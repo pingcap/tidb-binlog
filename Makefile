@@ -1,7 +1,7 @@
 GO=GO15VENDOREXPERIMENT="1" go
 
-LDFLAGS += -X "github.com/iamxy/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/iamxy/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
 
 default: build
 

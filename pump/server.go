@@ -2,7 +2,7 @@ package pump
 
 import (
 	"fmt"
-	pb "github.com/iamxy/tidb-binlog/proto"
+	pb "github.com/pingcap/tidb-binlog/proto"
 	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

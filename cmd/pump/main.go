@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/iamxy/tidb-binlog/pump"
+	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/ngaut/log"
 	"math/rand"
 	"os"

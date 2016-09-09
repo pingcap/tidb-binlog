@@ -2,7 +2,7 @@ package flags
 
 import (
 	"fmt"
-	"github.com/iamxy/tidb-binlog/pkg/types"
+	"github.com/pingcap/tidb-binlog/pkg/types"
 	"strings"
 )
 
