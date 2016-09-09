@@ -1,15 +1,15 @@
 package pump
 
 import (
-	"golang.org/x/net/context"
-	pb "github.com/iamxy/tidb-binlog/proto"
-	"net"
-	"google.golang.org/grpc"
-	"github.com/ngaut/log"
 	"fmt"
+	pb "github.com/iamxy/tidb-binlog/proto"
+	"github.com/ngaut/log"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"net"
 )
 
-type server struct {}
+type server struct{}
 
 func (s *server) WriteBinlog(ctx context.Context, in *pb.WriteBinlogReq) (*pb.WriteBinlogResp, error) {
 	return nil, nil
@@ -21,7 +21,7 @@ func (s *server) PullBinlog(ctx context.Context, in *pb.PullBinlogReq) (*pb.Pull
 
 func Run(cfg *Config) {
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", cfg.Port))
-	if err !=  nil {
+	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
