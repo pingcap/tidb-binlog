@@ -12,7 +12,6 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/util"
 	"github.com/pingcap/tidb-binlog/binlog/scheme"
-	"github.com/pingcap/tidb-binlog/pump"
 )
 
 const (
@@ -35,17 +34,14 @@ type machine struct {
 	rwMutex    sync.RWMutex
 }
 
-func NewMachineFromConfig(cfg *pump.Config) (Machine, error) {
+func NewMachineFromConfig(host string) (Machine, error) {
 	machID, err := readLocalMachineID()
 	if err != nil {
 		log.Errorf("Read local machine ID error, %v", err)
 		return nil, err
 	}
 
-	var host string
-	if len(cfg.Host) > 0 {
-		host = cfg.Host
-	} else {
+	if len(host) <= 0 {
 		if ipaddrs, err := util.IntranetIP(); err != nil {
 			return nil, err
 		} else {
