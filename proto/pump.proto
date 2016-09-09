@@ -9,31 +9,30 @@ service Pump {
 
 message WriteBinlogReq {
     uint64 clusterID = 1;
-    uint64 startTS = 2;
-    uint64 commitTS = 3;
-    int32 type = 4;
-    bytes payload = 5;
+    bytes payload = 2;
 }
 
 message WriteBinlogResp {
-    int32 suc = 1;
-    string errmsg = 2;
+    string errmsg = 1;
 }
 
 message PullBinlogReq {
     uint64 clusterID = 1;
     Pos startFrom  = 2;
-    int32 batchNum = 3;
+    int32 batch = 3;
 }
 
 message PullBinlogResp {
-    int32 suc = 1;
-    string errmsg = 2;
-    Pos endPos = 3;
-    repeated bytes payloads = 4;
+    string errmsg = 1;
+    repeated Item items = 2;
 }
 
 message Pos {
     uint32 suffix = 1;
     uint64 offset = 2;
+}
+
+message Item {
+    Pos offset = 1;
+    bytes payload = 2;
 }
