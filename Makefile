@@ -1,7 +1,7 @@
 GO=GO15VENDOREXPERIMENT="1" go
 
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/util.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/util.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/iamxy/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/iamxy/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
 
 default: build
 
@@ -13,12 +13,12 @@ build: pump server
 
 pump:
 	rm -rf vendor && ln -s _vendor/vendor vendor
-	$(GO) build -ldflag '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
+	$(GO) build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 	rm -rf vendor
 
 server:
 	rm -rf vendor && ln -s _vendor/vendor vendor
-	$(GO) build -ldflag '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
+	$(GO) build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 	rm -rf vendor
 
 install:
@@ -58,5 +58,5 @@ clean:
 	$(GO) clean ./...
 	rm -rf vendor
 
-.PHONY: update clean
+.PHONY: build test check update clean pump server
 

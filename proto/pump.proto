@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package proto;
+
+service Pump {
+    rpc WriteBinlog (WriteBinlogReq) returns (WriteBinlogResp) {}
+    rpc PullBinlog (PullBinlogReq) returns (PullBinlogResp) {}
+}
+
+message WriteBinlogReq {
+    uint64 clusterID = 1;
+    uint64 startTS = 2;
+    uint64 commitTS = 3;
+    int32 type = 4;
+    bytes payload = 5;
+}
+
+message WriteBinlogResp {
+    int32 suc = 1;
+    string errmsg = 2;
+}
+
+message PullBinlogReq {
+    uint64 clusterID = 1;
+    Pos startFrom  = 2;
+    int32 batchNum = 3;
+}
+
+message PullBinlogResp {
+    int32 suc = 1;
+    string errmsg = 2;
+    Pos endPos = 3;
+    repeated bytes payloads = 4;
+}
+
+message Pos {
+    uint32 suffix = 1;
+    uint64 offset = 2;
+}
