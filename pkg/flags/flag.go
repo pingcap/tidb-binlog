@@ -3,10 +3,10 @@ package flags
 import (
 	"flag"
 	"fmt"
+	"github.com/juju/errors"
 	"net/url"
 	"os"
 	"strings"
-	"github.com/juju/errors"
 )
 
 func flagToEnv(prefix, name string) string {

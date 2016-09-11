@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pump"
 	"math/rand"
 	"os"
 	"os/signal"
