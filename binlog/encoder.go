@@ -1,39 +1,37 @@
 package binlog
 
 import (
-	"io"
-	"sync"
 	"encoding/binary"
+	"hash/crc32"
+	"io"
 
 	"github.com/pingcap/tidb-binlog/binlog/scheme"
 )
 
 type encoder struct {
-	mu 		sync.Mutex
-	bw 		io.Writer
+	bw io.Writer
 
-	buf       	[]byte
-	uint64buf 	[]byte
-	uint32buf	[]byte
+	crc       uint32
+	buf       []byte
+	uint64buf []byte
 }
 
-func newEncoder(w io.Writer) *encoder {
+func newEncoder(w io.Writer, crc uint32) *encoder {
 	return &encoder{
 		bw:        w,
+		crc:       crc,
 		buf:       make([]byte, 1024*1024),
 		uint64buf: make([]byte, 8),
 	}
 }
 
 func (e *encoder) encode(ent *scheme.Entry) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	e.crc = crc32.Update(e.crc, crcTable, ent.Payload)
+	ent.Crc = e.crc
 
-	var (
-		data []byte
-		err  error
-		n    int
-	)
+	var data []byte
+	var err error
+	var n int
 
 	if ent.SizeOfEntry() > len(e.buf) {
 		data, err = ent.Marshal()
@@ -58,6 +56,10 @@ func (e *encoder) encode(ent *scheme.Entry) error {
 	}
 	_, err = e.bw.Write(data)
 	return err
+}
+
+func (e *encoder) getCRC() uint32 {
+	return e.crc
 }
 
 func encodeFrameSize(dataBytes int) (lenField uint64, padBytes int) {

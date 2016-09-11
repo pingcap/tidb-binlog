@@ -1,56 +1,37 @@
 package scheme
 
 import (
-	"errors"
-
 	"encoding/binary"
+	"errors"
 )
 
 type Entry struct {
-	CommitTs	uint64
-	StartTs		uint64
-	Size		uint64
-	Payload		[]byte
-	Offset		BinlogOffset
+	Payload []byte
+	Type    uint32
+	Crc     uint32
+	Offset  BinlogPosition
 }
-
-const magicByte = 0x19
 
 var (
 	ErrorFormat = errors.New("entry format is error")
 )
 
-func (ent *Entry) Unmarshal(b []byte, offset *BinlogOffset) error {
+func (ent *Entry) Unmarshal(b []byte, offset *BinlogPosition) error {
 	length := len(b)
 
-	if length <= 25 && b[0] != magicByte {
+	if length < 8 {
 		return ErrorFormat
 	}
 
-	n, nerr := binary.Uvarint(b[17:25])
-	if nerr <= 0  || int(n + 25) != length {
-		return ErrorFormat
+	ent.Type = binary.LittleEndian.Uint32(b[0:4])
+	ent.Crc = binary.LittleEndian.Uint32(b[4:8])
+
+	ent.Payload = b[8:]
+	ent.Offset = BinlogPosition{
+		Suffix: offset.Suffix,
+		Offset: offset.Offset,
 	}
-	ent.Size = n
 
-	n, nerr = binary.Uvarint(b[1:9])
-	if nerr <= 0 {
-                return ErrorFormat
-        }
-	ent.CommitTs = n
-
-	n, nerr = binary.Uvarint(b[9:17])
-        if nerr <= 0 {
-                return ErrorFormat
-        }
-        ent.StartTs = n
-
-	ent.Payload = b[25:]
-	ent.Offset = BinlogOffset {
-		Suffix: 	offset.Suffix,
-		Offset:		offset.Offset,
-	}
-	
 	return nil
 }
 
@@ -65,18 +46,15 @@ func (ent *Entry) Marshal() (data []byte, err error) {
 }
 
 func (ent *Entry) MarshalTo(data []byte) (int, error) {
-	data[0] = magicByte
-	binary.PutUvarint(data[1:], ent.CommitTs)
-	binary.PutUvarint(data[9:], ent.StartTs)
-	binary.PutUvarint(data[17:], ent.Size)
-
-	for i := 0; i < len(ent.Payload) && i+25 < len(data); i++ {
-		data[i+25] = ent.Payload[i] 
+	binary.LittleEndian.PutUint32(data[:4], ent.Type)
+	binary.LittleEndian.PutUint32(data[4:8], ent.Crc)
+	for i := 0; i < len(ent.Payload); i++ {
+		data[i+8] = ent.Payload[i]
 	}
 
 	return ent.SizeOfEntry(), nil
 }
 
 func (ent *Entry) SizeOfEntry() int {
-	return 25 + len(ent.Payload)
+	return len(ent.Payload) + 8
 }

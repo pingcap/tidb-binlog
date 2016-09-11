@@ -13,7 +13,6 @@ var (
 	badBinlogName = errors.New("bad file name")
 )
 
-//check the dir is already used
 func Exist(dirpath string) bool {
 	names, err := file.ReadDir(dirpath)
 	if err != nil {
@@ -23,6 +22,8 @@ func Exist(dirpath string) bool {
 	return len(names) != 0
 }
 
+// searchIndex returns the last array index of file
+// equal to or smaller than the given index.
 func searchIndex(names []string, index uint64) (int, bool) {
 	for i := len(names) - 1; i >= 0; i-- {
 		name := names[i]
@@ -39,6 +40,7 @@ func searchIndex(names []string, index uint64) (int, bool) {
 	return -1, false
 }
 
+// readBinlogNames return sorted filenames in the dirpath
 func readBinlogNames(dirpath string) ([]string, error) {
 	names, err := file.ReadDir(dirpath)
 	if err != nil {
@@ -56,7 +58,7 @@ func readBinlogNames(dirpath string) ([]string, error) {
 func checkBinlogNames(names []string) []string {
 	fnames := make([]string, 0)
 	for _, name := range names {
-		if  _, err := parseBinlogName(name); err != nil {
+		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
 				log.Warningf("ignored file %v in wal", name)
 			}

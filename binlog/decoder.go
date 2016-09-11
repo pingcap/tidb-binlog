@@ -2,27 +2,28 @@ package binlog
 
 import (
 	"bufio"
-	"io"
 	"encoding/binary"
+	"hash/crc32"
+	"io"
 
 	"github.com/pingcap/tidb-binlog/binlog/scheme"
 )
 
 type decoder struct {
-	brs	[]*bufio.Reader
-	offset  scheme.BinlogOffset
+	crc    uint32
+	brs    []*bufio.Reader
+	offset scheme.BinlogPosition
 }
 
-func newDecoder(offset scheme.BinlogOffset, r ...io.Reader)  *decoder {
+func newDecoder(offset scheme.BinlogPosition, r ...io.Reader) *decoder {
 	readers := make([]*bufio.Reader, len(r))
-	for i := range  r {
+	for i := range r {
 		readers[i] = bufio.NewReader(r[i])
 	}
 
-
-	return &decoder {
-		brs:	readers,
-		offset:	offset,
+	return &decoder{
+		brs:    readers,
+		offset: offset,
 	}
 }
 
@@ -34,11 +35,12 @@ func (d *decoder) decode(ent *scheme.Entry) error {
 	l, err := readInt64(d.brs[0])
 	if err == io.EOF || (err == nil && l == 0) {
 		d.brs = d.brs[1:]
+		d.offset.Suffix += 1
+		d.offset.Offset = 0
+
 		if len(d.brs) == 0 {
 			return io.EOF
 		}
-		d.offset.Suffix += 1
-		d.offset.Offset = 0
 		return d.decode(ent)
 	}
 	if err != nil {
@@ -59,9 +61,23 @@ func (d *decoder) decode(ent *scheme.Entry) error {
 		return err
 	}
 
-	d.offset.Offset += entBytes +  padBytes + 8
+	crc := crc32.Update(d.crc, crcTable, ent.Payload)
+	if ent.Type != crcType && crc != ent.Crc {
+		return ErrCRCMismatch
+	}
+
+	d.crc = ent.Crc
+	d.offset.Offset += entBytes + padBytes + 8
 
 	return nil
+}
+
+func (e *decoder) getCRC() uint32 {
+	return e.crc
+}
+
+func (d *decoder) updateCRC(crc uint32) {
+	d.crc = crc
 }
 
 func decodeFrameSize(lenField int64) (recBytes int64, padBytes int64) {

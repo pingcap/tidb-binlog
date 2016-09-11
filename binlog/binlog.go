@@ -1,202 +1,233 @@
 package binlog
 
 import (
+	"hash/crc32"
 	"io"
 	"os"
 	"path"
-	"sync"
-	"errors"
-	"hash/crc32"
-	
+
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/binlog/scheme"
+	"github.com/pingcap/tidb-binlog/pkg/file"
+)
+
+const (
+	entryType uint32 = iota
+	crcType
 )
 
 var (
-	SegmentSizeBytes int64 	= 64 * 1000 * 1000
-	ErrFileNotFound        	= errors.New("file: file not found")
-	crcTable            	= crc32.MakeTable(crc32.Castagnoli)
+	// segmentSizeBytes is size of each binlog segment file,
+	// as an exported variable, you can define a different size
+	SegmentSizeBytes int64 = 64 * 1024 * 1024
+
+	ErrFileNotFound    = errors.New("file: file not found")
+	ErrCRCMismatch     = errors.New("binlog: crc mismatch")
+	ErrFileCourruption = errors.New("binlog: content is courruption")
+	crcTable           = crc32.MakeTable(crc32.Castagnoli)
 )
 
+// Binlog is a logical representation of the binlog storage.
+// it is either in read mode or append mode.
 type Binlog struct {
-	dir		string
-	offset		scheme.BinlogOffset
-
-	decoder		*decoder
-	readCloser	func() error
-	
-	mu		sync.Mutex
-	encoder		*encoder
-	
-	locks           []*file.LockedFile
-	fp		*filePipeline
+	dir     string
+	decoder *decoder
+	encoder *encoder
+	file    *file.LockedFile
 }
 
+// Create creates a binlog directory, then can append binlogs.
+// crc is stored in the head of each binlog file for be retrieved
 func Create(dirpath string) (*Binlog, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
 
-	// the temporary dir make the create dir atomic
-	tmpdirpath := path.Clean(dirpath) + ".tmp"
-	if file.Exist(tmpdirpath) {
-		if err := os.RemoveAll(tmpdirpath); err != nil {
-			return nil, err
-		}
+	if err := file.CreateDirAll(dirpath); err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	if err := file.CreateDirAll(tmpdirpath); err != nil {
-		return nil, err
-	}
-
-	p := path.Join(tmpdirpath, fileName(0))
+	p := path.Join(dirpath, fileName(0))
 	f, err := file.LockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
-		return nil, err
-	}
-
-	if _, err := f.Seek(0, os.SEEK_END); err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	binlog := &Binlog{
-		dir:      dirpath,
-		encoder:  newEncoder(f),
+		dir:     dirpath,
+		encoder: newEncoder(f, 0),
+		file:    f,
 	}
-	binlog.locks = append(binlog.locks, f)
-	return binlog.renameFile(tmpdirpath)
-}
 
-func Open(dirpath string, offset scheme.BinlogOffset) (*Binlog, error) {
-	names, err := readBinlogNames(dirpath)
-	if err != nil {
+	if err := binlog.saveCrc(0); err != nil {
 		return nil, err
-	}
-
-	nameIndex, ok := searchIndex(names, offset.Suffix)
-	if !ok {
-		return nil, ErrFileNotFound
-	}
-
-	first := true
-
-	rcs := make([]io.ReadCloser, 0)
-	rs  := make([]io.Reader, 0)
-	for _, name := range names[nameIndex:] {
-		p := path.Join(dirpath, name)
-		rf, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
-		if err != nil {
-			closeAll(rcs...)
-			return nil, err
-		}
-
-		if first {
-			first = false
-
-			index, _ := parseBinlogName(name)
-			if index == offset.Suffix {
-				ofs, err  := rf.Seek(offset.Offset, os.SEEK_SET)
-				if err != nil {
-					closeAll(rcs...)
-					return nil, err
-				}
-
-				if ofs < offset.Offset {
-                                	continue
-                        	}
-			}
-		}
-
-		rcs	= append(rcs, rf)
-		rs 	= append(rs, rf)
-	}
-
-	closer := func() error {return closeAll(rcs...)}
-	binlog := &Binlog{
-		dir : 		dirpath,
-		offset:  	offset,
-		decoder:   	newDecoder(offset, rs...),
-		readCloser: 	closer,
 	}
 
 	return binlog, nil
 }
 
-func OpenForWrite(dirpath string) (*Binlog, error) {
+func OpenForRead(dirpath string) (*Binlog, error) {
+	_, err := readBinlogNames(dirpath)
+	if err == ErrFileNotFound {
+		return nil, err
+	}
+
+	binlog := &Binlog{
+		dir: dirpath,
+	}
+
+	return binlog, nil
+}
+
+//open for write, after read the binlog last CRC , then it can be appendd
+func Open(dirpath string) (*Binlog, error) {
 	names, err := readBinlogNames(dirpath)
-        if err != nil {
-                return  nil, err
-        }
+	if err == ErrFileNotFound {
+		return Create(dirpath)
+	}
+
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	lastFileName := names[len(names)-1]
 	p := path.Join(dirpath, lastFileName)
-        f, err := file.TryLockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-        if err != nil {
-                return nil, err
-        }
-
-        if _, err := f.Seek(0, os.SEEK_END); err != nil {
-                return nil, err
-        }
-
-
-        binlog := &Binlog{
-                dir:      dirpath,
-                encoder:  newEncoder(f),
-        }
-        binlog.locks = append(binlog.locks, f)
-	binlog.fp = newFilePipeline(binlog.dir, SegmentSizeBytes)
-
-        return binlog, nil
-}
-
-func (b *Binlog) Read(nums int) (ents []scheme.Entry, err error)  {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	var ent  = &scheme.Entry{}
-	decoder := b.decoder
-
-	for index := 0; index < nums; index++ {	
-		err = decoder.decode(ent)
-		if err != nil {
-			break
-		}
-
-		newEnt := scheme.Entry {
-			CommitTs:	ent.CommitTs,
-			StartTs:	ent.StartTs,
-			Size:		ent.Size,
-			Payload:	ent.Payload,
-			Offset:		ent.Offset,
-		}
-		ents = append(ents, newEnt)
+	f, err := file.TryLockFile(p, os.O_RDWR, file.PrivateFileMode)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	return 
+	binlog := &Binlog{
+		dir:  dirpath,
+		file: f,
+	}
+
+	crc, err := binlog.lastCRC(SegmentSizeBytes, io.Reader(f))
+	if err != io.EOF {
+		return nil, errors.Trace(err)
+	}
+	binlog.encoder = newEncoder(f, crc)
+
+	if _, err := f.Seek(0, os.SEEK_END); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return binlog, nil
 }
 
-func (b *Binlog) Write(ents []scheme.Entry) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+// Read read nums binlogs from the given binlogPosition.
+// it read binlogs from files and append to result set util the count = nums
+// after read all binlog from one file  then close it and open the following file
+func (b *Binlog) Read(nums int, from scheme.BinlogPosition) ([]scheme.Entry, error) {
+	var ent = &scheme.Entry{}
+	var ents = []scheme.Entry{}
+	var index int
 
+	dirpath := b.dir
+
+	if nums < 0 {
+		return nil, errors.Errorf("read number must be positive")
+	}
+
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	nameIndex, ok := searchIndex(names, from.Suffix)
+	if !ok {
+		return nil, ErrFileNotFound
+	}
+
+	for _, name := range names[nameIndex:] {
+		p := path.Join(dirpath, name)
+		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
+		if err != nil {
+			return ents, errors.Trace(err)
+		}
+
+		fileIndex, err := parseBinlogName(name)
+		if err != nil {
+			f.Close()
+			return ents, errors.Trace(err)
+		}
+
+		if fileIndex == from.Suffix {
+			crc, err := b.lastCRC(from.Offset, io.Reader(f))
+			if err != nil && err != io.EOF {
+				f.Close()
+				return ents, errors.Errorf("unexpected position %v, get error %v", from, err)
+			}
+
+			f.Seek(from.Offset, os.SEEK_SET)
+			b.decoder = newDecoder(from, io.Reader(f))
+			b.decoder.updateCRC(crc)
+		} else {
+			b.decoder = newDecoder(from, io.Reader(f))
+		}
+
+		for ; index < nums; index++ {
+			err = b.decoder.decode(ent)
+			if err != nil {
+				break
+			}
+
+			switch ent.Type {
+			case entryType:
+				newEnt := scheme.Entry{
+					Payload: ent.Payload,
+					Offset:  ent.Offset,
+					Crc:     ent.Crc,
+				}
+				ents = append(ents, newEnt)
+			case crcType:
+				// check the each CRC in the head of each binlog file
+				// it must be equal with the all binlog payload crc checksum before the file
+				crc := b.decoder.getCRC()
+				if crc != 0 && crc != ent.Crc {
+					return ents, ErrCRCMismatch
+				}
+				index--
+
+				b.decoder.updateCRC(ent.Crc)
+			default:
+				return ents, errors.Errorf("unexpected entry type %d", ent.Type)
+			}
+		}
+
+		f.Close()
+
+		if (err != nil && err != io.EOF) || index == nums {
+			return ents, err
+		}
+
+		from.Suffix += 1
+		from.Offset = 0
+	}
+
+	return ents, nil
+}
+
+// Writes appends the binlog
+// if size of current file is bigger than SegmentSizeBytes, then rotate a new file
+func (b *Binlog) Write(ents []scheme.Entry) error {
 	if len(ents) == 0 {
 		return nil
 	}
 
 	for i := range ents {
 		if err := b.encoder.encode(&ents[i]); err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
-	curOff, err := b.tail().Seek(0, os.SEEK_CUR)
+	curOffset, err := b.file.Seek(0, os.SEEK_CUR)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
-	if curOff < SegmentSizeBytes {
+	if curOffset < SegmentSizeBytes {
 		return b.sync()
 		return nil
 	}
@@ -204,116 +235,93 @@ func (b *Binlog) Write(ents []scheme.Entry) error {
 	return b.rotate()
 }
 
+// Rotate create a new file for append binlog
+// it should store the previsou CRC sum in the head of the file
 func (b *Binlog) rotate() error {
-	off, err := b.tail().Seek(0, os.SEEK_CUR)
+	_, err := b.file.Seek(0, os.SEEK_CUR)
 	if err != nil {
-		return err
-	}
-
-	if err := b.tail().Truncate(off); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	if err := b.sync(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	fpath := path.Join(b.dir, fileName(b.seq()+1))
 
-	newTail, err := b.fp.Open()
+	b.file.Close()
+
+	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
-	b.locks = append(b.locks, newTail)
+	b.file = newTail
 
-	if err = os.Rename(newTail.Name(), fpath); err != nil {
-		return err
+	b.encoder = newEncoder(b.file, b.encoder.getCRC())
+	if err = b.saveCrc(b.encoder.crc); err != nil {
+		return errors.Trace(err)
 	}
-	newTail.Close()
-
-	if newTail, err = file.LockFile(fpath, os.O_WRONLY, file.PrivateFileMode); err != nil {
-		return err
-	}
-
-	b.locks[len(b.locks)-1] = newTail
-	b.encoder = newEncoder(b.tail())
 
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }
 
 func (b *Binlog) sync() error {
-	err := file.Fsync(b.tail().File)
-
-	return err
+	return file.Fsync(b.file.File)
 }
-
 
 func (b *Binlog) Close() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.fp != nil {
-		b.fp.Close()
-		b.fp = nil
-	}
-
-	if b.tail() != nil {
+	if b.file != nil {
 		if err := b.sync(); err != nil {
-			return err
+			return errors.Trace(err)
+		}
+
+		if err := b.file.Close(); err != nil {
+			log.Errorf("failed to unlock during closing wal: %s", err)
 		}
 	}
 
-	for _, l := range b.locks {
-		if l == nil {
-			continue
-		}
-		if err := l.Close(); err != nil {
-			log.Errorf("failed to unlock during closing binlog: %s", err)
-		}
-	}
-	return nil
-}
-
-func (b *Binlog) renameFile(tmpdirpath string) (*Binlog, error) {
-
-	if err := os.RemoveAll(b.dir); err != nil {
-		return nil, err
-	}
-	if err := os.Rename(tmpdirpath, b.dir); err != nil {
-		return nil, err
-	}
-
-	b.fp = newFilePipeline(b.dir, SegmentSizeBytes)
-	return b, nil
-}
-
-func (b *Binlog) tail() *file.LockedFile {
-	if len(b.locks) > 0 {
-		return b.locks[len(b.locks)-1]
-	}
 	return nil
 }
 
 func (b *Binlog) seq() uint64 {
-	t := b.tail()
-	if t == nil {
+	if b.file == nil {
 		return 0
 	}
-	seq, err := parseBinlogName(path.Base(t.Name()))
+
+	seq, err := parseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
-		log.Fatalf("bad binlog name %s (%v)", t.Name(), err)
+		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
 	}
+
 	return seq
 }
 
-func closeAll(rcs ...io.ReadCloser) error {
-	for _, f := range rcs {
-		if err := f.Close(); err != nil {
-			return err
+func (b *Binlog) saveCrc(crc uint32) error {
+	return b.encoder.encode(&scheme.Entry{Type: crcType, Crc: crc})
+}
+
+// lastCRC reads from head of the file util to the end(append model) or the give position(read model)
+// to calculate the previous binlogs CRC sum
+func (b *Binlog) lastCRC(toPosition int64, reader io.Reader) (uint32, error) {
+	b.decoder = newDecoder(scheme.BinlogPosition{Offset: 0}, reader)
+	ent := &scheme.Entry{}
+	var prevCrc uint32
+
+	err := b.decoder.decode(ent)
+	for ; err == nil && toPosition > ent.Offset.Offset; err = b.decoder.decode(ent) {
+		prevCrc = b.decoder.getCRC()
+
+		if ent.Type == crcType {
+			if prevCrc != 0 && prevCrc != ent.Crc {
+				return 0, ErrCRCMismatch
+			}
+
+			b.decoder.updateCRC(ent.Crc)
 		}
 	}
 
-	return nil
+	b.decoder = nil
+	return prevCrc, err
 }
