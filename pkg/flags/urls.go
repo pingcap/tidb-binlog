@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pingcap/tidb-binlog/pkg/types"
 	"strings"
+	"github.com/juju/errors"
 )
 
 type URLsValue types.URLs
@@ -14,7 +15,7 @@ func (us *URLsValue) Set(s string) error {
 	strs := strings.Split(s, ",")
 	nus, err := types.NewURLs(strs)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	*us = URLsValue(nus)

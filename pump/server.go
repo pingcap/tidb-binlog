@@ -15,7 +15,7 @@ func (s *server) WriteBinlog(ctx context.Context, in *pb.WriteBinlogReq) (*pb.Wr
 	return nil, nil
 }
 
-func (s *server) PullBinlog(ctx context.Context, in *pb.PullBinlogReq) (*pb.PullBinlogResp, error) {
+func (s *server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.PullBinlogResp, error) {
 	return nil, nil
 }
 

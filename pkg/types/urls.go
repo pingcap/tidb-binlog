@@ -1,12 +1,12 @@
 package types
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"sort"
 	"strings"
+	"github.com/juju/errors"
 )
 
 type URLs []url.URL
@@ -20,16 +20,16 @@ func NewURLs(strs []string) (URLs, error) {
 		in = strings.TrimSpace(in)
 		u, err := url.Parse(in)
 		if err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "unix" && u.Scheme != "unixs" {
-			return nil, fmt.Errorf("URL scheme must be http, https, unix, or unixs: %s", in)
+			return nil, errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", in)
 		}
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return nil, fmt.Errorf(`URL address does not have the form "host:port": %s`, in)
+			return nil, errors.Errorf(`URL address does not have the form "host:port": %s`, in)
 		}
 		if u.Path != "" {
-			return nil, fmt.Errorf("URL must not contain a path: %s", in)
+			return nil, errors.Errorf("URL must not contain a path: %s", in)
 		}
 		all[i] = *u
 	}
