@@ -1,5 +1,3 @@
-GO=GO15VENDOREXPERIMENT="1" go
-
 ARCH      := "`uname -s`"
 LINUX     := "Linux"
 MAC       := "Darwin"
@@ -19,12 +17,12 @@ build: pump server
 
 pump:
 	rm -rf vendor && ln -s _vendor/vendor vendor
-	$(GO) build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
+	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 	rm -rf vendor
 
 server:
 	rm -rf vendor && ln -s _vendor/vendor vendor
-	$(GO) build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
+	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 	rm -rf vendor
 
 install:
