@@ -38,7 +38,7 @@ message PullBinlogReq {
     uint64 clusterID = 1;
 
     // The position from which the binlog will be sent.
-    Pos startFrom  = 2;
+    Pos startFrom  = 2 [(gogoproto.nullable) = false];
 
     // The max number of binlog in a batch to pull.
     int32 batch = 3;
@@ -49,22 +49,22 @@ message PullBinlogResp {
     string errmsg = 1;
 
     // The binlogs in a batch pulled.
-    repeated Binlog binlogs = 2;
+    repeated Binlog binlogs = 2 [(gogoproto.nullable) = false];
 }
 
 // Binlogs are stored in a number of sequential files in a directory.
 // The Pos describes the position of a binlog.
 message Pos {
     // The suffix of binlog file, like .000001 .000002
-    uint32 suffix = 1;
+    uint64 suffix = 1;
 
     // The binlog offset in a file.
-    uint64 offset = 2;
+    int64 offset = 2;
 }
 
 message Binlog {
     // The position of this binlog.
-    Pos pos = 1;
+    Pos pos = 1 [(gogoproto.nullable) = false];
 
     // The bytes of binlog payload encoded by protobuf
     bytes payload = 2;
