@@ -2,11 +2,12 @@ package pump
 
 import (
 	"fmt"
+	"net"
+
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"net"
 )
 
 type server struct{}

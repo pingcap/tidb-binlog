@@ -1,11 +1,12 @@
 package types
 
 import (
-	"github.com/juju/errors"
 	"net"
 	"net/url"
 	"sort"
 	"strings"
+
+	"github.com/juju/errors"
 )
 
 type URLs []url.URL

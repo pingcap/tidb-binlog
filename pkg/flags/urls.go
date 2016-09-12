@@ -2,9 +2,10 @@ package flags
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/types"
-	"strings"
 )
 
 type URLsValue types.URLs
