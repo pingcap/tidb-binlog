@@ -3,14 +3,15 @@ package pump
 import (
 	"flag"
 	"fmt"
-	"github.com/ghodss/yaml"
-	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/types"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/ghodss/yaml"
+	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/types"
 )
 
 const (
