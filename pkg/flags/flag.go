@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/juju/errors"
 )
 
 func flagToEnv(prefix, name string) string {
@@ -50,7 +52,7 @@ func SetFlagsFromEnv(prefix string, fs *flag.FlagSet) error {
 
 	verifyEnv(prefix, usedEnvKey, alreadySet)
 
-	return err
+	return errors.Trace(err)
 }
 
 type flagSetter interface {
@@ -64,7 +66,7 @@ func setFlagFromEnv(fs flagSetter, prefix, fname string, usedEnvKey, alreadySet 
 		if val != "" {
 			usedEnvKey[key] = true
 			if serr := fs.Set(fname, val); serr != nil {
-				return fmt.Errorf("invalid environment value %q for %s: %v", val, key, serr)
+				return errors.Errorf("invalid environment value %q for %s: %v", val, key, serr)
 			}
 			// recognized and used environment variable key=val
 		}

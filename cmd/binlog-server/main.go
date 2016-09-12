@@ -1,1 +1,4 @@
-package binlog_server
+package main
+
+func main() {
+}

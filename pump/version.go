@@ -1,8 +1,9 @@
 package pump
 
 import (
-	"github.com/ngaut/log"
 	"runtime"
+
+	"github.com/ngaut/log"
 )
 
 var (

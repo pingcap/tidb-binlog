@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb-binlog/pump"
-	"github.com/ngaut/log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pump"
 )
 
 func main() {

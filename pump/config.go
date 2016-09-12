@@ -1,16 +1,17 @@
 package pump
 
 import (
-	"errors"
 	"flag"
 	"fmt"
-	"github.com/ghodss/yaml"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/types"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/ghodss/yaml"
+	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/types"
 )
 
 const (
@@ -70,7 +71,7 @@ func (cfg *Config) Parse(arguments []string) error {
 		os.Exit(2)
 	}
 	if len(cfg.FlagSet.Args()) > 0 {
-		return fmt.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
+		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
 
 	if cfg.printVersion {
@@ -91,7 +92,7 @@ func (cfg *Config) Parse(arguments []string) error {
 
 func (cfg *Config) configFromCmdLine() error {
 	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	cfg.EtcdEndpoints = flags.URLStrsFromFlag(cfg.FlagSet, "etcd")
 	return cfg.validate()
@@ -100,11 +101,11 @@ func (cfg *Config) configFromCmdLine() error {
 func (cfg *Config) configFromFile(path string) error {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	err = yaml.Unmarshal(b, cfg)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return cfg.validate()
 }
@@ -118,7 +119,7 @@ func (cfg *Config) validate() error {
 		return errors.New("no etcd endpoint given")
 	}
 	if _, err := types.NewURLs(cfg.EtcdEndpoints); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return nil
 }
