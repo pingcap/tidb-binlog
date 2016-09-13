@@ -15,15 +15,20 @@ dev: build check test
 
 build: pump server
 
-pump:
+proto/pump.pb.go: proto/pump.proto
+	sh proto/generate.sh
+
+pump: proto/pump.pb.go
 	rm -rf vendor && ln -s _vendor/vendor vendor
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 	rm -rf vendor
 
-server:
+server: proto/pump.pb.go
 	rm -rf vendor && ln -s _vendor/vendor vendor
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 	rm -rf vendor
+
+proto: proto/pump.pb.go
 
 install:
 	rm -rf vendor && ln -s _vendor/vendor vendor
@@ -66,5 +71,5 @@ clean:
 	go clean ./...
 	rm -rf vendor
 
-.PHONY: build test check update clean pump server fmt
+.PHONY: build test check update clean pump server fmt proto
 
