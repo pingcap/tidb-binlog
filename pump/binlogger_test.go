@@ -24,7 +24,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	binlog, err := Create(dir)
+	binlog, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	b, ok := binlog.(*binlogger)
@@ -49,7 +49,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 
 	b.Close()
 
-	_, err = Create(dir)
+	_, err = CreateBinlogger(dir)
 	if err != os.ErrExist {
 		c.Fatalf("err = %v, but want %v", err, os.ErrExist)
 	}
@@ -65,19 +65,19 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	defer os.RemoveAll(dir)
 
-	binlog, err := Create(dir)
+	binlog, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	b, ok := binlog.(*binlogger)
 	c.Assert(ok, IsTrue)
 
 	b.rotate()
-	err = b.WriteTail([]pb.Binlog{pb.Binlog{Payload: []byte("binlogtest")}})
+	err = b.WriteTail([]byte("binlogtest"))
 	c.Assert(err, IsNil)
 
 	b.Close()
 
-	binlog, err = Open(dir)
+	binlog, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	b, ok = binlog.(*binlogger)
@@ -100,7 +100,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 		c.Fatalf("name = %+v, want %+v", g, fileName(1))
 	}
 
-	err = b.WriteTail([]pb.Binlog{pb.Binlog{Payload: []byte("binlogtest")}})
+	err = b.WriteTail([]byte("binlogtest"))
 	c.Assert(err, IsNil)
 
 	nowOffset, err := curFile.Seek(0, os.SEEK_CUR)
@@ -118,14 +118,12 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	binlog, err := Create(dir)
+	binlog, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	ent := pb.Binlog{
-		Payload: []byte("binlogtest"),
-	}
+	ent := []byte("binlogtest")
 
-	err = binlog.WriteTail([]pb.Binlog{ent})
+	err = binlog.WriteTail(ent)
 	c.Assert(err, IsNil)
 
 	b, ok := binlog.(*binlogger)
@@ -139,19 +137,19 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 		c.Fatalf("name = %+v, want %+v", g, binlogName)
 	}
 
-	err = b.WriteTail([]pb.Binlog{ent})
+	err = b.WriteTail(ent)
 	c.Assert(err, IsNil)
 
 	b.Close()
 
-	binlog, err = Open(dir)
+	binlog, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	f1, err := binlog.ReadFrom(pb.Pos{}, 1)
 	c.Assert(err, IsNil)
 	binlog.Close()
 
-	binlog, err = Open(dir)
+	binlog, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	f2, err := binlog.ReadFrom(pb.Pos{Suffix: 1, Offset: 0}, 1)
@@ -187,23 +185,18 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	b, err := Create(dir)
+	b, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 	b.Close()
 
-	var es []pb.Binlog
-	for i := 0; i < 10; i++ {
-		es = append(es, pb.Binlog{
-			Payload: []byte("binlogtest"),
-		})
-	}
-
 	for i := 0; i < 20; i++ {
-		binlog, err := Open(dir)
+		binlog, err := OpenBinlogger(dir)
 		c.Assert(err, IsNil)
 
-		err = binlog.WriteTail(es)
-		c.Assert(err, IsNil)
+		for i := 0; i < 10; i++ {
+			err = binlog.WriteTail([]byte("binlogtest"))
+			c.Assert(err, IsNil)
+		}
 
 		b, ok := binlog.(*binlogger)
 		c.Assert(ok, IsTrue)
@@ -215,9 +208,8 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 		b.Close()
 	}
 
-	b2, err := Open(dir)
+	b2, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
-	defer b2.Close()
 
 	ents, err := b2.ReadFrom(pb.Pos{}, 11)
 	c.Assert(err, IsNil)
@@ -238,7 +230,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	}
 	b2.Close()
 
-	b3, err := Open(dir)
+	b3, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer b3.Close()
 
@@ -254,24 +246,19 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	b, err := Create(dir)
+	b, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 	b.Close()
 
-	var es []pb.Binlog
-	for i := 0; i < 4; i++ {
-		es = append(es, pb.Binlog{
-			Payload: []byte("binlogtest"),
-		})
-	}
-
 	for i := 0; i < 3; i++ {
-		binlog, err := Open(dir)
+		binlog, err := OpenBinlogger(dir)
 
 		c.Assert(err, IsNil)
 
-		err = binlog.WriteTail(es)
-		c.Assert(err, IsNil)
+		for i := 0; i < 4; i++ {
+			err = binlog.WriteTail([]byte("binlogtest"))
+			c.Assert(err, IsNil)
+		}
 
 		b, ok := binlog.(*binlogger)
 		c.Assert(ok, IsTrue)
@@ -291,7 +278,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	err = f1.Close()
 	c.Assert(err, IsNil)
 
-	b1, err := Open(dir)
+	b1, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer b1.Close()
 

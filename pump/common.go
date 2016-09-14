@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	badBinlogName = errors.New("bad file name")
+	errBadBinlogName = errors.New("bad file name")
 )
 
+// Exist checks the dir exist, that it should have some file
 func Exist(dirpath string) bool {
 	names, err := file.ReadDir(dirpath)
 	if err != nil {
@@ -32,12 +33,30 @@ func searchIndex(names []string, index uint64) (int, bool) {
 			log.Errorf("parse correct name should never fail: %v", err)
 		}
 
-		if index >= curIndex {
+		if index == curIndex {
 			return i, true
 		}
 	}
 
 	return -1, false
+}
+
+// isValidBinlog detect the binlog names is valid
+func isValidBinlog(names []string) bool {
+	var lastSuffix uint64
+	for _, name := range names {
+		curSuffix, err := parseBinlogName(name)
+		if err != nil {
+			log.Fatalf("binlogger: parse corrent name should never fail: %v", err)
+		}
+
+		if lastSuffix != 0 && lastSuffix != curSuffix-1 {
+			return false
+		}
+		lastSuffix = curSuffix
+	}
+
+	return true
 }
 
 // readBinlogNames return sorted filenames in the dirpath
@@ -56,7 +75,7 @@ func readBinlogNames(dirpath string) ([]string, error) {
 }
 
 func checkBinlogNames(names []string) []string {
-	fnames := make([]string, 0)
+	var fnames []string
 	for _, name := range names {
 		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
@@ -72,7 +91,7 @@ func checkBinlogNames(names []string) []string {
 
 func parseBinlogName(str string) (index uint64, err error) {
 	if !strings.HasPrefix(str, "binlog-") {
-		return 0, badBinlogName
+		return 0, errBadBinlogName
 	}
 
 	_, err = fmt.Sscanf(str, "binlog-%016d", &index)

@@ -14,22 +14,28 @@ import (
 )
 
 var (
-	// segmentSizeBytes is size of each binlog segment file,
+	// SegmentSizeBytes is size of each binlog segment file,
 	// as an exported variable, you can define a different size
 	SegmentSizeBytes int64 = 64 * 1024 * 1024
 
-	ErrFileNotFound          = errors.New("pump/binlogger: file not found")
-	ErrFileContentCorruption = errors.New("pump/binlogger: content is corruption")
-	ErrCRCMismatch           = errors.New("pump/binlogger: crc mismatch")
-	crcTable                 = crc32.MakeTable(crc32.Castagnoli)
+	// ErrFileNotFound means that a ReadFrom call can't find file to read
+	ErrFileNotFound = errors.New("binlogger: file not found")
+
+	// ErrFileContentCorruption means that detect the content is curruption for some season
+	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
+
+	// ErrCRCMismatch means that detech the crc don't match
+	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
+	crcTable       = crc32.MakeTable(crc32.Castagnoli)
 )
 
+// Binlogger is the interface that for append and read binlog
 type Binlogger interface {
 	// read nums binlog events from the "from" position
 	ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error)
 
-	// batch write binlog events
-	WriteTail(entries []pb.Binlog) error
+	// batch write binlog event
+	WriteTail(payload []byte) error
 
 	// close the binlogger
 	Close() error
@@ -40,9 +46,6 @@ type Binlogger interface {
 type binlogger struct {
 	dir string
 
-	// decoder read from fd, then decode bytes to pb.Binlog
-	decoder *decoder
-
 	// encoder encode pb.Binlog to bytes, the write to fd
 	encoder *encoder
 
@@ -51,9 +54,8 @@ type binlogger struct {
 	mutex sync.Mutex
 }
 
-// Create creates a binlog directory, then can append binlogs.
-// crc is stored in the head of each binlog file for be retrieved
-func Create(dirpath string) (Binlogger, error) {
+// CreateBinlogger creates a binlog directory, then can append binlogs.
+func CreateBinlogger(dirpath string) (Binlogger, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
@@ -77,14 +79,24 @@ func Create(dirpath string) (Binlogger, error) {
 	return binlog, nil
 }
 
-//open for write, after read the binlog last CRC , then it can be appendd
-func Open(dirpath string) (Binlogger, error) {
+//OpenBinlogger for write, then it can be appendd
+func OpenBinlogger(dirpath string) (Binlogger, error) {
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
 		return nil, err
 	}
 
-	lastFileName := names[len(names)-1]
+	if !isValidBinlog(names) {
+		return nil, ErrFileContentCorruption
+	}
+
+	var lastFileName string
+	if len(names) == 0 {
+		lastFileName = fileName(0)
+	} else {
+		lastFileName = names[len(names)-1]
+	}
+
 	p := path.Join(dirpath, lastFileName)
 	f, err := file.TryLockFile(p, os.O_RDWR, file.PrivateFileMode)
 	if err != nil {
@@ -104,6 +116,11 @@ func Open(dirpath string) (Binlogger, error) {
 	return binlog, nil
 }
 
+//CloseBinlogger closes the binlogger
+func CloseBinlogger(binlogger Binlogger) error {
+	return binlogger.Close()
+}
+
 // Read read nums logs from the given log position.
 // it read binlogs from files and append to result set util the count = num
 // after read all binlog from one file  then close it and open the following file
@@ -111,6 +128,7 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 	var ent = &pb.Binlog{}
 	var ents = []pb.Binlog{}
 	var index int
+	var decoder *decoder
 	var first = true
 
 	dirpath := b.dir
@@ -135,18 +153,10 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 		if err != nil {
 			return ents, errors.Trace(err)
 		}
-
-		fileIndex, err := parseBinlogName(name)
-		if err != nil {
-			f.Close()
-			return ents, errors.Trace(err)
-		}
+		defer f.Close()
 
 		if first {
 			first = false
-			if fileIndex != from.Suffix {
-				return ents, errors.Errorf("pos's suffix is wrong")
-			}
 
 			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
@@ -158,10 +168,10 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 			}
 		}
 
-		b.decoder = newDecoder(from, io.Reader(f))
+		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			err = b.decoder.decode(ent)
+			err = decoder.decode(ent)
 			if err != nil {
 				break
 			}
@@ -173,13 +183,11 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 			ents = append(ents, newEnt)
 		}
 
-		f.Close()
-
 		if (err != nil && err != io.EOF) || index == nums {
 			return ents, err
 		}
 
-		from.Suffix += 1
+		from.Suffix++
 		from.Offset = 0
 	}
 
@@ -188,18 +196,16 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(ents []pb.Binlog) error {
+func (b *binlogger) WriteTail(payload []byte) error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if len(ents) == 0 {
+	if len(payload) == 0 {
 		return nil
 	}
 
-	for i := range ents {
-		if err := b.encoder.encode(&ents[i]); err != nil {
-			return errors.Trace(err)
-		}
+	if err := b.encoder.encode(payload); err != nil {
+		return errors.Trace(err)
 	}
 
 	curOffset, err := b.file.Seek(0, os.SEEK_CUR)
@@ -215,16 +221,7 @@ func (b *binlogger) WriteTail(ents []pb.Binlog) error {
 }
 
 // Rotate create a new file for append binlog
-// it should store the previsou CRC sum in the head of the file
 func (b *binlogger) rotate() error {
-	_, err := b.file.Seek(0, os.SEEK_CUR)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if err := b.sync(); err != nil {
-		return errors.Trace(err)
-	}
 
 	fpath := path.Join(b.dir, fileName(b.seq()+1))
 
@@ -242,18 +239,13 @@ func (b *binlogger) rotate() error {
 	return nil
 }
 
-func (b *binlogger) sync() error {
-	return file.Fsync(b.file.File)
-}
-
 func (b *binlogger) Close() error {
-	if b.file != nil {
-		if err := b.sync(); err != nil {
-			return errors.Trace(err)
-		}
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
 
+	if b.file != nil {
 		if err := b.file.Close(); err != nil {
-			log.Errorf("failed to unlock during closing wal: %s", err)
+			log.Errorf("failed to unlock during closing file: %s", err)
 		}
 	}
 

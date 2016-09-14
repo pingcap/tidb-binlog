@@ -4,15 +4,13 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-
-	pb "github.com/pingcap/tidb-binlog/proto"
 )
 
 var magic uint32 = 471532804
 
-//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-//  | magic word (4 byte)| Size (8 byte, len(crc+payload)) | crc (4 byte) |  Payload  |
-//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
+//  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 type encoder struct {
 	bw io.Writer
@@ -24,23 +22,22 @@ func newEncoder(w io.Writer) *encoder {
 	}
 }
 
-func (e *encoder) encode(ent *pb.Binlog) error {
+func (e *encoder) encode(payload []byte) error {
 	var err error
 
-	crc := crc32.Checksum(ent.Payload, crcTable)
+	crc := crc32.Checksum(payload, crcTable)
 
-	// size count crc + payload
-	size := len(ent.Payload) + 4
+	// length count crc + payload
+	length := len(payload)
 
-	// data length is magic + size + crc + payload
-	data := make([]byte, size+12)
+	// size is length of magic + size + crc + payload
+	size := length + 16
+	data := make([]byte, size)
 
 	binary.LittleEndian.PutUint32(data[:4], magic)
-	binary.LittleEndian.PutUint64(data[4:12], uint64(size))
-	binary.LittleEndian.PutUint32(data[12:16], crc)
-	for i := 0; i < len(ent.Payload); i++ {
-		data[i+16] = ent.Payload[i]
-	}
+	binary.LittleEndian.PutUint64(data[4:12], uint64(length))
+	copy(data[12:size-4], payload)
+	binary.LittleEndian.PutUint32(data[size-4:], crc)
 
 	size, err = e.bw.Write(data)
 	if err != nil {

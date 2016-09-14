@@ -8,11 +8,14 @@ import (
 )
 
 const (
+	// PrivateFileMode is the permission for service file
 	PrivateFileMode = 0600
-	PrivateDirMode  = 0700
+
+	// PrivateDirMode is the permission for service dir
+	PrivateDirMode = 0700
 )
 
-// reads and returns all file and dir names from directory f
+// ReadDir reads and returns all file and dir names from directory f
 func ReadDir(dirpath string) ([]string, error) {
 	dir, err := os.Open(dirpath)
 	if err != nil {
@@ -30,16 +33,9 @@ func ReadDir(dirpath string) ([]string, error) {
 	return names, nil
 }
 
-func TouchDirAll(dir string) error {
-	if err := os.MkdirAll(dir, PrivateDirMode); err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
+// CreateDirAll guarantee to create a new and empty dir
 func CreateDirAll(dir string) error {
-	if err := TouchDirAll(dir); err != nil {
+	if err := os.MkdirAll(dir, PrivateDirMode); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -55,10 +51,7 @@ func CreateDirAll(dir string) error {
 	return nil
 }
 
-func Fsync(f *os.File) error {
-	return f.Sync()
-}
-
+// Exist detects the file/dir whether exist
 func Exist(name string) bool {
 	_, err := os.Stat(name)
 	return err == nil

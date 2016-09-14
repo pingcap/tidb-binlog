@@ -30,7 +30,7 @@ func (d *decoder) decode(ent *pb.Binlog) error {
 
 	// read and chekc magic number
 	magicNum, err := readInt32(d.br)
-	if err == io.EOF || (err == nil && magicNum == 0) {
+	if err == io.EOF {
 		d.br = nil
 		return io.EOF
 	}
@@ -48,7 +48,7 @@ func (d *decoder) decode(ent *pb.Binlog) error {
 		}
 		return err
 	}
-	data := make([]byte, size)
+	data := make([]byte, size+4)
 
 	// read payload+crc
 	if _, err = io.ReadFull(d.br, data); err != nil {
@@ -59,8 +59,8 @@ func (d *decoder) decode(ent *pb.Binlog) error {
 	}
 
 	// decode bytes to ent struct and validate crc
-	entryCrc := binary.LittleEndian.Uint32(data[0:4])
-	ent.Payload = data[4:]
+	entryCrc := binary.LittleEndian.Uint32(data[size:])
+	ent.Payload = data[:size]
 	crc := crc32.Checksum(ent.Payload, crcTable)
 	if crc != entryCrc {
 		return ErrCRCMismatch
@@ -72,7 +72,7 @@ func (d *decoder) decode(ent *pb.Binlog) error {
 	}
 
 	// 12 is size + magic length
-	d.pos.Offset += size + 12
+	d.pos.Offset += size + 16
 
 	return nil
 }
