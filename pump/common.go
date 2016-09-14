@@ -41,7 +41,7 @@ func searchIndex(names []string, index uint64) (int, bool) {
 	return -1, false
 }
 
-// isValidBinlog detect the binlog names is valid
+// isValidBinlog detects the binlog names is valid
 func isValidBinlog(names []string) bool {
 	var lastSuffix uint64
 	for _, name := range names {
@@ -59,7 +59,7 @@ func isValidBinlog(names []string) bool {
 	return true
 }
 
-// readBinlogNames return sorted filenames in the dirpath
+// readBinlogNames returns sorted filenames in the dirpath
 func readBinlogNames(dirpath string) ([]string, error) {
 	names, err := file.ReadDir(dirpath)
 	if err != nil {

@@ -79,7 +79,7 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 	return binlog, nil
 }
 
-//OpenBinlogger for write, then it can be appendd
+//OpenBinlogger returns a binlogger for write, then it can be appendd
 func OpenBinlogger(dirpath string) (Binlogger, error) {
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
@@ -121,9 +121,9 @@ func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
 
-// Read read nums logs from the given log position.
-// it read binlogs from files and append to result set util the count = num
-// after read all binlog from one file  then close it and open the following file
+// Read reads nums logs from the given log position.
+// it reads binlogs from files and append to result set util the count = num
+// after reads all binlog from one file  then close it and open the following file
 func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
 	var ent = &pb.Binlog{}
 	var ents = []pb.Binlog{}
@@ -220,9 +220,8 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	return b.rotate()
 }
 
-// Rotate create a new file for append binlog
+// Rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
-
 	fpath := path.Join(b.dir, fileName(b.seq()+1))
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
@@ -230,7 +229,9 @@ func (b *binlogger) rotate() error {
 		return errors.Trace(err)
 	}
 
-	b.file.Close()
+	if err = b.file.Close(); err != nil {
+		log.Errorf("failed to unlock during closing file: %s", err)
+	}
 	b.file = newTail
 
 	b.encoder = newEncoder(b.file)
@@ -239,6 +240,7 @@ func (b *binlogger) rotate() error {
 	return nil
 }
 
+// Close closes the binlogger
 func (b *binlogger) Close() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()

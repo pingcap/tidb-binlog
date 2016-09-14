@@ -14,7 +14,7 @@ var (
 // LockedFile wraps the file into a LockedFile concept simply
 type LockedFile struct{ *os.File }
 
-// TryLockFile try to open the file with the file lock, it's unblock
+// TryLockFile tries to open the file with the file lock, it's unblock
 func TryLockFile(path string, flag int, perm os.FileMode) (*LockedFile, error) {
 	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
