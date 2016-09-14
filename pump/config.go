@@ -20,6 +20,7 @@ const (
 	defaultPort              = 8250
 	defaultHeartbeatInterval = 1000
 	defaultBinlogDir         = "/var/pump/binlog"
+	defaultMachineMetaDir    = "/var/pump/machine"
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	BinlogDir       string `json:"binlog-dir"`
 	HeartbeatMS     uint   `json:"heartbeat"`
 	Debug           bool   `json:"debug"`
+	MachineMetaDir  string `json:"data-dir"`
 
 	configFile   string
 	printVersion bool
@@ -53,6 +55,7 @@ func NewConfig() *Config {
 	fs.Var(flags.NewURLsValue(defaultEtcdURLs), "etcd", "A comma separated list of etcd endpoints")
 	fs.UintVar(&cfg.HeartbeatMS, "heartbeat", defaultHeartbeatInterval, "Number of milliseconds between heartbeat ticks")
 	fs.StringVar(&cfg.BinlogDir, "binlog-dir", defaultBinlogDir, "The path of binlog files")
+	fs.StringVar(&cfg.MachineMetaDir, "machine-metadata-dir", defaultMachineMetaDir, "The path of mach info storage")
 	fs.BoolVar(&cfg.Debug, "debug", false, "Enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "Path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "Print pump version info")
