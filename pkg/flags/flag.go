@@ -88,13 +88,3 @@ func URLStrsFromFlag(fs *flag.FlagSet, urlsFlagName string) []string {
 	}
 	return strs
 }
-
-func IsSet(fs *flag.FlagSet, name string) bool {
-	set := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			set = true
-		}
-	})
-	return set
-}
