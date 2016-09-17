@@ -28,7 +28,7 @@ func (s *testConfigSuite) TestConfigParsingCmdLineFlags(c *C) {
 	args := []string{
 		"-host", "192.168.199.100",
 		"-port", "8260",
-		"-etcd", "http://192.168.199.113:2379,http://hostname:2379",
+		"-pd-addrs", "http://192.168.199.113:2379,http://hostname:2379",
 		"-heartbeat=500",
 		"-binlog-dir=/tmp/pump",
 		"--debug",
@@ -43,7 +43,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 	args := []string{
 		"-host", "192.168.199.100",
 		"-port", "8260",
-		"-etcd", "http://192.168.199.113:2379,http://hostname:2379",
+		"-pd-addrs", "http://192.168.199.113:2379,http://hostname:2379",
 		"-heartbeat=500",
 		"--debug",
 	}
@@ -62,7 +62,7 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	yc := struct {
 		Host          string   `json:"host"`
 		Port          uint     `json:"port"`
-		EtcdEndpoints []string `json:"etcd"`
+		EtcdEndpoints []string `json:"pd-addrs"`
 		BinlogDir     string   `json:"binlog-dir"`
 		HeartbeatMS   uint     `json:"heartbeat"`
 		Debug         bool     `json:"debug"`

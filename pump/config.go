@@ -27,7 +27,7 @@ type Config struct {
 
 	Host            string   `json:"host"`
 	Port            uint     `json:"port"`
-	EtcdEndpoints   []string `json:"etcd"`
+	EtcdEndpoints   []string `json:"pd-addrs"`
 	EtcdDialTimeout time.Duration
 	BinlogDir       string `json:"binlog-dir"`
 	HeartbeatMS     uint   `json:"heartbeat"`
@@ -50,7 +50,7 @@ func NewConfig() *Config {
 
 	fs.StringVar(&cfg.Host, "host", "", "This pump's hostname or IP address to advertise to the public")
 	fs.UintVar(&cfg.Port, "port", defaultPort, "Port to listen on for gRPC")
-	fs.Var(flags.NewURLsValue(defaultEtcdURLs), "etcd", "A comma separated list of etcd endpoints")
+	fs.Var(flags.NewURLsValue(defaultEtcdURLs), "pd-addrs", "A comma separated list of the PD endpoints")
 	fs.UintVar(&cfg.HeartbeatMS, "heartbeat", defaultHeartbeatInterval, "Number of milliseconds between heartbeat ticks")
 	fs.StringVar(&cfg.BinlogDir, "binlog-dir", defaultBinlogDir, "The path of binlog files")
 	fs.BoolVar(&cfg.Debug, "debug", false, "Enable debug-level logging")
@@ -94,7 +94,7 @@ func (cfg *Config) configFromCmdLine() error {
 	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
-	cfg.EtcdEndpoints = flags.URLStrsFromFlag(cfg.FlagSet, "etcd")
+	cfg.EtcdEndpoints = flags.URLStrsFromFlag(cfg.FlagSet, "pd-addrs")
 	return cfg.validate()
 }
 
@@ -116,7 +116,7 @@ func (cfg *Config) validate() error {
 		return errors.New("flag 'host' must be set")
 	}
 	if len(cfg.EtcdEndpoints) == 0 {
-		return errors.New("no etcd endpoint given")
+		return errors.New("no PD endpoints given")
 	}
 	if _, err := types.NewURLs(cfg.EtcdEndpoints); err != nil {
 		return errors.Trace(err)
