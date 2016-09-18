@@ -17,12 +17,6 @@ var _ = Suite(&testFlagSuite{})
 
 type testFlagSuite struct{}
 
-func (s *testFlagSuite) SetUpSuite(c *C) {
-}
-
-func (s *testFlagSuite) TearDownSuite(c *C) {
-}
-
 func (s *testFlagSuite) TestSetFlagsFromEnv(c *C) {
 	fs := flag.NewFlagSet("test1", flag.ExitOnError)
 	fs.String("f1", "", "")

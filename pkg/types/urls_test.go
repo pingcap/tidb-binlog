@@ -15,12 +15,6 @@ var _ = Suite(&testTypesSuite{})
 
 type testTypesSuite struct{}
 
-func (s *testTypesSuite) SetUpSuite(c *C) {
-}
-
-func (s *testTypesSuite) TearDownSuite(c *C) {
-}
-
 func (s *testTypesSuite) TestURLs(c *C) {
 	urlstrs := []string{
 		"http://192.168.199.111:1080",

@@ -27,7 +27,7 @@ type Config struct {
 
 	Host            string   `json:"host"`
 	Port            uint     `json:"port"`
-	EtcdEndpoints   []string `json:"pd-addrs"`
+	EtcdEndpoints   []string `json:"pd"`
 	EtcdDialTimeout time.Duration
 	BinlogDir       string `json:"binlog-dir"`
 	HeartbeatMS     uint   `json:"heartbeat"`
@@ -48,9 +48,9 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, usageline)
 	}
 
-	fs.StringVar(&cfg.Host, "host", "", "This pump's hostname or IP address to advertise to the public")
+	fs.StringVar(&cfg.Host, "host", "", "The pump's hostname or IP address to advertise to the public")
 	fs.UintVar(&cfg.Port, "port", defaultPort, "Port to listen on for gRPC")
-	fs.Var(flags.NewURLsValue(defaultEtcdURLs), "pd-addrs", "A comma separated list of the PD endpoints")
+	fs.Var(flags.NewURLsValue(defaultEtcdURLs), "pd", "A comma separated list of the PD endpoints")
 	fs.UintVar(&cfg.HeartbeatMS, "heartbeat", defaultHeartbeatInterval, "Number of milliseconds between heartbeat ticks")
 	fs.StringVar(&cfg.BinlogDir, "binlog-dir", defaultBinlogDir, "The path of binlog files")
 	fs.BoolVar(&cfg.Debug, "debug", false, "Enable debug-level logging")
@@ -94,7 +94,7 @@ func (cfg *Config) configFromCmdLine() error {
 	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
-	cfg.EtcdEndpoints = flags.URLStrsFromFlag(cfg.FlagSet, "pd-addrs")
+	cfg.EtcdEndpoints = flags.URLStrsFromFlag(cfg.FlagSet, "pd")
 	return cfg.validate()
 }
 
