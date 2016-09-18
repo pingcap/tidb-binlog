@@ -20,7 +20,7 @@ func (s *server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.Pul
 	return nil, nil
 }
 
-func StartUp(cfg *Config) {
+func Start(cfg *Config) {
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", cfg.Port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

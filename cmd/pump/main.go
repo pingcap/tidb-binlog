@@ -39,5 +39,5 @@ func main() {
 		os.Exit(0)
 	}()
 
-	pump.StartUp(cfg)
+	pump.Start(cfg)
 }
