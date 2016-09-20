@@ -38,14 +38,14 @@ func readLocalNodeID(dir string) (string, error) {
 	// read the node ID from file
 	hash, err := ioutil.ReadFile(fullPath)
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
-	machID := fmt.Sprintf("%X", hash)
-	if len(machID) == 0 {
+	nodeID := fmt.Sprintf("%X", hash)
+	if len(nodeID) == 0 {
 		return generateLocalNodeID(dir)
 	}
 
-	return machID, nil
+	return nodeID, nil
 }
 
 // generate a new node ID, and save it to file
@@ -59,12 +59,12 @@ func generateLocalNodeID(dirpath string) (string, error) {
 	// dir not exists, make it
 	dir := filepath.Join(dirpath, nodeDir)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	file := filepath.Join(dir, nodeIDFile)
 	if err := ioutil.WriteFile(file, hash, os.ModePerm); err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 	nodeID := fmt.Sprintf("%X", hash)
 	return nodeID, nil
@@ -88,7 +88,7 @@ func KRand(size int, kind int) []byte {
 func CheckFileExist(filepath string) (string, error) {
 	fi, err := os.Stat(filepath)
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 	if fi.IsDir() {
 		return "", errors.Errorf("filepath: %s, is a directory, not a file", filepath)
@@ -146,7 +146,7 @@ func isValidBinlog(names []string) bool {
 func readBinlogNames(dirpath string) ([]string, error) {
 	names, err := file.ReadDir(dirpath)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	fnames := checkBinlogNames(names)

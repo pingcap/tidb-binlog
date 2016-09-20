@@ -35,7 +35,7 @@ func (r *EtcdRegistry) prefixed(p ...string) string {
 func (r *EtcdRegistry) Node(ctx context.Context, nodeID string) (*NodeStatus, error) {
 	resp, err := r.client.List(ctx, r.prefixed(nodePrefix, nodeID))
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	status, err := nodeStatusFromEtcdNode(nodeID, resp)
@@ -126,7 +126,7 @@ func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error)
 		case "object":
 			if err := json.Unmarshal(n.Value, &status); err != nil {
 				log.Errorf("Error unmarshaling NodeStatus, nodeID: %s, %v", nodeID, err)
-				return nil, err
+				return nil, errors.Trace(err)
 			}
 		case "alive":
 			isAlive = true

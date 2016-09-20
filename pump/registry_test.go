@@ -72,7 +72,7 @@ func TestRefreshNode(t *testing.T) {
 	host := "mytest"
 
 	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
-        defer cancel()
+	defer cancel()
 	err := r.RegisterNode(ctx, nodeID, host)
 	if err != nil {
 		t.Fatal(err)

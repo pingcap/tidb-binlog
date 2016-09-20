@@ -39,7 +39,7 @@ func (e *Client) Create(ctx context.Context, key string, val string, opts []clie
 		clientv3.OpPut(key, val, opts...),
 	).Commit()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	if !txnResp.Succeeded {
@@ -54,7 +54,7 @@ func (e *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	key = keyWithPrefix(e.pathPrefix, key)
 	resp, err := e.client.KV.Get(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	if len(resp.Kvs) == 0 {
@@ -73,7 +73,7 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 	if ttl > 0 {
 		lcr, err := e.client.Lease.Grant(ctx, ttl)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		opts = []clientv3.OpOption{clientv3.WithLease(lcr.ID)}
@@ -99,7 +99,7 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 			clientv3.OpGet(key),
 		).Commit()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		if !txnResp.Succeeded {
@@ -124,7 +124,7 @@ func (e *Client) List(ctx context.Context, key string) (*Node, error) {
 
 	resp, err := e.client.KV.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	root := new(Node)
