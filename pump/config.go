@@ -20,7 +20,7 @@ const (
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultHeartbeatInterval = 1000
-	defaultBinlogDir         = "data.pump"
+	defaultDataDir           = "data.pump"
 )
 
 type Config struct {
@@ -30,7 +30,7 @@ type Config struct {
 	AdvertiseAddr   string `json:"advertise-addr"`
 	EtcdURLs        string `json:"pd-urls"`
 	EtcdDialTimeout time.Duration
-	BinlogDir       string `json:"data-dir"`
+	DataDir         string `json:"data-dir"`
 	HeartbeatMS     uint   `json:"heartbeat-interval"`
 	Debug           bool
 	configFile      string
@@ -51,7 +51,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
-	fs.StringVar(&cfg.BinlogDir, "data-dir", "", "the path to store binlog data")
+	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.UintVar(&cfg.HeartbeatMS, "heartbeat-interval", defaultHeartbeatInterval, "number of milliseconds between heartbeat ticks")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
@@ -104,7 +104,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
-	adjustString(&cfg.BinlogDir, defaultBinlogDir)
+	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustUint(&cfg.HeartbeatMS, defaultHeartbeatInterval)
 
 	return cfg.validate()

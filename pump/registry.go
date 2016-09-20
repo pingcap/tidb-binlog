@@ -11,7 +11,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-const machinePrefix = "machine"
+const nodePrefix = "node"
 
 // EtcdRegistry wraps the reaction with etcd
 type EtcdRegistry struct {
@@ -27,54 +27,44 @@ func NewEtcdRegistry(client *etcd.Client, reqTimeout time.Duration) *EtcdRegistr
 	}
 }
 
-func (r *EtcdRegistry) ctx() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
-	return ctx, cancel
-}
-
 func (r *EtcdRegistry) prefixed(p ...string) string {
 	return path.Join(p...)
 }
 
-// Machine returns the machineStatus that matchs machID in the etcd
-func (r *EtcdRegistry) Machine(machID string) (*MachineStatus, error) {
-	ctx, cancel := r.ctx()
-	defer cancel()
-
-	resp, err := r.client.List(ctx, r.prefixed(machinePrefix, machID))
+// Node returns the nodeStatus that matchs nodeID in the etcd
+func (r *EtcdRegistry) Node(ctx context.Context, nodeID string) (*NodeStatus, error) {
+	resp, err := r.client.List(ctx, r.prefixed(nodePrefix, nodeID))
 	if err != nil {
 		return nil, err
 	}
 
-	status, err := machineStatusFromEtcdNode(machID, resp)
+	status, err := nodeStatusFromEtcdNode(nodeID, resp)
 	if err != nil {
-		return nil, errors.Errorf("Invalid machine node, machID[%s], error[%v]", machID, err)
+		return nil, errors.Errorf("Invalid node, nodeID[%s], error[%v]", nodeID, err)
 	}
 
 	return status, nil
 }
 
-// RegisterMachine register the machine in the etcd
-func (r *EtcdRegistry) RegisterMachine(machID, host string) error {
-	if exists, err := r.checkMachineExists(machID); err != nil {
+// RegisterNode register the node in the etcd
+func (r *EtcdRegistry) RegisterNode(ctx context.Context, nodeID, host string) error {
+	if exists, err := r.checkNodeExists(ctx, nodeID); err != nil {
 		return errors.Trace(err)
 	} else if !exists {
-		// not found then create a new machine node
-		return r.createMachine(machID, host)
+		// not found then create a new  node
+		return r.createNode(ctx, nodeID, host)
 	}
 
-	// found it, update host infomation of the machine
-	machStatus := &MachineStatus{
-		MachID: machID,
+	// found it, update host infomation of the node
+	nodeStatus := &NodeStatus{
+		NodeID: nodeID,
 		Host:   host,
 	}
-	return r.UpdateMeachineStatus(machID, machStatus)
+	return r.UpdateNodeStatus(ctx, nodeID, nodeStatus)
 }
 
-func (r *EtcdRegistry) checkMachineExists(machID string) (bool, error) {
-	ctx, cancel := r.ctx()
-	defer cancel()
-	_, err := r.client.Get(ctx, r.prefixed(machinePrefix, machID))
+func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool, error) {
+	_, err := r.client.Get(ctx, r.prefixed(nodePrefix, nodeID))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
@@ -84,63 +74,58 @@ func (r *EtcdRegistry) checkMachineExists(machID string) (bool, error) {
 	return true, nil
 }
 
-// UpdateMeachineStatus updates the mach
-func (r *EtcdRegistry) UpdateMeachineStatus(machID string, machStatus *MachineStatus) error {
-	object, err := marshal(machStatus)
+// UpdateNodeStatus updates the node
+func (r *EtcdRegistry) UpdateNodeStatus(ctx context.Context, nodeID string, nodeStatus *NodeStatus) error {
+	object, err := json.Marshal(nodeStatus)
 	if err != nil {
-		return errors.Errorf("Error marshaling MachineSattus, %v, %v", object, err)
+		return errors.Errorf("Error marshaling NodeSattus, %v, %v", object, err)
 	}
 
-	ctx, cancel := r.ctx()
-	defer cancel()
-	key := r.prefixed(machinePrefix, machID, "object")
-	if err := r.client.Update(ctx, key, object, 0); err != nil {
-		return errors.Errorf("Failed to update MachStatus in etcd, %s, %v, %v", machID, object, err)
+	key := r.prefixed(nodePrefix, nodeID, "object")
+	if err := r.client.Update(ctx, key, string(object), 0); err != nil {
+		return errors.Errorf("Failed to update NodeStatus in etcd, %s, %v, %v", nodeID, object, err)
 	}
 	return nil
 }
 
-func (r *EtcdRegistry) createMachine(machID string, host string) error {
-	object := &MachineStatus{
-		MachID: machID,
+func (r *EtcdRegistry) createNode(ctx context.Context, nodeID string, host string) error {
+	object := &NodeStatus{
+		NodeID: nodeID,
 		Host:   host,
 	}
 
-	ctx, cancel := r.ctx()
-	defer cancel()
-	if objstr, err := marshal(object); err == nil {
-		if err := r.client.Create(ctx, r.prefixed(machinePrefix, machID, "object"), objstr, nil); err != nil {
-			return errors.Errorf("Failed to create MachStatus of machine node, %s, %v, %v", machID, object, err)
-		}
-	} else {
-		return errors.Errorf("Error marshaling MachineStatus, %v, %v", object, err)
+	objstr, err := json.Marshal(object)
+	if err != nil {
+		return errors.Errorf("Error marshaling NodeStatus, %v, %v", object, err)
+	}
+
+	if err = r.client.Create(ctx, r.prefixed(nodePrefix, nodeID, "object"), string(objstr), nil); err != nil {
+		return errors.Errorf("Failed to create NodeStatus of node, %s, %v, %v", nodeID, object, err)
 	}
 
 	return nil
 }
 
-// RefreshMachine keeps the heartbeats with etcd
-func (r *EtcdRegistry) RefreshMachine(machID string, ttl int64) error {
-	aliveKey := r.prefixed(machinePrefix, machID, "alive")
+// RefreshNode keeps the heartbeats with etcd
+func (r *EtcdRegistry) RefreshNode(ctx context.Context, nodeID string, ttl int64) error {
+	aliveKey := r.prefixed(nodePrefix, nodeID, "alive")
 
-	// try to touch alive state of machine, update ttl
-	ctx, cancel := r.ctx()
-	defer cancel()
+	// try to touch alive state of node, update ttl
 	if err := r.client.Update(ctx, aliveKey, "", ttl); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func machineStatusFromEtcdNode(machID string, node *etcd.Node) (*MachineStatus, error) {
-	status := &MachineStatus{}
+func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error) {
+	status := &NodeStatus{}
 
 	var isAlive bool
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
-			if err := unmarshal(n.Value, &status); err != nil {
-				log.Errorf("Error unmarshaling MachStatus, machID: %s, %v", machID, err)
+			if err := json.Unmarshal(n.Value, &status); err != nil {
+				log.Errorf("Error unmarshaling NodeStatus, nodeID: %s, %v", nodeID, err)
 				return nil, err
 			}
 		case "alive":
@@ -150,20 +135,4 @@ func machineStatusFromEtcdNode(machID string, node *etcd.Node) (*MachineStatus, 
 
 	status.IsAlive = isAlive
 	return status, nil
-}
-
-func marshal(obj interface{}) (string, error) {
-	encoded, err := json.Marshal(obj)
-	if err == nil {
-		return string(encoded), nil
-	}
-	return "", errors.Errorf("unable to JSON-serialize object: %s", err)
-}
-
-func unmarshal(val []byte, obj interface{}) error {
-	err := json.Unmarshal(val, &obj)
-	if err == nil {
-		return nil
-	}
-	return errors.Errorf("unable to JSON-deserialize object: %s", err)
 }

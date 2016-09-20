@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
@@ -29,7 +30,7 @@ func NewClient(client *clientv3.Client, pathPrefix string) *Client {
 	}
 }
 
-// Create guarante to set a key = value with some options(like ttl)
+// Create guarantees to set a key = value with some options(like ttl)
 func (e *Client) Create(ctx context.Context, key string, val string, opts []clientv3.OpOption) error {
 	key = keyWithPrefix(e.pathPrefix, key)
 	txnResp, err := e.client.KV.Txn(ctx).If(
@@ -42,7 +43,7 @@ func (e *Client) Create(ctx context.Context, key string, val string, opts []clie
 	}
 
 	if !txnResp.Succeeded {
-		return NewKeyExistsError(key)
+		return errors.AlreadyExistsf("key %s is not found in etcd", key)
 	}
 
 	return nil
@@ -57,13 +58,13 @@ func (e *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, NewKeyNotFoundError(key)
+		return nil, errors.NotFoundf("key %s is not found in etcd", key)
 	}
 
 	return resp.Kvs[0].Value, nil
 }
 
-// Update guarante to update a key/value.
+// Update guarantees to update a key/value.
 // set ttl 0 to disable the Lease ttl feature
 func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) error {
 	key = keyWithPrefix(e.pathPrefix, key)
@@ -75,7 +76,7 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 			return err
 		}
 
-		opts = []clientv3.OpOption{clientv3.WithLease(clientv3.LeaseID(lcr.ID))}
+		opts = []clientv3.OpOption{clientv3.WithLease(lcr.ID)}
 	}
 
 	getResp, err := e.client.KV.Get(ctx, key)
@@ -85,16 +86,9 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 
 	originRevision := int64(0)
 
-	if len(getResp.Kvs) == 0 {
-		err = e.Create(ctx, key, val, opts)
-		if err != nil {
-			return err
-		}
-
-		return nil
+	if len(getResp.Kvs) != 0 {
+		originRevision = getResp.Kvs[0].ModRevision
 	}
-
-	originRevision = getResp.Kvs[0].ModRevision
 
 	for {
 		txnResp, err := e.client.KV.Txn(ctx).If(
@@ -109,7 +103,7 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 		}
 
 		if !txnResp.Succeeded {
-			getResp = (*clientv3.GetResponse)(txnResp.Responses[0].GetResponseRange())
+			getResp := txnResp.Responses[0].GetResponseRange()
 			log.Infof("Update of %s failed because of a conflict, originRevision = %d, want Revision = %d,going to retry", key, originRevision, getResp.Kvs[0].ModRevision)
 			originRevision = getResp.Kvs[0].ModRevision
 			continue

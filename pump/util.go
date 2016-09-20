@@ -29,50 +29,45 @@ func InitLogger(cfg *Config) {
 	log.SetHighlighting(false)
 }
 
-func readLocalMachineID(dir string) (string, error) {
-	fullPath := filepath.Join(dir, machineDir, machineIDFile)
+func readLocalNodeID(dir string) (string, error) {
+	fullPath := filepath.Join(dir, nodeDir, nodeIDFile)
 	if _, err := CheckFileExist(fullPath); err != nil {
-		return generateLocalMachineID(dir)
+		return generateLocalNodeID(dir)
 	}
 
-	// read the machine ID from file
+	// read the node ID from file
 	hash, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		return "", err
 	}
 	machID := fmt.Sprintf("%X", hash)
 	if len(machID) == 0 {
-		return generateLocalMachineID(dir)
+		return generateLocalNodeID(dir)
 	}
 
 	return machID, nil
 }
 
-// generate a new machine ID, and save it to file
-func generateLocalMachineID(dirpath string) (string, error) {
+// generate a new node ID, and save it to file
+func generateLocalNodeID(dirpath string) (string, error) {
 	rand64 := string(KRand(64, 3))
 	log.Debugf("Generated a randomized string with 64 runes, %s", rand64)
 	t := sha1.New()
 	io.WriteString(t, rand64)
 	hash := t.Sum(nil)
 
-	dir := filepath.Join(dirpath, machineDir)
-	if _, err := os.Stat(dir); err != nil {
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		// dir not exists, make it
-		if err := os.Mkdir(dir, os.ModePerm); err != nil {
-			return "", err
-		}
+	// dir not exists, make it
+	dir := filepath.Join(dirpath, nodeDir)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return "", err
 	}
 
-	file := filepath.Join(dir, machineIDFile)
+	file := filepath.Join(dir, nodeIDFile)
 	if err := ioutil.WriteFile(file, hash, os.ModePerm); err != nil {
 		return "", err
 	}
-	machID := fmt.Sprintf("%X", hash)
-	return machID, nil
+	nodeID := fmt.Sprintf("%X", hash)
+	return nodeID, nil
 }
 
 // KRand is an algorithm that compute rand nums

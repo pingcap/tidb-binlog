@@ -7,94 +7,99 @@ import (
 	"github.com/coreos/etcd/integration"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	pb "github.com/pingcap/tidb-binlog/proto"
+	"golang.org/x/net/context"
 )
 
-func TestUpdateMachineInfo(t *testing.T) {
+func TestUpdateNodeInfo(t *testing.T) {
 	etcdclient, cluster := testSetup(t)
 	defer cluster.Terminate(t)
 
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
-	machID := "test1"
+	nodeID := "test1"
 	host := "mytest"
 
-	err := r.RegisterMachine(machID, host)
+	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
+	defer cancel()
+	err := r.RegisterNode(ctx, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Machine(machID)
+	status, err := r.Node(ctx, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.MachID != machID || len(status.Offsets) != 0 {
-		t.Fatalf("machine info have error : %v", status)
+	if status.NodeID != nodeID || len(status.Offsets) != 0 {
+		t.Fatalf("node info have error : %v", status)
 	}
 
-	newMachineStatus := &MachineStatus{
-		MachID:  machID,
+	newNodeStatus := &NodeStatus{
+		NodeID:  nodeID,
 		Host:    host,
 		Offsets: make(map[string]*pb.Pos),
 	}
 
-	newMachineStatus.Offsets["cluster1"] = &pb.Pos{
+	newNodeStatus.Offsets["cluster1"] = &pb.Pos{
 		Suffix: 1,
 		Offset: 1,
 	}
 
-	err = r.UpdateMeachineStatus(machID, newMachineStatus)
+	err = r.UpdateNodeStatus(ctx, nodeID, newNodeStatus)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err = r.Machine(machID)
+	status, err = r.Node(ctx, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.MachID != machID || status.Offsets["cluster1"].Suffix != 1 ||
+	if status.NodeID != nodeID || status.Offsets["cluster1"].Suffix != 1 ||
 		status.Offsets["cluster1"].Offset != 1 {
-		t.Fatalf("machine info have error : %v", status)
+		t.Fatalf("node info have error : %v", status)
 	}
 }
 
-func TestRefreshMachine(t *testing.T) {
+func TestRefreshNode(t *testing.T) {
 	etcdclient, cluster := testSetup(t)
 	defer cluster.Terminate(t)
 
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
-	machID := "test1"
+	nodeID := "test1"
 	host := "mytest"
 
-	err := r.RegisterMachine(machID, host)
+	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
+        defer cancel()
+	err := r.RegisterNode(ctx, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = r.RefreshMachine(machID, 2)
+	err = r.RefreshNode(ctx, nodeID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Machine(machID)
+	status, err := r.Node(ctx, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.MachID != machID || len(status.Offsets) != 0 || !status.IsAlive {
-		t.Fatalf("machine info have error : %v", status)
+	if status.NodeID != nodeID || len(status.Offsets) != 0 || !status.IsAlive {
+		t.Fatalf("node info have error : %v", status)
 	}
 
 	time.Sleep(3 * time.Second)
 
-	status, err = r.Machine(machID)
+	status, err = r.Node(ctx, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.MachID != machID || len(status.Offsets) != 0 || status.IsAlive {
-		t.Fatalf("machine info have error : %v", status)
+	if status.NodeID != nodeID || len(status.Offsets) != 0 || status.IsAlive {
+		t.Fatalf("node info have error : %v", status)
 	}
 }
 
