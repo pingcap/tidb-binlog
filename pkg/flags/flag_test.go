@@ -95,8 +95,11 @@ func (s *testFlagSuite) TestSetFlagsFromEnvBad(c *C) {
 }
 
 func (s *testFlagSuite) TestURLStrsFromFlag(c *C) {
+	urlv, err := NewURLsValue("http://127.0.0.1:1234")
+	c.Assert(err, IsNil)
+
 	fs := flag.NewFlagSet("testUrlFlag", flag.ExitOnError)
-	fs.Var(NewURLsValue("http://127.0.0.1:1234"), "urls", "")
+	fs.Var(urlv, "urls", "")
 	fs.Parse([]string{})
 
 	urls := "http://192.168.1.1:1234,http://192.168.1.2:1234,http://192.168.1.3:1234"
