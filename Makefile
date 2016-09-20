@@ -37,6 +37,8 @@ install:
 
 test:
 	rm -rf vendor && ln -s _vendor/vendor vendor
+	@export log_level=error;\
+	go test -cover $(PACKAGES)
 	rm -rf vendor
 
 fmt:
