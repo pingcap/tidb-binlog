@@ -1,8 +1,8 @@
 package pump
 
 import (
-	"fmt"
 	"net"
+	"net/url"
 
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto"
@@ -20,8 +20,12 @@ func (s *server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.Pul
 	return nil, nil
 }
 
-func Run(cfg *Config) {
-	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", cfg.Port))
+func Start(cfg *Config) {
+	u, err := url.Parse(cfg.ListenAddr)
+	if err != nil {
+		log.Fatalf("bad configuration of listening addr: %s, error: %v", cfg.ListenAddr, err)
+	}
+	lis, err := net.Listen("tcp", u.Host)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

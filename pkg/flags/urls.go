@@ -1,8 +1,8 @@
 package flags
 
 import (
-	"fmt"
 	"strings"
+	"net/url"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/types"
@@ -31,10 +31,21 @@ func (us *URLsValue) String() string {
 	return strings.Join(all, ",")
 }
 
-func NewURLsValue(init string) *URLsValue {
-	v := &URLsValue{}
-	if err := v.Set(init); err != nil {
-		panic(fmt.Sprintf("new URLsValue should never fail: %v", err))
+func (us *URLsValue) StringSlice() []string {
+	all := make([]string, len(*us))
+	for i, u := range *us {
+		all[i] = u.String()
 	}
-	return v
+	return all
+}
+
+func (us *URLsValue) URLSlice() []url.URL {
+	urls := []url.URL(*us)
+	return urls
+}
+
+func NewURLsValue(init string) (*URLsValue, error) {
+	v := &URLsValue{}
+	err := v.Set(init)
+	return v, err
 }

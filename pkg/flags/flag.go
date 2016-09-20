@@ -76,25 +76,10 @@ func setFlagFromEnv(fs flagSetter, prefix, fname string, usedEnvKey, alreadySet 
 
 // URLsFromFlag returns a slices from url got from the flag.
 func URLsFromFlag(fs *flag.FlagSet, urlsFlagName string) []url.URL {
-	return []url.URL(*fs.Lookup(urlsFlagName).Value.(*URLsValue))
+	return fs.Lookup(urlsFlagName).Value.(*URLsValue).URLSlice()
 }
 
 // URLsFromFlag returns a string slices from url got from the flag.
 func URLStrsFromFlag(fs *flag.FlagSet, urlsFlagName string) []string {
-	urls := URLsFromFlag(fs, urlsFlagName)
-	strs := make([]string, len(urls))
-	for i, u := range urls {
-		strs[i] = u.String()
-	}
-	return strs
-}
-
-func IsSet(fs *flag.FlagSet, name string) bool {
-	set := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			set = true
-		}
-	})
-	return set
+	return fs.Lookup(urlsFlagName).Value.(*URLsValue).StringSlice()
 }
