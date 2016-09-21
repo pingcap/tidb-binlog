@@ -93,7 +93,13 @@ func TestUpdate(t *testing.T) {
 	input2 := "updatetest2"
 	key := "binlog/updatekey"
 
-	err := etcdCli.Update(ctx, key, input, 2)
+	lcr, err := etcdCli.client.Lease.Grant(ctx, 2)
+	if err != nil {
+		t.Fatalf("get lease failed: %v", err)
+	}
+
+	opts := []clientv3.OpOption{clientv3.WithLease(lcr.ID)}
+	err = etcdCli.Create(ctx, key, input, opts)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}

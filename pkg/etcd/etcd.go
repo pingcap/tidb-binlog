@@ -6,7 +6,6 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
 
@@ -64,7 +63,7 @@ func (e *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	return resp.Kvs[0].Value, nil
 }
 
-// Update guarantees to update a key/value.
+// Update updates a key/value.
 // set ttl 0 to disable the Lease ttl feature
 func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) error {
 	key = keyWithPrefix(e.pathPrefix, key)
@@ -79,37 +78,17 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 		opts = []clientv3.OpOption{clientv3.WithLease(lcr.ID)}
 	}
 
-	getResp, err := e.client.KV.Get(ctx, key)
+	txnResp, err := e.client.KV.Txn(ctx).If(
+		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
+	).Then(
+		clientv3.OpPut(key, val, opts...),
+	).Commit()
 	if err != nil {
-		return nil
+		return errors.Trace(err)
 	}
 
-	originRevision := int64(0)
-
-	if len(getResp.Kvs) != 0 {
-		originRevision = getResp.Kvs[0].ModRevision
-	}
-
-	for {
-		txnResp, err := e.client.KV.Txn(ctx).If(
-			clientv3.Compare(clientv3.ModRevision(key), "=", originRevision),
-		).Then(
-			clientv3.OpPut(key, val, opts...),
-		).Else(
-			clientv3.OpGet(key),
-		).Commit()
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		if !txnResp.Succeeded {
-			getResp := txnResp.Responses[0].GetResponseRange()
-			log.Infof("Update of %s failed because of a conflict, originRevision = %d, want Revision = %d,going to retry", key, originRevision, getResp.Kvs[0].ModRevision)
-			originRevision = getResp.Kvs[0].ModRevision
-			continue
-		}
-
-		break
+	if !txnResp.Succeeded {
+		return errors.NotFoundf("key %s is not found in etcd", key)
 	}
 
 	return nil
