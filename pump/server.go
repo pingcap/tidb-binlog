@@ -3,9 +3,7 @@ package pump
 import (
 	"net"
 	"net/url"
-
 	"sync"
-
 	"fmt"
 	"os"
 	"path"
