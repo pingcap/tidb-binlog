@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"golang.org/x/net/context"
 )
 
-const nodePrefix = "node"
+const nodePrefix = "nodes"
 
 // EtcdRegistry wraps the reaction with etcd
 type EtcdRegistry struct {
@@ -32,35 +31,36 @@ func (r *EtcdRegistry) prefixed(p ...string) string {
 }
 
 // Node returns the nodeStatus that matchs nodeID in the etcd
-func (r *EtcdRegistry) Node(ctx context.Context, nodeID string) (*NodeStatus, error) {
+func (r *EtcdRegistry) Node(pctx context.Context, nodeID string) (*NodeStatus, error) {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
 	resp, err := r.client.List(ctx, r.prefixed(nodePrefix, nodeID))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	status, err := nodeStatusFromEtcdNode(nodeID, resp)
 	if err != nil {
 		return nil, errors.Errorf("Invalid node, nodeID[%s], error[%v]", nodeID, err)
 	}
-
 	return status, nil
 }
 
 // RegisterNode register the node in the etcd
-func (r *EtcdRegistry) RegisterNode(ctx context.Context, nodeID, host string) error {
+func (r *EtcdRegistry) RegisterNode(pctx context.Context, nodeID, host string) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
 	if exists, err := r.checkNodeExists(ctx, nodeID); err != nil {
 		return errors.Trace(err)
 	} else if !exists {
 		// not found then create a new  node
 		return r.createNode(ctx, nodeID, host)
+	} else {
+		// found it, update host infomation of the node
+		return r.updateNode(ctx, nodeID, host)
 	}
 
-	// found it, update host infomation of the node
-	nodeStatus := &NodeStatus{
-		NodeID: nodeID,
-		Host:   host,
-	}
-	return r.UpdateNodeStatus(ctx, nodeID, nodeStatus)
 }
 
 func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool, error) {
@@ -75,43 +75,53 @@ func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool
 }
 
 // UpdateNodeStatus updates the node
-func (r *EtcdRegistry) UpdateNodeStatus(ctx context.Context, nodeID string, nodeStatus *NodeStatus) error {
-	object, err := json.Marshal(nodeStatus)
-	if err != nil {
-		return errors.Errorf("Error marshaling NodeSattus, %v, %v", object, err)
-	}
+func (r *EtcdRegistry) UpdateNode(pctx context.Context, nodeID, host string) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
 
+	return r.updateNode(ctx, nodeID, host)
+}
+
+func (r *EtcdRegistry) updateNode(ctx context.Context, nodeID, host string) error {
+	obj := &NodeStatus{
+		NodeID: nodeID,
+		Host:   host,
+	}
+	objstr, err := json.Marshal(obj)
+	if err != nil {
+		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
+	}
 	key := r.prefixed(nodePrefix, nodeID, "object")
-	if err := r.client.Update(ctx, key, string(object), 0); err != nil {
-		return errors.Errorf("Failed to update NodeStatus in etcd, %s, %v, %v", nodeID, object, err)
+	if err := r.client.Update(ctx, key, string(objstr), 0); err != nil {
+		return errors.Annotatef(err, "fail to update node with NodeStatus(%v)", obj)
 	}
 	return nil
 }
 
-func (r *EtcdRegistry) createNode(ctx context.Context, nodeID string, host string) error {
-	object := &NodeStatus{
+func (r *EtcdRegistry) createNode(ctx context.Context, nodeID, host string) error {
+	obj := &NodeStatus{
 		NodeID: nodeID,
 		Host:   host,
 	}
-
-	objstr, err := json.Marshal(object)
+	objstr, err := json.Marshal(obj)
 	if err != nil {
-		return errors.Errorf("Error marshaling NodeStatus, %v, %v", object, err)
+		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
 	}
-
-	if err = r.client.Create(ctx, r.prefixed(nodePrefix, nodeID, "object"), string(objstr), nil); err != nil {
-		return errors.Errorf("Failed to create NodeStatus of node, %s, %v, %v", nodeID, object, err)
+	key := r.prefixed(nodePrefix, nodeID, "object")
+	if err := r.client.Create(ctx, key, string(objstr), nil); err != nil {
+		return errors.Annotatef(err, "fail to create node with NodeStatus(%v)", obj)
 	}
-
 	return nil
 }
 
 // RefreshNode keeps the heartbeats with etcd
-func (r *EtcdRegistry) RefreshNode(ctx context.Context, nodeID string, ttl int64) error {
-	aliveKey := r.prefixed(nodePrefix, nodeID, "alive")
+func (r *EtcdRegistry) RefreshNode(pctx context.Context, nodeID string, ttl int64) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
 
+	aliveKey := r.prefixed(nodePrefix, nodeID, "alive")
 	// try to touch alive state of node, update ttl
-	if err := r.client.Update(ctx, aliveKey, "", ttl); err != nil {
+	if err := r.client.UpdateOrCreate(ctx, aliveKey, "", ttl); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -119,14 +129,12 @@ func (r *EtcdRegistry) RefreshNode(ctx context.Context, nodeID string, ttl int64
 
 func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error) {
 	status := &NodeStatus{}
-
 	var isAlive bool
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
-			if err := json.Unmarshal(n.Value, &status); err != nil {
-				log.Errorf("Error unmarshaling NodeStatus, nodeID: %s, %v", nodeID, err)
-				return nil, errors.Trace(err)
+			if err := json.Unmarshal(n.Value, status); err != nil {
+				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", nodeID)
 			}
 		case "alive":
 			isAlive = true

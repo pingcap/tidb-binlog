@@ -169,6 +169,5 @@ func TestList(t *testing.T) {
 func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) {
 	cluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	etcd := NewClient(cluster.RandClient(), "binlog")
-	ctx := context.Background()
-	return ctx, etcd, cluster
+	return context.Background(), etcd, cluster
 }
