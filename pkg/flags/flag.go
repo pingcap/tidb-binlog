@@ -79,7 +79,7 @@ func URLsFromFlag(fs *flag.FlagSet, urlsFlagName string) []url.URL {
 	return fs.Lookup(urlsFlagName).Value.(*URLsValue).URLSlice()
 }
 
-// URLsFromFlag returns a string slices from url got from the flag.
+// URLStrsFromFlag returns a string slices from url got from the flag.
 func URLStrsFromFlag(fs *flag.FlagSet, urlsFlagName string) []string {
 	return fs.Lookup(urlsFlagName).Value.(*URLsValue).StringSlice()
 }

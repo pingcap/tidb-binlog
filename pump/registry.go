@@ -74,7 +74,7 @@ func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool
 	return true, nil
 }
 
-// UpdateNodeStatus updates the node
+// UpdateNode updates the node
 func (r *EtcdRegistry) UpdateNode(pctx context.Context, nodeID, host string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()

@@ -23,6 +23,7 @@ const (
 	defaultDataDir           = "data.pump"
 )
 
+// Config holds the configuration of pump
 type Config struct {
 	*flag.FlagSet
 
@@ -37,6 +38,7 @@ type Config struct {
 	printVersion    bool
 }
 
+// NewConfig return an instance of configuration
 func NewConfig() *Config {
 	cfg := &Config{
 		EtcdDialTimeout: defaultEtcdDialTimeout,
@@ -60,6 +62,7 @@ func NewConfig() *Config {
 	return cfg
 }
 
+// Parse parses all config from command-line flags, environment vars or configuration file
 func (cfg *Config) Parse(arguments []string) error {
 	// Parse first to get config file
 	perr := cfg.FlagSet.Parse(arguments)
@@ -143,35 +146,36 @@ func adjustDuration(v *time.Duration, defValue time.Duration) {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
-	if urllis, err := url.Parse(cfg.ListenAddr); err != nil {
+	urllis, err := url.Parse(cfg.ListenAddr)
+	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
-	} else {
-		if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
-			return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
-		}
+	}
+
+	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
+		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 
 	// check AdvertiseAddr
-	if urladv, err := url.Parse(cfg.AdvertiseAddr); err != nil {
+	urladv, err := url.Parse(cfg.AdvertiseAddr)
+	if err != nil {
 		return errors.Errorf("parse AdvertiseAddr error: %s, %v", cfg.AdvertiseAddr, err)
-	} else {
-		if host, _, err := net.SplitHostPort(urladv.Host); err != nil {
-			return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
-		} else {
-			if host == "0.0.0.0" {
-				return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
-			}
-		}
+	}
+	host, _, err := net.SplitHostPort(urladv.Host)
+	if err != nil {
+		return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
+	}
+	if host == "0.0.0.0" {
+		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
 	}
 
 	// check EtcdEndpoints
-	if urlv, err := flags.NewURLsValue(cfg.EtcdURLs); err != nil {
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
 		return errors.Errorf("parse EtcdURLs error: %s, %v", cfg.EtcdURLs, err)
-	} else {
-		for _, u := range urlv.URLSlice() {
-			if _, _, err := net.SplitHostPort(u.Host); err != nil {
-				return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
-			}
+	}
+	for _, u := range urlv.URLSlice() {
+		if _, _, err := net.SplitHostPort(u.Host); err != nil {
+			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	// DefaultRootPath is the root path of the keys stored in etcd
 	DefaultRootPath = "tidb-binlog"
 )
 
@@ -35,7 +36,7 @@ func NewClient(cli *clientv3.Client, root string) *Client {
 	}
 }
 
-// NewClient return a wrapped etcd client
+// NewClientFromCfg return a wrapped etcd client
 func NewClientFromCfg(endpoints []string, dialTimeout time.Duration, root string) (*Client, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
@@ -116,6 +117,7 @@ func (e *Client) Update(ctx context.Context, key string, val string, ttl int64) 
 	return nil
 }
 
+// UpdateOrCreate updates a key/value, if the key does not exist then create, or update
 func (e *Client) UpdateOrCreate(ctx context.Context, key string, val string, ttl int64) error {
 	key = keyWithPrefix(e.rootPath, key)
 

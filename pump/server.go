@@ -153,6 +153,7 @@ func (s *pumpServer) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb
 	return ret, nil
 }
 
+// Start runs PumpServer to serve the listening port, and maintains heartbeat to Etcd
 func Start(cfg *Config) {
 	node, err := NewPumpNode(cfg)
 	if err != nil {

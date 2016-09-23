@@ -7,13 +7,16 @@ import (
 )
 
 var (
+	// Version defines the version of pump
 	Version = "1.0.0+git"
 
-	// GitSHA and BuildTS will be set during make
+	// GitSHA will be set during make
 	GitSHA  = "Not provided (use make build instead of go build)"
+	// BuildTS and BuildTS will be set during make
 	BuildTS = "Not provided (use make build instead of go build)"
 )
 
+// PrintVersionInfo show version info to stdout
 func PrintVersionInfo() {
 	log.Infof("pump Version: %s\n", Version)
 	log.Infof("Git SHA: %s\n", GitSHA)

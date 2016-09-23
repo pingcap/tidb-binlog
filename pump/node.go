@@ -26,6 +26,7 @@ const (
 	heartbeatTTL      = 5
 )
 
+// Node holds the states of this pump node
 type Node interface {
 	// ID return the uuid representing of this pump node
 	ID() string
