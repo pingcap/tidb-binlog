@@ -52,11 +52,13 @@ func (us *URLs) Sort() {
 }
 
 // Len return the lenght of URL slice
-func (us URLs) Len() int           { return len(us) }
+func (us URLs) Len() int { return len(us) }
+
 // Less compares two URL and return the less one
 func (us URLs) Less(i, j int) bool { return us[i].String() < us[j].String() }
+
 // Swap swaps two URLs in the slice
-func (us URLs) Swap(i, j int)      { us[i], us[j] = us[j], us[i] }
+func (us URLs) Swap(i, j int) { us[i], us[j] = us[j], us[i] }
 
 // StringSlice return a slice of formatted string of URL
 func (us URLs) StringSlice() []string {

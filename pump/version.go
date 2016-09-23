@@ -11,7 +11,7 @@ var (
 	Version = "1.0.0+git"
 
 	// GitSHA will be set during make
-	GitSHA  = "Not provided (use make build instead of go build)"
+	GitSHA = "Not provided (use make build instead of go build)"
 	// BuildTS and BuildTS will be set during make
 	BuildTS = "Not provided (use make build instead of go build)"
 )
