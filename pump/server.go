@@ -1,12 +1,12 @@
 package pump
 
 import (
+	"fmt"
 	"net"
 	"net/url"
-	"sync"
-	"fmt"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -157,7 +157,7 @@ func Start(cfg *Config) {
 	if err != nil {
 		log.Fatalf("fail to create node, %v", err)
 	}
-	if err := node.RegisterToEtcd(context.Background()); err != nil {
+	if err := node.Register(context.Background()); err != nil {
 		log.Fatalf("fail to register node to etcd, %v", err)
 	}
 	done := make(chan struct{})

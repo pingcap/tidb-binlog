@@ -1,11 +1,11 @@
 package pump
 
 import (
+	"context"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
-	"context"
 	"time"
 
 	"github.com/jonboulle/clockwork"
@@ -18,11 +18,9 @@ import (
 )
 
 const (
-	shortIDLen        = 8
-	nodeIDFile        = ".node"
-	lockFile          = ".lock"
-	heartbeatInterval = 3 * time.Second
-	heartbeatTTL      = 5
+	shortIDLen = 8
+	nodeIDFile = ".node"
+	lockFile   = ".lock"
 )
 
 // Node holds the states of this pump node
@@ -31,9 +29,9 @@ type Node interface {
 	ID() string
 	// a short ID as 8 bytes length
 	ShortID() string
-	// RegisterToEtcd register this pump node to the etcd
+	// Register register this pump node to Etcd
 	// create new one if nodeID not exist, or update it
-	RegisterToEtcd(ctx context.Context) error
+	Register(ctx context.Context) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context, done <-chan struct{}) <-chan error
@@ -41,8 +39,10 @@ type Node interface {
 
 type pumpNode struct {
 	*EtcdRegistry
-	id   string
-	host string
+	id                string
+	host              string
+	heartbeatTTL      time.Duration
+	heartbeatInterval time.Duration
 }
 
 // NodeStatus describes the status information of a node in etcd
@@ -86,9 +86,11 @@ func NewPumpNode(cfg *Config) (Node, error) {
 	}
 
 	node := &pumpNode{
-		EtcdRegistry: NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
-		id:           nodeID,
-		host:         advURL.Host,
+		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		id:                nodeID,
+		host:              advURL.Host,
+		heartbeatInterval: cfg.HeartbeatInterval,
+		heartbeatTTL:      cfg.HeartbeatInterval * 3 / 2,
 	}
 	return node, nil
 }
@@ -104,7 +106,7 @@ func (p *pumpNode) ShortID() string {
 	return p.id[0:shortIDLen]
 }
 
-func (p *pumpNode) RegisterToEtcd(ctx context.Context) error {
+func (p *pumpNode) Register(ctx context.Context) error {
 	err := p.RegisterNode(ctx, p.id, p.host)
 	if err != nil {
 		return errors.Trace(err)
@@ -122,8 +124,8 @@ func (p *pumpNode) Heartbeat(ctx context.Context, done <-chan struct{}) <-chan e
 				// stop heartbeat and prepare to exit
 				close(errc)
 				return
-			case <-clock.After(heartbeatInterval):
-				if err := p.RefreshNode(ctx, p.id, heartbeatTTL); err != nil {
+			case <-clock.After(p.heartbeatInterval):
+				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}
 			}

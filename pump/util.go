@@ -27,7 +27,7 @@ func InitLogger(isDebug bool) {
 
 // KRand is an algorithm that compute rand nums
 func KRand(size int, kind int) []byte {
-	ikind, kinds, result := kind, [][]int{[]int{10, 48}, []int{26, 97}, []int{26, 65}}, make([]byte, size)
+	ikind, kinds, result := kind, [][]int{{10, 48}, {26, 97}, {26, 65}}, make([]byte, size)
 	isAll := kind > 2 || kind < 0
 	for i := 0; i < size; i++ {
 		if isAll { // random ikind

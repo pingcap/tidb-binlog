@@ -3,7 +3,6 @@ package etcd
 import (
 	"path"
 	"strings"
-
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
