@@ -1,8 +1,8 @@
-hash: 35ebfcbc0d19642cec1946af38e63f9bb5da59fbcbf200b5574bbecbc807ae96
-updated: 2016-09-23T23:22:48.704360707+08:00
+hash: 8290402a2e8dbd173ba0fcd7dcf5b662b72d7623227808e7737c37ac24cbfa62
+updated: 2016-09-24T13:33:25.211040403+08:00
 imports:
 - name: github.com/coreos/etcd
-  version: 5c2053109bfbb195cb61d597c2538686289d0774
+  version: 2469a9568548b3f8abc22f5a2462c3443823334a
   subpackages:
   - auth/authpb
   - clientv3

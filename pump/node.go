@@ -41,7 +41,7 @@ type pumpNode struct {
 	*EtcdRegistry
 	id                string
 	host              string
-	heartbeatTTL      time.Duration
+	heartbeatTTL      int64
 	heartbeatInterval time.Duration
 }
 
@@ -89,8 +89,8 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		id:                nodeID,
 		host:              advURL.Host,
-		heartbeatInterval: cfg.HeartbeatInterval,
-		heartbeatTTL:      cfg.HeartbeatInterval * 3 / 2,
+		heartbeatInterval: time.Duration(cfg.HeartbeatInterval),
+		heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
 }
