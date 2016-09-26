@@ -341,14 +341,15 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) []*model.Column
 	for _, idx := range table.Indices {
 		if idx.Primary {
 			var cols []*model.ColumnInfo
-			columns := make(map[string]bool)
-			for _, col := range idx.Columns {
-				columns[col.Name.L] = true
-			}
+			columns := make(map[string]*model.ColumnInfo)
 
 			for _, col := range table.Columns {
-				if _, ok := columns[col.Name.L]; ok {
-					cols = append(cols, col)
+				columns[col.Name.L] = col
+			}
+
+			for _, col := range idx.Columns {
+				if column, ok := columns[col.Name.L]; ok {
+					cols = append(cols, column)
 				}
 			}
 
