@@ -6,7 +6,6 @@ import (
 
 	"github.com/coreos/etcd/integration"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	pb "github.com/pingcap/tidb-binlog/proto"
 	"golang.org/x/net/context"
 )
 
@@ -19,45 +18,32 @@ func TestUpdateNodeInfo(t *testing.T) {
 	nodeID := "test1"
 	host := "mytest"
 
-	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
-	defer cancel()
-	err := r.RegisterNode(ctx, nodeID, host)
+	err := r.RegisterNode(context.Background(), nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Node(ctx, nodeID)
+	status, err := r.Node(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.NodeID != nodeID || len(status.Offsets) != 0 {
+	if status.NodeID != nodeID || status.Host != host {
 		t.Fatalf("node info have error : %v", status)
 	}
 
-	newNodeStatus := &NodeStatus{
-		NodeID:  nodeID,
-		Host:    host,
-		Offsets: make(map[string]*pb.Pos),
-	}
-
-	newNodeStatus.Offsets["cluster1"] = &pb.Pos{
-		Suffix: 1,
-		Offset: 1,
-	}
-
-	err = r.UpdateNodeStatus(ctx, nodeID, newNodeStatus)
+	host = "localhost:1234"
+	err = r.UpdateNode(context.Background(), nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err = r.Node(ctx, nodeID)
+	status, err = r.Node(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.NodeID != nodeID || status.Offsets["cluster1"].Suffix != 1 ||
-		status.Offsets["cluster1"].Offset != 1 {
+	if status.NodeID != nodeID || status.Host != host {
 		t.Fatalf("node info have error : %v", status)
 	}
 }
@@ -71,34 +57,32 @@ func TestRefreshNode(t *testing.T) {
 	nodeID := "test1"
 	host := "mytest"
 
-	ctx, cancel := context.WithTimeout(context.Background(), r.reqTimeout)
-	defer cancel()
-	err := r.RegisterNode(ctx, nodeID, host)
+	err := r.RegisterNode(context.Background(), nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = r.RefreshNode(ctx, nodeID, 2)
+	err = r.RefreshNode(context.Background(), nodeID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Node(ctx, nodeID)
+	status, err := r.Node(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if status.NodeID != nodeID || len(status.Offsets) != 0 || !status.IsAlive {
+	if status.NodeID != nodeID || !status.IsAlive {
 		t.Fatalf("node info have error : %v", status)
 	}
 
 	time.Sleep(3 * time.Second)
 
-	status, err = r.Node(ctx, nodeID)
+	status, err = r.Node(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.NodeID != nodeID || len(status.Offsets) != 0 || status.IsAlive {
+	if status.NodeID != nodeID || status.IsAlive {
 		t.Fatalf("node info have error : %v", status)
 	}
 }

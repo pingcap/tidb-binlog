@@ -32,7 +32,7 @@ var (
 // Binlogger is the interface that for append and read binlog
 type Binlogger interface {
 	// read nums binlog events from the "from" position
-	ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error)
+	ReadFrom(from pb.Pos, nums int32) ([]pb.Binlog, error)
 
 	// batch write binlog event
 	WriteTail(payload []byte) error
@@ -79,7 +79,7 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 	return binlog, nil
 }
 
-//OpenBinlogger returns a binlogger for write, then it can be appendd
+//OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string) (Binlogger, error) {
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
@@ -98,7 +98,7 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	}
 
 	p := path.Join(dirpath, lastFileName)
-	f, err := file.TryLockFile(p, os.O_RDWR, file.PrivateFileMode)
+	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -124,10 +124,10 @@ func CloseBinlogger(binlogger Binlogger) error {
 // Read reads nums logs from the given log position.
 // it reads binlogs from files and append to result set util the count = num
 // after reads all binlog from one file  then close it and open the following file
-func (b *binlogger) ReadFrom(from pb.Pos, nums int) ([]pb.Binlog, error) {
+func (b *binlogger) ReadFrom(from pb.Pos, nums int32) ([]pb.Binlog, error) {
 	var ent = &pb.Binlog{}
 	var ents = []pb.Binlog{}
-	var index int
+	var index int32
 	var decoder *decoder
 	var first = true
 

@@ -23,7 +23,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	pump.InitLogger(cfg)
+	pump.InitLogger(cfg.Debug)
 	pump.PrintVersionInfo()
 
 	sc := make(chan os.Signal, 1)

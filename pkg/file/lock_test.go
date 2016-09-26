@@ -8,7 +8,6 @@ import (
 	. "github.com/pingcap/check"
 )
 
-
 var _ = Suite(&testLockSuite{})
 
 type testLockSuite struct{}
