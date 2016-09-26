@@ -13,7 +13,7 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
-// mysql is trabslator that translates TiDB binlog to  mysql sqls
+// mysqlTranslator translates TiDB binlog to  mysql sqls
 type mysqlTranslator struct{}
 
 var mt = &mysqlTranslator{}
@@ -86,17 +86,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var newValues []interface{}
 
 		// it has pkHandle, get the columm
-		pc := m.pkColumn(table)
-		if pc != nil {
-			updateColumns = append(updateColumns, pc)
-
-			remain, pk, err := codec.DecodeOne(row)
+		pcs := m.pkIndexColumns(table)
+		if pcs != nil {
+			remain, _, err := codec.DecodeOne(row)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 			row = remain
-
-			oldValues = append(oldValues, pk.GetValue())
 		}
 
 		// decode the valus the format is [pk, colID, colVal, colID,..]
@@ -111,8 +107,8 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		}
 
 		var i int
-		if pc == nil {
-			columnValues := make(map[int64]types.Datum)
+		columnValues := make(map[int64]types.Datum)
+		if pcs == nil {
 			for ; i < len(r)/2; i += 2 {
 				columnValues[r[i].GetInt64()] = r[i+1]
 			}
@@ -124,15 +120,28 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 					oldValues = append(oldValues, val.GetValue())
 				}
 			}
+
+			columnValues = make(map[int64]types.Datum)
+			for ; i < len(r); i += 2 {
+				columnValues[r[i].GetInt64()] = r[i+1]
+			}
+
+		} else {
+			for ; i < len(r); i += 2 {
+				columnValues[r[i].GetInt64()] = r[i+1]
+			}
+
+			for _, col := range pcs {
+				val, ok := columnValues[col.ID]
+				if ok {
+					updateColumns = append(updateColumns, col)
+					oldValues = append(oldValues, val.GetValue())
+				}
+			}
 		}
 
 		whereColumns := updateColumns
-		columnValues := make(map[int64]types.Datum)
 		updateColumns = nil
-
-		for ; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
-		}
 
 		for _, col := range columns {
 			val, ok := columnValues[col.ID]
@@ -159,7 +168,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInfo, rows []int64) ([]string, [][]interface{}, error) {
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	column := m.pkColumn(table)
+	column := m.pkHandleColumn(table)
 	if column == nil {
 		return nil, nil, errors.Errorf("table %s.%s dont have pkHandle column", schema, table.Name)
 	}
@@ -196,7 +205,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 
 		switch op {
 		case delByPK:
-			whereColumns = m.pksColumns(table)
+			whereColumns = m.pkIndexColumns(table)
 			if whereColumns == nil {
 				return nil, nil, errors.Errorf("table %s.%s dont have pkHandle column", schema, table.Name)
 			}
@@ -318,7 +327,7 @@ func (m *mysqlTranslator) genWhere(columns []*model.ColumnInfo, data []interface
 	return string(kvs)
 }
 
-func (m *mysqlTranslator) pkColumn(table *model.TableInfo) *model.ColumnInfo {
+func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
 		if m.isPKHandleColumn(table, col) {
 			return col
@@ -328,7 +337,7 @@ func (m *mysqlTranslator) pkColumn(table *model.TableInfo) *model.ColumnInfo {
 	return nil
 }
 
-func (m *mysqlTranslator) pksColumns(table *model.TableInfo) []*model.ColumnInfo {
+func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) []*model.ColumnInfo {
 	for _, idx := range table.Indices {
 		if idx.Primary {
 			var cols []*model.ColumnInfo

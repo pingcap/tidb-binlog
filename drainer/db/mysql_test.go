@@ -128,7 +128,7 @@ func (s *testDBSuite) TestGenInsertSQLs(c *C) {
 func (s *testDBSuite) TestGenUpdateSQLs(c *C) {
 	ms := &mysqlTranslator{}
 	schema := "t"
-	table := generateNoPKHandleTestTable()
+	table := generateNoPKTestTable()
 
 	colIDs := make([]int64, 0, 3)
 	row := make([]types.Datum, 0, 3)
@@ -209,7 +209,7 @@ func (s *testDBSuite) TestGenUpdateSQLs(c *C) {
 	sqls, vals, err = ms.GenUpdateSQLs(schema, table, [][]byte{bin})
 	c.Assert(err, IsNil)
 	c.Assert(len(sqls), Equals, 1)
-	if sqls[0] != "update t.account set ID = ?, Name = ?, male = ? where ID = ? limit 1;" {
+	if sqls[0] != "update t.account set ID = ?, Name = ?, male = ? where Name = ? limit 1;" {
 		c.Fatalf("update sql %s , but want %s", sqls[0], "update t.account set ID = ?, Name = ?, male = ? where ID = ? limit 1;")
 	}
 
@@ -220,10 +220,10 @@ func (s *testDBSuite) TestGenUpdateSQLs(c *C) {
 	c.Assert(ok, Equals, true)
 	valMale, ok = vals[0][2].(uint64)
 	c.Assert(ok, Equals, true)
-	oldValID, ok = vals[0][3].(int64)
+	oldValName, ok = vals[0][3].([]byte)
 	c.Assert(ok, Equals, true)
 
-	if valID != 1 || string(valName) != "xiaoming" || valMale != 1 || oldValID != 1 {
+	if valID != 1 || string(valName) != "xiaoming" || valMale != 1 || string(oldValName) != "xiaoming" {
 		c.Fatalf("insert vals %v, but want  1, xiaoming, 1", vals[0])
 	}
 }
@@ -343,7 +343,46 @@ func generateTestTable() *model.TableInfo {
 	userIDCol.Flag = 2
 
 	idIndex := &model.IndexInfo{
-		Primary: false,
+		Primary: true,
+		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
+	}
+
+	userNameCol := &model.ColumnInfo{
+		ID:     2,
+		Name:   model.NewCIStr("Name"),
+		Offset: 1,
+	}
+	nameIndex := &model.IndexInfo{
+		Primary: true,
+		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr("Name"), Offset: 0}},
+	}
+
+	t.Indices = []*model.IndexInfo{nameIndex, idIndex}
+
+	maleCol := &model.ColumnInfo{
+		ID:           3,
+		Name:         model.NewCIStr("male"),
+		DefaultValue: uint64(1),
+		Offset:       2,
+	}
+
+	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, maleCol}
+
+	return t
+}
+
+func generateNoPKHandleTestTable() *model.TableInfo {
+	t := &model.TableInfo{}
+	t.Name = model.NewCIStr("account")
+
+	t.PKIsHandle = true
+	userIDCol := &model.ColumnInfo{
+		ID:     1,
+		Name:   model.NewCIStr("ID"),
+		Offset: 0,
+	}
+
+	idIndex := &model.IndexInfo{
 		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
 	}
 
@@ -371,7 +410,7 @@ func generateTestTable() *model.TableInfo {
 	return t
 }
 
-func generateNoPKHandleTestTable() *model.TableInfo {
+func generateNoPKTestTable() *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
@@ -383,7 +422,6 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 	}
 
 	idIndex := &model.IndexInfo{
-		Primary: false,
 		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
 	}
 
@@ -393,7 +431,6 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 		Offset: 1,
 	}
 	nameIndex := &model.IndexInfo{
-		Primary: true,
 		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr("Name"), Offset: 0}},
 	}
 
