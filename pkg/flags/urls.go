@@ -1,13 +1,14 @@
 package flags
 
 import (
-	"strings"
 	"net/url"
+	"strings"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/types"
 )
 
+// URLsValue define a slice of URLs as a type
 type URLsValue types.URLs
 
 // Set parses a command line set of URLs formatted like:
@@ -31,6 +32,7 @@ func (us *URLsValue) String() string {
 	return strings.Join(all, ",")
 }
 
+// StringSlice return a slice of string with formatted URL
 func (us *URLsValue) StringSlice() []string {
 	all := make([]string, len(*us))
 	for i, u := range *us {
@@ -39,11 +41,13 @@ func (us *URLsValue) StringSlice() []string {
 	return all
 }
 
+// URLSlice return a slice of URLs
 func (us *URLsValue) URLSlice() []url.URL {
 	urls := []url.URL(*us)
 	return urls
 }
 
+// NewURLsValue return a URLsValue from a string of URLs list
 func NewURLsValue(init string) (*URLsValue, error) {
 	v := &URLsValue{}
 	err := v.Set(init)

@@ -51,11 +51,11 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 
 func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	yc := struct {
-		ListenAddr    string `json:"addr"`
-		AdvertiseAddr string `json:"advertise-addr"`
-		EtcdURLs      string `json:"pd-urls"`
-		BinlogDir     string `json:"data-dir"`
-		HeartbeatMS   uint   `json:"heartbeat-interval"`
+		ListenAddr        string `json:"addr"`
+		AdvertiseAddr     string `json:"advertise-addr"`
+		EtcdURLs          string `json:"pd-urls"`
+		BinlogDir         string `json:"data-dir"`
+		HeartbeatInterval uint   `json:"heartbeat-interval"`
 	}{
 		"192.168.199.100:8260",
 		"192.168.199.100:8260",
@@ -101,18 +101,18 @@ func mustCreateCfgFile(c *C, b []byte, prefix string) *os.File {
 
 func validateConfig(c *C, cfg *Config) {
 	vcfg := &Config{
-		ListenAddr:    "http://192.168.199.100:8260",
-		AdvertiseAddr: "http://192.168.199.100:8260",
-		EtcdURLs:      "http://192.168.199.110:2379,http://hostname:2379",
-		DataDir:       "/tmp/pump",
-		HeartbeatMS:   1500,
-		Debug:         true,
+		ListenAddr:        "http://192.168.199.100:8260",
+		AdvertiseAddr:     "http://192.168.199.100:8260",
+		EtcdURLs:          "http://192.168.199.110:2379,http://hostname:2379",
+		DataDir:           "/tmp/pump",
+		HeartbeatInterval: 1500,
+		Debug:             true,
 	}
 
 	c.Assert(cfg.ListenAddr, Equals, vcfg.ListenAddr)
 	c.Assert(cfg.AdvertiseAddr, Equals, vcfg.AdvertiseAddr)
 	c.Assert(cfg.EtcdURLs, Equals, vcfg.EtcdURLs)
 	c.Assert(cfg.DataDir, Equals, vcfg.DataDir)
-	c.Assert(cfg.HeartbeatMS, Equals, vcfg.HeartbeatMS)
+	c.Assert(cfg.HeartbeatInterval, Equals, vcfg.HeartbeatInterval)
 	c.Assert(cfg.Debug, Equals, vcfg.Debug)
 }

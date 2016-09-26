@@ -1,0 +1,23 @@
+package: github.com/pingcap/tidb-binlog
+import:
+- package: github.com/coreos/etcd
+  version: ^3.1.0-alpha.0
+  subpackages:
+  - clientv3
+- package: github.com/ghodss/yaml
+- package: github.com/golang/protobuf
+  subpackages:
+  - proto
+- package: github.com/jonboulle/clockwork
+  version: ^0.1.0
+- package: github.com/juju/errors
+- package: github.com/ngaut/log
+- package: github.com/twinj/uuid
+  version: ^0.10.0
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: google.golang.org/grpc
+  version: ^1.0.1-GA
+testImport:
+- package: github.com/pingcap/check

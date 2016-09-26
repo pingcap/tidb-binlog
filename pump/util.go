@@ -1,13 +1,9 @@
 package pump
 
 import (
-	"crypto/sha1"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/juju/errors"
@@ -20,8 +16,8 @@ var (
 )
 
 // InitLogger initalizes Pump's logger.
-func InitLogger(cfg *Config) {
-	if cfg.Debug {
+func InitLogger(isDebug bool) {
+	if isDebug {
 		log.SetLevelByString("debug")
 	} else {
 		log.SetLevelByString("info")
@@ -29,50 +25,9 @@ func InitLogger(cfg *Config) {
 	log.SetHighlighting(false)
 }
 
-func readLocalNodeID(dir string) (string, error) {
-	fullPath := filepath.Join(dir, nodeDir, nodeIDFile)
-	if _, err := CheckFileExist(fullPath); err != nil {
-		return generateLocalNodeID(dir)
-	}
-
-	// read the node ID from file
-	hash, err := ioutil.ReadFile(fullPath)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	nodeID := fmt.Sprintf("%X", hash)
-	if len(nodeID) == 0 {
-		return generateLocalNodeID(dir)
-	}
-
-	return nodeID, nil
-}
-
-// generate a new node ID, and save it to file
-func generateLocalNodeID(dirpath string) (string, error) {
-	rand64 := string(KRand(64, 3))
-	log.Debugf("Generated a randomized string with 64 runes, %s", rand64)
-	t := sha1.New()
-	io.WriteString(t, rand64)
-	hash := t.Sum(nil)
-
-	// dir not exists, make it
-	dir := filepath.Join(dirpath, nodeDir)
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		return "", errors.Trace(err)
-	}
-
-	file := filepath.Join(dir, nodeIDFile)
-	if err := ioutil.WriteFile(file, hash, os.ModePerm); err != nil {
-		return "", errors.Trace(err)
-	}
-	nodeID := fmt.Sprintf("%X", hash)
-	return nodeID, nil
-}
-
 // KRand is an algorithm that compute rand nums
 func KRand(size int, kind int) []byte {
-	ikind, kinds, result := kind, [][]int{[]int{10, 48}, []int{26, 97}, []int{26, 65}}, make([]byte, size)
+	ikind, kinds, result := kind, [][]int{{10, 48}, {26, 97}, {26, 65}}, make([]byte, size)
 	isAll := kind > 2 || kind < 0
 	for i := 0; i < size; i++ {
 		if isAll { // random ikind
