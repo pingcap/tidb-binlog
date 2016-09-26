@@ -16,19 +16,22 @@ dev: build check test
 build: pump server
 
 proto/pump.pb.go: proto/pump.proto
-	sh proto/generate.sh
+	sh proto/generate.sh pump.proto
+proto/binlog.pb.go: proto/binlog.proto
+	sh proto/generate.sh binlog.proto
 
 pump: proto/pump.pb.go
 	rm -rf vendor && ln -s _vendor/vendor vendor
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 	rm -rf vendor
 
-server: proto/pump.pb.go
+server: proto/pump.pb.go proto/binlog.pb.go
 	rm -rf vendor && ln -s _vendor/vendor vendor
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 	rm -rf vendor
 
-proto: proto/pump.pb.go
+proto:
+	sh proto/generate.sh
 
 install:
 	rm -rf vendor && ln -s _vendor/vendor vendor
