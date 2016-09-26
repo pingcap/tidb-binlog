@@ -16,6 +16,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+var (
+	tcpLis  net.Listener
+	unixLis net.Listener
+)
+
 // Pump server implements the gRPC interface,
 // and maintains pump's status at run time.
 type pumpServer struct {
@@ -174,17 +179,39 @@ func Start(cfg *Config) {
 		log.Fatalf("fail to initialize pump server, %v", err)
 	}
 
-	// start to listen
-	u, err := url.Parse(cfg.ListenAddr)
+	// start a TCP listener
+	tcpURL, err := url.Parse(cfg.ListenAddr)
 	if err != nil {
-		log.Fatalf("invalid configuration of listening addr: %s, error: %v", cfg.ListenAddr, err)
+		log.Fatalf("invalid listening addr: %s, error: %v", cfg.ListenAddr, err)
 	}
-	lis, err := net.Listen("tcp", u.Host)
+	tcpLis, err = net.Listen("tcp", tcpURL.Host)
 	if err != nil {
-		log.Fatalf("fail to listen on: %s, %v", u.Host, err)
+		log.Fatalf("fail to start TCP listener on: %s, %v", tcpURL.Host, err)
 	}
+
+	// start a UNIX listener
+	unixURL, err := url.Parse(cfg.Socket)
+	if err != nil {
+		log.Fatalf("invalid socket addr: %s, error: %v", cfg.Socket, err)
+	}
+	unixLis, err = net.Listen("unix", unixURL.Path)
+	if err != nil {
+		log.Fatalf("fail to start UNIX listener on: %s, %v", unixURL.Path, err)
+	}
+
 	// start a gRPC server and register the pump server with it
 	s := grpc.NewServer()
 	pb.RegisterPumpServer(s, server)
-	s.Serve(lis)
+	go s.Serve(unixLis)
+	s.Serve(tcpLis)
+}
+
+// Close releases resource of pump server
+func Close() {
+	if unixLis != nil {
+		unixLis.Close()
+	}
+	if tcpLis != nil {
+		tcpLis.Close()
+	}
 }

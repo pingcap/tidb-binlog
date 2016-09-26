@@ -36,6 +36,7 @@ func main() {
 	go func() {
 		sig := <-sc
 		log.Infof("got signal [%d] to exit.", sig)
+		pump.Close()
 		os.Exit(0)
 	}()
 
