@@ -34,5 +34,4 @@ message DumpBinlogResp {
     // endCommitTS is the commitTS of the last one in binlog payloads
     // client can use it as beginCommitTS of the next request of dump.
     int64 endCommitTS = 3;
-
 }

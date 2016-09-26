@@ -50,7 +50,7 @@ func Start(cfg *Config) {
 		log.Fatalf("fail to listen on: %s, %v", u.Host, err)
 	}
 
-	// start a gRPC server and register the pump server with it
+	// start a gRPC server and register the binlog server with it
 	s := grpc.NewServer()
 	pb.RegisterBinlogServer(s, server)
 	s.Serve(lis)

@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	defaultListenAddr          = "127.0.0.1:18300"
+	defaultListenAddr          = "127.0.0.1:18200"
 	defaultDataDir             = "data.binlog-server"
-	defaultCollectInterval     = 10 * time.Second
-	defaultDepositWindowPeriod = 10 * time.Minute
+	defaultCollectInterval     = 5
+	defaultDepositWindowPeriod = 10
 	defaultEtcdURLs            = "http://127.0.0.1:2379"
 	// defaultEtcdTimeout defines default timeout of dialing or sending request to the etcd server.
 	defaultEtcdTimeout = 5 * time.Second
@@ -31,8 +31,8 @@ type Config struct {
 
 	ListenAddr          string        `json:"addr"`
 	DataDir             string        `json:"data-dir"`
-	CollectInterval     time.Duration `json:"collect-interval"`
-	DepositWindowPeriod time.Duration `json:"deposit-window-period"`
+	CollectInterval     int           `json:"collect-interval"`
+	DepositWindowPeriod int           `json:"deposit-window-period"`
 	EtcdURLs            string        `json:"pd-urls"`
 	EtcdTimeout         time.Duration
 	Debug               bool
@@ -51,14 +51,14 @@ func NewConfig() *Config {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, usageline)
 	}
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
+	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for connection of drainer")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "path to RocksDB data files")
-	fs.DurationVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "interval time of loop of collecting binlogs from pumps")
-	fs.DurationVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "after this period of time the binlogs stored in RocksDB become public state")
+	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval in second of collection loop pulling binlog from pumps")
+	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "after the period of time (in minutes) binlogs stored in RocksDB will become public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the endpoints of PD")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
-	fs.StringVar(&cfg.configFile, "config-file", "", "path to configuration file")
-	fs.BoolVar(&cfg.printVersion, "version", false, "print version info of binlog-server")
+	fs.StringVar(&cfg.configFile, "config-file", "", "path of configuration file")
+	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 
 	return cfg
 }
@@ -105,8 +105,8 @@ func (cfg *Config) Parse(args []string) error {
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustDuration(&cfg.CollectInterval, defaultCollectInterval)
-	adjustDuration(&cfg.DepositWindowPeriod, defaultDepositWindowPeriod)
+	adjustInt(&cfg.CollectInterval, defaultCollectInterval)
+	adjustInt(&cfg.DepositWindowPeriod, defaultDepositWindowPeriod)
 	adjustDuration(&cfg.EtcdTimeout, defaultEtcdTimeout)
 
 	return nil
@@ -130,6 +130,12 @@ func adjustString(v *string, defValue string) {
 	}
 }
 
+func adjustInt(v *int, defValue int) {
+	if *v == 0 {
+		*v = defValue
+	}
+}
+
 func adjustDuration(v *time.Duration, defValue time.Duration) {
 	if *v == 0 {
 		*v = defValue
@@ -143,7 +149,6 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-
 	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
