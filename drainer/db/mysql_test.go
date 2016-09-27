@@ -252,7 +252,7 @@ func (s *testDBSuite) TestGenDeleteSQLs(c *C) {
 	row := []types.Datum{types.NewDatum("liming")}
 	bin, _ := codec.EncodeKey(nil, row...)
 
-	sqls, vals, err = ms.GenDeleteSQLs(schema, table, delByPK, [][]byte{bin})
+	sqls, vals, err = ms.GenDeleteSQLs(schema, table, DelByPK, [][]byte{bin})
 	c.Assert(err, IsNil)
 	c.Assert(len(sqls), Equals, 1)
 	if sqls[0] != "delete from t.account where Name = ? limit 1;" {
@@ -290,7 +290,7 @@ func (s *testDBSuite) TestGenDeleteSQLs(c *C) {
 	bin, err = tablecodec.EncodeRow(row, colIDs)
 	c.Assert(err, IsNil)
 
-	sqls, vals, err = ms.GenDeleteSQLs(schema, table, delByCol, [][]byte{bin})
+	sqls, vals, err = ms.GenDeleteSQLs(schema, table, DelByCol, [][]byte{bin})
 	c.Assert(err, IsNil)
 	c.Assert(len(sqls), Equals, 1)
 	if sqls[0] != "delete from t.account where ID = ? and Name = ? and male = ? limit 1;" {
@@ -312,14 +312,6 @@ func (s *testDBSuite) TestGenDeleteSQLs(c *C) {
 
 func (s *testDBSuite) TestGenDLLSQL(c *C) {
 	ms := &mysqlTranslator{}
-
-	ok, err := ms.IsDDLSQL("create database t")
-	c.Assert(err, IsNil)
-	c.Assert(ok, Equals, true)
-
-	ok, err = ms.IsDDLSQL("select * from t.account limit 1")
-	c.Assert(err, IsNil)
-	c.Assert(ok, Equals, false)
 
 	sql, err := ms.GenDDLSQL("create database t", "t")
 	c.Assert(err, IsNil)

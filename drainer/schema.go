@@ -9,10 +9,9 @@ import (
 )
 
 // Schema stores the source TiDB all schema infomations
-// schema infomations could be changed by drainer init and ddls apear
+// schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
-	schemaNameToID map[string]int64
-	tableNameToID  map[tableName]int64
+	tableIDToName map[int64]tableName
 
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
@@ -40,8 +39,7 @@ func NewSchema(store kv.Storage, ts uint64) (*Schema, error) {
 
 // SyncTiDBSchema syncs the all schema infomations that at ts
 func (s *Schema) SyncTiDBSchema(store kv.Storage, ts uint64) error {
-	s.schemaNameToID = make(map[string]int64)
-	s.tableNameToID = make(map[tableName]int64)
+	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)
 
@@ -66,12 +64,11 @@ func (s *Schema) SyncTiDBSchema(store kv.Storage, ts uint64) error {
 		}
 
 		db.Tables = tables
-		s.schemaNameToID[db.Name.L] = db.ID
 		s.schemas[db.ID] = db
 
 		for _, table := range tables {
-			s.tableNameToID[tableName{schema: db.Name.L, table: table.Name.L}] = table.ID
 			s.tables[table.ID] = table
+			s.tableIDToName[table.ID] = tableName{schema: db.Name.L, table: table.Name.L}
 		}
 	}
 
@@ -89,26 +86,14 @@ func (s *Schema) SchemaMetaVersion() int64 {
 	return s.schemaMetaVersion
 }
 
-// SchemaByName returns the DBInfo by the schema name
-func (s *Schema) SchemaByName(schema model.CIStr) (val *model.DBInfo, ok bool) {
-	id, ok := s.schemaNameToID[schema.L]
+// SchemaAndTableName returns the tableName by table id
+func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
+	tn, ok := s.tableIDToName[id]
 	if !ok {
-		return
+		return "", "", false
 	}
 
-	val, ok = s.schemas[id]
-	return
-}
-
-// TableByName returns the TableInfo by the table name
-func (s *Schema) TableByName(schema, table model.CIStr) (t *model.TableInfo, ok bool) {
-	id, ok := s.tableNameToID[tableName{schema: schema.L, table: table.L}]
-	if !ok {
-		return
-	}
-
-	t = s.tables[id]
-	return
+	return tn.schema, tn.table, true
 }
 
 // SchemaByID returns the DBInfo by schema id
@@ -124,73 +109,55 @@ func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 }
 
 // DropSchema deletes the given DBInfo
-func (s *Schema) DropSchema(schema model.CIStr) {
-	id, ok := s.schemaNameToID[schema.L]
+func (s *Schema) DropSchema(id int64) (string, error) {
+	schema, ok := s.schemas[id]
 	if !ok {
-		return
+		return "", errors.NotFoundf("schema %s", schema.Name)
 	}
 
-	db, _ := s.schemas[id]
-	for _, table := range db.Tables {
-		tn := tableName{schema: db.Name.L, table: table.Name.L}
-		id, ok = s.tableNameToID[tn]
-		if !ok {
-			continue
-		}
-		delete(s.tableNameToID, tn)
-		delete(s.tables, id)
+	for _, table := range schema.Tables {
+		delete(s.tables, table.ID)
+		delete(s.tableIDToName, table.ID)
 	}
 
-	delete(s.schemaNameToID, schema.L)
 	delete(s.schemas, id)
 
-	return
+	return schema.Name.L, nil
 }
 
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
-	_, ok := s.schemaNameToID[db.Name.L]
-	if ok {
-		return errors.AlreadyExistsf("schema %s already exists", db.Name)
+	if _, ok := s.schemas[db.ID]; ok {
+		return errors.AlreadyExistsf("schema %s", db.Name)
 	}
 
-	s.schemaNameToID[db.Name.L] = db.ID
 	s.schemas[db.ID] = db
 
 	return nil
 }
 
 // DropTable deletes the given TableInfo
-func (s *Schema) DropTable(schema, table model.CIStr) {
-	tn := tableName{schema: schema.L, table: table.L}
-	id, ok := s.tableNameToID[tn]
+func (s *Schema) DropTable(id int64) (string, error) {
+	table, ok := s.tables[id]
 	if !ok {
-		return
+		return "", errors.NotFoundf("table %s", table.Name)
 	}
 
-	delete(s.tableNameToID, tn)
 	delete(s.tables, id)
-
-	return
+	delete(s.tableIDToName, id)
+	return table.Name.L, nil
 }
 
 // Createtable creates new TableInfo
-func (s *Schema) Createtable(schema model.CIStr, table *model.TableInfo) error {
-	tn := tableName{schema: schema.L, table: table.Name.L}
-	_, ok := s.tableNameToID[tn]
+func (s *Schema) Createtable(schema *model.DBInfo, table *model.TableInfo) error {
+	_, ok := s.tables[table.ID]
 	if ok {
-		return errors.AlreadyExistsf("table %s.%s already exists", schema, table.Name)
+		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
 	}
 
-	id, ok := s.schemaNameToID[schema.L]
-	if !ok {
-		return errors.NotFoundf("schema %s not found", schema)
-	}
-
-	s.schemas[id].Tables = append(s.schemas[id].Tables, table)
-
-	s.tableNameToID[tn] = table.ID
+	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
+	s.tableIDToName[table.ID] = tableName{schema: schema.Name.L, table: table.Name.L}
 
 	return nil
 }

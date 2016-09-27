@@ -13,13 +13,15 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
+var (
+	maxRetryCount = 100
+)
+
 // mysqlTranslator translates TiDB binlog to  mysql sqls
 type mysqlTranslator struct{}
 
-var mt = &mysqlTranslator{}
-
 func init() {
-	Register("mysql", mt)
+	Register("mysql", &mysqlTranslator{})
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]interface{}, error) {
@@ -170,7 +172,7 @@ func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInf
 	values := make([][]interface{}, 0, len(rows))
 	column := m.pkHandleColumn(table)
 	if column == nil {
-		return nil, nil, errors.Errorf("table %s.%s dont have pkHandle column", schema, table.Name)
+		return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 	}
 
 	whereColumns := []*model.ColumnInfo{column}
@@ -204,10 +206,10 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 		}
 
 		switch op {
-		case delByPK:
+		case DelByPK:
 			whereColumns = m.pkIndexColumns(table)
 			if whereColumns == nil {
-				return nil, nil, errors.Errorf("table %s.%s dont have pkHandle column", schema, table.Name)
+				return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 			}
 
 			if len(r) != len(whereColumns) {
@@ -218,7 +220,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 				value = append(value, val.GetValue())
 			}
 
-		case delByCol:
+		case DelByCol:
 			whereColumns = columns
 
 			if len(r)%2 != 0 {
@@ -250,17 +252,6 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 	return sqls, values, nil
 }
 
-func (m *mysqlTranslator) IsDDLSQL(sql string) (bool, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		return false, errors.Errorf("[sql]%s[error]%v", sql, err)
-	}
-
-	_, isDDL := stmt.(ast.DDLNode)
-	return isDDL, nil
-}
-
-//todo: check ddl query contains schema
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {

@@ -8,19 +8,19 @@ import (
 type opType byte
 
 const (
-	insert = iota + 1
-	update
-	del
-	delByID
-	delByPK
-	delByCol
-	ddl
+	Insert = iota + 1
+	Update
+	Del
+	DelByID
+	DelByPK
+	DelByCol
+	DDL
 )
 
-var providers = make(map[string]SQLTranslator)
+var providers = make(map[string]SQLsTranslator)
 
-// SQLTranslator is the interface for translating TiDB binlog to target sqls
-type SQLTranslator interface {
+// SQLsTranslator is the interface for translating TiDB binlog to target sqls
+type SQLsTranslator interface {
 	// GenInsertSQLs generates the insert SQLs
 	GenInsertSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]interface{}, error)
 
@@ -33,21 +33,18 @@ type SQLTranslator interface {
 	// GenDeleteSQLs generates the delete SQLs by cols values
 	GenDeleteSQLs(string, *model.TableInfo, opType, [][]byte) ([]string, [][]interface{}, error)
 
-	// IsDDLSQL checks whether the query string is DDL SQL
-	IsDDLSQL(string) (bool, error)
-
 	// GenDDLSQL generates the ddl SQL by  query string
 	GenDDLSQL(string, string) (string, error)
 }
 
 // Register registers the SQLTranslator into the providers
-func Register(name string, provider SQLTranslator) {
+func Register(name string, provider SQLsTranslator) {
 	if provider == nil {
-		panic("SQLTranslator: Register provide is nil")
+		panic("SQLsTranslator: Register provide is nil")
 	}
 
 	if _, dup := providers[name]; dup {
-		panic("SQLTranslator: Register called twice for provider " + name)
+		panic("SQLsTranslator: Register called twice for provider " + name)
 	}
 
 	providers[name] = provider
@@ -60,7 +57,7 @@ func Unregister(name string) {
 
 // Manager is the SQLTranslator factory
 type Manager struct {
-	translator SQLTranslator
+	translator SQLsTranslator
 }
 
 // NewManager returns the Manager by given providerName
@@ -91,11 +88,6 @@ func (m *Manager) GenDeleteSQLsByID(schema string, table *model.TableInfo, rows 
 // GenDeleteSQLs wraps the GenInsertSQLs's GenDeleteSQLs method
 func (m *Manager) GenDeleteSQLs(schema string, table *model.TableInfo, op opType, rows [][]byte) ([]string, [][]interface{}, error) {
 	return m.translator.GenDeleteSQLs(schema, table, op, rows)
-}
-
-// IsDDLSQL wraps the GenInsertSQLs's IsDDLSQL method
-func (m *Manager) IsDDLSQL(sql string) (bool, error) {
-	return m.translator.IsDDLSQL(sql)
 }
 
 // GenDDLSQL wraps the GenInsertSQLs's GenDDLSQL method
