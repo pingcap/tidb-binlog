@@ -1,4 +1,4 @@
-package db
+package translator
 
 import (
 	"fmt"
@@ -13,11 +13,7 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
-var (
-	maxRetryCount = 100
-)
-
-// mysqlTranslator translates TiDB binlog to  mysql sqls
+// mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct{}
 
 func init() {
@@ -88,7 +84,11 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var newValues []interface{}
 
 		// it has pkHandle, get the columm
-		pcs := m.pkIndexColumns(table)
+		pcs, err := m.pkIndexColumns(table)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+
 		if pcs != nil {
 			remain, _, err := codec.DecodeOne(row)
 			if err != nil {
@@ -192,7 +192,7 @@ func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInf
 
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, op opType, rows [][]byte) ([]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, op OpType, rows [][]byte) ([]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -207,7 +207,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 
 		switch op {
 		case DelByPK:
-			whereColumns = m.pkIndexColumns(table)
+			whereColumns, _ = m.pkIndexColumns(table)
 			if whereColumns == nil {
 				return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 			}
@@ -328,7 +328,7 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 	return nil
 }
 
-func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) []*model.ColumnInfo {
+func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
 	for _, idx := range table.Indices {
 		if idx.Primary {
 			var cols []*model.ColumnInfo
@@ -344,11 +344,15 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) []*model.Column
 				}
 			}
 
-			return cols
+			if len(cols) == 0 {
+				return nil, errors.New("primay index is empty, but should not be empty")
+			}
+
+			return cols, nil
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (m *mysqlTranslator) isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {

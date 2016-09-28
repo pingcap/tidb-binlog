@@ -1,4 +1,4 @@
-package db
+package translator
 
 import (
 	"testing"
@@ -367,7 +367,7 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
-	t.PKIsHandle = true
+	t.PKIsHandle = false
 	userIDCol := &model.ColumnInfo{
 		ID:     1,
 		Name:   model.NewCIStr("ID"),

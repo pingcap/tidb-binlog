@@ -148,8 +148,8 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	return table.Name.L, nil
 }
 
-// Createtable creates new TableInfo
-func (s *Schema) Createtable(schema *model.DBInfo, table *model.TableInfo) error {
+// CreateTable creates new TableInfo
+func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
