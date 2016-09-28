@@ -56,9 +56,9 @@ type Server struct {
 
 	tcpAddr  string
 	unixAddr string
-	tcpLis   net.Listener
-	unixLis  net.Listener
+	gs       *grpc.Server
 	done     chan struct{}
+	ctx      context.Context
 }
 
 // NewServer return a instance of pump server
@@ -73,7 +73,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
+		gs:         grpc.NewServer(),
 		done:       make(chan struct{}),
+		ctx:        context.Background(),
 	}, nil
 }
 
@@ -170,12 +172,12 @@ func (s *Server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.Pul
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	if err := s.node.Register(context.Background()); err != nil {
+	if err := s.node.Register(s.ctx); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
 	// start heartbeat
-	errc := s.node.Heartbeat(context.Background(), s.done)
+	errc := s.node.Heartbeat(s.ctx, s.done)
 	go func() {
 		for err := range errc {
 			log.Error(err)
@@ -192,7 +194,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "invalid listening tcp addr (%s)", s.tcpAddr)
 	}
-	s.tcpLis, err = net.Listen("tcp", tcpURL.Host)
+	tcpLis, err := net.Listen("tcp", tcpURL.Host)
 	if err != nil {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
@@ -202,31 +204,22 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
 	}
-	s.unixLis, err = net.Listen("unix", unixURL.Path)
+	unixLis, err := net.Listen("unix", unixURL.Path)
 	if err != nil {
 		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
 	}
 
-	// start a gRPC server and register the pump server with it
-	gs := grpc.NewServer()
-	pb.RegisterPumpServer(gs, s)
-
-	// serve the listeners
-	go gs.Serve(s.unixLis)
-	gs.Serve(s.tcpLis)
+	// register pump with gRPC server and start to serve listeners
+	pb.RegisterPumpServer(s.gs, s)
+	go s.gs.Serve(unixLis)
+	s.gs.Serve(tcpLis)
 	return nil
 }
 
-// Close releases resource of pump server
+// Close gracefully releases resource of pump server
 func (s *Server) Close() {
 	// notify other goroutines to exit
 	close(s.done)
-
-	// close the listeners
-	if s.unixLis != nil {
-		s.unixLis.Close()
-	}
-	if s.tcpLis != nil {
-		s.tcpLis.Close()
-	}
+	// stop the gRPC server
+	s.gs.GracefulStop()
 }
