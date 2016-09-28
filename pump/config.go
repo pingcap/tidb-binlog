@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/ghodss/yaml"
@@ -19,6 +20,7 @@ const (
 	defaultEtcdDialTimeout   = 5 * time.Second
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
 	defaultListenAddr        = "127.0.0.1:8250"
+	defaultSocket            = "unix:///tmp/pump.sock"
 	defaultHeartbeatInterval = 2000
 	defaultDataDir           = "data.pump"
 )
@@ -29,6 +31,7 @@ type Config struct {
 
 	ListenAddr        string `json:"addr"`
 	AdvertiseAddr     string `json:"advertise-addr"`
+	Socket            string `json:"socket"`
 	EtcdURLs          string `json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string `json:"data-dir"`
@@ -52,6 +55,7 @@ func NewConfig() *Config {
 
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
+	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of milliseconds between heartbeat ticks")
@@ -108,6 +112,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
+	adjustString(&cfg.Socket, defaultSocket)
 	adjustUint(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
 	return cfg.validate()
@@ -150,7 +155,6 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-
 	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
@@ -166,6 +170,15 @@ func (cfg *Config) validate() error {
 	}
 	if host == "0.0.0.0" {
 		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
+	}
+
+	// check socketAddr
+	urlsock, err := url.Parse(cfg.Socket)
+	if err != nil {
+		return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
+	}
+	if len(strings.Split(urlsock.Path, "/")) < 2 {
+		return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
 	}
 
 	// check EtcdEndpoints

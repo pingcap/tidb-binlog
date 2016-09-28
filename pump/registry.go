@@ -64,7 +64,7 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, nodeID, host string) e
 }
 
 func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool, error) {
-	_, err := r.client.Get(ctx, r.prefixed(nodePrefix, nodeID))
+	_, err := r.client.Get(ctx, r.prefixed(nodePrefix, nodeID, "object"))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil

@@ -26,6 +26,12 @@ func main() {
 	pump.InitLogger(cfg.Debug)
 	pump.PrintVersionInfo()
 
+	p, err := pump.NewServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "creating pump server error, %v", err)
+		os.Exit(2)
+	}
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
@@ -36,8 +42,12 @@ func main() {
 	go func() {
 		sig := <-sc
 		log.Infof("got signal [%d] to exit.", sig)
+		p.Close()
 		os.Exit(0)
 	}()
 
-	pump.Start(cfg)
+	if err := p.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "pump server error, %v", err)
+		os.Exit(2)
+	}
 }

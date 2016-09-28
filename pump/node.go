@@ -1,7 +1,6 @@
 package pump
 
 import (
-	"context"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	pb "github.com/pingcap/tidb-binlog/proto"
 	"github.com/twinj/uuid"
+	"golang.org/x/net/context"
 )
 
 const (
