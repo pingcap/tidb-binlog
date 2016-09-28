@@ -79,7 +79,7 @@ func (e *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, errors.NotFoundf("key %s is not found in etcd", key)
+		return nil, errors.NotFoundf("key %s in etcd", key)
 	}
 
 	return resp.Kvs[0].Value, nil
