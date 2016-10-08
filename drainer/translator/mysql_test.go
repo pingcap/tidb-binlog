@@ -209,7 +209,7 @@ func (s *testDBSuite) TestGenUpdateSQLs(c *C) {
 	sqls, vals, err = ms.GenUpdateSQLs(schema, table, [][]byte{bin})
 	c.Assert(err, IsNil)
 	c.Assert(len(sqls), Equals, 1)
-	if sqls[0] != "update t.account set ID = ?, Name = ?, male = ? where Name = ? limit 1;" {
+	if sqls[0] != "update t.account set ID = ?, Name = ?, male = ? where ID = ? limit 1;" {
 		c.Fatalf("update sql %s , but want %s", sqls[0], "update t.account set ID = ?, Name = ?, male = ? where ID = ? limit 1;")
 	}
 
@@ -220,10 +220,10 @@ func (s *testDBSuite) TestGenUpdateSQLs(c *C) {
 	c.Assert(ok, Equals, true)
 	valMale, ok = vals[0][2].(uint64)
 	c.Assert(ok, Equals, true)
-	oldValName, ok = vals[0][3].([]byte)
+	oldValID, ok = vals[0][3].(int64)
 	c.Assert(ok, Equals, true)
 
-	if valID != 1 || string(valName) != "xiaoming" || valMale != 1 || string(oldValName) != "xiaoming" {
+	if valID != 1 || string(valName) != "xiaoming" || valMale != 1 || oldValID != 1 {
 		c.Fatalf("insert vals %v, but want  1, xiaoming, 1", vals[0])
 	}
 }
@@ -255,7 +255,7 @@ func (s *testDBSuite) TestGenDeleteSQLs(c *C) {
 	sqls, vals, err = ms.GenDeleteSQLs(schema, table, DelByPK, [][]byte{bin})
 	c.Assert(err, IsNil)
 	c.Assert(len(sqls), Equals, 1)
-	if sqls[0] != "delete from t.account where Name = ? limit 1;" {
+	if sqls[0] != "delete from t.account where ID = ? limit 1;" {
 		c.Fatalf("delete sql %s, but want %s", sqls[0], "delete from t.account where Name = ? limit 1;")
 	}
 
@@ -333,7 +333,6 @@ func generateTestTable() *model.TableInfo {
 		Offset: 0,
 	}
 	userIDCol.Flag = 2
-
 	idIndex := &model.IndexInfo{
 		Primary: true,
 		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
@@ -373,7 +372,6 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 		Name:   model.NewCIStr("ID"),
 		Offset: 0,
 	}
-
 	idIndex := &model.IndexInfo{
 		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
 	}
@@ -412,7 +410,6 @@ func generateNoPKTestTable() *model.TableInfo {
 		Name:   model.NewCIStr("ID"),
 		Offset: 0,
 	}
-
 	idIndex := &model.IndexInfo{
 		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
 	}

@@ -2,10 +2,11 @@ package translator
 
 import (
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
 )
 
-// OpType represents type of the operation 
+// OpType represents type of the operation
 type OpType byte
 
 const (
@@ -41,11 +42,11 @@ type SQLTranslator interface {
 // Register registers the SQLTranslator into the providers
 func Register(name string, provider SQLTranslator) {
 	if provider == nil {
-		panic("SQLsTranslator: Register provide is nil")
+		log.Fatal("SQLTranslator: Register provide is nil")
 	}
 
 	if _, dup := providers[name]; dup {
-		panic("SQLsTranslator: Register called twice for provider " + name)
+		log.Fatal("SQLTranslator: Register called twice for provider " + name)
 	}
 
 	providers[name] = provider
@@ -65,7 +66,7 @@ type Manager struct {
 func NewManager(providerName string) (*Manager, error) {
 	translator, ok := providers[providerName]
 	if !ok {
-		return nil, errors.Errorf("translator: unknown provider %q", providerName)
+		return nil, errors.Errorf("SQLTranslator: unknown provider %q", providerName)
 	}
 
 	return &Manager{translator}, nil

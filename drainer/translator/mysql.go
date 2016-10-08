@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -89,6 +90,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, errors.Trace(err)
 		}
 
+		// decode one to get the pk
 		if pcs != nil {
 			remain, _, err := codec.DecodeOne(row)
 			if err != nil {
@@ -97,8 +99,11 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			row = remain
 		}
 
-		// decode the valus the format is [pk, colID, colVal, colID,..]
-		// or [colID, colVal, colID, colVal, ..]
+		// the format
+		// 1 have pk index columns: [pk, colID, colVal, colID,..]
+		//   the pk index columns' values are constant, we can make up the where condition
+		//   from [..., colID, colVal, colID,..] directly
+		// 2 no pk index columns: [oldColID, oldColVal, ..., newColID, colVal, ..]
 		r, err := codec.Decode(row, 2*(len(columns)-1))
 		if err != nil {
 			return nil, nil, errors.Trace(err)
@@ -108,6 +113,8 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, errors.Errorf("table %s.%s update row data is corruption %v", schema, table.Name, r)
 		}
 
+		// TODO: if meet old schema that before drop pk index,
+		// (now we don't have pk indexs), It can't work well.
 		var i int
 		columnValues := make(map[int64]types.Datum)
 		if pcs == nil {
@@ -174,7 +181,6 @@ func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInf
 	if column == nil {
 		return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 	}
-
 	whereColumns := []*model.ColumnInfo{column}
 
 	for _, rowID := range rows {
@@ -189,7 +195,6 @@ func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInf
 	}
 
 	return sqls, values, nil
-
 }
 
 func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, op OpType, rows [][]byte) ([]string, [][]interface{}, error) {
@@ -288,20 +293,20 @@ func (m *mysqlTranslator) genColumnPlaceholders(length int) string {
 }
 
 func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {
-	var kvs []byte
+	var kvs bytes.Buffer
 	for i := range columns {
 		if i == len(columns)-1 {
-			kvs = append(kvs, []byte(fmt.Sprintf("%s = ?", columns[i].Name))...)
+			fmt.Fprintf(&kvs, "%s = ?", columns[i].Name)
 		} else {
-			kvs = append(kvs, []byte(fmt.Sprintf("%s = ?, ", columns[i].Name))...)
+			fmt.Fprintf(&kvs, "%s = ?, ", columns[i].Name)
 		}
 	}
 
-	return string(kvs)
+	return kvs.String()
 }
 
 func (m *mysqlTranslator) genWhere(columns []*model.ColumnInfo, data []interface{}) string {
-	var kvs []byte
+	var kvs bytes.Buffer
 	for i := range columns {
 		kvSplit := "="
 		if data[i] == nil {
@@ -309,13 +314,13 @@ func (m *mysqlTranslator) genWhere(columns []*model.ColumnInfo, data []interface
 		}
 
 		if i == len(columns)-1 {
-			kvs = append(kvs, []byte(fmt.Sprintf("%s %s ?", columns[i].Name, kvSplit))...)
+			fmt.Fprintf(&kvs, "%s %s ?", columns[i].Name, kvSplit)
 		} else {
-			kvs = append(kvs, []byte(fmt.Sprintf("%s %s ? and ", columns[i].Name, kvSplit))...)
+			fmt.Fprintf(&kvs, "%s %s ? and ", columns[i].Name, kvSplit)
 		}
 	}
 
-	return string(kvs)
+	return kvs.String()
 }
 
 func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
@@ -329,9 +334,14 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 }
 
 func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
+	col := m.pkHandleColumn(table)
+	if col != nil {
+		return []*model.ColumnInfo{col}, nil
+	}
+
+	var cols []*model.ColumnInfo
 	for _, idx := range table.Indices {
 		if idx.Primary {
-			var cols []*model.ColumnInfo
 			columns := make(map[string]*model.ColumnInfo)
 
 			for _, col := range table.Columns {
@@ -352,7 +362,7 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 		}
 	}
 
-	return nil, nil
+	return cols, nil
 }
 
 func (m *mysqlTranslator) isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
