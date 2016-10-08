@@ -9,7 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -155,7 +155,7 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, nodeID string, ttl int6
 }
 
 // UpdateSavepoint updates the savepoint of pulling binlog
-func (r *EtcdRegistry) UpdateSavepoint(pctx context.Context, nodeID string, clusterID uint64, pos pb.Pos) error {
+func (r *EtcdRegistry) UpdateSavepoint(pctx context.Context, nodeID string, clusterID uint64, pos binlog.Pos) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
@@ -174,7 +174,7 @@ func (r *EtcdRegistry) UpdateSavepoint(pctx context.Context, nodeID string, clus
 func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error) {
 	status := &NodeStatus{}
 	var isAlive bool
-	savepoints := make(map[string]pb.Pos)
+	savepoints := make(map[string]binlog.Pos)
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
@@ -185,7 +185,7 @@ func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error)
 			isAlive = true
 		case "savepoints":
 			for cid, nn := range n.Childs {
-				var pos pb.Pos
+				var pos binlog.Pos
 				if err := json.Unmarshal(nn.Value, &pos); err != nil {
 					return nil, errors.Annotatef(err, "error unmarshal savepoint of cluster(%s) in node(%s)", cid, nodeID)
 				}

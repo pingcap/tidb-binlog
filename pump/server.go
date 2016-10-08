@@ -11,7 +11,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -132,9 +132,9 @@ func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
 }
 
 // WriteBinlog implements the gRPC interface of pump server
-func (s *Server) WriteBinlog(ctx context.Context, in *pb.WriteBinlogReq) (*pb.WriteBinlogResp, error) {
+func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
 	cid := fmt.Sprintf("%d", in.ClusterID)
-	ret := &pb.WriteBinlogResp{}
+	ret := &binlog.WriteBinlogResp{}
 	binlogger, err := s.getBinloggerToWrite(cid)
 	if err != nil {
 		ret.Errmsg = err.Error()
@@ -148,14 +148,14 @@ func (s *Server) WriteBinlog(ctx context.Context, in *pb.WriteBinlogReq) (*pb.Wr
 }
 
 // PullBinlogs implements the gRPC interface of pump server
-func (s *Server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.PullBinlogResp, error) {
+func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
 	cid := fmt.Sprintf("%d", in.ClusterID)
-	ret := &pb.PullBinlogResp{}
+	ret := &binlog.PullBinlogResp{}
 	binlogger, err := s.getBinloggerToRead(cid)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// return an empty slice and a nil error
-			ret.Binlogs = []pb.Binlog{}
+			ret.Entities = []binlog.Entity{}
 			return ret, nil
 		}
 		ret.Errmsg = err.Error()
@@ -166,7 +166,7 @@ func (s *Server) PullBinlogs(ctx context.Context, in *pb.PullBinlogReq) (*pb.Pul
 		ret.Errmsg = err.Error()
 		return ret, err
 	}
-	ret.Binlogs = binlogs
+	ret.Entities = binlogs
 	return ret, nil
 }
 
@@ -211,7 +211,7 @@ func (s *Server) Start() error {
 	}
 
 	// register pump with gRPC server and start to serve listeners
-	pb.RegisterPumpServer(s.gs, s)
+	binlog.RegisterPumpServer(s.gs, s)
 	go s.gs.Serve(unixLis)
 	s.gs.Serve(tcpLis)
 	return nil

@@ -10,7 +10,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
-	pb "github.com/pingcap/tidb-binlog/proto"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/_vendor/src/github.com/ngaut/log"
 	"github.com/pingcap/tipb/go-binlog"
@@ -138,7 +137,7 @@ func (c *Collector) collect(ctx context.Context) error {
 	}()
 
 	items := make(map[int64]*binlog.Binlog)
-	savepoints := make(map[string]pb.Pos)
+	savepoints := make(map[string]binlog.Pos)
 	for r := range resc {
 		if r.err != nil {
 			return errors.Annotatef(err, "failed to collect binlog of cluster(%d) from pump node(%s)",
@@ -181,7 +180,7 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	return nil
 }
 
-func (c *Collector) updateSavepoints(ctx context.Context, savepoints map[string]pb.Pos) error {
+func (c *Collector) updateSavepoints(ctx context.Context, savepoints map[string]binlog.Pos) error {
 	for id, pos := range savepoints {
 		err := c.reg.UpdateSavepoint(ctx, id, c.clusterID, pos)
 		if err != nil {

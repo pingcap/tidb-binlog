@@ -31,22 +31,14 @@ dev: build check test
 
 build: pump server drainer
 
-proto/pump.pb.go: proto/pump.proto
-	sh proto/generate.sh pump.proto
-proto/binlog.pb.go: proto/binlog.proto
-	sh proto/generate.sh binlog.proto
-
-pump: proto/pump.pb.go
+pump:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 
-server: proto/pump.pb.go proto/binlog.pb.go
+server:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 
 drainer:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
-
-proto:
-	sh proto/generate.sh
 
 install:
 	go install ./...
@@ -90,5 +82,5 @@ clean:
 	go clean -i ./...
 	rm -rf *.out
 
-.PHONY: build test check update clean pump server drainer fmt proto
+.PHONY: build test check update clean pump server drainer fmt
 

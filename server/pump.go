@@ -6,7 +6,6 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
-	pb "github.com/pingcap/tidb-binlog/proto"
 	"github.com/pingcap/tipb/go-binlog"
 	"google.golang.org/grpc"
 )
@@ -15,8 +14,8 @@ type result struct {
 	err       error
 	nodeID    string
 	clusterID uint64
-	begin     pb.Pos
-	end       pb.Pos
+	begin     binlog.Pos
+	end       binlog.Pos
 	binlogs   map[int64]*binlog.Binlog
 }
 
@@ -27,14 +26,14 @@ type Pump struct {
 	host      string
 	conn      *grpc.ClientConn
 	timeout   time.Duration
-	client    pb.PumpClient
-	current   pb.Pos
+	client    binlog.PumpClient
+	current   binlog.Pos
 	batch     int32
 	interval  time.Duration
 }
 
 // NewPump return an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, pos pb.Pos, batch int32, interval time.Duration) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, pos binlog.Pos, batch int32, interval time.Duration) (*Pump, error) {
 	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to connect to pump node(%s) at host(%s)", nodeID, host)
@@ -45,7 +44,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		host:      host,
 		conn:      conn,
 		timeout:   timeout,
-		client:    pb.NewPumpClient(conn),
+		client:    binlog.NewPumpClient(conn),
 		current:   pos,
 		batch:     batch,
 		interval:  interval,
@@ -80,7 +79,7 @@ func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
 
 	ctx, cancel := context.WithTimeout(pctx, p.timeout)
 	defer cancel()
-	req := &pb.PullBinlogReq{
+	req := &binlog.PullBinlogReq{
 		ClusterID: p.clusterID,
 		StartFrom: p.current,
 		Batch:     p.batch,
@@ -94,16 +93,16 @@ func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
 		res.err = errors.New(resp.Errmsg)
 		return
 	}
-	if len(resp.Binlogs) == 0 {
+	if len(resp.Entities) == 0 {
 		return
 	}
 
-	res.end = CalculateNextPos(resp.Binlogs[len(resp.Binlogs)-1])
+	res.end = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
 	prewriteItems := make(map[int64]*binlog.Binlog)
 	commitItems := make(map[int64]*binlog.Binlog)
 	rollbackItems := make(map[int64]*binlog.Binlog)
 
-	for _, item := range resp.Binlogs {
+	for _, item := range resp.Entities {
 		b := new(binlog.Binlog)
 		err := b.Unmarshal(item.Payload)
 		if err != nil {
@@ -151,7 +150,7 @@ func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
 	}
 }
 
-func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs map[int64]*binlog.Binlog, pos pb.Pos, times int) error {
+func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) error {
 	if times++; times > 3 {
 		// TODO call abort() API of TiKV to rollback the rest PrewriteItems
 		return nil
@@ -164,7 +163,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 	case <-clock.After(p.interval):
 		ctx, cancel := context.WithTimeout(pctx, p.timeout)
 		defer cancel()
-		req := &pb.PullBinlogReq{
+		req := &binlog.PullBinlogReq{
 			ClusterID: p.clusterID,
 			StartFrom: pos,
 			Batch:     p.batch,
@@ -176,14 +175,14 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 		if resp.Errmsg != "" {
 			return errors.New(resp.Errmsg)
 		}
-		if len(resp.Binlogs) == 0 {
+		if len(resp.Entities) == 0 {
 			return p.collectFurtherBatch(pctx, prewriteItems, binlogs, pos, times)
 		}
 
-		pos = CalculateNextPos(resp.Binlogs[len(resp.Binlogs)-1])
+		pos = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
 		commitItems := make(map[int64]*binlog.Binlog)
 		rollbackItems := make(map[int64]*binlog.Binlog)
-		for _, item := range resp.Binlogs {
+		for _, item := range resp.Entities {
 			b := new(binlog.Binlog)
 			err := b.Unmarshal(item.Payload)
 			if err != nil {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -55,8 +55,8 @@ func NewBinlogServer(cfg *Config) (*BinlogServer, error) {
 }
 
 // DumpBinlog implements the gRPC interface of binlog-server
-func (s *BinlogServer) DumpBinlog(ctx context.Context, req *pb.DumpBinlogReq) (*pb.DumpBinlogResp, error) {
-	ret := &pb.DumpBinlogResp{}
+func (s *BinlogServer) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
+	ret := &binlog.DumpBinlogResp{}
 	start := req.BeginCommitTS
 	end := s.window.LoadLower()
 	limit := req.Limit
@@ -129,7 +129,7 @@ func (s *BinlogServer) Start() error {
 	}
 
 	// register binlog-server with gRPC server and start to serve listener
-	pb.RegisterBinlogServer(s.gs, s)
+	binlog.RegisterCisternServer(s.gs, s)
 	s.gs.Serve(tcpLis)
 	return nil
 }

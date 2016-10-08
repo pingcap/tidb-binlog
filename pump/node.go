@@ -13,7 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
@@ -51,7 +51,7 @@ type NodeStatus struct {
 	NodeID      string
 	Host        string
 	IsAlive     bool
-	LastReadPos map[string]pb.Pos
+	LastReadPos map[string]binlog.Pos
 }
 
 // NewPumpNode return a pumpNode obj that initialized by server config
