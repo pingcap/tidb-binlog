@@ -54,6 +54,9 @@ func (r *RocksStore) Get(commitTs int64) ([]byte, time.Duration, error) {
 		return nil, 0, errors.Trace(err)
 	}
 	defer value.Free()
+	if value.Size() == 0 {
+		return nil, 0, errors.NotFoundf("commitTs(%d)", commitTs)
+	}
 	data := make([]byte, value.Size())
 	copy(data, value.Data())
 	payload, ts, err := decodePayload(data)
@@ -93,21 +96,22 @@ func (r *RocksStore) LoadMarker() (int64, error) {
 	key := codec.EncodeInt([]byte{}, math.MaxInt64)
 	value, err := r.db.Get(gorocksdb.NewDefaultReadOptions(), key)
 	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer value.Free()
+	if value.Size() == 0 {
 		err = r.SaveMarker(0)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		value, err = r.db.Get(gorocksdb.NewDefaultReadOptions(), key)
+		return 0, nil
+	} else {
+		_, ret, err := codec.DecodeInt(value.Data())
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
+		return ret, nil
 	}
-	defer value.Free()
-	_, ret, err := codec.DecodeInt(value.Data())
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return ret, nil
 }
 
 // Close implements the Close() interface of Store
