@@ -22,13 +22,12 @@ import (
 var (
 	maxRetryCount = 100
 
-	maxWaitGetJobTime       = 5 * time.Minute
-	retryTimeout            = 3 * time.Second
-	waitTime                = 10 * time.Millisecond
-	maxWaitTime             = 3 * time.Second
-	eventTimeout            = 3 * time.Second
-	statusTime              = 30 * time.Second
-	nextRequestTS     int64 = 0
+	maxWaitGetJobTime = 5 * time.Minute
+	retryTimeout      = 3 * time.Second
+	waitTime          = 10 * time.Millisecond
+	maxWaitTime       = 3 * time.Second
+	eventTimeout      = 3 * time.Second
+	statusTime        = 30 * time.Second
 )
 
 // Drainer converts tidb binlog to the specified DB sqls, and sync it to target DB
@@ -193,6 +192,14 @@ func (d *Drainer) getSnapShotTable(snapshotVer uint64, schemaID int64, tableID i
 	return table, nil
 }
 
+// while appears ddl, we would wait ddl completed.
+// According to tidb ddl source code, the ways that we will change local schema as blew:
+// 1 we can get the newest schema info from job if the ddl type is ActionCreateSchema/ActionCreateTable.
+// 2 we can change the local schema info if the ddl type is ActionDropSchema/ActionDropTable.
+// 3 we can get the schema info from the job whose state is StateReorganization, then do some small adjustments
+//   if the ddl type is ActionAddColumn/ActionDropColumn/ActionAddIndex
+// 4 we can just do samll adjustments if the ddl type is ActionDropIndex
+// 5 we don't need to change the local schema info if the ddl type is ActionAddForeignKey/ActionDropForeignKey
 func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
 	job, err := d.getHistoryJob(id)
 	if err != nil {
@@ -200,11 +207,7 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	}
 
 	tmpDelay := retryTimeout
-	for job == nil || job.State != model.JobDone {
-		if job.State == model.JobCancelled {
-			return "", "", false, nil
-		}
-
+	for job == nil {
 		time.Sleep(tmpDelay)
 		tmpDelay *= 2
 		if tmpDelay > maxWaitGetJobTime {
@@ -215,6 +218,10 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		if err != nil {
 			return "", "", false, errors.Trace(err)
 		}
+	}
+
+	if job.State == model.JobCancelled {
+		return "", "", false, nil
 	}
 
 	switch job.Type {
@@ -490,6 +497,7 @@ func (d *Drainer) run() error {
 
 	var err error
 	var operations = []translator.OpType{translator.Insert, translator.Update, translator.Del}
+	var rawBinlog []byte
 
 	d.toDB, err = openDB(d.cfg.To.User, d.cfg.To.Password, d.cfg.To.Host, d.cfg.To.Port, d.cfg.DBType)
 	if err != nil {
@@ -511,11 +519,9 @@ func (d *Drainer) run() error {
 	go d.printStatus()
 
 	d.wg.Add(1)
-	nextRequestTS = d.meta.Pos()
-	go d.onStream()
+	go d.inputStreaming()
 
 	for {
-		var rawBinlog []byte
 
 		select {
 		case <-d.ctx.Done():
@@ -634,7 +640,7 @@ func (d *Drainer) run() error {
 
 			}
 
-		case pb.BinlogType_PreDDL:
+		case pb.BinlogType_PostDDL:
 			sql := string(binlog.GetDdlQuery())
 			jobID := binlog.GetDdlJobId()
 
@@ -695,7 +701,7 @@ func (d *Drainer) printStatus() {
 	}
 }
 
-func (d *Drainer) onStream() {
+func (d *Drainer) inputStreaming() {
 	defer d.wg.Done()
 
 	var err error
@@ -703,6 +709,7 @@ func (d *Drainer) onStream() {
 	var resp *proto.DumpBinlogResp
 
 	tmpDelay := retryTimeout
+	nextRequestTS := d.meta.Pos()
 
 	for {
 		select {
@@ -744,15 +751,15 @@ func (d *Drainer) Close() {
 	d.Lock()
 	defer d.Unlock()
 
-	if d.store != nil {
-		d.store.Close()
-	}
-
 	d.cancel()
 
 	close(d.job)
 
 	d.wg.Wait()
+
+	if d.store != nil {
+		d.store.Close()
+	}
 
 	closeDB(d.toDB)
 

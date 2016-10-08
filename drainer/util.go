@@ -94,7 +94,7 @@ func ignoreDDLError(err error) bool {
 }
 
 func openDB(username string, password string, host string, port int, proto string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8", username, password, host, port)
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&multiStatements=true", username, password, host, port)
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
