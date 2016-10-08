@@ -6,7 +6,7 @@ import (
 	"hash/crc32"
 	"io"
 
-	pb "github.com/pingcap/tidb-binlog/proto"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 type decoder struct {

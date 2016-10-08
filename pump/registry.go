@@ -9,7 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"golang.org/x/net/context"
 )
 

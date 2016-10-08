@@ -13,7 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )

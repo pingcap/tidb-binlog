@@ -31,15 +31,15 @@ dev: build check test
 
 build: pump server drainer
 
-proto/pump.pb.go: proto/pump.proto
+proto/binlog/pump.pb.go: proto/binlog/pump.proto
 	sh proto/generate.sh pump.proto
-proto/binlog.pb.go: proto/binlog.proto
+proto/binlog/binlog.pb.go: proto/binlog/binlog.proto
 	sh proto/generate.sh binlog.proto
 
-pump: proto/pump.pb.go
+pump: proto/binlog/pump.pb.go
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 
-server: proto/pump.pb.go proto/binlog.pb.go
+server: proto/binlog/pump.pb.go proto/binlog/binlog.pb.go
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
 
 drainer:
