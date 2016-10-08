@@ -26,6 +26,12 @@ func main() {
 	server.InitLogger(cfg.Debug)
 	server.PrintVersionInfo()
 
+	bs, err := server.NewBinlogServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create binlog server error, %v", err)
+		os.Exit(2)
+	}
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
 		syscall.SIGHUP,
@@ -36,8 +42,12 @@ func main() {
 	go func() {
 		sig := <-sc
 		log.Infof("got signal [%d] to exit.", sig)
+		bs.Close()
 		os.Exit(0)
 	}()
 
-	server.Start(cfg)
+	if err := bs.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "start binlog-server error, %v", err)
+		os.Exit(2)
+	}
 }

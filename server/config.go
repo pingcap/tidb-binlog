@@ -18,23 +18,27 @@ import (
 const (
 	defaultListenAddr          = "127.0.0.1:18200"
 	defaultDataDir             = "data.binlog-server"
-	defaultCollectInterval     = 5
+	defaultCollectInterval     = 10
+	defaultCollectBatch        = 5000
 	defaultDepositWindowPeriod = 10
 	defaultEtcdURLs            = "http://127.0.0.1:2379"
-	// defaultEtcdTimeout defines default timeout of dialing or sending request to the etcd server.
+	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout = 5 * time.Second
+	defaultPumpTimeout = 5 * time.Second
 )
 
 // Config holds the configuration of binlog-server
 type Config struct {
 	*flag.FlagSet
-
-	ListenAddr          string        `json:"addr"`
-	DataDir             string        `json:"data-dir"`
-	CollectInterval     int           `json:"collect-interval"`
-	DepositWindowPeriod int           `json:"deposit-window-period"`
-	EtcdURLs            string        `json:"pd-urls"`
+	ClusterID           uint64 `json:"cluster-id"`
+	ListenAddr          string `json:"addr"`
+	DataDir             string `json:"data-dir"`
+	CollectInterval     int    `json:"collect-interval"`
+	CollectBatch        int    `json:"collect-batch"`
+	DepositWindowPeriod int    `json:"deposit-window-period"`
+	EtcdURLs            string `json:"pd-urls"`
 	EtcdTimeout         time.Duration
+	PumpTimeout         time.Duration
 	Debug               bool
 	configFile          string
 	printVersion        bool
@@ -44,27 +48,29 @@ type Config struct {
 func NewConfig() *Config {
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
+		PumpTimeout: defaultPumpTimeout,
 	}
-
 	cfg.FlagSet = flag.NewFlagSet("binlog-server", flag.ContinueOnError)
 	fs := cfg.FlagSet
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, usageline)
 	}
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for connection of drainer")
-	fs.StringVar(&cfg.DataDir, "data-dir", "", "path to RocksDB data files")
-	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval in second of collection loop pulling binlog from pumps")
-	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "after the period of time (in minutes) binlogs stored in RocksDB will become public state")
-	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the endpoints of PD")
+	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that binlog-server in charge of")
+	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of RocksDB")
+	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
+	fs.IntVar(&cfg.CollectBatch, "collect-batch", defaultCollectBatch, "the max number of binlog items in a pulling batch")
+	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in RocksDB will become to public state")
+	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
-	fs.StringVar(&cfg.configFile, "config-file", "", "path of configuration file")
+	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
-
 	return cfg
 }
 
+// Parse parses all config from command-line flags, environment vars or the configuration file
 func (cfg *Config) Parse(args []string) error {
-	// Parse first to get config file
+	// parse first to get config file
 	perr := cfg.FlagSet.Parse(args)
 	switch perr {
 	case nil:
@@ -74,7 +80,6 @@ func (cfg *Config) Parse(args []string) error {
 	default:
 		os.Exit(2)
 	}
-
 	if cfg.printVersion {
 		fmt.Printf("binlog-server Version: %s\n", Version)
 		fmt.Printf("Git SHA: %s\n", GitSHA)
@@ -83,33 +88,28 @@ func (cfg *Config) Parse(args []string) error {
 		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
-
-	// Load config file if specified
+	// load config file if specified
 	if cfg.configFile != "" {
 		if err := cfg.configFromFile(cfg.configFile); err != nil {
 			return errors.Trace(err)
 		}
 	}
-
-	// Parse again to replace with command line options
+	// parse again to replace with command line options
 	cfg.FlagSet.Parse(args)
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
-
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
+	if err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
-
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.CollectInterval, defaultCollectInterval)
+	adjustInt(&cfg.CollectBatch, defaultCollectBatch)
 	adjustInt(&cfg.DepositWindowPeriod, defaultDepositWindowPeriod)
-	adjustDuration(&cfg.EtcdTimeout, defaultEtcdTimeout)
-
-	return nil
+	return cfg.validate()
 }
 
 func (cfg *Config) configFromFile(path string) error {
@@ -136,12 +136,6 @@ func adjustInt(v *int, defValue int) {
 	}
 }
 
-func adjustDuration(v *time.Duration, defValue time.Duration) {
-	if *v == 0 {
-		*v = defValue
-	}
-}
-
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -152,7 +146,6 @@ func (cfg *Config) validate() error {
 	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
-
 	// check EtcdEndpoints
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
@@ -163,6 +156,9 @@ func (cfg *Config) validate() error {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
 	}
-
+	// clusterId must be configured
+	if cfg.ClusterID == 0 {
+		return errors.Errorf("cluster-id must be configured")
+	}
 	return nil
 }
