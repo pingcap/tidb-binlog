@@ -11,6 +11,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/server"
+	"github.com/juju/errors"
 )
 
 func main() {
@@ -19,7 +20,7 @@ func main() {
 
 	cfg := server.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "verifying flags error, %v. See 'binlog-server --help'.\n", err)
+		fmt.Fprintf(os.Stderr, "verifying flags error, See 'binlog-server --help'.\n %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 
@@ -28,7 +29,7 @@ func main() {
 
 	bs, err := server.NewBinlogServer(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "create binlog server error, %v", err)
+		log.Errorf("create binlog server error, %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 
@@ -47,7 +48,7 @@ func main() {
 	}()
 
 	if err := bs.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "start binlog-server error, %v", err)
+		log.Errorf("start binlog-server error, %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 }
