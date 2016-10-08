@@ -57,8 +57,8 @@ type Server struct {
 	tcpAddr  string
 	unixAddr string
 	gs       *grpc.Server
-	done     chan struct{}
 	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // NewServer return a instance of pump server
@@ -67,6 +67,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
@@ -74,8 +75,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
 		gs:         grpc.NewServer(),
-		done:       make(chan struct{}),
-		ctx:        context.Background(),
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
@@ -177,7 +178,7 @@ func (s *Server) Start() error {
 	}
 
 	// start heartbeat
-	errc := s.node.Heartbeat(s.ctx, s.done)
+	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
 			log.Error(err)
@@ -219,7 +220,7 @@ func (s *Server) Start() error {
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
 	// notify other goroutines to exit
-	close(s.done)
+	s.cancel()
 	// stop the gRPC server
 	s.gs.GracefulStop()
 }
