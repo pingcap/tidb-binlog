@@ -6,7 +6,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	pb "github.com/pingcap/tidb-binlog/proto"
 	"github.com/pingcap/tipb/go-binlog"
 	"google.golang.org/grpc"
 )

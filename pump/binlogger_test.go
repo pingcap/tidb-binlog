@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	pb "github.com/pingcap/tidb-binlog/proto"
 )
 
 func TestClient(t *testing.T) {

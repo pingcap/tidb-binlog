@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/ngaut/log"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	pb "github.com/pingcap/tidb-binlog/proto"
 )
 
 // InitLogger initalizes Pump's logger.

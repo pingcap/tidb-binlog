@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultListenAddr          = "127.0.0.1:18200"
+	defaultListenAddr          = "127.0.0.1:8249"
 	defaultDataDir             = "data.binlog-server"
 	defaultCollectInterval     = 10
 	defaultCollectBatch        = 5000
@@ -105,6 +105,7 @@ func (cfg *Config) Parse(args []string) error {
 	}
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
+	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.CollectInterval, defaultCollectInterval)
 	adjustInt(&cfg.CollectBatch, defaultCollectBatch)
