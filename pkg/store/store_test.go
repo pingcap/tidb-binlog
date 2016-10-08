@@ -1,9 +1,9 @@
 package store
 
 import (
-	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto"
@@ -16,38 +16,73 @@ func TestClient(t *testing.T) {
 var _ = Suite(&testStoreSuite{})
 
 type testStoreSuite struct {
-	db      DB
 	dirPath string
 }
 
 func (s *testStoreSuite) SetUpTest(c *C) {
-	fmt.Println("xxx")
 	tmpdir := os.TempDir()
-	db, err := New(tmpdir)
-	c.Assert(err, IsNil)
 	s.dirPath = tmpdir
-	s.db = db
 }
 
 func (s *testStoreSuite) TearDownSuite(c *C) {
-	fmt.Println("yyy")
-	s.db.Close()
 	os.RemoveAll(s.dirPath)
 }
 
 func (s *testStoreSuite) TestDB(c *C) {
-	s.MustPut(c, 1, &pb.Binlog{})
-	s.MustPut(c, 2, &pb.Binlog{})
-	s.MustPut(c, 3, &pb.Binlog{})
-	s.MustPut(c, 4, &pb.Binlog{})
-	s.MustPut(c, 5, &pb.Binlog{})
-	s.MustPut(c, 6, &pb.Binlog{})
-
-	_, err := s.db.Scan(1)
+	db, err := New(s.dirPath, 0)
 	c.Assert(err, IsNil)
+	defer db.Close()
+
+	for i := uint64(1); i <= 100; i++ {
+		mustPut(db, c, i, &pb.Binlog{})
+	}
+
+	iter, err := db.Scan(1)
+	c.Assert(err, IsNil)
+
+	key := 0
+	for ; iter.Valid(); iter.Next() {
+		key++
+		ts, err := iter.Key()
+		c.Assert(err, IsNil)
+		c.Assert(ts, Equals, key)
+
+		_, err = iter.Value()
+		c.Assert(err, IsNil)
+	}
 }
 
-func (s *testStoreSuite) MustPut(c *C, ts uint64, b *pb.Binlog) {
-	err := s.db.Put(ts, b)
+func (s *testStoreSuite) TestScanAfterPut(c *C) {
+	db, err := New(s.dirPath, 3*time.Second)
+	c.Assert(err, IsNil)
+	defer db.Close()
+
+	for i := uint64(1); i <= 50; i++ {
+		mustPut(db, c, i, &pb.Binlog{})
+	}
+
+	iter, err := db.Scan(1)
+	c.Assert(err, IsNil)
+	// Scan immediately after Put, iter should get nothing
+	count := 0
+	for ; iter.Valid(); iter.Next() {
+		count++
+	}
+	c.Assert(count, Equals, 0)
+
+	// After sleep 3s, data should be visible to Scan
+	time.Sleep(3 * time.Second)
+	iter, err = db.Scan(1)
+	key := 0
+	for ; iter.Valid(); iter.Next() {
+		key++
+		ts, err := iter.Key()
+		c.Assert(err, IsNil)
+		c.Assert(ts, Equals, key)
+	}
+}
+
+func mustPut(db DB, c *C, ts uint64, b *pb.Binlog) {
+	err := db.Put(ts, b)
 	c.Assert(err, IsNil)
 }

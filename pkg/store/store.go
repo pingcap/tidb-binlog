@@ -10,12 +10,14 @@ import (
 	"github.com/tecbot/gorocksdb"
 )
 
+// DB is an interface for (commitTS, Binlog) key-value store.
 type DB interface {
 	Put(commitTS uint64, value *pb.Binlog) error
 	Scan(commitTs uint64) (Iterator, error)
 	Close()
 }
 
+// Iterator is an interface for visiting key-value in DB.
 type Iterator interface {
 	Next()
 	Valid() bool
@@ -32,11 +34,17 @@ var (
 )
 
 type rocksDB struct {
-	db *gorocksdb.DB
-	cf []*gorocksdb.ColumnFamilyHandle
+	db    *gorocksdb.DB
+	cf    []*gorocksdb.ColumnFamilyHandle
+	delay time.Duration
 }
 
-func New(path string) (DB, error) {
+// New returns a rocksDB which implements DB interface.
+// 'path' specifies the RocksDB data directory path.
+// data written into DB is not visible immediately, it takes at least
+// 'delay' time duration for the data to become visible after their
+// first written into DB.
+func New(path string, delay time.Duration) (DB, error) {
 	opt := gorocksdb.NewDefaultOptions()
 	opt.SetCreateIfMissing(true)
 	opt.SetCreateIfMissingColumnFamilies(true)
@@ -52,6 +60,7 @@ func New(path string) (DB, error) {
 	}, nil
 }
 
+// Put implements DB interface.
 func (r *rocksDB) Put(commitTS uint64, binlog *pb.Binlog) error {
 	key := codec.EncodeUint([]byte{}, commitTS)
 	now, err := time.Now().MarshalBinary()
@@ -62,7 +71,10 @@ func (r *rocksDB) Put(commitTS uint64, binlog *pb.Binlog) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	value := encodeBinlog(binlog)
+	value, err := encodeBinlog(binlog)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = r.db.PutCF(defaultWriteOption, r.cf[1], key, value)
 	if err != nil {
 		return errors.Trace(err)
@@ -70,6 +82,7 @@ func (r *rocksDB) Put(commitTS uint64, binlog *pb.Binlog) error {
 	return nil
 }
 
+// Scan implements DB interface.
 func (r *rocksDB) Scan(commitTS uint64) (Iterator, error) {
 	key := codec.EncodeUint([]byte{}, commitTS)
 	iter := r.db.NewIteratorCF(defaultReadOption, r.cf[0])
@@ -83,7 +96,7 @@ func (r *rocksDB) Scan(commitTS uint64) (Iterator, error) {
 			return nil, errors.Trace(err)
 		}
 
-		if t.Add(5 * time.Minute).After(now) {
+		if t.Add(r.delay).After(now) {
 			break
 		}
 
@@ -157,12 +170,12 @@ func (iter *rocksIterator) Value() (*pb.Binlog, error) {
 	return iterBinlogValue(iter.Iterator)
 }
 
-func encodeBinlog(v *pb.Binlog) []byte {
-	// TODO
-	return nil
+func encodeBinlog(v *pb.Binlog) ([]byte, error) {
+	return v.Marshal()
 }
 
 func decodeBinlog(buf []byte) (*pb.Binlog, error) {
-	// TODO
-	return nil, errors.New("not implement yet")
+	var ret pb.Binlog
+	err := ret.Unmarshal(buf)
+	return &ret, err
 }
