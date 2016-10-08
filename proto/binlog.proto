@@ -16,7 +16,7 @@ service Binlog {
 
 message DumpBinlogReq {
     // beginCommitTS speicifies the position from which begin to dump binlogs.
-    // notice that actually the result of dump starts from the one next to beginCommitTS
+    // note that actually the result of dump starts from the one next to beginCommitTS
     // it should be zero in case of the first request.
     int64 beginCommitTS = 1;
 

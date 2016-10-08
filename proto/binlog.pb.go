@@ -42,7 +42,7 @@ const _ = proto1.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type DumpBinlogReq struct {
 	// beginCommitTS speicifies the position from which begin to dump binlogs.
-	// notice that actually the result of dump starts from the one next to beginCommitTS
+	// note that actually the result of dump starts from the one next to beginCommitTS
 	// it should be zero in case of the first request.
 	BeginCommitTS int64 `protobuf:"varint,1,opt,name=beginCommitTS,proto3" json:"beginCommitTS,omitempty"`
 	// limit defines the maximum number of binlogs requested once call.
