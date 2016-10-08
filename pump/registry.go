@@ -5,8 +5,11 @@ import (
 	"path"
 	"time"
 
+	"fmt"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	pb "github.com/pingcap/tidb-binlog/proto"
 	"golang.org/x/net/context"
 )
 
@@ -19,11 +22,19 @@ type EtcdRegistry struct {
 }
 
 // NewEtcdRegistry returns an EtcdRegistry client
-func NewEtcdRegistry(client *etcd.Client, reqTimeout time.Duration) *EtcdRegistry {
+func NewEtcdRegistry(cli *etcd.Client, reqTimeout time.Duration) *EtcdRegistry {
 	return &EtcdRegistry{
-		client:     client,
+		client:     cli,
 		reqTimeout: reqTimeout,
 	}
+}
+
+// Close cuts off the client connection
+func (r *EtcdRegistry) Close() error {
+	if err := r.client.Close(); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (r *EtcdRegistry) prefixed(p ...string) string {
@@ -41,9 +52,25 @@ func (r *EtcdRegistry) Node(pctx context.Context, nodeID string) (*NodeStatus, e
 	}
 	status, err := nodeStatusFromEtcdNode(nodeID, resp)
 	if err != nil {
-		return nil, errors.Errorf("Invalid node, nodeID[%s], error[%v]", nodeID, err)
+		return nil, errors.Annotatef(err, "Invalid nodeID(%s)", nodeID)
 	}
 	return status, nil
+}
+
+// Nodes retruns all the nodeStatuses in the etcd
+func (r *EtcdRegistry) Nodes(pctx context.Context) ([]*NodeStatus, error) {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	resp, err := r.client.List(ctx, r.prefixed(nodePrefix))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	statuses, err := nodeStatusesFromEtcdNode(resp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return statuses, nil
 }
 
 // RegisterNode register the node in the etcd
@@ -127,20 +154,58 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, nodeID string, ttl int6
 	return nil
 }
 
+// UpdateSavepoint updates the savepoint of pulling binlog
+func (r *EtcdRegistry) UpdateSavepoint(pctx context.Context, nodeID string, clusterID uint64, pos pb.Pos) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	cid := fmt.Sprintf("%d", clusterID)
+	key := r.prefixed(nodePrefix, nodeID, "savepoints", cid)
+	value, err := json.Marshal(&pos)
+	if err != nil {
+		return errors.Annotatef(err, "error marshal Pos(%v)", pos)
+	}
+	if err := r.client.UpdateOrCreate(ctx, key, string(value), 0); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error) {
 	status := &NodeStatus{}
 	var isAlive bool
+	savepoints := make(map[string]pb.Pos)
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
-			if err := json.Unmarshal(n.Value, status); err != nil {
+			if err := json.Unmarshal(n.Value, &status); err != nil {
 				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", nodeID)
 			}
 		case "alive":
 			isAlive = true
+		case "savepoints":
+			for cid, nn := range n.Childs {
+				var pos pb.Pos
+				if err := json.Unmarshal(nn.Value, &pos); err != nil {
+					return nil, errors.Annotatef(err, "error unmarshal savepoint of cluster(%s) in node(%s)", cid, nodeID)
+				}
+				savepoints[cid] = pos
+			}
 		}
 	}
-
 	status.IsAlive = isAlive
+	status.LastReadPos = savepoints
 	return status, nil
+}
+
+func nodeStatusesFromEtcdNode(root *etcd.Node) ([]*NodeStatus, error) {
+	var statuses []*NodeStatus
+	for id, n := range root.Childs {
+		status, err := nodeStatusFromEtcdNode(id, n)
+		if err != nil {
+			return nil, err
+		}
+		statuses = append(statuses, status)
+	}
+	return statuses, nil
 }
