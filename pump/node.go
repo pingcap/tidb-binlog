@@ -90,7 +90,7 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		id:                nodeID,
 		host:              advURL.Host,
-		heartbeatInterval: time.Duration(cfg.HeartbeatInterval),
+		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
 		heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
