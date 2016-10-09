@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"flag"
@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultListenAddr          = "127.0.0.1:8249"
-	defaultDataDir             = "data.binlog-server"
+	defaultDataDir             = "data.cistern"
 	defaultCollectInterval     = 10
 	defaultCollectBatch        = 5000
 	defaultDepositWindowPeriod = 10
@@ -27,7 +27,7 @@ const (
 	defaultPumpTimeout = 5 * time.Second
 )
 
-// Config holds the configuration of binlog-server
+// Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
 	ClusterID           uint64 `json:"cluster-id"`
@@ -50,12 +50,12 @@ func NewConfig() *Config {
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
 	}
-	cfg.FlagSet = flag.NewFlagSet("binlog-server", flag.ContinueOnError)
+	cfg.FlagSet = flag.NewFlagSet("cistern", flag.ContinueOnError)
 	fs := cfg.FlagSet
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, usageline)
 	}
-	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that binlog-server in charge of")
+	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that cistern in charge of")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of RocksDB")
 	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
@@ -81,7 +81,7 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(2)
 	}
 	if cfg.printVersion {
-		fmt.Printf("binlog-server Version: %s\n", Version)
+		fmt.Printf("cistern Version: %s\n", Version)
 		fmt.Printf("Git SHA: %s\n", GitSHA)
 		fmt.Printf("Build TS: %s\n", BuildTS)
 		fmt.Printf("Go Version: %s\n", runtime.Version())
@@ -144,7 +144,7 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
+	if _, _, err = net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 	// check EtcdEndpoints

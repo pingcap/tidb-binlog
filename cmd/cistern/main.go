@@ -9,27 +9,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/server"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/cistern"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	cfg := server.NewConfig()
+	cfg := cistern.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "verifying flags error, See 'binlog-server --help'.\n %s", errors.ErrorStack(err))
+		fmt.Fprintf(os.Stderr, "verifying flags error, See 'cistern --help'.\n %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 
-	server.InitLogger(cfg.Debug)
-	server.PrintVersionInfo()
+	cistern.InitLogger(cfg.Debug)
+	cistern.PrintVersionInfo()
 
-	bs, err := server.NewBinlogServer(cfg)
+	bs, err := cistern.NewServer(cfg)
 	if err != nil {
-		log.Errorf("create binlog server error, %s", errors.ErrorStack(err))
+		log.Errorf("create cistern server error, %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 
@@ -48,7 +48,7 @@ func main() {
 	}()
 
 	if err := bs.Start(); err != nil {
-		log.Errorf("start binlog-server error, %s", errors.ErrorStack(err))
+		log.Errorf("start cistern server error, %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 }

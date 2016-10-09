@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"runtime"
@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	// Version defines the version of binlog-server
+	// Version defines the version of cistern server
 	Version = "1.0.0+git"
 
 	// GitSHA will be set during make
@@ -18,7 +18,7 @@ var (
 
 // PrintVersionInfo show version info to stdout
 func PrintVersionInfo() {
-	log.Infof("binlog-server Version: %s\n", Version)
+	log.Infof("cistern Version: %s\n", Version)
 	log.Infof("Git SHA: %s\n", GitSHA)
 	log.Infof("Build TS: %s\n", BuildTS)
 	log.Infof("Go Version: %s\n", runtime.Version())

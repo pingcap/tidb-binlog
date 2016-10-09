@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"net"
@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-// BinlogServer implements the gRPC interface,
+// Server implements the gRPC interface,
 // and maintains the runtime status
-type BinlogServer struct {
+type Server struct {
 	rocksdb   store.Store
 	window    *DepositWindow
 	collector *Collector
@@ -26,8 +26,8 @@ type BinlogServer struct {
 	wg        sync.WaitGroup
 }
 
-// NewBinlogServer return a instance of binlog-server
-func NewBinlogServer(cfg *Config) (*BinlogServer, error) {
+// NewServer return a instance of binlog-server
+func NewServer(cfg *Config) (*Server, error) {
 	s, err := store.NewRocksStore(cfg.DataDir)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open RocksDB store in dir(%s)", cfg.DataDir)
@@ -42,7 +42,7 @@ func NewBinlogServer(cfg *Config) (*BinlogServer, error) {
 	}
 	p := NewPublisher(cfg, s, win)
 	ctx, cancel := context.WithCancel(context.Background())
-	return &BinlogServer{
+	return &Server{
 		rocksdb:   s,
 		window:    win,
 		collector: c,
@@ -54,8 +54,8 @@ func NewBinlogServer(cfg *Config) (*BinlogServer, error) {
 	}, nil
 }
 
-// DumpBinlog implements the gRPC interface of binlog-server
-func (s *BinlogServer) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
+// DumpBinlog implements the gRPC interface of cistern server
+func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
 	ret := &binlog.DumpBinlogResp{}
 	start := req.BeginCommitTS
 	end := s.window.LoadLower()
@@ -93,7 +93,7 @@ func (s *BinlogServer) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq
 }
 
 // StartCollect runs Collector up in a coroutine.
-func (s *BinlogServer) StartCollect() {
+func (s *Server) StartCollect() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -102,7 +102,7 @@ func (s *BinlogServer) StartCollect() {
 }
 
 // StartPublish runs Publisher up in a coroutine.
-func (s *BinlogServer) StartPublish() {
+func (s *Server) StartPublish() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -110,8 +110,8 @@ func (s *BinlogServer) StartPublish() {
 	}()
 }
 
-// Start runs BinlogServer to serve the listening addr, and starts to collect binlog
-func (s *BinlogServer) Start() error {
+// Start runs CisternServer to serve the listening addr, and starts to collect binlog
+func (s *Server) Start() error {
 	// start to collect
 	s.StartCollect()
 
@@ -128,14 +128,14 @@ func (s *BinlogServer) Start() error {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
 
-	// register binlog-server with gRPC server and start to serve listener
+	// register cistern server with gRPC server and start to serve listener
 	binlog.RegisterCisternServer(s.gs, s)
 	s.gs.Serve(tcpLis)
 	return nil
 }
 
-// Close stops all coroutines started by binlog-server gracefully
-func (s *BinlogServer) Close() {
+// Close stops all coroutines started by cistern server gracefully
+func (s *Server) Close() {
 	// first stop gRPC server
 	s.gs.GracefulStop()
 	// notify all coroutines to exit

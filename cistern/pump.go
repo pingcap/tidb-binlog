@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"context"
@@ -122,7 +122,7 @@ func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
 		case binlog.BinlogType_PostDDL:
 			res.binlogs[b.CommitTs] = b
 		default:
-			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%s), Pos(%v) ",
+			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
 				b.Tp, p.host, p.clusterID, item.Pos)
 		}
 	}

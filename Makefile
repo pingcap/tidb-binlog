@@ -29,13 +29,13 @@ all: dev install
 
 dev: build check test
 
-build: pump server drainer
+build: pump cistern drainer
 
 pump:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 
-server:
-	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
+cistern:
+	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/cistern cmd/cistern/main.go
 
 drainer:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
@@ -82,5 +82,5 @@ clean:
 	go clean -i ./...
 	rm -rf *.out
 
-.PHONY: build test check update clean pump server drainer fmt
+.PHONY: build test check update clean pump cistern drainer fmt
 

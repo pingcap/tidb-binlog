@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"fmt"
@@ -126,10 +126,10 @@ func (c *Collector) collect(ctx context.Context) error {
 	var wg sync.WaitGroup
 	for _, p := range c.pumps {
 		wg.Add(1)
-		go func() {
+		go func(p *Pump) {
 			p.Collect(ctx, resc)
 			wg.Done()
-		}()
+		}(p)
 	}
 	go func() {
 		wg.Wait()

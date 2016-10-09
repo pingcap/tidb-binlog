@@ -1,4 +1,4 @@
-package server
+package cistern
 
 import (
 	"github.com/ngaut/log"

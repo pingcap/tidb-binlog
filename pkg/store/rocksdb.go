@@ -105,13 +105,12 @@ func (r *RocksStore) LoadMarker() (int64, error) {
 			return 0, errors.Trace(err)
 		}
 		return 0, nil
-	} else {
-		_, ret, err := codec.DecodeInt(value.Data())
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		return ret, nil
 	}
+	_, ret, err := codec.DecodeInt(value.Data())
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return ret, nil
 }
 
 // Close implements the Close() interface of Store
