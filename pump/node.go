@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -16,6 +15,7 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
+	"github.com/ngaut/log"
 )
 
 const (
