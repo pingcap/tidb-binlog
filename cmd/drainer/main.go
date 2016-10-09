@@ -15,8 +15,8 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/drainer"
-	"github.com/pingcap/tidb-binlog/proto"
 	"github.com/pingcap/tidb/store/tikv"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"google.golang.org/grpc"
 )
 
@@ -83,7 +83,7 @@ func main() {
 	}
 }
 
-func createBinlogClient(host string, port int) proto.BinlogClient {
+func createBinlogClient(host string, port int) pb.CisternClient {
 	path := fmt.Sprintf("%s:%d", host, port)
 	dialerOpt := grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 		return net.DialTimeout("tcp", addr, timeout)
@@ -92,5 +92,5 @@ func createBinlogClient(host string, port int) proto.BinlogClient {
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
-	return proto.NewBinlogClient(clientCon)
+	return pb.NewCisternClient(clientCon)
 }

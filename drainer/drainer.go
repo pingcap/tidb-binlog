@@ -11,7 +11,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
-	"github.com/pingcap/tidb-binlog/proto"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -46,9 +45,9 @@ type Drainer struct {
 
 	input chan []byte
 
-	store        kv.Storage
-	toDB         *sql.DB
-	binlogClient proto.BinlogClient
+	store         kv.Storage
+	toDB          *sql.DB
+	cisternClient pb.CisternClient
 
 	done chan struct{}
 	job  chan *job
@@ -68,11 +67,11 @@ type Drainer struct {
 }
 
 // NewDrainer returns a Drainer instance
-func NewDrainer(cfg *Config, store kv.Storage, binlogClient proto.BinlogClient) *Drainer {
+func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) *Drainer {
 	drainer := new(Drainer)
 	drainer.cfg = cfg
 	drainer.store = store
-	drainer.binlogClient = binlogClient
+	drainer.cisternClient = cisternClient
 	drainer.meta = NewLocalMeta(cfg.Meta, cfg.InitTs)
 	drainer.input = make(chan []byte, 1024)
 	drainer.lastCount.Set(0)
@@ -706,7 +705,7 @@ func (d *Drainer) inputStreaming() {
 
 	var err error
 	var count int
-	var resp *proto.DumpBinlogResp
+	var resp *pb.DumpBinlogResp
 
 	tmpDelay := retryTimeout
 	nextRequestTS := d.meta.Pos()
@@ -722,8 +721,8 @@ func (d *Drainer) inputStreaming() {
 				continue
 			}
 
-			req := &proto.DumpBinlogReq{BeginCommitTS: nextRequestTS, Limit: int32(d.cfg.RequestCount)}
-			resp, err = d.binlogClient.DumpBinlog(context.Background(), req)
+			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS, Limit: int32(d.cfg.RequestCount)}
+			resp, err = d.cisternClient.DumpBinlog(context.Background(), req)
 			if err != nil {
 				log.Warning(err)
 			}
@@ -731,7 +730,7 @@ func (d *Drainer) inputStreaming() {
 				log.Warning(errors.New(resp.Errmsg))
 			}
 
-			if resp == nil {
+			if resp == nil || len(resp.Payloads) == 0 {
 				time.Sleep(tmpDelay)
 				tmpDelay *= 2
 				if tmpDelay > maxWaitGetJobTime {
