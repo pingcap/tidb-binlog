@@ -13,7 +13,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/_vendor/src/github.com/ngaut/log"
 	"github.com/pingcap/tipb/go-binlog"
-	"github.com/toolkits/logger"
 	"golang.org/x/net/context"
 )
 
@@ -66,7 +65,7 @@ func (c *Collector) Start(ctx context.Context) {
 			p.Close()
 		}
 		if err := c.reg.Close(); err != nil {
-			logger.Error(err.Error())
+			log.Error(err.Error())
 		}
 		log.Info("Collect coroutine exited")
 	}()
