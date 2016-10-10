@@ -9,13 +9,13 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
-	"github.com/ngaut/log"
 )
 
 const (
@@ -123,7 +123,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				errc <- errors.Trace(err)
 			}
 			close(errc)
-			log.Info("Heartbeat coroutine exited")
+			log.Info("Heartbeat goroutine exited")
 		}()
 
 		var clock = clockwork.NewRealClock()

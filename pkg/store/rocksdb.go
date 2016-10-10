@@ -11,7 +11,10 @@ import (
 
 // RocksStore wraps RocksDB as Store
 type RocksStore struct {
-	db *gorocksdb.DB
+	dbReadOpts  *gorocksdb.ReadOptions
+	dbWriteOpts *gorocksdb.WriteOptions
+	db          *gorocksdb.DB
+	marker      []byte
 }
 
 // RocksIterator wraps RocksDB iterator
@@ -23,12 +26,16 @@ type RocksIterator struct {
 func NewRocksStore(dir string) (Store, error) {
 	opts := gorocksdb.NewDefaultOptions()
 	opts.SetCreateIfMissing(true)
+	defer opts.Destroy()
 	db, err := gorocksdb.OpenDb(opts, dir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &RocksStore{
-		db: db,
+		dbReadOpts:  gorocksdb.NewDefaultReadOptions(),
+		dbWriteOpts: gorocksdb.NewDefaultWriteOptions(),
+		db:          db,
+		marker:      codec.EncodeInt([]byte{}, math.MaxInt64),
 	}, nil
 }
 
@@ -39,7 +46,7 @@ func (r *RocksStore) Put(commitTs int64, payload []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = r.db.Put(gorocksdb.NewDefaultWriteOptions(), key, data)
+	err = r.db.Put(r.dbWriteOpts, key, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -49,7 +56,7 @@ func (r *RocksStore) Put(commitTs int64, payload []byte) error {
 // Get implements the Get() interface of Store
 func (r *RocksStore) Get(commitTs int64) ([]byte, time.Duration, error) {
 	key := codec.EncodeInt([]byte{}, commitTs)
-	value, err := r.db.Get(gorocksdb.NewDefaultReadOptions(), key)
+	value, err := r.db.Get(r.dbReadOpts, key)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -68,7 +75,7 @@ func (r *RocksStore) Get(commitTs int64) ([]byte, time.Duration, error) {
 
 // Scan implements the Scan() interface of Store
 func (r *RocksStore) Scan(commitTs int64) (Iterator, error) {
-	iter := r.db.NewIterator(gorocksdb.NewDefaultReadOptions())
+	iter := r.db.NewIterator(r.dbReadOpts)
 	key := codec.EncodeInt([]byte{}, commitTs)
 	iter.Seek(key)
 	if iter.Err() != nil {
@@ -79,12 +86,11 @@ func (r *RocksStore) Scan(commitTs int64) (Iterator, error) {
 	}, nil
 }
 
-// SaveMarker implements the SaveMarker() interface of Store
+// SaveMarker implements the SaveMarker() interface of Store,
+// using MaxInt64 as key to store the marker of commitTs
 func (r *RocksStore) SaveMarker(commitTs int64) error {
-	// use the MaxInt64 as key to store marker of commitTs
-	key := codec.EncodeInt([]byte{}, math.MaxInt64)
 	value := codec.EncodeInt([]byte{}, commitTs)
-	err := r.db.Put(gorocksdb.NewDefaultWriteOptions(), key, value)
+	err := r.db.Put(r.dbWriteOpts, r.marker, value)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -93,8 +99,7 @@ func (r *RocksStore) SaveMarker(commitTs int64) error {
 
 // LoadMarker implements the LoadMarker() interface of Store
 func (r *RocksStore) LoadMarker() (int64, error) {
-	key := codec.EncodeInt([]byte{}, math.MaxInt64)
-	value, err := r.db.Get(gorocksdb.NewDefaultReadOptions(), key)
+	value, err := r.db.Get(r.dbReadOpts, r.marker)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -116,6 +121,8 @@ func (r *RocksStore) LoadMarker() (int64, error) {
 // Close implements the Close() interface of Store
 func (r *RocksStore) Close() {
 	r.db.Close()
+	r.dbReadOpts.Destroy()
+	r.dbWriteOpts.Destroy()
 }
 
 // Next implements the Next() interface of Iterator
@@ -133,14 +140,16 @@ func (ri *RocksIterator) Valid() bool {
 		return false
 	}
 	key := ri.iter.Key()
-	defer key.Free()
 	_, ret, err := codec.DecodeInt(key.Data())
 	if err != nil {
+		key.Free()
 		return false
 	}
 	if ret == math.MaxInt64 {
+		key.Free()
 		return false
 	}
+	key.Free()
 	return true
 }
 
@@ -152,23 +161,25 @@ func (ri *RocksIterator) Close() {
 // CommitTs implements the CommitTs() interface of Iterator
 func (ri *RocksIterator) CommitTs() (int64, error) {
 	key := ri.iter.Key()
-	defer key.Free()
 	_, ret, err := codec.DecodeInt(key.Data())
 	if err != nil {
+		key.Free()
 		return 0, errors.Trace(err)
 	}
+	key.Free()
 	return ret, nil
 }
 
 // Payload implements the Payload() interface of Iterator
 func (ri *RocksIterator) Payload() ([]byte, time.Duration, error) {
 	value := ri.iter.Value()
-	defer value.Free()
 	data := make([]byte, value.Size())
 	copy(data, value.Data())
 	payload, ts, err := decodePayload(data)
 	if err != nil {
+		value.Free()
 		return nil, 0, errors.Trace(err)
 	}
+	value.Free()
 	return payload, time.Now().Sub(ts), nil
 }

@@ -19,6 +19,8 @@ FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.GitSHA=$(shell git rev-parse HEAD)"
 
 default: build buildsucc
 

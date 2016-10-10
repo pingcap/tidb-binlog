@@ -61,21 +61,14 @@ func (p *Pump) Close() {
 // Each Prewrite type item in batch must find a type of Commit or Rollback one with the same startTS,
 // if some ones don't find guys, it should pull another batch from pump and find their partners.
 // Eventually, if there are still some rest ones, calls abort() via tikv client for them.
-func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
-	res := result{
+func (p *Pump) Collect(pctx context.Context) (res result) {
+	res = result{
 		nodeID:    p.nodeID,
 		clusterID: p.clusterID,
 		begin:     p.current,
 		end:       p.current,
 		binlogs:   make(map[int64]*binlog.Binlog),
 	}
-	defer func() {
-		select {
-		case resc <- res:
-		case <-pctx.Done():
-			return
-		}
-	}()
 
 	ctx, cancel := context.WithTimeout(pctx, p.timeout)
 	defer cancel()
@@ -148,10 +141,11 @@ func (p *Pump) Collect(pctx context.Context, resc chan<- result) {
 			return
 		}
 	}
+	return
 }
 
 func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) error {
-	if times++; times > 3 {
+	if times > 3 {
 		// TODO call abort() API of TiKV to rollback the rest PrewriteItems
 		return nil
 	}
@@ -176,7 +170,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 			return errors.New(resp.Errmsg)
 		}
 		if len(resp.Entities) == 0 {
-			return p.collectFurtherBatch(pctx, prewriteItems, binlogs, pos, times)
+			return p.collectFurtherBatch(pctx, prewriteItems, binlogs, pos, times+1)
 		}
 
 		pos = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
@@ -211,7 +205,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 		}
 
 		if len(prewriteItems) > 0 {
-			return p.collectFurtherBatch(pctx, prewriteItems, binlogs, pos, times)
+			return p.collectFurtherBatch(pctx, prewriteItems, binlogs, pos, times+1)
 		}
 	}
 

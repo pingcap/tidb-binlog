@@ -7,11 +7,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb-binlog/pump"
-	"github.com/pingcap/tidb/_vendor/src/github.com/ngaut/log"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -67,7 +67,7 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		log.Info("Collect coroutine exited")
+		log.Info("Collect goroutine exited")
 	}()
 
 	round := 1
@@ -77,7 +77,6 @@ func (c *Collector) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-clock.After(c.interval):
-			log.Debugf("start to collect binlog at round[%d]", round)
 			start := time.Now()
 			if err := c.collect(ctx); err != nil {
 				log.Errorf("collect error: %v", err)
@@ -90,6 +89,53 @@ func (c *Collector) Start(ctx context.Context) {
 }
 
 func (c *Collector) collect(ctx context.Context) error {
+	if err := c.prepare(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
+	// start to collect binlog from each pump
+	resc := make(chan result)
+	var wg sync.WaitGroup
+	for _, p := range c.pumps {
+		wg.Add(1)
+		go func(p *Pump) {
+			select {
+			case resc <- p.Collect(ctx):
+			case <-ctx.Done():
+			}
+			wg.Done()
+		}(p)
+	}
+	go func() {
+		wg.Wait()
+		close(resc)
+	}()
+
+	items := make(map[int64]*binlog.Binlog)
+	savepoints := make(map[string]binlog.Pos)
+	for r := range resc {
+		if r.err != nil {
+			return errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
+				r.clusterID, r.nodeID)
+		}
+		for commitTS, item := range r.binlogs {
+			items[commitTS] = item
+		}
+		if ComparePos(r.end, r.begin) > 0 {
+			savepoints[r.nodeID] = r.end
+		}
+	}
+
+	if err := c.store(items); err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.updateSavepoints(ctx, savepoints); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (c *Collector) prepare(ctx context.Context) error {
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -117,47 +163,10 @@ func (c *Collector) collect(ctx context.Context) error {
 			// release invalid connection
 			p.Close()
 			delete(c.pumps, id)
+			log.Infof("node(%s) of cluster(%d) on host(%s) has been removed and release the connection to it",
+				id, p.clusterID, p.host)
 		}
 	}
-
-	// start to collect binlog from each pump
-	resc := make(chan result)
-	var wg sync.WaitGroup
-	for _, p := range c.pumps {
-		wg.Add(1)
-		go func(p *Pump) {
-			p.Collect(ctx, resc)
-			wg.Done()
-		}(p)
-	}
-	go func() {
-		wg.Wait()
-		close(resc)
-	}()
-
-	items := make(map[int64]*binlog.Binlog)
-	savepoints := make(map[string]binlog.Pos)
-	for r := range resc {
-		if r.err != nil {
-			return errors.Annotatef(err, "failed to collect binlog of cluster(%d) from pump node(%s)",
-				r.clusterID, r.nodeID)
-		}
-		for commitTS, item := range r.binlogs {
-			items[commitTS] = item
-		}
-		if ComparePos(r.end, r.begin) > 0 {
-			savepoints[r.nodeID] = r.end
-		}
-	}
-
-	if err := c.store(items); err != nil {
-		return errors.Trace(err)
-	}
-
-	if err := c.updateSavepoints(ctx, savepoints); err != nil {
-		return errors.Trace(err)
-	}
-
 	return nil
 }
 

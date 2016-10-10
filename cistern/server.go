@@ -92,7 +92,7 @@ func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*bi
 	return ret, nil
 }
 
-// StartCollect runs Collector up in a coroutine.
+// StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
 	s.wg.Add(1)
 	go func() {
@@ -101,7 +101,7 @@ func (s *Server) StartCollect() {
 	}()
 }
 
-// StartPublish runs Publisher up in a coroutine.
+// StartPublish runs Publisher up in a goroutine.
 func (s *Server) StartPublish() {
 	s.wg.Add(1)
 	go func() {
@@ -134,13 +134,13 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Close stops all coroutines started by cistern server gracefully
+// Close stops all goroutines started by cistern server gracefully
 func (s *Server) Close() {
 	// first stop gRPC server
 	s.gs.GracefulStop()
-	// notify all coroutines to exit
+	// notify all goroutines to exit
 	s.cancel()
-	// waiting for coroutines exit
+	// waiting for goroutines exit
 	s.wg.Wait()
 	s.rocksdb.Close()
 }

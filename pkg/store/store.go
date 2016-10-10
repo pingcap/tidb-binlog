@@ -6,6 +6,8 @@ import (
 	"github.com/juju/errors"
 )
 
+const lengthOfBinaryTime = 15
+
 // Store defines a set of methods to manipulate a KV storage for binlog.
 // key is the commitTs of binlog, while the binlog payload as value.
 // It also records the time of putting KV to store as timestamp for calculating the age of tuple.
@@ -20,7 +22,7 @@ type Store interface {
 	SaveMarker(commitTs int64) error
 	// LoadMarker loads the position of commitTs from store.
 	LoadMarker() (int64, error)
-	// Close closed the store DB.
+	// Close closes the store DB.
 	Close()
 }
 
@@ -53,12 +55,8 @@ func encodePayload(payload []byte) ([]byte, error) {
 }
 
 func decodePayload(data []byte) ([]byte, time.Time, error) {
-	ts := time.Now()
-	timeBinary, err := ts.MarshalBinary()
-	if err != nil {
-		return nil, ts, errors.Trace(err)
-	}
-	n1 := len(timeBinary)
+	n1 := lengthOfBinaryTime
+	var ts time.Time
 	if err := ts.UnmarshalBinary(data[:n1]); err != nil {
 		return nil, ts, errors.Trace(err)
 	}
