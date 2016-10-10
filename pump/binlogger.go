@@ -10,7 +10,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var (
@@ -32,7 +32,7 @@ var (
 // Binlogger is the interface that for append and read binlog
 type Binlogger interface {
 	// read nums binlog events from the "from" position
-	ReadFrom(from pb.Pos, nums int32) ([]pb.Binlog, error)
+	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// batch write binlog event
 	WriteTail(payload []byte) error
@@ -46,7 +46,7 @@ type Binlogger interface {
 type binlogger struct {
 	dir string
 
-	// encoder encode pb.Binlog to bytes, the write to fd
+	// encoder encodes binlog payload into bytes, and write to file
 	encoder *encoder
 
 	// file is the lastest file in the dir
@@ -124,9 +124,9 @@ func CloseBinlogger(binlogger Binlogger) error {
 // Read reads nums logs from the given log position.
 // it reads binlogs from files and append to result set util the count = num
 // after reads all binlog from one file  then close it and open the following file
-func (b *binlogger) ReadFrom(from pb.Pos, nums int32) ([]pb.Binlog, error) {
-	var ent = &pb.Binlog{}
-	var ents = []pb.Binlog{}
+func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
+	var ent = &binlog.Entity{}
+	var ents = []binlog.Entity{}
 	var index int32
 	var decoder *decoder
 	var first = true
@@ -176,9 +176,9 @@ func (b *binlogger) ReadFrom(from pb.Pos, nums int32) ([]pb.Binlog, error) {
 				break
 			}
 
-			newEnt := pb.Binlog{
-				Payload: ent.Payload,
+			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
+				Payload: ent.Payload,
 			}
 			ents = append(ents, newEnt)
 		}

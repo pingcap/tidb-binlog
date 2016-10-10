@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -145,14 +145,14 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	binlog, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	f1, err := binlog.ReadFrom(pb.Pos{}, 1)
+	f1, err := binlog.ReadFrom(binlog.Pos{}, 1)
 	c.Assert(err, IsNil)
 	binlog.Close()
 
 	binlog, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	f2, err := binlog.ReadFrom(pb.Pos{Suffix: 1, Offset: 0}, 1)
+	f2, err := binlog.ReadFrom(binlog.Pos{Suffix: 1, Offset: 0}, 1)
 	c.Assert(err, IsNil)
 	binlog.Close()
 
@@ -211,19 +211,19 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	b2, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	ents, err := b2.ReadFrom(pb.Pos{}, 11)
+	ents, err := b2.ReadFrom(binlog.Pos{}, 11)
 	c.Assert(err, IsNil)
 	if ents[10].Pos.Suffix != 0 || ents[10].Pos.Offset != 260 {
 		c.Fatalf("last index read = %d, want %d; offset = %d, want %d", ents[10].Pos.Suffix, 0, ents[10].Pos.Offset, 260)
 	}
 
-	ents, err = b2.ReadFrom(pb.Pos{Suffix: 0, Offset: 286}, 11)
+	ents, err = b2.ReadFrom(binlog.Pos{Suffix: 0, Offset: 286}, 11)
 	c.Assert(err, IsNil)
 	if ents[10].Pos.Suffix != 1 || ents[10].Pos.Offset != 26 {
 		c.Fatalf("last index read = %d, want %d; offset = %d, want %d", ents[10].Pos.Suffix, 1, ents[10].Pos.Offset, 26)
 	}
 
-	ents, err = b2.ReadFrom(pb.Pos{Suffix: 1, Offset: 52}, 18)
+	ents, err = b2.ReadFrom(binlog.Pos{Suffix: 1, Offset: 52}, 18)
 	c.Assert(err, IsNil)
 	if ents[17].Pos.Suffix != 1 || ents[17].Pos.Offset != 26*19 {
 		c.Fatalf("last index read = %d, want %d; offset = %d, want %d", ents[17].Pos.Suffix, 1, ents[17].Pos.Offset, 26*19)
@@ -234,7 +234,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	c.Assert(err, IsNil)
 	defer b3.Close()
 
-	ents, err = b3.ReadFrom(pb.Pos{Offset: 26, Suffix: 5}, 20)
+	ents, err = b3.ReadFrom(binlog.Pos{Offset: 26, Suffix: 5}, 20)
 	c.Assert(err, IsNil)
 	if ents[19].Pos.Suffix != 6 || ents[19].Pos.Offset != 0 {
 		c.Fatalf("last index read = %d, want %d; offset = %d, want %d", ents[19].Pos.Suffix, 6, ents[19].Pos.Offset, 0)
@@ -282,7 +282,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	c.Assert(err, IsNil)
 	defer b1.Close()
 
-	ents, err := b1.ReadFrom(pb.Pos{Suffix: 1, Offset: 26}, 4)
+	ents, err := b1.ReadFrom(binlog.Pos{Suffix: 1, Offset: 26}, 4)
 	if err != io.ErrUnexpectedEOF || len(ents) != 1 {
 		c.Fatalf("err = %v, want nil; count of ent = %d, want 1", err, len(ents))
 	}

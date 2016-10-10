@@ -23,8 +23,6 @@ imports:
   - runtime
   - runtime/internal
   - utilities
-- name: github.com/jonboulle/clockwork
-  version: 2eee05ed794112d45db504eb05aa693efd2b8b09
 - name: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
 - name: github.com/ngaut/log

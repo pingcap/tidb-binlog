@@ -21,7 +21,7 @@ const (
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultSocket            = "unix:///tmp/pump.sock"
-	defaultHeartbeatInterval = 2000
+	defaultHeartbeatInterval = 2
 	defaultDataDir           = "data.pump"
 )
 
@@ -58,7 +58,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
-	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of milliseconds between heartbeat ticks")
+	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")

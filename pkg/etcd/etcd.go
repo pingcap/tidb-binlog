@@ -51,6 +51,14 @@ func NewClientFromCfg(endpoints []string, dialTimeout time.Duration, root string
 	}, nil
 }
 
+// Close shutdowns the connection to etcd
+func (e *Client) Close() error {
+	if err := e.client.Close(); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // Create guarantees to set a key = value with some options(like ttl)
 func (e *Client) Create(ctx context.Context, key string, val string, opts []clientv3.OpOption) error {
 	key = keyWithPrefix(e.rootPath, key)
