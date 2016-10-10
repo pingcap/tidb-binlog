@@ -141,15 +141,13 @@ func (ri *RocksIterator) Valid() bool {
 	}
 	key := ri.iter.Key()
 	_, ret, err := codec.DecodeInt(key.Data())
+	key.Free()
 	if err != nil {
-		key.Free()
 		return false
 	}
 	if ret == math.MaxInt64 {
-		key.Free()
 		return false
 	}
-	key.Free()
 	return true
 }
 
@@ -162,11 +160,10 @@ func (ri *RocksIterator) Close() {
 func (ri *RocksIterator) CommitTs() (int64, error) {
 	key := ri.iter.Key()
 	_, ret, err := codec.DecodeInt(key.Data())
+	key.Free()
 	if err != nil {
-		key.Free()
 		return 0, errors.Trace(err)
 	}
-	key.Free()
 	return ret, nil
 }
 
@@ -175,11 +172,10 @@ func (ri *RocksIterator) Payload() ([]byte, time.Duration, error) {
 	value := ri.iter.Value()
 	data := make([]byte, value.Size())
 	copy(data, value.Data())
+	value.Free()
 	payload, ts, err := decodePayload(data)
 	if err != nil {
-		value.Free()
 		return nil, 0, errors.Trace(err)
 	}
-	value.Free()
 	return payload, time.Now().Sub(ts), nil
 }
