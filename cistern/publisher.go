@@ -3,7 +3,6 @@ package cistern
 import (
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/store"
@@ -36,12 +35,11 @@ func NewPublisher(cfg *Config, s store.Store, w *DepositWindow) *Publisher {
 // Start run a loop of publishing binlog to drainer
 func (p *Publisher) Start(ctx context.Context) {
 	round := 1
-	var clock = clockwork.NewRealClock()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-clock.After(p.interval):
+		case <-time.After(p.interval):
 			log.Debugf("start to run publishing at round[%d]", round)
 			start := time.Now()
 			if err := p.publish(); err != nil {

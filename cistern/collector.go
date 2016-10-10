@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -27,11 +26,11 @@ type Collector struct {
 	batch     int32
 	interval  time.Duration
 	reg       *pump.EtcdRegistry
+	pumps     map[string]*Pump
+	timeout   time.Duration
+	window    *DepositWindow
+	rocksdb   store.Store
 	// TODO handle TiKV Client
-	pumps   map[string]*Pump
-	timeout time.Duration
-	window  *DepositWindow
-	rocksdb store.Store
 }
 
 // NewCollector returns an instance of Collector
@@ -71,12 +70,11 @@ func (c *Collector) Start(ctx context.Context) {
 	}()
 
 	round := 1
-	var clock = clockwork.NewRealClock()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-clock.After(c.interval):
+		case <-time.After(c.interval):
 			start := time.Now()
 			if err := c.collect(ctx); err != nil {
 				log.Errorf("collect error: %v", err)

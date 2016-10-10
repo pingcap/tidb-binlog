@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -126,12 +125,11 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			log.Info("Heartbeat goroutine exited")
 		}()
 
-		var clock = clockwork.NewRealClock()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-clock.After(p.heartbeatInterval):
+			case <-time.After(p.heartbeatInterval):
 				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}

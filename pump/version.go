@@ -16,7 +16,7 @@ var (
 	BuildTS = "Not provided (use make build instead of go build)"
 )
 
-// PrintVersionInfo show version info to stdout
+// PrintVersionInfo show version info to Stdout
 func PrintVersionInfo() {
 	log.Infof("pump Version: %s\n", Version)
 	log.Infof("Git SHA: %s\n", GitSHA)

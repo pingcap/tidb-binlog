@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
 	"github.com/pingcap/tipb/go-binlog"
 	"google.golang.org/grpc"
@@ -150,11 +149,10 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 		return nil
 	}
 
-	var clock = clockwork.NewRealClock()
 	select {
 	case <-pctx.Done():
 		return errors.Trace(pctx.Err())
-	case <-clock.After(p.interval):
+	case <-time.After(p.interval):
 		ctx, cancel := context.WithTimeout(pctx, p.timeout)
 		defer cancel()
 		req := &binlog.PullBinlogReq{
