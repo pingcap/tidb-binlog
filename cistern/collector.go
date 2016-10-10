@@ -92,7 +92,7 @@ func (c *Collector) collect(ctx context.Context) error {
 	}
 
 	// start to collect binlog from each pump
-	resc := make(chan result)
+	resc := make(chan Result)
 	var wg sync.WaitGroup
 	for _, p := range c.pumps {
 		wg.Add(1)
