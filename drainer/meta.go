@@ -26,15 +26,12 @@ type Meta interface {
 	// Save saves meta information.
 	Save(pos int64) error
 
-	// Check checks whether we should save meta.
-	Check() bool
-
 	// Pos gets position information.
 	Pos() int64
 }
 
 // LocalMeta is local meta struct.
-type LocalMeta struct {
+type localMeta struct {
 	sync.RWMutex
 
 	name     string
@@ -44,12 +41,12 @@ type LocalMeta struct {
 }
 
 // NewLocalMeta creates a new LocalMeta.
-func NewLocalMeta(name string) *LocalMeta {
-	return &LocalMeta{name: name}
+func NewLocalMeta(name string) Meta {
+	return &localMeta{name: name}
 }
 
 // Load implements Meta.Load interface.
-func (lm *LocalMeta) Load() error {
+func (lm *localMeta) Load() error {
 	file, err := os.Open(lm.name)
 	if err != nil && !os.IsNotExist(errors.Cause(err)) {
 		return errors.Trace(err)
@@ -64,7 +61,7 @@ func (lm *LocalMeta) Load() error {
 }
 
 // Save implements Meta.Save interface.
-func (lm *LocalMeta) Save(pos int64) error {
+func (lm *localMeta) Save(pos int64) error {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -89,25 +86,13 @@ func (lm *LocalMeta) Save(pos int64) error {
 }
 
 // Pos implements Meta.Pos interface.
-func (lm *LocalMeta) Pos() int64 {
+func (lm *localMeta) Pos() int64 {
 	lm.RLock()
 	defer lm.RUnlock()
 
 	return lm.BinLogPos
 }
 
-// Check implements Meta.Check interface.
-func (lm *LocalMeta) Check() bool {
-	lm.RLock()
-	defer lm.RUnlock()
-
-	if time.Since(lm.saveTime) >= maxSaveTime {
-		return true
-	}
-
-	return false
-}
-
-func (lm *LocalMeta) String() string {
+func (lm *localMeta) String() string {
 	return fmt.Sprintf("binlog %s pos = %d", lm.name, lm.Pos())
 }

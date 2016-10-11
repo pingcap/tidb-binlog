@@ -42,8 +42,7 @@ type Drainer struct {
 
 	translator *translator.Manager
 
-	wg    sync.WaitGroup
-	jobWg sync.WaitGroup
+	wg sync.WaitGroup
 
 	input chan []byte
 
@@ -104,8 +103,6 @@ func (d *Drainer) Start() error {
 		return errors.Trace(err)
 	}
 
-	d.wg.Add(1)
-
 	err = d.run()
 	if err != nil {
 		return errors.Trace(err)
@@ -129,32 +126,10 @@ func (d *Drainer) addCount(tp translator.OpType) {
 	d.count.Add(1)
 }
 
-func (d *Drainer) checkWait(job *job) bool {
-	if job.tp == translator.DDL {
-		return true
-	}
-
-	if d.meta.Check() {
-		return true
-	}
-
-	return false
-}
-
-func (d *Drainer) addJob(job *job) {
-	d.jobWg.Add(1)
-	d.job <- job
-
-	wait := d.checkWait(job)
-	if wait {
-		d.jobWg.Wait()
-	}
-}
-
 func (d *Drainer) savePoint(ts int64) {
 	err := d.meta.Save(ts)
 	if err != nil {
-		log.Warnf("[write save point]%d[error]%v", ts, err)
+		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
 }
 
@@ -419,6 +394,7 @@ func newJob(tp translator.OpType, sql string, args []interface{}, retry bool, po
 }
 
 func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
+	d.wg.Add(1)
 	defer d.wg.Done()
 
 	idx := 0
@@ -455,8 +431,8 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				d.savePoint(lastCommitTs)
 
 				idx = 0
-				sqls = sqls[0:0]
-				args = args[0:0]
+				sqls = sqls[:0]
+				args = args[:0]
 				lastSyncTime = time.Now()
 			} else {
 				sqls = append(sqls, job.sql)
@@ -472,14 +448,14 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				d.savePoint(lastCommitTs)
 
 				idx = 0
-				sqls = sqls[0:0]
-				args = args[0:0]
+				sqls = sqls[:0]
+				args = args[:0]
 				lastSyncTime = time.Now()
 			}
 
 			d.addCount(job.tp)
-			d.jobWg.Done()
-		default:
+
+		case <-time.After(waitTime):
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxWaitTime {
 				err = executeSQLs(db, sqls, args, true)
@@ -489,17 +465,16 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				d.savePoint(lastCommitTs)
 
 				idx = 0
-				sqls = sqls[0:0]
-				args = args[0:0]
+				sqls = sqls[:0]
+				args = args[:0]
 				lastSyncTime = now
 			}
-
-			time.Sleep(waitTime)
 		}
 	}
 }
 
 func (d *Drainer) run() error {
+	d.wg.Add(1)
 	defer d.wg.Done()
 
 	var err error
@@ -518,13 +493,10 @@ func (d *Drainer) run() error {
 	d.start = time.Now()
 	d.lastTime = d.start
 
-	d.wg.Add(1)
 	go d.sync(d.toDB, d.job)
 
-	d.wg.Add(1)
 	go d.printStatus()
 
-	d.wg.Add(1)
 	go d.inputStreaming()
 
 	for {
@@ -575,7 +547,7 @@ func (d *Drainer) run() error {
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
 
 				job := newJob(translator.DDL, sql, nil, false, commitTS)
-				d.addJob(job)
+				d.job <- job
 
 				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
 			}
@@ -584,6 +556,9 @@ func (d *Drainer) run() error {
 }
 
 func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) error {
+	// bound , offset and operations are used to parition the sql type (insert, update, del)
+	// bound stores the insert, update, delete bound position info
+	// offset is just a cursor for record the sql position
 	var (
 		sqls   []string
 		args   [][]interface{}
@@ -669,12 +644,12 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) er
 			}
 
 			job := newJob(operations[offset], sqls[i], args[i], true, commitTS)
-			d.addJob(job)
+			d.job <- job
 		}
 
-		sqls = sqls[0:0]
-		args = args[0:0]
-		bound = bound[0:0]
+		sqls = sqls[:0]
+		args = args[:0]
+		bound = bound[:0]
 		offset = 0
 	}
 
@@ -682,6 +657,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) er
 }
 
 func (d *Drainer) printStatus() {
+	d.wg.Add(1)
 	defer d.wg.Done()
 
 	timer := time.NewTicker(statusTime)
@@ -714,6 +690,7 @@ func (d *Drainer) printStatus() {
 }
 
 func (d *Drainer) inputStreaming() {
+	d.wg.Add(1)
 	defer d.wg.Done()
 
 	var err error
@@ -735,7 +712,7 @@ func (d *Drainer) inputStreaming() {
 			}
 
 			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS, Limit: int32(d.cfg.RequestCount)}
-			resp, err = d.cisternClient.DumpBinlog(context.Background(), req)
+			resp, err = d.cisternClient.DumpBinlog(d.ctx, req)
 			if err != nil {
 				log.Warning(err)
 			}

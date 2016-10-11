@@ -66,11 +66,6 @@ LOOP:
 		return nil
 	}
 
-	if err != nil {
-		log.Errorf("exec sqls[%v] failed %v", sqls, errors.ErrorStack(err))
-		return errors.Trace(err)
-	}
-
 	return errors.Errorf("exec sqls[%v] failed", sqls)
 }
 
@@ -112,8 +107,12 @@ func adjustColumn(table *model.TableInfo, job *model.Job) error {
 	col := &model.ColumnInfo{}
 
 	err := job.DecodeArgs(col, nil, &offset)
-	if err != nil || col.Name.L != table.Columns[offset].Name.L {
+	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if col.Name.L != table.Columns[offset].Name.L {
+		return errors.Errorf("table %s columns %s position can't match ", table.Name, col.Name)
 	}
 
 	for i := offset + 1; i < len(table.Columns); i++ {
