@@ -104,16 +104,12 @@ func (p *Pump) Collect(pctx context.Context) (res Result) {
 			return
 		}
 		switch b.Tp {
-		case binlog.BinlogType_Prewrite:
-			prewriteItems[b.StartTs] = b
-		case binlog.BinlogType_Commit:
-			commitItems[b.StartTs] = b
+		case binlog.BinlogType_Prewrite, binlog.BinlogType_PreDDL:
+                        prewriteItems[b.StartTs] = b
+                case binlog.BinlogType_Commit, binlog.BinlogType_PostDDL:
+                        commitItems[b.StartTs] = b
 		case binlog.BinlogType_Rollback:
 			rollbackItems[b.StartTs] = b
-		case binlog.BinlogType_PreDDL:
-			res.binlogs[b.CommitTs] = b
-		case binlog.BinlogType_PostDDL:
-			res.binlogs[b.CommitTs] = b
 		default:
 			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
 				b.Tp, p.host, p.clusterID, item.Pos)
@@ -183,7 +179,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, prewriteItems, binlogs 
 					p.host, p.clusterID, item.Pos)
 			}
 			switch b.Tp {
-			case binlog.BinlogType_Commit:
+			case binlog.BinlogType_Commit, binlog.BinlogType_PostDDL:
 				commitItems[b.StartTs] = b
 			case binlog.BinlogType_Rollback:
 				rollbackItems[b.StartTs] = b
