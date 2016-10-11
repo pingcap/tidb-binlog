@@ -47,14 +47,19 @@ func main() {
 	}
 
 	log.Infof("%v", cfg)
-	store, err := tidb.NewStore(cfg.StorePath)
+	storePath := fmt.Sprintf("tikv://%s", cfg.PdPath)
+	store, err := tidb.NewStore(storePath)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	binlogClient := createBinlogClient(cfg.BinlogClient.Host, cfg.BinlogClient.Port)
+	cisternClient := createCisternClient(cfg.CisternClient.Host, cfg.CisternClient.Port)
 
-	ds := drainer.NewDrainer(cfg, store, binlogClient)
+	ds, err := drainer.NewDrainer(cfg, store, cisternClient)
+	if err != nil {
+		store.Close()
+		log.Fatal(errors.ErrorStack(err))
+	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -83,7 +88,7 @@ func main() {
 	}
 }
 
-func createBinlogClient(host string, port int) pb.CisternClient {
+func createCisternClient(host string, port int) pb.CisternClient {
 	path := fmt.Sprintf("%s:%d", host, port)
 	dialerOpt := grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 		return net.DialTimeout("tcp", addr, timeout)

@@ -2,20 +2,17 @@
 
 log-level = "info"
 
-id = 101
-
-meta = "syncer.meta"
-init-ts = 0
-batch = 1
-request-bacth=1
+data-dir = "data.drainer"
+txn-batch = 1
+request-count=100
 
 pprof-addr = ":10081"
 
-store-path = "tikv://127.0.0.1:2379?cluster=1"
+pd-path = "127.0.0.1:2379?cluster=1"
 
 [client]
 host = "127.0.0.1"
-port = "10000"
+port = 8249
 
 [to]
 host = "127.0.0.1"

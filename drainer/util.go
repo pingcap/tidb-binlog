@@ -15,7 +15,6 @@ import (
 	"github.com/pingcap/tidb/terror"
 )
 
-// ExecuteSQL wraps the GenInsertSQLs's ExecuteSQL method
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) error {
 	if len(sqls) == 0 {
 		return nil

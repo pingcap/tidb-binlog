@@ -3,6 +3,8 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -49,8 +51,7 @@ type Drainer struct {
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
 
-	done chan struct{}
-	job  chan *job
+	job chan *job
 
 	start    time.Time
 	lastTime time.Time
@@ -67,28 +68,32 @@ type Drainer struct {
 }
 
 // NewDrainer returns a Drainer instance
-func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) *Drainer {
+func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) (*Drainer, error) {
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+		return nil, err
+	}
+
 	drainer := new(Drainer)
 	drainer.cfg = cfg
 	drainer.store = store
 	drainer.cisternClient = cisternClient
-	drainer.meta = NewLocalMeta(cfg.Meta, cfg.InitTs)
+	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
-	drainer.lastCount.Set(0)
-	drainer.count.Set(0)
-	drainer.insertCount.Set(0)
-	drainer.updateCount.Set(0)
-	drainer.deleteCount.Set(0)
-	drainer.done = make(chan struct{})
 	drainer.job = make(chan *job, 1024)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
 
-	return drainer
+	return drainer, nil
 }
 
 // Start starts to sync.
 func (d *Drainer) Start() error {
-	err := d.meta.Load()
+	var err error
+	if d.cfg.InitCommitTS == 0 {
+		err = d.meta.Load()
+	} else {
+		err = d.meta.Save(d.cfg.InitCommitTS)
+	}
+
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -105,8 +110,6 @@ func (d *Drainer) Start() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	d.done <- struct{}{}
 
 	return nil
 }
@@ -138,21 +141,21 @@ func (d *Drainer) checkWait(job *job) bool {
 	return false
 }
 
-func (d *Drainer) addJob(job *job) error {
+func (d *Drainer) addJob(job *job) {
 	d.jobWg.Add(1)
 	d.job <- job
 
 	wait := d.checkWait(job)
 	if wait {
 		d.jobWg.Wait()
-
-		err := d.meta.Save(job.pos)
-		if err != nil {
-			return errors.Trace(err)
-		}
 	}
+}
 
-	return nil
+func (d *Drainer) savePoint(ts int64) {
+	err := d.meta.Save(ts)
+	if err != nil {
+		log.Warnf("[write save point]%d[error]%v", ts, err)
+	}
 }
 
 func (d *Drainer) getHistoryJob(id int64) (*model.Job, error) {
@@ -419,19 +422,18 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 	defer d.wg.Done()
 
 	idx := 0
-	count := d.cfg.Batch
+	count := d.cfg.TxnBatch
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 	lastSyncTime := time.Now()
+	var lastCommitTs int64
 
 	var err error
 	for {
 		select {
-		case job, ok := <-jobChan:
-			if !ok {
-				return
-			}
-
+		case <-d.ctx.Done():
+			return
+		case job := <-jobChan:
 			idx++
 
 			if job.tp == translator.DDL {
@@ -439,6 +441,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
+				d.savePoint(lastCommitTs)
 
 				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, false)
 				if err != nil {
@@ -448,6 +451,8 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 					}
 				}
+				lastCommitTs = job.pos
+				d.savePoint(lastCommitTs)
 
 				idx = 0
 				sqls = sqls[0:0]
@@ -456,6 +461,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 			} else {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
+				lastCommitTs = job.pos
 			}
 
 			if idx >= count {
@@ -463,6 +469,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
+				d.savePoint(lastCommitTs)
 
 				idx = 0
 				sqls = sqls[0:0]
@@ -479,6 +486,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
+				d.savePoint(lastCommitTs)
 
 				idx = 0
 				sqls = sqls[0:0]
@@ -495,15 +503,14 @@ func (d *Drainer) run() error {
 	defer d.wg.Done()
 
 	var err error
-	var operations = []translator.OpType{translator.Insert, translator.Update, translator.Del}
 	var rawBinlog []byte
 
-	d.toDB, err = openDB(d.cfg.To.User, d.cfg.To.Password, d.cfg.To.Host, d.cfg.To.Port, d.cfg.DBType)
+	d.toDB, err = openDB(d.cfg.To.User, d.cfg.To.Password, d.cfg.To.Host, d.cfg.To.Port, d.cfg.DestDBType)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	d.translator, err = translator.NewManager(d.cfg.DBType)
+	d.translator, err = translator.NewManager(d.cfg.DestDBType)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -545,98 +552,9 @@ func (d *Drainer) run() error {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 
-			mutations := preWrite.GetMutations()
-
-			var (
-				sqls   []string
-				args   [][]interface{}
-				bound  []int
-				offset int
-			)
-
-			for _, mutation := range mutations {
-
-				table, ok := d.schema.TableByID(mutation.GetTableId())
-				if !ok {
-					continue
-				}
-
-				schemaName, tableName, ok := d.schema.SchemaAndTableName(mutation.GetTableId())
-				if !ok {
-					continue
-				}
-
-				if len(mutation.GetInsertedRows()) > 0 {
-					sql, arg, err := d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
-					if err != nil {
-						return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-					}
-
-					sqls = append(sqls, sql...)
-					args = append(args, arg...)
-					offset += len(sqls)
-				}
-				bound = append(bound, offset)
-
-				if len(mutation.GetUpdatedRows()) > 0 {
-					sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
-					if err != nil {
-						return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-					}
-
-					sqls = append(sqls, sql...)
-					args = append(args, arg...)
-					offset += len(sqls)
-				}
-				bound = append(bound, offset)
-
-				if len(mutation.GetDeletedIds()) > 0 {
-					sql, arg, err := d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
-					if err != nil {
-						return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-					}
-
-					sqls = append(sqls, sql...)
-					args = append(args, arg...)
-					offset += len(sqls)
-				}
-
-				if len(mutation.GetDeletedPks()) > 0 {
-					sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
-					if err != nil {
-						return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-					}
-
-					sqls = append(sqls, sql...)
-					args = append(args, arg...)
-					offset += len(sqls)
-				}
-
-				if len(mutation.GetDeletedRows()) > 0 {
-					sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
-					if err != nil {
-						return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-					}
-
-					sqls = append(sqls, sql...)
-					args = append(args, arg...)
-					offset += len(sqls)
-				}
-				bound = append(bound, offset)
-
-				offset = 0
-				for i := range sqls {
-					for i >= bound[offset] {
-						offset++
-					}
-
-					job := newJob(operations[offset], sqls[i], args[i], true, commitTS)
-					err = d.addJob(job)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-
+			err = d.translateSqls(preWrite.GetMutations(), commitTS)
+			if err != nil {
+				return errors.Trace(err)
 			}
 
 		case pb.BinlogType_PostDDL:
@@ -657,15 +575,110 @@ func (d *Drainer) run() error {
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
 
 				job := newJob(translator.DDL, sql, nil, false, commitTS)
-				err = d.addJob(job)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				d.addJob(job)
 
 				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
 			}
 		}
 	}
+}
+
+func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) error {
+	var (
+		sqls   []string
+		args   [][]interface{}
+		bound  []int
+		offset int
+	)
+	var operations = []translator.OpType{translator.Insert, translator.Update, translator.Del}
+
+	for _, mutation := range mutations {
+
+		table, ok := d.schema.TableByID(mutation.GetTableId())
+		if !ok {
+			continue
+		}
+
+		schemaName, tableName, ok := d.schema.SchemaAndTableName(mutation.GetTableId())
+		if !ok {
+			continue
+		}
+
+		if len(mutation.GetInsertedRows()) > 0 {
+			sql, arg, err := d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
+			if err != nil {
+				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			sqls = append(sqls, sql...)
+			args = append(args, arg...)
+			offset += len(sqls)
+		}
+		bound = append(bound, offset)
+
+		if len(mutation.GetUpdatedRows()) > 0 {
+			sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			if err != nil {
+				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			sqls = append(sqls, sql...)
+			args = append(args, arg...)
+			offset += len(sqls)
+		}
+		bound = append(bound, offset)
+
+		if len(mutation.GetDeletedIds()) > 0 {
+			sql, arg, err := d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
+			if err != nil {
+				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			sqls = append(sqls, sql...)
+			args = append(args, arg...)
+			offset += len(sqls)
+		}
+
+		if len(mutation.GetDeletedPks()) > 0 {
+			sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
+			if err != nil {
+				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			sqls = append(sqls, sql...)
+			args = append(args, arg...)
+			offset += len(sqls)
+		}
+
+		if len(mutation.GetDeletedRows()) > 0 {
+			sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
+			if err != nil {
+				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			sqls = append(sqls, sql...)
+			args = append(args, arg...)
+			offset += len(sqls)
+		}
+		bound = append(bound, offset)
+
+		offset = 0
+		for i := range sqls {
+			for i >= bound[offset] {
+				offset++
+			}
+
+			job := newJob(operations[offset], sqls[i], args[i], true, commitTS)
+			d.addJob(job)
+		}
+
+		sqls = sqls[0:0]
+		args = args[0:0]
+		bound = bound[0:0]
+		offset = 0
+	}
+
+	return nil
 }
 
 func (d *Drainer) printStatus() {
@@ -727,7 +740,7 @@ func (d *Drainer) inputStreaming() {
 				log.Warning(err)
 			}
 			if err == nil && resp.Errmsg != "" {
-				log.Warning(errors.New(resp.Errmsg))
+				log.Warning(resp.Errmsg)
 			}
 
 			if resp == nil || len(resp.Payloads) == 0 {
@@ -752,15 +765,15 @@ func (d *Drainer) Close() {
 
 	d.cancel()
 
-	close(d.job)
-
 	d.wg.Wait()
+
+	close(d.job)
 
 	if d.store != nil {
 		d.store.Close()
 	}
 
-	closeDB(d.toDB)
-
-	<-d.done
+	if d.toDB != nil {
+		closeDB(d.toDB)
+	}
 }

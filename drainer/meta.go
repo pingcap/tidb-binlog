@@ -44,8 +44,8 @@ type LocalMeta struct {
 }
 
 // NewLocalMeta creates a new LocalMeta.
-func NewLocalMeta(name string, ts int64) *LocalMeta {
-	return &LocalMeta{name: name, BinLogPos: ts}
+func NewLocalMeta(name string) *LocalMeta {
+	return &LocalMeta{name: name}
 }
 
 // Load implements Meta.Load interface.

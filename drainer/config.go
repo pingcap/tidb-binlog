@@ -15,17 +15,16 @@ func NewConfig() *Config {
 	fs := cfg.FlagSet
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
-	fs.IntVar(&cfg.ServerID, "server-id", 101, "drianer server ID")
-	fs.IntVar(&cfg.Batch, "b", 1, "batch commit count")
+	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.IntVar(&cfg.RequestCount, "request-count", 1, "batch count once request")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", ":10081", "pprof addr")
-	fs.StringVar(&cfg.Meta, "meta", "syncer.meta", "syncer meta info")
-	fs.Int64Var(&cfg.InitTs, "init-ts", 0, "syncer meta info")
+	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
+	fs.Int64Var(&cfg.InitCommitTS, "init-commit-ts", 0, "the init point for sync")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.StorePath, "store-path", "", "tikv store path")
-	fs.StringVar(&cfg.DBType, "db-type", "mysql", "to db type: Mysql, PostgreSQL")
+	fs.StringVar(&cfg.PdPath, "pd-path", "", "pd path")
+	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
 
 	return cfg
 }
@@ -48,8 +47,8 @@ func (c *DBConfig) String() string {
 	return fmt.Sprintf("DBConfig(%+v)", *c)
 }
 
-// BinlogClientConfig is the binlog client configuration.
-type BinlogClientConfig struct {
+// CisternClientConfig is the cistern client configuration.
+type CisternClientConfig struct {
 	Host string `toml:"host" json:"host"`
 
 	Port int `toml:"port" json:"port"`
@@ -67,23 +66,21 @@ type Config struct {
 
 	PprofAddr string `toml:"pprof-addr" json:"pprof-addr"`
 
-	ServerID int `toml:"server-id" json:"server-id"`
-
-	Batch int `toml:"batch" json:"batch"`
+	TxnBatch int `toml:"txn-batch" json:"txn-batch"`
 
 	RequestCount int `toml:"request-count" json:"request-count"`
 
-	InitTs int64 `toml:"init-ts" json:"init-ts"`
+	InitCommitTS int64 `toml:"init-commit-ts" json:"init-commit-ts"`
 
-	Meta string `toml:"meta" json:"meta"`
+	DataDir string `toml:"data-dir" json:"data-dir"`
 
 	To DBConfig `toml:"to" json:"to"`
 
-	BinlogClient BinlogClientConfig `toml:"client" json:"client"`
+	CisternClient CisternClientConfig `toml:"client" json:"client"`
 
-	StorePath string `toml:"store-path" json:"store-path"`
+	PdPath string `toml:"pd-path" json:"pd-path"`
 
-	DBType string `toml:"db-type" json:"db-type"`
+	DestDBType string `toml:"db-type" json:"db-type"`
 
 	configFile string
 }
@@ -114,8 +111,8 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
 	}
 
-	if c.StorePath == "" {
-		return errors.New("must have store path")
+	if c.PdPath == "" {
+		return errors.New("must have pd path")
 	}
 
 	return nil
