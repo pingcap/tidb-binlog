@@ -4,7 +4,7 @@ log-level = "info"
 
 data-dir = "data.drainer"
 txn-batch = 1
-request-count=100
+request-count=1000
 
 pprof-addr = ":10081"
 

@@ -50,8 +50,6 @@ type Drainer struct {
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
 
-	job chan *job
-
 	start    time.Time
 	lastTime time.Time
 
@@ -78,7 +76,6 @@ func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) (
 	drainer.cisternClient = cisternClient
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
-	drainer.job = make(chan *job, 1024)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
 
 	return drainer, nil
@@ -109,21 +106,6 @@ func (d *Drainer) Start() error {
 	}
 
 	return nil
-}
-
-func (d *Drainer) addCount(tp translator.OpType) {
-	switch tp {
-	case translator.Insert:
-		d.insertCount.Add(1)
-	case translator.Update:
-		d.updateCount.Add(1)
-	case translator.Del:
-		d.deleteCount.Add(1)
-	case translator.DDL:
-		d.ddlCount.Add(1)
-	}
-
-	d.count.Add(1)
 }
 
 func (d *Drainer) savePoint(ts int64) {
@@ -185,15 +167,19 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 
 	tmpDelay := retryTimeout
 	for job == nil {
-		time.Sleep(tmpDelay)
-		tmpDelay *= 2
-		if tmpDelay > maxWaitGetJobTime {
-			tmpDelay = maxWaitGetJobTime
-		}
-
-		job, err = d.getHistoryJob(id)
-		if err != nil {
+		select {
+		case <-d.ctx.Done():
 			return "", "", false, errors.Trace(err)
+		case <-time.After(tmpDelay):
+			tmpDelay *= 2
+			if tmpDelay > maxWaitGetJobTime {
+				tmpDelay = maxWaitGetJobTime
+			}
+
+			job, err = d.getHistoryJob(id)
+			if err != nil {
+				return "", "", false, errors.Trace(err)
+			}
 		}
 	}
 
@@ -381,96 +367,52 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	}
 }
 
-type job struct {
-	tp    translator.OpType
-	sql   string
-	args  []interface{}
-	retry bool
-	pos   int64
-}
-
-func newJob(tp translator.OpType, sql string, args []interface{}, retry bool, pos int64) *job {
-	return &job{tp: tp, sql: sql, args: args, retry: retry, pos: pos}
-}
-
-func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
-	d.wg.Add(1)
-	defer d.wg.Done()
-
-	idx := 0
-	count := d.cfg.TxnBatch
-	sqls := make([]string, 0, count)
-	args := make([][]interface{}, 0, count)
-	lastSyncTime := time.Now()
-	var lastCommitTs int64
-
-	var err error
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case job := <-jobChan:
-			idx++
-
-			if job.tp == translator.DDL {
-				err = executeSQLs(db, sqls, args, true)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-				d.savePoint(lastCommitTs)
-
-				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, false)
-				if err != nil {
-					if !ignoreDDLError(err) {
-						log.Fatalf(errors.ErrorStack(err))
-					} else {
-						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
-					}
-				}
-				lastCommitTs = job.pos
-				d.savePoint(lastCommitTs)
-
-				idx = 0
-				sqls = sqls[:0]
-				args = args[:0]
-				lastSyncTime = time.Now()
-			} else {
-				sqls = append(sqls, job.sql)
-				args = append(args, job.args)
-				lastCommitTs = job.pos
-			}
-
-			if idx >= count {
-				err = executeSQLs(db, sqls, args, true)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-				d.savePoint(lastCommitTs)
-
-				idx = 0
-				sqls = sqls[:0]
-				args = args[:0]
-				lastSyncTime = time.Now()
-			}
-
-			d.addCount(job.tp)
-
-		case <-time.After(waitTime):
-			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxWaitTime {
-				err = executeSQLs(db, sqls, args, true)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-				d.savePoint(lastCommitTs)
-
-				idx = 0
-				sqls = sqls[:0]
-				args = args[:0]
-				lastSyncTime = now
-			}
-		}
+func (d *Drainer) addCount(tp translator.OpType) {
+	switch tp {
+	case translator.Insert:
+		d.insertCount.Add(1)
+	case translator.Update:
+		d.updateCount.Add(1)
+	case translator.Del:
+		d.deleteCount.Add(1)
+	case translator.DDL:
+		d.ddlCount.Add(1)
 	}
+
+	d.count.Add(1)
+}
+
+type batch struct {
+	isDDL    bool
+	sqls     []string
+	args     [][]interface{}
+	retry    bool
+	commitTS int64
+}
+
+func newBatch(isDDL, retry bool, commitTS int64) *batch {
+	return &batch{
+		isDDL:    isDDL,
+		retry:    retry,
+		commitTS: commitTS,
+	}
+}
+
+func (b *batch) addJob(sql string, args []interface{}) {
+	b.sqls = append(b.sqls, sql)
+	b.args = append(b.args, args)
+}
+
+func (b *batch) applyBatch(db *sql.DB) error {
+	err := executeSQLs(db, b.sqls, b.args, b.retry)
+	if err != nil {
+		if !b.isDDL || !ignoreDDLError(err) {
+			return errors.Trace(err)
+		}
+
+		log.Warnf("[ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+	}
+	return nil
 }
 
 func (d *Drainer) run() error {
@@ -493,10 +435,7 @@ func (d *Drainer) run() error {
 	d.start = time.Now()
 	d.lastTime = d.start
 
-	go d.sync(d.toDB, d.job)
-
 	go d.printStatus()
-
 	go d.inputStreaming()
 
 	for {
@@ -524,10 +463,18 @@ func (d *Drainer) run() error {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 
-			err = d.translateSqls(preWrite.GetMutations(), commitTS)
+			b := newBatch(false, true, commitTS)
+			err = d.translateSqls(preWrite.GetMutations(), b)
 			if err != nil {
 				return errors.Trace(err)
 			}
+
+			err = b.applyBatch(d.toDB)
+			if err != nil {
+				log.Errorf("[exec sqls error][ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+				return errors.Trace(err)
+			}
+			d.savePoint(commitTS)
 
 		case pb.BinlogType_PostDDL:
 			sql := string(binlog.GetDdlQuery())
@@ -546,16 +493,25 @@ func (d *Drainer) run() error {
 
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
 
-				job := newJob(translator.DDL, sql, nil, false, commitTS)
-				d.job <- job
+				d.addCount(translator.DDL)
+
+				b := newBatch(true, false, commitTS)
+				b.addJob(sql, nil)
+
+				err = b.applyBatch(d.toDB)
+				if err != nil {
+					log.Errorf("[exec ddl error][ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+					return errors.Trace(err)
+				}
 
 				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
+				d.savePoint(commitTS)
 			}
 		}
 	}
 }
 
-func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) error {
+func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 	// bound , offset and operations are used to parition the sql type (insert, update, del)
 	// bound stores the insert, update, delete bound position info
 	// offset is just a cursor for record the sql position
@@ -643,8 +599,8 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, commitTS int64) er
 				offset++
 			}
 
-			job := newJob(operations[offset], sqls[i], args[i], true, commitTS)
-			d.job <- job
+			d.addCount(operations[offset])
+			b.addJob(sqls[i], args[i])
 		}
 
 		sqls = sqls[:0]
@@ -697,14 +653,15 @@ func (d *Drainer) inputStreaming() {
 	var count int
 	var resp *pb.DumpBinlogResp
 
-	tmpDelay := retryTimeout
 	nextRequestTS := d.meta.Pos()
+	tmpDelay := time.Duration(0)
 
 	for {
+
 		select {
 		case <-d.ctx.Done():
 			return
-		default:
+		case <-time.After(tmpDelay):
 			if count > 0 {
 				d.input <- resp.Payloads[len(resp.Payloads)-count]
 				count--
@@ -721,15 +678,11 @@ func (d *Drainer) inputStreaming() {
 			}
 
 			if resp == nil || len(resp.Payloads) == 0 {
-				time.Sleep(tmpDelay)
-				tmpDelay *= 2
-				if tmpDelay > maxWaitGetJobTime {
-					tmpDelay = maxWaitGetJobTime
-				}
-			} else {
 				tmpDelay = retryTimeout
+			} else {
 				count = len(resp.Payloads)
 				nextRequestTS = resp.EndCommitTS
+				tmpDelay = 0
 			}
 		}
 	}
@@ -743,8 +696,6 @@ func (d *Drainer) Close() {
 	d.cancel()
 
 	d.wg.Wait()
-
-	close(d.job)
 
 	if d.store != nil {
 		d.store.Close()

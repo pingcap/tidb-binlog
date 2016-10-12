@@ -20,53 +20,53 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 		return nil
 	}
 
-	var (
-		err error
-		txn *sql.Tx
-	)
-
 	retryCount := 1
 	if retry {
 		retryCount = maxRetryCount
 	}
 
-LOOP:
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
 			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
 			time.Sleep(retryTimeout)
 		}
 
-		txn, err = db.Begin()
-		if err != nil {
-			log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
-			continue
+		if appleTxn(db, sqls, args) {
+			return nil
 		}
-
-		for i := range sqls {
-			log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
-
-			_, err = txn.Exec(sqls[i], args[i]...)
-			if err != nil {
-				log.Warnf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
-				rerr := txn.Rollback()
-				if rerr != nil {
-					log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], rerr)
-				}
-				continue LOOP
-			}
-		}
-
-		err = txn.Commit()
-		if err != nil {
-			log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
-			continue
-		}
-
-		return nil
 	}
 
 	return errors.Errorf("exec sqls[%v] failed", sqls)
+}
+
+func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) bool {
+	txn, err := db.Begin()
+	if err != nil {
+		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
+		return false
+	}
+
+	for i := range sqls {
+		log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
+
+		_, err = txn.Exec(sqls[i], args[i]...)
+		if err != nil {
+			log.Warnf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
+			rerr := txn.Rollback()
+			if rerr != nil {
+				log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], rerr)
+			}
+			return false
+		}
+	}
+
+	err = txn.Commit()
+	if err != nil {
+		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
+		return false
+	}
+
+	return true
 }
 
 func ignoreDDLError(err error) bool {
