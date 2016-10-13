@@ -3,19 +3,27 @@ package cistern
 import (
 	"net"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
+var (
+	WindowNamespace = []byte("window")
+	BinlogNamespace = []byte("binlog")
+)
+
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	rocksdb   store.Store
+	boltdb    store.Store
 	window    *DepositWindow
 	collector *Collector
 	publisher *Publisher
@@ -28,9 +36,13 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	s, err := store.NewRocksStore(cfg.DataDir)
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+		return nil, err
+	}
+
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to open RocksDB store in dir(%s)", cfg.DataDir)
+		return nil, errors.Annotatef(err, "failed to open boltDB store in dir(%s)", cfg.DataDir)
 	}
 	win, err := NewDepositWindow(s)
 	if err != nil {
@@ -43,7 +55,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	p := NewPublisher(cfg, s, win)
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		rocksdb:   s,
+		boltdb:    s,
 		window:    win,
 		collector: c,
 		publisher: p,
@@ -58,37 +70,47 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
 	ret := &binlog.DumpBinlogResp{}
 	start := req.BeginCommitTS
+	startKey := codec.EncodeInt([]byte{}, start)
 	end := s.window.LoadLower()
 	limit := req.Limit
 
-	iter, err := s.rocksdb.Scan(start)
-	if err != nil {
-		ret.Errmsg = err.Error()
-		return ret, nil
-	}
-	defer iter.Close()
-	for ; iter.Valid() && limit > 0; iter.Next() {
-		cts, err := iter.CommitTs()
+	s.boltdb.RLock()
+	defer s.boltdb.RUnlock()
+	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) bool {
+		if limit <= 0 {
+			return false
+		}
+
+		_, cts, err := codec.DecodeInt(key)
 		if err != nil {
 			ret.Errmsg = err.Error()
-			return ret, nil
+			return false
 		}
-		// skip the one of start position
+
 		if cts == start {
-			continue
+			return true
 		}
+
 		if cts >= end {
-			break
+			return false
 		}
-		payload, _, err := iter.Payload()
+
+		payload, _, err := decodePayload(val)
 		if err != nil {
 			ret.Errmsg = err.Error()
-			return ret, nil
+			return false
 		}
+
 		ret.Payloads = append(ret.Payloads, payload)
 		ret.EndCommitTS = cts
 		limit--
+
+		return true
+	})
+	if err != nil {
+		ret.Errmsg = err.Error()
 	}
+
 	return ret, nil
 }
 
@@ -142,5 +164,5 @@ func (s *Server) Close() {
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-	s.rocksdb.Close()
+	s.boltdb.Close()
 }

@@ -5,26 +5,30 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
+	"github.com/pingcap/tidb/util/codec"
 )
+
+var windowName = []byte("window")
 
 // DepositWindow holds the upper and lower boundary of the window
 // The value of lower boundary should be persisted to store.
 type DepositWindow struct {
 	upper int64
 	lower int64
-	rocks store.Store
+	bolt  store.Store
 }
 
 // NewDepositWindow return an instance of DepositWindow
 func NewDepositWindow(s store.Store) (*DepositWindow, error) {
-	l, err := s.LoadMarker()
+	l, err := loadMark(s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	return &DepositWindow{
 		upper: 0,
 		lower: l,
-		rocks: s,
+		bolt:  s,
 	}, nil
 }
 
@@ -50,10 +54,34 @@ func (d *DepositWindow) SaveUpper(val int64) {
 
 // PersistLower updates the lower boundary of window, and write it into storage.
 func (d *DepositWindow) PersistLower(val int64) error {
-	err := d.rocks.SaveMarker(val)
+	data := codec.EncodeInt([]byte{}, val)
+	err := d.bolt.Put(WindowNamespace, windowName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	atomic.StoreInt64(&d.lower, val)
 	return nil
+}
+
+func loadMark(s store.Store) (int64, error) {
+	var l int64
+	data, err := s.Get(WindowNamespace, windowName)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return 0, nil
+		}
+
+		return 0, errors.Trace(err)
+	}
+
+	if len(data) == 0 {
+		return 0, nil
+	}
+
+	_, l, err = codec.DecodeInt(data)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return l, nil
 }
