@@ -112,7 +112,7 @@ func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 func (s *Schema) DropSchema(id int64) (string, error) {
 	schema, ok := s.schemas[id]
 	if !ok {
-		return "", errors.NotFoundf("schema %s", schema.Name)
+		return "", errors.NotFoundf("schema %d", id)
 	}
 
 	for _, table := range schema.Tables {
@@ -128,7 +128,7 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
-		return errors.AlreadyExistsf("schema %s", db.Name)
+		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
 
 	s.schemas[db.ID] = db
@@ -140,7 +140,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 func (s *Schema) DropTable(id int64) (string, error) {
 	table, ok := s.tables[id]
 	if !ok {
-		return "", errors.NotFoundf("table %s", table.Name)
+		return "", errors.NotFoundf("table %d", id)
 	}
 
 	delete(s.tables, id)
@@ -158,6 +158,18 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = tableName{schema: schema.Name.L, table: table.Name.L}
+
+	return nil
+}
+
+// ReplaceTable replace the table by new tableInfo
+func (s *Schema) ReplaceTable(table *model.TableInfo) error {
+	_, ok := s.tables[table.ID]
+	if !ok {
+		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
+	}
+
+	s.tables[table.ID] = table
 
 	return nil
 }
