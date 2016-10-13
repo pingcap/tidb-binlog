@@ -7,9 +7,12 @@ ifeq "$(GOPATH)" ""
 endif
 
 CURDIR := $(shell pwd)
-export GOPATH := $(CURDIR)/_vendor:$(GOPATH)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
+
+GO        := GO15VENDOREXPERIMENT="1" go
+GOBUILD   := GOPATH=$(CURDIR)/_vendor:$(GOPATH) $(GO) build
+GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) $(GO) test
 
 ARCH      := "`uname -s`"
 LINUX     := "Linux"
@@ -34,20 +37,20 @@ dev: build check test
 build: pump cistern drainer
 
 pump:
-	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 
 cistern:
-	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/cistern cmd/cistern/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cistern cmd/cistern/main.go
 
 drainer:
-	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
 
 install:
 	go install ./...
 
 test:
 	@export log_level=error;\
-	GO15VENDOREXPERIMENT=1 go test -cover $(PACKAGES)
+	$(GOTEST) -cover $(PACKAGES)
 
 fmt:
 	go fmt ./...
@@ -73,10 +76,10 @@ update:
 ifdef PKG
 	glide get -s -v --skip-test ${PKG}
 else
-	glide update -s -v --skip-test
+	glide update -s -v -u --skip-test
 endif
 	@echo "removing test files"
-	glide vc --only-code --no-tests
+	glide vc --use-lock-file --only-code --no-tests
 	mkdir -p _vendor
 	mv vendor _vendor/src
 

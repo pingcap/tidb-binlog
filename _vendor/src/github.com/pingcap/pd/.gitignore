@@ -1,0 +1,7 @@
+bin
+/vendor
+*.iml
+.idea
+default.etcd
+default.pd
+*.swp
