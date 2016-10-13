@@ -6,15 +6,15 @@ import (
 	"hash/crc32"
 	"io"
 
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 type decoder struct {
 	br  *bufio.Reader
-	pos pb.Pos
+	pos binlog.Pos
 }
 
-func newDecoder(pos pb.Pos, r io.Reader) *decoder {
+func newDecoder(pos binlog.Pos, r io.Reader) *decoder {
 	reader := bufio.NewReader(r)
 
 	return &decoder{
@@ -23,7 +23,7 @@ func newDecoder(pos pb.Pos, r io.Reader) *decoder {
 	}
 }
 
-func (d *decoder) decode(ent *pb.Binlog) error {
+func (d *decoder) decode(ent *binlog.Entity) error {
 	if d.br == nil {
 		return io.EOF
 	}
@@ -66,7 +66,7 @@ func (d *decoder) decode(ent *pb.Binlog) error {
 		return ErrCRCMismatch
 	}
 
-	ent.Pos = pb.Pos{
+	ent.Pos = binlog.Pos{
 		Suffix: d.pos.Suffix,
 		Offset: d.pos.Offset,
 	}

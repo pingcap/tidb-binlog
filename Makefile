@@ -19,6 +19,8 @@ FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.GitSHA=$(shell git rev-parse HEAD)"
 
 default: build buildsucc
 
@@ -29,21 +31,16 @@ all: dev install
 
 dev: build check test
 
-build: pump server drainer
+build: pump cistern drainer
 
-proto/pump.pb.go: proto/pump.proto
-	sh proto/generate.sh
-
-pump: proto/pump.pb.go
+pump:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
 
-server: proto/pump.pb.go
-	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/binlog-server cmd/binlog-server/main.go
+cistern:
+	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/cistern cmd/cistern/main.go
 
 drainer:
 	GO15VENDOREXPERIMENT=1 go build -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
-
-proto: proto/pump.pb.go
 
 install:
 	go install ./...
@@ -87,5 +84,5 @@ clean:
 	go clean -i ./...
 	rm -rf *.out
 
-.PHONY: build test check update clean pump server drainer fmt proto
+.PHONY: build test check update clean pump cistern drainer fmt
 

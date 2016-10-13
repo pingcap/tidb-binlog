@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	pb "github.com/pingcap/tidb-binlog/proto"
+	"github.com/pingcap/tipb/go-binlog"
 	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
@@ -34,7 +34,7 @@ type Node interface {
 	Register(ctx context.Context) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
-	Heartbeat(ctx context.Context, done <-chan struct{}) <-chan error
+	Heartbeat(ctx context.Context) <-chan error
 }
 
 type pumpNode struct {
@@ -50,10 +50,10 @@ type NodeStatus struct {
 	NodeID      string
 	Host        string
 	IsAlive     bool
-	LastReadPos map[string]*pb.Pos
+	LastReadPos map[string]binlog.Pos
 }
 
-// NewPumpNode return a pumpNode obj that inited by server config
+// NewPumpNode return a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
 		return nil, errors.Trace(err)
@@ -89,7 +89,7 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		id:                nodeID,
 		host:              advURL.Host,
-		heartbeatInterval: time.Duration(cfg.HeartbeatInterval),
+		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
 		heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
@@ -114,17 +114,22 @@ func (p *pumpNode) Register(ctx context.Context) error {
 	return nil
 }
 
-func (p *pumpNode) Heartbeat(ctx context.Context, done <-chan struct{}) <-chan error {
+func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
-		var clock = clockwork.NewRealClock()
+		defer func() {
+			if err := p.Close(); err != nil {
+				errc <- errors.Trace(err)
+			}
+			close(errc)
+			log.Info("Heartbeat goroutine exited")
+		}()
+
 		for {
 			select {
-			case <-done:
-				// stop heartbeat and prepare to exit
-				close(errc)
+			case <-ctx.Done():
 				return
-			case <-clock.After(p.heartbeatInterval):
+			case <-time.After(p.heartbeatInterval):
 				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}
