@@ -57,17 +57,12 @@ func Unregister(name string) {
 	delete(providers, name)
 }
 
-// Manager is the SQLTranslator factory
-type Manager struct {
-	SQLTranslator
-}
-
-// NewManager returns the Manager by given providerName
-func NewManager(providerName string) (*Manager, error) {
+// New returns the SQLTranslator by given providerName
+func New(providerName string) (SQLTranslator, error) {
 	translator, ok := providers[providerName]
 	if !ok {
 		return nil, errors.Errorf("SQLTranslator: unknown provider %q", providerName)
 	}
 
-	return &Manager{translator}, nil
+	return translator, nil
 }

@@ -40,7 +40,7 @@ type Drainer struct {
 	schema *Schema
 	meta   Meta
 
-	translator *translator.Manager
+	translator translator.SQLTranslator
 
 	wg sync.WaitGroup
 
@@ -427,7 +427,7 @@ func (d *Drainer) run() error {
 		return errors.Trace(err)
 	}
 
-	d.translator, err = translator.NewManager(d.cfg.DestDBType)
+	d.translator, err = translator.New(d.cfg.DestDBType)
 	if err != nil {
 		return errors.Trace(err)
 	}
