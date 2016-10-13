@@ -74,10 +74,6 @@ func loadMark(s store.Store) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	if len(data) == 0 {
-		return 0, nil
-	}
-
 	_, l, err = codec.DecodeInt(data)
 	if err != nil {
 		return 0, errors.Trace(err)
