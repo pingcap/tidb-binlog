@@ -16,14 +16,6 @@ type Store interface {
 	Commit([]byte, Batch) error
 	// Close closes the store DB.
 	Close() error
-	// Lock locks the store for write
-	Lock()
-	// RLock locks the store for reading
-	RLock()
-	//Unlock unlocks the store
-	Unlock()
-	// RUnlock unlocks the store
-	RUnlock()
 }
 
 // Batch provides a way to batch txn

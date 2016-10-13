@@ -16,7 +16,9 @@ import (
 )
 
 var (
+	// WindowNamespace is window namespace for store.Store
 	WindowNamespace = []byte("window")
+	// BinlogNamespace is binlog namespace for store.Store
 	BinlogNamespace = []byte("binlog")
 )
 
@@ -74,8 +76,6 @@ func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*bi
 	end := s.window.LoadLower()
 	limit := req.Limit
 
-	s.boltdb.RLock()
-	defer s.boltdb.RUnlock()
 	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) bool {
 		if limit <= 0 {
 			return false

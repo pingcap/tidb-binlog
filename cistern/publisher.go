@@ -58,9 +58,6 @@ func (p *Publisher) publish() error {
 	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
 
-	p.boltdb.RLock()
-	defer p.boltdb.RUnlock()
-
 	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) bool {
 		_, cts, err := codec.DecodeInt(key)
 		if err != nil {

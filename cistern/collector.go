@@ -11,6 +11,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -31,16 +32,20 @@ type Collector struct {
 	timeout   time.Duration
 	window    *DepositWindow
 	boltdb    store.Store
-	// TODO handle TiKV Client
+	tiClient  *tikv.LockResolver
 }
 
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, error) {
-	// TODO start a TiKV connection
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.ClusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, etcd.DefaultRootPath)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -54,13 +59,14 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		timeout:   cfg.PumpTimeout,
 		window:    w,
 		boltdb:    s,
+		tiClient:  tiClient,
 	}, nil
 }
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		// TODO close TiKV connection
+		// TODO close TiKV connection, but there isn't close()
 		for _, p := range c.pumps {
 			p.Close()
 		}
@@ -99,7 +105,7 @@ func (c *Collector) collect(ctx context.Context) error {
 		wg.Add(1)
 		go func(p *Pump) {
 			select {
-			case resc <- p.Collect(ctx):
+			case resc <- p.Collect(ctx, c.tiClient):
 			case <-ctx.Done():
 			}
 			wg.Done()
@@ -191,9 +197,6 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 
 		b.Put(key, data)
 	}
-
-	c.boltdb.Lock()
-	defer c.boltdb.Unlock()
 
 	err := c.boltdb.Commit(BinlogNamespace, b)
 

@@ -14,6 +14,7 @@ type BoltStore struct {
 	db *bolt.DB
 }
 
+// NewBoltStore return a bolt store
 func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
@@ -41,7 +42,10 @@ func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 	}, nil
 }
 
+// Get implements the Get() interface of Store
 func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
+	s.RLock()
+	defer s.RUnlock()
 	var value []byte
 
 	err := s.db.View(func(tx *bolt.Tx) error {
@@ -62,7 +66,11 @@ func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
 	return value, errors.Trace(err)
 }
 
+// Put implements the Put() interface of Store
 func (s *BoltStore) Put(namespace []byte, key []byte, payload []byte) error {
+	s.Lock()
+	defer s.Unlock()
+
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(namespace)
 		if b == nil {
@@ -79,7 +87,10 @@ func (s *BoltStore) Put(namespace []byte, key []byte, payload []byte) error {
 	return errors.Trace(err)
 }
 
+// Scan implements the Scan() interface of Store
 func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byte) bool) error {
+	s.RLock()
+	defer s.RUnlock()
 
 	return s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(namespace)
@@ -95,7 +106,11 @@ func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byt
 	})
 }
 
+// Commit implements the Commit() interface of Store
 func (s *BoltStore) Commit(namespace []byte, b Batch) error {
+	s.Lock()
+	defer s.Unlock()
+
 	bt, ok := b.(*batch)
 	if !ok {
 		return errors.Errorf("invalid batch type %T", b)
@@ -125,10 +140,12 @@ func (s *BoltStore) Commit(namespace []byte, b Batch) error {
 	return errors.Trace(err)
 }
 
+// NewBatch implements the NewBatch() interface of Store
 func (s *BoltStore) NewBatch() Batch {
 	return &batch{}
 }
 
+// Close implements the Close() interface of Store
 func (s *BoltStore) Close() error {
 	return s.db.Close()
 }
@@ -143,6 +160,7 @@ type batch struct {
 	writes []write
 }
 
+// Put implements the Put() interface of Batch
 func (b *batch) Put(key []byte, value []byte) {
 	w := write{
 		key:   append([]byte(nil), key...),
@@ -151,6 +169,7 @@ func (b *batch) Put(key []byte, value []byte) {
 	b.writes = append(b.writes, w)
 }
 
+// Delete implements the Delete() interface of Batch
 func (b *batch) Delete(key []byte) {
 	w := write{
 		key:      append([]byte(nil), key...),
@@ -160,6 +179,7 @@ func (b *batch) Delete(key []byte) {
 	b.writes = append(b.writes, w)
 }
 
+// Len implements the Len() interface of Batch
 func (b *batch) Len() int {
 	return len(b.writes)
 }
