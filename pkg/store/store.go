@@ -5,15 +5,15 @@ package store
 // It also records the time of putting KV to store as timestamp for calculating the age of tuple.
 type Store interface {
 	// Put adds or updates a binlog into store.
-	Put([]byte, []byte, []byte) error
+	Put(namespace []byte, key []byte, payload []byte) error
 	// Get returns the payload and age of binlog by given commitTs.
-	Get([]byte, []byte) ([]byte, error)
+	Get(namespace []byte, key []byte) ([]byte, error)
 	// Scan returns an Iterator of binlog which from the position of the specified commitTs.
-	Scan([]byte, []byte, func([]byte, []byte) (bool, error)) error
+	Scan(namespace []byte, startKey []byte, f func(key []byte, val []byte) (bool, error)) error
 	// NewBatch creates a Batch for writing.
 	NewBatch() Batch
 	// Commit writes data in Batch.
-	Commit([]byte, Batch) error
+	Commit(namespace []byte, b Batch) error
 	// Close closes the store DB.
 	Close() error
 }

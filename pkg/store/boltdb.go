@@ -1,16 +1,12 @@
 package store
 
 import (
-	"sync"
-
 	"github.com/boltdb/bolt"
 	"github.com/juju/errors"
 )
 
 // BoltStore wraps BoltDB as Store
 type BoltStore struct {
-	sync.RWMutex
-
 	db *bolt.DB
 }
 
@@ -44,8 +40,6 @@ func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 
 // Get implements the Get() interface of Store
 func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
-	s.RLock()
-	defer s.RUnlock()
 	var value []byte
 
 	err := s.db.View(func(tx *bolt.Tx) error {
@@ -68,9 +62,6 @@ func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
 
 // Put implements the Put() interface of Store
 func (s *BoltStore) Put(namespace []byte, key []byte, payload []byte) error {
-	s.Lock()
-	defer s.Unlock()
-
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(namespace)
 		if b == nil {
@@ -89,9 +80,6 @@ func (s *BoltStore) Put(namespace []byte, key []byte, payload []byte) error {
 
 // Scan implements the Scan() interface of Store
 func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byte) (bool, error)) error {
-	s.RLock()
-	defer s.RUnlock()
-
 	return s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(namespace)
 		if bucket == nil {
@@ -116,9 +104,6 @@ func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byt
 
 // Commit implements the Commit() interface of Store
 func (s *BoltStore) Commit(namespace []byte, b Batch) error {
-	s.Lock()
-	defer s.Unlock()
-
 	bt, ok := b.(*batch)
 	if !ok {
 		return errors.Errorf("invalid batch type %T", b)
