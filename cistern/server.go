@@ -21,6 +21,7 @@ type Server struct {
 	publisher *Publisher
 	tcpAddr   string
 	gs        *grpc.Server
+	metrics   *metricClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -42,11 +43,21 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	p := NewPublisher(cfg, s, win)
 	ctx, cancel := context.WithCancel(context.Background())
+
+	var metrics *metricClient
+	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+		metrics = &metricClient{
+			addr:     cfg.MetricsAddr,
+			interval: cfg.MetricsInterval,
+		}
+	}
+
 	return &Server{
 		rocksdb:   s,
 		window:    win,
 		collector: c,
 		publisher: p,
+		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,
 		gs:        grpc.NewServer(),
 		ctx:       ctx,
@@ -110,6 +121,17 @@ func (s *Server) StartPublish() {
 	}()
 }
 
+func (s *Server) StartMetrics() {
+	if s.metrics == nil {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.metrics.Start(s.ctx)
+	}()
+}
+
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// start to collect
@@ -117,6 +139,9 @@ func (s *Server) Start() error {
 
 	// start to publish
 	s.StartPublish()
+
+	// collect metrics to prometheus
+	s.StartMetrics()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
