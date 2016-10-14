@@ -11,6 +11,8 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -29,17 +31,21 @@ type Collector struct {
 	pumps     map[string]*Pump
 	timeout   time.Duration
 	window    *DepositWindow
-	rocksdb   store.Store
-	// TODO handle TiKV Client
+	boltdb    store.Store
+	tiClient  *tikv.LockResolver
 }
 
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, error) {
-	// TODO start a TiKV connection
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.ClusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, etcd.DefaultRootPath)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -52,14 +58,15 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		pumps:     make(map[string]*Pump),
 		timeout:   cfg.PumpTimeout,
 		window:    w,
-		rocksdb:   s,
+		boltdb:    s,
+		tiClient:  tiClient,
 	}, nil
 }
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		// TODO close TiKV connection
+		// TODO close TiKV connection, but there isn't close()
 		for _, p := range c.pumps {
 			p.Close()
 		}
@@ -98,7 +105,7 @@ func (c *Collector) collect(ctx context.Context) error {
 		wg.Add(1)
 		go func(p *Pump) {
 			select {
-			case resc <- p.Collect(ctx):
+			case resc <- p.Collect(ctx, c.tiClient):
 			case <-ctx.Done():
 			}
 			wg.Done()
@@ -170,6 +177,8 @@ func (c *Collector) prepare(ctx context.Context) error {
 
 func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	boundary := c.window.LoadLower()
+	b := c.boltdb.NewBatch()
+
 	for commitTS, item := range items {
 		if commitTS < boundary {
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
@@ -179,11 +188,19 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if err := c.rocksdb.Put(commitTS, payload); err != nil {
+
+		key := codec.EncodeInt([]byte{}, commitTS)
+		data, err := encodePayload(payload)
+		if err != nil {
 			return errors.Trace(err)
 		}
+
+		b.Put(key, data)
 	}
-	return nil
+
+	err := c.boltdb.Commit(BinlogNamespace, b)
+
+	return errors.Trace(err)
 }
 
 func (c *Collector) updateSavepoints(ctx context.Context, savepoints map[string]binlog.Pos) error {

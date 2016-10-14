@@ -6,6 +6,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/store"
+	"github.com/pingcap/tidb/util/codec"
 	"golang.org/x/net/context"
 )
 
@@ -19,7 +20,7 @@ type Publisher struct {
 	interval time.Duration
 	period   time.Duration
 	window   *DepositWindow
-	rocksdb  store.Store
+	boltdb   store.Store
 }
 
 // NewPublisher return an instance of Publisher
@@ -28,7 +29,7 @@ func NewPublisher(cfg *Config, s store.Store, w *DepositWindow) *Publisher {
 		interval: defaultPublishInterval,
 		period:   time.Duration(cfg.DepositWindowPeriod) * time.Minute,
 		window:   w,
-		rocksdb:  s,
+		boltdb:   s,
 	}
 }
 
@@ -54,26 +55,31 @@ func (p *Publisher) Start(ctx context.Context) {
 
 func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
+	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
-	iter, err := p.rocksdb.Scan(start)
+
+	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
+		_, cts, err := codec.DecodeInt(key)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
+		_, age, err := decodePayload(val)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
+		if age < p.period {
+			end = cts
+			return false, nil
+		}
+
+		return true, nil
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer iter.Close()
-	for ; iter.Valid(); iter.Next() {
-		cts, err := iter.CommitTs()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		_, age, err := iter.Payload()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if age < p.period {
-			end = cts
-			break
-		}
-	}
+
 	if end > start {
 		if err := p.window.PersistLower(end); err != nil {
 			return errors.Trace(err)
@@ -81,5 +87,6 @@ func (p *Publisher) publish() error {
 
 		depositWindowBoundary.Set(float64(end))
 	}
+
 	return nil
 }
