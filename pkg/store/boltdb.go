@@ -88,7 +88,7 @@ func (s *BoltStore) Put(namespace []byte, key []byte, payload []byte) error {
 }
 
 // Scan implements the Scan() interface of Store
-func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byte) bool) error {
+func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byte) (bool, error)) error {
 	s.RLock()
 	defer s.RUnlock()
 
@@ -99,7 +99,15 @@ func (s *BoltStore) Scan(namespace []byte, startKey []byte, f func([]byte, []byt
 		}
 
 		c := bucket.Cursor()
-		for ck, cv := c.Seek(startKey); ck != nil && f(ck, cv); ck, cv = c.Next() {
+		for ck, cv := c.Seek(startKey); ck != nil; ck, cv = c.Next() {
+			valid, err := f(ck, cv)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			if !valid {
+				break
+			}
 		}
 
 		return nil

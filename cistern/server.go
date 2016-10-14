@@ -76,42 +76,40 @@ func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*bi
 	end := s.window.LoadLower()
 	limit := req.Limit
 
-	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) bool {
+	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
 		if limit <= 0 {
-			return false
+			return false, nil
 		}
 
 		_, cts, err := codec.DecodeInt(key)
 		if err != nil {
-			ret.Errmsg = err.Error()
-			return false
+			return false, errors.Trace(err)
 		}
 
 		if cts == start {
-			return true
+			return true, nil
 		}
 
 		if cts >= end {
-			return false
+			return false, nil
 		}
 
 		payload, _, err := decodePayload(val)
 		if err != nil {
-			ret.Errmsg = err.Error()
-			return false
+			return false, errors.Trace(err)
 		}
 
 		ret.Payloads = append(ret.Payloads, payload)
 		ret.EndCommitTS = cts
 		limit--
 
-		return true
+		return true, nil
 	})
 	if err != nil {
 		ret.Errmsg = err.Error()
 	}
 
-	return ret, nil
+	return ret, errors.Trace(err)
 }
 
 // StartCollect runs Collector up in a goroutine.

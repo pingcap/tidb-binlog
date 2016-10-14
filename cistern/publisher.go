@@ -58,25 +58,23 @@ func (p *Publisher) publish() error {
 	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
 
-	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) bool {
+	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
 		_, cts, err := codec.DecodeInt(key)
 		if err != nil {
-			log.Errorf("run publishing error: %v", err)
-			return false
+			return false, errors.Trace(err)
 		}
 
 		_, age, err := decodePayload(val)
 		if err != nil {
-			log.Errorf("run publishing error: %v", err)
-			return false
+			return false, errors.Trace(err)
 		}
 
 		if age < p.period {
 			end = cts
-			return false
+			return false, nil
 		}
 
-		return true
+		return true, nil
 	})
 	if err != nil {
 		return errors.Trace(err)

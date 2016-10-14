@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -79,29 +80,36 @@ func testGet(c *C, store Store) {
 
 func testScan(c *C, store Store) {
 	index := 1
-	err := store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) bool {
+	err := store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) (bool, error) {
 		if index == 3 {
-			return false
+			return false, nil
 		}
 
 		c.Assert(key, DeepEquals, keys[index])
 		c.Assert(val, DeepEquals, values[index])
 		index++
-		return true
+		return true, nil
 	})
 	c.Assert(err, IsNil)
 	c.Assert(index, Equals, 3)
 
 	index = 1
-	err = store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) bool {
+	err = store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) (bool, error) {
 
 		c.Assert(key, DeepEquals, keys[index])
 		c.Assert(val, DeepEquals, values[index])
 		index++
-		return true
+		return true, nil
 	})
 	c.Assert(err, IsNil)
 	c.Assert(index, Equals, 4)
+
+	err = store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) (bool, error) {
+		return false, errors.NotFoundf("test err %s", "test")
+	})
+	if !errors.IsNotFound(err) {
+		c.Fatalf("err should be not found err %v", err)
+	}
 }
 
 func testBatch(c *C, store Store) {

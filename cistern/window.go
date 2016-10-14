@@ -8,7 +8,7 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-var windowName = []byte("window")
+var windowKeyName = []byte("window")
 
 // DepositWindow holds the upper and lower boundary of the window
 // The value of lower boundary should be persisted to store.
@@ -55,7 +55,7 @@ func (d *DepositWindow) SaveUpper(val int64) {
 // PersistLower updates the lower boundary of window, and write it into storage.
 func (d *DepositWindow) PersistLower(val int64) error {
 	data := codec.EncodeInt([]byte{}, val)
-	err := d.bolt.Put(WindowNamespace, windowName, data)
+	err := d.bolt.Put(WindowNamespace, windowKeyName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -65,7 +65,7 @@ func (d *DepositWindow) PersistLower(val int64) error {
 
 func loadMark(s store.Store) (int64, error) {
 	var l int64
-	data, err := s.Get(WindowNamespace, windowName)
+	data, err := s.Get(WindowNamespace, windowKeyName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return 0, nil
