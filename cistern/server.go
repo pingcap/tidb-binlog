@@ -3,24 +3,35 @@ package cistern
 import (
 	"net"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
+	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
+var (
+	// WindowNamespace is window namespace for store.Store
+	WindowNamespace = []byte("window")
+	// BinlogNamespace is binlog namespace for store.Store
+	BinlogNamespace = []byte("binlog")
+)
+
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	rocksdb   store.Store
+	boltdb    store.Store
 	window    *DepositWindow
 	collector *Collector
 	publisher *Publisher
 	tcpAddr   string
 	gs        *grpc.Server
+	metrics   *metricClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -28,9 +39,13 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	s, err := store.NewRocksStore(cfg.DataDir)
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+		return nil, err
+	}
+
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to open RocksDB store in dir(%s)", cfg.DataDir)
+		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
 	win, err := NewDepositWindow(s)
 	if err != nil {
@@ -42,11 +57,21 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	p := NewPublisher(cfg, s, win)
 	ctx, cancel := context.WithCancel(context.Background())
+
+	var metrics *metricClient
+	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+		metrics = &metricClient{
+			addr:     cfg.MetricsAddr,
+			interval: cfg.MetricsInterval,
+		}
+	}
+
 	return &Server{
-		rocksdb:   s,
+		boltdb:    s,
 		window:    win,
 		collector: c,
 		publisher: p,
+		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,
 		gs:        grpc.NewServer(),
 		ctx:       ctx,
@@ -58,38 +83,44 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
 	ret := &binlog.DumpBinlogResp{}
 	start := req.BeginCommitTS
+	startKey := codec.EncodeInt([]byte{}, start)
 	end := s.window.LoadLower()
 	limit := req.Limit
 
-	iter, err := s.rocksdb.Scan(start)
-	if err != nil {
-		ret.Errmsg = err.Error()
-		return ret, nil
-	}
-	defer iter.Close()
-	for ; iter.Valid() && limit > 0; iter.Next() {
-		cts, err := iter.CommitTs()
-		if err != nil {
-			ret.Errmsg = err.Error()
-			return ret, nil
+	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
+		if limit <= 0 {
+			return false, nil
 		}
-		// skip the one of start position
+
+		_, cts, err := codec.DecodeInt(key)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+
 		if cts == start {
-			continue
+			return true, nil
 		}
+
 		if cts >= end {
-			break
+			return false, nil
 		}
-		payload, _, err := iter.Payload()
+
+		payload, _, err := decodePayload(val)
 		if err != nil {
-			ret.Errmsg = err.Error()
-			return ret, nil
+			return false, errors.Trace(err)
 		}
+
 		ret.Payloads = append(ret.Payloads, payload)
 		ret.EndCommitTS = cts
 		limit--
+
+		return true, nil
+	})
+	if err != nil {
+		ret.Errmsg = err.Error()
 	}
-	return ret, nil
+
+	return ret, errors.Trace(err)
 }
 
 // StartCollect runs Collector up in a goroutine.
@@ -110,6 +141,17 @@ func (s *Server) StartPublish() {
 	}()
 }
 
+func (s *Server) StartMetrics() {
+	if s.metrics == nil {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.metrics.Start(s.ctx)
+	}()
+}
+
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// start to collect
@@ -117,6 +159,9 @@ func (s *Server) Start() error {
 
 	// start to publish
 	s.StartPublish()
+
+	// collect metrics to prometheus
+	s.StartMetrics()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -142,5 +187,5 @@ func (s *Server) Close() {
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-	s.rocksdb.Close()
+	s.boltdb.Close()
 }

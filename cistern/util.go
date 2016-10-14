@@ -1,9 +1,14 @@
 package cistern
 
 import (
+	"time"
+
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tipb/go-binlog"
 )
+
+const lengthOfBinaryTime = 15
 
 // InitLogger initalizes Pump's logger.
 func InitLogger(isDebug bool) {
@@ -37,4 +42,30 @@ func CalculateNextPos(item binlog.Entity) binlog.Pos {
 	// 4 bytes(magic) + 8 bytes(size) + length of payload + 4 bytes(CRC)
 	pos.Offset += int64(len(item.Payload) + 16)
 	return pos
+}
+
+func encodePayload(payload []byte) ([]byte, error) {
+	nowBinary, err := time.Now().MarshalBinary()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	n1 := len(nowBinary)
+	n2 := len(payload)
+	data := make([]byte, n1+n2)
+	copy(data[:n1], nowBinary)
+	copy(data[n1:], payload)
+	return data, nil
+}
+
+func decodePayload(value []byte) ([]byte, time.Duration, error) {
+	var ts time.Time
+	n1 := lengthOfBinaryTime
+
+	data := make([]byte, len(value))
+	copy(data, value)
+
+	if err := ts.UnmarshalBinary(data[:n1]); err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return data[n1:], time.Now().Sub(ts), nil
 }
