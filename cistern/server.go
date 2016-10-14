@@ -44,7 +44,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to open boltDB store in dir(%s)", cfg.DataDir)
+		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
 	win, err := NewDepositWindow(s)
 	if err != nil {
