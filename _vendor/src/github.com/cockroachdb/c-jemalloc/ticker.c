@@ -1,1 +1,0 @@
-internal/src/ticker.c

@@ -18,6 +18,8 @@ import (
 	"sync"
 
 	"github.com/coreos/etcd/clientv3"
+	pb "github.com/coreos/etcd/etcdserver/etcdserverpb"
+
 	"golang.org/x/net/context"
 )
 
@@ -27,6 +29,8 @@ type watchergroups struct {
 	mu        sync.Mutex
 	groups    map[watchRange]*watcherGroup
 	idToGroup map[receiverID]*watcherGroup
+
+	proxyCtx context.Context
 }
 
 func (wgs *watchergroups) addWatcher(rid receiverID, w watcher) {
@@ -36,11 +40,33 @@ func (wgs *watchergroups) addWatcher(rid receiverID, w watcher) {
 	groups := wgs.groups
 
 	if wg, ok := groups[w.wr]; ok {
-		wg.add(rid, w)
+		rev := wg.add(rid, w)
+		wgs.idToGroup[rid] = wg
+
+		if rev == 0 {
+			// The group is newly created, the create event has not been delivered
+			// to this group yet.
+			// We can rely on etcd server to deliver the create event.
+			// Or we might end up sending created event twice.
+			return
+		}
+
+		resp := &pb.WatchResponse{
+			Header: &pb.ResponseHeader{
+				// todo: fill in ClusterId
+				// todo: fill in MemberId:
+				Revision: rev,
+				// todo: fill in RaftTerm:
+			},
+			WatchId: rid.watcherID,
+			Created: true,
+		}
+		w.ch <- resp
+
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(wgs.proxyCtx)
 
 	wch := wgs.cw.Watch(ctx, w.wr.key,
 		clientv3.WithRange(w.wr.end),
@@ -52,20 +78,22 @@ func (wgs *watchergroups) addWatcher(rid receiverID, w watcher) {
 	watchg.add(rid, w)
 	go watchg.run()
 	groups[w.wr] = watchg
+	wgs.idToGroup[rid] = watchg
 }
 
-func (wgs *watchergroups) removeWatcher(rid receiverID) bool {
+func (wgs *watchergroups) removeWatcher(rid receiverID) (int64, bool) {
 	wgs.mu.Lock()
 	defer wgs.mu.Unlock()
 
 	if g, ok := wgs.idToGroup[rid]; ok {
 		g.delete(rid)
+		delete(wgs.idToGroup, rid)
 		if g.isEmpty() {
 			g.stop()
 		}
-		return true
+		return g.revision(), true
 	}
-	return false
+	return -1, false
 }
 
 func (wgs *watchergroups) maybeJoinWatcherSingle(rid receiverID, ws watcherSingle) bool {
@@ -98,4 +126,5 @@ func (wgs *watchergroups) stop() {
 	for _, wg := range wgs.groups {
 		wg.stop()
 	}
+	wgs.groups = nil
 }

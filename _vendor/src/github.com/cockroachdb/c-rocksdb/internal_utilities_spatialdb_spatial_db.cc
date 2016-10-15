@@ -1,1 +1,0 @@
-internal/utilities/spatialdb/spatial_db.cc

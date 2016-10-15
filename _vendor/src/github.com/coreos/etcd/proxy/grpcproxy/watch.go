@@ -31,65 +31,97 @@ type watchProxy struct {
 
 	mu           sync.Mutex
 	nextStreamID int64
+
+	ctx context.Context
 }
 
 func NewWatchProxy(c *clientv3.Client) pb.WatchServer {
-	return &watchProxy{
+	wp := &watchProxy{
 		cw: c.Watcher,
 		wgs: watchergroups{
-			cw:     c.Watcher,
-			groups: make(map[watchRange]*watcherGroup),
+			cw:        c.Watcher,
+			groups:    make(map[watchRange]*watcherGroup),
+			idToGroup: make(map[receiverID]*watcherGroup),
+			proxyCtx:  c.Ctx(),
 		},
+		ctx: c.Ctx(),
 	}
+	go func() {
+		<-wp.ctx.Done()
+		wp.wgs.stop()
+	}()
+	return wp
 }
 
 func (wp *watchProxy) Watch(stream pb.Watch_WatchServer) (err error) {
 	wp.mu.Lock()
 	wp.nextStreamID++
+	sid := wp.nextStreamID
 	wp.mu.Unlock()
 
 	sws := serverWatchStream{
-		cw:      wp.cw,
-		groups:  &wp.wgs,
-		singles: make(map[int64]*watcherSingle),
+		cw:       wp.cw,
+		groups:   &wp.wgs,
+		singles:  make(map[int64]*watcherSingle),
+		inGroups: make(map[int64]struct{}),
 
-		id:         wp.nextStreamID,
+		id:         sid,
 		gRPCStream: stream,
 
-		ctrlCh:  make(chan *pb.WatchResponse, 10),
-		watchCh: make(chan *pb.WatchResponse, 10),
+		watchCh: make(chan *pb.WatchResponse, 1024),
+
+		proxyCtx: wp.ctx,
 	}
 
 	go sws.recvLoop()
-
 	sws.sendLoop()
-
-	return nil
+	return wp.ctx.Err()
 }
 
 type serverWatchStream struct {
 	id int64
 	cw clientv3.Watcher
 
-	mu      sync.Mutex // make sure any access of groups and singles is atomic
-	groups  *watchergroups
-	singles map[int64]*watcherSingle
+	mu       sync.Mutex // make sure any access of groups and singles is atomic
+	groups   *watchergroups
+	singles  map[int64]*watcherSingle
+	inGroups map[int64]struct{}
 
 	gRPCStream pb.Watch_WatchServer
 
-	ctrlCh  chan *pb.WatchResponse
 	watchCh chan *pb.WatchResponse
 
 	nextWatcherID int64
+
+	proxyCtx context.Context
 }
 
 func (sws *serverWatchStream) close() {
-	close(sws.watchCh)
-	close(sws.ctrlCh)
+	var wg sync.WaitGroup
+	sws.mu.Lock()
+	wg.Add(len(sws.singles) + len(sws.inGroups))
 	for _, ws := range sws.singles {
-		ws.stop()
+		// copy the range variable to avoid race
+		copyws := ws
+		go func() {
+			copyws.stop()
+			wg.Done()
+		}()
 	}
-	sws.groups.stop()
+	for id := range sws.inGroups {
+		// copy the range variable to avoid race
+		wid := id
+		go func() {
+			sws.groups.removeWatcher(receiverID{streamID: sws.id, watcherID: wid})
+			wg.Done()
+		}()
+	}
+	sws.inGroups = nil
+	sws.mu.Unlock()
+
+	wg.Wait()
+
+	close(sws.watchCh)
 }
 
 func (sws *serverWatchStream) recvLoop() error {
@@ -144,14 +176,8 @@ func (sws *serverWatchStream) sendLoop() {
 			if err := sws.gRPCStream.Send(wresp); err != nil {
 				return
 			}
-
-		case c, ok := <-sws.ctrlCh:
-			if !ok {
-				return
-			}
-			if err := sws.gRPCStream.Send(c); err != nil {
-				return
-			}
+		case <-sws.proxyCtx.Done():
+			return
 		}
 	}
 }
@@ -162,13 +188,14 @@ func (sws *serverWatchStream) addCoalescedWatcher(w watcher) {
 
 	rid := receiverID{streamID: sws.id, watcherID: w.id}
 	sws.groups.addWatcher(rid, w)
+	sws.inGroups[w.id] = struct{}{}
 }
 
 func (sws *serverWatchStream) addDedicatedWatcher(w watcher, rev int64) {
 	sws.mu.Lock()
 	defer sws.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(sws.proxyCtx)
 
 	wch := sws.cw.Watch(ctx,
 		w.wr.key, clientv3.WithRange(w.wr.end),
@@ -187,8 +214,13 @@ func (sws *serverWatchStream) maybeCoalesceWatcher(ws watcherSingle) bool {
 	defer sws.mu.Unlock()
 
 	rid := receiverID{streamID: sws.id, watcherID: ws.w.id}
+	// do not add new watchers when stream is closing
+	if sws.inGroups == nil {
+		return false
+	}
 	if sws.groups.maybeJoinWatcherSingle(rid, ws) {
 		delete(sws.singles, ws.w.id)
+		sws.inGroups[ws.w.id] = struct{}{}
 		return true
 	}
 	return false
@@ -198,12 +230,38 @@ func (sws *serverWatchStream) removeWatcher(id int64) {
 	sws.mu.Lock()
 	defer sws.mu.Unlock()
 
-	if sws.groups.removeWatcher(receiverID{streamID: sws.id, watcherID: id}) {
+	var (
+		rev int64
+		ok  bool
+	)
+
+	defer func() {
+		if !ok {
+			return
+		}
+		resp := &pb.WatchResponse{
+			Header: &pb.ResponseHeader{
+				// todo: fill in ClusterId
+				// todo: fill in MemberId:
+				Revision: rev,
+				// todo: fill in RaftTerm:
+			},
+			WatchId:  id,
+			Canceled: true,
+		}
+		sws.watchCh <- resp
+	}()
+
+	rev, ok = sws.groups.removeWatcher(receiverID{streamID: sws.id, watcherID: id})
+	if ok {
+		delete(sws.inGroups, id)
 		return
 	}
 
-	if ws, ok := sws.singles[id]; ok {
+	var ws *watcherSingle
+	if ws, ok = sws.singles[id]; ok {
 		delete(sws.singles, id)
 		ws.stop()
+		rev = ws.lastStoreRev
 	}
 }

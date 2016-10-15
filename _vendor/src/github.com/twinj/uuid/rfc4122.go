@@ -57,10 +57,10 @@ func init() {
 // NewV1 will generate a new RFC4122 version 1 UUID
 func NewV1() UUID {
 	state.Lock()
-	defer state.Unlock()
 	now := currentUUIDTimestamp()
 	state.read(now, currentUUIDNodeId())
 	state.persist()
+	state.Unlock()
 	return formatV1(now, uint16(1), ReservedRFC4122, state.node)
 }
 

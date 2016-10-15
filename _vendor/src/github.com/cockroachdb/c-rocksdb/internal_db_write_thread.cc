@@ -1,1 +1,0 @@
-internal/db/write_thread.cc

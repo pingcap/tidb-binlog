@@ -15,6 +15,8 @@
 package grpcproxy
 
 import (
+	"time"
+
 	"github.com/coreos/etcd/clientv3"
 	pb "github.com/coreos/etcd/etcdserver/etcdserverpb"
 	"github.com/coreos/etcd/mvcc"
@@ -42,12 +44,16 @@ func (w *watcher) send(wr clientv3.WatchResponse) {
 
 	events := make([]*mvccpb.Event, 0, len(wr.Events))
 
+	var lastRev int64
 	for i := range wr.Events {
 		ev := (*mvccpb.Event)(wr.Events[i])
 		if ev.Kv.ModRevision <= w.rev {
 			continue
 		} else {
-			w.rev = ev.Kv.ModRevision
+			// We cannot update w.rev here.
+			// txn can have multiple events with the same rev.
+			// If we update w.rev here, we would skip some events in the same txn.
+			lastRev = ev.Kv.ModRevision
 		}
 
 		filtered := false
@@ -65,6 +71,10 @@ func (w *watcher) send(wr clientv3.WatchResponse) {
 		}
 	}
 
+	if lastRev > w.rev {
+		w.rev = lastRev
+	}
+
 	// all events are filtered out?
 	if !wr.IsProgressNotify() && !wr.Created && len(events) == 0 {
 		return
@@ -78,7 +88,9 @@ func (w *watcher) send(wr clientv3.WatchResponse) {
 	}
 	select {
 	case w.ch <- pbwr:
-	default:
-		panic("handle this")
+	case <-time.After(50 * time.Millisecond):
+		// close the watch chan will notify the stream sender.
+		// the stream will gc all its watchers.
+		close(w.ch)
 	}
 }

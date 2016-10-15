@@ -57,6 +57,13 @@ func togRPCError(err error) error {
 		return rpctypes.ErrGRPCTimeout
 	case etcdserver.ErrTimeoutDueToLeaderFail:
 		return rpctypes.ErrGRPCTimeoutDueToLeaderFail
+	case etcdserver.ErrUnhealthy:
+		return rpctypes.ErrGRPCUnhealthy
+
+	case lease.ErrLeaseNotFound:
+		return rpctypes.ErrGRPCLeaseNotFound
+	case lease.ErrLeaseExists:
+		return rpctypes.ErrGRPCLeaseExist
 
 	case auth.ErrRootUserNotExist:
 		return rpctypes.ErrGRPCRootUserNotExist

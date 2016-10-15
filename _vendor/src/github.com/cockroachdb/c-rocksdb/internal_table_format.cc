@@ -1,1 +1,0 @@
-internal/table/format.cc

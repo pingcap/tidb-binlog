@@ -1,26 +1,20 @@
-hash: 831941a3f02466144e472f6b15e02a239083006142679dd73951deb01d0773b5
-updated: 2016-10-13T19:14:08.955072609+08:00
+hash: 6961c90043c69b027ff52a65a831da3f571c6139c33047f52dea8fb4c7c8328f
+updated: 2016-10-15T14:37:58.473265278+08:00
 imports:
+- name: bitbucket.org/ww/goautoneg
+  version: ""
 - name: github.com/beorn7/perks
-  version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
+  version: ""
   subpackages:
   - quantile
 - name: github.com/boltdb/bolt
-  version: d97499360d1ecebc492ea66c7447ea948f417620
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
 - name: github.com/BurntSushi/toml
-  version: 99064174e013895bbd9b025c31100bd1d9b590ca
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
 - name: github.com/cloudfoundry-incubator/candiedyaml
-  version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
-- name: github.com/cockroachdb/c-jemalloc
-  version: 42e6a32cd7a4dff9c70d80323681d46d046181ef
-- name: github.com/cockroachdb/c-lz4
-  version: 834d3303c9e84b1045bc57c3eb3723ee8cb4d33b
-- name: github.com/cockroachdb/c-rocksdb
-  version: 894d369c4ea259b65f75563feeb06bea322a8450
-- name: github.com/cockroachdb/c-snappy
-  version: d4e7b428fe7fc09e93573df3448567a62df8c9fa
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
 - name: github.com/coreos/etcd
-  version: e53b99588a05d1f4ef172c178d4ed8e8106b8be4
+  version: ""
   subpackages:
   - clientv3
   - integration
@@ -49,6 +43,7 @@ imports:
   - etcdserver/stats
   - lease
   - lease/leasehttp
+  - lease/leasepb
   - mvcc
   - mvcc/backend
   - pkg/contention
@@ -72,73 +67,72 @@ imports:
   - pkg/logutil
   - proxy/grpcproxy/cache
   - pkg/ioutil
-  - lease/leasepb
   - pkg/adt
   - snap/snappb
   - pkg/crc
 - name: github.com/coreos/go-semver
-  version: 568e959cd89871e61434c1143528d9162da89ef2
+  version: ""
   subpackages:
   - semver
 - name: github.com/coreos/go-systemd
-  version: bfdc81d0d7e0fb19447b08571f63b774495251ce
+  version: ""
   subpackages:
   - daemon
   - journal
   - util
 - name: github.com/coreos/pkg
-  version: fa29b1d70f0beaddd4c7021607cc3c3be8ce94b8
+  version: ""
   subpackages:
   - capnslog
 - name: github.com/ghodss/yaml
-  version: aa0c862057666179de291b67d9f093d12b5a8473
+  version: ""
 - name: github.com/go-sql-driver/mysql
-  version: 0b58b37b664c21f3010e836f1b931e1d0b0b0685
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
 - name: github.com/gogo/protobuf
-  version: 909568be09de550ed094403c2bf8a261b5bb730a
+  version: ""
   subpackages:
   - proto
 - name: github.com/golang/groupcache
-  version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
+  version: ""
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: 874264fbbb43f4d91e999fecb4b40143ed611400
+  version: ""
   subpackages:
   - proto
   - jsonpb
 - name: github.com/golang/snappy
-  version: 723cc1e459b8eea2dea4583200fd60757d40097a
+  version: ""
 - name: github.com/google/btree
-  version: 7364763242911ab6d418d2722e237194938ebad0
+  version: ""
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: ""
   subpackages:
   - runtime
   - utilities
   - runtime/internal
 - name: github.com/jonboulle/clockwork
-  version: 2eee05ed794112d45db504eb05aa693efd2b8b09
+  version: ""
 - name: github.com/juju/errors
-  version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
+  version: ""
 - name: github.com/matttproud/golang_protobuf_extensions
-  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  version: ""
   subpackages:
   - pbutil
 - name: github.com/ngaut/deadline
-  version: fae8f9dfd7048de16575b9d4c255278e38c28a4f
+  version: ""
 - name: github.com/ngaut/log
-  version: cec23d3e10b016363780d894a0eb732a12c06e02
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
 - name: github.com/ngaut/pools
-  version: 6352e005618615ffaf1cb1c6622b8e91435751fe
+  version: ""
 - name: github.com/ngaut/sync2
-  version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
+  version: ""
 - name: github.com/petar/GoLLRB
-  version: 53be0d36a84c2a886ca057d34b6aa4468df9ccb4
+  version: ""
   subpackages:
   - llrb
 - name: github.com/pingcap/goleveldb
-  version: 158edde5a354460121af007d02a00b01c8d03443
+  version: ""
   subpackages:
   - leveldb
   - leveldb/cache
@@ -153,7 +147,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: b67cb2eae50058de05fb22c5c0118571c8f98404
+  version: ""
   subpackages:
   - pkg/coprocessor
   - pkg/errorpb
@@ -166,16 +160,17 @@ imports:
   - pkg/raft_serverpb
   - pkg/eraftpb
 - name: github.com/pingcap/pd
-  version: 7f4d00f58c3b517e4c9526874b9e3818a2c2d0a3
+  version: ""
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: deeaf077d783c32aba41fde8200792f002962951
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
   subpackages:
   - store/tikv
+  - util/codec
   - ddl
   - infoschema
   - kv
@@ -185,9 +180,12 @@ imports:
   - terror
   - ast
   - parser
-  - util/codec
   - util/types
   - tablecodec
+  - sessionctx/binloginfo
+  - store/tikv/mock-tikv
+  - store/tikv/oracle
+  - store/tikv/oracle/oracles
   - context
   - domain
   - executor
@@ -196,7 +194,6 @@ imports:
   - privilege/privileges
   - sessionctx
   - sessionctx/autocommit
-  - sessionctx/binloginfo
   - sessionctx/db
   - sessionctx/forupdate
   - sessionctx/variable
@@ -204,9 +201,6 @@ imports:
   - store/localstore/engine
   - store/localstore/goleveldb
   - util
-  - store/tikv/mock-tikv
-  - store/tikv/oracle
-  - store/tikv/oracle/oracles
   - evaluator
   - inspectkv
   - meta/autoid
@@ -219,57 +213,55 @@ imports:
   - util/distinct
   - util/hack
   - distsql
+  - distsql/xeval
   - expression
   - plan
   - util/sqlexec
-  - distsql/xeval
   - util/bytes
   - util/segmentmap
   - util/stringutil
 - name: github.com/pingcap/tipb
-  version: 38084aeaf922fb5d41284865d64b2113f3ae5f1c
+  version: ""
   subpackages:
   - go-binlog
   - go-tipb
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: ""
   subpackages:
   - prometheus
   - prometheus/push
 - name: github.com/prometheus/client_model
-  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  version: ""
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 4402f4e5ea79ec15f3c574773b6a5198fbea215f
+  version: ""
   subpackages:
   - expfmt
   - model
   - internal/bitbucket.org/ww/goautoneg
 - name: github.com/prometheus/procfs
-  version: abf152e5f3e97f2fafac028d2cc06c1feb87ffa5
+  version: ""
 - name: github.com/siddontang/go
-  version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
   subpackages:
   - ioutil2
   - sync2
-- name: github.com/tecbot/gorocksdb
-  version: c5961f0da43124b8eca4efc325d723b6ca319e91
 - name: github.com/twinj/uuid
-  version: 89173bcdda19db0eb88aef1e1cb1cb2505561d31
+  version: ""
 - name: github.com/ugorji/go
-  version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
+  version: ""
   subpackages:
   - codec
 - name: github.com/xiang90/probing
-  version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
+  version: ""
 - name: golang.org/x/crypto
-  version: 1351f936d976c60a0a48d728281922cf63eafb8d
+  version: ""
   subpackages:
   - bcrypt
   - blowfish
 - name: golang.org/x/net
-  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  version: ""
   subpackages:
   - context
   - lex/httplex
@@ -278,11 +270,11 @@ imports:
   - http2/hpack
   - internal/timeseries
 - name: golang.org/x/sys
-  version: 8d1157a435470616f975ff9bb013bea8d0962067
+  version: ""
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: 723492b65e225eafcba054e76ba18bb9c5ac1ea2
+  version: ""
   subpackages:
   - encoding
   - encoding/charmap
@@ -294,8 +286,10 @@ imports:
   - encoding/traditionalchinese
   - encoding/unicode
   - transform
+  - internal/utf8internal
+  - runes
 - name: google.golang.org/grpc
-  version: 231b4cfea0e79843053a33f5fe90bd4d84b23cd3
+  version: ""
   subpackages:
   - codes
   - credentials
@@ -307,4 +301,4 @@ imports:
   - peer
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9481b6299989620a385bc365109c94ec6df8d1ad
