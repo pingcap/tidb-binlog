@@ -65,10 +65,10 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	defer os.RemoveAll(dir)
 
-	binlog, err := CreateBinlogger(dir)
+	tmp, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	b, ok := binlog.(*binlogger)
+	b, ok := tmp.(*binlogger)
 	c.Assert(ok, IsTrue)
 
 	b.rotate()
@@ -77,10 +77,10 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b.Close()
 
-	binlog, err = OpenBinlogger(dir)
+	tmp, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	b, ok = binlog.(*binlogger)
+	b, ok = tmp.(*binlogger)
 	c.Assert(ok, IsTrue)
 
 	curFile := b.file
@@ -118,15 +118,15 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	binlog, err := CreateBinlogger(dir)
+	tmp, err := CreateBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	ent := []byte("binlogtest")
 
-	err = binlog.WriteTail(ent)
+	err = tmp.WriteTail(ent)
 	c.Assert(err, IsNil)
 
-	b, ok := binlog.(*binlogger)
+	b, ok := tmp.(*binlogger)
 	c.Assert(ok, IsTrue)
 
 	err = b.rotate()
@@ -142,19 +142,19 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	b.Close()
 
-	binlog, err = OpenBinlogger(dir)
+	tmp, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	f1, err := binlog.ReadFrom(binlog.Pos{}, 1)
+	f1, err := tmp.ReadFrom(binlog.Pos{}, 1)
 	c.Assert(err, IsNil)
-	binlog.Close()
+	tmp.Close()
 
-	binlog, err = OpenBinlogger(dir)
+	tmp, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	f2, err := binlog.ReadFrom(binlog.Pos{Suffix: 1, Offset: 0}, 1)
+	f2, err := tmp.ReadFrom(binlog.Pos{Suffix: 1, Offset: 0}, 1)
 	c.Assert(err, IsNil)
-	binlog.Close()
+	tmp.Close()
 
 	if len(f1) != 1 {
 		c.Fatalf("nums of read entry = %d, but want 1", len(f1))

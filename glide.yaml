@@ -1,21 +1,26 @@
 package: github.com/pingcap/tidb-binlog
 import:
-- package: github.com/coreos/etcd
-  version: ^3.1.0-alpha.0
-  subpackages:
-  - clientv3
 - package: github.com/ghodss/yaml
+  version: aa0c862057666179de291b67d9f093d12b5a8473
 - package: github.com/golang/protobuf
   subpackages:
   - proto
 - package: github.com/juju/errors
+  version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
 - package: github.com/ngaut/log
+- package: github.com/prometheus/client_golang
+  subpackages:
+  - prometheus
+  - prometheus/push
 - package: github.com/twinj/uuid
-  version: ^0.10.0
+  version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - package: golang.org/x/net
   subpackages:
   - context
+  - lex/httplex
 - package: google.golang.org/grpc
-  version: ^1.0.1-GA
+- package: github.com/pingcap/pd
+- package: github.com/coreos/etcd
+  version: ^3.1.0-rc.0
 testImport:
 - package: github.com/pingcap/check
