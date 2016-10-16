@@ -25,7 +25,7 @@ var (
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	boltdb    store.Store
+	boltdb    *store.BoltStore
 	window    *DepositWindow
 	collector *Collector
 	publisher *Publisher

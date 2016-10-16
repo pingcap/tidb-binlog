@@ -4,16 +4,16 @@ package store
 // key is the commitTs of binlog, while the binlog payload as value.
 // It also records the time of putting KV to store as timestamp for calculating the age of tuple.
 type Store interface {
-	// Put adds or updates a binlog into store.
-	Put(namespace []byte, key []byte, payload []byte) error
-	// Get returns the payload and age of binlog by given commitTs.
-	Get(namespace []byte, key []byte) ([]byte, error)
-	// Scan returns an Iterator of binlog which from the position of the specified commitTs.
-	Scan(namespace []byte, startKey []byte, f func(key []byte, val []byte) (bool, error)) error
-	// NewBatch creates a Batch for writing.
-	NewBatch() Batch
-	// Commit writes data in Batch.
-	Commit(namespace []byte, b Batch) error
+	// // Get returns the payload and age of binlog by given commitTs.
+	// Get(commitTS int64) ([]byte, error)
+	// Scan scans from the commitTS the specified commitTs.
+	Scan(commitTS int64, f func(key []byte, val []byte) (bool, error)) error
+	// WriteBatch writes data in Batch.
+	WriteBatch(b Batch) error
+	// LoadMark loads deposit window from store.
+	LoadMark() (int64, error)
+	// SaveMark saves deposit window to store.
+	SaveMark(int64) error
 	// Close closes the store DB.
 	Close() error
 }

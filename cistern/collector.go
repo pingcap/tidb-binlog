@@ -31,12 +31,12 @@ type Collector struct {
 	pumps     map[string]*Pump
 	timeout   time.Duration
 	window    *DepositWindow
-	boltdb    store.Store
+	boltdb    *store.BoltStore
 	tiClient  *tikv.LockResolver
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, error) {
+func NewCollector(cfg *Config, s *store.BoltStore, w *DepositWindow) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)

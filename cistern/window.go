@@ -15,11 +15,11 @@ var windowKeyName = []byte("window")
 type DepositWindow struct {
 	upper int64
 	lower int64
-	bolt  store.Store
+	bolt  *store.BoltStore
 }
 
 // NewDepositWindow return an instance of DepositWindow
-func NewDepositWindow(s store.Store) (*DepositWindow, error) {
+func NewDepositWindow(s *store.BoltStore) (*DepositWindow, error) {
 	l, err := loadMark(s)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -63,7 +63,7 @@ func (d *DepositWindow) PersistLower(val int64) error {
 	return nil
 }
 
-func loadMark(s store.Store) (int64, error) {
+func loadMark(s *store.BoltStore) (int64, error) {
 	var l int64
 	data, err := s.Get(WindowNamespace, windowKeyName)
 	if err != nil {

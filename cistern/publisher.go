@@ -20,11 +20,11 @@ type Publisher struct {
 	interval time.Duration
 	period   time.Duration
 	window   *DepositWindow
-	boltdb   store.Store
+	boltdb   *store.BoltStore
 }
 
 // NewPublisher return an instance of Publisher
-func NewPublisher(cfg *Config, s store.Store, w *DepositWindow) *Publisher {
+func NewPublisher(cfg *Config, s *store.BoltStore, w *DepositWindow) *Publisher {
 	return &Publisher{
 		interval: defaultPublishInterval,
 		period:   time.Duration(cfg.DepositWindowPeriod) * time.Minute,
