@@ -50,7 +50,8 @@ func NewConfig() *Config {
 	cfg.FlagSet = flag.NewFlagSet("pump", flag.ContinueOnError)
 	fs := cfg.FlagSet
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, usageline)
+		fmt.Fprintln(os.Stderr, "Usage of pump:")
+		fs.PrintDefaults()
 	}
 
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")

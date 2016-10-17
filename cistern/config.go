@@ -55,7 +55,8 @@ func NewConfig() *Config {
 	cfg.FlagSet = flag.NewFlagSet("cistern", flag.ContinueOnError)
 	fs := cfg.FlagSet
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, usageline)
+		fmt.Fprintln(os.Stderr, "Usage of cistern:")
+		fs.PrintDefaults()
 	}
 	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that cistern in charge of")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
@@ -79,7 +80,6 @@ func (cfg *Config) Parse(args []string) error {
 	switch perr {
 	case nil:
 	case flag.ErrHelp:
-		fmt.Fprintln(os.Stderr, flagsline)
 		os.Exit(1)
 	default:
 		os.Exit(2)
