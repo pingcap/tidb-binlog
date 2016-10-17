@@ -10,12 +10,19 @@ import (
 type OpType byte
 
 const (
+	// Insert defines a OpType constant for insert operation.
 	Insert = iota + 1
+	// Update defines a OpType constant for update operation.
 	Update
+	// Del defines a OpType constant for delete operation.
 	Del
+	// DelByID defines a OpType constant for delete operation.
 	DelByID
+	// DelByPK defines a OpType constant for delete operation.
 	DelByPK
+	// DelByCol defines a OpType constant for delete operation.
 	DelByCol
+	// DDL defines a OpType constant for ddl operation.
 	DDL
 )
 

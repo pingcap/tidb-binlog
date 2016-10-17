@@ -177,7 +177,7 @@ func (c *Collector) prepare(ctx context.Context) error {
 
 func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	boundary := c.window.LoadLower()
-	b := c.boltdb.NewBatch()
+	b := store.NewBatch()
 
 	for commitTS, item := range items {
 		if commitTS < boundary {
@@ -198,7 +198,7 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 		b.Put(key, data)
 	}
 
-	err := c.boltdb.Commit(BinlogNamespace, b)
+	err := c.boltdb.WriteBatch(b)
 
 	return errors.Trace(err)
 }

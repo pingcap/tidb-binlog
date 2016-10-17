@@ -10,11 +10,6 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-var (
-	windowNamespace = []byte("window")
-	binlogNamespace = []byte("binlog")
-)
-
 var keys [][]byte
 var batchValues [][]byte
 var values [][]byte
@@ -53,7 +48,7 @@ func (s *testStoreSuite) TestBlot(c *C) {
 	testBatch(c, store)
 }
 
-func testBuckets(c *C, store Store) {
+func testBuckets(c *C, store *BoltStore) {
 	err := store.Put(windowNamespace, codec.EncodeInt([]byte{}, 1), []byte("test"))
 	c.Assert(err, IsNil)
 
@@ -63,14 +58,14 @@ func testBuckets(c *C, store Store) {
 	}
 }
 
-func testPut(c *C, store Store) {
+func testPut(c *C, store *BoltStore) {
 	for i := range keys {
 		err := store.Put(binlogNamespace, keys[i], values[i])
 		c.Assert(err, IsNil)
 	}
 }
 
-func testGet(c *C, store Store) {
+func testGet(c *C, store *BoltStore) {
 	for i := range keys {
 		val, err := store.Get(binlogNamespace, keys[i])
 		c.Assert(err, IsNil)
@@ -78,7 +73,7 @@ func testGet(c *C, store Store) {
 	}
 }
 
-func testScan(c *C, store Store) {
+func testScan(c *C, store *BoltStore) {
 	index := 1
 	err := store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) (bool, error) {
 		if index == 3 {
@@ -112,8 +107,8 @@ func testScan(c *C, store Store) {
 	}
 }
 
-func testBatch(c *C, store Store) {
-	b := store.NewBatch()
+func testBatch(c *C, store *BoltStore) {
+	b := NewBatch()
 	for i := 0; i < len(keys); i++ {
 		b.Put(keys[i], batchValues[i])
 	}

@@ -3,15 +3,22 @@ package store
 import (
 	"github.com/boltdb/bolt"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/util/codec"
 )
 
-// BoltStore wraps BoltDB as Store
+var (
+	windowNamespace = []byte("window")
+	binlogNamespace = []byte("binlog")
+	windowKeyName   = []byte("window")
+)
+
+// BoltStore wraps BoltDB
 type BoltStore struct {
 	db *bolt.DB
 }
 
 // NewBoltStore return a bolt store
-func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
+func NewBoltStore(path string, namespaces [][]byte) (*BoltStore, error) {
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -134,7 +141,7 @@ func (s *BoltStore) Commit(namespace []byte, b Batch) error {
 }
 
 // NewBatch implements the NewBatch() interface of Store
-func (s *BoltStore) NewBatch() Batch {
+func NewBatch() Batch {
 	return &batch{}
 }
 
@@ -175,4 +182,55 @@ func (b *batch) Delete(key []byte) {
 // Len implements the Len() interface of Batch
 func (b *batch) Len() int {
 	return len(b.writes)
+}
+
+var _ Store = &storeImpl{}
+
+type storeImpl struct {
+	*BoltStore
+}
+
+// New returns a Store object.
+func New(path string) (s Store, err error) {
+	var ret storeImpl
+	ret.BoltStore, err = NewBoltStore(path, [][]byte{windowNamespace, binlogNamespace})
+	return &ret, nil
+}
+
+// Scan scans from the commitTS the specified commitTs.
+func (s *storeImpl) Scan(commitTS int64, f func(key []byte, val []byte) (bool, error)) error {
+	startKey := codec.EncodeInt([]byte{}, commitTS)
+	return s.BoltStore.Scan(binlogNamespace, startKey, f)
+}
+
+// WriteBatch writes data in Batch.
+func (s *storeImpl) WriteBatch(b Batch) error {
+	return s.BoltStore.Commit(binlogNamespace, b)
+}
+
+// LoadMark loads deposit window from store.
+func (s *storeImpl) LoadMark() (int64, error) {
+	data, err := s.BoltStore.Get(windowNamespace, windowKeyName)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return 0, nil
+		}
+		return 0, errors.Trace(err)
+	}
+
+	_, l, err := codec.DecodeInt(data)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return l, nil
+}
+
+// SaveMark saves deposit window to store.
+func (s *storeImpl) SaveMark(val int64) error {
+	data := codec.EncodeInt([]byte{}, val)
+	err := s.BoltStore.Put(windowNamespace, windowKeyName, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }

@@ -55,10 +55,9 @@ func (p *Publisher) Start(ctx context.Context) {
 
 func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
-	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
 
-	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
+	err := p.boltdb.Scan(start, func(key []byte, val []byte) (bool, error) {
 		_, cts, err := codec.DecodeInt(key)
 		if err != nil {
 			return false, errors.Trace(err)
