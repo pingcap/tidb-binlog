@@ -1,7 +1,7 @@
 package cistern
 
 import (
-	"fmt"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -16,6 +16,8 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
+
+var savePointKeyName = []byte("save_point")
 
 // Collector keeps all connections to pumps, and pulls binlog from each pump server periodically.
 // If find any pump server gone away collector should halt processing until recovery.
@@ -126,6 +128,7 @@ func (c *Collector) collect(ctx context.Context) error {
 		for commitTS, item := range r.binlogs {
 			items[commitTS] = item
 		}
+
 		if ComparePos(r.end, r.begin) > 0 {
 			savepoints[r.nodeID] = r.end
 		}
@@ -134,13 +137,23 @@ func (c *Collector) collect(ctx context.Context) error {
 	if err := c.store(items); err != nil {
 		return errors.Trace(err)
 	}
-	if err := c.updateSavepoints(ctx, savepoints); err != nil {
+	if err := c.updateSavepoints(savepoints); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
+	var initFlag bool
+
+	savePoints, err := c.getSavePoints()
+	if errors.IsNotFound(err) {
+		log.Infof("initialize the nodes's binlog point")
+		initFlag = true
+	} else if err != nil {
+		return errors.Trace(err)
+	}
+
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -153,8 +166,11 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
-			cid := fmt.Sprintf("%d", c.clusterID)
-			pos := n.LastReadPos[cid]
+			pos := binlog.Pos{}
+			if !initFlag {
+				pos = savePoints[n.NodeID]
+			}
+
 			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
 			if err != nil {
 				return errors.Trace(err)
@@ -203,15 +219,40 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	return errors.Trace(err)
 }
 
-func (c *Collector) updateSavepoints(ctx context.Context, savepoints map[string]binlog.Pos) error {
-	for id, pos := range savepoints {
-		err := c.reg.UpdateSavepoint(ctx, id, c.clusterID, pos)
-		if err != nil {
-			return errors.Trace(err)
-		}
+func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
+	if len(savePoints) == 0 {
+		return nil
+	}
+
+	payload, err := json.Marshal(savePoints)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = c.boltdb.Put(MetaNamespace, savePointKeyName, payload)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for id, pos := range savePoints {
 		if p, ok := c.pumps[id]; ok {
 			p.current = pos
 		}
 	}
+
 	return nil
+}
+
+func (c *Collector) getSavePoints() (map[string]binlog.Pos, error) {
+	payload, err := c.boltdb.Get(MetaNamespace, savePointKeyName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var savePoints map[string]binlog.Pos
+	if err := json.Unmarshal(payload, &savePoints); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return savePoints, nil
 }

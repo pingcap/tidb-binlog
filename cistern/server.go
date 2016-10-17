@@ -1,6 +1,7 @@
 package cistern
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -16,8 +17,8 @@ import (
 )
 
 var (
-	// WindowNamespace is window namespace for store.Store
-	WindowNamespace = []byte("window")
+	// MetaNamespace is window namespace for store.Store
+	MetaNamespace = []byte("meta")
 	// BinlogNamespace is binlog namespace for store.Store
 	BinlogNamespace = []byte("binlog")
 )
@@ -39,11 +40,14 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
+	MetaNamespace = append(MetaNamespace, []byte(fmt.Sprintf("%d", cfg.ClusterID))...)
+	BinlogNamespace = append(BinlogNamespace, []byte(fmt.Sprintf("%d", cfg.ClusterID))...)
+
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{MetaNamespace, BinlogNamespace})
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
@@ -141,6 +145,7 @@ func (s *Server) StartPublish() {
 	}()
 }
 
+// StartMetrics runs a metrics colletcor in a goroutine
 func (s *Server) StartMetrics() {
 	if s.metrics == nil {
 		return
