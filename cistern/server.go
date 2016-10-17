@@ -15,17 +15,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-var (
-	// WindowNamespace is window namespace for store.Store
-	WindowNamespace = []byte("window")
-	// BinlogNamespace is binlog namespace for store.Store
-	BinlogNamespace = []byte("binlog")
-)
-
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	boltdb    *store.BoltStore
+	boltdb    store.Store
 	window    *DepositWindow
 	collector *Collector
 	publisher *Publisher
@@ -43,7 +36,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
+	s, err := store.New(path.Join(cfg.DataDir, "data.bolt"))
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
@@ -83,11 +76,10 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
 	ret := &binlog.DumpBinlogResp{}
 	start := req.BeginCommitTS
-	startKey := codec.EncodeInt([]byte{}, start)
 	end := s.window.LoadLower()
 	limit := req.Limit
 
-	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
+	err := s.boltdb.Scan(start, func(key []byte, val []byte) (bool, error) {
 		if limit <= 0 {
 			return false, nil
 		}
@@ -141,6 +133,7 @@ func (s *Server) StartPublish() {
 	}()
 }
 
+// StartMetrics collects metrics information in a goroutine.
 func (s *Server) StartMetrics() {
 	if s.metrics == nil {
 		return

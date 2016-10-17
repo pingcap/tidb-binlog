@@ -31,12 +31,12 @@ type Collector struct {
 	pumps     map[string]*Pump
 	timeout   time.Duration
 	window    *DepositWindow
-	boltdb    *store.BoltStore
+	boltdb    store.Store
 	tiClient  *tikv.LockResolver
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, s *store.BoltStore, w *DepositWindow) (*Collector, error) {
+func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -177,7 +177,7 @@ func (c *Collector) prepare(ctx context.Context) error {
 
 func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	boundary := c.window.LoadLower()
-	b := c.boltdb.NewBatch()
+	b := store.NewBatch()
 
 	for commitTS, item := range items {
 		if commitTS < boundary {
@@ -198,7 +198,7 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 		b.Put(key, data)
 	}
 
-	err := c.boltdb.Commit(BinlogNamespace, b)
+	err := c.boltdb.WriteBatch(b)
 
 	return errors.Trace(err)
 }

@@ -20,11 +20,11 @@ type Publisher struct {
 	interval time.Duration
 	period   time.Duration
 	window   *DepositWindow
-	boltdb   *store.BoltStore
+	boltdb   store.Store
 }
 
 // NewPublisher return an instance of Publisher
-func NewPublisher(cfg *Config, s *store.BoltStore, w *DepositWindow) *Publisher {
+func NewPublisher(cfg *Config, s store.Store, w *DepositWindow) *Publisher {
 	return &Publisher{
 		interval: defaultPublishInterval,
 		period:   time.Duration(cfg.DepositWindowPeriod) * time.Minute,
@@ -55,10 +55,9 @@ func (p *Publisher) Start(ctx context.Context) {
 
 func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
-	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
 
-	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
+	err := p.boltdb.Scan(start, func(key []byte, val []byte) (bool, error) {
 		_, cts, err := codec.DecodeInt(key)
 		if err != nil {
 			return false, errors.Trace(err)

@@ -12,7 +12,7 @@ var (
 	windowKeyName   = []byte("window")
 )
 
-// BoltStore wraps BoltDB as Store
+// BoltStore wraps BoltDB
 type BoltStore struct {
 	db *bolt.DB
 }
@@ -141,7 +141,7 @@ func (s *BoltStore) Commit(namespace []byte, b Batch) error {
 }
 
 // NewBatch implements the NewBatch() interface of Store
-func (s *BoltStore) NewBatch() Batch {
+func NewBatch() Batch {
 	return &batch{}
 }
 
@@ -190,6 +190,7 @@ type storeImpl struct {
 	*BoltStore
 }
 
+// New returns a Store object.
 func New(path string) (s Store, err error) {
 	var ret storeImpl
 	ret.BoltStore, err = NewBoltStore(path, [][]byte{windowNamespace, binlogNamespace})

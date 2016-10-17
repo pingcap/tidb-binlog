@@ -108,7 +108,7 @@ func testScan(c *C, store *BoltStore) {
 }
 
 func testBatch(c *C, store *BoltStore) {
-	b := store.NewBatch()
+	b := NewBatch()
 	for i := 0; i < len(keys); i++ {
 		b.Put(keys[i], batchValues[i])
 	}
