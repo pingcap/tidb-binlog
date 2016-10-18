@@ -17,8 +17,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-var savePointKeyName = []byte("save_point")
-
 // Collector keeps all connections to pumps, and pulls binlog from each pump server periodically.
 // If find any pump server gone away collector should halt processing until recovery.
 // Each Prewrite binlog in a batch must be paired up with a Commit or Abort binlog that have same startTS.
@@ -144,15 +142,6 @@ func (c *Collector) collect(ctx context.Context) error {
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
-	var initFlag bool
-
-	savePoints, err := c.getSavePoints()
-	if errors.IsNotFound(err) {
-		log.Infof("initialize the nodes's binlog point")
-		initFlag = true
-	} else if err != nil {
-		return errors.Trace(err)
-	}
 
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
@@ -166,9 +155,9 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
-			pos := binlog.Pos{}
-			if !initFlag {
-				pos = savePoints[n.NodeID]
+			pos, err := c.getSavePoints(n.NodeID)
+			if err != nil {
+				return errors.Trace(err)
 			}
 
 			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
@@ -220,21 +209,18 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 }
 
 func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
-	if len(savePoints) == 0 {
-		return nil
-	}
+	for id, pos := range savepoints {
 
-	payload, err := json.Marshal(savePoints)
-	if err != nil {
-		return errors.Trace(err)
-	}
+		data, err := pos.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
 
-	err = c.boltdb.Put(MetaNamespace, savePointKeyName, payload)
-	if err != nil {
-		return errors.Trace(err)
-	}
+		err = c.boltdb.Put(SavePointNamespace, []byte(id), data)
+		if err != nil {
+			return errors.Trace(err)
+		}
 
-	for id, pos := range savePoints {
 		if p, ok := c.pumps[id]; ok {
 			p.current = pos
 		}
@@ -243,14 +229,14 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 	return nil
 }
 
-func (c *Collector) getSavePoints() (map[string]binlog.Pos, error) {
-	payload, err := c.boltdb.Get(MetaNamespace, savePointKeyName)
+func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+	payload, err := c.boltdb.Get(SavePointNamespace, []byte(nodeID))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var savePoints map[string]binlog.Pos
-	if err := json.Unmarshal(payload, &savePoints); err != nil {
+	var savePoint binlog.Pos
+	if err := savePoint.Unmarshal(payload); err != nil {
 		return nil, errors.Trace(err)
 	}
 
