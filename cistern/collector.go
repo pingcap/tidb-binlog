@@ -1,7 +1,6 @@
 package cistern
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -126,6 +125,7 @@ func (c *Collector) collect(ctx context.Context) error {
 		for commitTS, item := range r.binlogs {
 			items[commitTS] = item
 		}
+
 		if ComparePos(r.end, r.begin) > 0 {
 			savepoints[r.nodeID] = r.end
 		}
@@ -134,13 +134,14 @@ func (c *Collector) collect(ctx context.Context) error {
 	if err := c.store(items); err != nil {
 		return errors.Trace(err)
 	}
-	if err := c.updateSavepoints(ctx, savepoints); err != nil {
+	if err := c.updateSavepoints(savepoints); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
+
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -153,8 +154,11 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
-			cid := fmt.Sprintf("%d", c.clusterID)
-			pos := n.LastReadPos[cid]
+			pos, err := c.getSavePoints(n.NodeID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
 			if err != nil {
 				return errors.Trace(err)
@@ -203,15 +207,41 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 	return errors.Trace(err)
 }
 
-func (c *Collector) updateSavepoints(ctx context.Context, savepoints map[string]binlog.Pos) error {
-	for id, pos := range savepoints {
-		err := c.reg.UpdateSavepoint(ctx, id, c.clusterID, pos)
+func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
+	for id, pos := range savePoints {
+
+		data, err := pos.Marshal()
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		err = c.boltdb.Put(SavePointNamespace, []byte(id), data)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
 		if p, ok := c.pumps[id]; ok {
 			p.current = pos
 		}
 	}
+
 	return nil
+}
+
+func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+	var savePoint = binlog.Pos{}
+	payload, err := c.boltdb.Get(SavePointNamespace, []byte(nodeID))
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return savePoint, nil
+		}
+
+		return savePoint, errors.Trace(err)
+	}
+
+	if err := savePoint.Unmarshal(payload); err != nil {
+		return savePoint, errors.Trace(err)
+	}
+
+	return savePoint, nil
 }

@@ -1,6 +1,7 @@
 package cistern
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -15,12 +16,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-var (
-	// WindowNamespace is window namespace for store.Store
-	WindowNamespace = []byte("window")
-	// BinlogNamespace is binlog namespace for store.Store
-	BinlogNamespace = []byte("binlog")
-)
+// WindowNamespace is window namespace for store.Store
+var WindowNamespace []byte
+
+// BinlogNamespace is binlog namespace for store.Store
+var BinlogNamespace []byte
+
+// SavePointNamespace is save point namespace for store.Store
+var SavePointNamespace []byte
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -39,11 +42,15 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
+	WindowNamespace = []byte(fmt.Sprintf("meta_%d", cfg.ClusterID))
+	BinlogNamespace = []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))
+	SavePointNamespace = []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))
+
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace})
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace, SavePointNamespace})
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
@@ -141,6 +148,7 @@ func (s *Server) StartPublish() {
 	}()
 }
 
+// StartMetrics runs a metrics colletcor in a goroutine
 func (s *Server) StartMetrics() {
 	if s.metrics == nil {
 		return
