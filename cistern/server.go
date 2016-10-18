@@ -42,15 +42,15 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	MetaNamespace = append(MetaNamespace, []byte(fmt.Sprintf("meta_%d", cfg.ClusterID))...)
-	BinlogNamespace = append(BinlogNamespace, []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))...)
-	SavePointNamespace = append(SavePointNamespace, []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))...)
+	WindowNamespace = []byte(fmt.Sprintf("meta_%d", cfg.ClusterID))
+	BinlogNamespace = []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))
+	SavePointNamespace = []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{MetaNamespace, BinlogNamespace})
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace, SavePointNamespace})
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}

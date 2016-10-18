@@ -1,7 +1,6 @@
 package cistern
 
 import (
-	"encoding/json"
 	"sync"
 	"time"
 
@@ -209,7 +208,7 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 }
 
 func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
-	for id, pos := range savepoints {
+	for id, pos := range savePoints {
 
 		data, err := pos.Marshal()
 		if err != nil {
@@ -230,15 +229,19 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+	var savePoint = binlog.Pos{}
 	payload, err := c.boltdb.Get(SavePointNamespace, []byte(nodeID))
 	if err != nil {
-		return nil, errors.Trace(err)
+		if errors.IsNotFound(err) {
+			return savePoint, nil
+		}
+
+		return savePoint, errors.Trace(err)
 	}
 
-	var savePoint binlog.Pos
 	if err := savePoint.Unmarshal(payload); err != nil {
-		return nil, errors.Trace(err)
+		return savePoint, errors.Trace(err)
 	}
 
-	return savePoints, nil
+	return savePoint, nil
 }
