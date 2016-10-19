@@ -3,6 +3,7 @@ package drainer
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -13,6 +14,10 @@ func NewConfig() *Config {
 	cfg := &Config{}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage of drainer:")
+		fs.PrintDefaults()
+	}
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
 	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
