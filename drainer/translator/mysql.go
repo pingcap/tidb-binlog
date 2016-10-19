@@ -134,14 +134,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 				return nil, nil, errors.Trace(err)
 			}
 
-			/*for _, col := range columns {
-				val, ok := columnValues[col.ID]
-				if ok {
-					updateColumns = append(updateColumns, col)
-					oldValues = append(oldValues, val.GetValue())
-				}
-			}*/
-
 			columnValues = make(map[int64]types.Datum)
 			for ; i < len(r); i += 2 {
 				columnValues[r[i].GetInt64()] = r[i+1]
