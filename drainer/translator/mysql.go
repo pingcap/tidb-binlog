@@ -156,14 +156,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
-
-			/*for _, col := range pcs {
-				val, ok := columnValues[col.ID]
-				if ok {
-					updateColumns = append(updateColumns, col)
-					oldValues = append(oldValues, val.GetValue())
-				}
-			}*/
 		}
 
 		whereColumns := updateColumns
@@ -173,14 +165,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
-
-		/*for _, col := range columns {
-			val, ok := columnValues[col.ID]
-			if ok {
-				updateColumns = append(updateColumns, col)
-				newValues = append(newValues, val.GetValue())
-			}
-		}*/
 
 		var value []interface{}
 		kvs := m.genKVs(updateColumns)
