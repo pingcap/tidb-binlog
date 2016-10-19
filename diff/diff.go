@@ -49,6 +49,12 @@ func (df *Diff) Equal() (eq bool, err error) {
 			err = errors.Trace(err)
 			return
 		}
+
+		eq, err = df.EqualIndex(tblName)
+		if err != nil || !eq {
+			err = errors.Trace(err)
+			return
+		}
 	}
 
 	return
@@ -65,7 +71,7 @@ func (df *Diff) EqualTable(tblName string) (bool, error) {
 }
 
 // EqualIndex tests whether two database index are same.
-func (df *Diff) EqualIndex() (bool, error) {
+func (df *Diff) EqualIndex(tblName string) (bool, error) {
 	// TODO
 	return true, nil
 }
@@ -141,7 +147,6 @@ func equalOneRow(rows1, rows2 *sql.Rows, n int) (bool, error) {
 	}
 	err := rows1.Scan(args...)
 	if err != nil {
-		log.Debug("scan error!!")
 		return false, errors.Trace(err)
 	}
 
@@ -150,7 +155,6 @@ func equalOneRow(rows1, rows2 *sql.Rows, n int) (bool, error) {
 	}
 	err = rows2.Scan(args...)
 	if err != nil {
-		log.Debug("scan error!!safasldfj")
 		return false, errors.Trace(err)
 	}
 
@@ -265,14 +269,6 @@ func orderbyKey(descs []describeTable) string {
 		return descs[0].Field
 	}
 	return buf.String()
-}
-
-func parseSQL(p *parser.Parser, sql string) (ast.StmtNode, error) {
-	stmt, err := p.ParseOneStmt(sql, "", "")
-	if err != nil {
-		return stmt, errors.Trace(err)
-	}
-	return stmt, err
 }
 
 func querySQL(db *sql.DB, query string) (*sql.Rows, error) {
