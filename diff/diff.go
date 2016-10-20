@@ -7,8 +7,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/parser"
 )
 
 // Diff contains two sql DB, used for comparing.
@@ -40,17 +38,22 @@ func (df *Diff) Equal() (eq bool, err error) {
 
 	eq = equalStrings(tbls1, tbls2)
 	if !eq {
+		log.Info("show tables get different table.")
 		return false, nil
 	}
 
 	for _, tblName := range tbls1 {
-		eq, err = df.EqualTable(tblName)
-		if err != nil || !eq {
+		eq, err = df.EqualIndex(tblName)
+		if err != nil {
 			err = errors.Trace(err)
 			return
 		}
+		if !eq {
+			log.Infof("table have different index: %s\n", tblName)
+			return
+		}
 
-		eq, err = df.EqualIndex(tblName)
+		eq, err = df.EqualTable(tblName)
 		if err != nil || !eq {
 			err = errors.Trace(err)
 			return
@@ -63,16 +66,38 @@ func (df *Diff) Equal() (eq bool, err error) {
 // EqualTable tests whether two database table have same data and schema.
 func (df *Diff) EqualTable(tblName string) (bool, error) {
 	eq, err := df.equalCreateTable(tblName)
-	if err != nil || !eq {
+	if err != nil {
 		return eq, errors.Trace(err)
 	}
+	if !eq {
+		log.Infof("table have different schema: %s\n", tblName)
+		return eq, err
+	}
 
-	return df.equalTableData(tblName)
+	eq, err = df.equalTableData(tblName)
+	if err != nil {
+		return eq, errors.Trace(err)
+	}
+	if !eq {
+		log.Infof("table data different: %s\n", tblName)
+	}
+	return eq, err
 }
 
 // EqualIndex tests whether two database index are same.
 func (df *Diff) EqualIndex(tblName string) (bool, error) {
-	// TODO
+	index1, err := getTableIndex(df.db1, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	index2, err := getTableIndex(df.db2, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	eq, err := equalRows(index1, index2)
+	if err != nil {
+		return eq, errors.Trace(err)
+	}
 	return true, nil
 }
 
@@ -106,6 +131,10 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 		return false, errors.Trace(err)
 	}
 
+	return equalRows(rows1, rows2)
+}
+
+func equalRows(rows1, rows2 *sql.Rows) (bool, error) {
 	cols1, err := rows1.Columns()
 	if err != nil {
 		return false, errors.Trace(err)
@@ -121,6 +150,7 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 	for rows1.Next() {
 		if !rows2.Next() {
 			// rows2 count less than rows1
+			log.Info("rows count different")
 			return false, nil
 		}
 
@@ -131,6 +161,7 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 	}
 	if rows2.Next() {
 		// rows1 count less than rows2
+		log.Info("rows count different")
 		return false, nil
 	}
 	return true, nil
@@ -160,6 +191,7 @@ func equalOneRow(rows1, rows2 *sql.Rows, n int) (bool, error) {
 
 	for i := 0; i < len(data1); i++ {
 		if !bytes.Equal(data1[i], data2[i]) {
+			log.Infof("row different, one is %#v, the other is %#v", data1, data2)
 			return false, nil
 		}
 	}
@@ -176,6 +208,14 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 
 	// TODO select all data out may OOM if table is huge
 	rows, err := querySQL(db, fmt.Sprintf("select * from %s order by %s", tblName, pk1))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return rows, nil
+}
+
+func getTableIndex(db *sql.DB, tblName string) (*sql.Rows, error) {
+	rows, err := querySQL(db, fmt.Sprintf("show index from %s;", tblName))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
