@@ -50,27 +50,41 @@ func uniqInt64Value(column *column, min int64, max int64) int64 {
 	return column.data.uniqInt64()
 }
 
-func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface{}, error) {
+func queryCount(table *table, db *sql.DB) (int, error) {
 	rows, err := db.Query(fmt.Sprintf("SELECT COUNT(*) as count FROM %s", table.name))
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 
 	var nums int
 	for rows.Next() {
 		err = rows.Scan(&nums)
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return 0, errors.Trace(err)
 		}
+	}
+
+	return nums, nil
+}
+
+func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface{}, error) {
+	nums, err := queryCount(table, db)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
 	}
 
 	var sqls []string
 	var args [][]interface{}
-	start := randInt(1, nums-count)
 
+	if nums == 0 || nums-count < 1 {
+		return sqls, args, nil
+	}
+
+	start := randInt(1, nums-count)
 	length := len(table.columns)
 	where := genWhere(table.columns)
-	rows, err = db.Query(fmt.Sprintf("SELECT * FROM %s limit %d, %d", table.name, start, count))
+
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s limit %d, %d", table.name, start, count))
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -96,26 +110,23 @@ func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface
 }
 
 func genUpdateSqls(table *table, db *sql.DB, count int) ([]string, [][]interface{}, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT COUNT(*) as count FROM %s", table.name))
+	nums, err := queryCount(table, db)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	var nums int
-	for rows.Next() {
-		err = rows.Scan(&nums)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-	}
-
 	var sqls []string
 	var args [][]interface{}
-	start := randInt(1, nums-count+1)
 
+	if nums == 0 || nums-count < 1 {
+		return sqls, args, nil
+	}
+
+	start := randInt(1, nums-count)
 	length := len(table.columns)
 	where := genWhere(table.columns)
-	rows, err = db.Query(fmt.Sprintf("SELECT * FROM %s limit %d, %d", table.name, start, count))
+
+	rows, err := db.Query(fmt.Sprintf("SELECT * FROM %s limit %d, %d", table.name, start, count))
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}

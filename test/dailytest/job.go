@@ -19,15 +19,6 @@ const (
 	Del
 )
 
-type ddlType byte
-
-const (
-	addColumn = iota + 1
-	dropColumn
-	addIndex
-	dropIndex
-)
-
 func addJobs(jobCount int, jobChan chan struct{}) {
 	for i := 0; i < jobCount; i++ {
 		jobChan <- struct{}{}
@@ -36,20 +27,18 @@ func addJobs(jobCount int, jobChan chan struct{}) {
 	close(jobChan)
 }
 
-func genSqls(table *table, db *sql.DB, count int, op OpType) {
+func doSqls(table *table, db *sql.DB, count int, op OpType) {
 	var sqls []string
 	var args [][]interface{}
 	var err error
-
-	modifyCount := count/10 + 1
 
 	switch op {
 	case Insert:
 		sqls, args, err = genInsertSqls(table, count)
 	case Update:
-		sqls, args, err = genUpdateSqls(table, db, modifyCount)
+		sqls, args, err = genUpdateSqls(table, db, count)
 	case Del:
-		sqls, args, err = genDeleteSqls(table, db, modifyCount)
+		sqls, args, err = genDeleteSqls(table, db, count)
 	}
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
@@ -79,22 +68,22 @@ func execSqls(db *sql.DB, sqls []string, args [][]interface{}) {
 
 func doJob(table *table, db *sql.DB, batch int, jobChan chan struct{}, doneChan chan struct{}) {
 	count := 0
+	modifyCount := batch / 10
 	for range jobChan {
 		count++
 		if count == batch {
-			genSqls(table, db, count, Insert)
-			modifyCount := count/10 + 1
-			genSqls(table, db, modifyCount, Update)
-			genSqls(table, db, modifyCount, Del)
+			doSqls(table, db, count, Insert)
+			doSqls(table, db, modifyCount, Update)
+			doSqls(table, db, modifyCount, Del)
 			count = 0
 		}
 	}
 
 	if count > 0 {
-		genSqls(table, db, count, Insert)
-		modifyCount := count/10 + 1
-		genSqls(table, db, modifyCount, Update)
-		genSqls(table, db, modifyCount, Del)
+		modifyCount = count / 10
+		doSqls(table, db, count, Insert)
+		doSqls(table, db, modifyCount, Update)
+		doSqls(table, db, modifyCount, Del)
 		count = 0
 	}
 
@@ -114,7 +103,7 @@ func doDMLProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, ba
 	doneChan := make(chan struct{}, workerCount)
 
 	start := time.Now()
-	go addJobs(jobCount/2, jobChan)
+	go addJobs(jobCount, jobChan)
 
 	for i := 0; i < workerCount; i++ {
 		go doJob(table, dbs[i], batch, jobChan, doneChan)
@@ -167,8 +156,8 @@ func doProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, batch
 		log.Fatal("column count must > 2, and the first and second column are for primary key")
 	}
 
-	doDMLProcess(table, dbs, jobCount, workerCount, batch)
+	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
 	doDDLProcess(table, dbs[0])
-	doDMLProcess(table, dbs, jobCount, workerCount, batch)
+	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
 
 }

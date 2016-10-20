@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb-binlog/test/util"
 )
 
+// Run execute the test case
 func Run(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobCount int, batch int) {
 	var wg sync.WaitGroup
 	wg.Add(len(tableSQLs))
