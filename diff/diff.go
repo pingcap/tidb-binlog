@@ -118,7 +118,9 @@ func (df *Diff) equalCreateTable(tblName string) (bool, error) {
 		return false, errors.Trace(err2)
 	}
 
-	return table1 == table2, nil
+	// TODO ignore table schema currently
+	// return table1 == table2, nil
+	return true, nil
 }
 
 func (df *Diff) equalTableData(tblName string) (bool, error) {
@@ -337,8 +339,7 @@ func (si *showIndex) Equal(data comparable) bool {
 		bytes.Compare(si.Seq_in_index, si1.Seq_in_index) == 0 &&
 		bytes.Compare(si.Column_name, si1.Column_name) == 0 &&
 		bytes.Compare(si.Sub_part, si1.Sub_part) == 0 &&
-		bytes.Compare(si.Packed, si1.Packed) == 0 &&
-		bytes.Compare(si.Null, si1.Null) == 0
+		bytes.Compare(si.Packed, si1.Packed) == 0
 }
 
 type describeTable struct {
