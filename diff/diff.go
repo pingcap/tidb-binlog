@@ -94,11 +94,12 @@ func (df *Diff) EqualIndex(tblName string) (bool, error) {
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	eq, err := equalRows(index1, index2)
-	if err != nil {
+
+	eq, err := equalRows(index1, index2, &showIndex{}, &showIndex{})
+	if err != nil || !eq {
 		return eq, errors.Trace(err)
 	}
-	return true, nil
+	return eq, nil
 }
 
 func (df *Diff) equalCreateTable(tblName string) (bool, error) {
@@ -131,10 +132,6 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 		return false, errors.Trace(err)
 	}
 
-	return equalRows(rows1, rows2)
-}
-
-func equalRows(rows1, rows2 *sql.Rows) (bool, error) {
 	cols1, err := rows1.Columns()
 	if err != nil {
 		return false, errors.Trace(err)
@@ -147,6 +144,12 @@ func equalRows(rows1, rows2 *sql.Rows) (bool, error) {
 		return false, nil
 	}
 
+	row1 := make(rawBytesRow, len(cols1))
+	row2 := make(rawBytesRow, len(cols2))
+	return equalRows(rows1, rows2, row1, row2)
+}
+
+func equalRows(rows1, rows2 *sql.Rows, row1, row2 comparableSQLRow) (bool, error) {
 	for rows1.Next() {
 		if !rows2.Next() {
 			// rows2 count less than rows1
@@ -154,7 +157,7 @@ func equalRows(rows1, rows2 *sql.Rows) (bool, error) {
 			return false, nil
 		}
 
-		eq, err := equalOneRow(rows1, rows2, len(cols1))
+		eq, err := equalOneRow(rows1, rows2, row1, row2)
 		if err != nil || !eq {
 			return eq, errors.Trace(err)
 		}
@@ -167,36 +170,18 @@ func equalRows(rows1, rows2 *sql.Rows) (bool, error) {
 	return true, nil
 }
 
-func equalOneRow(rows1, rows2 *sql.Rows, n int) (bool, error) {
-	data1 := make([]sql.RawBytes, n)
-	data2 := make([]sql.RawBytes, n)
-
-	args := make([]interface{}, n)
-
-	for i := 0; i < len(args); i++ {
-		args[i] = &data1[i]
-	}
-	err := rows1.Scan(args...)
+func equalOneRow(rows1, rows2 *sql.Rows, row1, row2 comparableSQLRow) (bool, error) {
+	err := row1.Scan(rows1)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 
-	for i := 0; i < len(args); i++ {
-		args[i] = &data2[i]
-	}
-	err = rows2.Scan(args...)
+	row2.Scan(rows2)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
 
-	for i := 0; i < len(data1); i++ {
-		if !bytes.Equal(data1[i], data2[i]) {
-			log.Infof("row different, one is %#v, the other is %#v", data1, data2)
-			return false, nil
-		}
-	}
-
-	return true, nil
+	return row1.Equal(row2), nil
 }
 
 func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
@@ -260,6 +245,102 @@ func getCreateTable(db *sql.DB, tn string) (string, error) {
 	return "", errTableNotExist
 }
 
+type comparableSQLRow interface {
+	sqlRow
+	comparable
+}
+
+type sqlRow interface {
+	Scan(*sql.Rows) error
+}
+
+type comparable interface {
+	Equal(comparable) bool
+}
+
+type rawBytesRow []sql.RawBytes
+
+func (r rawBytesRow) Len() int {
+	return len([]sql.RawBytes(r))
+}
+
+func (r rawBytesRow) Scan(rows *sql.Rows) error {
+	args := make([]interface{}, len(r))
+	for i := 0; i < len(args); i++ {
+		args[i] = &r[i]
+	}
+
+	err := rows.Scan(args...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (r rawBytesRow) Equal(data comparable) bool {
+	r2, ok := data.(rawBytesRow)
+	if !ok {
+		return false
+	}
+	if r.Len() != r2.Len() {
+		return false
+	}
+	for i := 0; i < r.Len(); i++ {
+		if bytes.Compare(r[i], r[i]) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+type showIndex struct {
+	Table         sql.RawBytes
+	Non_unique    sql.RawBytes
+	Key_name      sql.RawBytes
+	Seq_in_index  sql.RawBytes
+	Column_name   sql.RawBytes
+	Collation     sql.RawBytes
+	Cardinality   sql.RawBytes
+	Sub_part      sql.RawBytes
+	Packed        sql.RawBytes
+	Null          sql.RawBytes
+	Index_type    sql.RawBytes
+	Comment       sql.RawBytes
+	Index_comment sql.RawBytes
+}
+
+func (si *showIndex) Scan(rows *sql.Rows) error {
+	err := rows.Scan(&si.Table,
+		&si.Non_unique,
+		&si.Key_name,
+		&si.Seq_in_index,
+		&si.Column_name,
+		&si.Collation,
+		&si.Cardinality,
+		&si.Sub_part,
+		&si.Packed,
+		&si.Null,
+		&si.Index_type,
+		&si.Comment,
+		&si.Index_comment)
+	return errors.Trace(err)
+}
+
+func (si *showIndex) Equal(data comparable) bool {
+	si1, ok := data.(*showIndex)
+	if !ok {
+		return false
+	}
+	return bytes.Compare(si.Table, si1.Table) == 0 &&
+		bytes.Compare(si.Non_unique, si1.Non_unique) == 0 &&
+		bytes.Compare(si.Key_name, si1.Key_name) == 0 &&
+		bytes.Compare(si.Seq_in_index, si1.Seq_in_index) == 0 &&
+		bytes.Compare(si.Column_name, si1.Column_name) == 0 &&
+		bytes.Compare(si.Sub_part, si1.Sub_part) == 0 &&
+		bytes.Compare(si.Packed, si1.Packed) == 0 &&
+		bytes.Compare(si.Null, si1.Null) == 0
+}
+
 type describeTable struct {
 	Field   string
 	Type    string
@@ -267,6 +348,11 @@ type describeTable struct {
 	Key     string
 	Default interface{}
 	Extra   interface{}
+}
+
+func (desc *describeTable) Scan(rows *sql.Rows) error {
+	err := rows.Scan(&desc.Field, &desc.Type, &desc.Null, &desc.Key, &desc.Default, &desc.Extra)
+	return errors.Trace(err)
 }
 
 func getTableSchema(db *sql.DB, tblName string) ([]describeTable, error) {
@@ -280,7 +366,7 @@ func getTableSchema(db *sql.DB, tblName string) ([]describeTable, error) {
 	var descs []describeTable
 	for rows.Next() {
 		var desc describeTable
-		err := rows.Scan(&desc.Field, &desc.Type, &desc.Null, &desc.Key, &desc.Default, &desc.Extra)
+		err := desc.Scan(rows)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
