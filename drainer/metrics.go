@@ -1,4 +1,4 @@
-package cistern
+package drainer
 
 import (
 	"time"
@@ -10,26 +10,26 @@ import (
 )
 
 var (
-	depositWindowBoundary = prometheus.NewGauge(
-		prometheus.GaugeOpts{
+	eventCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "deposit_window",
-			Help:      "DepositWindow lower boundary.",
-		})
+			Subsystem: "drainer",
+			Name:      "event",
+			Help:      "the sql sql event(dml, ddl).",
+		}, []string{"type"})
 
-	savePointGauge = prometheus.NewGaugeVec(
+	tpsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "save_point",
-			Help:      "node's save point(position).",
-		}, []string{"nodeID"})
+			Subsystem: "drainer",
+			Name:      "tps",
+			Help:      "the tps of drainer.",
+		}, []string{"type"})
 )
 
 func init() {
-	prometheus.MustRegister(depositWindowBoundary)
-	prometheus.MustRegister(savePointGauge)
+	prometheus.MustRegister(eventCounter)
+	prometheus.MustRegister(tpsGauge)
 }
 
 type metricClient struct {
@@ -40,6 +40,7 @@ type metricClient struct {
 // Start run a loop of pushing metrics to Prometheus Pushgateway.
 func (mc *metricClient) Start(ctx context.Context) {
 	log.Debugf("start prometheus metrics client, addr=%s, internal=%ds", mc.addr, mc.interval)
+
 	for {
 		select {
 		case <-ctx.Done():

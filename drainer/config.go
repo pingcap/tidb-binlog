@@ -23,6 +23,8 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.IntVar(&cfg.RequestCount, "request-count", 1, "batch count once request")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", ":10081", "pprof addr")
+	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
+	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 30, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
 	fs.Int64Var(&cfg.InitCommitTS, "init-commit-ts", 0, "the init point for sync")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
@@ -70,6 +72,10 @@ type Config struct {
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
 
 	PprofAddr string `toml:"pprof-addr" json:"pprof-addr"`
+
+	MetricsAddr string `toml:"metrics-addr" json:"metrics-addr"`
+
+	MetricsInterval int `toml:"metrics-interval" json:"metrics-interval"`
 
 	TxnBatch int `toml:"txn-batch" json:"txn-batch"`
 
