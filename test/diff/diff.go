@@ -103,18 +103,16 @@ func (df *Diff) EqualIndex(tblName string) (bool, error) {
 }
 
 func (df *Diff) equalCreateTable(tblName string) (bool, error) {
-	table1, err1 := getCreateTable(df.db1, tblName)
-	table2, err2 := getCreateTable(df.db2, tblName)
+	_, err1 := getCreateTable(df.db1, tblName)
+	_, err2 := getCreateTable(df.db2, tblName)
 
-	_, notfound1 := err1.(NotFoundError)
-	_, notfound2 := err2.(NotFoundError)
-	switch {
-	// table not exist should not be handled as error
-	case notfound1 && notfound2:
+	if errors.IsNotFound(err1) && errors.IsNotFound(err2) {
 		return true, nil
-	case err1 != nil:
+	}
+	if err1 != nil {
 		return false, errors.Trace(err1)
-	case err2 != nil:
+	}
+	if err2 != nil {
 		return false, errors.Trace(err2)
 	}
 
@@ -244,7 +242,7 @@ func getCreateTable(db *sql.DB, tn string) (string, error) {
 		err := rs.Scan(&name, &cs)
 		return cs, errors.Trace(err)
 	}
-	return "", errTableNotExist
+	return "", errors.NewNotFound(nil, "table not exist")
 }
 
 type comparableSQLRow interface {
@@ -288,7 +286,7 @@ func (r rawBytesRow) Equal(data comparable) bool {
 		return false
 	}
 	for i := 0; i < r.Len(); i++ {
-		if bytes.Compare(r[i], r[i]) != 0 {
+		if bytes.Compare(r[i], r2[i]) != 0 {
 			return false
 		}
 	}
