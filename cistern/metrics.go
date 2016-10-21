@@ -17,19 +17,10 @@ var (
 			Name:      "deposit_window",
 			Help:      "DepositWindow lower boundary.",
 		})
-
-	savePointGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "save_point",
-			Help:      "node's save point(position).",
-		}, []string{"nodeID"})
 )
 
 func init() {
 	prometheus.MustRegister(depositWindowBoundary)
-	prometheus.MustRegister(savePointGauge)
 }
 
 type metricClient struct {
