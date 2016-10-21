@@ -17,19 +17,10 @@ var (
 			Name:      "event",
 			Help:      "the sql sql event(dml, ddl).",
 		}, []string{"type"})
-
-	tpsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "tps",
-			Help:      "the tps of drainer.",
-		}, []string{"type"})
 )
 
 func init() {
 	prometheus.MustRegister(eventCounter)
-	prometheus.MustRegister(tpsGauge)
 }
 
 type metricClient struct {
