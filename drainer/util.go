@@ -25,25 +25,28 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 		retryCount = maxRetryCount
 	}
 
+	var err error
+
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
 			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
 			time.Sleep(retryTimeout)
 		}
 
-		if appleTxn(db, sqls, args) {
+		err = appleTxn(db, sqls, args)
+		if err == nil {
 			return nil
 		}
 	}
 
-	return errors.Errorf("exec sqls[%v] failed", sqls)
+	return errors.Trace(err)
 }
 
-func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) bool {
+func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 	txn, err := db.Begin()
 	if err != nil {
 		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
-		return false
+		return errors.Trace(err)
 	}
 
 	for i := range sqls {
@@ -56,17 +59,17 @@ func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) bool {
 			if rerr != nil {
 				log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], rerr)
 			}
-			return false
+			return errors.Trace(err)
 		}
 	}
 
 	err = txn.Commit()
 	if err != nil {
 		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
-		return false
+		return errors.Trace(err)
 	}
 
-	return true
+	return nil
 }
 
 func ignoreDDLError(err error) bool {

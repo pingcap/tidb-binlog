@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
 )
@@ -63,7 +64,13 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			if !ok {
 				vals = append(vals, col.DefaultValue)
 			} else {
-				vals = append(vals, val.GetValue())
+
+				value, err := m.formatData(val, col.FieldType)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+
+				vals = append(vals, value)
 			}
 		}
 
@@ -122,12 +129,9 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 				columnValues[r[i].GetInt64()] = r[i+1]
 			}
 
-			for _, col := range columns {
-				val, ok := columnValues[col.ID]
-				if ok {
-					updateColumns = append(updateColumns, col)
-					oldValues = append(oldValues, val.GetValue())
-				}
+			updateColumns, oldValues, err = m.generateColumnAndValue(columns, columnValues)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
 			}
 
 			columnValues = make(map[int64]types.Datum)
@@ -140,24 +144,18 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 				columnValues[r[i].GetInt64()] = r[i+1]
 			}
 
-			for _, col := range pcs {
-				val, ok := columnValues[col.ID]
-				if ok {
-					updateColumns = append(updateColumns, col)
-					oldValues = append(oldValues, val.GetValue())
-				}
+			updateColumns, oldValues, err = m.generateColumnAndValue(pcs, columnValues)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
 			}
 		}
 
 		whereColumns := updateColumns
 		updateColumns = nil
 
-		for _, col := range columns {
-			val, ok := columnValues[col.ID]
-			if ok {
-				updateColumns = append(updateColumns, col)
-				newValues = append(newValues, val.GetValue())
-			}
+		updateColumns, newValues, err = m.generateColumnAndValue(columns, columnValues)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
 		}
 
 		var value []interface{}
@@ -221,13 +219,16 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 				return nil, nil, errors.Errorf("table %s.%s the delete row by pks binlog %v is courruption", schema, table.Name, r)
 			}
 
-			for _, val := range r {
-				value = append(value, val.GetValue())
+			for index, val := range r {
+				newValue, err := m.formatData(val, whereColumns[index].FieldType)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+
+				value = append(value, newValue)
 			}
 
 		case DelByCol:
-			whereColumns = columns
-
 			if len(r)%2 != 0 {
 				return nil, nil, errors.Errorf("table %s.%s the delete row by cols binlog %v is courruption", schema, table.Name, r)
 			}
@@ -237,12 +238,11 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 				columnValues[r[i].GetInt64()] = r[i+1]
 			}
 
-			for _, col := range columns {
-				val, ok := columnValues[col.ID]
-				if ok {
-					value = append(value, val.GetValue())
-				}
+			whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
 			}
+
 		default:
 			return nil, nil, errors.Errorf("delete row error type %v", op)
 		}
@@ -367,4 +367,49 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 
 func (m *mysqlTranslator) isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
+}
+
+func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {
+	var newColumn []*model.ColumnInfo
+	var newColumnsValues []interface{}
+
+	for _, col := range columns {
+		val, ok := columnValues[col.ID]
+		if ok {
+			newColumn = append(newColumn, col)
+			value, err := m.formatData(val, col.FieldType)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+
+			newColumnsValues = append(newColumnsValues, value)
+		}
+	}
+
+	return newColumn, newColumnsValues, nil
+}
+
+func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (interface{}, error) {
+	value, err := tablecodec.Unflatten(data, &ft, false)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	switch ft.Tp {
+	case mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
+		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
+		mysql.TypeString:
+		return value.GetValue(), nil
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp, mysql.TypeDuration:
+		return fmt.Sprintf("%v", value.GetValue()), nil
+	case mysql.TypeEnum:
+		return value.GetMysqlEnum().Value, nil
+	case mysql.TypeSet:
+		return value.GetMysqlSet().Value, nil
+	case mysql.TypeBit:
+		return value.GetMysqlBit().Value, nil
+	}
+
+	return value.GetValue(), nil
 }
