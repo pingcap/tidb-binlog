@@ -471,7 +471,7 @@ func (d *Drainer) run() error {
 
 			err = b.applyBatch(d.toDB)
 			if err != nil {
-				log.Errorf("[exec sqls error][ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+				log.Errorf("[exec sqls error][dml error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
 				return errors.Trace(err)
 			}
 			d.savePoint(commitTS)
@@ -500,7 +500,7 @@ func (d *Drainer) run() error {
 
 				err = b.applyBatch(d.toDB)
 				if err != nil {
-					log.Errorf("[exec ddl error][ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+					log.Errorf("[exec ddl error][ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
 					return errors.Trace(err)
 				}
 
