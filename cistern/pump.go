@@ -96,8 +96,8 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 	prewriteItems := make(map[int64]*binlog.Binlog)
 	preDDLItems := make(map[int64]*binlog.Binlog)
 	commitItems := make(map[int64]*binlog.Binlog)
-	postDDLItems := make(map[int64]*binlog.Binlog)
 	rollbackItems := make(map[int64]*binlog.Binlog)
+	postDDLItems := make(map[int64]*binlog.Binlog)
 
 	for _, item := range resp.Entities {
 		b := new(binlog.Binlog)
@@ -115,9 +115,9 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 		case binlog.BinlogType_Rollback:
 			rollbackItems[b.StartTs] = b
 		case binlog.BinlogType_PreDDL:
-			preDDLItems[b.DdlJobId] = b
+			preDDLItems[b.StartTs] = b
 		case binlog.BinlogType_PostDDL:
-			postDDLItems[b.DdlJobId] = b
+			postDDLItems[b.StartTs] = b
 
 		default:
 			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
@@ -132,21 +132,18 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 			item.Tp = co.Tp
 			res.binlogs[item.CommitTs] = item
 			delete(prewriteItems, startTs)
-		} else if ro, ok := rollbackItems[startTs]; ok {
-			item.CommitTs = ro.CommitTs
-			item.Tp = ro.Tp
-			res.binlogs[item.CommitTs] = item
+		} else if _, ok := rollbackItems[startTs]; ok {
 			delete(prewriteItems, startTs)
 		}
 	}
 
 	// match ddl binlog
-	for id, item := range preDDLItems {
-		if postDDL, ok := postDDLItems[id]; ok {
+	for startTs, item := range preDDLItems {
+		if postDDL, ok := postDDLItems[startTs]; ok {
 			item.CommitTs = postDDL.CommitTs
 			item.Tp = postDDL.Tp
 			res.binlogs[item.CommitTs] = item
-			delete(preDDLItems, id)
+			delete(preDDLItems, startTs)
 		}
 	}
 
@@ -164,11 +161,7 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 	return
 }
 
-func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, prewriteItems map[int64]*binlog.Binlog, preDDLItems map[int64]*binlog.Binlog, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) error {
-	if len(prewriteItems) == 0 && len(preDDLItems) == 0 {
-		return nil
-	}
-
+func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, prewriteItems, preDDLItems, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) error {
 	if times > 3 {
 		for startTs, item := range prewriteItems {
 			primaryKey := item.GetPrewriteKey()
@@ -176,13 +169,15 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 			if err != nil {
 				return errors.Trace(err)
 			}
-
 			if status.IsCommitted() {
 				item.CommitTs = int64(status.CommitTS())
 				item.Tp = binlog.BinlogType_Commit
 				binlogs[item.CommitTs] = item
-				delete(prewriteItems, startTs)
 			}
+			delete(prewriteItems, startTs)
+		}
+		if len(preDDLItems) > 0 {
+			return errors.Errorf("can not find the matching postDDLItems with preDDLItems, %v", preDDLItems)
 		}
 		return nil
 	}
@@ -211,8 +206,8 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 
 		pos = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
 		commitItems := make(map[int64]*binlog.Binlog)
-		postDDLItems := make(map[int64]*binlog.Binlog)
 		rollbackItems := make(map[int64]*binlog.Binlog)
+		postDDLItems := make(map[int64]*binlog.Binlog)
 		for _, item := range resp.Entities {
 			b := new(binlog.Binlog)
 			err := b.Unmarshal(item.Payload)
@@ -226,34 +221,33 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 			case binlog.BinlogType_Rollback:
 				rollbackItems[b.StartTs] = b
 			case binlog.BinlogType_PostDDL:
-				postDDLItems[b.DdlJobId] = b
+				postDDLItems[b.StartTs] = b
 			}
 		}
+
+		// match dml binlog
 		for startTs, item := range prewriteItems {
 			if co, ok := commitItems[startTs]; ok {
 				item.CommitTs = co.CommitTs
 				item.Tp = co.Tp
 				binlogs[item.CommitTs] = item
 				delete(prewriteItems, startTs)
-			} else if ro, ok := rollbackItems[startTs]; ok {
-				item.CommitTs = ro.CommitTs
-				item.Tp = ro.Tp
-				binlogs[item.CommitTs] = item
+			} else if _, ok := rollbackItems[startTs]; ok {
 				delete(prewriteItems, startTs)
 			}
 		}
 
 		// match ddl binlog
-		for id, item := range preDDLItems {
-			if postDDL, ok := postDDLItems[id]; ok {
+		for startTs, item := range preDDLItems {
+			if postDDL, ok := postDDLItems[startTs]; ok {
 				item.CommitTs = postDDL.CommitTs
 				item.Tp = postDDL.Tp
 				binlogs[item.CommitTs] = item
-				delete(preDDLItems, id)
+				delete(preDDLItems, startTs)
 			}
 		}
 
-		if len(prewriteItems) > 0 {
+		if len(prewriteItems) > 0 || len(preDDLItems) > 0 {
 			return p.collectFurtherBatch(pctx, t, prewriteItems, preDDLItems, binlogs, pos, times+1)
 		}
 	}

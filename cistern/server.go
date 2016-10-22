@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
@@ -16,14 +17,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-// WindowNamespace is window namespace for store.Store
-var WindowNamespace []byte
-
-// BinlogNamespace is binlog namespace for store.Store
-var BinlogNamespace []byte
-
-// SavePointNamespace is save point namespace for store.Store
-var SavePointNamespace []byte
+var windowNamespace []byte
+var binlogNamespace []byte
+var savepointNamespace []byte
+var ddlJobNamespace []byte
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -42,27 +39,40 @@ type Server struct {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	WindowNamespace = []byte(fmt.Sprintf("meta_%d", cfg.ClusterID))
-	BinlogNamespace = []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))
-	SavePointNamespace = []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))
+	windowNamespace = []byte(fmt.Sprintf("window_%d", cfg.ClusterID))
+	binlogNamespace = []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))
+	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))
+	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cfg.ClusterID))
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{WindowNamespace, BinlogNamespace, SavePointNamespace})
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{
+		windowNamespace,
+		binlogNamespace,
+		savepointNamespace,
+		ddlJobNamespace,
+	})
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
+
 	win, err := NewDepositWindow(s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	c, err := NewCollector(cfg, s, win)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if err := c.LoadHistoryDDLJobs(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	p := NewPublisher(cfg, s, win)
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var metrics *metricClient
@@ -87,47 +97,66 @@ func NewServer(cfg *Config) (*Server, error) {
 }
 
 // DumpBinlog implements the gRPC interface of cistern server
-func (s *Server) DumpBinlog(ctx context.Context, req *binlog.DumpBinlogReq) (*binlog.DumpBinlogResp, error) {
-	ret := &binlog.DumpBinlogResp{}
-	start := req.BeginCommitTS
-	startKey := codec.EncodeInt([]byte{}, start)
-	end := s.window.LoadLower()
-	limit := req.Limit
+func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) error {
+	current := req.BeginCommitTS
+	for {
+		var resps []*binlog.DumpBinlogResp
+		start := current
+		end := s.window.LoadLower()
+		limit := 1000
 
-	err := s.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
-		if limit <= 0 {
-			return false, nil
-		}
-
-		_, cts, err := codec.DecodeInt(key)
+		err := s.boltdb.Scan(
+			binlogNamespace,
+			codec.EncodeInt([]byte{}, start),
+			func(key []byte, val []byte) (bool, error) {
+				_, cts, err := codec.DecodeInt(key)
+				if err != nil {
+					return false, errors.Trace(err)
+				}
+				if cts >= end || len(resps) >= limit {
+					return false, nil
+				}
+				if cts == start {
+					return true, nil
+				}
+				payload, _, err := decodePayload(val)
+				if err != nil {
+					return false, errors.Trace(err)
+				}
+				ret := &binlog.DumpBinlogResp{
+					CommitTS: cts,
+					Payload:  payload,
+				}
+				resps = append(resps, ret)
+				return true, nil
+			},
+		)
 		if err != nil {
-			return false, errors.Trace(err)
+			return errors.Trace(err)
 		}
 
-		if cts == start {
-			return true, nil
+		for _, resp := range resps {
+			item := &binlog.Binlog{}
+			if err := item.Unmarshal(resp.Payload); err != nil {
+				return errors.Trace(err)
+			}
+			if item.DdlJobId > 0 {
+				key := codec.EncodeInt([]byte{}, item.DdlJobId)
+				data, err := s.boltdb.Get(ddlJobNamespace, key)
+				if err != nil {
+					return errors.Annotatef(err,
+						"DDL Job(%d) not found, with binlog commitTS(%d)", item.DdlJobId, resp.CommitTS)
+				}
+				resp.Ddljob = data
+			}
+			if err := stream.Send(resp); err != nil {
+				return errors.Trace(err)
+			}
+			current = resp.CommitTS
 		}
 
-		if cts >= end {
-			return false, nil
-		}
-
-		payload, _, err := decodePayload(val)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-
-		ret.Payloads = append(ret.Payloads, payload)
-		ret.EndCommitTS = cts
-		limit--
-
-		return true, nil
-	})
-	if err != nil {
-		ret.Errmsg = err.Error()
+		time.Sleep(1 * time.Second)
 	}
-
-	return ret, errors.Trace(err)
 }
 
 // StartCollect runs Collector up in a goroutine.
