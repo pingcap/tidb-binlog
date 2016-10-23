@@ -3,8 +3,6 @@ package drainer
 import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 )
 
@@ -25,10 +23,10 @@ type tableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(store kv.Storage, ts uint64) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ts int64) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.SyncTiDBSchema(store, ts)
+	err := s.ReConstructSchema(jobs, ts)
 	if err != nil {
 		log.Errorf("schema: sync schema at %d failed - %v", ts, err)
 		return nil, errors.Trace(err)
@@ -38,46 +36,84 @@ func NewSchema(store kv.Storage, ts uint64) (*Schema, error) {
 }
 
 // SyncTiDBSchema syncs the all schema infomations that at ts
-func (s *Schema) SyncTiDBSchema(store kv.Storage, ts uint64) error {
+func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)
 
-	version := kv.NewVersion(ts)
-	snapshot, err := store.GetSnapshot(version)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	var err error
+	for _, job := range jobs {
+		switch job.Type {
+		case model.ActionCreateSchema:
+			schema := &model.DBInfo{}
+			if err := job.DecodeArgs(schema); err != nil {
+				return errors.Trace(err)
+			}
 
-	// sync all databases
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	dbs, err := snapMeta.ListDatabases()
-	if err != nil {
-		return errors.Trace(err)
-	}
+			err = s.CreateSchema(schema)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-	for _, db := range dbs {
-		// sync all tables under the databases
-		tables, err := snapMeta.ListTables(db.ID)
-		if err != nil {
-			return errors.Trace(err)
+		case model.ActionDropSchema:
+			_, err := s.DropSchema(job.SchemaID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionCreateTable:
+			table := &model.TableInfo{}
+			if err := job.DecodeArgs(table); err != nil {
+				return errors.Trace(err)
+			}
+
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err = s.CreateTable(schema, table)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionDropTable:
+			_, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			_, err := s.DropTable(job.TableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
+			tbInfo := &model.TableInfo{}
+			err := job.DecodeArgs(nil, tbInfo)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if tbInfo == nil {
+				return errors.NotFoundf("table %d", job.TableID)
+			}
+
+			_, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err = s.ReplaceTable(tbInfo)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionAddForeignKey, model.ActionDropForeignKey:
+		default:
+			return errors.Errorf("invalid ddl %v", job)
 		}
-
-		db.Tables = tables
-		s.schemas[db.ID] = db
-
-		for _, table := range tables {
-			s.tables[table.ID] = table
-			s.tableIDToName[table.ID] = tableName{schema: db.Name.L, table: table.Name.L}
-		}
 	}
 
-	schemeMetaVersion, err := snapMeta.GetSchemaVersion()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	s.schemaMetaVersion = schemeMetaVersion
 	return nil
 }
 
