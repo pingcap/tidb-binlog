@@ -55,7 +55,7 @@ func (d *DepositWindow) SaveUpper(val int64) {
 // PersistLower updates the lower boundary of window, and write it into storage.
 func (d *DepositWindow) PersistLower(val int64) error {
 	data := codec.EncodeInt([]byte{}, val)
-	err := d.bolt.Put(WindowNamespace, windowKeyName, data)
+	err := d.bolt.Put(windowNamespace, windowKeyName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -65,7 +65,7 @@ func (d *DepositWindow) PersistLower(val int64) error {
 
 func loadMark(s store.Store) (int64, error) {
 	var l int64
-	data, err := s.Get(WindowNamespace, windowKeyName)
+	data, err := s.Get(windowNamespace, windowKeyName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return 0, nil
