@@ -81,10 +81,10 @@ func (p *Publisher) publish() error {
 	}
 
 	if end > start {
-		depositWindowBoundary.Set(float64(end))
 		if err := p.window.PersistLower(end); err != nil {
 			return errors.Trace(err)
 		}
+		depositWindowBoundary.Set(float64(end))
 	}
 	return nil
 }
