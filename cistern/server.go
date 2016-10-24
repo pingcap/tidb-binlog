@@ -98,25 +98,29 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // DumpBinlog implements the gRPC interface of cistern server
 func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) error {
-	current := req.BeginCommitTS
-	for {
-		var resps []*binlog.DumpBinlogResp
-		start := current
-		end := s.window.LoadLower()
-		limit := 1000
+	batch := 1000
+	latest := req.BeginCommitTS
 
+	for {
+		end := s.window.LoadLower()
+		if latest >= end {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		var resps []*binlog.DumpBinlogResp
 		err := s.boltdb.Scan(
 			binlogNamespace,
-			codec.EncodeInt([]byte{}, start),
+			codec.EncodeInt([]byte{}, latest),
 			func(key []byte, val []byte) (bool, error) {
 				_, cts, err := codec.DecodeInt(key)
 				if err != nil {
 					return false, errors.Trace(err)
 				}
-				if cts >= end || len(resps) >= limit {
+				if cts > end || len(resps) >= batch {
 					return false, nil
 				}
-				if cts == start {
+				if cts == latest {
 					return true, nil
 				}
 				payload, _, err := decodePayload(val)
@@ -152,10 +156,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			if err := stream.Send(resp); err != nil {
 				return errors.Trace(err)
 			}
-			current = resp.CommitTS
+			latest = resp.CommitTS
 		}
-
-		time.Sleep(1 * time.Second)
 	}
 }
 

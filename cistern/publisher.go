@@ -70,9 +70,9 @@ func (p *Publisher) publish() error {
 				return false, errors.Trace(err)
 			}
 			if age < p.period {
-				end = cts
 				return false, nil
 			}
+			end = cts
 			return true, nil
 		},
 	)
