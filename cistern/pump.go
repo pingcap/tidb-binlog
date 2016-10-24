@@ -155,9 +155,6 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 		}
 	}
 
-	if len(preDDLItems) > 0 {
-		log.Fatalf("[cistern/pump][ddl can't match]%v", preDDLItems)
-	}
 	return
 }
 

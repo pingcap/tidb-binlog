@@ -50,6 +50,8 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	tidb.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?cluster=%d", urlv.String(), cfg.ClusterID)
 	tiStore, err := tidb.NewStore(tiPath)
 	if err != nil {
