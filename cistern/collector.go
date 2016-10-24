@@ -1,9 +1,9 @@
 package cistern
 
 import (
+	"fmt"
 	"sync"
 	"time"
-	"fmt"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -52,7 +52,7 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 	}
 
 	tidb.RegisterStore("tikv", tikv.Driver{})
-	tiPath := fmt.Sprintf("tikv://%s?cluster=%d", urlv.String(), cfg.ClusterID)
+	tiPath := fmt.Sprintf("tikv://%s?cluster=%d", urlv.HostString(), cfg.ClusterID)
 	tiStore, err := tidb.NewStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
