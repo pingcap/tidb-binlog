@@ -154,6 +154,9 @@ func (e *iso2022JPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 		// Decode a 1-byte rune.
 		if r < utf8.RuneSelf {
 			size = 1
+			if r == asciiEsc {
+				r = encoding.ASCIISub
+			}
 
 		} else {
 			// Decode a multi-byte rune.
@@ -206,22 +209,7 @@ func (e *iso2022JPEncoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc in
 					goto writeJIS
 				}
 			}
-
-			// Switch back to ASCII state in case of error so that an ASCII
-			// replacement character can be written in the correct state.
-			if *e != asciiState {
-				if nDst+3 > len(dst) {
-					err = transform.ErrShortDst
-					break
-				}
-				*e = asciiState
-				dst[nDst+0] = asciiEsc
-				dst[nDst+1] = '('
-				dst[nDst+2] = 'B'
-				nDst += 3
-			}
-			err = internal.ErrASCIIReplacement
-			break
+			r = encoding.ASCIISub
 		}
 
 		if *e != asciiState {

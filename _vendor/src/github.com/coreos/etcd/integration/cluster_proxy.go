@@ -52,8 +52,9 @@ func newClientV3(cfg clientv3.Config) (*clientv3.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	rpc := toGRPC(c)
-	c.KV = clientv3.NewKVFromKVClient(rpc.KV)
-	c.Watcher = clientv3.NewWatchFromWatchClient(rpc.Watch)
+
+	toGRPC(c)
+	c.KV = clientv3.NewKVFromKVClient(grpcproxy.KvServerToKvClient(grpcproxy.NewKvProxy(c)))
+	c.Watcher = clientv3.NewWatchFromWatchClient(grpcproxy.WatchServerToWatchClient(grpcproxy.NewWatchProxy(c)))
 	return c, nil
 }

@@ -24,6 +24,7 @@ import (
 
 	pb "github.com/coreos/etcd/etcdserver/etcdserverpb"
 	"github.com/coreos/etcd/etcdserver/membership"
+	"github.com/coreos/etcd/pkg/contention"
 	"github.com/coreos/etcd/pkg/pbutil"
 	"github.com/coreos/etcd/pkg/types"
 	"github.com/coreos/etcd/raft"
@@ -102,8 +103,10 @@ type raftNode struct {
 	// a chan to send out apply
 	applyc chan apply
 
-	// a chan to send out readState
-	readStateC chan raft.ReadState
+	// TODO: remove the etcdserver related logic from raftNode
+	// TODO: add a state machine interface to apply the commit entries
+	// and do snapshot/recover
+	s *EtcdServer
 
 	// utility
 	ticker      <-chan time.Time
@@ -115,18 +118,32 @@ type raftNode struct {
 	// If transport is nil, server will panic.
 	transport rafthttp.Transporter
 
+	td *contention.TimeoutDetector
+
 	stopped chan struct{}
 	done    chan struct{}
 }
 
 // start prepares and starts raftNode in a new goroutine. It is no longer safe
 // to modify the fields after it has been started.
-func (r *raftNode) start(rh *raftReadyHandler) {
+// TODO: Ideally raftNode should get rid of the passed in server structure.
+func (r *raftNode) start(s *EtcdServer) {
+	r.s = s
 	r.applyc = make(chan apply)
 	r.stopped = make(chan struct{})
 	r.done = make(chan struct{})
 
+	heartbeat := 200 * time.Millisecond
+	if s.Cfg != nil {
+		heartbeat = time.Duration(s.Cfg.TickMs) * time.Millisecond
+	}
+	// set up contention detectors for raft heartbeat message.
+	// expect to send a heartbeat within 2 heartbeat intervals.
+	r.td = contention.NewTimeoutDetector(2 * heartbeat)
+
 	go func() {
+		var syncC <-chan time.Time
+
 		defer r.onStop()
 		islead := false
 
@@ -150,15 +167,32 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 					}
 
 					atomic.StoreUint64(&r.lead, rd.SoftState.Lead)
-					islead = rd.RaftState == raft.StateLeader
-					rh.leadershipUpdate()
-				}
-
-				if len(rd.ReadStates) != 0 {
-					select {
-					case r.readStateC <- rd.ReadStates[len(rd.ReadStates)-1]:
-					case <-r.stopped:
-						return
+					if rd.RaftState == raft.StateLeader {
+						islead = true
+						// TODO: raft should send server a notification through chan when
+						// it promotes or demotes instead of modifying server directly.
+						syncC = r.s.SyncTicker
+						if r.s.lessor != nil {
+							r.s.lessor.Promote(r.s.Cfg.electionTimeout())
+						}
+						// TODO: remove the nil checking
+						// current test utility does not provide the stats
+						if r.s.stats != nil {
+							r.s.stats.BecomeLeader()
+						}
+						if r.s.compactor != nil {
+							r.s.compactor.Resume()
+						}
+						r.td.Reset()
+					} else {
+						islead = false
+						if r.s.lessor != nil {
+							r.s.lessor.Demote()
+						}
+						if r.s.compactor != nil {
+							r.s.compactor.Pause()
+						}
+						syncC = nil
 					}
 				}
 
@@ -180,7 +214,7 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 				// For more details, check raft thesis 10.2.1
 				if islead {
 					// gofail: var raftBeforeLeaderSend struct{}
-					rh.sendMessage(rd.Messages)
+					r.s.send(rd.Messages)
 				}
 
 				// gofail: var raftBeforeSave struct{}
@@ -207,10 +241,12 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 
 				if !islead {
 					// gofail: var raftBeforeFollowerSend struct{}
-					rh.sendMessage(rd.Messages)
+					r.s.send(rd.Messages)
 				}
 				raftDone <- struct{}{}
 				r.Advance()
+			case <-syncC:
+				r.s.sync(r.s.Cfg.ReqTimeout())
 			case <-r.stopped:
 				return
 			}

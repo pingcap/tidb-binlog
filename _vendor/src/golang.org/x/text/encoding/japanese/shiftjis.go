@@ -39,7 +39,7 @@ loop:
 		case 0xa1 <= c0 && c0 < 0xe0:
 			r, size = rune(c0)+(0xff61-0xa1), 1
 
-		case (0x81 <= c0 && c0 < 0xa0) || (0xe0 <= c0 && c0 < 0xfd):
+		case (0x81 <= c0 && c0 < 0xa0) || (0xe0 <= c0 && c0 < 0xf0):
 			if c0 <= 0x9f {
 				c0 -= 0x70
 			} else {
@@ -152,8 +152,7 @@ loop:
 					goto write2
 				}
 			}
-			err = internal.ErrASCIIReplacement
-			break
+			r = encoding.ASCIISub
 		}
 
 	write1:

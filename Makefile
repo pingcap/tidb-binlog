@@ -76,7 +76,7 @@ update:
 ifdef PKG
 	glide get -s -v --skip-test ${PKG}
 else
-	glide update -s -v -u
+	glide update -v
 endif
 	@echo "removing test files"
 	glide vc --use-lock-file --only-code --no-tests

@@ -191,10 +191,6 @@ type SetOptions struct {
 
 	// Dir specifies whether or not this Node should be created as a directory.
 	Dir bool
-
-	// NoValueOnSuccess specifies whether the response contains the current value of the Node.
-	// If set, the response will only contain the current value when the request fails.
-	NoValueOnSuccess bool
 }
 
 type GetOptions struct {
@@ -339,7 +335,6 @@ func (k *httpKeysAPI) Set(ctx context.Context, key, val string, opts *SetOptions
 		act.TTL = opts.TTL
 		act.Refresh = opts.Refresh
 		act.Dir = opts.Dir
-		act.NoValueOnSuccess = opts.NoValueOnSuccess
 	}
 
 	doCtx := ctx
@@ -528,16 +523,15 @@ func (w *waitAction) HTTPRequest(ep url.URL) *http.Request {
 }
 
 type setAction struct {
-	Prefix           string
-	Key              string
-	Value            string
-	PrevValue        string
-	PrevIndex        uint64
-	PrevExist        PrevExistType
-	TTL              time.Duration
-	Refresh          bool
-	Dir              bool
-	NoValueOnSuccess bool
+	Prefix    string
+	Key       string
+	Value     string
+	PrevValue string
+	PrevIndex uint64
+	PrevExist PrevExistType
+	TTL       time.Duration
+	Refresh   bool
+	Dir       bool
 }
 
 func (a *setAction) HTTPRequest(ep url.URL) *http.Request {
@@ -570,9 +564,6 @@ func (a *setAction) HTTPRequest(ep url.URL) *http.Request {
 
 	if a.Refresh {
 		form.Add("refresh", "true")
-	}
-	if a.NoValueOnSuccess {
-		params.Set("noValueOnSuccess", strconv.FormatBool(a.NoValueOnSuccess))
 	}
 
 	u.RawQuery = params.Encode()

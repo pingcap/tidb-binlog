@@ -35,7 +35,7 @@ const (
 	// to apply functions instead of a valid txn ID.
 	noTxn = -1
 
-	warnApplyDuration = 100 * time.Millisecond
+	warnApplyDuration = 10 * time.Millisecond
 )
 
 type applyResult struct {
@@ -258,9 +258,7 @@ func (a *applierV3backend) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResp
 	}
 
 	limit := r.Limit
-	if r.SortOrder != pb.RangeRequest_NONE ||
-		r.MinModRevision != 0 || r.MaxModRevision != 0 ||
-		r.MinCreateRevision != 0 || r.MaxCreateRevision != 0 {
+	if r.SortOrder != pb.RangeRequest_NONE {
 		// fetch everything; sort and truncate afterwards
 		limit = 0
 	}
@@ -285,23 +283,6 @@ func (a *applierV3backend) Range(txnID int64, r *pb.RangeRequest) (*pb.RangeResp
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if r.MaxModRevision != 0 {
-		f := func(kv *mvccpb.KeyValue) bool { return kv.ModRevision > r.MaxModRevision }
-		pruneKVs(rr, f)
-	}
-	if r.MinModRevision != 0 {
-		f := func(kv *mvccpb.KeyValue) bool { return kv.ModRevision < r.MinModRevision }
-		pruneKVs(rr, f)
-	}
-	if r.MaxCreateRevision != 0 {
-		f := func(kv *mvccpb.KeyValue) bool { return kv.CreateRevision > r.MaxCreateRevision }
-		pruneKVs(rr, f)
-	}
-	if r.MinCreateRevision != 0 {
-		f := func(kv *mvccpb.KeyValue) bool { return kv.CreateRevision < r.MinCreateRevision }
-		pruneKVs(rr, f)
 	}
 
 	if r.SortOrder != pb.RangeRequest_NONE {
@@ -462,7 +443,7 @@ func (a *applierV3backend) applyUnion(txnID int64, union *pb.RequestOp) *pb.Resp
 		if tv.RequestRange != nil {
 			resp, err := a.Range(txnID, tv.RequestRange)
 			if err != nil {
-				plog.Panicf("unexpected error during txn: %v", err)
+				panic("unexpected error during txn")
 			}
 			return &pb.ResponseOp{Response: &pb.ResponseOp_ResponseRange{ResponseRange: resp}}
 		}
@@ -470,7 +451,7 @@ func (a *applierV3backend) applyUnion(txnID int64, union *pb.RequestOp) *pb.Resp
 		if tv.RequestPut != nil {
 			resp, err := a.Put(txnID, tv.RequestPut)
 			if err != nil {
-				plog.Panicf("unexpected error during txn: %v", err)
+				panic("unexpected error during txn")
 			}
 			return &pb.ResponseOp{Response: &pb.ResponseOp_ResponsePut{ResponsePut: resp}}
 		}
@@ -478,7 +459,7 @@ func (a *applierV3backend) applyUnion(txnID int64, union *pb.RequestOp) *pb.Resp
 		if tv.RequestDeleteRange != nil {
 			resp, err := a.DeleteRange(txnID, tv.RequestDeleteRange)
 			if err != nil {
-				plog.Panicf("unexpected error during txn: %v", err)
+				panic("unexpected error during txn")
 			}
 			return &pb.ResponseOp{Response: &pb.ResponseOp_ResponseDeleteRange{ResponseDeleteRange: resp}}
 		}
@@ -508,7 +489,7 @@ func (a *applierV3backend) LeaseGrant(lc *pb.LeaseGrantRequest) (*pb.LeaseGrantR
 	resp := &pb.LeaseGrantResponse{}
 	if err == nil {
 		resp.ID = int64(l.ID)
-		resp.TTL = l.TTL()
+		resp.TTL = l.TTL
 		resp.Header = &pb.ResponseHeader{Revision: a.s.KV().Rev()}
 	}
 
@@ -813,15 +794,4 @@ func removeNeedlessRangeReqs(txn *pb.TxnRequest) {
 
 	txn.Success = f(txn.Success)
 	txn.Failure = f(txn.Failure)
-}
-
-func pruneKVs(rr *mvcc.RangeResult, isPrunable func(*mvccpb.KeyValue) bool) {
-	j := 0
-	for i := range rr.KVs {
-		rr.KVs[j] = rr.KVs[i]
-		if !isPrunable(&rr.KVs[i]) {
-			j++
-		}
-	}
-	rr.KVs = rr.KVs[:j]
 }
