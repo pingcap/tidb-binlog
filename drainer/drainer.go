@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
-	"github.com/siddontang/go/sync2"
 )
 
 var (
@@ -50,15 +49,7 @@ type Drainer struct {
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
 
-	start    time.Time
-	lastTime time.Time
-
-	ddlCount    sync2.AtomicInt64
-	insertCount sync2.AtomicInt64
-	updateCount sync2.AtomicInt64
-	deleteCount sync2.AtomicInt64
-	lastCount   sync2.AtomicInt64
-	count       sync2.AtomicInt64
+	metrics *metricClient
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -77,6 +68,16 @@ func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) (
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
+
+	var metrics *metricClient
+	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+		metrics = &metricClient{
+			addr:     cfg.MetricsAddr,
+			interval: cfg.MetricsInterval,
+		}
+	}
+
+	drainer.metrics = metrics
 
 	return drainer, nil
 }
@@ -370,16 +371,14 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 func (d *Drainer) addCount(tp translator.OpType) {
 	switch tp {
 	case translator.Insert:
-		d.insertCount.Add(1)
+		eventCounter.WithLabelValues("Insert").Inc()
 	case translator.Update:
-		d.updateCount.Add(1)
+		eventCounter.WithLabelValues("Update").Inc()
 	case translator.Del:
-		d.deleteCount.Add(1)
+		eventCounter.WithLabelValues("Delete").Inc()
 	case translator.DDL:
-		d.ddlCount.Add(1)
+		eventCounter.WithLabelValues("DDL").Inc()
 	}
-
-	d.count.Add(1)
 }
 
 type batch struct {
@@ -432,10 +431,7 @@ func (d *Drainer) run() error {
 		return errors.Trace(err)
 	}
 
-	d.start = time.Now()
-	d.lastTime = d.start
-
-	go d.printStatus()
+	go d.pushMetrics()
 	go d.inputStreaming()
 
 	for {
@@ -612,37 +608,15 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 	return nil
 }
 
-func (d *Drainer) printStatus() {
-	d.wg.Add(1)
-	defer d.wg.Done()
-
-	timer := time.NewTicker(statusTime)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-timer.C:
-			now := time.Now()
-			seconds := now.Unix() - d.lastTime.Unix()
-			totalSeconds := now.Unix() - d.start.Unix()
-			last := d.lastCount.Get()
-			total := d.count.Get()
-
-			tps, totalTps := int64(0), int64(0)
-			if seconds > 0 {
-				tps = (total - last) / seconds
-				totalTps = total / totalSeconds
-			}
-
-			log.Infof("[syncer]total events = %d, insert = %d, update = %d, delete = %d, total tps = %d, recent tps = %d, %s.",
-				total, d.insertCount.Get(), d.updateCount.Get(), d.deleteCount.Get(), totalTps, tps, d.meta)
-
-			d.lastCount.Set(total)
-			d.lastTime = time.Now()
-		}
+func (d *Drainer) pushMetrics() {
+	if d.metrics == nil {
+		return
 	}
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.metrics.Start(d.ctx)
+	}()
 }
 
 func (d *Drainer) inputStreaming() {

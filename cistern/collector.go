@@ -159,6 +159,7 @@ func (c *Collector) prepare(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 
+			log.Infof("node %s get save point %v", n.NodeID, pos)
 			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
 			if err != nil {
 				return errors.Trace(err)
