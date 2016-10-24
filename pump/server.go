@@ -222,5 +222,5 @@ func (s *Server) Close() {
 	// notify other goroutines to exit
 	s.cancel()
 	// stop the gRPC server
-	s.gs.GracefulStop()
+	s.gs.Stop()
 }

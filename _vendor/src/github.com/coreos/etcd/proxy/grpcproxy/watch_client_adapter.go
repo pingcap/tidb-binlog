@@ -32,11 +32,7 @@ func (s *ws2wc) Watch(ctx context.Context, opts ...grpc.CallOption) (pb.Watch_Wa
 	headerc, trailerc := make(chan metadata.MD, 1), make(chan metadata.MD, 1)
 	wclient := &ws2wcClientStream{chanClientStream{headerc, trailerc, &chanStream{ch1, ch2, ctx}}}
 	wserver := &ws2wcServerStream{chanServerStream{headerc, trailerc, &chanStream{ch2, ch1, ctx}}}
-	go func() {
-		s.wserv.Watch(wserver)
-		// close the server side sender
-		close(ch1)
-	}()
+	go s.wserv.Watch(wserver)
 	return wclient, nil
 }
 
@@ -92,7 +88,7 @@ func (ss *chanServerStream) SetTrailer(md metadata.MD) {
 type chanClientStream struct {
 	headerc  <-chan metadata.MD
 	trailerc <-chan metadata.MD
-	*chanStream
+	grpc.Stream
 }
 
 func (cs *chanClientStream) Header() (metadata.MD, error) {
@@ -113,10 +109,7 @@ func (cs *chanClientStream) Trailer() metadata.MD {
 	}
 }
 
-func (s *chanClientStream) CloseSend() error {
-	close(s.chanStream.sendc)
-	return nil
-}
+func (s *chanClientStream) CloseSend() error { return nil }
 
 // chanStream implements grpc.Stream using channels
 type chanStream struct {
@@ -125,7 +118,7 @@ type chanStream struct {
 	ctx   context.Context
 }
 
-func (s *chanStream) Context() context.Context { return s.ctx }
+func (s *chanStream) Context() context.Context { return s.Context() }
 
 func (s *chanStream) SendMsg(m interface{}) error {
 	select {
@@ -139,11 +132,8 @@ func (s *chanStream) SendMsg(m interface{}) error {
 func (s *chanStream) RecvMsg(m interface{}) error {
 	v := m.(*interface{})
 	select {
-	case msg, ok := <-s.recvc:
-		if !ok {
-			return grpc.ErrClientConnClosing
-		}
-		*v = msg
+	case m = <-s.recvc:
+		*v = m
 		return nil
 	case <-s.ctx.Done():
 	}

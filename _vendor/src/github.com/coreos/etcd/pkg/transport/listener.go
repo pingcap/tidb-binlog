@@ -208,9 +208,6 @@ func (info TLSInfo) ServerConfig() (*tls.Config, error) {
 		cfg.ClientCAs = cp
 	}
 
-	// "h2" NextProtos is necessary for enabling HTTP2 for go's HTTP server
-	cfg.NextProtos = []string{"h2"}
-
 	return cfg, nil
 }
 

@@ -60,21 +60,15 @@ func encodeKeyValue(k, v string) (string, string) {
 
 // DecodeKeyValue returns the original key and value corresponding to the
 // encoded data in k, v.
-// If k is a binary header and v contains comma, v is split on comma before decoded,
-// and the decoded v will be joined with comma before returned.
 func DecodeKeyValue(k, v string) (string, string, error) {
 	if !strings.HasSuffix(k, binHdrSuffix) {
 		return k, v, nil
 	}
-	vvs := strings.Split(v, ",")
-	for i, vv := range vvs {
-		val, err := base64.StdEncoding.DecodeString(vv)
-		if err != nil {
-			return "", "", err
-		}
-		vvs[i] = string(val)
+	val, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		return "", "", err
 	}
-	return k, strings.Join(vvs, ","), nil
+	return k, string(val), nil
 }
 
 // MD is a mapping from metadata keys to values. Users should use the following
@@ -117,17 +111,10 @@ func (md MD) Len() int {
 
 // Copy returns a copy of md.
 func (md MD) Copy() MD {
-	return Join(md)
-}
-
-// Join joins any number of MDs into a single MD.
-// The order of values for each key is determined by the order in which
-// the MDs containing those values are presented to Join.
-func Join(mds ...MD) MD {
 	out := MD{}
-	for _, md := range mds {
-		for k, v := range md {
-			out[k] = append(out[k], v...)
+	for k, v := range md {
+		for _, i := range v {
+			out[k] = append(out[k], i)
 		}
 	}
 	return out

@@ -67,13 +67,11 @@ func (wg *watcherGroup) broadcast(wr clientv3.WatchResponse) {
 	}
 }
 
-// add adds the watcher into the group with given ID.
-// The current revision of the watcherGroup is returned.
-func (wg *watcherGroup) add(rid receiverID, w watcher) int64 {
+func (wg *watcherGroup) add(rid receiverID, w watcher) {
 	wg.mu.Lock()
 	defer wg.mu.Unlock()
+
 	wg.receivers[rid] = w
-	return wg.rev
 }
 
 func (wg *watcherGroup) delete(rid receiverID) {
@@ -93,10 +91,4 @@ func (wg *watcherGroup) isEmpty() bool {
 func (wg *watcherGroup) stop() {
 	wg.cancel()
 	<-wg.donec
-}
-
-func (wg *watcherGroup) revision() int64 {
-	wg.mu.Lock()
-	defer wg.mu.Unlock()
-	return wg.rev
 }

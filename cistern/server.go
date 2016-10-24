@@ -219,7 +219,7 @@ func (s *Server) Start() error {
 // Close stops all goroutines started by cistern server gracefully
 func (s *Server) Close() {
 	// first stop gRPC server
-	s.gs.GracefulStop()
+	s.gs.Stop()
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
