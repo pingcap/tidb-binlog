@@ -141,7 +141,21 @@ func (kv *kv) do(ctx context.Context, op Op) (OpResponse, error) {
 	// TODO: handle other ops
 	case tRange:
 		var resp *pb.RangeResponse
-		resp, err = kv.remote.Range(ctx, op.toRangeRequest(), grpc.FailFast(false))
+		r := &pb.RangeRequest{
+			Key:          op.key,
+			RangeEnd:     op.end,
+			Limit:        op.limit,
+			Revision:     op.rev,
+			Serializable: op.serializable,
+			KeysOnly:     op.keysOnly,
+			CountOnly:    op.countOnly,
+		}
+		if op.sort != nil {
+			r.SortOrder = pb.RangeRequest_SortOrder(op.sort.Order)
+			r.SortTarget = pb.RangeRequest_SortTarget(op.sort.Target)
+		}
+
+		resp, err = kv.remote.Range(ctx, r, grpc.FailFast(false))
 		if err == nil {
 			return OpResponse{get: (*GetResponse)(resp)}, nil
 		}

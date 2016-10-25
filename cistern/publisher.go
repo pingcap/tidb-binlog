@@ -55,27 +55,27 @@ func (p *Publisher) Start(ctx context.Context) {
 
 func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
-	startKey := codec.EncodeInt([]byte{}, start)
 	end := start
 
-	err := p.boltdb.Scan(BinlogNamespace, startKey, func(key []byte, val []byte) (bool, error) {
-		_, cts, err := codec.DecodeInt(key)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-
-		_, age, err := decodePayload(val)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-
-		if age < p.period {
+	err := p.boltdb.Scan(
+		binlogNamespace,
+		codec.EncodeInt([]byte{}, start),
+		func(key []byte, val []byte) (bool, error) {
+			_, cts, err := codec.DecodeInt(key)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			_, age, err := decodePayload(val)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if age < p.period {
+				return false, nil
+			}
 			end = cts
-			return false, nil
-		}
-
-		return true, nil
-	})
+			return true, nil
+		},
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -84,9 +84,7 @@ func (p *Publisher) publish() error {
 		if err := p.window.PersistLower(end); err != nil {
 			return errors.Trace(err)
 		}
-
 		depositWindowBoundary.Set(float64(end))
 	}
-
 	return nil
 }

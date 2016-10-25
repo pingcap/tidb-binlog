@@ -70,8 +70,7 @@ const (
 	// Unofficial marks the start of encodings not registered by IANA.
 	Unofficial MIB = 10000 + iota
 
-	// Replacement is the WhatWG replacement encoding.
-	Replacement
+	// TODO: add Replacement?
 
 	// XUserDefined is the code for x-user-defined.
 	XUserDefined

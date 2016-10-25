@@ -1,15 +1,20 @@
 package cistern
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
@@ -32,6 +37,7 @@ type Collector struct {
 	window    *DepositWindow
 	boltdb    store.Store
 	tiClient  *tikv.LockResolver
+	tiStore   kv.Storage
 }
 
 // NewCollector returns an instance of Collector
@@ -45,6 +51,12 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		return nil, errors.Trace(err)
 	}
 
+	tidb.RegisterStore("tikv", tikv.Driver{})
+	tiPath := fmt.Sprintf("tikv://%s?cluster=%d", urlv.HostString(), cfg.ClusterID)
+	tiStore, err := tidb.NewStore(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, etcd.DefaultRootPath)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -59,20 +71,23 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		window:    w,
 		boltdb:    s,
 		tiClient:  tiClient,
+		tiStore:   tiStore,
 	}, nil
 }
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		// TODO close TiKV connection, but there isn't close()
 		for _, p := range c.pumps {
 			p.Close()
 		}
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		log.Info("Collect goroutine exited")
+		if err := c.tiStore.Close(); err != nil {
+			log.Error(err.Error())
+		}
+		log.Info("Collector goroutine exited")
 	}()
 
 	round := 1
@@ -131,6 +146,13 @@ func (c *Collector) collect(ctx context.Context) error {
 		}
 	}
 
+	jobs, err := c.grabDDLJobs(ctx, items)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if err := c.storeDDLJobs(jobs); err != nil {
+		return errors.Trace(err)
+	}
 	if err := c.store(items); err != nil {
 		return errors.Trace(err)
 	}
@@ -141,7 +163,6 @@ func (c *Collector) collect(ctx context.Context) error {
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
-
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -193,45 +214,38 @@ func (c *Collector) store(items map[int64]*binlog.Binlog) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		key := codec.EncodeInt([]byte{}, commitTS)
 		data, err := encodePayload(payload)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		b.Put(key, data)
 	}
 
-	err := c.boltdb.Commit(BinlogNamespace, b)
-
+	err := c.boltdb.Commit(binlogNamespace, b)
 	return errors.Trace(err)
 }
 
 func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 	for id, pos := range savePoints {
-
 		data, err := pos.Marshal()
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		err = c.boltdb.Put(SavePointNamespace, []byte(id), data)
+		err = c.boltdb.Put(savepointNamespace, []byte(id), data)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		if p, ok := c.pumps[id]; ok {
 			p.current = pos
 		}
 	}
-
 	return nil
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	var savePoint = binlog.Pos{}
-	payload, err := c.boltdb.Get(SavePointNamespace, []byte(nodeID))
+	payload, err := c.boltdb.Get(savepointNamespace, []byte(nodeID))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return savePoint, nil
@@ -239,10 +253,104 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 
 		return savePoint, errors.Trace(err)
 	}
-
 	if err := savePoint.Unmarshal(payload); err != nil {
 		return savePoint, errors.Trace(err)
 	}
-
 	return savePoint, nil
+}
+
+func (c *Collector) grabDDLJobs(ctx context.Context, items map[int64]*binlog.Binlog) (map[int64]*model.Job, error) {
+	res := make(map[int64]*model.Job)
+	for _, item := range items {
+		if item.DdlJobId > 0 {
+			job, err := c.getDDLJob(item.DdlJobId)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			for job == nil {
+				select {
+				case <-ctx.Done():
+					return nil, errors.Trace(ctx.Err())
+				case <-time.After(c.timeout):
+					job, err = c.getDDLJob(item.DdlJobId)
+					if err != nil {
+						return nil, errors.Trace(err)
+					}
+				}
+			}
+			res[item.DdlJobId] = job
+		}
+	}
+	return res, nil
+}
+
+func (c *Collector) getDDLJob(id int64) (*model.Job, error) {
+	version, err := c.tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := c.tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	job, err := snapMeta.GetHistoryDDLJob(id)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return job, nil
+}
+
+func (c *Collector) storeDDLJobs(jobs map[int64]*model.Job) error {
+	b := c.boltdb.NewBatch()
+	for id, job := range jobs {
+		if err := job.DecodeArgs(); err != nil {
+			return errors.Trace(err)
+		}
+		payload, err := job.Encode()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		key := codec.EncodeInt([]byte{}, id)
+		b.Put(key, payload)
+	}
+	err := c.boltdb.Commit(ddlJobNamespace, b)
+	return errors.Trace(err)
+}
+
+// LoadHistoryDDLJobs loads all history DDL jobs from TiDB
+func (c *Collector) LoadHistoryDDLJobs() error {
+	version, err := c.tiStore.CurrentVersion()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snapshot, err := c.tiStore.GetSnapshot(version)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, job := range jobs {
+		key := codec.EncodeInt([]byte{}, job.ID)
+		_, err = c.boltdb.Get(ddlJobNamespace, key)
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				return errors.Trace(err)
+			}
+			if err := job.DecodeArgs(); err != nil {
+				return errors.Trace(err)
+			}
+			payload, err := job.Encode()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if err := c.boltdb.Put(ddlJobNamespace, key, payload); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	return nil
 }

@@ -32,6 +32,15 @@ func (us *URLsValue) String() string {
 	return strings.Join(all, ",")
 }
 
+// HostString return a string of host:port format list separated by comma
+func (us *URLsValue) HostString() string {
+	all := make([]string, len(*us))
+	for i, u := range *us {
+		all[i] = u.Host
+	}
+	return strings.Join(all, ",")
+}
+
 // StringSlice return a slice of string with formatted URL
 func (us *URLsValue) StringSlice() []string {
 	all := make([]string, len(*us))

@@ -107,6 +107,17 @@ func (s *testFlagSuite) TestURLStrsFromFlag(c *C) {
 	c.Assert(strings.Join(URLStrsFromFlag(fs, "urls"), ","), Equals, urls)
 }
 
+func (s *testFlagSuite) TestURLValue(c *C) {
+	urls := "http://192.168.1.1:1234,http://127.0.0.1:1234,http://www.pingcap.net:1234"
+	urlv, err := NewURLsValue(urls)
+	c.Assert(err, IsNil)
+	c.Assert(urlv.String(), Equals, "http://127.0.0.1:1234,http://192.168.1.1:1234,http://www.pingcap.net:1234")
+	c.Assert(urlv.HostString(), Equals, "127.0.0.1:1234,192.168.1.1:1234,www.pingcap.net:1234")
+	c.Assert(urlv.StringSlice()[0], Equals, "http://127.0.0.1:1234")
+	c.Assert(urlv.StringSlice()[1], Equals, "http://192.168.1.1:1234")
+	c.Assert(urlv.StringSlice()[2], Equals, "http://www.pingcap.net:1234")
+}
+
 func mustSuccess(c *C, err error) {
 	c.Assert(err, IsNil)
 }

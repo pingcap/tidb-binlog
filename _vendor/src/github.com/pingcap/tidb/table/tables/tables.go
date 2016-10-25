@@ -72,7 +72,7 @@ func TableFromMeta(alloc autoid.Allocator, tblInfo *model.TableInfo) (table.Tabl
 			return nil, table.ErrColumnStateCantNone.Gen("column %s can't be in none state", colInfo.Name)
 		}
 
-		col := &table.Column{ColumnInfo: *colInfo}
+		col := table.ToColumn(colInfo)
 		columns = append(columns, col)
 	}
 
@@ -207,7 +207,7 @@ func (t *Table) UpdateRecord(ctx context.Context, h int64, oldData []types.Datum
 	colIDs := make([]int64, 0, len(t.WritableCols()))
 	for i, col := range t.WritableCols() {
 		if col.State != model.StatePublic && currentData[i].IsNull() {
-			defaultVal, _, err1 := table.GetColDefaultValue(ctx, &col.ColumnInfo)
+			defaultVal, _, err1 := table.GetColDefaultValue(ctx, col.ToInfo())
 			if err1 != nil {
 				return errors.Trace(err1)
 			}
@@ -341,7 +341,7 @@ func (t *Table) AddRecord(ctx context.Context, r []types.Datum) (recordID int64,
 		var value types.Datum
 		if col.State == model.StateWriteOnly || col.State == model.StateWriteReorganization {
 			// if col is in write only or write reorganization state, we must add it with its default value.
-			value, _, err = table.GetColDefaultValue(ctx, &col.ColumnInfo)
+			value, _, err = table.GetColDefaultValue(ctx, col.ToInfo())
 			if err != nil {
 				return 0, errors.Trace(err)
 			}
@@ -502,24 +502,6 @@ func (t *Table) Row(ctx context.Context, h int64) ([]types.Datum, error) {
 		return nil, errors.Trace(err)
 	}
 	return r, nil
-}
-
-// LockRow implements table.Table LockRow interface.
-// TODO: remove forRead parameter, it should always be true now.
-func (t *Table) LockRow(ctx context.Context, h int64, forRead bool) error {
-	txn, err := ctx.GetTxn(false)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// Get row lock key
-	lockKey := t.RecordKey(h)
-	if forRead {
-		err = txn.LockKeys(lockKey)
-	} else {
-		// set row lock key to current txn
-		err = txn.Set(lockKey, []byte(txn.String()))
-	}
-	return errors.Trace(err)
 }
 
 // RemoveRecord implements table.Table RemoveRecord interface.
@@ -728,6 +710,11 @@ func (t *Table) IterRecords(ctx context.Context, startKey kv.Key, cols []*table.
 // AllocAutoID implements table.Table AllocAutoID interface.
 func (t *Table) AllocAutoID() (int64, error) {
 	return t.alloc.Alloc(t.ID)
+}
+
+// Allocator implements table.Table Allocator interface.
+func (t *Table) Allocator() autoid.Allocator {
+	return t.alloc
 }
 
 // RebaseAutoID implements table.Table RebaseAutoID interface.
