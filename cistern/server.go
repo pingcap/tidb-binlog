@@ -169,6 +169,11 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 	}
 }
 
+// DumpDDLJobs implements the gRPC interface of cistern server
+func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
+	return nil, errors.New("implement in next pr")
+}
+
 // StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
 	s.wg.Add(1)

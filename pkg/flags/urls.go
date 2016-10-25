@@ -32,6 +32,7 @@ func (us *URLsValue) String() string {
 	return strings.Join(all, ",")
 }
 
+// HostString returns the string representation of host
 func (us *URLsValue) HostString() string {
 	all := make([]string, len(*us))
 	for i, u := range *us {

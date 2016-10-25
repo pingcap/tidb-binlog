@@ -37,7 +37,7 @@ type Config struct {
 	CollectBatch        int    `json:"collect-batch"`
 	DepositWindowPeriod int    `json:"deposit-window-period"`
 	EtcdURLs            string `json:"pd-urls"`
-	GC                  int    `json:gc`
+	GC                  int    `json:"gc"`
 	EtcdTimeout         time.Duration
 	PumpTimeout         time.Duration
 	MetricsAddr         string

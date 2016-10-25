@@ -218,7 +218,7 @@ import:
   - util/stringutil
   - util/types
 - package: github.com/pingcap/tipb
-  version: 627e9a203d065e3c4963403eadc235cb3eacbd7f
+  version: 38084aeaf922fb5d41284865d64b2113f3ae5f1c
   subpackages:
   - go-binlog
   - go-tipb

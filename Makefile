@@ -32,7 +32,7 @@ buildsucc:
 
 all: dev install
 
-dev: build check test
+dev: check test build
 
 build: pump cistern drainer
 
