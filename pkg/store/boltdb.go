@@ -38,6 +38,22 @@ func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 	}, nil
 }
 
+// EndKey returns the end key in the store.
+func (s *BoltStore) EndKey(namespace []byte) ([]byte, error) {
+	var ret []byte
+	err := s.db.View(func(tx *bolt.Tx) error {
+		cur := tx.Cursor()
+		key, _ := cur.Last()
+		if key != nil {
+			// key only valid for the life of the transaction, so make a copy
+			ret = make([]byte, len(key))
+			copy(ret, key)
+		}
+		return nil
+	})
+	return ret, errors.Trace(err)
+}
+
 // Get implements the Get() interface of Store
 func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
 	var value []byte

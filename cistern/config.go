@@ -37,6 +37,7 @@ type Config struct {
 	CollectBatch        int    `json:"collect-batch"`
 	DepositWindowPeriod int    `json:"deposit-window-period"`
 	EtcdURLs            string `json:"pd-urls"`
+	GC                  int    `json:gc`
 	EtcdTimeout         time.Duration
 	PumpTimeout         time.Duration
 	MetricsAddr         string
@@ -70,6 +71,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
+	fs.IntVar(&cfg.GC, "gc", 0, "recycle binlog older than gc days.")
 	return cfg
 }
 
