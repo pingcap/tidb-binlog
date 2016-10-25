@@ -11,10 +11,13 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/store"
+	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"github.com/ngaut/log"
 )
 
 var windowNamespace []byte
@@ -136,29 +139,183 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			},
 		)
 		if err != nil {
+			log.Errorf("gRPC: DumpBinlog scan boltdb error, %s", errors.ErrorStack(err))
 			return errors.Trace(err)
 		}
 
 		for _, resp := range resps {
 			item := &binlog.Binlog{}
 			if err := item.Unmarshal(resp.Payload); err != nil {
+				log.Errorf("gRPC: DumpBinlog unmarshal binlog error, %s", errors.ErrorStack(err))
 				return errors.Trace(err)
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
 				data, err := s.boltdb.Get(ddlJobNamespace, key)
 				if err != nil {
+					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err))
 					return errors.Annotatef(err,
 						"DDL Job(%d) not found, with binlog commitTS(%d)", item.DdlJobId, resp.CommitTS)
 				}
 				resp.Ddljob = data
 			}
 			if err := stream.Send(resp); err != nil {
+				log.Errorf("gRPC: DumpBinlog send stream error, %s", errors.ErrorStack(err))
 				return errors.Trace(err)
 			}
 			latest = resp.CommitTS
 		}
 	}
+}
+
+// DumpDDLJobs implements the gRPC interface of cistern server
+func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
+	upperTS := req.BeginCommitTS
+	lowerTS := calculatePreviousHourTimestamp(upperTS)
+
+	var (
+		lastTS       int64
+		lastDDLJobID int64
+	)
+
+	err := s.boltdb.Scan(
+		binlogNamespace,
+		codec.EncodeInt([]byte{}, lowerTS),
+		func(key []byte, val []byte) (bool, error) {
+			_, cts, err := codec.DecodeInt(key)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if cts > upperTS && lastTS > 0 {
+				return false, nil
+			}
+			payload, _, err := decodePayload(val)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			item := &binlog.Binlog{}
+			if err := item.Unmarshal(payload); err != nil {
+				return false, errors.Trace(err)
+			}
+			if item.DdlJobId > 0 {
+				lastDDLJobID = item.DdlJobId
+			}
+			lastTS = cts
+			return true, nil
+		},
+	)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs scan boltdb error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+
+	if lastDDLJobID > 0 {
+		return s.getAllHistoryDDLJobsByID(lastDDLJobID)
+	}
+
+	if lastTS > 0 {
+		return s.getAllHistoryDDLJobsByTS(lastTS)
+	}
+
+	return nil, errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
+}
+
+func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64) (*binlog.DumpDDLJobsResp, error) {
+	ddlJobs := [][]byte{}
+	err := s.boltdb.Scan(
+		ddlJobNamespace,
+		codec.EncodeInt([]byte{}, 0),
+		func(key []byte, val []byte) (bool, error) {
+			_, id, err := codec.DecodeInt(key)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if id > upperJobID {
+				return false, nil
+			}
+			ddlJobs = append(ddlJobs, val)
+			return true, nil
+		},
+	)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByID error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+
+	resp := &binlog.DumpDDLJobsResp{
+		Ddljobs: ddlJobs,
+	}
+	return resp, nil
+}
+
+func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, error) {
+	val, err := s.boltdb.Get(binlogNamespace, codec.EncodeInt([]byte{}, ts))
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+	payload, _, err := decodePayload(val)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS decode payload error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+	item := &binlog.Binlog{}
+	err = item.Unmarshal(payload)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS unmarshal payload error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+	if item.Tp != binlog.BinlogType_Commit {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS error, can't find a valid DML binlog by commitTS(%d)", ts)
+		return nil, errors.Errorf("can't find a valid DML binlog by commitTS(%d)", ts)
+	}
+	prewriteValue := &binlog.PrewriteValue{}
+	err = prewriteValue.Unmarshal(item.PrewriteValue)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS unmarshal prewriteValue error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+	upperSchemaVer := prewriteValue.SchemaVersion
+
+	ddlJobs := [][]byte{}
+	err = s.boltdb.Scan(
+		ddlJobNamespace,
+		codec.EncodeInt([]byte{}, 0),
+		func(key []byte, val []byte) (bool, error) {
+			job := &model.Job{}
+			if err := job.Decode(val); err != nil {
+				return false, errors.Trace(err)
+			}
+			var ver int64
+			if err := job.DecodeArgs(&ver); err != nil {
+				return false, errors.Trace(err)
+			}
+			if ver > upperSchemaVer {
+				return false, nil
+			}
+			ddlJobs = append(ddlJobs, val)
+			return true, nil
+		},
+	)
+	if err != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS scan boltdb error, %v", errors.ErrorStack(err))
+		return nil, errors.Trace(err)
+	}
+
+	resp := &binlog.DumpDDLJobsResp{
+		Ddljobs: ddlJobs,
+	}
+	return resp, nil
+}
+
+func calculatePreviousHourTimestamp(current int64) int64 {
+	physical := oracle.ExtractPhysical(uint64(current))
+	prevPhysical := physical - int64(1*time.Hour/time.Millisecond)
+	previous := oracle.ComposeTS(prevPhysical, 0)
+	if previous < 0 {
+		return 0
+	}
+	return int64(previous)
 }
 
 // StartCollect runs Collector up in a goroutine.
