@@ -14,6 +14,8 @@ type Schema struct {
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
 
+	ignoreSchema map[int64]bool
+
 	schemaMetaVersion int64
 }
 
@@ -22,32 +24,41 @@ type tableName struct {
 	table  string
 }
 
-// NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ts int64) (*Schema, error) {
+// NewSchema returns the Schema ""object""
+func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.ReConstructSchema(jobs, ts)
+	err := s.reconstructSchema(jobs, ts, ignoreSchemaNames)
 	if err != nil {
 		log.Errorf("schema: sync schema at %d failed - %v", ts, err)
 		return nil, errors.Trace(err)
 	}
 
+	log.Infof("[local schema] %v", s.tableIDToName)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
+
 	return s, nil
 }
 
 // SyncTiDBSchema syncs the all schema infomations that at ts
-func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)
+	s.ignoreSchema = make(map[int64]bool)
 
 	var err error
 	for _, job := range jobs {
 		switch job.Type {
 		case model.ActionCreateSchema:
 			schema := &model.DBInfo{}
-			if err := job.DecodeArgs(schema); err != nil {
+			if err := job.DecodeArgs(nil, schema); err != nil {
 				return errors.Trace(err)
+			}
+
+			if filterIgnoreSchema(schema, ignoreSchemaNames) {
+				s.AddIgnoreSchema(schema)
+				continue
 			}
 
 			err = s.CreateSchema(schema)
@@ -56,6 +67,11 @@ func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
 			}
 
 		case model.ActionDropSchema:
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
 			_, err := s.DropSchema(job.SchemaID)
 			if err != nil {
 				return errors.Trace(err)
@@ -63,8 +79,13 @@ func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
 
 		case model.ActionCreateTable:
 			table := &model.TableInfo{}
-			if err := job.DecodeArgs(table); err != nil {
+			if err := job.DecodeArgs(nil, table); err != nil {
 				return errors.Trace(err)
+			}
+
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
 			}
 
 			schema, ok := s.SchemaByID(job.SchemaID)
@@ -78,7 +99,12 @@ func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
 			}
 
 		case model.ActionDropTable:
-			_, ok := s.SchemaByID(job.SchemaID)
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			_, ok = s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
@@ -98,7 +124,12 @@ func (s *Schema) ReConstructSchema(jobs []*model.Job, ts int64) error {
 				return errors.NotFoundf("table %d", job.TableID)
 			}
 
-			_, ok := s.SchemaByID(job.SchemaID)
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			_, ok = s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
@@ -138,10 +169,21 @@ func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
 	return
 }
 
+// IgnoreSchemaByID returns the schema that whether to be ignored
+func (s *Schema) IgnoreSchemaByID(id int64) (val bool, ok bool) {
+	val, ok = s.ignoreSchema[id]
+	return
+}
+
 // TableByID returns the TableInfo by table id
 func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	return
+}
+
+// AddIgnoreSchema add schema into ignoreSchema
+func (s *Schema) AddIgnoreSchema(schema *model.DBInfo) {
+	s.ignoreSchema[schema.ID] = true
 }
 
 // DropSchema deletes the given DBInfo

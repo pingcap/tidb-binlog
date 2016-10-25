@@ -48,6 +48,8 @@ type Drainer struct {
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
 
+	ignoreSchemaNames []string
+
 	metrics *metricClient
 
 	ctx    context.Context
@@ -63,6 +65,7 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	drainer := new(Drainer)
 	drainer.cfg = cfg
 	drainer.cisternClient = cisternClient
+	drainer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
 	drainer.jobs = make(map[int64]*model.Job)
@@ -99,7 +102,7 @@ func (d *Drainer) Start() error {
 	}
 
 	// sync the schema at meta.Pos
-	d.schema, err = NewSchema(jobs, d.meta.Pos())
+	d.schema, err = NewSchema(jobs, d.meta.Pos(), d.ignoreSchemaNames)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -113,13 +116,28 @@ func (d *Drainer) Start() error {
 }
 
 func (d *Drainer) getHistoryJob(ts int64) ([]*model.Job, error) {
+	var resp *pb.DumpDDLJobsResp
+	var jobs []*model.Job
+	var err error
+
 	req := &pb.DumpDDLJobsReq{BeginCommitTS: ts}
-	resp, err := d.cisternClient.DumpDDLJobs(d.ctx, req)
-	if err != nil {
-		return nil, errors.Trace(err)
+	tmpDelay := time.Duration(0)
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return nil, nil
+		case <-time.After(tmpDelay):
+			resp, err = d.cisternClient.DumpDDLJobs(d.ctx, req)
+			if err != nil {
+				log.Warningf("[can't get history job]%v", err)
+				tmpDelay = retryTimeout
+				continue
+			}
+		}
+		break
 	}
 
-	var jobs []*model.Job
 	for _, Ddljob := range resp.Ddljobs {
 		job := &model.Job{}
 		err = job.Decode(Ddljob)
@@ -154,8 +172,13 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := &model.DBInfo{}
-		if err := job.DecodeArgs(schema); err != nil {
+		if err := job.DecodeArgs(nil, schema); err != nil {
 			return "", "", true, errors.Trace(err)
+		}
+
+		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
+			d.schema.AddIgnoreSchema(schema)
+			return "", "", false, nil
 		}
 
 		err = d.schema.CreateSchema(schema)
@@ -166,6 +189,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionDropSchema:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schemaName, err := d.schema.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", true, errors.Trace(err)
@@ -176,8 +204,16 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	case model.ActionCreateTable:
 		// get the TableInfo from job rawArgs
 		table := &model.TableInfo{}
-		if err := job.DecodeArgs(table); err != nil {
+		if err := job.DecodeArgs(nil, table); err != nil {
 			return "", "", true, errors.Trace(err)
+		}
+		if table == nil {
+			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+		}
+
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
@@ -193,6 +229,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionDropTable:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
@@ -217,6 +258,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 			return "", "", true, errors.NotFoundf("table %d", job.TableID)
 		}
 
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
@@ -230,6 +276,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionAddForeignKey, model.ActionDropForeignKey:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
@@ -517,6 +568,7 @@ func (d *Drainer) inputStreaming() {
 						log.Error(err)
 					}
 
+					tmpDelay = retryTimeout
 					stream = nil
 					continue
 				}
@@ -526,6 +578,8 @@ func (d *Drainer) inputStreaming() {
 					err = job.Decode(resp.Ddljob)
 					if err != nil {
 						log.Error(err)
+
+						tmpDelay = retryTimeout
 						stream = nil
 						continue
 					}
@@ -537,10 +591,12 @@ func (d *Drainer) inputStreaming() {
 				continue
 			}
 
+			tmpDelay = time.Duration(0)
 			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
 			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
 			if err != nil {
 				stream = nil
+				tmpDelay = retryTimeout
 				log.Error(err)
 				continue
 			}

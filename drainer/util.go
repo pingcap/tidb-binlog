@@ -3,6 +3,8 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -10,6 +12,7 @@ import (
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/terror"
 )
 
@@ -99,4 +102,21 @@ func openDB(username string, password string, host string, port int, proto strin
 
 func closeDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
+}
+
+func formatIgnoreSchemas(ignoreSchemas string) []string {
+	ignoreSchemas = strings.ToLower(ignoreSchemas)
+	schemas := sort.StringSlice(strings.Split(ignoreSchemas, ","))
+	schemas.Sort()
+
+	return []string(schemas)
+}
+
+func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames []string) bool {
+	if len(ignoreSchemaNames) == 0 {
+		return false
+	}
+
+	index := sort.SearchStrings(ignoreSchemaNames, schema.Name.L)
+	return ignoreSchemaNames[index] == schema.Name.L
 }

@@ -22,6 +22,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
 	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", ":10081", "pprof addr")
+	fs.StringVar(&cfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test", "disable sync the meta schema")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 30, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
@@ -70,6 +71,8 @@ type Config struct {
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
 
 	PprofAddr string `toml:"pprof-addr" json:"pprof-addr"`
+
+	IgnoreSchemas string `toml:"ignore-schemas" json:"ignore-schemas"`
 
 	MetricsAddr string `toml:"metrics-addr" json:"metrics-addr"`
 
