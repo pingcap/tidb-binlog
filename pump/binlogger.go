@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -39,6 +40,9 @@ type Binlogger interface {
 
 	// close the binlogger
 	Close() error
+
+	// GC recycles the old binlog file
+	GC(days time.Duration)
 }
 
 // filelog is a logical representation of the log storage.
@@ -192,6 +196,38 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	}
 
 	return ents, nil
+}
+
+// GC recycles the old binlog file
+func (b *binlogger) GC(days time.Duration) {
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		log.Error("read binlog files error:", names)
+		return
+	}
+
+	if len(names) == 0 {
+		return
+	}
+
+	// skip the latest binlog file
+	for _, name := range names[:len(names)-1] {
+		fileName := path.Join(b.dir, name)
+		fi, err := os.Stat(fileName)
+		if err != nil {
+			log.Error("GC binlog file stat error:", err)
+			continue
+		}
+
+		if time.Now().Sub(fi.ModTime()) > days {
+			err := os.Remove(fileName)
+			if err != nil {
+				log.Error("remove old binlog file err")
+				continue
+			}
+			log.Info("GC binlog file:", fileName)
+		}
+	}
 }
 
 // Writes appends the binlog
