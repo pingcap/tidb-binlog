@@ -164,7 +164,7 @@ import:
   - pkg/metrics
   - pkg/rpcutil
 - package: github.com/pingcap/tidb
-  version: dd831660fa04531b2d359f21c525f9207aba26df
+  version: c0c9729300d549dd1b014f2aab043e908126c511
   subpackages:
   - ast
   - context

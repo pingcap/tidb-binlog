@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -17,7 +18,6 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"github.com/ngaut/log"
 )
 
 var windowNamespace []byte
@@ -101,6 +101,12 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // DumpBinlog implements the gRPC interface of cistern server
 func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) error {
+	startTS := time.Now()
+	defer func() {
+		rpcHistogram.WithLabelValues("DumpBinlog").Observe(time.Since(startTS).Seconds())
+		rpcCounter.WithLabelValues("DumpBinlog").Add(1)
+	}()
+
 	batch := 1000
 	latest := req.BeginCommitTS
 
@@ -170,6 +176,11 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // DumpDDLJobs implements the gRPC interface of cistern server
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
+	startTS := time.Now()
+	defer func() {
+		rpcHistogram.WithLabelValues("DumpDDLJobs").Observe(time.Since(startTS).Seconds())
+		rpcCounter.WithLabelValues("DumpDDLJobs").Add(1)
+	}()
 	upperTS := req.BeginCommitTS
 	lowerTS := calculatePreviousHourTimestamp(upperTS)
 

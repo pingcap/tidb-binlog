@@ -159,6 +159,11 @@ func (c *Collector) collect(ctx context.Context) error {
 	if err := c.updateSavepoints(savepoints); err != nil {
 		return errors.Trace(err)
 	}
+
+	for nodeID, pos := range savepoints {
+		savepointSuffix.WithLabelValues(nodeID).Set(float64(pos.Suffix))
+		savepointOffset.WithLabelValues(nodeID).Set(float64(pos.Offset))
+	}
 	return nil
 }
 

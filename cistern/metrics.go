@@ -17,10 +17,47 @@ var (
 			Name:      "deposit_window",
 			Help:      "DepositWindow lower boundary.",
 		})
+
+	savepointSuffix = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "savepoint_suffix",
+			Help:      "Save points suffix for each node.",
+		}, []string{"nodeID"})
+
+	savepointOffset = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "savepoint_offset",
+			Help:      "Save points offset for each node.",
+		}, []string{"nodeID"})
+
+	rpcCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "rpc_counter",
+			Help:      "RPC counter for every rpc related operations.",
+		}, []string{"method"})
+
+	rpcHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "rpc_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+		}, []string{"method"})
 )
 
 func init() {
 	prometheus.MustRegister(depositWindowBoundary)
+	prometheus.MustRegister(savepointOffset)
+	prometheus.MustRegister(savepointSuffix)
+	prometheus.MustRegister(rpcCounter)
+	prometheus.MustRegister(rpcHistogram)
 }
 
 type metricClient struct {
