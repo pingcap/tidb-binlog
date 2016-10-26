@@ -34,15 +34,16 @@ type Collector struct {
 	batch     int32
 	interval  time.Duration
 	reg       *pump.EtcdRegistry
-	mu        struct {
-		sync.RWMutex
-		pumps map[string]*Pump
-	}
-	timeout  time.Duration
-	window   *DepositWindow
-	boltdb   store.Store
-	tiClient *tikv.LockResolver
-	tiStore  kv.Storage
+	pumps     map[string]*Pump
+	timeout   time.Duration
+	window    *DepositWindow
+	boltdb    store.Store
+	tiClient  *tikv.LockResolver
+	tiStore   kv.Storage
+
+	// expose savepoints to HTTP
+	mu     sync.Mutex
+	status map[string]binlog.Pos
 }
 
 // NewCollector returns an instance of Collector
@@ -66,25 +67,24 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	c := &Collector{
+	return &Collector{
 		clusterID: cfg.ClusterID,
 		batch:     int32(cfg.CollectBatch),
 		interval:  time.Duration(cfg.CollectInterval) * time.Second,
 		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		pumps:     make(map[string]*Pump),
 		timeout:   cfg.PumpTimeout,
 		window:    w,
 		boltdb:    s,
 		tiClient:  tiClient,
 		tiStore:   tiStore,
-	}
-	c.mu.pumps = make(map[string]*Pump)
-	return c, nil
+	}, nil
 }
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		for _, p := range c.mu.pumps {
+		for _, p := range c.pumps {
 			p.Close()
 		}
 		if err := c.reg.Close(); err != nil {
@@ -121,8 +121,7 @@ func (c *Collector) collect(ctx context.Context) error {
 	// start to collect binlog from each pump
 	resc := make(chan Result)
 	var wg sync.WaitGroup
-	c.mu.RLock()
-	for _, p := range c.mu.pumps {
+	for _, p := range c.pumps {
 		wg.Add(1)
 		go func(p *Pump) {
 			select {
@@ -132,7 +131,6 @@ func (c *Collector) collect(ctx context.Context) error {
 			wg.Done()
 		}(p)
 	}
-	c.mu.RUnlock()
 	go func() {
 		wg.Wait()
 		close(resc)
@@ -171,8 +169,6 @@ func (c *Collector) collect(ctx context.Context) error {
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	nodes, err := c.reg.Nodes(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -183,7 +179,7 @@ func (c *Collector) prepare(ctx context.Context) error {
 		if !n.IsAlive {
 			return errors.Errorf("pump with nodeID(%s) is offline, give up this round of processing", n.NodeID)
 		}
-		_, ok := c.mu.pumps[n.NodeID]
+		_, ok := c.pumps[n.NodeID]
 		if !ok {
 			pos, err := c.getSavePoints(n.NodeID)
 			if err != nil {
@@ -195,19 +191,27 @@ func (c *Collector) prepare(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			c.mu.pumps[n.NodeID] = p
+			c.pumps[n.NodeID] = p
 		}
 		online[n.NodeID] = true
 	}
-	for id, p := range c.mu.pumps {
+	for id, p := range c.pumps {
 		if !online[id] {
 			// release invalid connection
 			p.Close()
-			delete(c.mu.pumps, id)
+			delete(c.pumps, id)
 			log.Infof("node(%s) of cluster(%d) on host(%s) has been removed and release the connection to it",
 				id, p.clusterID, p.host)
 		}
 	}
+
+	savepoints := make(map[string]binlog.Pos)
+	for id, p := range c.pumps {
+		savepoints[id] = p.current
+	}
+	c.mu.Lock()
+	c.status = savepoints
+	c.mu.Unlock()
 	return nil
 }
 
@@ -246,11 +250,9 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		c.mu.RLock()
-		if p, ok := c.mu.pumps[id]; ok {
+		if p, ok := c.pumps[id]; ok {
 			p.current = pos
 		}
-		c.mu.RUnlock()
 	}
 	return nil
 }
@@ -369,12 +371,6 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 
 // Status exposes collector's status to HTTP handler.
 func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
-	savepoints := make(map[string]binlog.Pos)
-	c.mu.RLock()
-	for nodeID, pump := range c.mu.pumps {
-		savepoints[nodeID] = pump.current
-	}
-	c.mu.RUnlock()
 	lower := c.window.LoadLower()
 	upper := c.window.LoadUpper()
 
@@ -385,7 +381,9 @@ func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
 			Upper int64
 		}
 	}
-	status.SavePoints = savepoints
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	status.SavePoints = c.status
 	status.DepositWindow.Lower = lower
 	status.DepositWindow.Upper = upper
 
