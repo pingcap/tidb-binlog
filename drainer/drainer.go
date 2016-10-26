@@ -43,6 +43,8 @@ type Drainer struct {
 	wg sync.WaitGroup
 
 	input chan []byte
+
+	jLock sync.RWMutex
 	jobs  map[int64]*model.Job
 
 	toDB          *sql.DB
@@ -121,19 +123,17 @@ func (d *Drainer) getHistoryJob(ts int64) ([]*model.Job, error) {
 	var err error
 
 	req := &pb.DumpDDLJobsReq{BeginCommitTS: ts}
-	tmpDelay := time.Duration(0)
 
 	for {
-		select {
-		case <-d.ctx.Done():
-			return nil, nil
-		case <-time.After(tmpDelay):
-			resp, err = d.cisternClient.DumpDDLJobs(d.ctx, req)
-			if err != nil {
-				log.Warningf("[can't get history job]%v", err)
-				tmpDelay = retryTimeout
-				continue
+		resp, err = d.cisternClient.DumpDDLJobs(d.ctx, req)
+		if err != nil {
+			log.Warningf("[can't get history job]%v", err)
+			select {
+			case <-d.ctx.Done():
+				return nil, nil
+			case <-time.After(retryTimeout):
 			}
+			continue
 		}
 		break
 	}
@@ -163,7 +163,9 @@ func (d *Drainer) savePoint(ts int64) {
 // the third value[bool]: whether the job is need to execute
 // the fourth value[error]: the handleDDL execution's err
 func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
+	d.jLock.RLock()
 	job, ok := d.jobs[id]
+	d.jLock.RUnlock()
 	if !ok {
 		return "", "", false, errors.Errorf("[ddl jon miss]%v", id)
 	}
@@ -411,7 +413,9 @@ func (d *Drainer) run() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			d.jLock.Lock()
 			delete(d.jobs, jobID)
+			d.jLock.Unlock()
 
 			if ok {
 				sql, err = d.translator.GenDDLSQL(sql, schema)
@@ -552,65 +556,65 @@ func (d *Drainer) pushMetrics() {
 }
 
 func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, error) {
-	if stream != nil {
-		resp, err := stream.Recv()
+	var nextTs int64
+	var err error
+	var resp *pb.DumpBinlogResp
+
+	for {
+		resp, err = stream.Recv()
 		if err != nil {
-			return 0, errors.Trace(err)
+			break
 		}
 
 		if resp.Ddljob != nil {
 			job := &model.Job{}
 			err = job.Decode(resp.Ddljob)
 			if err != nil {
-				return 0, errors.Trace(err)
+				break
 			}
+
+			d.jLock.Lock()
 			d.jobs[job.ID] = job
+			d.jLock.Unlock()
 		}
 
+		nextTs = resp.CommitTS
 		d.input <- resp.Payload
-		return resp.CommitTS, nil
 	}
 
-	return 0, nil
+	return nextTs, errors.Trace(err)
 }
 
 func (d *Drainer) inputStreaming() {
 	d.wg.Add(1)
 	defer d.wg.Done()
 
+	var err error
 	var stream pb.Cistern_DumpBinlogClient
-
 	nextRequestTS := d.meta.Pos()
-	tmpDelay := time.Duration(0)
 
 	for {
-
 		select {
 		case <-d.ctx.Done():
-			return
-		case <-time.After(tmpDelay):
-			nextTs, err := d.receiveBinlog(stream)
+		default:
+			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
+			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
 			if err != nil {
-				tmpDelay = retryTimeout
-				stream = nil
-				if errors.Cause(err) != io.EOF {
-					log.Errorf("[stream]%v", err)
-				}
+				log.Errorf("[Get stream]%v", err)
+				time.Sleep(retryTimeout)
 				continue
 			}
 
-			if nextTs == 0 {
-				req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
-				stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
-				if err != nil {
-					stream = nil
-					tmpDelay = retryTimeout
-					log.Error(err)
-					continue
-				}
-			} else {
+			nextTs, err := d.receiveBinlog(stream)
+			if nextTs != 0 {
 				nextRequestTS = nextTs
-				tmpDelay = time.Duration(0)
+			}
+			if err != nil {
+				if errors.Cause(err) != io.EOF {
+					log.Errorf("[stream]%v", err)
+				}
+				time.Sleep(retryTimeout)
+				continue
 			}
 		}
 	}
