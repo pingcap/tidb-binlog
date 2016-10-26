@@ -596,6 +596,7 @@ func (d *Drainer) inputStreaming() {
 	for {
 		select {
 		case <-d.ctx.Done():
+			return
 		default:
 			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
 			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
