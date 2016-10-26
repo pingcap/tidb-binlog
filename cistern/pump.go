@@ -1,12 +1,12 @@
 package cistern
 
 import (
-	"context"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

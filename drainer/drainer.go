@@ -48,7 +48,7 @@ type Drainer struct {
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
 
-	ignoreSchemaNames []string
+	ignoreSchemaNames map[string]struct{}
 
 	metrics *metricClient
 
@@ -157,6 +157,11 @@ func (d *Drainer) savePoint(ts int64) {
 	}
 }
 
+// handleDDL has four return values,
+// the first value[string]: the schema name
+// the second value[string]: the sql that is corresponding to the job
+// the third value[bool]: whether the job is need to execute
+// the fourth value[error]: the handleDDL execution's err
 func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
 	job, ok := d.jobs[id]
 	if !ok {
@@ -546,12 +551,33 @@ func (d *Drainer) pushMetrics() {
 	}()
 }
 
+func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, error) {
+	if stream != nil {
+		resp, err := stream.Recv()
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+
+		if resp.Ddljob != nil {
+			job := &model.Job{}
+			err = job.Decode(resp.Ddljob)
+			if err != nil {
+				return 0, errors.Trace(err)
+			}
+			d.jobs[job.ID] = job
+		}
+
+		d.input <- resp.Payload
+		return resp.CommitTS, nil
+	}
+
+	return 0, nil
+}
+
 func (d *Drainer) inputStreaming() {
 	d.wg.Add(1)
 	defer d.wg.Done()
 
-	var err error
-	var resp *pb.DumpBinlogResp
 	var stream pb.Cistern_DumpBinlogClient
 
 	nextRequestTS := d.meta.Pos()
@@ -563,44 +589,28 @@ func (d *Drainer) inputStreaming() {
 		case <-d.ctx.Done():
 			return
 		case <-time.After(tmpDelay):
-			if stream != nil {
-				resp, err = stream.Recv()
-				if err != nil {
-					if err != io.EOF {
-						log.Error(err)
-					}
-
-					tmpDelay = retryTimeout
-					stream = nil
-					continue
+			nextTs, err := d.receiveBinlog(stream)
+			if err != nil {
+				tmpDelay = retryTimeout
+				stream = nil
+				if errors.Cause(err) != io.EOF {
+					log.Errorf("[stream]%v", err)
 				}
-
-				if resp.Ddljob != nil {
-					job := &model.Job{}
-					err = job.Decode(resp.Ddljob)
-					if err != nil {
-						log.Error(err)
-
-						tmpDelay = retryTimeout
-						stream = nil
-						continue
-					}
-					d.jobs[job.ID] = job
-				}
-
-				d.input <- resp.Payload
-				nextRequestTS = resp.CommitTS
 				continue
 			}
 
-			tmpDelay = time.Duration(0)
-			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
-			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
-			if err != nil {
-				stream = nil
-				tmpDelay = retryTimeout
-				log.Error(err)
-				continue
+			if nextTs == 0 {
+				req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
+				stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
+				if err != nil {
+					stream = nil
+					tmpDelay = retryTimeout
+					log.Error(err)
+					continue
+				}
+			} else {
+				nextRequestTS = nextTs
+				tmpDelay = time.Duration(0)
 			}
 		}
 	}

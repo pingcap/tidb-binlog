@@ -14,7 +14,7 @@ type Schema struct {
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
 
-	ignoreSchema map[int64]bool
+	ignoreSchema map[int64]struct{}
 
 	schemaMetaVersion int64
 }
@@ -25,7 +25,7 @@ type tableName struct {
 }
 
 // NewSchema returns the Schema ""object""
-func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
 	err := s.reconstructSchema(jobs, ts, ignoreSchemaNames)
@@ -42,11 +42,11 @@ func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) (*Schema
 }
 
 // SyncTiDBSchema syncs the all schema infomations that at ts
-func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)
-	s.ignoreSchema = make(map[int64]bool)
+	s.ignoreSchema = make(map[int64]struct{})
 
 	var err error
 	for _, job := range jobs {
@@ -172,7 +172,7 @@ func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
 }
 
 // IgnoreSchemaByID returns the schema that whether to be ignored
-func (s *Schema) IgnoreSchemaByID(id int64) (val bool, ok bool) {
+func (s *Schema) IgnoreSchemaByID(id int64) (val struct{}, ok bool) {
 	val, ok = s.ignoreSchema[id]
 	return
 }
@@ -185,7 +185,7 @@ func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 
 // AddIgnoreSchema add schema into ignoreSchema
 func (s *Schema) AddIgnoreSchema(schema *model.DBInfo) {
-	s.ignoreSchema[schema.ID] = true
+	s.ignoreSchema[schema.ID] = struct{}{}
 }
 
 // DropIgnoreSchema delete the given DBInfo in ignoreSchema

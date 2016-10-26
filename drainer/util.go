@@ -104,19 +104,19 @@ func closeDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
 }
 
-func formatIgnoreSchemas(ignoreSchemas string) []string {
+func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 	ignoreSchemas = strings.ToLower(ignoreSchemas)
 	schemas := sort.StringSlice(strings.Split(ignoreSchemas, ","))
-	schemas.Sort()
 
-	return []string(schemas)
-}
-
-func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames []string) bool {
-	if len(ignoreSchemaNames) == 0 {
-		return false
+	ignoreSchemaNames := make(map[string]struct{})
+	for _, schema := range schemas {
+		ignoreSchemaNames[schema] = struct{}{}
 	}
 
-	index := sort.SearchStrings(ignoreSchemaNames, schema.Name.L)
-	return ignoreSchemaNames[index] == schema.Name.L
+	return ignoreSchemaNames
+}
+
+func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
+	_, ok := ignoreSchemaNames[schema.Name.L]
+	return ok
 }
