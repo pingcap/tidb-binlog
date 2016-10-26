@@ -34,7 +34,8 @@ func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames []string) (*Schema
 		return nil, errors.Trace(err)
 	}
 
-	log.Infof("[local schema] %v", s.tableIDToName)
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
 	log.Infof("[ignore schema] %v", s.ignoreSchema)
 
 	return s, nil
@@ -69,6 +70,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaName
 		case model.ActionDropSchema:
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
+				s.DropIgnoreSchema(job.SchemaID)
 				continue
 			}
 
@@ -184,6 +186,11 @@ func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 // AddIgnoreSchema add schema into ignoreSchema
 func (s *Schema) AddIgnoreSchema(schema *model.DBInfo) {
 	s.ignoreSchema[schema.ID] = true
+}
+
+// DropIgnoreSchema delete the given DBInfo in ignoreSchema
+func (s *Schema) DropIgnoreSchema(id int64) {
+	delete(s.ignoreSchema, id)
 }
 
 // DropSchema deletes the given DBInfo

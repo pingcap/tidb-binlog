@@ -191,6 +191,7 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	case model.ActionDropSchema:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
+			d.schema.DropIgnoreSchema(job.SchemaID)
 			return "", "", false, nil
 		}
 
@@ -405,6 +406,7 @@ func (d *Drainer) run() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			delete(d.jobs, jobID)
 
 			if ok {
 				sql, err = d.translator.GenDDLSQL(sql, schema)

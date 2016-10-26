@@ -10,12 +10,12 @@ batch = 10
 host = "127.0.0.1"
 user = "root"
 password = ""
-name = "test"
+name = "binlog_test"
 port = 4000
 
 [target-db]
 host = "127.0.0.1"
 user = "root"
 password = ""
-name = "test"
+name = "binlog_test"
 port = 3306
