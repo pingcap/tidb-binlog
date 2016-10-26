@@ -210,7 +210,11 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 	}
 
 	if lastDDLJobID > 0 {
-		return s.getAllHistoryDDLJobsByID(lastDDLJobID)
+		// If the exceed flag is true means that can't find a binlog which commitTS less or equal than the given position.
+		// In this situation it should grab the first one whose commitTS is greater than the begin TS, and have to
+		// do some special treatment in getAllHistoryDDLJobsByID()
+		exceed := lastTS > req.BeginCommitTS
+		return s.getAllHistoryDDLJobsByID(lastDDLJobID, exceed)
 	}
 
 	if lastTS > 0 {
@@ -220,7 +224,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 	return nil, errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
 }
 
-func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64) (*binlog.DumpDDLJobsResp, error) {
+func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlog.DumpDDLJobsResp, error) {
 	ddlJobs := [][]byte{}
 	err := s.boltdb.Scan(
 		ddlJobNamespace,
@@ -230,7 +234,10 @@ func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64) (*binlog.DumpDDLJobs
 			if err != nil {
 				return false, errors.Trace(err)
 			}
-			if id > upperJobID {
+			// if exceed is true the one with the upperJobID must be excluded
+			if exceed && id >= upperJobID {
+				return false, nil
+			} else if id > upperJobID {
 				return false, nil
 			}
 			ddlJobs = append(ddlJobs, val)
