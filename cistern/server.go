@@ -3,6 +3,7 @@ package cistern
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -16,6 +17,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
+	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -375,11 +377,16 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
+	m := cmux.New(tcpLis)
+	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpL := m.Match(cmux.HTTP1Fast())
 
 	// register cistern server with gRPC server and start to serve listener
 	binlog.RegisterCisternServer(s.gs, s)
-	s.gs.Serve(tcpLis)
-	return nil
+	go s.gs.Serve(grpcL)
+
+	http.HandleFunc("/status", s.collector.Status)
+	return http.Serve(httpL, nil)
 }
 
 // Close stops all goroutines started by cistern server gracefully

@@ -1,7 +1,9 @@
 package cistern
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -353,4 +355,29 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		}
 	}
 	return nil
+}
+
+// Status exposes collector's status to HTTP handler.
+func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
+	savepoints := make(map[string]binlog.Pos)
+	for nodeID := range c.pumps {
+		if pos, err := c.getSavePoints(nodeID); err == nil {
+			savepoints[nodeID] = pos
+		}
+	}
+	lower := c.window.LoadLower()
+	upper := c.window.LoadUpper()
+
+	var status struct {
+		SavePoints    map[string]binlog.Pos
+		DepositWindow struct {
+			Lower int64
+			Upper int64
+		}
+	}
+	status.SavePoints = savepoints
+	status.DepositWindow.Lower = lower
+	status.DepositWindow.Upper = upper
+
+	json.NewEncoder(w).Encode(status)
 }
