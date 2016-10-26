@@ -1,5 +1,5 @@
-hash: 5c99ef1b18738233697bf25bf9c7763bf20d58fac13e6e571673799a8d4f1788
-updated: 2016-10-25T19:17:51.450838364+08:00
+hash: 6fde14409f61931f400b1be8ddbb79d0bf79a8e63d35dd223404f0945a7c44a0
+updated: 2016-10-25T22:29:54.807177646+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -158,14 +158,14 @@ imports:
   - pkg/raft_serverpb
   - pkg/util
 - name: github.com/pingcap/pd
-  version: c0af22f4f5c96ec7bd6d7c284529fa674a06cada
+  version: dcfe726e8c98451c554a88ce78bcd2f0b28fd680
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: dd831660fa04531b2d359f21c525f9207aba26df
+  version: 0eee7c85224cbd7ea7b6887e5b07990f2e82bbb4
   subpackages:
   - ast
   - context
