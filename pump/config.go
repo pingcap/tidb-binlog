@@ -22,6 +22,7 @@ const (
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultSocket            = "unix:///tmp/pump.sock"
 	defaultHeartbeatInterval = 2
+	defaultGC                = 7
 	defaultDataDir           = "data.pump"
 )
 
@@ -36,6 +37,7 @@ type Config struct {
 	EtcdDialTimeout   time.Duration
 	DataDir           string `json:"data-dir"`
 	HeartbeatInterval uint   `json:"heartbeat-interval"`
+	GC                uint   `json:"gc"`
 	Debug             bool
 	configFile        string
 	printVersion      bool
@@ -60,6 +62,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
+	fs.UintVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")

@@ -1,5 +1,5 @@
-hash: 66b2e0cabba161941592f87e96b08a8a5491f5d04a2eb3973630da2201c9dd03
-updated: 2016-10-25T19:22:46.082052792+08:00
+hash: 7e28aca80dfb27b84245a374d0bbe6e86db5dcffee48017edc59f3959fb06ae1
+updated: 2016-10-26T19:07:50.731869658+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -158,14 +158,14 @@ imports:
   - pkg/raft_serverpb
   - pkg/util
 - name: github.com/pingcap/pd
-  version: c0af22f4f5c96ec7bd6d7c284529fa674a06cada
+  version: dcfe726e8c98451c554a88ce78bcd2f0b28fd680
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: c0c9729300d549dd1b014f2aab043e908126c511
+  version: 0eee7c85224cbd7ea7b6887e5b07990f2e82bbb4
   subpackages:
   - ast
   - context
@@ -219,7 +219,7 @@ imports:
   - util/stringutil
   - util/types
 - name: github.com/pingcap/tipb
-  version: 38084aeaf922fb5d41284865d64b2113f3ae5f1c
+  version: 627e9a203d065e3c4963403eadc235cb3eacbd7f
   subpackages:
   - go-binlog
   - go-tipb
