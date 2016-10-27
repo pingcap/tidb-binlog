@@ -386,7 +386,9 @@ func (s *Server) Start() error {
 	go s.gs.Serve(grpcL)
 
 	http.HandleFunc("/status", s.collector.Status)
-	return http.Serve(httpL, nil)
+	go http.Serve(httpL, nil)
+
+	return m.Serve()
 }
 
 // Close stops all goroutines started by cistern server gracefully
