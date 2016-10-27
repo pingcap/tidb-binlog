@@ -13,15 +13,12 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/drainer"
-	"github.com/pingcap/tidb/store/tikv"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"google.golang.org/grpc"
 )
 
 func main() {
-	tidb.RegisterStore("tikv", tikv.Driver{})
 	cfg := drainer.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
@@ -47,17 +44,11 @@ func main() {
 	}
 
 	log.Infof("%v", cfg)
-	storePath := fmt.Sprintf("tikv://%s", cfg.PdPath)
-	store, err := tidb.NewStore(storePath)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
 
 	cisternClient := createCisternClient(cfg.CisternClient.Host, cfg.CisternClient.Port)
 
-	ds, err := drainer.NewDrainer(cfg, store, cisternClient)
+	ds, err := drainer.NewDrainer(cfg, cisternClient)
 	if err != nil {
-		store.Close()
 		log.Fatal(errors.ErrorStack(err))
 	}
 

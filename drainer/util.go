@@ -3,6 +3,7 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -11,7 +12,6 @@ import (
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
-	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
 )
 
@@ -26,7 +26,6 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 	}
 
 	var err error
-
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
 			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
@@ -104,108 +103,19 @@ func closeDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
 }
 
-func adjustColumn(table *model.TableInfo, job *model.Job) error {
-	offsetChanged := make(map[int]int)
-	offset := 0
-	col := &model.ColumnInfo{}
+func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
+	ignoreSchemas = strings.ToLower(ignoreSchemas)
+	schemas := strings.Split(ignoreSchemas, ",")
 
-	err := job.DecodeArgs(col, nil, &offset)
-	if err != nil {
-		return errors.Trace(err)
+	ignoreSchemaNames := make(map[string]struct{})
+	for _, schema := range schemas {
+		ignoreSchemaNames[schema] = struct{}{}
 	}
 
-	if col.Name.L != table.Columns[offset].Name.L {
-		return errors.Errorf("table %s columns %s position can't match ", table.Name, col.Name)
-	}
-
-	for i := offset + 1; i < len(table.Columns); i++ {
-		offsetChanged[table.Columns[i].Offset] = i
-		table.Columns[i].Offset = i
-	}
-	table.Columns[offset].Offset = offset
-
-	for _, idx := range table.Indices {
-		for _, col := range idx.Columns {
-			newOffset, ok := offsetChanged[col.Offset]
-			if ok {
-				col.Offset = newOffset
-			}
-		}
-	}
-
-	return nil
+	return ignoreSchemaNames
 }
 
-func adjustTableIndex(table *model.TableInfo, job *model.Job, isAdd bool) error {
-	var indexName model.CIStr
-	var indexInfo *model.IndexInfo
-	var err error
-
-	if isAdd {
-		err = job.DecodeArgs(nil, &indexName, nil, nil)
-	} else {
-		err = job.DecodeArgs(&indexName)
-	}
-
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	newIndices := make([]*model.IndexInfo, 0, len(table.Indices))
-	for _, idx := range table.Indices {
-		if idx.Name.L != indexName.L {
-			newIndices = append(newIndices, idx)
-		} else {
-			indexInfo = idx
-		}
-	}
-
-	if indexInfo == nil {
-		return errors.NotFoundf("table %s(%d) 's index %s", table.Name, table.ID, indexName)
-	}
-
-	if isAdd {
-		addIndexColumnFlag(table, indexInfo)
-		return nil
-	}
-
-	table.Indices = newIndices
-
-	dropIndexColumnFlag(table, indexInfo)
-	return nil
-}
-
-func addIndexColumnFlag(table *model.TableInfo, indexInfo *model.IndexInfo) error {
-
-	col := indexInfo.Columns[0]
-
-	if indexInfo.Unique && len(indexInfo.Columns) == 1 {
-		table.Columns[col.Offset].Flag |= tmysql.UniqueKeyFlag
-	} else {
-		table.Columns[col.Offset].Flag |= tmysql.MultipleKeyFlag
-	}
-
-	return nil
-}
-
-func dropIndexColumnFlag(table *model.TableInfo, indexInfo *model.IndexInfo) {
-	col := indexInfo.Columns[0]
-
-	if indexInfo.Unique && len(indexInfo.Columns) == 1 {
-		table.Columns[col.Offset].Flag &= ^uint(tmysql.UniqueKeyFlag)
-	} else {
-		table.Columns[col.Offset].Flag &= ^uint(tmysql.MultipleKeyFlag)
-	}
-
-	for _, index := range table.Indices {
-		if index.Name.L == indexInfo.Name.L {
-			continue
-		}
-
-		if index.Columns[0].Name.L != col.Name.L {
-			continue
-		}
-
-		addIndexColumnFlag(table, index)
-	}
+func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
+	_, ok := ignoreSchemaNames[schema.Name.L]
+	return ok
 }
