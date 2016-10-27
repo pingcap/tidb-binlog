@@ -139,7 +139,7 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 	// match ddl binlog
 	for jobID, item := range preDDLItems {
 		if postDDL, ok := postDDLItems[jobID]; ok {
-			item.CommitTs = item.StartTs
+			item.CommitTs = postDDL.CommitTs
 			item.Tp = postDDL.Tp
 			res.binlogs[item.CommitTs] = item
 			delete(preDDLItems, jobID)
@@ -236,7 +236,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 		// match ddl binlog
 		for jobID, item := range preDDLItems {
 			if postDDL, ok := postDDLItems[jobID]; ok {
-				item.CommitTs = item.StartTs
+				item.CommitTs = postDDL.CommitTs
 				item.Tp = postDDL.Tp
 				binlogs[item.CommitTs] = item
 				delete(preDDLItems, jobID)
