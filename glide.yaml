@@ -157,14 +157,14 @@ import:
   - pkg/raft_serverpb
   - pkg/util
 - package: github.com/pingcap/pd
-  version: c0af22f4f5c96ec7bd6d7c284529fa674a06cada
+  version: dcfe726e8c98451c554a88ce78bcd2f0b28fd680
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - package: github.com/pingcap/tidb
-  version: c0c9729300d549dd1b014f2aab043e908126c511
+  version: 0eee7c85224cbd7ea7b6887e5b07990f2e82bbb4
   subpackages:
   - ast
   - context

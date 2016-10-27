@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -59,6 +60,7 @@ type Server struct {
 	gs       *grpc.Server
 	ctx      context.Context
 	cancel   context.CancelFunc
+	gc       time.Duration
 }
 
 // NewServer return a instance of pump server
@@ -77,6 +79,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:         grpc.NewServer(),
 		ctx:        ctx,
 		cancel:     cancel,
+		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 	}, nil
 }
 
@@ -210,11 +213,26 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
 	}
 
+	// gc old binlog files
+	go s.gcBinlogFile()
+
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 	go s.gs.Serve(unixLis)
 	s.gs.Serve(tcpLis)
 	return nil
+}
+
+func (s *Server) gcBinlogFile() {
+	if s.gc == 0 {
+		return
+	}
+	for {
+		for _, b := range s.dispatcher {
+			b.GC(s.gc)
+		}
+		time.Sleep(time.Hour)
+	}
 }
 
 // Close gracefully releases resource of pump server
