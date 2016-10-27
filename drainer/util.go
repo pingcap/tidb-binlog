@@ -3,7 +3,6 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -106,7 +105,7 @@ func closeDB(db *sql.DB) error {
 
 func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 	ignoreSchemas = strings.ToLower(ignoreSchemas)
-	schemas := sort.StringSlice(strings.Split(ignoreSchemas, ","))
+	schemas := strings.Split(ignoreSchemas, ",")
 
 	ignoreSchemaNames := make(map[string]struct{})
 	for _, schema := range schemas {

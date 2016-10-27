@@ -24,7 +24,7 @@ type tableName struct {
 	table  string
 }
 
-// NewSchema returns the Schema ""object""
+// NewSchema returns the Schema object
 func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
