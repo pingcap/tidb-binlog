@@ -1,7 +1,9 @@
 package cistern
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -38,6 +40,10 @@ type Collector struct {
 	boltdb    store.Store
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
+
+	// expose savepoints to HTTP
+	mu     sync.Mutex
+	status map[string]binlog.Pos
 }
 
 // NewCollector returns an instance of Collector
@@ -198,6 +204,14 @@ func (c *Collector) prepare(ctx context.Context) error {
 				id, p.clusterID, p.host)
 		}
 	}
+
+	savepoints := make(map[string]binlog.Pos)
+	for id, p := range c.pumps {
+		savepoints[id] = p.current
+	}
+	c.mu.Lock()
+	c.status = savepoints
+	c.mu.Unlock()
 	return nil
 }
 
@@ -353,4 +367,25 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		}
 	}
 	return nil
+}
+
+// Status exposes collector's status to HTTP handler.
+func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
+	lower := c.window.LoadLower()
+	upper := c.window.LoadUpper()
+
+	var status struct {
+		SavePoints    map[string]binlog.Pos
+		DepositWindow struct {
+			Lower int64
+			Upper int64
+		}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	status.SavePoints = c.status
+	status.DepositWindow.Lower = lower
+	status.DepositWindow.Upper = upper
+
+	json.NewEncoder(w).Encode(status)
 }
