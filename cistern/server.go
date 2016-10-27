@@ -377,7 +377,7 @@ func (s *Server) StartGC() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				err := GC(s.boltdb, binlogNamespace, s.gc)
+				err := GColdBinLog(s.boltdb, binlogNamespace, s.gc)
 				if err != nil {
 					log.Error("GC binlog error:", errors.ErrorStack(err))
 				}

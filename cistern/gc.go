@@ -9,9 +9,9 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-// GC recycle old binlog data in the store.
+// GColdBinLog recycle old binlog data in the store.
 // days indicates for how long binlog will be preserve.
-func GC(store store.Store, ns []byte, days time.Duration) error {
+func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
 	endkey, err := store.EndKey(ns)
 	if err != nil {
 		return errors.Trace(err)
