@@ -3,6 +3,7 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"sync"
@@ -13,8 +14,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -45,9 +44,13 @@ type Drainer struct {
 
 	input chan []byte
 
-	store         kv.Storage
+	jLock sync.RWMutex
+	jobs  map[int64]*model.Job
+
 	toDB          *sql.DB
 	cisternClient pb.CisternClient
+
+	ignoreSchemaNames map[string]struct{}
 
 	metrics *metricClient
 
@@ -56,17 +59,18 @@ type Drainer struct {
 }
 
 // NewDrainer returns a Drainer instance
-func NewDrainer(cfg *Config, store kv.Storage, cisternClient pb.CisternClient) (*Drainer, error) {
+func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
 	drainer := new(Drainer)
 	drainer.cfg = cfg
-	drainer.store = store
 	drainer.cisternClient = cisternClient
+	drainer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
+	drainer.jobs = make(map[int64]*model.Job)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
 
 	var metrics *metricClient
@@ -90,13 +94,17 @@ func (d *Drainer) Start() error {
 	} else {
 		err = d.meta.Save(d.cfg.InitCommitTS)
 	}
+	if err != nil {
+		return errors.Trace(err)
+	}
 
+	jobs, err := d.getHistoryJob(d.meta.Pos())
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// sync the schema at meta.Pos
-	d.schema, err = NewSchema(d.store, uint64(d.meta.Pos()))
+	d.schema, err = NewSchema(jobs, d.meta.Pos(), d.ignoreSchemaNames)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -109,6 +117,39 @@ func (d *Drainer) Start() error {
 	return nil
 }
 
+func (d *Drainer) getHistoryJob(ts int64) ([]*model.Job, error) {
+	var resp *pb.DumpDDLJobsResp
+	var jobs []*model.Job
+	var err error
+
+	req := &pb.DumpDDLJobsReq{BeginCommitTS: ts}
+
+	for {
+		resp, err = d.cisternClient.DumpDDLJobs(d.ctx, req)
+		if err != nil {
+			log.Warningf("[can't get history job]%v", err)
+			select {
+			case <-d.ctx.Done():
+				return nil, nil
+			case <-time.After(retryTimeout):
+			}
+			continue
+		}
+		break
+	}
+
+	for _, Ddljob := range resp.Ddljobs {
+		job := &model.Job{}
+		err = job.Decode(Ddljob)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, nil
+}
+
 func (d *Drainer) savePoint(ts int64) {
 	err := d.meta.Save(ts)
 	if err != nil {
@@ -116,84 +157,35 @@ func (d *Drainer) savePoint(ts int64) {
 	}
 }
 
-func (d *Drainer) getHistoryJob(id int64) (*model.Job, error) {
-	version, err := d.store.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	snapshot, err := d.store.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	job, err := snapMeta.GetHistoryDDLJob(id)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return job, err
-}
-
-func (d *Drainer) getSnapShotTable(snapshotVer uint64, schemaID int64, tableID int64) (*model.TableInfo, error) {
-	version := kv.NewVersion(snapshotVer)
-	snapshot, err := d.store.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-
-	table, err := snapMeta.GetTable(schemaID, tableID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return table, nil
-}
-
-// while appears ddl, we would wait ddl completed.
-// According to tidb ddl source code, the ways that we will change local schema as blew:
-// 1 we can get the newest schema info from job if the ddl type is ActionCreateSchema/ActionCreateTable.
-// 2 we can change the local schema info if the ddl type is ActionDropSchema/ActionDropTable.
-// 3 we can get the schema info from the job whose state is StateReorganization, then do some small adjustments
-//   if the ddl type is ActionAddColumn/ActionDropColumn/ActionAddIndex
-// 4 we can just do samll adjustments if the ddl type is ActionDropIndex
-// 5 we don't need to change the local schema info if the ddl type is ActionAddForeignKey/ActionDropForeignKey
+// handleDDL has four return values,
+// the first value[string]: the schema name
+// the second value[string]: the sql that is corresponding to the job
+// the third value[bool]: whether the job is need to execute
+// the fourth value[error]: the handleDDL execution's err
 func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
-	job, err := d.getHistoryJob(id)
-	if err != nil {
-		return "", "", false, errors.Trace(err)
-	}
-
-	tmpDelay := retryTimeout
-	for job == nil {
-		select {
-		case <-d.ctx.Done():
-			return "", "", false, errors.Trace(err)
-		case <-time.After(tmpDelay):
-			tmpDelay *= 2
-			if tmpDelay > maxWaitGetJobTime {
-				tmpDelay = maxWaitGetJobTime
-			}
-
-			job, err = d.getHistoryJob(id)
-			if err != nil {
-				return "", "", false, errors.Trace(err)
-			}
-		}
+	d.jLock.RLock()
+	job, ok := d.jobs[id]
+	d.jLock.RUnlock()
+	if !ok {
+		return "", "", false, errors.Errorf("[ddl jon miss]%v", id)
 	}
 
 	if job.State == model.JobCancelled {
 		return "", "", false, nil
 	}
 
+	var err error
 	switch job.Type {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := &model.DBInfo{}
-		if err := job.DecodeArgs(schema); err != nil {
+		if err := job.DecodeArgs(nil, schema); err != nil {
 			return "", "", true, errors.Trace(err)
+		}
+
+		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
+			d.schema.AddIgnoreSchema(schema)
+			return "", "", false, nil
 		}
 
 		err = d.schema.CreateSchema(schema)
@@ -204,6 +196,12 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionDropSchema:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			d.schema.DropIgnoreSchema(job.SchemaID)
+			return "", "", false, nil
+		}
+
 		schemaName, err := d.schema.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", true, errors.Trace(err)
@@ -214,8 +212,16 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	case model.ActionCreateTable:
 		// get the TableInfo from job rawArgs
 		table := &model.TableInfo{}
-		if err := job.DecodeArgs(table); err != nil {
+		if err := job.DecodeArgs(nil, table); err != nil {
 			return "", "", true, errors.Trace(err)
+		}
+		if table == nil {
+			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+		}
+
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
@@ -231,6 +237,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionDropTable:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
@@ -245,13 +256,19 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 
 		return schema.Name.L, sql, true, nil
 
-	case model.ActionAddColumn:
-		table, err := d.getSnapShotTable(job.SnapshotVer, job.SchemaID, job.TableID)
+	case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
+		tbInfo := &model.TableInfo{}
+		err := job.DecodeArgs(nil, tbInfo)
 		if err != nil {
 			return "", "", true, errors.Trace(err)
 		}
-		if table == nil {
+		if tbInfo == nil {
 			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+		}
+
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
@@ -259,96 +276,7 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = adjustColumn(table, job)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		err = d.schema.ReplaceTable(table)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		return schema.Name.L, sql, true, nil
-
-	case model.ActionDropColumn:
-		table, err := d.getSnapShotTable(job.SnapshotVer, job.SchemaID, job.TableID)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-		if table == nil {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
-		}
-
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		var colName model.CIStr
-		err = job.DecodeArgs(&colName)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		newColumns := make([]*model.ColumnInfo, 0, len(table.Columns))
-		for _, col := range table.Columns {
-			if col.Name.L != colName.L {
-				newColumns = append(newColumns, col)
-			}
-		}
-		table.Columns = newColumns
-
-		err = d.schema.ReplaceTable(table)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		return schema.Name.L, sql, true, nil
-
-	case model.ActionAddIndex:
-		table, err := d.getSnapShotTable(job.SnapshotVer, job.SchemaID, job.TableID)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-		if table == nil {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
-		}
-
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		err = adjustTableIndex(table, job, true)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		err = d.schema.ReplaceTable(table)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		return schema.Name.L, sql, true, nil
-
-	case model.ActionDropIndex:
-		table, ok := d.schema.TableByID(job.TableID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
-		}
-
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		err = adjustTableIndex(table, job, false)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		err = d.schema.ReplaceTable(table)
+		err = d.schema.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", true, errors.Trace(err)
 		}
@@ -356,6 +284,11 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		return schema.Name.L, sql, true, nil
 
 	case model.ActionAddForeignKey, model.ActionDropForeignKey:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", false, nil
+		}
+
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
@@ -480,6 +413,9 @@ func (d *Drainer) run() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			d.jLock.Lock()
+			delete(d.jobs, jobID)
+			d.jLock.Unlock()
 
 			if ok {
 				sql, err = d.translator.GenDDLSQL(sql, schema)
@@ -619,44 +555,67 @@ func (d *Drainer) pushMetrics() {
 	}()
 }
 
+func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, error) {
+	var nextTs int64
+	var err error
+	var resp *pb.DumpBinlogResp
+
+	for {
+		resp, err = stream.Recv()
+		if err != nil {
+			break
+		}
+
+		if resp.Ddljob != nil {
+			job := &model.Job{}
+			err = job.Decode(resp.Ddljob)
+			if err != nil {
+				break
+			}
+
+			d.jLock.Lock()
+			d.jobs[job.ID] = job
+			d.jLock.Unlock()
+		}
+
+		nextTs = resp.CommitTS
+		d.input <- resp.Payload
+	}
+
+	return nextTs, errors.Trace(err)
+}
+
 func (d *Drainer) inputStreaming() {
 	d.wg.Add(1)
 	defer d.wg.Done()
 
 	var err error
-	var count int
-	var resp *pb.DumpBinlogResp
-
+	var stream pb.Cistern_DumpBinlogClient
 	nextRequestTS := d.meta.Pos()
-	tmpDelay := time.Duration(0)
 
 	for {
-
 		select {
 		case <-d.ctx.Done():
 			return
-		case <-time.After(tmpDelay):
-			if count > 0 {
-				d.input <- resp.Payloads[len(resp.Payloads)-count]
-				count--
+		default:
+			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
+			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
+			if err != nil {
+				log.Errorf("[Get stream]%v", err)
+				time.Sleep(retryTimeout)
 				continue
 			}
 
-			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS, Limit: int32(d.cfg.RequestCount)}
-			resp, err = d.cisternClient.DumpBinlog(d.ctx, req)
+			nextTs, err := d.receiveBinlog(stream)
+			if nextTs != 0 {
+				nextRequestTS = nextTs
+			}
 			if err != nil {
-				log.Warning(err)
-			}
-			if err == nil && resp.Errmsg != "" {
-				log.Warning(resp.Errmsg)
-			}
-
-			if resp == nil || len(resp.Payloads) == 0 {
-				tmpDelay = retryTimeout
-			} else {
-				count = len(resp.Payloads)
-				nextRequestTS = resp.EndCommitTS
-				tmpDelay = 0
+				if errors.Cause(err) != io.EOF {
+					log.Errorf("[stream]%v", err)
+				}
+				time.Sleep(retryTimeout)
+				continue
 			}
 		}
 	}
@@ -670,10 +629,6 @@ func (d *Drainer) Close() {
 	d.cancel()
 
 	d.wg.Wait()
-
-	if d.store != nil {
-		d.store.Close()
-	}
 
 	if d.toDB != nil {
 		closeDB(d.toDB)

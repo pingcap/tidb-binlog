@@ -3,8 +3,6 @@ package drainer
 import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 )
 
@@ -16,6 +14,8 @@ type Schema struct {
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
 
+	ignoreSchema map[int64]struct{}
+
 	schemaMetaVersion int64
 }
 
@@ -25,59 +25,128 @@ type tableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(store kv.Storage, ts uint64) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.SyncTiDBSchema(store, ts)
+	err := s.reconstructSchema(jobs, ts, ignoreSchemaNames)
 	if err != nil {
 		log.Errorf("schema: sync schema at %d failed - %v", ts, err)
 		return nil, errors.Trace(err)
 	}
 
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
+
 	return s, nil
 }
 
 // SyncTiDBSchema syncs the all schema infomations that at ts
-func (s *Schema) SyncTiDBSchema(store kv.Storage, ts uint64) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)
+	s.ignoreSchema = make(map[int64]struct{})
 
-	version := kv.NewVersion(ts)
-	snapshot, err := store.GetSnapshot(version)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	var err error
+	for _, job := range jobs {
+		switch job.Type {
+		case model.ActionCreateSchema:
+			schema := &model.DBInfo{}
+			if err := job.DecodeArgs(nil, schema); err != nil {
+				return errors.Trace(err)
+			}
 
-	// sync all databases
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	dbs, err := snapMeta.ListDatabases()
-	if err != nil {
-		return errors.Trace(err)
-	}
+			if filterIgnoreSchema(schema, ignoreSchemaNames) {
+				s.AddIgnoreSchema(schema)
+				continue
+			}
 
-	for _, db := range dbs {
-		// sync all tables under the databases
-		tables, err := snapMeta.ListTables(db.ID)
-		if err != nil {
-			return errors.Trace(err)
+			err = s.CreateSchema(schema)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionDropSchema:
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				s.DropIgnoreSchema(job.SchemaID)
+				continue
+			}
+
+			_, err := s.DropSchema(job.SchemaID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionCreateTable:
+			table := &model.TableInfo{}
+			if err := job.DecodeArgs(nil, table); err != nil {
+				return errors.Trace(err)
+			}
+
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err = s.CreateTable(schema, table)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionDropTable:
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			_, ok = s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			_, err := s.DropTable(job.TableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
+			tbInfo := &model.TableInfo{}
+			err := job.DecodeArgs(nil, tbInfo)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if tbInfo == nil {
+				return errors.NotFoundf("table %d", job.TableID)
+			}
+
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			_, ok = s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err = s.ReplaceTable(tbInfo)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case model.ActionAddForeignKey, model.ActionDropForeignKey:
+		default:
+			return errors.Errorf("invalid ddl %v", job)
 		}
-
-		db.Tables = tables
-		s.schemas[db.ID] = db
-
-		for _, table := range tables {
-			s.tables[table.ID] = table
-			s.tableIDToName[table.ID] = tableName{schema: db.Name.L, table: table.Name.L}
-		}
 	}
 
-	schemeMetaVersion, err := snapMeta.GetSchemaVersion()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	s.schemaMetaVersion = schemeMetaVersion
 	return nil
 }
 
@@ -102,10 +171,26 @@ func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
 	return
 }
 
+// IgnoreSchemaByID returns the schema that whether to be ignored
+func (s *Schema) IgnoreSchemaByID(id int64) (val struct{}, ok bool) {
+	val, ok = s.ignoreSchema[id]
+	return
+}
+
 // TableByID returns the TableInfo by table id
 func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	return
+}
+
+// AddIgnoreSchema add schema into ignoreSchema
+func (s *Schema) AddIgnoreSchema(schema *model.DBInfo) {
+	s.ignoreSchema[schema.ID] = struct{}{}
+}
+
+// DropIgnoreSchema delete the given DBInfo in ignoreSchema
+func (s *Schema) DropIgnoreSchema(id int64) {
+	delete(s.ignoreSchema, id)
 }
 
 // DropSchema deletes the given DBInfo

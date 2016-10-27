@@ -52,7 +52,7 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 	}
 
 	tidb.RegisterStore("tikv", tikv.Driver{})
-	tiPath := fmt.Sprintf("tikv://%s?cluster=%d?&disableGC=true", urlv.HostString(), cfg.ClusterID)
+	tiPath := fmt.Sprintf("tikv://%s?cluster=%d&disableGC=true", urlv.HostString(), cfg.ClusterID)
 	tiStore, err := tidb.NewStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
