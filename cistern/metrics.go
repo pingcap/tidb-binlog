@@ -40,7 +40,7 @@ var (
 			Subsystem: "cistern",
 			Name:      "rpc_counter",
 			Help:      "RPC counter for every rpc related operations.",
-		}, []string{"method"})
+		}, []string{"method", "label"})
 
 	rpcHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -49,7 +49,21 @@ var (
 			Name:      "rpc_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
-		}, []string{"method"})
+		}, []string{"method", "label"})
+	binlogCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "binlog_count_total",
+			Help:      "Total binlog count been stored.",
+		})
+	ddlJobsCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "ddl_jobs_total",
+			Help:      "Total ddl jobs count been stored.",
+		})
 )
 
 func init() {
@@ -58,6 +72,8 @@ func init() {
 	prometheus.MustRegister(savepointSuffix)
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
+	prometheus.MustRegister(binlogCounter)
+	prometheus.MustRegister(ddlJobsCounter)
 }
 
 type metricClient struct {

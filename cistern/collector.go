@@ -156,10 +156,13 @@ func (c *Collector) collect(ctx context.Context) error {
 	if err := c.store(items); err != nil {
 		return errors.Trace(err)
 	}
+
 	if err := c.updateSavepoints(savepoints); err != nil {
 		return errors.Trace(err)
 	}
 
+	ddlJobsCounter.Add(float64(len(jobs)))
+	binlogCounter.Add(float64(len(items)))
 	for nodeID, pos := range savepoints {
 		savepointSuffix.WithLabelValues(nodeID).Set(float64(pos.Suffix))
 		savepointOffset.WithLabelValues(nodeID).Set(float64(pos.Offset))

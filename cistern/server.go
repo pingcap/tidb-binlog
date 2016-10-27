@@ -100,11 +100,17 @@ func NewServer(cfg *Config) (*Server, error) {
 }
 
 // DumpBinlog implements the gRPC interface of cistern server
-func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) error {
+func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) (err error) {
 	startTS := time.Now()
 	defer func() {
-		rpcHistogram.WithLabelValues("DumpBinlog").Observe(time.Since(startTS).Seconds())
-		rpcCounter.WithLabelValues("DumpBinlog").Add(1)
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(startTS).Seconds())
+		rpcCounter.WithLabelValues("DumpBinlog", label).Add(1)
 	}()
 
 	batch := 1000
@@ -118,7 +124,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		}
 
 		var resps []*binlog.DumpBinlogResp
-		err := s.boltdb.Scan(
+		err = s.boltdb.Scan(
 			binlogNamespace,
 			codec.EncodeInt([]byte{}, latest),
 			func(key []byte, val []byte) (bool, error) {
@@ -146,14 +152,16 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		)
 		if err != nil {
 			log.Errorf("gRPC: DumpBinlog scan boltdb error, %s", errors.ErrorStack(err))
-			return errors.Trace(err)
+			err = errors.Trace(err)
+			return
 		}
 
 		for _, resp := range resps {
 			item := &binlog.Binlog{}
-			if err := item.Unmarshal(resp.Payload); err != nil {
+			if err = item.Unmarshal(resp.Payload); err != nil {
 				log.Errorf("gRPC: DumpBinlog unmarshal binlog error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				return
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
@@ -165,9 +173,10 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 				}
 				resp.Ddljob = data
 			}
-			if err := stream.Send(resp); err != nil {
+			if err = stream.Send(resp); err != nil {
 				log.Errorf("gRPC: DumpBinlog send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				return
 			}
 			latest = resp.CommitTS
 		}
@@ -175,11 +184,17 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server
-func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
+func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
 	startTS := time.Now()
 	defer func() {
-		rpcHistogram.WithLabelValues("DumpDDLJobs").Observe(time.Since(startTS).Seconds())
-		rpcCounter.WithLabelValues("DumpDDLJobs").Add(1)
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("DumpDDLJobs", label).Observe(time.Since(startTS).Seconds())
+		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
 	}()
 	upperTS := req.BeginCommitTS
 	lowerTS := calculatePreviousHourTimestamp(upperTS)
@@ -189,7 +204,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 		lastDDLJobID int64
 	)
 
-	err := s.boltdb.Scan(
+	err = s.boltdb.Scan(
 		binlogNamespace,
 		codec.EncodeInt([]byte{}, lowerTS),
 		func(key []byte, val []byte) (bool, error) {
@@ -217,7 +232,8 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 	)
 	if err != nil {
 		log.Errorf("gRPC: DumpDDLJobs scan boltdb error, %v", errors.ErrorStack(err))
-		return nil, errors.Trace(err)
+		err = errors.Trace(err)
+		return
 	}
 
 	if lastDDLJobID > 0 {
@@ -232,7 +248,8 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 		return s.getAllHistoryDDLJobsByTS(lastTS)
 	}
 
-	return nil, errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
+	err = errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
+	return
 }
 
 func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlog.DumpDDLJobsResp, error) {
