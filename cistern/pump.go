@@ -114,9 +114,9 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 		case binlog.BinlogType_Rollback:
 			rollbackItems[b.StartTs] = b
 		case binlog.BinlogType_PreDDL:
-			preDDLItems[b.StartTs] = b
+			preDDLItems[b.DdlJobId] = b
 		case binlog.BinlogType_PostDDL:
-			postDDLItems[b.StartTs] = b
+			postDDLItems[b.DdlJobId] = b
 
 		default:
 			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
@@ -137,12 +137,12 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 	}
 
 	// match ddl binlog
-	for startTs, item := range preDDLItems {
-		if postDDL, ok := postDDLItems[startTs]; ok {
-			item.CommitTs = postDDL.CommitTs
+	for jobID, item := range preDDLItems {
+		if postDDL, ok := postDDLItems[jobID]; ok {
+			item.CommitTs = item.StartTs
 			item.Tp = postDDL.Tp
 			res.binlogs[item.CommitTs] = item
-			delete(preDDLItems, startTs)
+			delete(preDDLItems, jobID)
 		}
 	}
 
@@ -217,7 +217,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 			case binlog.BinlogType_Rollback:
 				rollbackItems[b.StartTs] = b
 			case binlog.BinlogType_PostDDL:
-				postDDLItems[b.StartTs] = b
+				postDDLItems[b.DdlJobId] = b
 			}
 		}
 
@@ -234,12 +234,12 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 		}
 
 		// match ddl binlog
-		for startTs, item := range preDDLItems {
-			if postDDL, ok := postDDLItems[startTs]; ok {
-				item.CommitTs = postDDL.CommitTs
+		for jobID, item := range preDDLItems {
+			if postDDL, ok := postDDLItems[jobID]; ok {
+				item.CommitTs = item.StartTs
 				item.Tp = postDDL.Tp
 				binlogs[item.CommitTs] = item
-				delete(preDDLItems, startTs)
+				delete(preDDLItems, jobID)
 			}
 		}
 
