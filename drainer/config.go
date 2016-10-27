@@ -21,8 +21,8 @@ func NewConfig() *Config {
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
 	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
-	fs.IntVar(&cfg.RequestCount, "request-count", 1, "batch count once request")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", ":10081", "pprof addr")
+	fs.StringVar(&cfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test", "disable sync the meta schema")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
@@ -30,7 +30,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.PdPath, "pd-path", "", "pd path")
 	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
 
 	return cfg
@@ -73,13 +72,13 @@ type Config struct {
 
 	PprofAddr string `toml:"pprof-addr" json:"pprof-addr"`
 
+	IgnoreSchemas string `toml:"ignore-schemas" json:"ignore-schemas"`
+
 	MetricsAddr string `toml:"metrics-addr" json:"metrics-addr"`
 
 	MetricsInterval int `toml:"metrics-interval" json:"metrics-interval"`
 
 	TxnBatch int `toml:"txn-batch" json:"txn-batch"`
-
-	RequestCount int `toml:"request-count" json:"request-count"`
 
 	InitCommitTS int64 `toml:"init-commit-ts" json:"init-commit-ts"`
 
@@ -88,8 +87,6 @@ type Config struct {
 	To DBConfig `toml:"to" json:"to"`
 
 	CisternClient CisternClientConfig `toml:"client" json:"client"`
-
-	PdPath string `toml:"pd-path" json:"pd-path"`
 
 	DestDBType string `toml:"db-type" json:"db-type"`
 
@@ -120,10 +117,6 @@ func (c *Config) Parse(arguments []string) error {
 
 	if len(c.FlagSet.Args()) != 0 {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
-	}
-
-	if c.PdPath == "" {
-		return errors.New("must have pd path")
 	}
 
 	return nil
