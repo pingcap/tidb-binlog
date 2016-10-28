@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
@@ -33,6 +34,8 @@ func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
 	if gcToTS < 0 {
 		gcToTS = 0
 	}
+
+	log.Infof("GC binlog older than timestamp: %v, until date: %v", gcToTS, time.Unix(prevPhysical/1000, (prevPhysical%1000)*1e6))
 
 	batch := store.NewBatch()
 	err = store.Scan(ns, nil, func(key []byte, val []byte) (bool, error) {
