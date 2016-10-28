@@ -3,14 +3,13 @@ package cistern
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
 	"runtime"
 	"time"
 
-	"github.com/ghodss/yaml"
+	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 )
@@ -30,13 +29,13 @@ const (
 // Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
-	ClusterID           uint64 `json:"cluster-id"`
-	ListenAddr          string `json:"addr"`
-	DataDir             string `json:"data-dir"`
-	CollectInterval     int    `json:"collect-interval"`
-	CollectBatch        int    `json:"collect-batch"`
-	DepositWindowPeriod int    `json:"deposit-window-period"`
-	EtcdURLs            string `json:"pd-urls"`
+	ClusterID           uint64 `toml:"cluster-id" json:"cluster-id"`
+	ListenAddr          string `toml:"addr" json:"addr"`
+	DataDir             string `toml:"data-dir" json:"data-dir"`
+	CollectInterval     int    `toml:"collect-interval" json:"collect-interval"`
+	CollectBatch        int    `toml:"collect-batch" json:"collect-batch"`
+	DepositWindowPeriod int    `toml:"deposit-window-period" json:"deposit-window-period"`
+	EtcdURLs            string `toml:"pd-urls" json:"pd-urls"`
 	EtcdTimeout         time.Duration
 	PumpTimeout         time.Duration
 	MetricsAddr         string
@@ -118,15 +117,8 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = yaml.Unmarshal(b, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	_, err := toml.DecodeFile(path, cfg)
+	return errors.Trace(err)
 }
 
 func adjustString(v *string, defValue string) {
