@@ -17,6 +17,10 @@ func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if endkey == nil {
+		// skip gc if no data exist.
+		return nil
+	}
 
 	v, err := store.Get(ns, endkey)
 	if err != nil {
@@ -29,7 +33,7 @@ func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
 	}
 
 	physical := oracle.ExtractPhysical(uint64(ts))
-	prevPhysical := physical - int64(days*24*time.Hour/time.Millisecond)
+	prevPhysical := physical - int64(days*24*(time.Hour/time.Millisecond))
 	gcToTS := oracle.ComposeTS(prevPhysical, 0)
 	if gcToTS < 0 {
 		gcToTS = 0

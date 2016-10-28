@@ -42,7 +42,11 @@ func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 func (s *BoltStore) EndKey(namespace []byte) ([]byte, error) {
 	var ret []byte
 	err := s.db.View(func(tx *bolt.Tx) error {
-		cur := tx.Cursor()
+		b := tx.Bucket(namespace)
+		if b == nil {
+			return errors.NotFoundf("bolt: bucket %s", namespace)
+		}
+		cur := b.Cursor()
 		key, _ := cur.Last()
 		if key != nil {
 			// key only valid for the life of the transaction, so make a copy
