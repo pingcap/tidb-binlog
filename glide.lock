@@ -1,5 +1,5 @@
-hash: 7e28aca80dfb27b84245a374d0bbe6e86db5dcffee48017edc59f3959fb06ae1
-updated: 2016-10-26T19:07:50.731869658+08:00
+hash: 48ae1a2bdf8cd367485f8fb02b3c7e05406e1ad570e3d3c0ef52eff3884c20af
+updated: 2016-10-26T17:02:38.006161732+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -244,6 +244,8 @@ imports:
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
   - ioutil2
+- name: github.com/soheilhy/cmux
+  version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/ugorji/go
