@@ -10,9 +10,9 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-// GColdBinLog recycle old binlog data in the store.
+// GCHistoryBinlog recycle old binlog data in the store.
 // days indicates for how long binlog will be preserve.
-func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
+func GCHistoryBinlog(store store.Store, ns []byte, duration time.Duration) error {
 	endkey, err := store.EndKey(ns)
 	if err != nil {
 		return errors.Trace(err)
@@ -22,18 +22,13 @@ func GColdBinLog(store store.Store, ns []byte, days time.Duration) error {
 		return nil
 	}
 
-	v, err := store.Get(ns, endkey)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	_, ts, err := codec.DecodeInt(v)
+	_, ts, err := codec.DecodeInt(endkey)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	physical := oracle.ExtractPhysical(uint64(ts))
-	prevPhysical := physical - int64(days*24*(time.Hour/time.Millisecond))
+	prevPhysical := physical - int64(duration/1e6)
 	gcToTS := oracle.ComposeTS(prevPhysical, 0)
 	if gcToTS < 0 {
 		gcToTS = 0
