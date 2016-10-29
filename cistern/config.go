@@ -59,10 +59,10 @@ func NewConfig() *Config {
 	}
 	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that cistern in charge of")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
-	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of RocksDB")
+	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
 	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
 	fs.IntVar(&cfg.CollectBatch, "collect-batch", defaultCollectBatch, "the max number of binlog items in a pulling batch")
-	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in RocksDB will become to public state")
+	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in boltDB will become to public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")

@@ -1,6 +1,6 @@
 ## Drainer
 
-A tool that queries TiDB-Binlogs from cistern, then executes them on target DB.
+drainer transforms binlog to various dialects of SQL, and apply to downstream database or filesystem.
 
 ## How to use
 
@@ -17,7 +17,7 @@ Usage of drainer:
   -ignore-schemas string
        	disable sync the meta schema (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test")
   -init-commit-ts int
-       	the init point for sync
+       	the this position from which begin to sync and apply binlog.
   -log-file string
        	log file path
   -log-rotate string
@@ -38,7 +38,7 @@ Usage of drainer:
 ```
 ./bin/drainer -dest-db-type mysql -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql -data-dir data.drainer
 ```
-or use toml file
+or use configuration file
 
 ```
 ./bin/drainer -config-file config.toml

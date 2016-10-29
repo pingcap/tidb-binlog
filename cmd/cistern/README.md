@@ -1,6 +1,6 @@
 ## Cistern
 
-A service that pulls binlog items from all pump, then sorts them and generates TiDB-Binlogs by commitTs
+cistern collects binlog from each pump in cluster, and store them on disk in order of commitTS.
 
 ## How to use
 
@@ -17,11 +17,11 @@ Usage of cistern:
   -config-file string
        	path to the configuration file
   -data-dir string
-       	path to the data directory of RocksDB (default "data.cistern")
+        path to the data directory of boltDB (default "data.cistern")
   -debug
        	whether to enable debug-level logging
   -deposit-window-period int
-       	a period of time (in minutes) after that the binlog items stored in RocksDB will become to public state (default 10)
+        a period of time (in minutes) after that the binlog items stored in boltDB will become to public state (default 10)
   -metrics-addr string
        	prometheus pushgateway address, leaves it empty will disable prometheus push.
   -metrics-interval int
@@ -38,7 +38,7 @@ Usage of cistern:
 ```
 ./bin/cistern -deposit-window-period 1 -cluster-id 1
 ```
-or use toml file
+or use configuration file
 
 ```
 ./bin/cistern -config-file config.toml

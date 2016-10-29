@@ -1,6 +1,6 @@
 ## Pump
 
-A service that provoids rpc interfces that write binlog items and pull binlog items.
+pump is a daemon that receives realtime binlog from tidb-server and writes in sequential disk files synchronously.
 
 ## How to use
 
@@ -32,13 +32,13 @@ Usage of pump:
 ## Example
 
 ```
-./bin/pump -socket unix:///tmp/pump.sock -pd-urls http://127.0.0.1:2379 (unix socket style)
+./bin/pump -socket unix:///tmp/pump.sock -pd-urls http://127.0.0.1:2379
 ```
-or use toml file
+or use configuration file
 
 ```
 ./bin/pump -config-file config.toml
 ```
 
 ## Deployment
-You should deployment pump server for every TiDB in the cluster, more TiDBs that are not in same cluster can share one pump.
+You should deployment pump server for each TiDB node in the cluster, pump can serve tidb-servers across different clusters.

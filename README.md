@@ -1,6 +1,6 @@
 ## TiDB-Binlog
 
-A commercial tool used to collect and merge [TiDB's](https://github.com/pingcap/tidb) binlog for real-time data backup and synchronization.
+A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binlog for real-time data backup and synchronization.
 
 
 ## How to build
@@ -21,18 +21,16 @@ When build successfully, you can find the binary in bin directory.
 
 [pump](./cmd/pump)
 
-A service that provoids rpc interfces that write binlog items and pull binlog items.
+pump is a daemon that receives realtime binlog from tidb-server and writes in sequential disk files synchronously.
 
 [cistern](./cmd/cistern)
 
-A service that pulls binlog items from all pump, then sorts them and generates TiDB-Binlogs by commitTs
+cistern collects binlog from each pump in cluster, and store them on disk in order of commitTS.
 
 [drainer](./cmd/drainer)
 
-A tool that queries TiDB-Binlogs from cistern, then executes them on target DB.
+drainer transforms binlog to various dialects of SQL, and apply to downstream database or filesystem.
 
 ## Deployment
-
-TiDB-binlog contains pump, cistern and drainer services, the boot sequence is related to PD, TiDB, TiKV。
 
 The recommended startup sequence: PD -> TiKV -> [pump](./cmd/pump) -> TiDB -> [cistern](./cmd/cistern) -> [drainer](./cmd/drainer)
