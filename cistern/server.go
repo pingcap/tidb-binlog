@@ -110,7 +110,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // DumpBinlog implements the gRPC interface of cistern server
 func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) (err error) {
-	startTS := time.Now()
+	beginTime := time.Now()
 	defer func() {
 		var label string
 		if err != nil {
@@ -118,7 +118,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		} else {
 			label = "fail"
 		}
-		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(startTS).Seconds())
+		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("DumpBinlog", label).Add(1)
 	}()
 
@@ -194,7 +194,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // DumpDDLJobs implements the gRPC interface of cistern server
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
-	startTS := time.Now()
+	beginTime := time.Now()
 	defer func() {
 		var label string
 		if err != nil {
@@ -202,7 +202,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		} else {
 			label = "fail"
 		}
-		rpcHistogram.WithLabelValues("DumpDDLJobs", label).Observe(time.Since(startTS).Seconds())
+		rpcHistogram.WithLabelValues("DumpDDLJobs", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
 	}()
 	upperTS := req.BeginCommitTS

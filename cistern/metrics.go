@@ -18,20 +18,12 @@ var (
 			Help:      "DepositWindow lower boundary.",
 		})
 
-	savepointSuffix = prometheus.NewGaugeVec(
+	savepoint = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "cistern",
-			Name:      "savepoint_suffix",
-			Help:      "Save points suffix for each node.",
-		}, []string{"nodeID"})
-
-	savepointOffset = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "savepoint_offset",
-			Help:      "Save points offset for each node.",
+			Name:      "savepoint",
+			Help:      "Save point for each node.",
 		}, []string{"nodeID"})
 
 	rpcCounter = prometheus.NewCounterVec(
@@ -68,8 +60,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(depositWindowBoundary)
-	prometheus.MustRegister(savepointOffset)
-	prometheus.MustRegister(savepointSuffix)
+	prometheus.MustRegister(savepoint)
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogCounter)
