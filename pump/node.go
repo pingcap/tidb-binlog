@@ -1,7 +1,9 @@
 package pump
 
 import (
+	"fmt"
 	"io/ioutil"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -73,7 +75,7 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		if cfg.NodeID != "" {
 			nodeID = cfg.NodeID
 		} else if errors.IsNotFound(err) {
-			nodeID, err = generateLocalNodeID(cfg.DataDir)
+			nodeID, err = generateLocalNodeID(cfg.DataDir, cfg.ListenAddr)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -163,17 +165,32 @@ func readLocalNodeID(dataDir string) (string, error) {
 }
 
 // generate a new nodeID, and store it to local filesystem
-func generateLocalNodeID(dataDir string) (string, error) {
+func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	if err := os.MkdirAll(dataDir, file.PrivateDirMode); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	id := uuid.NewV1()
-	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
-	if err := ioutil.WriteFile(nodeIDPath, id.Bytes(), file.PrivateFileMode); err != nil {
+	urllis, err := url.Parse(listenAddr)
+	if err != nil {
 		return "", errors.Trace(err)
 	}
-	return id.String(), nil
+
+	_, port, err := net.SplitHostPort(urllis.Host)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	id := fmt.Sprintf("%s:%s", hostname, port)
+	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
+	if err := ioutil.WriteFile(nodeIDPath, []byte(id), file.PrivateFileMode); err != nil {
+		return "", errors.Trace(err)
+	}
+	return id, nil
 }
 
 // checkExclusive try to get filelock of dataDir in exclusive mode
