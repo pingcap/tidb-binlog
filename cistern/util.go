@@ -69,3 +69,13 @@ func decodePayload(value []byte) ([]byte, time.Duration, error) {
 	}
 	return data[n1:], time.Now().Sub(ts), nil
 }
+
+// combine suffix offset in one float, the format would be suffix.offset
+func posToFloat(pos *binlog.Pos) float64 {
+	var decimal float64
+	decimal = float64(pos.Offset)
+	for decimal > 1 {
+		decimal = decimal / 10
+	}
+	return float64(pos.Suffix) + decimal
+}
