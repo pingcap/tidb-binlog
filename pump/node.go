@@ -70,7 +70,9 @@ func NewPumpNode(cfg *Config) (Node, error) {
 
 	nodeID, err := readLocalNodeID(cfg.DataDir)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if cfg.NodeID != "" {
+			nodeID = cfg.NodeID
+		} else if errors.IsNotFound(err) {
 			nodeID, err = generateLocalNodeID(cfg.DataDir)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -78,6 +80,8 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		} else {
 			return nil, errors.Trace(err)
 		}
+	} else if cfg.NodeID != "" {
+		log.Warning("you had a node ID in local file.[if you want to change the node ID, you should delete the file data-dir/.node file]")
 	}
 
 	advURL, err := url.Parse(cfg.AdvertiseAddr)

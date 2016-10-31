@@ -170,6 +170,29 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 	}
 }
 
+// GetLastCommitTS implements the gRPC interface of cistern server
+func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCommitTSReq) (*binlog.GetLatestCommitTSResp, error) {
+	lastkey, err := s.boltdb.EndKey(binlogNamespace)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if lastkey == nil {
+		return &binlog.GetLatestCommitTSResp{
+			CommitTS: 0,
+		}, nil
+	}
+
+	_, commitTS, err := codec.DecodeInt(lastkey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &binlog.GetLatestCommitTSResp{
+		CommitTS: commitTS,
+	}, nil
+}
+
 // DumpDDLJobs implements the gRPC interface of cistern server
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
 	upperTS := req.BeginCommitTS

@@ -1,11 +1,12 @@
 package pump
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"testing"
 
-	"github.com/ghodss/yaml"
+	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
 )
 
@@ -50,12 +51,12 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 }
 
 func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
-	yc := struct {
-		ListenAddr        string `json:"addr"`
-		AdvertiseAddr     string `json:"advertise-addr"`
-		EtcdURLs          string `json:"pd-urls"`
-		BinlogDir         string `json:"data-dir"`
-		HeartbeatInterval uint   `json:"heartbeat-interval"`
+	yc := &struct {
+		ListenAddr        string `toml:"addr" json:"addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir         string `toml:"data-dir" json:"data-dir"`
+		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	}{
 		"192.168.199.100:8260",
 		"192.168.199.100:8260",
@@ -64,10 +65,12 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 		1500,
 	}
 
-	b, err := yaml.Marshal(&yc)
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile := mustCreateCfgFile(c, b, "pump_config")
+	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "pump_config")
 	defer os.Remove(tmpfile.Name())
 
 	args := []string{
