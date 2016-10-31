@@ -42,8 +42,10 @@ type Collector struct {
 	tiStore   kv.Storage
 
 	// expose savepoints to HTTP
-	mu     sync.Mutex
-	status map[string]binlog.Pos
+	mu             sync.Mutex
+	status         map[string]binlog.Pos
+	latestCommitTS int64
+	synced         bool
 }
 
 // NewCollector returns an instance of Collector
@@ -167,6 +169,26 @@ func (c *Collector) collect(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	// HTTP status
+	latestCommitTS := c.latestCommitTS
+	for ts := range items {
+		if ts > latestCommitTS {
+			latestCommitTS = ts
+		}
+	}
+	var synced bool
+	if len(items) == 0 {
+		synced = true
+	} else {
+		synced = false
+	}
+	c.mu.Lock()
+	c.status = savepoints
+	c.latestCommitTS = latestCommitTS
+	c.synced = synced
+	c.mu.Unlock()
+
+	// prometheus metrics
 	ddlJobsCounter.Add(float64(len(jobs)))
 	binlogCounter.Add(float64(len(items)))
 	for nodeID, pos := range savepoints {
@@ -212,13 +234,6 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 	}
 
-	savepoints := make(map[string]binlog.Pos)
-	for id, p := range c.pumps {
-		savepoints[id] = p.current
-	}
-	c.mu.Lock()
-	c.status = savepoints
-	c.mu.Unlock()
 	return nil
 }
 
@@ -387,10 +402,15 @@ func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
 			Lower int64
 			Upper int64
 		}
+		LatestCommitTS int64
+		Synced         bool
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	status.SavePoints = c.status
+	status.LatestCommitTS = c.latestCommitTS
+	status.Synced = c.synced
+	c.mu.Unlock()
+
 	status.DepositWindow.Lower = lower
 	status.DepositWindow.Upper = upper
 

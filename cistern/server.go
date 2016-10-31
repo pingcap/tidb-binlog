@@ -298,10 +298,10 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
 		return nil, errors.Trace(err)
 	}
-	payload, _, err := decodePayload(val)
-	if err != nil {
-		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS decode payload error, %v", errors.ErrorStack(err))
-		return nil, errors.Trace(err)
+	payload, _, err1 := decodePayload(val)
+	if err1 != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS decode payload error, %v", errors.ErrorStack(err1))
+		return nil, errors.Trace(err1)
 	}
 	item := &binlog.Binlog{}
 	err = item.Unmarshal(payload)
@@ -327,12 +327,12 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
 			job := &model.Job{}
-			if err := job.Decode(val); err != nil {
-				return false, errors.Trace(err)
+			if err1 := job.Decode(val); err != nil {
+				return false, errors.Trace(err1)
 			}
 			var ver int64
-			if err := job.DecodeArgs(&ver); err != nil {
-				return false, errors.Trace(err)
+			if err1 := job.DecodeArgs(&ver); err != nil {
+				return false, errors.Trace(err1)
 			}
 			if ver > upperSchemaVer {
 				return false, nil
