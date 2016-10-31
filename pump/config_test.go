@@ -51,9 +51,9 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 }
 
 func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
-	yc := &struct {
+	yc := struct {
 		ListenAddr        string `toml:"addr" json:"addr"`
-		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		AdvertiseAddr     string `toml:"advertiser-addr" json:"advertise-addr"`
 		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 		BinlogDir         string `toml:"data-dir" json:"data-dir"`
 		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`

@@ -109,7 +109,19 @@ func NewServer(cfg *Config) (*Server, error) {
 }
 
 // DumpBinlog implements the gRPC interface of cistern server
-func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) error {
+func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) (err error) {
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("DumpBinlog", label).Add(1)
+	}()
+
 	batch := 1000
 	latest := req.BeginCommitTS
 
@@ -121,13 +133,13 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		}
 
 		var resps []*binlog.DumpBinlogResp
-		err := s.boltdb.Scan(
+		err = s.boltdb.Scan(
 			binlogNamespace,
 			codec.EncodeInt([]byte{}, latest),
 			func(key []byte, val []byte) (bool, error) {
-				_, cts, err := codec.DecodeInt(key)
-				if err != nil {
-					return false, errors.Trace(err)
+				_, cts, err1 := codec.DecodeInt(key)
+				if err1 != nil {
+					return false, errors.Trace(err1)
 				}
 				if cts > end || len(resps) >= batch {
 					return false, nil
@@ -135,9 +147,9 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 				if cts == latest {
 					return true, nil
 				}
-				payload, _, err := decodePayload(val)
-				if err != nil {
-					return false, errors.Trace(err)
+				payload, _, err1 := decodePayload(val)
+				if err1 != nil {
+					return false, errors.Trace(err1)
 				}
 				ret := &binlog.DumpBinlogResp{
 					CommitTS: cts,
@@ -149,28 +161,31 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		)
 		if err != nil {
 			log.Errorf("gRPC: DumpBinlog scan boltdb error, %s", errors.ErrorStack(err))
-			return errors.Trace(err)
+			err = errors.Trace(err)
+			return
 		}
 
 		for _, resp := range resps {
 			item := &binlog.Binlog{}
-			if err := item.Unmarshal(resp.Payload); err != nil {
+			if err = item.Unmarshal(resp.Payload); err != nil {
 				log.Errorf("gRPC: DumpBinlog unmarshal binlog error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				return
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
-				data, err := s.boltdb.Get(ddlJobNamespace, key)
-				if err != nil {
-					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err))
+				data, err1 := s.boltdb.Get(ddlJobNamespace, key)
+				if err1 != nil {
+					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err1))
 					return errors.Annotatef(err,
 						"DDL Job(%d) not found, with binlog commitTS(%d)", item.DdlJobId, resp.CommitTS)
 				}
 				resp.Ddljob = data
 			}
-			if err := stream.Send(resp); err != nil {
+			if err = stream.Send(resp); err != nil {
 				log.Errorf("gRPC: DumpBinlog send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				return
 			}
 			latest = resp.CommitTS
 		}
@@ -203,7 +218,18 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server
-func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*binlog.DumpDDLJobsResp, error) {
+func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("DumpDDLJobs", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
+	}()
 	upperTS := req.BeginCommitTS
 	lowerTS := calculatePreviousHourTimestamp(upperTS)
 
@@ -212,24 +238,24 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 		lastDDLJobID int64
 	)
 
-	err := s.boltdb.Scan(
+	err = s.boltdb.Scan(
 		binlogNamespace,
 		codec.EncodeInt([]byte{}, lowerTS),
 		func(key []byte, val []byte) (bool, error) {
-			_, cts, err := codec.DecodeInt(key)
-			if err != nil {
+			_, cts, err1 := codec.DecodeInt(key)
+			if err1 != nil {
 				return false, errors.Trace(err)
 			}
 			if cts > upperTS && lastTS > 0 {
 				return false, nil
 			}
-			payload, _, err := decodePayload(val)
-			if err != nil {
-				return false, errors.Trace(err)
+			payload, _, err1 := decodePayload(val)
+			if err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			item := &binlog.Binlog{}
-			if err := item.Unmarshal(payload); err != nil {
-				return false, errors.Trace(err)
+			if err1 := item.Unmarshal(payload); err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			if item.DdlJobId > 0 {
 				lastDDLJobID = item.DdlJobId
@@ -240,7 +266,8 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 	)
 	if err != nil {
 		log.Errorf("gRPC: DumpDDLJobs scan boltdb error, %v", errors.ErrorStack(err))
-		return nil, errors.Trace(err)
+		err = errors.Trace(err)
+		return
 	}
 
 	if lastDDLJobID > 0 {
@@ -255,7 +282,8 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (*
 		return s.getAllHistoryDDLJobsByTS(lastTS)
 	}
 
-	return nil, errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
+	err = errors.Errorf("can't determine the schema version by incoming TS, because there is not any binlog yet.")
+	return
 }
 
 func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlog.DumpDDLJobsResp, error) {
