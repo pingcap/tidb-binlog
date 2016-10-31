@@ -3,14 +3,13 @@ package cistern
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
 	"runtime"
 	"time"
 
-	"github.com/ghodss/yaml"
+	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 )
@@ -30,14 +29,14 @@ const (
 // Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
-	ClusterID           uint64 `json:"cluster-id"`
-	ListenAddr          string `json:"addr"`
-	DataDir             string `json:"data-dir"`
-	CollectInterval     int    `json:"collect-interval"`
-	CollectBatch        int    `json:"collect-batch"`
-	DepositWindowPeriod int    `json:"deposit-window-period"`
-	EtcdURLs            string `json:"pd-urls"`
-	GC                  int    `json:"gc"`
+	ClusterID           uint64 `toml:"cluster-id" json:"cluster-id"`
+	ListenAddr          string `toml:"addr" json:"addr"`
+	DataDir             string `toml:"data-dir" json:"data-dir"`
+	CollectInterval     int    `toml:"collect-interval" json:"collect-interval"`
+	CollectBatch        int    `toml:"collect-batch" json:"collect-batch"`
+	DepositWindowPeriod int    `toml:"deposit-window-period" json:"deposit-window-period"`
+	EtcdURLs            string `toml:"pd-urls" json:"pd-urls"`
+	GC                  int    `toml:"gc" json:"gc"`
 	EtcdTimeout         time.Duration
 	PumpTimeout         time.Duration
 	MetricsAddr         string
@@ -61,17 +60,17 @@ func NewConfig() *Config {
 	}
 	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that cistern in charge of")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
-	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of RocksDB")
+	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
 	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
 	fs.IntVar(&cfg.CollectBatch, "collect-batch", defaultCollectBatch, "the max number of binlog items in a pulling batch")
-	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in RocksDB will become to public state")
+	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in boltDB will become to public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
-	fs.IntVar(&cfg.GC, "gc", 0, "recycle binlog older than gc days.")
+	fs.IntVar(&cfg.GC, "gc", 0, "a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed.")
 	return cfg
 }
 
@@ -120,15 +119,8 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = yaml.Unmarshal(b, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	_, err := toml.DecodeFile(path, cfg)
+	return errors.Trace(err)
 }
 
 func adjustString(v *string, defValue string) {

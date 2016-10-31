@@ -3,7 +3,6 @@ package pump
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -11,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
+	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 )
@@ -30,14 +29,14 @@ const (
 type Config struct {
 	*flag.FlagSet
 
-	ListenAddr        string `json:"addr"`
-	AdvertiseAddr     string `json:"advertise-addr"`
-	Socket            string `json:"socket"`
-	EtcdURLs          string `json:"pd-urls"`
+	ListenAddr        string `toml:"addr" json:"addr"`
+	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+	Socket            string `toml:"socket" json:"socket"`
+	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
-	DataDir           string `json:"data-dir"`
-	HeartbeatInterval uint   `json:"heartbeat-interval"`
-	GC                uint   `json:"gc"`
+	DataDir           string `toml:"data-dir" json:"data-dir"`
+	HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	GC                uint   `toml:"gc" json:"gc"`
 	Debug             bool
 	configFile        string
 	printVersion      bool
@@ -123,15 +122,8 @@ func (cfg *Config) Parse(arguments []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = yaml.Unmarshal(b, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	_, err := toml.DecodeFile(path, cfg)
+	return errors.Trace(err)
 }
 
 func adjustString(v *string, defValue string) {
