@@ -186,7 +186,8 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 
 	if lastkey == nil {
 		return &binlog.GetLatestCommitTSResp{
-			CommitTS: 0,
+			IsQuiescent: true,
+			CommitTS:    0,
 		}, nil
 	}
 
@@ -196,7 +197,8 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 	}
 
 	return &binlog.GetLatestCommitTSResp{
-		CommitTS: commitTS,
+		IsQuiescent: s.collector.IsQuiescent(),
+		CommitTS:    commitTS,
 	}, nil
 }
 

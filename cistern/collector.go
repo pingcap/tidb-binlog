@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -30,16 +31,17 @@ import (
 // and finally abort the txn in TiKV for that single ones.
 // After a batch processing is complete, collector will update the savepoint of each pump binlog stored in Etcd.
 type Collector struct {
-	clusterID uint64
-	batch     int32
-	interval  time.Duration
-	reg       *pump.EtcdRegistry
-	pumps     map[string]*Pump
-	timeout   time.Duration
-	window    *DepositWindow
-	boltdb    store.Store
-	tiClient  *tikv.LockResolver
-	tiStore   kv.Storage
+	clusterID   uint64
+	batch       int32
+	interval    time.Duration
+	isQuiescent int32
+	reg         *pump.EtcdRegistry
+	pumps       map[string]*Pump
+	timeout     time.Duration
+	window      *DepositWindow
+	boltdb      store.Store
+	tiClient    *tikv.LockResolver
+	tiStore     kv.Storage
 
 	// expose savepoints to HTTP
 	mu     sync.Mutex
@@ -68,16 +70,17 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID: cfg.ClusterID,
-		batch:     int32(cfg.CollectBatch),
-		interval:  time.Duration(cfg.CollectInterval) * time.Second,
-		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		pumps:     make(map[string]*Pump),
-		timeout:   cfg.PumpTimeout,
-		window:    w,
-		boltdb:    s,
-		tiClient:  tiClient,
-		tiStore:   tiStore,
+		clusterID:   cfg.ClusterID,
+		batch:       int32(cfg.CollectBatch),
+		interval:    time.Duration(cfg.CollectInterval) * time.Second,
+		reg:         pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		pumps:       make(map[string]*Pump),
+		timeout:     cfg.PumpTimeout,
+		window:      w,
+		boltdb:      s,
+		isQuiescent: 1,
+		tiClient:    tiClient,
+		tiStore:     tiStore,
 	}, nil
 }
 
@@ -164,6 +167,11 @@ func (c *Collector) collect(ctx context.Context) error {
 	}
 	if err := c.updateSavepoints(savepoints); err != nil {
 		return errors.Trace(err)
+	}
+	if len(items) > 0 {
+		atomic.StoreInt32(&c.isQuiescent, 0)
+	} else {
+		atomic.StoreInt32(&c.isQuiescent, 1)
 	}
 	return nil
 }
@@ -367,6 +375,11 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		}
 	}
 	return nil
+}
+
+// IsQuiescent specifies whether the all binlogs are consumed
+func (c *Collector) IsQuiescent() bool {
+	return atomic.LoadInt32(&c.isQuiescent) == 1
 }
 
 // Status exposes collector's status to HTTP handler.

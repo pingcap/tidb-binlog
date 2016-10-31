@@ -15,7 +15,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
-	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
 
@@ -136,6 +135,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
+
 				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}
@@ -157,11 +157,8 @@ func readLocalNodeID(dataDir string) (string, error) {
 	if err != nil {
 		return "", errors.Annotate(err, "local nodeID file is collapsed")
 	}
-	if len(data) < 16 {
-		return "", errors.Errorf("local nodeID file(%s) is collapsed", nodeIDPath)
-	}
-	id := uuid.New(data)
-	return id.String(), nil
+
+	return string(data), nil
 }
 
 // generate a new nodeID, and store it to local filesystem

@@ -382,9 +382,9 @@ func (d *Drainer) run() error {
 		}
 
 		commitTS := binlog.GetCommitTs()
+		jobID := binlog.GetDdlJobId()
 
-		switch binlog.GetTp() {
-		case pb.BinlogType_Commit:
+		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
@@ -405,9 +405,8 @@ func (d *Drainer) run() error {
 			}
 			d.savePoint(commitTS)
 
-		case pb.BinlogType_PostDDL:
+		} else if jobID > 0 {
 			sql := string(binlog.GetDdlQuery())
-			jobID := binlog.GetDdlJobId()
 
 			schema, sql, ok, err := d.handleDDL(jobID, sql)
 			if err != nil {
