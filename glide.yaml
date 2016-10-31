@@ -86,7 +86,7 @@ import:
 - package: github.com/go-sql-driver/mysql
   version: dbc3fe23a4aced10a53834106e288b155d17e2ee
 - package: github.com/gogo/protobuf
-  version: 909568be09de550ed094403c2bf8a261b5bb730a
+  version: ^0.3.0
   subpackages:
   - proto
 - package: github.com/golang/groupcache
@@ -109,7 +109,7 @@ import:
   - runtime/internal
   - utilities
 - package: github.com/jonboulle/clockwork
-  version: 2eee05ed794112d45db504eb05aa693efd2b8b09
+  version: v0.1.0
 - package: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
 - package: github.com/matttproud/golang_protobuf_extensions
@@ -223,7 +223,7 @@ import:
   - go-binlog
   - go-tipb
 - package: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: ^0.8.0
   subpackages:
   - prometheus
   - prometheus/push
@@ -293,6 +293,8 @@ import:
   - naming
   - peer
   - transport
+- package: github.com/soheilhy/cmux
+  version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 testImports:
 - package: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1

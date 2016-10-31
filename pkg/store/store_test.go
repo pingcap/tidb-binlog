@@ -78,6 +78,12 @@ func testGet(c *C, store Store) {
 	}
 }
 
+func testEndKey(c *C, store Store) {
+	val, err := store.EndKey(binlogNamespace)
+	c.Assert(err, IsNil)
+	c.Assert(val, DeepEquals, values[len(values)-1])
+}
+
 func testScan(c *C, store Store) {
 	index := 1
 	err := store.Scan(binlogNamespace, keys[1], func(key []byte, val []byte) (bool, error) {

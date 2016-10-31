@@ -15,6 +15,7 @@ type Diff struct {
 	db2 *sql.DB
 }
 
+// New returns a Diff instance.
 func New(db1, db2 *sql.DB) *Diff {
 	return &Diff{
 		db1: db1,
@@ -294,35 +295,35 @@ func (r rawBytesRow) Equal(data comparable) bool {
 }
 
 type showIndex struct {
-	Table         sql.RawBytes
-	Non_unique    sql.RawBytes
-	Key_name      sql.RawBytes
-	Seq_in_index  sql.RawBytes
-	Column_name   sql.RawBytes
-	Collation     sql.RawBytes
-	Cardinality   sql.RawBytes
-	Sub_part      sql.RawBytes
-	Packed        sql.RawBytes
-	Null          sql.RawBytes
-	Index_type    sql.RawBytes
-	Comment       sql.RawBytes
-	Index_comment sql.RawBytes
+	Table        sql.RawBytes
+	NonUnique    sql.RawBytes
+	KeyName      sql.RawBytes
+	SeqInIndex   sql.RawBytes
+	ColumnName   sql.RawBytes
+	Collation    sql.RawBytes
+	Cardinality  sql.RawBytes
+	SubPart      sql.RawBytes
+	Packed       sql.RawBytes
+	Null         sql.RawBytes
+	IndexType    sql.RawBytes
+	Comment      sql.RawBytes
+	IndexComment sql.RawBytes
 }
 
 func (si *showIndex) Scan(rows *sql.Rows) error {
 	err := rows.Scan(&si.Table,
-		&si.Non_unique,
-		&si.Key_name,
-		&si.Seq_in_index,
-		&si.Column_name,
+		&si.NonUnique,
+		&si.KeyName,
+		&si.SeqInIndex,
+		&si.ColumnName,
 		&si.Collation,
 		&si.Cardinality,
-		&si.Sub_part,
+		&si.SubPart,
 		&si.Packed,
 		&si.Null,
-		&si.Index_type,
+		&si.IndexType,
 		&si.Comment,
-		&si.Index_comment)
+		&si.IndexComment)
 	return errors.Trace(err)
 }
 
@@ -332,11 +333,11 @@ func (si *showIndex) Equal(data comparable) bool {
 		return false
 	}
 	return bytes.Compare(si.Table, si1.Table) == 0 &&
-		bytes.Compare(si.Non_unique, si1.Non_unique) == 0 &&
-		bytes.Compare(si.Key_name, si1.Key_name) == 0 &&
-		bytes.Compare(si.Seq_in_index, si1.Seq_in_index) == 0 &&
-		bytes.Compare(si.Column_name, si1.Column_name) == 0 &&
-		bytes.Compare(si.Sub_part, si1.Sub_part) == 0 &&
+		bytes.Compare(si.NonUnique, si1.NonUnique) == 0 &&
+		bytes.Compare(si.KeyName, si1.KeyName) == 0 &&
+		bytes.Compare(si.SeqInIndex, si1.SeqInIndex) == 0 &&
+		bytes.Compare(si.ColumnName, si1.ColumnName) == 0 &&
+		bytes.Compare(si.SubPart, si1.SubPart) == 0 &&
 		bytes.Compare(si.Packed, si1.Packed) == 0
 }
 

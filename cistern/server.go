@@ -3,6 +3,7 @@ package cistern
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -16,6 +17,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
+	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -38,6 +40,7 @@ type Server struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+	gc        time.Duration
 }
 
 // NewServer return a instance of binlog-server
@@ -86,6 +89,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
+	var gc time.Duration
+	if cfg.GC > 0 {
+		gc = time.Duration(cfg.GC) * 24 * time.Hour
+	}
+
 	return &Server{
 		boltdb:    s,
 		window:    win,
@@ -96,6 +104,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:        grpc.NewServer(),
 		ctx:       ctx,
 		cancel:    cancel,
+		gc:        gc,
 	}, nil
 }
 
@@ -128,9 +137,9 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			binlogNamespace,
 			codec.EncodeInt([]byte{}, latest),
 			func(key []byte, val []byte) (bool, error) {
-				_, cts, err := codec.DecodeInt(key)
-				if err != nil {
-					return false, errors.Trace(err)
+				_, cts, err1 := codec.DecodeInt(key)
+				if err1 != nil {
+					return false, errors.Trace(err1)
 				}
 				if cts > end || len(resps) >= batch {
 					return false, nil
@@ -138,9 +147,9 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 				if cts == latest {
 					return true, nil
 				}
-				payload, _, err := decodePayload(val)
-				if err != nil {
-					return false, errors.Trace(err)
+				payload, _, err1 := decodePayload(val)
+				if err1 != nil {
+					return false, errors.Trace(err1)
 				}
 				ret := &binlog.DumpBinlogResp{
 					CommitTS: cts,
@@ -208,20 +217,20 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		binlogNamespace,
 		codec.EncodeInt([]byte{}, lowerTS),
 		func(key []byte, val []byte) (bool, error) {
-			_, cts, err := codec.DecodeInt(key)
-			if err != nil {
+			_, cts, err1 := codec.DecodeInt(key)
+			if err1 != nil {
 				return false, errors.Trace(err)
 			}
 			if cts > upperTS && lastTS > 0 {
 				return false, nil
 			}
-			payload, _, err := decodePayload(val)
-			if err != nil {
-				return false, errors.Trace(err)
+			payload, _, err1 := decodePayload(val)
+			if err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			item := &binlog.Binlog{}
-			if err := item.Unmarshal(payload); err != nil {
-				return false, errors.Trace(err)
+			if err1 := item.Unmarshal(payload); err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			if item.DdlJobId > 0 {
 				lastDDLJobID = item.DdlJobId
@@ -383,6 +392,30 @@ func (s *Server) StartMetrics() {
 	}()
 }
 
+// StartGC runs GC periodically in a goroutine.
+func (s *Server) StartGC() {
+	if s.gc == 0 {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer s.wg.Done()
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				err := GCHistoryBinlog(s.boltdb, binlogNamespace, s.gc)
+				if err != nil {
+					log.Error("GC binlog error:", errors.ErrorStack(err))
+				}
+			}
+		}
+	}()
+}
+
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// start to collect
@@ -394,6 +427,9 @@ func (s *Server) Start() error {
 	// collect metrics to prometheus
 	s.StartMetrics()
 
+	// recycle old binlog
+	s.StartGC()
+
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
 	if err != nil {
@@ -403,11 +439,18 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
+	m := cmux.New(tcpLis)
+	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpL := m.Match(cmux.HTTP1Fast())
 
 	// register cistern server with gRPC server and start to serve listener
 	binlog.RegisterCisternServer(s.gs, s)
-	s.gs.Serve(tcpLis)
-	return nil
+	go s.gs.Serve(grpcL)
+
+	http.HandleFunc("/status", s.collector.Status)
+	go http.Serve(httpL, nil)
+
+	return m.Serve()
 }
 
 // Close stops all goroutines started by cistern server gracefully

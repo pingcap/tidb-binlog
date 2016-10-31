@@ -11,11 +11,15 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
+// OpType is defined for operation type
 type OpType byte
 
 const (
+	// Insert is the constant defined for insert OpType
 	Insert OpType = iota + 1
+	// Update is the constant defined for update OpType
 	Update
+	// Del is the constant defined for delete OpType
 	Del
 )
 
