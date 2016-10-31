@@ -335,7 +335,7 @@ func generateTestTable() *model.TableInfo {
 	userIDCol.Flag = 2
 	idIndex := &model.IndexInfo{
 		Primary: true,
-		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
+		Columns: []*model.IndexColumn{{Offset: 0}},
 	}
 
 	userNameCol := &model.ColumnInfo{
@@ -345,7 +345,7 @@ func generateTestTable() *model.TableInfo {
 	}
 	nameIndex := &model.IndexInfo{
 		Primary: true,
-		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr("Name"), Offset: 0}},
+		Columns: []*model.IndexColumn{{Name: model.NewCIStr("Name"), Offset: 0}},
 	}
 
 	t.Indices = []*model.IndexInfo{nameIndex, idIndex}
@@ -373,7 +373,7 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 		Offset: 0,
 	}
 	idIndex := &model.IndexInfo{
-		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
+		Columns: []*model.IndexColumn{{Offset: 0}},
 	}
 
 	userNameCol := &model.ColumnInfo{
@@ -383,7 +383,7 @@ func generateNoPKHandleTestTable() *model.TableInfo {
 	}
 	nameIndex := &model.IndexInfo{
 		Primary: true,
-		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr("Name"), Offset: 0}},
+		Columns: []*model.IndexColumn{{Name: model.NewCIStr("Name"), Offset: 0}},
 	}
 
 	t.Indices = []*model.IndexInfo{idIndex, nameIndex}
@@ -411,7 +411,7 @@ func generateNoPKTestTable() *model.TableInfo {
 		Offset: 0,
 	}
 	idIndex := &model.IndexInfo{
-		Columns: []*model.IndexColumn{&model.IndexColumn{Offset: 0}},
+		Columns: []*model.IndexColumn{{Offset: 0}},
 	}
 
 	userNameCol := &model.ColumnInfo{
@@ -420,7 +420,7 @@ func generateNoPKTestTable() *model.TableInfo {
 		Offset: 1,
 	}
 	nameIndex := &model.IndexInfo{
-		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr("Name"), Offset: 0}},
+		Columns: []*model.IndexColumn{{Name: model.NewCIStr("Name"), Offset: 0}},
 	}
 
 	t.Indices = []*model.IndexInfo{idIndex, nameIndex}

@@ -40,6 +40,7 @@ type Server struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+	gc        time.Duration
 }
 
 // NewServer return a instance of binlog-server
@@ -88,6 +89,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
+	var gc time.Duration
+	if cfg.GC > 0 {
+		gc = time.Duration(cfg.GC) * 24 * time.Hour
+	}
+
 	return &Server{
 		boltdb:    s,
 		window:    win,
@@ -98,6 +104,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:        grpc.NewServer(),
 		ctx:       ctx,
 		cancel:    cancel,
+		gc:        gc,
 	}, nil
 }
 
@@ -357,6 +364,30 @@ func (s *Server) StartMetrics() {
 	}()
 }
 
+// StartGC runs GC periodically in a goroutine.
+func (s *Server) StartGC() {
+	if s.gc == 0 {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer s.wg.Done()
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				err := GCHistoryBinlog(s.boltdb, binlogNamespace, s.gc)
+				if err != nil {
+					log.Error("GC binlog error:", errors.ErrorStack(err))
+				}
+			}
+		}
+	}()
+}
+
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// start to collect
@@ -367,6 +398,9 @@ func (s *Server) Start() error {
 
 	// collect metrics to prometheus
 	s.StartMetrics()
+
+	// recycle old binlog
+	s.StartGC()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)

@@ -10,6 +10,8 @@ type Store interface {
 	Get(namespace []byte, key []byte) ([]byte, error)
 	// Scan returns an Iterator of binlog which from the position of the specified commitTs.
 	Scan(namespace []byte, startKey []byte, f func(key []byte, val []byte) (bool, error)) error
+	// EndKey returns the end key in the store.
+	EndKey(namespace []byte) ([]byte, error)
 	// NewBatch creates a Batch for writing.
 	NewBatch() Batch
 	// Commit writes data in Batch.
