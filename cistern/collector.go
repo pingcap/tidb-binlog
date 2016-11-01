@@ -32,7 +32,6 @@ type Collector struct {
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
-	isSynced  int32
 	reg       *pump.EtcdRegistry
 	pumps     map[string]*Pump
 	timeout   time.Duration
@@ -78,7 +77,6 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		timeout:   cfg.PumpTimeout,
 		window:    w,
 		boltdb:    s,
-		isSynced:  1,
 		tiClient:  tiClient,
 		tiStore:   tiStore,
 	}, nil
@@ -288,7 +286,7 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 }
 
 func (c *Collector) updateLatestCommitTS(items map[int64]*binlog.Binlog) {
-	var max int64
+	max := c.window.LoadUpper()
 	for ts := range items {
 		if ts > max {
 			max = ts
