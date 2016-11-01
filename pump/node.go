@@ -135,7 +135,6 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
-
 				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}
