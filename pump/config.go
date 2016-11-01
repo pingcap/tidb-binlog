@@ -29,6 +29,7 @@ const (
 type Config struct {
 	*flag.FlagSet
 
+	NodeID            string `toml:"node-id" json:"node-id"`
 	ListenAddr        string `toml:"addr" json:"addr"`
 	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
 	Socket            string `toml:"socket" json:"socket"`
@@ -55,6 +56,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 
+	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of pump node; if not specify, we will generate one from hostname and the listening port")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")

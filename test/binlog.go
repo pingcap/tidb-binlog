@@ -3,11 +3,14 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
+	"github.com/pingcap/tidb-binlog/test/diff"
+	"github.com/pingcap/tidb-binlog/test/util"
 )
 
 func main() {
@@ -48,5 +51,29 @@ create table ntest(
 );
 `}
 
+	// generate sql and execute
 	dailytest.Run(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+
+	time.Sleep(3 * time.Minute)
+
+	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	d := diff.New(sourceDB, targetDB)
+	ok, err := d.Equal()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !ok {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
+
+	log.Info("test pass!!!")
 }

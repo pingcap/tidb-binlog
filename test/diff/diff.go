@@ -39,7 +39,7 @@ func (df *Diff) Equal() (eq bool, err error) {
 
 	eq = equalStrings(tbls1, tbls2)
 	if !eq {
-		log.Info("show tables get different table.")
+		log.Infof("show tables get different table. [source db tables] %v [target db tables] %v", tbls1, tbls2)
 		return false, nil
 	}
 

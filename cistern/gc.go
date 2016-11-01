@@ -39,7 +39,7 @@ func GCHistoryBinlog(store store.Store, ns []byte, duration time.Duration) error
 	batch := store.NewBatch()
 	err = store.Scan(ns, nil, func(key []byte, val []byte) (bool, error) {
 		_, cts, err1 := codec.DecodeInt(key)
-		if err != nil {
+		if err1 != nil {
 			return false, errors.Trace(err1)
 		}
 		if uint64(cts) > gcToTS {
