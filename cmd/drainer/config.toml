@@ -2,6 +2,8 @@
 
 log-level = "info"
 
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
 data-dir = "data.drainer"
 txn-batch = 1
 

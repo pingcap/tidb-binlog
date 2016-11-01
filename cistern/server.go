@@ -174,9 +174,9 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
-				data, err := s.boltdb.Get(ddlJobNamespace, key)
-				if err != nil {
-					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err))
+				data, err1 := s.boltdb.Get(ddlJobNamespace, key)
+				if err1 != nil {
+					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err1))
 					return errors.Annotatef(err,
 						"DDL Job(%d) not found, with binlog commitTS(%d)", item.DdlJobId, resp.CommitTS)
 				}
@@ -190,6 +190,31 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			latest = resp.CommitTS
 		}
 	}
+}
+
+// GetLatestCommitTS implements the gRPC interface of cistern server
+func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCommitTSReq) (*binlog.GetLatestCommitTSResp, error) {
+	lastkey, err := s.boltdb.EndKey(binlogNamespace)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if lastkey == nil {
+		return &binlog.GetLatestCommitTSResp{
+			IsSynced: true,
+			CommitTS: 0,
+		}, nil
+	}
+
+	_, commitTS, err := codec.DecodeInt(lastkey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &binlog.GetLatestCommitTSResp{
+		IsSynced: s.collector.IsSynced(),
+		CommitTS: commitTS,
+	}, nil
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server
@@ -327,12 +352,12 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
 			job := &model.Job{}
-			if err := job.Decode(val); err != nil {
-				return false, errors.Trace(err)
+			if err1 := job.Decode(val); err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			var ver int64
-			if err := job.DecodeArgs(&ver); err != nil {
-				return false, errors.Trace(err)
+			if err1 := job.DecodeArgs(&ver); err1 != nil {
+				return false, errors.Trace(err1)
 			}
 			if ver > upperSchemaVer {
 				return false, nil

@@ -1,7 +1,9 @@
 package pump
 
 import (
+	"fmt"
 	"io/ioutil"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,7 +15,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
-	"github.com/twinj/uuid"
 	"golang.org/x/net/context"
 )
 
@@ -70,14 +71,18 @@ func NewPumpNode(cfg *Config) (Node, error) {
 
 	nodeID, err := readLocalNodeID(cfg.DataDir)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			nodeID, err = generateLocalNodeID(cfg.DataDir)
+		if cfg.NodeID != "" {
+			nodeID = cfg.NodeID
+		} else if errors.IsNotFound(err) {
+			nodeID, err = generateLocalNodeID(cfg.DataDir, cfg.ListenAddr)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 		} else {
 			return nil, errors.Trace(err)
 		}
+	} else if cfg.NodeID != "" {
+		log.Warning("you had a node ID in local file.[if you want to change the node ID, you should delete the file data-dir/.node file]")
 	}
 
 	advURL, err := url.Parse(cfg.AdvertiseAddr)
@@ -151,25 +156,37 @@ func readLocalNodeID(dataDir string) (string, error) {
 	if err != nil {
 		return "", errors.Annotate(err, "local nodeID file is collapsed")
 	}
-	if len(data) < 16 {
-		return "", errors.Errorf("local nodeID file(%s) is collapsed", nodeIDPath)
-	}
-	id := uuid.New(data)
-	return id.String(), nil
+
+	return string(data), nil
 }
 
 // generate a new nodeID, and store it to local filesystem
-func generateLocalNodeID(dataDir string) (string, error) {
+func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	if err := os.MkdirAll(dataDir, file.PrivateDirMode); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	id := uuid.NewV1()
-	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
-	if err := ioutil.WriteFile(nodeIDPath, id.Bytes(), file.PrivateFileMode); err != nil {
+	urllis, err := url.Parse(listenAddr)
+	if err != nil {
 		return "", errors.Trace(err)
 	}
-	return id.String(), nil
+
+	_, port, err := net.SplitHostPort(urllis.Host)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	id := fmt.Sprintf("%s:%s", hostname, port)
+	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
+	if err := ioutil.WriteFile(nodeIDPath, []byte(id), file.PrivateFileMode); err != nil {
+		return "", errors.Trace(err)
+	}
+	return id, nil
 }
 
 // checkExclusive try to get filelock of dataDir in exclusive mode
