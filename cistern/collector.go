@@ -104,9 +104,12 @@ func (c *Collector) Start(ctx context.Context) {
 			return
 		case <-time.After(c.interval):
 			start := time.Now()
-			if err := c.collect(ctx); err != nil {
+			synced, err := c.collect(ctx)
+			if err != nil {
 				log.Errorf("collect error: %v", err)
+				synced = false
 			}
+			c.updateStatus(synced)
 			elapsed := time.Now().Sub(start)
 			log.Debugf("finished collecting at round[%d], elapsed time[%s]", round, elapsed)
 			round++
@@ -114,21 +117,27 @@ func (c *Collector) Start(ctx context.Context) {
 	}
 }
 
-func (c *Collector) collect(ctx context.Context) (err error) {
+// updateStatus updates the http status of the Collector.
+func (c *Collector) updateStatus(synced bool) {
 	status := HTTPStatus{
-		Synced:  true,
+		Synced:  synced,
 		PumpPos: make(map[string]binlog.Pos),
 	}
-	defer func(c *Collector, status *HTTPStatus) {
-		if err != nil {
-			// if collect meet any error, status.Synced should be set to false.
-			status.Synced = false
-		}
-		c.mu.Lock()
-		c.mu.status = status
-		c.mu.Unlock()
-	}(c, &status)
 
+	for nodeID, pump := range c.pumps {
+		status.PumpPos[nodeID] = pump.current
+	}
+	status.DepositWindow.Lower = c.window.LoadLower()
+	status.DepositWindow.Upper = c.window.LoadUpper()
+
+	c.mu.Lock()
+	c.mu.status = &status
+	c.mu.Unlock()
+}
+
+// collect pulls binlog from pumps, return whether cistern is synced with
+// pump after this round of collect.
+func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 	if err1 := c.prepare(ctx); err1 != nil {
 		err = errors.Trace(err1)
 		return
@@ -156,42 +165,41 @@ func (c *Collector) collect(ctx context.Context) (err error) {
 	savepoints := make(map[string]binlog.Pos)
 	for r := range resc {
 		if r.err != nil {
-			return errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
+			err = errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
 				r.clusterID, r.nodeID)
+			return
 		}
 		for commitTS, item := range r.binlogs {
 			items[commitTS] = item
 		}
-
-		// update the http status no matter savepoints changes or not
-		status.PumpPos[r.nodeID] = r.end
 
 		if ComparePos(r.end, r.begin) > 0 {
 			savepoints[r.nodeID] = r.end
 		}
 	}
 
-	jobs, err := c.grabDDLJobs(ctx, items)
-	if err != nil {
-		return errors.Trace(err)
+	jobs, err1 := c.grabDDLJobs(ctx, items)
+	if err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
-	if err := c.storeDDLJobs(jobs); err != nil {
-		return errors.Trace(err)
+	if err1 := c.storeDDLJobs(jobs); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
-	if err := c.store(items); err != nil {
-		return errors.Trace(err)
+	if err1 := c.store(items); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
 
-	if err := c.updateSavepoints(savepoints); err != nil {
-		return errors.Trace(err)
+	if err1 := c.updateSavepoints(savepoints); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
 
 	c.updateLatestCommitTS(items)
-
-	status.DepositWindow.Lower = c.window.LoadLower()
-	status.DepositWindow.Upper = c.window.LoadUpper()
-	if len(items) > 0 {
-		status.Synced = false
+	if len(items) == 0 {
+		synced = true
 	}
 
 	// prometheus metrics
@@ -200,7 +208,7 @@ func (c *Collector) collect(ctx context.Context) (err error) {
 	for nodeID, pos := range savepoints {
 		savepoint.WithLabelValues(nodeID).Set(posToFloat(&pos))
 	}
-	return nil
+	return
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
@@ -409,11 +417,7 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 
 // Status exposes collector's status to HTTP handler.
 func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
-	var s *HTTPStatus
-	c.mu.Lock()
-	s = c.mu.status
-	c.mu.Unlock()
-	s.Status(w, r)
+	c.HTTPStatus().Status(w, r)
 }
 
 // HTTPStatus returns a snapshot of current http status.
