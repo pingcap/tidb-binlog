@@ -364,7 +364,7 @@ func (c *Collector) getDDLJob(id int64) (*model.Job, error) {
 func (c *Collector) storeDDLJobs(jobs map[int64]*model.Job) error {
 	b := c.boltdb.NewBatch()
 	for id, job := range jobs {
-		if err := job.DecodeArgs(); err != nil {
+		if err := decodeJob(job); err != nil {
 			return errors.Trace(err)
 		}
 		payload, err := job.Encode()
@@ -400,7 +400,7 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 			if !errors.IsNotFound(err) {
 				return errors.Trace(err)
 			}
-			if err := job.DecodeArgs(); err != nil {
+			if err := decodeJob(job); err != nil {
 				return errors.Trace(err)
 			}
 			payload, err := job.Encode()
