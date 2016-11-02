@@ -194,26 +194,10 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // GetLatestCommitTS implements the gRPC interface of cistern server
 func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCommitTSReq) (*binlog.GetLatestCommitTSResp, error) {
-	lastkey, err := s.boltdb.EndKey(binlogNamespace)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if lastkey == nil {
-		return &binlog.GetLatestCommitTSResp{
-			IsSynced: true,
-			CommitTS: 0,
-		}, nil
-	}
-
-	_, commitTS, err := codec.DecodeInt(lastkey)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+	status := s.collector.HTTPStatus()
 	return &binlog.GetLatestCommitTSResp{
-		IsSynced: s.collector.IsSynced(),
-		CommitTS: commitTS,
+		IsSynced: status.Synced,
+		CommitTS: status.DepositWindow.Upper,
 	}, nil
 }
 
@@ -323,10 +307,10 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
 		return nil, errors.Trace(err)
 	}
-	payload, _, err := decodePayload(val)
-	if err != nil {
-		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS decode payload error, %v", errors.ErrorStack(err))
-		return nil, errors.Trace(err)
+	payload, _, err1 := decodePayload(val)
+	if err1 != nil {
+		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS decode payload error, %v", errors.ErrorStack(err1))
+		return nil, errors.Trace(err1)
 	}
 	item := &binlog.Binlog{}
 	err = item.Unmarshal(payload)
