@@ -136,15 +136,30 @@ func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+	var err error
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
+	}()
+
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.WriteBinlogResp{}
-	binlogger, err := s.getBinloggerToWrite(cid)
-	if err != nil {
+	binlogger, err1 := s.getBinloggerToWrite(cid)
+	if err1 != nil {
 		ret.Errmsg = err.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
-	if err := binlogger.WriteTail(in.Payload); err != nil {
+	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
 	return ret, nil
@@ -152,21 +167,36 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 
 // PullBinlogs implements the gRPC interface of pump server
 func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
+	var err error
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "succ"
+		} else {
+			label = "fail"
+		}
+		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
+	}()
+
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.PullBinlogResp{}
-	binlogger, err := s.getBinloggerToRead(cid)
-	if err != nil {
+	binlogger, err1 := s.getBinloggerToRead(cid)
+	if err1 != nil {
 		if errors.IsNotFound(err) {
 			// return an empty slice and a nil error
 			ret.Entities = []binlog.Entity{}
 			return ret, nil
 		}
 		ret.Errmsg = err.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
-	binlogs, err := binlogger.ReadFrom(in.StartFrom, in.Batch)
-	if err != nil {
+	binlogs, err1 := binlogger.ReadFrom(in.StartFrom, in.Batch)
+	if err1 != nil {
 		ret.Errmsg = err.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
 	ret.Entities = binlogs
