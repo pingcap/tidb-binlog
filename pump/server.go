@@ -3,6 +3,7 @@ package pump
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
+	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -219,8 +221,15 @@ func (s *Server) Start() error {
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 	go s.gs.Serve(unixLis)
-	s.gs.Serve(tcpLis)
-	return nil
+
+	// grpc and http will use the same tcp connection
+	m := cmux.New(tcpLis)
+	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	httpL := m.Match(cmux.HTTP1Fast())
+	go s.gs.Serve(grpcL)
+	go http.Serve(httpL, nil)
+
+	return m.Serve()
 }
 
 func (s *Server) gcBinlogFile() {
