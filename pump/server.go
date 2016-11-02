@@ -151,9 +151,9 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	defer func() {
 		var label string
 		if err != nil {
-			label = "succ"
-		} else {
 			label = "fail"
+		} else {
+			label = "succ"
 		}
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
@@ -182,9 +182,9 @@ func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*bi
 	defer func() {
 		var label string
 		if err != nil {
-			label = "succ"
-		} else {
 			label = "fail"
+		} else {
+			label = "succ"
 		}
 		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)

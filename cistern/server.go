@@ -114,9 +114,9 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 	defer func() {
 		var label string
 		if err != nil {
-			label = "succ"
-		} else {
 			label = "fail"
+		} else {
+			label = "succ"
 		}
 		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("DumpBinlog", label).Add(1)
@@ -207,9 +207,9 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 	defer func() {
 		var label string
 		if err != nil {
-			label = "succ"
-		} else {
 			label = "fail"
+		} else {
+			label = "succ"
 		}
 		rpcHistogram.WithLabelValues("DumpDDLJobs", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
