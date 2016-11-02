@@ -163,12 +163,12 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	ret := &binlog.WriteBinlogResp{}
 	binlogger, err1 := s.getBinloggerToWrite(cid)
 	if err1 != nil {
-		ret.Errmsg = err.Error()
+		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
 	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		ret.Errmsg = err.Error()
+		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
@@ -194,18 +194,18 @@ func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*bi
 	ret := &binlog.PullBinlogResp{}
 	binlogger, err1 := s.getBinloggerToRead(cid)
 	if err1 != nil {
-		if errors.IsNotFound(err) {
+		if errors.IsNotFound(err1) {
 			// return an empty slice and a nil error
 			ret.Entities = []binlog.Entity{}
 			return ret, nil
 		}
-		ret.Errmsg = err.Error()
+		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
 	binlogs, err1 := binlogger.ReadFrom(in.StartFrom, in.Batch)
 	if err1 != nil {
-		ret.Errmsg = err.Error()
+		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
