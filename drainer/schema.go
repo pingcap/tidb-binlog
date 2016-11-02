@@ -50,6 +50,10 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaName
 
 	var err error
 	for _, job := range jobs {
+		if job.State == model.JobCancelled {
+			continue
+		}
+
 		switch job.Type {
 		case model.ActionCreateSchema:
 			schema := &model.DBInfo{}

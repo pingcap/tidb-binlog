@@ -36,7 +36,7 @@ Usage of cistern:
 ## Example
 
 ```
-./bin/cistern -deposit-window-period 1 -cluster-id 1
+./bin/cistern -cluster-id 1
 ```
 or use configuration file
 
