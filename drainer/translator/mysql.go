@@ -40,6 +40,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 		var r []types.Datum
 		// decode the remain values, the format is [coldID, colVal, coldID, colVal....]
+		// while the table just has primary id, filter the nil value that follows by the primary id
 		if remain[0] != codec.NilFlag {
 			r, err = codec.Decode(remain, 2*(len(columns)-1))
 			if err != nil {
