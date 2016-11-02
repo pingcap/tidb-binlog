@@ -38,10 +38,14 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, errors.Trace(err)
 		}
 
+		var r []types.Datum
 		// decode the remain values, the format is [coldID, colVal, coldID, colVal....]
-		r, err := codec.Decode(remain, 2*(len(columns)-1))
-		if err != nil {
-			return nil, nil, errors.Trace(err)
+		// while the table just has primary id, filter the nil value that follows by the primary id
+		if remain[0] != codec.NilFlag {
+			r, err = codec.Decode(remain, 2*(len(columns)-1))
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
 		}
 
 		if len(r)%2 != 0 {
