@@ -93,7 +93,8 @@ func decodeJob(job *model.Job) error {
 	case model.ActionCreateTable, model.ActionDropTable,
 		model.ActionAddColumn, model.ActionDropColumn,
 		model.ActionAddIndex, model.ActionDropIndex,
-		model.ActionAddForeignKey, model.ActionDropForeignKey:
+		model.ActionAddForeignKey, model.ActionDropForeignKey,
+		model.ActionTruncateTable:
 		table := &model.TableInfo{}
 		if err := job.DecodeArgs(&ver, table); err != nil {
 			return errors.Trace(err)
