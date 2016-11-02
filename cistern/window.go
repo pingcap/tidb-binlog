@@ -20,13 +20,13 @@ type DepositWindow struct {
 
 // NewDepositWindow return an instance of DepositWindow
 func NewDepositWindow(s store.Store) (*DepositWindow, error) {
-	l, err := loadMark(s)
+	l, u, err := loadMark(s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &DepositWindow{
-		upper: 0,
+		upper: u,
 		lower: l,
 		bolt:  s,
 	}, nil
@@ -63,21 +63,35 @@ func (d *DepositWindow) PersistLower(val int64) error {
 	return nil
 }
 
-func loadMark(s store.Store) (int64, error) {
-	var l int64
+// loadMark loads the lower upper boundary of the window from store.
+func loadMark(s store.Store) (int64, int64, error) {
+	var l, u int64
 	data, err := s.Get(windowNamespace, windowKeyName)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return 0, nil
+			return 0, 0, nil
 		}
 
-		return 0, errors.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 
 	_, l, err = codec.DecodeInt(data)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 
-	return l, nil
+	ts, err := s.EndKey(binlogNamespace)
+	if err != nil {
+		return l, 0, errors.Trace(err)
+	}
+
+	if ts == nil {
+		return l, 0, nil
+	}
+	_, u, err = codec.DecodeInt(ts)
+	if err != nil {
+		return l, 0, errors.Trace(err)
+	}
+
+	return l, u, nil
 }

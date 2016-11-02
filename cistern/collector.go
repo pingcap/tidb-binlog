@@ -1,11 +1,9 @@
 package cistern
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -34,7 +32,6 @@ type Collector struct {
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
-	isSynced  int32
 	reg       *pump.EtcdRegistry
 	pumps     map[string]*Pump
 	timeout   time.Duration
@@ -43,9 +40,11 @@ type Collector struct {
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 
-	// expose savepoints to HTTP
-	mu     sync.Mutex
-	status map[string]binlog.Pos
+	// expose savepoints to HTTP.
+	mu struct {
+		sync.Mutex
+		status *HTTPStatus
+	}
 }
 
 // NewCollector returns an instance of Collector
@@ -78,7 +77,6 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		timeout:   cfg.PumpTimeout,
 		window:    w,
 		boltdb:    s,
-		isSynced:  1,
 		tiClient:  tiClient,
 		tiStore:   tiStore,
 	}, nil
@@ -106,9 +104,12 @@ func (c *Collector) Start(ctx context.Context) {
 			return
 		case <-time.After(c.interval):
 			start := time.Now()
-			if err := c.collect(ctx); err != nil {
+			synced, err := c.collect(ctx)
+			if err != nil {
 				log.Errorf("collect error: %v", err)
+				synced = false
 			}
+			c.updateStatus(synced)
 			elapsed := time.Now().Sub(start)
 			log.Debugf("finished collecting at round[%d], elapsed time[%s]", round, elapsed)
 			round++
@@ -116,9 +117,30 @@ func (c *Collector) Start(ctx context.Context) {
 	}
 }
 
-func (c *Collector) collect(ctx context.Context) error {
-	if err := c.prepare(ctx); err != nil {
-		return errors.Trace(err)
+// updateStatus updates the http status of the Collector.
+func (c *Collector) updateStatus(synced bool) {
+	status := HTTPStatus{
+		Synced:  synced,
+		PumpPos: make(map[string]binlog.Pos),
+	}
+
+	for nodeID, pump := range c.pumps {
+		status.PumpPos[nodeID] = pump.current
+	}
+	status.DepositWindow.Lower = c.window.LoadLower()
+	status.DepositWindow.Upper = c.window.LoadUpper()
+
+	c.mu.Lock()
+	c.mu.status = &status
+	c.mu.Unlock()
+}
+
+// collect pulls binlog from pumps, return whether cistern is synced with
+// pump after this round of collect.
+func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
+	if err1 := c.prepare(ctx); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
 
 	// start to collect binlog from each pump
@@ -143,8 +165,9 @@ func (c *Collector) collect(ctx context.Context) error {
 	savepoints := make(map[string]binlog.Pos)
 	for r := range resc {
 		if r.err != nil {
-			return errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
+			err = errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
 				r.clusterID, r.nodeID)
+			return
 		}
 		for commitTS, item := range r.binlogs {
 			items[commitTS] = item
@@ -155,33 +178,37 @@ func (c *Collector) collect(ctx context.Context) error {
 		}
 	}
 
-	jobs, err := c.grabDDLJobs(ctx, items)
-	if err != nil {
-		return errors.Trace(err)
+	jobs, err1 := c.grabDDLJobs(ctx, items)
+	if err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
-	if err := c.storeDDLJobs(jobs); err != nil {
-		return errors.Trace(err)
+	if err1 := c.storeDDLJobs(jobs); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
-	if err := c.store(items); err != nil {
-		return errors.Trace(err)
-	}
-
-	if err := c.updateSavepoints(savepoints); err != nil {
-		return errors.Trace(err)
-	}
-
-	if len(items) > 0 {
-		atomic.StoreInt32(&c.isSynced, 0)
-	} else {
-		atomic.StoreInt32(&c.isSynced, 1)
+	if err1 := c.store(items); err1 != nil {
+		err = errors.Trace(err1)
+		return
 	}
 
+	if err1 := c.updateSavepoints(savepoints); err1 != nil {
+		err = errors.Trace(err1)
+		return
+	}
+
+	c.updateLatestCommitTS(items)
+	if len(items) == 0 {
+		synced = true
+	}
+
+	// prometheus metrics
 	ddlJobsCounter.Add(float64(len(jobs)))
 	binlogCounter.Add(float64(len(items)))
 	for nodeID, pos := range savepoints {
 		savepoint.WithLabelValues(nodeID).Set(posToFloat(&pos))
 	}
-	return nil
+	return
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
@@ -221,13 +248,6 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 	}
 
-	savepoints := make(map[string]binlog.Pos)
-	for id, p := range c.pumps {
-		savepoints[id] = p.current
-	}
-	c.mu.Lock()
-	c.status = savepoints
-	c.mu.Unlock()
 	return nil
 }
 
@@ -271,6 +291,16 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 		}
 	}
 	return nil
+}
+
+func (c *Collector) updateLatestCommitTS(items map[int64]*binlog.Binlog) {
+	max := c.window.LoadUpper()
+	for ts := range items {
+		if ts > max {
+			max = ts
+		}
+	}
+	c.window.SaveUpper(max)
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
@@ -385,28 +415,16 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 	return nil
 }
 
-// IsSynced specifies whether the all binlogs are consumed
-func (c *Collector) IsSynced() bool {
-	return atomic.LoadInt32(&c.isSynced) == 1
-}
-
 // Status exposes collector's status to HTTP handler.
 func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
-	lower := c.window.LoadLower()
-	upper := c.window.LoadUpper()
+	c.HTTPStatus().Status(w, r)
+}
 
-	var status struct {
-		SavePoints    map[string]binlog.Pos
-		DepositWindow struct {
-			Lower int64
-			Upper int64
-		}
-	}
+// HTTPStatus returns a snapshot of current http status.
+func (c *Collector) HTTPStatus() *HTTPStatus {
+	var status *HTTPStatus
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	status.SavePoints = c.status
-	status.DepositWindow.Lower = lower
-	status.DepositWindow.Upper = upper
-
-	json.NewEncoder(w).Encode(status)
+	status = c.mu.status
+	c.mu.Unlock()
+	return status
 }
