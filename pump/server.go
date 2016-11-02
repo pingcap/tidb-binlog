@@ -63,6 +63,7 @@ type Server struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	gc       time.Duration
+	metrics  *metricClient
 }
 
 // NewServer return a instance of pump server
@@ -70,6 +71,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	n, err := NewPumpNode(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	var metrics *metricClient
+	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+		metrics = &metricClient{
+			addr:     cfg.MetricsAddr,
+			interval: cfg.MetricsInterval,
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
@@ -81,6 +90,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:         grpc.NewServer(),
 		ctx:        ctx,
 		cancel:     cancel,
+		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 	}, nil
 }
@@ -138,15 +148,30 @@ func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+	var err error
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "fail"
+		} else {
+			label = "succ"
+		}
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
+	}()
+
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.WriteBinlogResp{}
-	binlogger, err := s.getBinloggerToWrite(cid)
-	if err != nil {
-		ret.Errmsg = err.Error()
+	binlogger, err1 := s.getBinloggerToWrite(cid)
+	if err1 != nil {
+		ret.Errmsg = err1.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
-	if err := binlogger.WriteTail(in.Payload); err != nil {
-		ret.Errmsg = err.Error()
+	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+		ret.Errmsg = err1.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
 	return ret, nil
@@ -154,21 +179,36 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 
 // PullBinlogs implements the gRPC interface of pump server
 func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
+	var err error
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "fail"
+		} else {
+			label = "succ"
+		}
+		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
+	}()
+
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.PullBinlogResp{}
-	binlogger, err := s.getBinloggerToRead(cid)
-	if err != nil {
-		if errors.IsNotFound(err) {
+	binlogger, err1 := s.getBinloggerToRead(cid)
+	if err1 != nil {
+		if errors.IsNotFound(err1) {
 			// return an empty slice and a nil error
 			ret.Entities = []binlog.Entity{}
 			return ret, nil
 		}
-		ret.Errmsg = err.Error()
+		ret.Errmsg = err1.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
-	binlogs, err := binlogger.ReadFrom(in.StartFrom, in.Batch)
-	if err != nil {
-		ret.Errmsg = err.Error()
+	binlogs, err1 := binlogger.ReadFrom(in.StartFrom, in.Batch)
+	if err1 != nil {
+		ret.Errmsg = err1.Error()
+		err = errors.Trace(err1)
 		return ret, err
 	}
 	ret.Entities = binlogs
@@ -218,6 +258,9 @@ func (s *Server) Start() error {
 	// gc old binlog files
 	go s.gcBinlogFile()
 
+	// collect metrics to prometheus
+	go s.startMetrics()
+
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 	go s.gs.Serve(unixLis)
@@ -242,6 +285,13 @@ func (s *Server) gcBinlogFile() {
 		}
 		time.Sleep(time.Hour)
 	}
+}
+
+func (s *Server) startMetrics() {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.Start(s.ctx)
 }
 
 // Close gracefully releases resource of pump server
