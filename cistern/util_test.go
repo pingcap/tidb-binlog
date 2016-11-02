@@ -21,5 +21,5 @@ func (suite *testUtilSuite) TestPosToFloat(c *check.C) {
 		Offset: 3721,
 	}
 	f := posToFloat(&pos)
-	c.Assert(f, check.Equals, 4.3721)
+	c.Assert(f, check.Equals, 3721.4)
 }

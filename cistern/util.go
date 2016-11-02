@@ -5,6 +5,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
 )
 
@@ -78,4 +79,28 @@ func posToFloat(pos *binlog.Pos) float64 {
 		decimal = decimal / 10
 	}
 	return float64(pos.Offset) + decimal
+}
+
+func decodeJob(job *model.Job) error {
+	var ver int64
+	switch job.Type {
+	case model.ActionCreateSchema, model.ActionDropSchema:
+		schema := &model.DBInfo{}
+		if err := job.DecodeArgs(&ver, schema); err != nil {
+			return errors.Trace(err)
+		}
+		job.Args = []interface{}{ver, schema}
+	case model.ActionCreateTable, model.ActionDropTable,
+		model.ActionAddColumn, model.ActionDropColumn,
+		model.ActionAddIndex, model.ActionDropIndex,
+		model.ActionAddForeignKey, model.ActionDropForeignKey:
+		table := &model.TableInfo{}
+		if err := job.DecodeArgs(&ver, table); err != nil {
+			return errors.Trace(err)
+		}
+		job.Args = []interface{}{ver, table}
+	default:
+		return errors.Errorf("invalid ddl %v", job)
+	}
+	return nil
 }
