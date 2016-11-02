@@ -61,6 +61,7 @@ type Server struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	gc       time.Duration
+	metrics  *metricClient
 }
 
 // NewServer return a instance of pump server
@@ -68,6 +69,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	n, err := NewPumpNode(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	var metrics *metricClient
+	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+		metrics = &metricClient{
+			addr:     cfg.MetricsAddr,
+			interval: cfg.MetricsInterval,
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
@@ -79,6 +88,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:         grpc.NewServer(),
 		ctx:        ctx,
 		cancel:     cancel,
+		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 	}, nil
 }
@@ -246,6 +256,9 @@ func (s *Server) Start() error {
 	// gc old binlog files
 	go s.gcBinlogFile()
 
+	// collect metrics to prometheus
+	go s.startMetrics()
+
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 	go s.gs.Serve(unixLis)
@@ -263,6 +276,13 @@ func (s *Server) gcBinlogFile() {
 		}
 		time.Sleep(time.Hour)
 	}
+}
+
+func (s *Server) startMetrics() {
+	if s.metrics == nil {
+		return
+	}
+	s.metrics.Start(s.ctx)
 }
 
 // Close gracefully releases resource of pump server

@@ -39,6 +39,8 @@ type Config struct {
 	HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	GC                uint   `toml:"gc" json:"gc"`
 	Debug             bool
+	MetricsAddr       string
+	MetricsInterval   int
 	configFile        string
 	printVersion      bool
 }
@@ -65,6 +67,8 @@ func NewConfig() *Config {
 	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.UintVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
+	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
+	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
 
