@@ -287,7 +287,7 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 
 		return schema.Name.L, sql, true, nil
 
-	case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
+	default:
 		tbInfo := &model.TableInfo{}
 		err := job.DecodeArgs(nil, tbInfo)
 		if err != nil {
@@ -313,22 +313,6 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 		}
 
 		return schema.Name.L, sql, true, nil
-
-	case model.ActionAddForeignKey, model.ActionDropForeignKey:
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
-		if ok {
-			return "", "", false, nil
-		}
-
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		return schema.Name.L, sql, true, nil
-
-	default:
-		return "", "", true, errors.Errorf("invalid ddl %v", job)
 	}
 }
 

@@ -149,7 +149,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaName
 				return errors.Trace(err)
 			}
 
-		case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
+		default:
 			tbInfo := &model.TableInfo{}
 			err := job.DecodeArgs(nil, tbInfo)
 			if err != nil {
@@ -173,10 +173,6 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaName
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-		case model.ActionAddForeignKey, model.ActionDropForeignKey:
-		default:
-			return errors.Errorf("invalid ddl %v", job)
 		}
 	}
 
