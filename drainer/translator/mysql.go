@@ -262,6 +262,14 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
+	subSqls := strings.Split(sql, ";")
+	for i := len(subSqls) - 1; i >= 0; i-- {
+		sql = strings.TrimSpace(subSqls[i])
+		if sql != "" {
+			break
+		}
+	}
+
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
@@ -405,7 +413,7 @@ func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (inte
 		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
 		mysql.TypeString:
 		return value.GetValue(), nil
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp, mysql.TypeDuration:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
 		return fmt.Sprintf("%v", value.GetValue()), nil
 	case mysql.TypeEnum:
 		return value.GetMysqlEnum().Value, nil
