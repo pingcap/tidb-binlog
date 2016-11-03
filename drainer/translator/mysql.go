@@ -262,19 +262,23 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
-	subSqls := strings.Split(sql, ";")
-	for i := len(subSqls) - 1; i >= 0; i-- {
-		sql = strings.TrimSpace(subSqls[i])
-		if sql != "" {
-			break
-		}
-	}
 
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
+	var index int
+	for ; index < len(stmts); index++ {
+		_, isUseStmt := stmts[index].(*ast.UseStmt)
+		if !isUseStmt {
+			if index != len(stmts)-1 {
+				return "", errors.Errorf("muliti sql %s is not allowed", sql)
+			}
+		}
+	}
+
+	stmt := stmts[len(stmts)-1]
 	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 	if isCreateDatabase {
 		return fmt.Sprintf("%s;", sql), nil
