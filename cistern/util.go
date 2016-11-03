@@ -12,13 +12,23 @@ import (
 const lengthOfBinaryTime = 15
 
 // InitLogger initalizes Pump's logger.
-func InitLogger(isDebug bool) {
-	if isDebug {
+func InitLogger(cfg *Config) {
+	if cfg.Debug {
 		log.SetLevelByString("debug")
 	} else {
 		log.SetLevelByString("info")
 	}
 	log.SetHighlighting(false)
+
+	if len(cfg.LogFile) > 0 {
+		log.SetOutputByName(cfg.LogFile)
+
+		if cfg.LogRotate == "hour" {
+			log.SetRotateByHour()
+		} else {
+			log.SetRotateByDay()
+		}
+	}
 }
 
 // ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
