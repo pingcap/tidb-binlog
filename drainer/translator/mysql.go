@@ -262,11 +262,23 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+
+	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
+	var index int
+	for ; index < len(stmts); index++ {
+		_, isUseStmt := stmts[index].(*ast.UseStmt)
+		if !isUseStmt {
+			if index != len(stmts)-1 {
+				return "", errors.Errorf("muliti sql %s is not allowed", sql)
+			}
+		}
+	}
+
+	stmt := stmts[len(stmts)-1]
 	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 	if isCreateDatabase {
 		return fmt.Sprintf("%s;", sql), nil
@@ -405,7 +417,7 @@ func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (inte
 		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
 		mysql.TypeString:
 		return value.GetValue(), nil
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp, mysql.TypeDuration:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
 		return fmt.Sprintf("%v", value.GetValue()), nil
 	case mysql.TypeEnum:
 		return value.GetMysqlEnum().Value, nil

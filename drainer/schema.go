@@ -120,6 +120,35 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaName
 				return errors.Trace(err)
 			}
 
+		case model.ActionTruncateTable:
+			_, ok := s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				continue
+			}
+
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			_, err := s.DropTable(job.TableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			table := &model.TableInfo{}
+			if err := job.DecodeArgs(nil, table); err != nil {
+				return errors.Trace(err)
+			}
+			if table == nil {
+				return errors.NotFoundf("table %d", job.TableID)
+			}
+
+			err = s.CreateTable(schema, table)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 		case model.ActionAddColumn, model.ActionDropColumn, model.ActionAddIndex, model.ActionDropIndex:
 			tbInfo := &model.TableInfo{}
 			err := job.DecodeArgs(nil, tbInfo)
