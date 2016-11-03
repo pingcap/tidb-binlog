@@ -37,6 +37,8 @@ type Config struct {
 	DepositWindowPeriod int    `toml:"deposit-window-period" json:"deposit-window-period"`
 	EtcdURLs            string `toml:"pd-urls" json:"pd-urls"`
 	GC                  int    `toml:"gc" json:"gc"`
+	LogFile             string `toml:"log-file" json:"log-file"`
+	LogRotate           string `toml:"log-rotate" json:"log-rotate"`
 	EtcdTimeout         time.Duration
 	PumpTimeout         time.Duration
 	MetricsAddr         string
@@ -71,6 +73,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.IntVar(&cfg.GC, "gc", 0, "a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed.")
+	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
+	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	return cfg
 }
 

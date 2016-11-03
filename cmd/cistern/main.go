@@ -26,6 +26,16 @@ func main() {
 	}
 
 	cistern.InitLogger(cfg.Debug)
+	if len(cfg.LogFile) > 0 {
+		log.SetOutputByName(cfg.LogFile)
+
+		if cfg.LogRotate == "hour" {
+			log.SetRotateByHour()
+		} else {
+			log.SetRotateByDay()
+		}
+	}
+
 	cistern.PrintVersionInfo()
 
 	bs, err := cistern.NewServer(cfg)
