@@ -217,6 +217,7 @@ func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*bi
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
+	grpc.EnableTracing = false
 	// register this node
 	if err := s.node.Register(s.ctx); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
