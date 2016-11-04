@@ -15,7 +15,7 @@ var (
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "event",
-			Help:      "the sql sql event(dml, ddl).",
+			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
 	savePointBoundary = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -24,11 +24,20 @@ var (
 			Name:      "save_point",
 			Help:      "save point of drainer.",
 		})
+	txnHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "txn_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of txn.",
+			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
+		})
 )
 
 func init() {
 	prometheus.MustRegister(savePointBoundary)
 	prometheus.MustRegister(eventCounter)
+	prometheus.MustRegister(txnHistogram)
 }
 
 type metricClient struct {

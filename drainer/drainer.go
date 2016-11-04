@@ -353,12 +353,13 @@ func newBatch(isDDL, retry bool, commitTS int64) *batch {
 	}
 }
 
-func (b *batch) addJob(sql string, args []interface{}) {
-	b.sqls = append(b.sqls, sql)
-	b.args = append(b.args, args)
+func (b *batch) addJob(sqls []string, args [][]interface{}) {
+	b.sqls = append(b.sqls, sqls...)
+	b.args = append(b.args, args...)
 }
 
 func (b *batch) applyBatch(db *sql.DB) error {
+	beginTime := time.Now()
 	err := executeSQLs(db, b.sqls, b.args, b.retry)
 	if err != nil {
 		if !b.isDDL || !ignoreDDLError(err) {
@@ -367,6 +368,7 @@ func (b *batch) applyBatch(db *sql.DB) error {
 
 		log.Warnf("[ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
 	}
+	txnHistogram.Observe(time.Since(beginTime).Seconds())
 	return nil
 }
 
@@ -449,7 +451,7 @@ func (d *Drainer) run() error {
 				d.addCount(translator.DDL)
 
 				b := newBatch(true, false, commitTS)
-				b.addJob(sql, nil)
+				b.addJob([]string{sql}, nil)
 
 				err = b.applyBatch(d.toDB)
 				if err != nil {
@@ -465,17 +467,6 @@ func (d *Drainer) run() error {
 }
 
 func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
-	// bound , offset and operations are used to parition the sql type (insert, update, del)
-	// bound stores the insert, update, delete bound position info
-	// offset is just a cursor for record the sql position
-	var (
-		sqls   []string
-		args   [][]interface{}
-		bound  []int
-		offset int
-	)
-	var operations = []translator.OpType{translator.Insert, translator.Update, translator.Del}
-
 	for _, mutation := range mutations {
 
 		table, ok := d.schema.TableByID(mutation.GetTableId())
@@ -494,11 +485,9 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			sqls = append(sqls, sql...)
-			args = append(args, arg...)
-			offset += len(sqls)
+			b.addJob(sql, arg)
+			d.addCount(translator.Insert)
 		}
-		bound = append(bound, offset)
 
 		if len(mutation.GetUpdatedRows()) > 0 {
 			sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
@@ -506,11 +495,9 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			sqls = append(sqls, sql...)
-			args = append(args, arg...)
-			offset += len(sqls)
+			b.addJob(sql, arg)
+			d.addCount(translator.Update)
 		}
-		bound = append(bound, offset)
 
 		if len(mutation.GetDeletedIds()) > 0 {
 			sql, arg, err := d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
@@ -518,9 +505,8 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			sqls = append(sqls, sql...)
-			args = append(args, arg...)
-			offset += len(sqls)
+			b.addJob(sql, arg)
+			d.addCount(translator.Del)
 		}
 
 		if len(mutation.GetDeletedPks()) > 0 {
@@ -529,9 +515,8 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			sqls = append(sqls, sql...)
-			args = append(args, arg...)
-			offset += len(sqls)
+			b.addJob(sql, arg)
+			d.addCount(translator.Del)
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
@@ -540,26 +525,9 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			sqls = append(sqls, sql...)
-			args = append(args, arg...)
-			offset += len(sqls)
+			b.addJob(sql, arg)
+			d.addCount(translator.Del)
 		}
-		bound = append(bound, offset)
-
-		offset = 0
-		for i := range sqls {
-			for i >= bound[offset] {
-				offset++
-			}
-
-			d.addCount(operations[offset])
-			b.addJob(sqls[i], args[i])
-		}
-
-		sqls = sqls[:0]
-		args = args[:0]
-		bound = bound[:0]
-		offset = 0
 	}
 
 	return nil
