@@ -40,7 +40,7 @@ var (
 			Subsystem: "cistern",
 			Name:      "rpc_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
 		}, []string{"method", "label"})
 	binlogCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
