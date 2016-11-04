@@ -272,13 +272,18 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 	for ; index < len(stmts); index++ {
 		_, isUseStmt := stmts[index].(*ast.UseStmt)
 		if !isUseStmt {
-			if index != len(stmts)-1 {
+			/*if index != len(stmts)-1 {
 				return "", errors.Errorf("muliti sql %s is not allowed", sql)
-			}
+			}*/
+			break
 		}
 	}
 
-	stmt := stmts[len(stmts)-1]
+	if index >= len(stmts) {
+		index = len(stmts) - 1
+	}
+
+	stmt := stmts[index]
 	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 	if isCreateDatabase {
 		return fmt.Sprintf("%s;", sql), nil
