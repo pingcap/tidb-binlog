@@ -106,7 +106,7 @@ func (c *Collector) Start(ctx context.Context) {
 			start := time.Now()
 			synced, err := c.collect(ctx)
 			if err != nil {
-				log.Errorf("collect error: %v", err)
+				log.Errorf("collect error: %v", errors.ErrorStack(err))
 				synced = false
 			}
 			c.updateStatus(synced)
@@ -321,7 +321,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 
 func (c *Collector) grabDDLJobs(ctx context.Context, items map[int64]*binlog.Binlog) (map[int64]*model.Job, error) {
 	res := make(map[int64]*model.Job)
-	for _, item := range items {
+	for ts, item := range items {
 		if item.DdlJobId > 0 {
 			job, err := c.getDDLJob(item.DdlJobId)
 			if err != nil {
@@ -338,7 +338,11 @@ func (c *Collector) grabDDLJobs(ctx context.Context, items map[int64]*binlog.Bin
 					}
 				}
 			}
-			res[item.DdlJobId] = job
+			if job.State == model.JobCancelled {
+				delete(items, ts)
+			} else {
+				res[item.DdlJobId] = job
+			}
 		}
 	}
 	return res, nil
@@ -364,6 +368,9 @@ func (c *Collector) getDDLJob(id int64) (*model.Job, error) {
 func (c *Collector) storeDDLJobs(jobs map[int64]*model.Job) error {
 	b := c.boltdb.NewBatch()
 	for id, job := range jobs {
+		if job.State == model.JobCancelled {
+			continue
+		}
 		if err := decodeJob(job); err != nil {
 			return errors.Trace(err)
 		}
@@ -394,6 +401,9 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		return errors.Trace(err)
 	}
 	for _, job := range jobs {
+		if job.State == model.JobCancelled {
+			continue
+		}
 		key := codec.EncodeInt([]byte{}, job.ID)
 		_, err = c.boltdb.Get(ddlJobNamespace, key)
 		if err != nil {
