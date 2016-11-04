@@ -180,17 +180,17 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 // PullBinlogs implements the gRPC interface of pump server
 func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
 	var err error
-	beginTime := time.Now()
-	defer func() {
-		var label string
-		if err != nil {
-			label = "fail"
-		} else {
-			label = "succ"
-		}
-		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
-	}()
+	// beginTime := time.Now()
+	// defer func() {
+	// 	var label string
+	// 	if err != nil {
+	// 		label = "fail"
+	// 	} else {
+	// 		label = "succ"
+	// 	}
+	// 	rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
+	// 	rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
+	// }()
 
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.PullBinlogResp{}
