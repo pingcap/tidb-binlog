@@ -74,7 +74,7 @@ func (p *Publisher) publish() error {
 				return false, nil
 			}
 			end = cts
-			cnt++
+			cnt--
 			return true, nil
 		},
 	)
@@ -87,8 +87,8 @@ func (p *Publisher) publish() error {
 			return errors.Trace(err)
 		}
 
-		p.window.SaveItemsCount(cnt)
-		windowItemsCount.set(float64(p.window.LoadItemsCount()))
+		p.window.AddItemsCount(cnt)
+		windowItemsCount.Set(float64(p.window.LoadItemsCount()))
 		windowLowerBoundary.Set(float64(end))
 	}
 	return nil

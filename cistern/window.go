@@ -58,7 +58,7 @@ func (d *DepositWindow) LoadItemsCount() int64 {
 	return atomic.LoadInt64(&d.cnt)
 }
 
-// SaveItemsCount update the count of items in the window
+// AddItemsCount update the count of items in the window
 func (d *DepositWindow) AddItemsCount(val int64) {
 	atomic.AddInt64(&d.cnt, val)
 }

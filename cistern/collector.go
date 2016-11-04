@@ -202,10 +202,10 @@ func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 		synced = true
 	}
 
-	c.window.AddItemsCount(len(items))
+	c.window.AddItemsCount(int64(len(items)))
 	// prometheus metrics
-	windowUpperBoundary.set(float64(c.window.LoadUpper()))
-	windowItemsCount.set(float64(c.window.LoadItemsCount()))
+	windowUpperBoundary.Set(float64(c.window.LoadUpper()))
+	windowItemsCount.Set(float64(c.window.LoadItemsCount()))
 	ddlJobsCounter.Add(float64(len(jobs)))
 	binlogCounter.Add(float64(len(items)))
 	for nodeID, pos := range savepoints {

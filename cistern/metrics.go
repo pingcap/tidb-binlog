@@ -73,7 +73,9 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(depositWindowBoundary)
+	prometheus.MustRegister(windowLowerBoundary)
+	prometheus.MustRegister(windowUpperBoundary)
+	prometheus.MustRegister(windowItemsCount)
 	prometheus.MustRegister(savepoint)
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
