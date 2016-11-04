@@ -87,6 +87,7 @@ func decodeJob(job *model.Job) error {
 	case model.ActionCreateSchema, model.ActionDropSchema:
 		schema := &model.DBInfo{}
 		if err := job.DecodeArgs(&ver, schema); err != nil {
+			log.Errorf("job %v decode err %v", job, err)
 			return errors.Trace(err)
 		}
 		job.Args = []interface{}{ver, schema}
@@ -97,6 +98,7 @@ func decodeJob(job *model.Job) error {
 		model.ActionTruncateTable:
 		table := &model.TableInfo{}
 		if err := job.DecodeArgs(&ver, table); err != nil {
+			log.Errorf("job %v decode err %v", job, err)
 			return errors.Trace(err)
 		}
 		job.Args = []interface{}{ver, table}
