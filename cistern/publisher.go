@@ -57,6 +57,7 @@ func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
 	end := start
 
+	var cnt int64
 	err := p.boltdb.Scan(
 		binlogNamespace,
 		codec.EncodeInt([]byte{}, start),
@@ -73,6 +74,7 @@ func (p *Publisher) publish() error {
 				return false, nil
 			}
 			end = cts
+			cnt++
 			return true, nil
 		},
 	)
@@ -84,7 +86,10 @@ func (p *Publisher) publish() error {
 		if err := p.window.PersistLower(end); err != nil {
 			return errors.Trace(err)
 		}
-		depositWindowBoundary.Set(float64(end))
+
+		p.window.SaveItemsCount(cnt)
+		windowItemsCount.set(float64(p.window.LoadItemsCount()))
+		windowLowerBoundary.Set(float64(end))
 	}
 	return nil
 }

@@ -10,12 +10,26 @@ import (
 )
 
 var (
-	depositWindowBoundary = prometheus.NewGauge(
+	windowLowerBoundary = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "cistern",
-			Name:      "deposit_window",
+			Name:      "lower_window",
 			Help:      "DepositWindow lower boundary.",
+		})
+	windowUpperBoundary = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "upper_window",
+			Help:      "DepositWindow upper boundary.",
+		})
+	windowItemsCount = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "window_items_cnt",
+			Help:      "Total count of items in the window.",
 		})
 
 	savepoint = prometheus.NewGaugeVec(

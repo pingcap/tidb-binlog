@@ -17,9 +17,17 @@ var (
 			Name:      "event",
 			Help:      "the sql sql event(dml, ddl).",
 		}, []string{"type"})
+	savePointBoundary = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "save_point",
+			Help:      "save point of drainer.",
+		})
 )
 
 func init() {
+	prometheus.MustRegister(savePointBoundary)
 	prometheus.MustRegister(eventCounter)
 }
 
