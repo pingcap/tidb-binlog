@@ -569,6 +569,8 @@ func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, erro
 
 		nextTs = resp.CommitTS
 		d.input <- resp.Payload
+
+		chanLength.Set(float64(len(d.input)))
 	}
 
 	return nextTs, errors.Trace(err)

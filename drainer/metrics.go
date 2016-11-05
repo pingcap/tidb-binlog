@@ -32,12 +32,20 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
 		})
+	chanLength = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "drainer_chan_length",
+			Help:      "the length of drainer binlog input chan.",
+		})
 )
 
 func init() {
 	prometheus.MustRegister(savePointBoundary)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
+	prometheus.MustRegister(chanLength)
 }
 
 type metricClient struct {
