@@ -162,16 +162,21 @@ func (d *Drainer) savePoint(ts int64) {
 // the second value[string]: the sql that is corresponding to the job
 // the third value[bool]: whether the job is need to execute
 // the fourth value[error]: the handleDDL execution's err
-func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
+func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
 	d.jLock.RLock()
 	job, ok := d.jobs[id]
 	d.jLock.RUnlock()
 	if !ok {
-		return "", "", false, errors.Errorf("[ddl jon miss]%v", id)
+		return "", "", false, errors.Errorf("[ddl job miss]%v", id)
 	}
 
 	if job.State == model.JobCancelled {
 		return "", "", false, nil
+	}
+
+	sql := job.Query
+	if sql == "" {
+		return "", "", false, errors.Errorf("[ddl job sql miss]%v", id)
 	}
 
 	var err error
@@ -421,9 +426,7 @@ func (d *Drainer) run() error {
 			d.savePoint(commitTS)
 
 		} else if jobID > 0 {
-			sql := string(binlog.GetDdlQuery())
-
-			schema, sql, ok, err := d.handleDDL(jobID, sql)
+			schema, sql, ok, err := d.handleDDL(jobID)
 			if err != nil {
 				return errors.Trace(err)
 			}
