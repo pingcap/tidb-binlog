@@ -25,7 +25,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	cistern.InitLogger(cfg.Debug)
+	cistern.InitLogger(cfg)
 	cistern.PrintVersionInfo()
 
 	bs, err := cistern.NewServer(cfg)

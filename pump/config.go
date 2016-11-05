@@ -38,6 +38,8 @@ type Config struct {
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	GC                uint   `toml:"gc" json:"gc"`
+	LogFile           string `toml:"log-file" json:"log-file"`
+	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
 	Debug             bool
 	MetricsAddr       string
 	MetricsInterval   int
@@ -71,6 +73,8 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
+	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
+	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
 	return cfg
 }

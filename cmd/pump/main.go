@@ -24,7 +24,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	pump.InitLogger(cfg.Debug)
+	pump.InitLogger(cfg)
 	pump.PrintVersionInfo()
 
 	p, err := pump.NewServer(cfg)
