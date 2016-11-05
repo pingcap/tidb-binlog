@@ -85,7 +85,7 @@ func (p *Publisher) publish() error {
 			return errors.Trace(err)
 		}
 
-		windowBoundary.WithLabelValues("lower").Set(float64(end))
+		windowGauge.WithLabelValues("lower").Set(float64(end))
 	}
 	return nil
 }

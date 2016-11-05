@@ -203,11 +203,11 @@ func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 	}
 
 	// prometheus metrics
-	windowBoundary.WithLabelValues("upper").Set(float64(c.window.LoadUpper()))
+	windowGauge.WithLabelValues("upper").Set(float64(c.window.LoadUpper()))
 	ddlJobsCounter.Add(float64(len(jobs)))
 	binlogCounter.Add(float64(len(items)))
 	for nodeID, pos := range savepoints {
-		savepoint.WithLabelValues(nodeID).Set(posToFloat(&pos))
+		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pos))
 	}
 	return
 }

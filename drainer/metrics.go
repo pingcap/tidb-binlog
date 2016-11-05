@@ -17,19 +17,19 @@ var (
 			Name:      "event",
 			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
-	savePointBoundary = prometheus.NewGauge(
+	positionGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "save_point",
-			Help:      "save point of drainer.",
+			Name:      "position",
+			Help:      "save position of drainer.",
 		})
 	txnHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "txn_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of txn.",
+			Name:      "txn_duration_time",
+			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
 	chanLength = prometheus.NewGauge(
@@ -42,7 +42,7 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(savePointBoundary)
+	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(chanLength)

@@ -156,7 +156,7 @@ func (d *Drainer) savePoint(ts int64) {
 		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
 
-	savePointBoundary.Set(float64(ts))
+	positionGauge.Set(float64(ts))
 }
 
 // handleDDL has four return values,
@@ -164,7 +164,7 @@ func (d *Drainer) savePoint(ts int64) {
 // the second value[string]: the sql that is corresponding to the job
 // the third value[bool]: whether the job is need to execute
 // the fourth value[error]: the handleDDL execution's err
-func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
+func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) {
 	d.jLock.RLock()
 	job, ok := d.jobs[id]
 	d.jLock.RUnlock()
@@ -175,12 +175,6 @@ func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
 	if job.State == model.JobCancelled {
 		return "", "", false, nil
 	}
-
-	if job.Query == "" {
-		return "", "", true, errors.Errorf("[ddl query miss]%v", id)
-	}
-
-	sql := job.Query
 
 	var err error
 	switch job.Type {
@@ -431,8 +425,9 @@ func (d *Drainer) run() error {
 			d.savePoint(commitTS)
 
 		} else if jobID > 0 {
+			sql := string(binlog.GetDdlQuery())
 
-			schema, sql, ok, err := d.handleDDL(jobID)
+			schema, sql, ok, err := d.handleDDL(jobID, sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
