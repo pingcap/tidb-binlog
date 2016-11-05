@@ -30,7 +30,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "txn_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
 	chanLength = prometheus.NewGauge(
 		prometheus.GaugeOpts{
