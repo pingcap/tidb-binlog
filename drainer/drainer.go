@@ -324,16 +324,16 @@ func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
 	}
 }
 
-func (d *Drainer) addCount(tp translator.OpType) {
+func (d *Drainer) addCount(tp translator.OpType, nums int) {
 	switch tp {
 	case translator.Insert:
-		eventCounter.WithLabelValues("Insert").Inc()
+		eventCounter.WithLabelValues("Insert").Add(float64(nums))
 	case translator.Update:
-		eventCounter.WithLabelValues("Update").Inc()
+		eventCounter.WithLabelValues("Update").Add(float64(nums))
 	case translator.Del:
-		eventCounter.WithLabelValues("Delete").Inc()
+		eventCounter.WithLabelValues("Delete").Add(float64(nums))
 	case translator.DDL:
-		eventCounter.WithLabelValues("DDL").Inc()
+		eventCounter.WithLabelValues("DDL").Add(float64(nums))
 	}
 }
 
@@ -448,10 +448,10 @@ func (d *Drainer) run() error {
 
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
 
-				d.addCount(translator.DDL)
+				d.addCount(translator.DDL, 1)
 
 				b := newBatch(true, false, commitTS)
-				b.addJob([]string{sql}, nil)
+				b.addJob([]string{sql}, [][]interface{}{{}})
 
 				err = b.applyBatch(d.toDB)
 				if err != nil {
@@ -486,7 +486,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			}
 
 			b.addJob(sql, arg)
-			d.addCount(translator.Insert)
+			d.addCount(translator.Insert, len(sql))
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
@@ -496,7 +496,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			}
 
 			b.addJob(sql, arg)
-			d.addCount(translator.Update)
+			d.addCount(translator.Update, len(sql))
 		}
 
 		if len(mutation.GetDeletedIds()) > 0 {
@@ -506,7 +506,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			}
 
 			b.addJob(sql, arg)
-			d.addCount(translator.Del)
+			d.addCount(translator.Del, len(sql))
 		}
 
 		if len(mutation.GetDeletedPks()) > 0 {
@@ -516,7 +516,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			}
 
 			b.addJob(sql, arg)
-			d.addCount(translator.Del)
+			d.addCount(translator.Del, len(sql))
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
@@ -526,7 +526,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			}
 
 			b.addJob(sql, arg)
-			d.addCount(translator.Del)
+			d.addCount(translator.Del, len(sql))
 		}
 	}
 

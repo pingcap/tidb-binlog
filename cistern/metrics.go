@@ -10,27 +10,13 @@ import (
 )
 
 var (
-	windowLowerBoundary = prometheus.NewGauge(
+	windowBoundary = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "cistern",
-			Name:      "lower_window",
-			Help:      "DepositWindow lower boundary.",
-		})
-	windowUpperBoundary = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "upper_window",
-			Help:      "DepositWindow upper boundary.",
-		})
-	windowItemsCount = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "window_items_cnt",
-			Help:      "Total count of items in the window.",
-		})
+			Name:      "window_boundary",
+			Help:      "DepositWindow boundary.",
+		}, []string{"label"})
 
 	savepoint = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -73,9 +59,7 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(windowLowerBoundary)
-	prometheus.MustRegister(windowUpperBoundary)
-	prometheus.MustRegister(windowItemsCount)
+	prometheus.MustRegister(windowBoundary)
 	prometheus.MustRegister(savepoint)
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)

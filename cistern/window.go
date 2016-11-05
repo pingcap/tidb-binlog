@@ -15,7 +15,6 @@ var windowKeyName = []byte("window")
 type DepositWindow struct {
 	upper int64
 	lower int64
-	cnt   int64
 	bolt  store.Store
 }
 
@@ -51,16 +50,6 @@ func (d *DepositWindow) LoadUpper() int64 {
 // SaveUpper updates the upper boundary of window
 func (d *DepositWindow) SaveUpper(val int64) {
 	atomic.StoreInt64(&d.upper, val)
-}
-
-// LoadItemsCount returns the count of items in the window
-func (d *DepositWindow) LoadItemsCount() int64 {
-	return atomic.LoadInt64(&d.cnt)
-}
-
-// AddItemsCount update the count of items in the window
-func (d *DepositWindow) AddItemsCount(val int64) {
-	atomic.AddInt64(&d.cnt, val)
 }
 
 // PersistLower updates the lower boundary of window, and write it into storage.
