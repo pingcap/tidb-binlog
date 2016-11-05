@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -111,7 +112,6 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 			commitItems[b.StartTs] = b
 		case binlog.BinlogType_Rollback:
 			rollbackItems[b.StartTs] = b
-
 		default:
 			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
 				b.Tp, p.host, p.clusterID, item.Pos)
@@ -132,7 +132,10 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 
 	// after an interval, pull a further batch from pump, and look up partners for the rest Prewrite items(if has)
 	if len(prewriteItems) > 0 {
-		if err := p.collectFurtherBatch(pctx, t, prewriteItems, res.binlogs, res.end, 0); err != nil {
+		times, err := p.collectFurtherBatch(pctx, t, prewriteItems, res.binlogs, res.end, 1)
+		// whether successful or not record metrics
+		collectRetryTimesGaugeVec.WithLabelValues(p.host).Set(float64(times))
+		if err != nil {
 			res.err = errors.Trace(err)
 			return
 		}
@@ -141,17 +144,19 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 	return
 }
 
-func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, prewriteItems, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) error {
-	if times > 3 {
+func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, prewriteItems, binlogs map[int64]*binlog.Binlog, pos binlog.Pos, times int) (int, error) {
+	if times > 120 {
 		for startTs, item := range prewriteItems {
 			if item.GetDdlJobId() > 0 {
 				continue
 			}
 
+			log.Warnf("CAUTION: invoke CetTxnStatus() to confirm commitTS after waiting for a long time not find a matching item with startTS(%d)", startTs)
+
 			primaryKey := item.GetPrewriteKey()
 			status, err := t.GetTxnStatus(uint64(startTs), primaryKey)
 			if err != nil {
-				return errors.Trace(err)
+				return times, errors.Trace(err)
 			}
 			if status.IsCommitted() {
 				item.CommitTs = int64(status.CommitTS())
@@ -162,14 +167,14 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 		}
 
 		if len(prewriteItems) > 0 {
-			return errors.Errorf("can not find the matching DDLItems, %v", prewriteItems)
+			return times, errors.Errorf("some prewrite DDL items remain single after waiting for a long time, items(%v)", prewriteItems)
 		}
-		return nil
+		return times, nil
 	}
 
 	select {
 	case <-pctx.Done():
-		return errors.Trace(pctx.Err())
+		return times, errors.Trace(pctx.Err())
 	case <-time.After(p.interval):
 		ctx, cancel := context.WithTimeout(pctx, p.timeout)
 		defer cancel()
@@ -180,10 +185,10 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 		}
 		resp, err := p.client.PullBinlogs(ctx, req)
 		if err != nil {
-			return errors.Trace(err)
+			return times, errors.Trace(err)
 		}
 		if resp.Errmsg != "" {
-			return errors.New(resp.Errmsg)
+			return times, errors.New(resp.Errmsg)
 		}
 		if len(resp.Entities) == 0 {
 			return p.collectFurtherBatch(pctx, t, prewriteItems, binlogs, pos, times+1)
@@ -196,7 +201,7 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 			b := new(binlog.Binlog)
 			err := b.Unmarshal(item.Payload)
 			if err != nil {
-				return errors.Annotatef(err, "unmarshal payload error, host(%s), clusterID(%s), Pos(%v)",
+				return times, errors.Annotatef(err, "unmarshal payload error, host(%s), clusterID(%s), Pos(%v)",
 					p.host, p.clusterID, item.Pos)
 			}
 			switch b.Tp {
@@ -224,5 +229,5 @@ func (p *Pump) collectFurtherBatch(pctx context.Context, t *tikv.LockResolver, p
 		}
 	}
 
-	return nil
+	return times, nil
 }

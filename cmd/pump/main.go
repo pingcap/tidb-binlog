@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pump"
-	_ "net/http/pprof"
 )
 
 func main() {
