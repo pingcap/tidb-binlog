@@ -66,6 +66,12 @@ type Server struct {
 	metrics  *metricClient
 }
 
+func init() {
+	// tracing has suspicious leak problem, so disable it here.
+	// it must be set before any real grpc operation.
+	grpc.EnableTracing = false
+}
+
 // NewServer return a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
 	n, err := NewPumpNode(cfg)
