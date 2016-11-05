@@ -43,6 +43,12 @@ type Server struct {
 	gc        time.Duration
 }
 
+func init() {
+	// tracing has suspicious leak problem, so disable it here.
+	// it must be set before any real grpc operation.
+	grpc.EnableTracing = false
+}
+
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
 	windowNamespace = []byte(fmt.Sprintf("window_%d", cfg.ClusterID))

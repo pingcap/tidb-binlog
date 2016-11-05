@@ -66,6 +66,12 @@ type Server struct {
 	metrics  *metricClient
 }
 
+func init() {
+	// tracing has suspicious leak problem, so disable it here.
+	// it must be set before any real grpc operation.
+	grpc.EnableTracing = false
+}
+
 // NewServer return a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
 	n, err := NewPumpNode(cfg)
@@ -180,17 +186,17 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 // PullBinlogs implements the gRPC interface of pump server
 func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
 	var err error
-	// beginTime := time.Now()
-	// defer func() {
-	// 	var label string
-	// 	if err != nil {
-	// 		label = "fail"
-	// 	} else {
-	// 		label = "succ"
-	// 	}
-	// 	rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
-	// 	rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
-	// }()
+	beginTime := time.Now()
+	defer func() {
+		var label string
+		if err != nil {
+			label = "fail"
+		} else {
+			label = "succ"
+		}
+		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
+		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
+	}()
 
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.PullBinlogResp{}
@@ -217,7 +223,6 @@ func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*bi
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
-	grpc.EnableTracing = false
 	// register this node
 	if err := s.node.Register(s.ctx); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
