@@ -42,6 +42,7 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
 		}, []string{"method", "label"})
+
 	binlogCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -49,6 +50,7 @@ var (
 			Name:      "binlog_count_total",
 			Help:      "Total binlog count been stored.",
 		})
+
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -56,6 +58,14 @@ var (
 			Name:      "ddl_jobs_total",
 			Help:      "Total ddl jobs count been stored.",
 		})
+
+	collectRetryTimesGaugeVec = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "collect_retry_times",
+			Help:      "How many times of collections to get a batch of coupled binlog from a pump node.",
+		}, []string{"host"})
 )
 
 func init() {
@@ -65,6 +75,7 @@ func init() {
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
+	prometheus.MustRegister(collectRetryTimesGaugeVec)
 }
 
 type metricClient struct {
