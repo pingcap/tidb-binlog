@@ -57,7 +57,6 @@ func (p *Publisher) publish() error {
 	start := p.window.LoadLower()
 	end := start
 
-	var cnt int64
 	err := p.boltdb.Scan(
 		binlogNamespace,
 		codec.EncodeInt([]byte{}, start),
@@ -74,7 +73,6 @@ func (p *Publisher) publish() error {
 				return false, nil
 			}
 			end = cts
-			cnt--
 			return true, nil
 		},
 	)
