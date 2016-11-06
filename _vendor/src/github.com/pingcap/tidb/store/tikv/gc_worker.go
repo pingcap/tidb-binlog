@@ -23,10 +23,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb"
-	"github.com/pingcap/tidb/context"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/util/sqlexec"
 )
 
 // GCWorker periodically triggers GC process on tikv server.
@@ -42,7 +39,7 @@ type GCWorker struct {
 }
 
 // NewGCWorker creates a GCWorker instance.
-func NewGCWorker(store kv.Storage) (*GCWorker, error) {
+func NewGCWorker(store *tikvStore) (*GCWorker, error) {
 	session, err := tidb.CreateSession(store)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -58,7 +55,7 @@ func NewGCWorker(store kv.Storage) (*GCWorker, error) {
 	worker := &GCWorker{
 		uuid:        strconv.FormatUint(ver.Ver, 16),
 		desc:        fmt.Sprintf("host:%s, pid:%d, start at %s", hostName, os.Getpid(), time.Now()),
-		store:       store.(*tikvStore),
+		store:       store,
 		session:     session,
 		gcIsRunning: false,
 		lastFinish:  time.Now(),
@@ -234,7 +231,7 @@ func (w *GCWorker) runGCJob(safePoint uint64) {
 		w.done <- errors.Trace(err)
 		return
 	}
-	err = w.DoGC(safePoint)
+	err = w.doGC(safePoint)
 	if err != nil {
 		w.done <- errors.Trace(err)
 	}
@@ -314,8 +311,7 @@ func (w *GCWorker) resolveLocks(safePoint uint64) error {
 	return nil
 }
 
-// DoGC sends GC command to KV, it is exported for testing purpose.
-func (w *GCWorker) DoGC(safePoint uint64) error {
+func (w *GCWorker) doGC(safePoint uint64) error {
 	gcWorkerCounter.WithLabelValues("do_gc").Inc()
 
 	req := &kvrpcpb.Request{
@@ -486,13 +482,11 @@ func (w *GCWorker) loadDurationWithDefault(key string, def time.Duration) (*time
 
 func (w *GCWorker) loadValueFromSysTable(key string) (string, error) {
 	stmt := fmt.Sprintf(`SELECT (variable_value) FROM mysql.tidb WHERE variable_name='%s' FOR UPDATE`, key)
-	restrictExecutor := w.session.(sqlexec.RestrictedSQLExecutor)
-	ctx := w.session.(context.Context)
-	rs, err := restrictExecutor.ExecRestrictedSQL(ctx, stmt)
+	rs, err := w.session.Execute(stmt)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	row, err := rs.Next()
+	row, err := rs[0].Next()
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -510,9 +504,8 @@ func (w *GCWorker) saveValueToSysTable(key, value string) error {
 			       ON DUPLICATE KEY
 			       UPDATE variable_value = '%[2]s', comment = '%[3]s'`,
 		key, value, gcVariableComments[key])
-	restrictExecutor := w.session.(sqlexec.RestrictedSQLExecutor)
-	ctx := w.session.(context.Context)
-	_, err := restrictExecutor.ExecRestrictedSQL(ctx, stmt)
+
+	_, err := w.session.Execute(stmt)
 	log.Debugf("[gc worker] save kv, %s:%s %v", key, value, err)
 	return errors.Trace(err)
 }

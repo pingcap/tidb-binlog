@@ -111,7 +111,6 @@ const (
 	WeekOfYear       = "weekofyear"
 	Year             = "year"
 	YearWeek         = "yearweek"
-	FromUnixTime     = "from_unixtime"
 
 	// string functions
 	ASCII          = "ascii"

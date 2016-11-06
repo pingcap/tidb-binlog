@@ -41,7 +41,7 @@ func (d *ddl) handleBgJobQueue() error {
 			return errors.Trace(err)
 		}
 
-		// Get the first background job and run it.
+		// get the first background job and run
 		job, err = d.getFirstBgJob(t)
 		if err != nil {
 			return errors.Trace(err)
@@ -109,11 +109,10 @@ func (d *ddl) prepareBgJob(t *meta.Meta, ddlJob *model.Job) error {
 		Type:     ddlJob.Type,
 	}
 
-	if len(ddlJob.Args) >= 2 {
-		// ddlJob.Args[0] is the schema version that isn't necessary in background job and
-		// ddlJob.Args[1] is the table information or the database information.
-		// They will make the background job of dropping schema become more complicated to handle.
-		job.Args = ddlJob.Args[2:]
+	if len(ddlJob.Args) > 0 {
+		// ddlJob.Args[0] is the schema version that isn't necessary in background job and it will make
+		// the background job of dropping schema become more complicated to handle.
+		job.Args = ddlJob.Args[1:]
 	}
 
 	err := t.EnQueueBgJob(job)
@@ -142,7 +141,7 @@ func (d *ddl) updateBgJob(t *meta.Meta, job *model.Job) error {
 
 // finishBgJob finishs a background job.
 func (d *ddl) finishBgJob(t *meta.Meta, job *model.Job) error {
-	log.Infof("[ddl] finish background job %v", job)
+	log.Warnf("[ddl] finish background job %v", job)
 	if _, err := t.DeQueueBgJob(); err != nil {
 		return errors.Trace(err)
 	}
@@ -155,8 +154,8 @@ func (d *ddl) finishBgJob(t *meta.Meta, job *model.Job) error {
 func (d *ddl) onBackgroundWorker() {
 	defer d.wait.Done()
 
-	// We use 4 * lease time to check owner's timeout, so here, we will update owner's status
-	// every 2 * lease time. If lease is 0, we will use default 10s.
+	// we use 4 * lease time to check owner's timeout, so here, we will update owner's status
+	// every 2 * lease time, if lease is 0, we will use default 10s.
 	checkTime := chooseLeaseTime(2*d.lease, 10*time.Second)
 
 	ticker := time.NewTicker(checkTime)

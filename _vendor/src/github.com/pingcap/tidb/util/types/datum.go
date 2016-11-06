@@ -16,7 +16,6 @@ package types
 import (
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/charset"
 	"github.com/pingcap/tidb/util/hack"
+	"sort"
 )
 
 // Kind constants.
@@ -694,6 +694,9 @@ func (d *Datum) convertToFloat(target *FieldType) (Datum, error) {
 		f = d.GetFloat64()
 	case KindString, KindBytes:
 		f, err = StrToFloat(d.GetString())
+		if err != nil {
+			return ret, errors.Trace(err)
+		}
 	case KindMysqlTime:
 		f, _ = d.GetMysqlTime().ToNumber().ToFloat64()
 	case KindMysqlDuration:
@@ -714,10 +717,9 @@ func (d *Datum) convertToFloat(target *FieldType) (Datum, error) {
 	// For float and following double type, we will only truncate it for float(M, D) format.
 	// If no D is set, we will handle it like origin float whether M is set or not.
 	if target.Flen != UnspecifiedLength && target.Decimal != UnspecifiedLength {
-		var err1 error
-		f, err1 = TruncateFloat(f, target.Flen, target.Decimal)
-		if err == nil {
-			err = err1
+		f, err = TruncateFloat(f, target.Flen, target.Decimal)
+		if err != nil {
+			return ret, errors.Trace(err)
 		}
 	}
 	if target.Tp == mysql.TypeFloat {
@@ -725,7 +727,7 @@ func (d *Datum) convertToFloat(target *FieldType) (Datum, error) {
 	} else {
 		ret.SetFloat64(f)
 	}
-	return ret, errors.Trace(err)
+	return ret, nil
 }
 
 func (d *Datum) convertToString(target *FieldType) (Datum, error) {
@@ -759,30 +761,12 @@ func (d *Datum) convertToString(target *FieldType) (Datum, error) {
 	default:
 		return invalidConv(d, target.Tp)
 	}
-
+	// TODO: consider target.Charset/Collate
 	var err error
-	if target.Flen >= 0 {
-		// Flen is the rune length, not binary length, for UTF8 charset, we need to calculate the
-		// rune count and truncate to Flen runes if it is too long.
-		if target.Charset == charset.CharsetUTF8 || target.Charset == charset.CharsetUTF8MB4 {
-			var runeCount int
-			var truncateLen int
-			for i := range s {
-				runeCount++
-				if runeCount == target.Flen+1 {
-					// We do break here because we need to iterate to the end to get runeCount.
-					truncateLen = i
-				}
-			}
-			if truncateLen > 0 {
-				err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, runeCount)
-				s = truncateStr(s, truncateLen)
-			}
-		} else if len(s) > target.Flen {
-			err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, len(s))
-			s = truncateStr(s, target.Flen)
-		}
+	if target.Flen > 0 && target.Flen < len(s) {
+		err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, len(s))
 	}
+	s = truncateStr(s, target.Flen)
 	ret.SetString(s)
 	if target.Charset == charset.CharsetBin {
 		ret.k = KindBytes
@@ -791,8 +775,59 @@ func (d *Datum) convertToString(target *FieldType) (Datum, error) {
 }
 
 func (d *Datum) convertToInt(target *FieldType) (Datum, error) {
-	i64, err := d.toSignedInteger(target.Tp)
-	return NewIntDatum(i64), errors.Trace(err)
+	tp := target.Tp
+	lowerBound := signedLowerBound[tp]
+	upperBound := signedUpperBound[tp]
+	var (
+		val int64
+		err error
+		ret Datum
+	)
+	switch d.k {
+	case KindInt64:
+		val, err = convertIntToInt(d.GetInt64(), lowerBound, upperBound, tp)
+	case KindUint64:
+		val, err = convertUintToInt(d.GetUint64(), upperBound, tp)
+	case KindFloat32, KindFloat64:
+		val, err = convertFloatToInt(d.GetFloat64(), lowerBound, upperBound, tp)
+	case KindString, KindBytes:
+		fval, err1 := StrToFloat(d.GetString())
+		if err1 != nil {
+			return ret, errors.Trace(err1)
+		}
+		val, err = convertFloatToInt(fval, lowerBound, upperBound, tp)
+	case KindMysqlTime:
+		dec := d.GetMysqlTime().ToNumber()
+		dec.Round(dec, 0)
+		val, _ = dec.ToInt()
+		val, err = convertIntToInt(val, lowerBound, upperBound, tp)
+	case KindMysqlDuration:
+		dec := d.GetMysqlDuration().ToNumber()
+		dec.Round(dec, 0)
+		iVal, err1 := dec.ToInt()
+		val, err = convertIntToInt(iVal, lowerBound, upperBound, tp)
+		if err == nil {
+			err = err1
+		}
+	case KindMysqlDecimal:
+		fval, _ := d.GetMysqlDecimal().ToFloat64()
+		val, err = convertFloatToInt(fval, lowerBound, upperBound, tp)
+	case KindMysqlHex:
+		val, err = convertFloatToInt(d.GetMysqlHex().ToNumber(), lowerBound, upperBound, tp)
+	case KindMysqlBit:
+		val, err = convertFloatToInt(d.GetMysqlBit().ToNumber(), lowerBound, upperBound, tp)
+	case KindMysqlEnum:
+		val, err = convertFloatToInt(d.GetMysqlEnum().ToNumber(), lowerBound, upperBound, tp)
+	case KindMysqlSet:
+		val, err = convertFloatToInt(d.GetMysqlSet().ToNumber(), lowerBound, upperBound, tp)
+	default:
+		return invalidConv(d, target.Tp)
+	}
+	ret.SetInt64(val)
+	if err != nil {
+		return ret, errors.Trace(err)
+	}
+	return ret, nil
 }
 
 func (d *Datum) convertToUint(target *FieldType) (Datum, error) {
@@ -1183,10 +1218,7 @@ func (d *Datum) ToDecimal() (*mysql.MyDecimal, error) {
 
 // ToInt64 converts to a int64.
 func (d *Datum) ToInt64() (int64, error) {
-	return d.toSignedInteger(mysql.TypeLonglong)
-}
-
-func (d *Datum) toSignedInteger(tp byte) (int64, error) {
+	tp := mysql.TypeLonglong
 	lowerBound := signedLowerBound[tp]
 	upperBound := signedUpperBound[tp]
 	switch d.Kind() {
@@ -1201,11 +1233,10 @@ func (d *Datum) toSignedInteger(tp byte) (int64, error) {
 	case KindString:
 		s := d.GetString()
 		fval, err := StrToFloat(s)
-		i64, err1 := convertFloatToInt(fval, lowerBound, upperBound, tp)
-		if err == nil {
-			err = err1
+		if err != nil {
+			return 0, errors.Trace(err)
 		}
-		return i64, errors.Trace(err)
+		return convertFloatToInt(fval, lowerBound, upperBound, tp)
 	case KindBytes:
 		s := string(d.GetBytes())
 		fval, err := StrToFloat(s)

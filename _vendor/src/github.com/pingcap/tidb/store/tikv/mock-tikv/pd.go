@@ -41,10 +41,6 @@ func NewPDClient(cluster *Cluster) pd.Client {
 	}
 }
 
-func (c *pdClient) GetClusterID() uint64 {
-	return 1
-}
-
 func (c *pdClient) GetTS() (int64, int64, error) {
 	tsMu.Lock()
 	defer tsMu.Unlock()

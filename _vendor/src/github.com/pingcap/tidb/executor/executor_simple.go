@@ -50,12 +50,12 @@ type SimpleExec struct {
 	done      bool
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 func (e *SimpleExec) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *SimpleExec) Schema() expression.Schema {
 	return nil
 }
@@ -100,7 +100,7 @@ func (e *SimpleExec) Next() (*Row, error) {
 	return nil, nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *SimpleExec) Close() error {
 	return nil
 }
@@ -206,7 +206,6 @@ func (e *SimpleExec) executeSet(s *ast.SetStmt) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Infof("[%d] set system variable %s = %s", sessionVars.ConnectionID, name, value.GetString())
 			if name == variable.TiDBSnapshot {
 				err = e.loadSnapshotInfoSchemaIfNeeded(sessionVars)
 				if err != nil {
@@ -223,7 +222,7 @@ func (e *SimpleExec) loadSnapshotInfoSchemaIfNeeded(sessionVars *variable.Sessio
 		sessionVars.SnapshotInfoschema = nil
 		return nil
 	}
-	log.Infof("[%d] loadSnapshotInfoSchema, SnapshotTS:%d", sessionVars.ConnectionID, sessionVars.SnapshotTS)
+	log.Infof("loadSnapshotInfoSchema, SnapshotTS:%d", sessionVars.SnapshotTS)
 	dom := sessionctx.GetDomain(e.ctx)
 	snapInfo, err := dom.GetSnapshotInfoSchema(sessionVars.SnapshotTS)
 	if err != nil {
@@ -305,10 +304,9 @@ func (e *SimpleExec) executeCommit(s *ast.CommitStmt) error {
 }
 
 func (e *SimpleExec) executeRollback(s *ast.RollbackStmt) error {
-	sessVars := variable.GetSessionVars(e.ctx)
-	log.Infof("[%d] execute rollback statement", sessVars.ConnectionID)
+	log.Info("RollbackTxn for rollback statement.")
 	err := e.ctx.RollbackTxn()
-	sessVars.SetStatusFlag(mysql.ServerStatusInTrans, false)
+	variable.GetSessionVars(e.ctx).SetStatusFlag(mysql.ServerStatusInTrans, false)
 	return errors.Trace(err)
 }
 

@@ -66,21 +66,16 @@ type rpcWorker struct {
 	quit      chan struct{}
 }
 
-func newRPCWorker(addrs []string) (*rpcWorker, error) {
+func newRPCWorker(addrs []string, clusterID uint64) *rpcWorker {
 	w := &rpcWorker{
-		urls:     addrsToUrls(addrs),
-		requests: make(chan interface{}, maxPipelineRequest),
-		quit:     make(chan struct{}),
+		urls:      addrsToUrls(addrs),
+		clusterID: clusterID,
+		requests:  make(chan interface{}, maxPipelineRequest),
+		quit:      make(chan struct{}),
 	}
-
-	if err := w.initClusterID(); err != nil {
-		return nil, errors.Trace(err)
-	}
-	log.Infof("[pd] init cluster id %v", w.clusterID)
-
 	w.wg.Add(1)
 	go w.work()
-	return w, nil
+	return w
 }
 
 func (w *rpcWorker) stop(err error) {
@@ -213,43 +208,6 @@ var msgID uint64
 
 func newMsgID() uint64 {
 	return atomic.AddUint64(&msgID, 1)
-}
-
-func (w *rpcWorker) initClusterID() error {
-	conn := mustNewConn(w.urls, w.quit)
-	if conn == nil {
-		return errors.New("client closed")
-	}
-	defer conn.Close()
-
-	clusterID, err := w.getClusterID(conn.ReadWriter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	w.clusterID = clusterID
-	return nil
-}
-
-func (w *rpcWorker) getClusterID(conn *bufio.ReadWriter) (uint64, error) {
-	// PD will not check the cluster ID in the GetPDMembersRequest, so we
-	// can send this request with any cluster ID, then PD will return its
-	// cluster ID in the response header.
-	req := &pdpb.Request{
-		Header: &pdpb.RequestHeader{
-			Uuid:      uuid.NewV4().Bytes(),
-			ClusterId: w.clusterID,
-		},
-		CmdType:      pdpb.CommandType_GetPDMembers,
-		GetPdMembers: &pdpb.GetPDMembersRequest{},
-	}
-
-	resp, err := w.callRPC(conn, req)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	return resp.GetHeader().GetClusterId(), nil
 }
 
 func (w *rpcWorker) getTSFromRemote(conn *bufio.ReadWriter, n int) (pdpb.Timestamp, error) {

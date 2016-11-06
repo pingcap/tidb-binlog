@@ -17,7 +17,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/context"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tipb/go-binlog"
 	goctx "golang.org/x/net/context"
 )
@@ -25,6 +24,9 @@ import (
 // PumpClient is the gRPC client to write binlog, it is opened on server start and never close,
 // shared by all sessions.
 var PumpClient binlog.PumpClient
+
+// ClusterID is set by command line argument, if not set, use default value 1.
+var ClusterID uint64 = 1
 
 // keyType is a dummy type to avoid naming collision in context.
 type keyType int
@@ -42,12 +44,12 @@ const (
 	binlogKey        keyType = 1
 )
 
-// SetSchemaVersion sets schema version to the context.
+// SetSchemaVersion sets schema version to a context.
 func SetSchemaVersion(ctx context.Context, version int64) {
 	ctx.SetValue(schemaVersionKey, version)
 }
 
-// GetSchemaVersion gets schema version in the context.
+// GetSchemaVersion gets schema version in a context.
 func GetSchemaVersion(ctx context.Context) int64 {
 	v, ok := ctx.Value(schemaVersionKey).(int64)
 	if !ok {
@@ -56,7 +58,7 @@ func GetSchemaVersion(ctx context.Context) int64 {
 	return v
 }
 
-// GetPrewriteValue gets binlog prewrite value in the context.
+// GetPrewriteValue gets binlog prewrite value in a context.
 func GetPrewriteValue(ctx context.Context, createIfNotExists bool) *binlog.PrewriteValue {
 	v, ok := ctx.Value(binlogKey).(*binlog.PrewriteValue)
 	if !ok && createIfNotExists {
@@ -68,9 +70,9 @@ func GetPrewriteValue(ctx context.Context, createIfNotExists bool) *binlog.Prewr
 }
 
 // WriteBinlog writes a binlog to Pump.
-func WriteBinlog(bin *binlog.Binlog, clusterID uint64) error {
+func WriteBinlog(bin *binlog.Binlog) error {
 	commitData, _ := bin.Marshal()
-	req := &binlog.WriteBinlogReq{ClusterID: clusterID, Payload: commitData}
+	req := &binlog.WriteBinlogReq{ClusterID: ClusterID, Payload: commitData}
 	resp, err := PumpClient.WriteBinlog(goctx.Background(), req)
 	if err == nil && resp.Errmsg != "" {
 		err = errors.New(resp.Errmsg)
@@ -78,17 +80,7 @@ func WriteBinlog(bin *binlog.Binlog, clusterID uint64) error {
 	return errors.Trace(err)
 }
 
-// SetDDLBinlog sets DDL binlog in the kv.Transaction.
-func SetDDLBinlog(txn kv.Transaction, jobID int64, ddlQuery string) {
-	bin := &binlog.Binlog{
-		Tp:       binlog.BinlogType_Prewrite,
-		DdlJobId: jobID,
-		DdlQuery: []byte(ddlQuery),
-	}
-	txn.SetOption(kv.BinlogData, bin)
-}
-
-// ClearBinlog clears binlog in the Context.
+// ClearBinlog clears binlog in a context.
 func ClearBinlog(ctx context.Context) {
 	ctx.ClearValue(binlogKey)
 }

@@ -108,15 +108,14 @@ type UnionScanExec struct {
 	cursor      int
 	sortErr     error
 	snapshotRow *Row
-	schema      expression.Schema
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (us *UnionScanExec) Schema() expression.Schema {
-	return us.schema
+	return us.Src.Schema()
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 func (us *UnionScanExec) Fields() []*ast.ResultField {
 	return us.Src.Fields()
 }
@@ -218,7 +217,7 @@ func (us *UnionScanExec) pickRow(a, b *Row) (*Row, error) {
 	return row, nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (us *UnionScanExec) Close() error {
 	return us.Src.Close()
 }

@@ -1,5 +1,5 @@
-hash: 939eef8e9e7e937274dd47b6c542cd8e2b0ba48e2c45f8bffbbc5b35aa50d37e
-updated: 2016-11-06T21:27:52.238148692+08:00
+hash: b697713a68f443045c3df3d2011cd2e32d8c82958453074872b136cf4f30b881
+updated: 2016-11-06T22:15:45.491916635+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -145,7 +145,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: f1868dde6860d51ff5d0822d720cb88e01a94373
+  version: 3542d756cbeb5eaf1494a378e73e62b938f025e7
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -158,14 +158,14 @@ imports:
   - pkg/raft_serverpb
   - pkg/util
 - name: github.com/pingcap/pd
-  version: af843d14758091cd59033c938188bbd241f7c2d4
+  version: dcfe726e8c98451c554a88ce78bcd2f0b28fd680
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: 1b96db9a57b6439791fe5a041b8d0c0e1ed83964
+  version: 0eee7c85224cbd7ea7b6887e5b07990f2e82bbb4
   subpackages:
   - ast
   - context
@@ -219,7 +219,7 @@ imports:
   - util/stringutil
   - util/types
 - name: github.com/pingcap/tipb
-  version: 0ff3e19786f9af44c072991f7ed697d9b30486cc
+  version: 627e9a203d065e3c4963403eadc235cb3eacbd7f
   subpackages:
   - go-binlog
   - go-tipb

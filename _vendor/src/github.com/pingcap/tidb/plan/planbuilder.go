@@ -185,14 +185,8 @@ func availableIndices(table *ast.TableName) (indices []*model.IndexInfo, include
 			usableHints = append(usableHints, hint)
 		}
 	}
-	publicIndices := make([]*model.IndexInfo, 0, len(table.TableInfo.Indices))
-	for _, index := range table.TableInfo.Indices {
-		if index.State == model.StatePublic {
-			publicIndices = append(publicIndices, index)
-		}
-	}
 	if len(usableHints) == 0 {
-		return publicIndices, true
+		return table.TableInfo.Indices, true
 	}
 	var hasUse bool
 	var ignores []*model.IndexInfo
@@ -202,7 +196,7 @@ func availableIndices(table *ast.TableName) (indices []*model.IndexInfo, include
 			// Currently we don't distinguish between Force and Use because our cost estimation is not reliable.
 			hasUse = true
 			for _, idxName := range hint.IndexNames {
-				idx := findIndexByName(publicIndices, idxName)
+				idx := findIndexByName(table.TableInfo.Indices, idxName)
 				if idx != nil {
 					indices = append(indices, idx)
 				}
@@ -210,7 +204,7 @@ func availableIndices(table *ast.TableName) (indices []*model.IndexInfo, include
 		case ast.HintIgnore:
 			// Collect all the ignore index hints.
 			for _, idxName := range hint.IndexNames {
-				idx := findIndexByName(publicIndices, idxName)
+				idx := findIndexByName(table.TableInfo.Indices, idxName)
 				if idx != nil {
 					ignores = append(ignores, idx)
 				}
@@ -226,7 +220,16 @@ func availableIndices(table *ast.TableName) (indices []*model.IndexInfo, include
 		// Empty use hint means don't use any index.
 		return nil, true
 	}
-	return removeIgnores(publicIndices, ignores), true
+	if len(ignores) == 0 {
+		return table.TableInfo.Indices, true
+	}
+	for _, idx := range table.TableInfo.Indices {
+		// Exclude ignored index.
+		if findIndexByName(ignores, idx.Name) == nil {
+			indices = append(indices, idx)
+		}
+	}
+	return indices, true
 }
 
 func removeIgnores(indices, ignores []*model.IndexInfo) []*model.IndexInfo {
@@ -438,10 +441,28 @@ func (b *planBuilder) buildExplain(explain *ast.ExplainStmt) Plan {
 	if show, ok := explain.Stmt.(*ast.ShowStmt); ok {
 		return b.buildShow(show)
 	}
-	targetPlan, err := Optimize(b.ctx, explain.Stmt, b.is)
-	if err != nil {
-		b.err = errors.Trace(err)
+	targetPlan := b.build(explain.Stmt)
+	if b.err != nil {
 		return nil
+	}
+	if logic, ok := targetPlan.(LogicalPlan); ok {
+		var err error
+		_, logic, err = logic.PredicatePushDown(nil)
+		if err != nil {
+			b.err = errors.Trace(err)
+			return nil
+		}
+		_, err = logic.PruneColumnsAndResolveIndices(logic.GetSchema())
+		if err != nil {
+			b.err = errors.Trace(err)
+			return nil
+		}
+		info, err := logic.convert2PhysicalPlan(&requiredProperty{})
+		if err != nil {
+			b.err = errors.Trace(err)
+			return nil
+		}
+		targetPlan = info.p
 	}
 	p := &Explain{StmtPlan: targetPlan}
 	addChild(p, targetPlan)

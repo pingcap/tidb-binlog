@@ -151,12 +151,12 @@ type DeleteExec struct {
 	finished bool
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *DeleteExec) Schema() expression.Schema {
 	return nil
 }
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *DeleteExec) Next() (*Row, error) {
 	if e.finished {
 		return nil, nil
@@ -265,13 +265,13 @@ func (e *DeleteExec) removeRow(ctx context.Context, t table.Table, h int64, data
 	return nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 // Returns nil to indicate there is no output.
 func (e *DeleteExec) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *DeleteExec) Close() error {
 	return e.SelectExec.Close()
 }
@@ -500,7 +500,6 @@ func (e *LoadDataInfo) insertData(cols []string) {
 	row, err := e.insertVal.fillRowData(e.Table.Cols(), e.row, true)
 	if err != nil {
 		log.Warnf("Load Data: insert data:%v failed:%v", e.row, errors.ErrorStack(err))
-		return
 	}
 	_, err = e.Table.AddRecord(e.insertVal.ctx, row)
 	if err != nil {
@@ -525,7 +524,7 @@ func (k loadDataVarKeyType) String() string {
 // LoadDataVarKey is a variable key for load data.
 const LoadDataVarKey loadDataVarKeyType = 0
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *LoadData) Next() (*Row, error) {
 	// TODO: support load data without local field.
 	if !e.IsLocal {
@@ -550,18 +549,18 @@ func (e *LoadData) Next() (*Row, error) {
 	return nil, nil
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *LoadData) Schema() expression.Schema {
 	return nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 // Returns nil to indicate there is no output.
 func (e *LoadData) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *LoadData) Close() error {
 	return nil
 }
@@ -593,12 +592,12 @@ type InsertExec struct {
 	finished bool
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *InsertExec) Schema() expression.Schema {
 	return nil
 }
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *InsertExec) Next() (*Row, error) {
 	if e.finished {
 		return nil, nil
@@ -658,13 +657,13 @@ func (e *InsertExec) Next() (*Row, error) {
 	return nil, nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 // Returns nil to indicate there is no output.
 func (e *InsertExec) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *InsertExec) Close() error {
 	if e.SelectExec != nil {
 		return e.SelectExec.Close()
@@ -844,38 +843,27 @@ func (e *InsertValues) getRowsSelect(cols []*table.Column) ([][]types.Datum, err
 	return rows, nil
 }
 
-func (e *InsertValues) fillRowData(cols []*table.Column, vals []types.Datum, ignoreErr bool) ([]types.Datum, error) {
+func (e *InsertValues) fillRowData(cols []*table.Column, vals []types.Datum, ignoreCastErr bool) ([]types.Datum, error) {
 	row := make([]types.Datum, len(e.Table.Cols()))
 	marked := make(map[int]struct{}, len(vals))
 	for i, v := range vals {
 		offset := cols[i].Offset
 		row[offset] = v
-		if !ignoreErr {
+		if !ignoreCastErr {
 			marked[offset] = struct{}{}
 		}
 	}
-	err := e.initDefaultValues(row, marked, ignoreErr)
+	err := e.initDefaultValues(row, marked, ignoreCastErr)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err = table.CastValues(e.ctx, row, cols, ignoreErr); err != nil {
+	if err = table.CastValues(e.ctx, row, cols, ignoreCastErr); err != nil {
 		return nil, errors.Trace(err)
 	}
 	if err = table.CheckNotNull(e.Table.Cols(), row); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return row, nil
-}
-
-func filterErr(err error, ignoreErr bool) error {
-	if err == nil {
-		return nil
-	}
-	if !ignoreErr {
-		return errors.Trace(err)
-	}
-	log.Warning("ignore err:%v", errors.ErrorStack(err))
-	return nil
 }
 
 func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struct{}, ignoreErr bool) error {
@@ -896,10 +884,9 @@ func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struc
 				continue
 			}
 			val, err := row[i].ToInt64()
-			if filterErr(errors.Trace(err), ignoreErr) != nil {
+			if err != nil && !ignoreErr {
 				return errors.Trace(err)
 			}
-			row[i].SetInt64(val)
 			if val != 0 {
 				e.Table.RebaseAutoID(val, true)
 				continue
@@ -928,7 +915,7 @@ func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struc
 		} else {
 			var err error
 			row[i], _, err = table.GetColDefaultValue(e.ctx, c.ToInfo())
-			if filterErr(err, ignoreErr) != nil {
+			if err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -1016,18 +1003,18 @@ type ReplaceExec struct {
 	finished bool
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *ReplaceExec) Schema() expression.Schema {
 	return nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 // Returns nil to indicate there is no output.
 func (e *ReplaceExec) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *ReplaceExec) Close() error {
 	if e.SelectExec != nil {
 		return e.SelectExec.Close()
@@ -1035,7 +1022,7 @@ func (e *ReplaceExec) Close() error {
 	return nil
 }
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *ReplaceExec) Next() (*Row, error) {
 	if e.finished {
 		return nil, nil
@@ -1128,12 +1115,12 @@ type UpdateExec struct {
 	cursor      int
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *UpdateExec) Schema() expression.Schema {
 	return nil
 }
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *UpdateExec) Next() (*Row, error) {
 	if !e.fetched {
 		err := e.fetchRows()
@@ -1241,13 +1228,13 @@ func (e *UpdateExec) getTableOffset(entry RowKeyEntry) int {
 	return 0
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 // Returns nil to indicate there is no output.
 func (e *UpdateExec) Fields() []*ast.ResultField {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *UpdateExec) Close() error {
 	return e.SelectExec.Close()
 }

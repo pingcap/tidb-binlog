@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/plan/statistics"
-	"github.com/pingcap/tidb/util/types"
 )
 
 // JoinType contains CrossJoin, InnerJoin, LeftOuterJoin, RightOuterJoin, FullOuterJoin, SemiJoin.
@@ -52,10 +51,6 @@ type Join struct {
 	LeftConditions  []expression.Expression
 	RightConditions []expression.Expression
 	OtherConditions []expression.Expression
-
-	// DefaultValues is only used for outer join, which stands for the default values when the outer table cannot find join partner
-	// instead of null padding.
-	DefaultValues []types.Datum
 }
 
 // Projection represents a select fields plan.
@@ -71,9 +66,6 @@ type Aggregation struct {
 	AggFuncs     []expression.AggregationFunction
 	GroupByItems []expression.Expression
 	ctx          context.Context
-
-	// groupByCols stores the columns that are group-by items.
-	groupByCols []*expression.Column
 }
 
 // Selection means a filter.
@@ -133,7 +125,7 @@ type DataSource struct {
 	statisticTable *statistics.Table
 }
 
-// Trim trims extra columns in src rows.
+// Trim trims child's rows.
 type Trim struct {
 	baseLogicalPlan
 }

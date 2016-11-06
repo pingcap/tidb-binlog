@@ -19,6 +19,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -40,8 +41,8 @@ func buildIndexInfo(tblInfo *model.TableInfo, unique bool, indexName model.CIStr
 	for _, ic := range idxColNames {
 		col := findCol(tblInfo.Columns, ic.Column.Name.O)
 		if col == nil {
-			return nil, errKeyColumnDoesNotExits.Gen("column does not exist: %s",
-				ic.Column.Name)
+			return nil, infoschema.ErrColumnNotExists.Gen("CREATE INDEX: column does not exist: %s",
+				ic.Column.Name.O)
 		}
 
 		// Length must be specified for BLOB and TEXT column indexes.
@@ -110,7 +111,7 @@ func dropIndexColumnFlag(tblInfo *model.TableInfo, indexInfo *model.IndexInfo) {
 }
 
 func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
-	// Handle rollback job.
+	// rollback job
 	if job.State == model.JobRollback {
 		err := d.onDropIndex(t, job)
 		if err != nil {
@@ -119,7 +120,7 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		return nil
 	}
 
-	// Handle normal job.
+	// normal job
 	schemaID := job.SchemaID
 	tblInfo, err := d.getTableInfo(t, job)
 	if err != nil {
@@ -142,10 +143,11 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 	for _, idx := range tblInfo.Indices {
 		if idx.Name.L == indexName.L {
 			if idx.State == model.StatePublic {
-				// We already have an index with same index name.
+				// we already have a index with same index name
 				job.State = model.JobCancelled
-				return errDupKeyName.Gen("index already exist %s", indexName)
+				return infoschema.ErrIndexExists.Gen("CREATE INDEX: index already exist %s", indexName)
 			}
+
 			indexInfo = idx
 			break
 		}
@@ -182,7 +184,7 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		// write only -> reorganization
 		job.SchemaState = model.StateWriteReorganization
 		indexInfo.State = model.StateWriteReorganization
-		// Initialize SnapshotVer to 0 for later reorganization check.
+		// initialize SnapshotVer to 0 for later reorganization check.
 		job.SnapshotVer = 0
 		err = t.UpdateTable(schemaID, tblInfo)
 		return errors.Trace(err)
@@ -190,7 +192,7 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		// reorganization -> public
 		reorgInfo, err := d.getReorgInfo(t, job)
 		if err != nil || reorgInfo.first {
-			// If we run reorg firstly, we should update the job snapshot version
+			// if we run reorg firstly, we should update the job snapshot version
 			// and then run the reorg next time.
 			return errors.Trace(err)
 		}
@@ -204,6 +206,7 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		err = d.runReorgJob(func() error {
 			return d.addTableIndex(tbl, indexInfo, reorgInfo, job)
 		})
+
 		if terror.ErrorEqual(err, errWaitReorgTimeout) {
 			// if timeout, we should return, check for the owner and re-wait job done.
 			return nil
@@ -217,16 +220,16 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		}
 
 		indexInfo.State = model.StatePublic
-		// Set column index flag.
+		// set column index flag.
 		addIndexColumnFlag(tblInfo, indexInfo)
 		if err = t.UpdateTable(schemaID, tblInfo); err != nil {
 			return errors.Trace(err)
 		}
 
-		// Finish this job.
+		// finish this job
 		job.SchemaState = model.StatePublic
 		job.State = model.JobDone
-		addTableHistoryInfo(job, ver, tblInfo)
+		addFinishInfo(job, ver, tblInfo)
 		return nil
 	default:
 		return ErrInvalidIndexState.Gen("invalid index state %v", tblInfo.State)
@@ -287,31 +290,39 @@ func (d *ddl) onDropIndex(t *meta.Meta, job *model.Job) error {
 		job.SchemaState = model.StateWriteOnly
 		indexInfo.State = model.StateWriteOnly
 		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateWriteOnly:
 		// write only -> delete only
 		job.SchemaState = model.StateDeleteOnly
 		indexInfo.State = model.StateDeleteOnly
 		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateDeleteOnly:
 		// delete only -> reorganization
 		job.SchemaState = model.StateDeleteReorganization
 		indexInfo.State = model.StateDeleteReorganization
 		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateDeleteReorganization:
 		// reorganization -> absent
+		tbl, err := d.getTable(schemaID, tblInfo)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
 		err = d.runReorgJob(func() error {
-			return d.dropTableIndex(indexInfo, job)
+			return d.dropTableIndex(tbl, indexInfo, job)
 		})
+
 		if terror.ErrorEqual(err, errWaitReorgTimeout) {
-			// If the timeout happens, we should return.
-			// Then check for the owner and re-wait job to finish.
+			// if timeout, we should return, check for the owner and re-wait job done.
 			return nil
 		}
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		// All reorganization jobs are done, drop this index.
+		// all reorganization jobs done, drop this index
 		newIndices := make([]*model.IndexInfo, 0, len(tblInfo.Indices))
 		for _, idx := range tblInfo.Indices {
 			if idx.Name.L != indexName.L {
@@ -319,24 +330,24 @@ func (d *ddl) onDropIndex(t *meta.Meta, job *model.Job) error {
 			}
 		}
 		tblInfo.Indices = newIndices
-		// Set column index flag.
+		// set column index flag.
 		dropIndexColumnFlag(tblInfo, indexInfo)
 		if err = t.UpdateTable(schemaID, tblInfo); err != nil {
 			return errors.Trace(err)
 		}
 
-		// Finish this job.
+		// finish this job
 		job.SchemaState = model.StateNone
 		if job.State == model.JobRollback {
 			job.State = model.JobRollbackDone
 		} else {
 			job.State = model.JobDone
 		}
-		addTableHistoryInfo(job, ver, tblInfo)
+		addFinishInfo(job, ver, tblInfo)
+		return nil
 	default:
-		err = ErrInvalidTableState.Gen("invalid table state %v", tblInfo.State)
+		return ErrInvalidTableState.Gen("invalid table state %v", tblInfo.State)
 	}
-	return errors.Trace(err)
 }
 
 func fetchRowColVals(txn kv.Transaction, t table.Table, handle int64, indexInfo *model.IndexInfo) (
@@ -366,7 +377,6 @@ func fetchRowColVals(txn kv.Transaction, t table.Table, handle int64, indexInfo 
 }
 
 const defaultBatchSize = 1024
-const defaultSmallBatchSize = 128
 
 // How to add index in reorganization state?
 //  1. Generate a snapshot with special version.
@@ -380,7 +390,7 @@ func (d *ddl) addTableIndex(t table.Table, indexInfo *model.IndexInfo, reorgInfo
 	count := job.GetRowCount()
 
 	for {
-		startTime := time.Now()
+		startTS := time.Now()
 		handles, err := d.getSnapshotRows(t, version, seekHandle)
 		if err != nil {
 			return errors.Trace(err)
@@ -391,7 +401,7 @@ func (d *ddl) addTableIndex(t table.Table, indexInfo *model.IndexInfo, reorgInfo
 		count += int64(len(handles))
 		seekHandle = handles[len(handles)-1] + 1
 		err = d.backfillTableIndex(t, indexInfo, handles, reorgInfo)
-		sub := time.Since(startTime).Seconds()
+		sub := time.Since(startTS).Seconds()
 		if err != nil {
 			log.Warnf("[ddl] added index for %v rows failed, take time %v", count, sub)
 			return errors.Trace(err)
@@ -400,6 +410,7 @@ func (d *ddl) addTableIndex(t table.Table, indexInfo *model.IndexInfo, reorgInfo
 		job.SetRowCount(count)
 		batchHandleDataHistogram.WithLabelValues(batchAddIdx).Observe(sub)
 		log.Infof("[ddl] added index for %v rows, take time %v", count, sub)
+
 	}
 }
 
@@ -446,80 +457,61 @@ func (d *ddl) getSnapshotRows(t table.Table, version uint64, seekHandle int64) (
 	return handles, nil
 }
 
-// backfillIndexInTxn deals with a part of backfilling index data in a Transaction.
-// This part of the index data rows is defaultSmallBatchSize.
-func (d *ddl) backfillIndexInTxn(t table.Table, kvIdx table.Index, handles []int64, txn kv.Transaction) (int64, error) {
-	nextHandle := handles[0]
+func (d *ddl) backfillTableIndex(t table.Table, indexInfo *model.IndexInfo, handles []int64, reorgInfo *reorgInfo) error {
+	kvX := tables.NewIndex(t.Meta(), indexInfo)
+
 	for _, handle := range handles {
 		log.Debug("[ddl] backfill index...", handle)
-		rowKey, vals, err := fetchRowColVals(txn, t, handle, kvIdx.Meta())
-		if terror.ErrorEqual(err, kv.ErrNotExist) {
-			// Row doesn't exist, skip it.
-			nextHandle = handle
-			continue
-		}
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-
-		exist, _, err := kvIdx.Exist(txn, vals, handle)
-		if err != nil {
-			return 0, errors.Trace(err)
-		} else if exist {
-			// Index already exists, skip it.
-			nextHandle = handle
-			continue
-		}
-		err = txn.LockKeys(rowKey)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-
-		// Create the index.
-		_, err = kvIdx.Create(txn, vals, handle)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		nextHandle = handle
-	}
-	return nextHandle, nil
-}
-
-func (d *ddl) backfillTableIndex(t table.Table, indexInfo *model.IndexInfo, handles []int64, reorgInfo *reorgInfo) error {
-	var endIdx int
-	kvIdx := tables.NewIndex(t.Meta(), indexInfo)
-	for len(handles) > 0 {
-		if len(handles) >= defaultSmallBatchSize {
-			endIdx = defaultSmallBatchSize
-		} else {
-			endIdx = len(handles)
-		}
 
 		err := kv.RunInNewTxn(d.store, true, func(txn kv.Transaction) error {
-			if err1 := d.isReorgRunnable(txn, ddlJobFlag); err1 != nil {
-				return errors.Trace(err1)
+			if err := d.isReorgRunnable(txn, ddlJobFlag); err != nil {
+				return errors.Trace(err)
 			}
-			nextHandle, err1 := d.backfillIndexInTxn(t, kvIdx, handles[:endIdx], txn)
+
+			rowKey, vals, err1 := fetchRowColVals(txn, t, handle, indexInfo)
+			if terror.ErrorEqual(err1, kv.ErrNotExist) {
+				// row doesn't exist, skip it.
+				return nil
+			}
 			if err1 != nil {
 				return errors.Trace(err1)
 			}
-			// Update reorg next handle.
-			return errors.Trace(reorgInfo.UpdateHandle(txn, nextHandle))
+
+			exist, _, err1 := kvX.Exist(txn, vals, handle)
+			if err1 != nil {
+				return errors.Trace(err1)
+			} else if exist {
+				// index already exists, skip it.
+				return nil
+			}
+			err1 = txn.LockKeys(rowKey)
+			if err1 != nil {
+				return errors.Trace(err1)
+			}
+
+			// create the index.
+			_, err1 = kvX.Create(txn, vals, handle)
+			if err1 != nil {
+				return errors.Trace(err1)
+			}
+
+			// update reorg next handle
+			return errors.Trace(reorgInfo.UpdateHandle(txn, handle))
 		})
+
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		handles = handles[endIdx:]
 	}
 
 	return nil
 }
 
-func (d *ddl) dropTableIndex(indexInfo *model.IndexInfo, job *model.Job) error {
-	startKey := tablecodec.EncodeTableIndexPrefix(job.TableID, indexInfo.ID)
+func (d *ddl) dropTableIndex(t table.Table, indexInfo *model.IndexInfo, job *model.Job) error {
+	prefix := tablecodec.EncodeTableIndexPrefix(t.Meta().ID, indexInfo.ID)
 	// It's asynchronous so it doesn't need to consider if it completes.
 	deleteAll := -1
-	_, _, err := d.delKeysWithStartKey(startKey, startKey, ddlJobFlag, job, deleteAll)
+	_, err := d.delKeysWithPrefix(prefix, ddlJobFlag, job, deleteAll)
+
 	return errors.Trace(err)
 }

@@ -78,19 +78,19 @@ type Job struct {
 	TableID  int64         `json:"table_id"`
 	State    JobState      `json:"state"`
 	Error    *terror.Error `json:"err"`
-	// Every time we meet an error when running job, we will increase it.
+	// every time we meet an error when running job, we will increase it.
 	ErrorCount int64 `json:"err_count"`
-	// The number of rows that are processed.
+	// the number of rows are processed.
 	RowCount int64         `json:"row_count"`
 	Mu       sync.Mutex    `json:"-"`
 	Args     []interface{} `json:"-"`
-	// We must use json raw message to delay parsing special args.
+	// we must use json raw message for delay parsing special args.
 	RawArgs     json.RawMessage `json:"raw_args"`
 	SchemaState SchemaState     `json:"schema_state"`
-	// Snapshot version for this job.
+	// snapshot version for this job.
 	SnapshotVer uint64 `json:"snapshot_ver"`
 	// unix nano seconds
-	// TODO: Use timestamp allocated by TSO.
+	// TODO: use timestamp allocated by TSO.
 	LastUpdateTS int64 `json:"last_update_ts"`
 	// Query string of the ddl job.
 	Query string `json:"query"`
@@ -145,8 +145,8 @@ func (job *Job) DecodeArgs(args ...interface{}) error {
 // String implements fmt.Stringer interface.
 func (job *Job) String() string {
 	rowCount := job.GetRowCount()
-	return fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, ArgLen:%d, Query:\n%s",
-		job.ID, job.Type, job.State, job.SchemaState, job.SchemaID, job.TableID, rowCount, len(job.Args), job.Query)
+	return fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, Args:%s",
+		job.ID, job.Type, job.State, job.SchemaState, job.SchemaID, job.TableID, rowCount, job.RawArgs)
 }
 
 // IsFinished returns whether job is finished or not.
@@ -203,7 +203,7 @@ func (s JobState) String() string {
 type Owner struct {
 	OwnerID string `json:"owner_id"`
 	// unix nano seconds
-	// TODO: Use timestamp allocated by TSO.
+	// TODO: use timestamp allocated by TSO
 	LastUpdateTS int64 `json:"last_update_ts"`
 }
 

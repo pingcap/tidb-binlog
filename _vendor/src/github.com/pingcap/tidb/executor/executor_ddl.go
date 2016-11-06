@@ -29,7 +29,6 @@ import (
 )
 
 // DDLExec represents a DDL executor.
-// It grabs a DDL instance from Domain, calling the DDL methods to do the work.
 type DDLExec struct {
 	Statement ast.StmtNode
 	ctx       context.Context
@@ -37,12 +36,12 @@ type DDLExec struct {
 	done      bool
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *DDLExec) Schema() expression.Schema {
 	return nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 func (e *DDLExec) Fields() []*ast.ResultField {
 	return nil
 }
@@ -78,7 +77,7 @@ func (e *DDLExec) Next() (*Row, error) {
 	return nil, nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *DDLExec) Close() error {
 	return nil
 }
@@ -195,4 +194,16 @@ func (e *DDLExec) executeAlterTable(s *ast.AlterTableStmt) error {
 	ti := ast.Ident{Schema: s.Table.Schema, Name: s.Table.Name}
 	err := sessionctx.GetDomain(e.ctx).DDL().AlterTable(e.ctx, ti, s.Specs)
 	return errors.Trace(err)
+}
+
+func joinColumnName(columnName *ast.ColumnName) string {
+	var originStrs []string
+	if columnName.Schema.O != "" {
+		originStrs = append(originStrs, columnName.Schema.O)
+	}
+	if columnName.Table.O != "" {
+		originStrs = append(originStrs, columnName.Table.O)
+	}
+	originStrs = append(originStrs, columnName.Name.O)
+	return strings.Join(originStrs, ".")
 }

@@ -350,7 +350,7 @@ func (c *ddlCallback) OnChanged(err error) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("[ddl] on DDL change")
+	log.Warnf("[ddl] on DDL change")
 
 	return c.do.MustReload()
 }
@@ -399,7 +399,7 @@ func (s *schemaValidityInfo) Check(lastFailedTS uint64) error {
 	return ErrLoadSchemaTimeOut.Gen("InfomationSchema is out of date.")
 }
 
-// NewDomain creates a new domain. Should not create multiple domains for the same store.
+// NewDomain creates a new domain.
 func NewDomain(store kv.Storage, lease time.Duration) (d *Domain, err error) {
 	d = &Domain{store: store,
 		SchemaValidity: &schemaValidityInfo{}}

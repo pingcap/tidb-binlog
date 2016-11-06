@@ -61,9 +61,7 @@ func (a *recordSet) Close() error {
 	return a.executor.Close()
 }
 
-// statement implements the ast.Statement interface, it builds a plan.Plan to an ast.Statement.
 type statement struct {
-	// The InfoSchema cannot change during execution, so we hold a reference to it.
 	is    infoschema.InfoSchema
 	plan  plan.Plan
 	text  string
@@ -83,10 +81,6 @@ func (a *statement) IsDDL() bool {
 	return a.isDDL
 }
 
-// Exec implements the ast.Statement Exec interface.
-// This function builds an Executor from a plan. If the Executor doesn't return result,
-// like the INSERT, UPDATE statements, it executes in this function, if the Executor returns
-// result, execution is done after this function returns, in the returned ast.RecordSet Next method.
 func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 	b := newExecutorBuilder(ctx, a.is)
 	e := b.build(a.plan)
@@ -94,7 +88,6 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 		return nil, errors.Trace(b.err)
 	}
 
-	// ExecuteExec is not a real Executor, we only use it to build another Executor from a prepared statement.
 	if executorExec, ok := e.(*ExecuteExec); ok {
 		err := executorExec.Build()
 		if err != nil {
@@ -103,10 +96,8 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 		e = executorExec.StmtExec
 	}
 
-	// Fields or Schema are only used for statements that return result set.
 	if len(e.Fields()) == 0 && len(e.Schema()) == 0 {
-		// Check if "tidb_snapshot" is set for the write executors.
-		// In history read mode, we can not do write operations.
+		// Write statements do not have record set, check if snapshot ts is set.
 		switch e.(type) {
 		case *DeleteExec, *InsertExec, *UpdateExec, *ReplaceExec, *LoadData, *DDLExec:
 			snapshotTS := variable.GetSnapshotTS(ctx)
@@ -115,16 +106,13 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 			}
 		}
 
+		// No result fields means no Recordset.
 		defer e.Close()
 		for {
 			row, err := e.Next()
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			// Even though there isn't any result set, the row is still used to indicate if there is
-			// more work to do.
-			// For example, the UPDATE statement updates a single row on a Next call, we keep calling Next until
-			// There is no more rows to update.
 			if row == nil {
 				return nil, nil
 			}
@@ -137,6 +125,7 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 			f.ColumnAsName = f.Column.Name
 		}
 	}
+
 	return &recordSet{
 		executor: e,
 		fields:   fs,

@@ -50,12 +50,12 @@ type GrantExec struct {
 	done bool
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *GrantExec) Schema() expression.Schema {
 	return nil
 }
 
-// Fields implements the Executor Fields interface.
+// Fields implements Executor Fields interface.
 func (e *GrantExec) Fields() []*ast.ResultField {
 	return nil
 }
@@ -113,7 +113,7 @@ func (e *GrantExec) Next() (*Row, error) {
 	return nil, nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *GrantExec) Close() error {
 	return nil
 }

@@ -19,6 +19,7 @@ package tables
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -212,6 +213,9 @@ func (t *Table) UpdateRecord(ctx context.Context, h int64, oldData []types.Datum
 			}
 			currentData[i] = defaultVal
 		}
+		if col.Charset == "utf8" && !utf8.Valid(currentData[i].GetBytes()) {
+			return table.ErrInvalidUTF8Value.Gen("invalid utf8 value %q", currentData[i].GetBytes())
+		}
 		colIDs = append(colIDs, col.ID)
 	}
 	// Set new row data into KV.
@@ -347,6 +351,9 @@ func (t *Table) AddRecord(ctx context.Context, r []types.Datum) (recordID int64,
 				// Save storage space by not storing null value.
 				continue
 			}
+			if col.Charset == "utf8" && !utf8.Valid(value.GetBytes()) {
+				return 0, table.ErrInvalidUTF8Value.Gen("invalid utf8 value %q", value.GetBytes())
+			}
 		}
 		colIDs = append(colIDs, col.ID)
 		row = append(row, value)
@@ -418,10 +425,7 @@ func (t *Table) addIndices(ctx context.Context, recordID int64, r []types.Datum,
 			// if index is in delete only or delete reorganization state, we can't add it.
 			continue
 		}
-		colVals, err2 := v.FetchValues(r)
-		if err2 != nil {
-			return 0, errors.Trace(err2)
-		}
+		colVals, _ := v.FetchValues(r)
 		var dupKeyErr error
 		if v.Meta().Unique || v.Meta().Primary {
 			entryKey, err1 := t.genIndexKeyStr(colVals)

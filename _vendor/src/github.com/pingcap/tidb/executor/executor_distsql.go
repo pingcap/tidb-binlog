@@ -56,19 +56,12 @@ var BaseLookupTableTaskSize = 1024
 // MaxLookupTableTaskSize represents max number of handles for a lookupTableTask.
 var MaxLookupTableTaskSize = 20480
 
-// lookupTableTask is created from a partial result of an index request which
-// contains the handles in those index keys.
 type lookupTableTask struct {
-	handles []int64
-	rows    []*Row
-	cursor  int
-	done    bool
-	doneCh  chan error
-
-	// The handles fetched from index is originally ordered by index, but we need handles to be ordered by itself
-	// to do table request.
-	// The indexOrder map is used to save the original index order for the handles.
-	// Without this map, the original index order might be lost.
+	handles    []int64
+	rows       []*Row
+	cursor     int
+	done       bool
+	doneCh     chan error
 	indexOrder map[int64]int
 }
 
@@ -90,7 +83,6 @@ func (task *lookupTableTask) getRow() (*Row, error) {
 	return nil, nil
 }
 
-// rowsSorter sorts the rows by its index order.
 type rowsSorter struct {
 	order map[int64]int
 	rows  []*Row
@@ -302,28 +294,7 @@ func closeAll(objs ...Closeable) error {
 	return nil
 }
 
-// XSelectIndexExec represents the DistSQL select index executor.
-// There are two execution modes. One is single-read, in which case we only need to read index keys.
-// The other one is double-read, in which case we first do index request to get handles, we use each
-// partial result to build a lookupTableTask.
-//
-// Each lookupTableTask works like XSelectTableExec. It sorts the handles, sends an *tipb.SelectRequest, then
-// gets distsql.SelectResult which returns multiple distsql.PartialResults, we fetch all the rows from
-// each distsql.PartialResult, then sort the rows by the original index order.
-//
-// So there might be many tasks built from index request, each task do its own table request.
-// If we do it one by one, the execution might be very slow.
-//
-// To speed up the execution, index request or table request is done concurrently. The concurrency is controlled
-// by kv.Client, we only need to pass the concurrency parameter.
-//
-// We also make a higher level of concurrency by doing index request in a background goroutine. The index goroutine
-// starts multple worker goroutines and fetches handles from each index partial request, builds lookup table tasks
-// and sends the task to 'workerCh'.
-//
-// Each worker goroutine receives tasks through the 'workerCh', then executes the task.
-// After finishing the task, the workers send the task to a taskChan. At the outer most Executor.Next method,
-// we receive the finished task through taskChan, and return each row in that task until no more tasks to receive.
+// XSelectIndexExec represents XAPI select index executor without result fields.
 type XSelectIndexExec struct {
 	tableInfo     *model.TableInfo
 	table         table.Table
@@ -336,12 +307,11 @@ type XSelectIndexExec struct {
 	where         *tipb.Expr
 	startTS       uint64
 
-	taskChan chan *lookupTableTask
+	tasks    chan *lookupTableTask
 	tasksErr error // not nil if tasks closed due to error.
 	taskCurr *lookupTableTask
 
-	indexPlan      *plan.PhysicalIndexScan
-	singleReadMode bool
+	indexPlan *plan.PhysicalIndexScan
 
 	returnedRows uint64 // returned row count
 
@@ -359,8 +329,6 @@ type XSelectIndexExec struct {
 	byItems   []*tipb.ByItem
 	aggFields []*types.FieldType
 	aggregate bool
-
-	scanConcurrency int
 }
 
 // Fields implements Exec Fields interface.
@@ -382,21 +350,21 @@ func (e *XSelectIndexExec) Close() error {
 	e.result = nil
 	e.partialResult = nil
 	e.taskCurr = nil
-	e.taskChan = nil
+	e.tasks = nil
 	e.returnedRows = 0
 	return nil
 }
 
-// Next implements the Executor Next interface.
+// Next implements Executor Next interface.
 func (e *XSelectIndexExec) Next() (*Row, error) {
 	if e.indexPlan.LimitCount != nil && e.returnedRows >= uint64(*e.indexPlan.LimitCount) {
 		return nil, nil
 	}
 	e.returnedRows++
-	if e.singleReadMode {
-		return e.nextForSingleRead()
+	if e.indexPlan.DoubleRead {
+		return e.nextForDoubleRead()
 	}
-	return e.nextForDoubleRead()
+	return e.nextForSingleRead()
 }
 
 func (e *XSelectIndexExec) nextForSingleRead() (*Row, error) {
@@ -413,7 +381,6 @@ func (e *XSelectIndexExec) nextForSingleRead() (*Row, error) {
 		e.result.Fetch()
 	}
 	for {
-		// Get partial result.
 		if e.partialResult == nil {
 			var err error
 			e.partialResult, err = e.result.Next()
@@ -421,17 +388,14 @@ func (e *XSelectIndexExec) nextForSingleRead() (*Row, error) {
 				return nil, errors.Trace(err)
 			}
 			if e.partialResult == nil {
-				// Finished.
 				return nil, nil
 			}
 		}
-		// Get a row from partial result.
 		h, rowData, err := e.partialResult.Next()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		if rowData == nil {
-			// Finish current partial result and get the next one.
 			e.partialResult = nil
 			continue
 		}
@@ -462,7 +426,7 @@ func (e *XSelectIndexExec) indexRowToTableRow(handle int64, indexRow []types.Dat
 
 func (e *XSelectIndexExec) nextForDoubleRead() (*Row, error) {
 	var startTs time.Time
-	if e.taskChan == nil {
+	if e.tasks == nil {
 		startTs = time.Now()
 		idxResult, err := e.doIndexRequest()
 		if err != nil {
@@ -471,16 +435,16 @@ func (e *XSelectIndexExec) nextForDoubleRead() (*Row, error) {
 		idxResult.IgnoreData()
 		idxResult.Fetch()
 
-		// Use a background goroutine to fetch index and put the result in e.taskChan.
-		// e.taskChan serves as a pipeline, so fetching index and getting table data can
-		// run concurrently.
-		e.taskChan = make(chan *lookupTableTask, 50)
-		go e.fetchHandles(idxResult, e.taskChan)
+		// Use a background goroutine to fetch index, put the result in e.tasks.
+		// e.tasks serves as a pipeline, so fetch index and get table data would
+		// run concurrency.
+		e.tasks = make(chan *lookupTableTask, 50)
+		go e.fetchHandles(idxResult, e.tasks)
 	}
 
 	for {
 		if e.taskCurr == nil {
-			taskCurr, ok := <-e.taskChan
+			taskCurr, ok := <-e.tasks
 			if !ok {
 				log.Debugf("[TIME_INDEX_TABLE_SCAN] time: %v", time.Since(startTs))
 				return nil, e.tasksErr
@@ -498,7 +462,7 @@ func (e *XSelectIndexExec) nextForDoubleRead() (*Row, error) {
 
 const concurrencyLimit int = 30
 
-// addWorker adds a worker for lookupTableTask.
+// addWorker add a worker for lookupTableTask.
 // It's not thread-safe and should be called in fetchHandles goroutine only.
 func addWorker(e *XSelectIndexExec, ch chan *lookupTableTask, concurrency *int) {
 	if *concurrency <= concurrencyLimit {
@@ -554,7 +518,7 @@ func getScanConcurrency(ctx context.Context) (int, error) {
 		return 0, errors.Trace(err)
 	}
 	c, err := strconv.ParseInt(concurrency, 10, 64)
-	log.Debugf("[%d] [DistSQL] Scan with concurrency %d", sessionVars.ConnectionID, c)
+	log.Debugf("[DistSQL] Scan with concurrency %d", c)
 	return int(c), errors.Trace(err)
 }
 
@@ -568,23 +532,24 @@ func (e *XSelectIndexExec) doIndexRequest() (distsql.SelectResult, error) {
 	} else if e.indexPlan.Desc {
 		selIdxReq.OrderBy = []*tipb.ByItem{{Desc: e.indexPlan.Desc}}
 	}
-	if e.singleReadMode || e.where == nil {
+	fieldTypes := make([]*types.FieldType, len(e.indexPlan.Index.Columns))
+	for i, v := range e.indexPlan.Index.Columns {
+		fieldTypes[i] = &(e.table.Cols()[v.Offset].FieldType)
+	}
+	if !e.indexPlan.DoubleRead || e.where == nil {
 		// TODO: when where condition is all index columns limit can be pushed too.
 		selIdxReq.Limit = e.indexPlan.LimitCount
 	}
-	concurrency := e.scanConcurrency
-	if e.singleReadMode {
+	concurrency, err := getScanConcurrency(e.ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !e.indexPlan.DoubleRead {
 		selIdxReq.Aggregates = e.aggFuncs
 		selIdxReq.GroupBy = e.byItems
 		selIdxReq.Where = e.where
 	} else if !e.indexPlan.OutOfOrder {
-		// The cost of index scan double-read is higher than single-read. Usually ordered index scan has a limit
-		// which may not have been pushed down, so we set concurrency to 1 to avoid fetching unnecessary data.
 		concurrency = 1
-	}
-	fieldTypes := make([]*types.FieldType, len(e.indexPlan.Index.Columns))
-	for i, v := range e.indexPlan.Index.Columns {
-		fieldTypes[i] = &(e.table.Cols()[v.Offset].FieldType)
 	}
 	keyRanges, err := indexRangesToKVRanges(e.table.Meta().ID, e.indexPlan.Index.ID, e.indexPlan.Ranges, fieldTypes)
 	if err != nil {
@@ -642,9 +607,6 @@ func (e *XSelectIndexExec) pickAndExecTask(ch <-chan *lookupTableTask) {
 	}
 }
 
-// ExecuteTask executes a lookup table task.
-// It works like executing an XSelectTableExec, except that the ranges are built from a slice of handles
-// rather than table ranges. It sends the request to all the regions containing those handles.
 func (e *XSelectIndexExec) executeTask(task *lookupTableTask) error {
 	sort.Sort(int64Slice(task.handles))
 	tblResult, err := e.doTableRequest(task.handles)
@@ -720,7 +682,11 @@ func (e *XSelectIndexExec) doTableRequest(handles []int64) (distsql.SelectResult
 	selTableReq.GroupBy = e.byItems
 	keyRanges := tableHandlesToKVRanges(e.table.Meta().ID, handles)
 
-	resp, err := distsql.Select(e.ctx.GetClient(), selTableReq, keyRanges, e.scanConcurrency, false)
+	concurrency, err := getScanConcurrency(e.ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp, err := distsql.Select(e.ctx.GetClient(), selTableReq, keyRanges, concurrency, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -732,30 +698,26 @@ func (e *XSelectIndexExec) doTableRequest(handles []int64) (distsql.SelectResult
 	return resp, nil
 }
 
-// XSelectTableExec represents the DistSQL select table executor.
-// Its execution is pushed down to KV layer.
+// XSelectTableExec represents XAPI select executor without result fields.
 type XSelectTableExec struct {
-	tableInfo   *model.TableInfo
-	table       table.Table
-	asName      *model.CIStr
-	ctx         context.Context
-	supportDesc bool
-	isMemDB     bool
-
-	// result returns one or more distsql.PartialResult and each PartialResult is return by one region.
+	tableInfo     *model.TableInfo
+	table         table.Table
+	asName        *model.CIStr
+	ctx           context.Context
+	supportDesc   bool
+	isMemDB       bool
 	result        distsql.SelectResult
 	partialResult distsql.PartialResult
-
-	where        *tipb.Expr
-	Columns      []*model.ColumnInfo
-	schema       expression.Schema
-	ranges       []plan.TableRange
-	desc         bool
-	limitCount   *int64
-	returnedRows uint64 // returned rowCount
-	keepOrder    bool
-	startTS      uint64
-	orderByList  []*tipb.ByItem
+	where         *tipb.Expr
+	Columns       []*model.ColumnInfo
+	schema        expression.Schema
+	ranges        []plan.TableRange
+	desc          bool
+	limitCount    *int64
+	returnedRows  uint64 // returned rowCount
+	keepOrder     bool
+	startTS       uint64
+	orderByList   []*tipb.ByItem
 
 	/*
 	   The following attributes are used for aggregation push down.
@@ -769,25 +731,22 @@ type XSelectTableExec struct {
 	byItems   []*tipb.ByItem
 	aggFields []*types.FieldType
 	aggregate bool
-
-	scanConcurrency int
 }
 
-// Schema implements the Executor Schema interface.
+// Schema implements Executor Schema interface.
 func (e *XSelectTableExec) Schema() expression.Schema {
 	return e.schema
 }
 
-// doRequest sends a *tipb.SelectRequest via kv.Client and gets the distsql.SelectResult.
 func (e *XSelectTableExec) doRequest() error {
 	var err error
 	selReq := new(tipb.SelectRequest)
 	selReq.StartTs = e.startTS
 	selReq.TimeZoneOffset = proto.Int64(timeZoneOffset())
 	selReq.Where = e.where
+	columns := e.Columns
 	selReq.TableInfo = &tipb.TableInfo{
 		TableId: e.tableInfo.ID,
-		Columns: distsql.ColumnsToProto(e.Columns, e.tableInfo.PKIsHandle),
 	}
 	if len(e.orderByList) > 0 {
 		selReq.OrderBy = e.orderByList
@@ -795,12 +754,16 @@ func (e *XSelectTableExec) doRequest() error {
 		selReq.OrderBy = []*tipb.ByItem{{Desc: e.desc}}
 	}
 	selReq.Limit = e.limitCount
+	selReq.TableInfo.Columns = distsql.ColumnsToProto(columns, e.tableInfo.PKIsHandle)
 	// Aggregate Info
 	selReq.Aggregates = e.aggFuncs
 	selReq.GroupBy = e.byItems
 
 	kvRanges := tableRangesToKVRanges(e.table.Meta().ID, e.ranges)
-	concurrency := e.scanConcurrency
+	concurrency, err := getScanConcurrency(e.ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	e.result, err = distsql.Select(e.ctx.GetClient(), selReq, kvRanges, concurrency, e.keepOrder)
 	if err != nil {
 		return errors.Trace(err)
@@ -814,7 +777,7 @@ func (e *XSelectTableExec) doRequest() error {
 	return nil
 }
 
-// Close implements the Executor Close interface.
+// Close implements Executor Close interface.
 func (e *XSelectTableExec) Close() error {
 	err := closeAll(e.result, e.partialResult)
 	if err != nil {
@@ -826,7 +789,7 @@ func (e *XSelectTableExec) Close() error {
 	return nil
 }
 
-// Next implements the Executor interface.
+// Next implements Executor interface.
 func (e *XSelectTableExec) Next() (*Row, error) {
 	if e.limitCount != nil && e.returnedRows >= uint64(*e.limitCount) {
 		return nil, nil
@@ -838,7 +801,6 @@ func (e *XSelectTableExec) Next() (*Row, error) {
 		}
 	}
 	for {
-		// Get partial result.
 		if e.partialResult == nil {
 			var err error
 			startTs := time.Now()
@@ -847,24 +809,20 @@ func (e *XSelectTableExec) Next() (*Row, error) {
 				return nil, errors.Trace(err)
 			}
 			if e.partialResult == nil {
-				// Finished.
 				return nil, nil
 			}
 			duration := time.Since(startTs)
-			connID := variable.GetSessionVars(e.ctx).ConnectionID
 			if duration > 30*time.Millisecond {
-				log.Infof("[%d] [TIME_TABLE_SCAN] %v", connID, duration)
+				log.Infof("[TIME_TABLE_SCAN] %v", duration)
 			} else {
-				log.Debugf("[%d] [TIME_TABLE_SCAN] %v", connID, duration)
+				log.Debugf("[TIME_TABLE_SCAN] %v", duration)
 			}
 		}
-		// Get a row from partial result.
 		h, rowData, err := e.partialResult.Next()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		if rowData == nil {
-			// Finish the current partial result and get the next one.
 			e.partialResult = nil
 			continue
 		}
@@ -877,7 +835,7 @@ func (e *XSelectTableExec) Next() (*Row, error) {
 	}
 }
 
-// Fields implements the Executor interface.
+// Fields implements Executor interface.
 func (e *XSelectTableExec) Fields() []*ast.ResultField {
 	return nil
 }

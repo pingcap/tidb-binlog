@@ -51,32 +51,21 @@ func (c *dbClient) SupportRequestType(reqType, subType int64) bool {
 
 func supportExpr(exprType tipb.ExprType) bool {
 	switch exprType {
-	// data type.
-	case tipb.ExprType_Null, tipb.ExprType_Int64, tipb.ExprType_Uint64,
-		tipb.ExprType_Float32, tipb.ExprType_Float64, tipb.ExprType_String,
-		tipb.ExprType_Bytes, tipb.ExprType_MysqlDuration, tipb.ExprType_MysqlDecimal,
-		tipb.ExprType_MysqlTime, tipb.ExprType_ColumnRef:
-		return true
-	// logic operators.
-	case tipb.ExprType_And, tipb.ExprType_Or, tipb.ExprType_Not, tipb.ExprType_Xor:
-		return true
-	// compare operators.
-	case tipb.ExprType_LT, tipb.ExprType_LE, tipb.ExprType_EQ, tipb.ExprType_NE,
+	case tipb.ExprType_Null, tipb.ExprType_Int64, tipb.ExprType_Uint64, tipb.ExprType_Float32,
+		tipb.ExprType_Float64, tipb.ExprType_String, tipb.ExprType_Bytes,
+		tipb.ExprType_MysqlDuration, tipb.ExprType_MysqlDecimal, tipb.ExprType_MysqlTime,
+		tipb.ExprType_ColumnRef,
+		tipb.ExprType_And, tipb.ExprType_Or,
+		tipb.ExprType_LT, tipb.ExprType_LE, tipb.ExprType_EQ, tipb.ExprType_NE,
 		tipb.ExprType_GE, tipb.ExprType_GT, tipb.ExprType_NullEQ,
-		tipb.ExprType_In, tipb.ExprType_ValueList, tipb.ExprType_Like:
+		tipb.ExprType_In, tipb.ExprType_ValueList,
+		tipb.ExprType_Not,
+		tipb.ExprType_Like:
 		return true
-	// arithmetic operators.
-	case tipb.ExprType_Plus, tipb.ExprType_Div, tipb.ExprType_Minus,
-		tipb.ExprType_Mul, tipb.ExprType_IntDiv, tipb.ExprType_Mod:
+	case tipb.ExprType_Plus, tipb.ExprType_Div, tipb.ExprType_Minus, tipb.ExprType_Mul,
+		tipb.ExprType_IntDiv, tipb.ExprType_Mod:
 		return true
-	// aggregate functions.
-	case tipb.ExprType_Count, tipb.ExprType_First, tipb.ExprType_Sum,
-		tipb.ExprType_Avg, tipb.ExprType_Max, tipb.ExprType_Min:
-		return true
-	// bitwise operators.
-	case tipb.ExprType_BitAnd, tipb.ExprType_BitOr, tipb.ExprType_BitXor, tipb.ExprType_BitNeg:
-		return true
-	case tipb.ExprType_Case, tipb.ExprType_Coalesce:
+	case tipb.ExprType_Count, tipb.ExprType_First, tipb.ExprType_Sum, tipb.ExprType_Avg, tipb.ExprType_Max, tipb.ExprType_Min:
 		return true
 	case kv.ReqSubTypeDesc:
 		return true
