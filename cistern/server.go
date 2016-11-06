@@ -12,6 +12,8 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -51,10 +53,24 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	windowNamespace = []byte(fmt.Sprintf("window_%d", cfg.ClusterID))
-	binlogNamespace = []byte(fmt.Sprintf("binlog_%d", cfg.ClusterID))
-	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cfg.ClusterID))
-	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cfg.ClusterID))
+	// lockResolver and tikvStore doesn't exposed a method to get clusterID
+	// so have to create a PD client temporarily.
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	pdCli, err := pd.NewClient(urlv.StringSlice())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	cid := pdCli.GetClusterID()
+	log.Infof("clusterID of cistern server is %v", cid)
+	pdCli.Close()
+
+	windowNamespace = []byte(fmt.Sprintf("window_%d", cid))
+	binlogNamespace = []byte(fmt.Sprintf("binlog_%d", cid))
+	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cid))
+	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cid))
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
@@ -75,10 +91,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, s, win)
+	c, err := NewCollector(cfg, cid, s, win)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	if err := c.LoadHistoryDDLJobs(); err != nil {
 		return nil, errors.Trace(err)
 	}

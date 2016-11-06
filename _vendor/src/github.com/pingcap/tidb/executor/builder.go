@@ -31,10 +31,11 @@ import (
 )
 
 // executorBuilder builds an Executor from a Plan.
-// The InfoSchema must be the same one used in InfoBinder.
+// The InfoSchema must not change during execution.
 type executorBuilder struct {
 	ctx context.Context
 	is  infoschema.InfoSchema
+	// If there is any error during Executor building process, err is set.
 	err error
 }
 
@@ -172,12 +173,7 @@ func (b *executorBuilder) joinConditions(conditions []ast.ExprNode) ast.ExprNode
 
 func (b *executorBuilder) buildSelectLock(v *plan.SelectLock) Executor {
 	src := b.build(v.GetChildByIndex(0))
-	ac, err := autocommit.ShouldAutocommit(b.ctx)
-	if err != nil {
-		b.err = errors.Trace(err)
-		return src
-	}
-	if ac {
+	if autocommit.ShouldAutocommit(b.ctx) {
 		// Locking of rows for update using SELECT FOR UPDATE only applies when autocommit
 		// is disabled (either by beginning transaction with START TRANSACTION or by setting
 		// autocommit to 0. If autocommit is enabled, the rows matching the specification are not locked.
@@ -349,7 +345,7 @@ func (b *executorBuilder) buildUnionScanExec(v *plan.PhysicalUnionScan) *UnionSc
 	if b.err != nil {
 		return nil
 	}
-	us := &UnionScanExec{ctx: b.ctx, Src: src}
+	us := &UnionScanExec{ctx: b.ctx, Src: src, schema: v.GetSchema()}
 	switch x := src.(type) {
 	case *XSelectTableExec:
 		us.desc = x.desc
@@ -386,12 +382,13 @@ func (b *executorBuilder) buildJoin(v *plan.PhysicalHashJoin) Executor {
 		targetTypes = append(targetTypes, types.NewFieldType(types.MergeFieldType(ln.GetType().Tp, rn.GetType().Tp)))
 	}
 	e := &HashJoinExec{
-		schema:      v.GetSchema(),
-		otherFilter: expression.ComposeCNFCondition(v.OtherConditions),
-		prepared:    false,
-		ctx:         b.ctx,
-		targetTypes: targetTypes,
-		concurrency: v.Concurrency,
+		schema:        v.GetSchema(),
+		otherFilter:   expression.ComposeCNFCondition(v.OtherConditions),
+		prepared:      false,
+		ctx:           b.ctx,
+		targetTypes:   targetTypes,
+		concurrency:   v.Concurrency,
+		defaultValues: v.DefaultValues,
 	}
 	if v.SmallTable == 1 {
 		e.smallFilter = expression.ComposeCNFCondition(v.RightConditions)
@@ -419,10 +416,10 @@ func (b *executorBuilder) buildJoin(v *plan.PhysicalHashJoin) Executor {
 	for i := 0; i < e.concurrency; i++ {
 		ctx := &hashJoinCtx{}
 		if e.bigFilter != nil {
-			ctx.bigFilter = e.bigFilter.DeepCopy()
+			ctx.bigFilter = e.bigFilter.Clone()
 		}
 		if e.otherFilter != nil {
-			ctx.otherFilter = e.otherFilter.DeepCopy()
+			ctx.otherFilter = e.otherFilter.Clone()
 		}
 		ctx.datumBuffer = make([]types.Datum, len(e.bigHashKey))
 		ctx.hashKeyBuffer = make([]byte, 0, 10000)
@@ -452,7 +449,7 @@ func (b *executorBuilder) buildSemiJoin(v *plan.PhysicalHashSemiJoin) Executor {
 		ctx:          b.ctx,
 		bigHashKey:   leftHashKey,
 		smallHashKey: rightHashKey,
-		withAux:      v.WithAux,
+		auxMode:      v.WithAux,
 		anti:         v.Anti,
 		targetTypes:  targetTypes,
 	}
@@ -551,6 +548,7 @@ func (b *executorBuilder) buildTableScan(v *plan.PhysicalTableScan) Executor {
 			byItems:     v.GbyItems,
 			orderByList: v.SortItems,
 		}
+		st.scanConcurrency, b.err = getScanConcurrency(b.ctx)
 		return st
 	}
 
@@ -584,19 +582,21 @@ func (b *executorBuilder) buildIndexScan(v *plan.PhysicalIndexScan) Executor {
 	supportDesc := client.SupportRequestType(kv.ReqTypeIndex, kv.ReqSubTypeDesc)
 	if !memDB && client.SupportRequestType(kv.ReqTypeIndex, 0) {
 		st := &XSelectIndexExec{
-			tableInfo:   v.Table,
-			ctx:         b.ctx,
-			supportDesc: supportDesc,
-			asName:      v.TableAsName,
-			table:       table,
-			indexPlan:   v,
-			startTS:     startTS,
-			where:       v.ConditionPBExpr,
-			aggregate:   v.Aggregated,
-			aggFuncs:    v.AggFuncs,
-			aggFields:   v.AggFields,
-			byItems:     v.GbyItems,
+			tableInfo:      v.Table,
+			ctx:            b.ctx,
+			supportDesc:    supportDesc,
+			asName:         v.TableAsName,
+			table:          table,
+			indexPlan:      v,
+			singleReadMode: !v.DoubleRead,
+			startTS:        startTS,
+			where:          v.ConditionPBExpr,
+			aggregate:      v.Aggregated,
+			aggFuncs:       v.AggFuncs,
+			aggFields:      v.AggFields,
+			byItems:        v.GbyItems,
 		}
+		st.scanConcurrency, b.err = getScanConcurrency(b.ctx)
 		return st
 	}
 	b.err = errors.New("Not implement yet.")

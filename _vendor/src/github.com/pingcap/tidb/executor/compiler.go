@@ -60,10 +60,9 @@ func statementLabel(node ast.StmtNode) string {
 	return "unknown"
 }
 
-// Compile compiles an ast.StmtNode to a stmt.Statement.
-// If it is supported to use new plan and executer, it optimizes the node to
-// a plan, and we wrap the plan in an adapter as stmt.Statement.
-// If it is not supported, the node will be converted to old statement.
+// Compile compiles an ast.StmtNode to an ast.Statement.
+// After preprocessed and validated, it will be optimized to a plan,
+// then wrappped to an adapter *statement as stmt.Statement.
 func (c *Compiler) Compile(ctx context.Context, node ast.StmtNode) (ast.Statement, error) {
 	stmtNodeCounter.WithLabelValues(statementLabel(node)).Inc()
 	if _, ok := node.(*ast.UpdateStmt); ok {
@@ -75,9 +74,10 @@ func (c *Compiler) Compile(ctx context.Context, node ast.StmtNode) (ast.Statemen
 	}
 
 	var is infoschema.InfoSchema
-	if snap := variable.GetSessionVars(ctx).SnapshotInfoschema; snap != nil {
+	sessVar := variable.GetSessionVars(ctx)
+	if snap := sessVar.SnapshotInfoschema; snap != nil {
 		is = snap.(infoschema.InfoSchema)
-		log.Infof("use snapshot schema %d", is.SchemaMetaVersion())
+		log.Infof("[%d] use snapshot schema %d", sessVar.ConnectionID, is.SchemaMetaVersion())
 	} else {
 		is = sessionctx.GetDomain(ctx).InfoSchema()
 		binloginfo.SetSchemaVersion(ctx, is.SchemaMetaVersion())

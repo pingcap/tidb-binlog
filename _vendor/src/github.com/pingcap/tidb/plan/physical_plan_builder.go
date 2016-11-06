@@ -78,6 +78,35 @@ func getRowCountByIndexRange(table *statistics.Table, indexRange *IndexRange, in
 	return uint64(count), nil
 }
 
+func getRowCountByTableRange(statsTbl *statistics.Table, ranges []TableRange, offset int) (uint64, error) {
+	var rowCount uint64
+	for _, rg := range ranges {
+		var cnt int64
+		var err error
+		if rg.LowVal == math.MinInt64 && rg.HighVal == math.MaxInt64 {
+			cnt = statsTbl.Count
+		} else if rg.LowVal == math.MinInt64 {
+			cnt, err = statsTbl.Columns[offset].LessRowCount(types.NewDatum(rg.HighVal))
+		} else if rg.HighVal == math.MaxInt64 {
+			cnt, err = statsTbl.Columns[offset].GreaterRowCount(types.NewDatum(rg.LowVal))
+		} else {
+			if rg.LowVal == rg.HighVal {
+				cnt, err = statsTbl.Columns[offset].EqualRowCount(types.NewDatum(rg.LowVal))
+			} else {
+				cnt, err = statsTbl.Columns[offset].BetweenRowCount(types.NewDatum(rg.LowVal), types.NewDatum(rg.HighVal))
+			}
+		}
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		rowCount += uint64(cnt)
+	}
+	if rowCount > uint64(statsTbl.Count) {
+		rowCount = uint64(statsTbl.Count)
+	}
+	return rowCount, nil
+}
+
 func (p *DataSource) convert2TableScan(prop *requiredProperty) (*physicalPlanInfo, error) {
 	table := p.Table
 	client := p.ctx.GetClient()
@@ -105,7 +134,7 @@ func (p *DataSource) convert2TableScan(prop *requiredProperty) (*physicalPlanInf
 		newSel := *sel
 		conds := make([]expression.Expression, 0, len(sel.Conditions))
 		for _, cond := range sel.Conditions {
-			conds = append(conds, cond.DeepCopy())
+			conds = append(conds, cond.Clone())
 		}
 		ts.AccessCondition, newSel.Conditions = detachTableScanConditions(conds, table)
 		if client != nil {
@@ -146,23 +175,9 @@ func (p *DataSource) convert2TableScan(prop *requiredProperty) (*physicalPlanInf
 				break
 			}
 		}
-		rowCount = 0
-		for _, rg := range ts.Ranges {
-			var cnt int64
-			var err error
-			if rg.LowVal == math.MinInt64 && rg.HighVal == math.MaxInt64 {
-				cnt = statsTbl.Count
-			} else if rg.LowVal == math.MinInt64 {
-				cnt, err = statsTbl.Columns[offset].LessRowCount(types.NewDatum(rg.HighVal))
-			} else if rg.HighVal == math.MaxInt64 {
-				cnt, err = statsTbl.Columns[offset].GreaterRowCount(types.NewDatum(rg.LowVal))
-			} else {
-				cnt, err = statsTbl.Columns[offset].BetweenRowCount(types.NewDatum(rg.LowVal), types.NewDatum(rg.HighVal))
-			}
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			rowCount += uint64(cnt)
+		rowCount, err = getRowCountByTableRange(statsTbl, ts.Ranges, offset)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 	if ts.ConditionPBExpr != nil {
@@ -202,7 +217,7 @@ func (p *DataSource) convert2IndexScan(prop *requiredProperty, index *model.Inde
 		newSel := *sel
 		conds := make([]expression.Expression, 0, len(sel.Conditions))
 		for _, cond := range sel.Conditions {
-			conds = append(conds, cond.DeepCopy())
+			conds = append(conds, cond.Clone())
 		}
 		is.AccessCondition, newSel.Conditions = detachIndexScanConditions(conds, is)
 		if client != nil {
@@ -287,7 +302,7 @@ func (p *DataSource) convert2PhysicalPlan(prop *requiredProperty) (*physicalPlan
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if indexInfo.cost < info.cost {
+		if info == nil || indexInfo.cost < info.cost {
 			info = indexInfo
 		}
 	}
@@ -468,7 +483,8 @@ func (p *Join) convert2PhysicalPlanLeft(prop *requiredProperty, innerJoin bool) 
 		OtherConditions: p.OtherConditions,
 		SmallTable:      1,
 		// TODO: decide concurrency by data size.
-		Concurrency: JoinConcurrency,
+		Concurrency:   JoinConcurrency,
+		DefaultValues: p.DefaultValues,
 	}
 	join.SetSchema(p.schema)
 	if innerJoin {
@@ -519,7 +535,8 @@ func (p *Join) convert2PhysicalPlanRight(prop *requiredProperty, innerJoin bool)
 		RightConditions: p.RightConditions,
 		OtherConditions: p.OtherConditions,
 		// TODO: decide concurrency by data size.
-		Concurrency: JoinConcurrency,
+		Concurrency:   JoinConcurrency,
+		DefaultValues: p.DefaultValues,
 	}
 	join.SetSchema(p.schema)
 	if innerJoin {
@@ -599,6 +616,11 @@ func (p *Join) convert2PhysicalPlan(prop *requiredProperty) (*physicalPlanInfo, 
 
 // convert2PhysicalPlanStream converts the logical aggregation to the stream aggregation *physicalPlanInfo.
 func (p *Aggregation) convert2PhysicalPlanStream(prop *requiredProperty) (*physicalPlanInfo, error) {
+	for _, aggFunc := range p.AggFuncs {
+		if aggFunc.GetMode() == expression.FinalMode {
+			return &physicalPlanInfo{cost: math.MaxFloat64}, nil
+		}
+	}
 	agg := &PhysicalAggregation{
 		AggType:      StreamedAgg,
 		AggFuncs:     p.AggFuncs,
@@ -625,17 +647,18 @@ func (p *Aggregation) convert2PhysicalPlanStream(prop *requiredProperty) (*physi
 		props: make([]*columnProp, 0, len(gbyCols)),
 	}
 	for _, pro := range prop.props {
-		isMatch := false
+		var matchedCol *expression.Column
 		for i, col := range gbyCols {
-			if col.ColName.L == pro.col.ColName.L {
+			if !col.Correlated && col.ColName.L == pro.col.ColName.L {
 				isSortKey[i] = true
-				isMatch = true
+				matchedCol = col
 			}
 		}
-		if !isMatch {
+		if matchedCol == nil {
 			return info, nil
 		}
-		newProp.props = append(newProp.props, pro)
+		// We should add columns in aggregation in order to keep index right.
+		newProp.props = append(newProp.props, &columnProp{col: matchedCol, desc: pro.desc})
 	}
 	newProp.sortKeyLen = len(newProp.props)
 	for i, col := range gbyCols {

@@ -39,7 +39,7 @@ func addSelection(p Plan, child LogicalPlan, conditions []expression.Expression,
 		baseLogicalPlan: newBaseLogicalPlan(Sel, allocator)}
 	selection.self = selection
 	selection.initID()
-	selection.SetSchema(child.GetSchema().DeepCopy())
+	selection.SetSchema(child.GetSchema().Clone())
 	return InsertPlan(p, child, selection)
 }
 
@@ -454,7 +454,7 @@ func outerJoinSimplify(p *Join, predicates []expression.Expression) error {
 // If it is a conjunction containing a null-rejected condition as a conjunct.
 // If it is a disjunction of null-rejected conditions.
 func isNullRejected(schema expression.Schema, expr expression.Expression) (bool, error) {
-	result, err := calculateResultOfExpression(schema, expr)
+	result, err := expression.EvaluateExprWithNull(schema, expr)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -468,31 +468,6 @@ func isNullRejected(schema expression.Schema, expr expression.Expression) (bool,
 		return true, errors.Trace(err)
 	}
 	return false, nil
-}
-
-// calculateResultOfExpression set inner table columns in a expression as null and calculate the finally result of the scalar function.
-func calculateResultOfExpression(schema expression.Schema, expr expression.Expression) (expression.Expression, error) {
-	switch x := expr.(type) {
-	case *expression.ScalarFunction:
-		var err error
-		args := make([]expression.Expression, len(x.Args))
-		for i, arg := range x.Args {
-			args[i], err = calculateResultOfExpression(schema, arg)
-		}
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return expression.NewFunction(x.FuncName.L, types.NewFieldType(mysql.TypeTiny), args...)
-	case *expression.Column:
-		if schema.GetIndex(x) == -1 {
-			return x, nil
-		}
-		constant := &expression.Constant{Value: types.Datum{}}
-		constant.Value.SetNull()
-		return constant, nil
-	default:
-		return x.DeepCopy(), nil
-	}
 }
 
 // concatOnAndWhereConds concatenate ON conditions with WHERE conditions.
@@ -549,7 +524,7 @@ func (p *Union) PredicatePushDown(predicates []expression.Expression) (ret []exp
 	for _, proj := range p.children {
 		newExprs := make([]expression.Expression, 0, len(predicates))
 		for _, cond := range predicates {
-			newCond := columnSubstitute(cond.DeepCopy(), p.GetSchema(), expression.Schema2Exprs(proj.GetSchema()))
+			newCond := columnSubstitute(cond.Clone(), p.GetSchema(), expression.Schema2Exprs(proj.GetSchema()))
 			newExprs = append(newExprs, newCond)
 		}
 		retCond, _, err := proj.(LogicalPlan).PredicatePushDown(newExprs)
@@ -563,17 +538,50 @@ func (p *Union) PredicatePushDown(predicates []expression.Expression) (ret []exp
 	return
 }
 
+// CheckColumnIsGroupByItem check whether a column is a group-by item.
+func (p *Aggregation) CheckColumnIsGroupByItem(col *expression.Column) bool {
+	id := p.GetSchema().GetIndex(col)
+	colOriginal, isColumn := p.AggFuncs[id].GetArgs()[0].(*expression.Column)
+	return isColumn && expression.Schema(p.groupByCols).GetIndex(colOriginal) != -1
+}
+
 // PredicatePushDown implements LogicalPlan PredicatePushDown interface.
-func (p *Aggregation) PredicatePushDown(predicates []expression.Expression) ([]expression.Expression, LogicalPlan, error) {
-	// TODO: implement aggregation push down.
+func (p *Aggregation) PredicatePushDown(predicates []expression.Expression) (ret []expression.Expression, retPlan LogicalPlan, err error) {
+	retPlan = p
+	var exprsOriginal []expression.Expression
 	var condsToPush []expression.Expression
+	for _, fun := range p.AggFuncs {
+		exprsOriginal = append(exprsOriginal, fun.GetArgs()[0])
+	}
 	for _, cond := range predicates {
-		if _, ok := cond.(*expression.Constant); ok {
+		switch cond.(type) {
+		case *expression.Constant:
 			condsToPush = append(condsToPush, cond)
+			// Consider SQL list "select sum(b) from t group by a having 1=0". "1=0" is a constant predicate which should be
+			// retained and pushed down at the same time. Because we will get a wrong query result that contains one column
+			// with value 0 rather than an empty query result.
+			ret = append(ret, cond)
+		case *expression.ScalarFunction:
+			extractedCols, _ := extractColumn(cond, nil, nil)
+			ok := true
+			for _, col := range extractedCols {
+				if !p.CheckColumnIsGroupByItem(col) {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				newFunc := columnSubstitute(cond.Clone(), p.GetSchema(), exprsOriginal)
+				condsToPush = append(condsToPush, newFunc)
+			} else {
+				ret = append(ret, cond)
+			}
+		default:
+			ret = append(ret, cond)
 		}
 	}
 	p.baseLogicalPlan.PredicatePushDown(condsToPush)
-	return predicates, p, nil
+	return
 }
 
 // PredicatePushDown implements LogicalPlan PredicatePushDown interface.
