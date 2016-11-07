@@ -54,7 +54,7 @@ func (mc *metricClient) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Duration(mc.interval) * time.Second):
-			err := push.FromGatherer(
+			err := push.AddFromGatherer(
 				"binlog",
 				push.HostnameGroupingKey(),
 				mc.addr,
