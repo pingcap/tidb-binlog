@@ -22,14 +22,14 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&all, "A", false, "Compare all the databases. shorthand for --all-databases")
-	flag.BoolVar(&all, "-all-databases", false, "Compare all the databases. This will be same as --databases with all databases selected.")
+	flag.BoolVar(&all, "A", false, "Compare all the databases. shorthand for -all-databases")
+	flag.BoolVar(&all, "all-databases", false, "Compare all the databases. This will be same as -databases with all databases selected.")
 
-	flag.StringVar(&databases, "B", "", "Compare several databases. shorthand for --databases")
-	flag.StringVar(&databases, "-databases", "", "Compare several databases. Note the difference in usage; in this case no tables are given. All name arguments are regarded as database names. 'USE db_name;' will be included in the output.")
+	flag.StringVar(&databases, "B", "", "Compare several databases. shorthand for -databases")
+	flag.StringVar(&databases, "databases", "", "Compare several databases. Note the difference in usage; in this case no tables are given. All name arguments are regarded as database names. 'USE db_name;' will be included in the output.")
 
-	flag.StringVar(&url1, "url1", "root@127.0.0.1:4000", "user[:password]@host:port")
-	flag.StringVar(&url2, "url2", "", "user:password@host:port")
+	flag.StringVar(&url1, "url1", "root@127.0.0.1:4000", "input format user[:password]@host:port")
+	flag.StringVar(&url2, "url2", "", "input format user[:password]@host:port")
 }
 
 func main() {
@@ -153,7 +153,7 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 }
 
 func showDatabases(dbcf *dbConf) []string {
-	src := fmt.Sprintf("%s@tcp(%s:%d)?timeout=30s&strict=true",
+	src := fmt.Sprintf("%s@tcp(%s:%d)/?timeout=30s&strict=true",
 		dbcf.user,
 		dbcf.host,
 		dbcf.port)
