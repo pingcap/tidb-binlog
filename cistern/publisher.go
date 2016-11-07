@@ -84,7 +84,8 @@ func (p *Publisher) publish() error {
 		if err := p.window.PersistLower(end); err != nil {
 			return errors.Trace(err)
 		}
-		depositWindowBoundary.Set(float64(end))
+
+		windowGauge.WithLabelValues("lower").Set(float64(end))
 	}
 	return nil
 }

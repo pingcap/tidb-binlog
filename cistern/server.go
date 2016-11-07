@@ -116,18 +116,6 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // DumpBinlog implements the gRPC interface of cistern server
 func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_DumpBinlogServer) (err error) {
-	beginTime := time.Now()
-	defer func() {
-		var label string
-		if err != nil {
-			label = "fail"
-		} else {
-			label = "succ"
-		}
-		rpcHistogram.WithLabelValues("DumpBinlog", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("DumpBinlog", label).Add(1)
-	}()
-
 	batch := 1000
 	latest := req.BeginCommitTS
 
