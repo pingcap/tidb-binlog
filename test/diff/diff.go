@@ -426,3 +426,21 @@ func equalStrings(str1, str2 []string) bool {
 	}
 	return true
 }
+
+func ShowDatabases(db *sql.DB) ([]string, error) {
+	var ret []string
+	rows, err := querySQL(db, "show databases;")
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var dbName string
+		err := rows.Scan(&dbName)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		ret = append(ret, dbName)
+	}
+	return ret, nil
+}

@@ -45,6 +45,9 @@ cistern:
 drainer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
 
+diff:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/diff cmd/diff/main.go
+
 install:
 	go install ./...
 
