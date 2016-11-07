@@ -169,7 +169,7 @@ func (d *Drainer) handleDDL(id int64, sql string) (string, string, bool, error) 
 	job, ok := d.jobs[id]
 	d.jLock.RUnlock()
 	if !ok {
-		return "", "", false, errors.Errorf("[ddl job miss]%v", id)
+		return "", "", false, errors.Errorf("[ddl jon miss]%v", id)
 	}
 
 	if job.State == model.JobCancelled {
@@ -564,8 +564,6 @@ func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, erro
 
 		nextTs = resp.CommitTS
 		d.input <- resp.Payload
-
-		chanLength.Set(float64(len(d.input)))
 	}
 
 	return nextTs, errors.Trace(err)
