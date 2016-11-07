@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"database/sql"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -162,21 +161,21 @@ func (d *Drainer) savePoint(ts int64) {
 // the second value[string]: the sql that is corresponding to the job
 // the third value[bool]: whether the job is need to execute
 // the fourth value[error]: the handleDDL execution's err
-func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
+func (d *Drainer) handleDDL(id int64) (string, string, error) {
 	d.jLock.RLock()
 	job, ok := d.jobs[id]
 	d.jLock.RUnlock()
 	if !ok {
-		return "", "", false, errors.Errorf("[ddl job miss]%v", id)
+		return "", "", errors.Errorf("[ddl job miss]%v", id)
 	}
 
 	if job.State == model.JobCancelled {
-		return "", "", false, nil
+		return "", "", nil
 	}
 
 	sql := job.Query
 	if sql == "" {
-		return "", "", false, errors.Errorf("[ddl job sql miss]%v", id)
+		return "", "", errors.Errorf("[ddl job sql miss]%v", id)
 	}
 
 	var err error
@@ -185,139 +184,137 @@ func (d *Drainer) handleDDL(id int64) (string, string, bool, error) {
 		// get the DBInfo from job rawArgs
 		schema := &model.DBInfo{}
 		if err := job.DecodeArgs(nil, schema); err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
 		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
 			d.schema.AddIgnoreSchema(schema)
-			return "", "", false, nil
+			return "", "", nil
 		}
 
 		err = d.schema.CreateSchema(schema)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, true, nil
+		return schema.Name.L, sql, nil
 
 	case model.ActionDropSchema:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			d.schema.DropIgnoreSchema(job.SchemaID)
-			return "", "", false, nil
+			return "", "", nil
 		}
 
 		schemaName, err := d.schema.DropSchema(job.SchemaID)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
-		return schemaName, sql, true, nil
+		return schemaName, sql, nil
 
 	case model.ActionCreateTable:
 		// get the TableInfo from job rawArgs
 		table := &model.TableInfo{}
 		if err := job.DecodeArgs(nil, table); err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 		if table == nil {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", false, nil
+			return "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = d.schema.CreateTable(schema, table)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, true, nil
+		return schema.Name.L, sql, nil
 
 	case model.ActionDropTable:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", false, nil
+			return "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		tableName, err := d.schema.DropTable(job.TableID)
-		if err != nil {
-			return "", "", true, errors.Trace(err)
-		}
-
-		sql = fmt.Sprintf("drop table %s", tableName)
-
-		return schema.Name.L, sql, true, nil
-
-	case model.ActionTruncateTable:
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
-		if ok {
-			return "", "", false, nil
-		}
-
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		_, err := d.schema.DropTable(job.TableID)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
+		}
+
+		return schema.Name.L, sql, nil
+
+	case model.ActionTruncateTable:
+		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", nil
+		}
+
+		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		_, err := d.schema.DropTable(job.TableID)
+		if err != nil {
+			return "", "", errors.Trace(err)
 		}
 
 		table := &model.TableInfo{}
 		if err := job.DecodeArgs(nil, table); err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 		if table == nil {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		err = d.schema.CreateTable(schema, table)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, true, nil
+		return schema.Name.L, sql, nil
 
 	default:
 		tbInfo := &model.TableInfo{}
 		err := job.DecodeArgs(nil, tbInfo)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 		if tbInfo == nil {
-			return "", "", true, errors.NotFoundf("table %d", job.TableID)
+			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", false, nil
+			return "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", true, errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = d.schema.ReplaceTable(tbInfo)
 		if err != nil {
-			return "", "", true, errors.Trace(err)
+			return "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, true, nil
+		return schema.Name.L, sql, nil
 	}
 }
 
@@ -426,7 +423,7 @@ func (d *Drainer) run() error {
 			d.savePoint(commitTS)
 
 		} else if jobID > 0 {
-			schema, sql, ok, err := d.handleDDL(jobID)
+			schema, sql, err := d.handleDDL(jobID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -434,7 +431,7 @@ func (d *Drainer) run() error {
 			delete(d.jobs, jobID)
 			d.jLock.Unlock()
 
-			if ok {
+			if sql != "" {
 				sql, err = d.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)
