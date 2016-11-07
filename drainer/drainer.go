@@ -159,8 +159,7 @@ func (d *Drainer) savePoint(ts int64) {
 // handleDDL has four return values,
 // the first value[string]: the schema name
 // the second value[string]: the sql that is corresponding to the job
-// the third value[bool]: whether the job is need to execute
-// the fourth value[error]: the handleDDL execution's err
+// the third value[error]: the handleDDL execution's err
 func (d *Drainer) handleDDL(id int64) (string, string, error) {
 	d.jLock.RLock()
 	job, ok := d.jobs[id]
