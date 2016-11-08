@@ -39,7 +39,6 @@ type PhysicalIndexScan struct {
 	basePlan
 	physicalTableSource
 
-	readOnly   bool
 	Table      *model.TableInfo
 	Index      *model.IndexInfo
 	Ranges     []*IndexRange
@@ -52,8 +51,6 @@ type PhysicalIndexScan struct {
 	DoubleRead bool
 
 	accessEqualCount int
-	AccessCondition  []expression.Expression
-	conditions       []expression.Expression
 
 	TableAsName *model.CIStr
 }
@@ -70,22 +67,41 @@ type physicalTableSource struct {
 	client kv.Client
 
 	Aggregated bool
+	readOnly   bool
 	AggFields  []*types.FieldType
-	AggFuncs   []*tipb.Expr
-	GbyItems   []*tipb.ByItem
+	AggFuncsPB []*tipb.Expr
+	GbyItemsPB []*tipb.ByItem
 
 	// ConditionPBExpr is the pb structure of conditions that be pushed down.
 	ConditionPBExpr *tipb.Expr
 
-	LimitCount *int64
-	SortItems  []*tipb.ByItem
+	// AccessCondition is used to calculate range.
+	AccessCondition []expression.Expression
+
+	LimitCount  *int64
+	SortItemsPB []*tipb.ByItem
+
+	// The following fields are used for explaining and testing. Because pb structures are not human-readable.
+	aggFuncs   []expression.AggregationFunction
+	gbyItems   []expression.Expression
+	sortItems  []*ByItems
+	conditions []expression.Expression
 }
 
-func (p *physicalTableSource) clear() {
+func (p *physicalTableSource) clearForAggPushDown() {
 	p.AggFields = nil
-	p.AggFuncs = nil
-	p.GbyItems = nil
+	p.AggFuncsPB = nil
+	p.GbyItemsPB = nil
 	p.Aggregated = false
+
+	p.aggFuncs = nil
+	p.gbyItems = nil
+}
+
+func (p *physicalTableSource) clearForTopnPushDown() {
+	p.sortItems = nil
+	p.SortItemsPB = nil
+	p.LimitCount = nil
 }
 
 func needCount(af expression.AggregationFunction) bool {
@@ -97,6 +113,18 @@ func needValue(af expression.AggregationFunction) bool {
 		af.GetName() == ast.AggFuncMax || af.GetName() == ast.AggFuncMin || af.GetName() == ast.AggFuncGroupConcat
 }
 
+func (p *physicalTableSource) tryToAddUnionScan(resultPlan PhysicalPlan) PhysicalPlan {
+	if p.readOnly {
+		return resultPlan
+	}
+	us := &PhysicalUnionScan{
+		Condition: expression.ComposeCNFCondition(append(p.conditions, p.AccessCondition...)),
+	}
+	us.SetChildren(resultPlan)
+	us.SetSchema(resultPlan.GetSchema())
+	return us
+}
+
 func (p *physicalTableSource) addLimit(l *Limit) {
 	if l != nil {
 		count := int64(l.Count + l.Offset)
@@ -105,16 +133,27 @@ func (p *physicalTableSource) addLimit(l *Limit) {
 }
 
 func (p *physicalTableSource) addTopN(prop *requiredProperty) bool {
+	if len(prop.props) == 0 && prop.limit != nil {
+		p.addLimit(prop.limit)
+		return true
+	}
 	if p.client == nil || !p.client.SupportRequestType(kv.ReqTypeSelect, kv.ReqSubTypeTopN) {
 		return false
 	}
-	if prop.limit == nil || len(prop.props) == 0 {
+	if prop.limit == nil {
 		return false
 	}
 	count := int64(prop.limit.Count + prop.limit.Offset)
 	p.LimitCount = &count
-	for _, item := range prop.props {
-		p.SortItems = append(p.SortItems, sortByItemToPB(p.client, item.col, item.desc))
+	for _, prop := range prop.props {
+		item := sortByItemToPB(p.client, prop.col, prop.desc)
+		if item == nil {
+			// When we fail to convert any sortItem to PB struct, we should clear the environments.
+			p.clearForTopnPushDown()
+			return false
+		}
+		p.SortItemsPB = append(p.SortItemsPB, item)
+		p.sortItems = append(p.sortItems, &ByItems{Expr: prop.col, Desc: prop.desc})
 	}
 	return true
 }
@@ -126,18 +165,22 @@ func (p *physicalTableSource) addAggregation(agg *PhysicalAggregation) expressio
 	for _, f := range agg.AggFuncs {
 		pb := aggFuncToPBExpr(p.client, f)
 		if pb == nil {
-			p.clear()
+			// When we fail to convert any agg function to PB struct, we should clear the environments.
+			p.clearForAggPushDown()
 			return nil
 		}
-		p.AggFuncs = append(p.AggFuncs, pb)
+		p.AggFuncsPB = append(p.AggFuncsPB, pb)
+		p.aggFuncs = append(p.aggFuncs, f.Clone())
 	}
 	for _, item := range agg.GroupByItems {
 		pb := groupByItemToPB(p.client, item)
 		if pb == nil {
-			p.clear()
+			// When we fail to convert any group-by item to PB struct, we should clear the environments.
+			p.clearForAggPushDown()
 			return nil
 		}
-		p.GbyItems = append(p.GbyItems, pb)
+		p.GbyItemsPB = append(p.GbyItemsPB, pb)
+		p.gbyItems = append(p.gbyItems, item.Clone())
 	}
 	p.Aggregated = true
 	gk := types.NewFieldType(mysql.TypeBlob)
@@ -146,15 +189,16 @@ func (p *physicalTableSource) addAggregation(agg *PhysicalAggregation) expressio
 	p.AggFields = append(p.AggFields, gk)
 	var schema expression.Schema
 	cursor := 0
-	schema = append(schema, &expression.Column{Index: cursor})
+	schema = append(schema, &expression.Column{Index: cursor, ColName: model.NewCIStr(fmt.Sprint(agg.GroupByItems))})
 	agg.GroupByItems = []expression.Expression{schema[cursor]}
 	newAggFuncs := make([]expression.AggregationFunction, len(agg.AggFuncs))
 	for i, aggFun := range agg.AggFuncs {
 		fun := expression.NewAggFunction(aggFun.GetName(), nil, false)
 		var args []expression.Expression
+		colName := model.NewCIStr(fmt.Sprint(aggFun.GetArgs()))
 		if needCount(fun) {
 			cursor++
-			schema = append(schema, &expression.Column{Index: cursor})
+			schema = append(schema, &expression.Column{Index: cursor, ColName: colName})
 			args = append(args, schema[cursor])
 			ft := types.NewFieldType(mysql.TypeLonglong)
 			ft.Flen = 21
@@ -164,7 +208,7 @@ func (p *physicalTableSource) addAggregation(agg *PhysicalAggregation) expressio
 		}
 		if needValue(fun) {
 			cursor++
-			schema = append(schema, &expression.Column{Index: cursor})
+			schema = append(schema, &expression.Column{Index: cursor, ColName: colName})
 			args = append(args, schema[cursor])
 			p.AggFields = append(p.AggFields, agg.schema[i].GetType())
 		}
@@ -181,16 +225,12 @@ type PhysicalTableScan struct {
 	basePlan
 	physicalTableSource
 
-	readOnly bool
-	Table    *model.TableInfo
-	Columns  []*model.ColumnInfo
-	DBName   *model.CIStr
-	Desc     bool
-	Ranges   []TableRange
-	pkCol    *expression.Column
-
-	AccessCondition []expression.Expression
-	conditions      []expression.Expression
+	Table   *model.TableInfo
+	Columns []*model.ColumnInfo
+	DBName  *model.CIStr
+	Desc    bool
+	Ranges  []TableRange
+	pkCol   *expression.Column
 
 	TableAsName *model.CIStr
 
@@ -224,6 +264,8 @@ type PhysicalHashJoin struct {
 	OtherConditions []expression.Expression
 	SmallTable      int
 	Concurrency     int
+
+	DefaultValues []types.Datum
 }
 
 // PhysicalHashSemiJoin represents hash join for semi join.
@@ -294,8 +336,9 @@ func (p *PhysicalIndexScan) MarshalJSON() ([]byte, error) {
 		"\n \"out of order\": %v,"+
 		"\n \"double read\": %v,"+
 		"\n \"access condition\": %s,"+
+		"\n \"count of pushed aggregate functions\": %d,"+
 		"\n \"limit\": %d\n}",
-		p.DBName.O, p.Table.Name.O, p.Index.Name.O, p.Ranges, p.Desc, p.OutOfOrder, p.DoubleRead, access, limit))
+		p.DBName.O, p.Table.Name.O, p.Index.Name.O, p.Ranges, p.Desc, p.OutOfOrder, p.DoubleRead, access, len(p.AggFuncsPB), limit))
 	return buffer.Bytes(), nil
 }
 
@@ -322,8 +365,9 @@ func (p *PhysicalTableScan) MarshalJSON() ([]byte, error) {
 		"\n \"desc\": %v,"+
 		"\n \"keep order\": %v,"+
 		"\n \"access condition\": %s,"+
+		"\n \"count of pushed aggregate functions\": %d,"+
 		"\n \"limit\": %d}",
-		p.DBName.O, p.Table.Name.O, p.Desc, p.KeepOrder, access, limit))
+		p.DBName.O, p.Table.Name.O, p.Desc, p.KeepOrder, access, len(p.AggFuncsPB), limit))
 	return buffer.Bytes(), nil
 }
 
@@ -602,6 +646,36 @@ func (p *SelectLock) Copy() PhysicalPlan {
 func (p *PhysicalAggregation) Copy() PhysicalPlan {
 	np := *p
 	return &np
+}
+
+// MarshalJSON implements json.Marshaler interface.
+func (p *PhysicalAggregation) MarshalJSON() ([]byte, error) {
+	child, err := json.Marshal(p.children[0].(PhysicalPlan))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	buffer := bytes.NewBufferString("{")
+	var tp string
+	if p.AggType == StreamedAgg {
+		tp = "StreamedAgg"
+	} else if p.AggType == FinalAgg {
+		tp = "FinalAgg"
+	} else {
+		tp = "CompleteAgg"
+	}
+	aggFuncs, err := json.Marshal(p.AggFuncs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	gbyExprs, err := json.Marshal(p.GroupByItems)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	buffer.WriteString(fmt.Sprintf("\"type\": \"%s\",\n"+
+		"\"AggFuncs\": %s,\n"+
+		"\"GroupByItems\": %s,\n"+
+		"\"child\": %s}", tp, aggFuncs, gbyExprs, child))
+	return buffer.Bytes(), nil
 }
 
 // Copy implements the PhysicalPlan Copy interface.
