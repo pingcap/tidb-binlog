@@ -140,7 +140,7 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 			return
 		}
 	} else {
-		collectRetryTimesGaugeVec.WithLabelValues(p.host).Set(float64(0))
+		collectRetryTimesGaugeVec.WithLabelValues(p.host).Set(0)
 	}
 
 	return
