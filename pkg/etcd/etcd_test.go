@@ -166,6 +166,43 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	ctx, etcdCli, cluster := testSetup(t)
+	defer cluster.Terminate(t)
+
+	key := "binlog/testkey"
+	keys := []string{key + "/level1", key + "/level2"}
+	for _, k := range keys {
+		err := etcdCli.Create(ctx, k, k, nil)
+		if err != nil {
+			t.Fatalf("Set failed: %v", err)
+		}
+	}
+
+	root, err := etcdCli.List(ctx, key)
+	if err != nil {
+		t.Fatalf("etcdClient.KV.List failed: %v", err)
+	}
+
+	if len(root.Childs) != 2 {
+		t.Fatalf("etcd fail to get 2, have %d remaining", len(root.Childs))
+	}
+
+	err = etcdCli.Delete(ctx, key, true)
+	if err != nil {
+		t.Fatalf("etcdClient.KV.Delete %v", err)
+	}
+
+	root, err = etcdCli.List(ctx, key)
+	if err != nil {
+		t.Fatalf("etcdClient.KV.delete failed: %v", err)
+	}
+
+	if len(root.Childs) != 0 {
+		t.Fatalf("etcd fail to delete level1, have %d remaining", len(root.Childs))
+	}
+}
+
 func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) {
 	cluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	etcd := NewClient(cluster.RandClient(), "binlog")

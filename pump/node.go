@@ -33,6 +33,8 @@ type Node interface {
 	// Register register this pump node to Etcd
 	// create new one if nodeID not exist, or update it
 	Register(ctx context.Context) error
+	// Unregister unregister this pump node from etcd
+	Unregister(ctx context.Context) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
@@ -113,6 +115,14 @@ func (p *pumpNode) ShortID() string {
 
 func (p *pumpNode) Register(ctx context.Context) error {
 	err := p.RegisterNode(ctx, p.id, p.host)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (p *pumpNode) Unregister(ctx context.Context) error {
+	err := p.UnregisterNode(ctx, p.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
