@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -49,6 +48,7 @@ import (
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 // Session context
@@ -76,7 +76,6 @@ type Session interface {
 
 var (
 	_         Session = (*session)(nil)
-	sessionID int64
 	sessionMu sync.Mutex
 )
 
@@ -118,7 +117,6 @@ type session struct {
 	txn         kv.Transaction // Current transaction
 	values      map[fmt.Stringer]interface{}
 	store       kv.Storage
-	sid         int64
 	history     stmtHistory
 	maxRetryCnt int // Max retry times. If maxRetryCnt <=0, there is no limitation for retry times.
 
@@ -135,6 +133,7 @@ func (s *session) cleanRetryInfo() {
 	}
 }
 
+// If the schema is invalid, we need to rollback the current transaction.
 func (s *session) checkSchemaValidOrRollback() error {
 	var ts uint64
 	if s.txn != nil {
@@ -147,7 +146,7 @@ func (s *session) checkSchemaValidOrRollback() error {
 
 	if err1 := s.RollbackTxn(); err1 != nil {
 		// TODO: handle this error.
-		log.Errorf("rollback txn failed, err:%v", errors.ErrorStack(err1))
+		log.Errorf("[%d] rollback txn failed, err:%v", variable.GetSessionVars(s).ConnectionID, errors.ErrorStack(err1))
 		errMsg := fmt.Sprintf("schema is invalid, rollback txn err:%v", err1.Error())
 		return domain.ErrLoadSchemaTimeOut.Gen(errMsg)
 	}
@@ -197,13 +196,17 @@ func (s *session) finishTxn(rollback bool) error {
 		return s.txn.Rollback()
 	}
 	if binloginfo.PumpClient != nil {
-		bin := binloginfo.GetPrewriteValue(s, false)
-		if bin != nil {
-			binlogData, err := bin.Marshal()
+		prewriteValue := binloginfo.GetPrewriteValue(s, false)
+		if prewriteValue != nil {
+			prewriteData, err := prewriteValue.Marshal()
 			if err != nil {
 				return errors.Trace(err)
 			}
-			s.txn.SetOption(kv.BinlogData, binlogData)
+			bin := &binlog.Binlog{
+				Tp:            binlog.BinlogType_Prewrite,
+				PrewriteValue: prewriteData,
+			}
+			s.txn.SetOption(kv.BinlogData, bin)
 		}
 	}
 	err := s.txn.Commit()
@@ -240,16 +243,27 @@ func (s *session) GetClient() kv.Client {
 
 func (s *session) String() string {
 	// TODO: how to print binded context in values appropriately?
+	sessVars := variable.GetSessionVars(s)
 	data := map[string]interface{}{
+		"id":         sessVars.ConnectionID,
+		"user":       sessVars.User,
 		"currDBName": db.GetCurrentSchema(s),
-		"sid":        s.sid,
+		"stauts":     sessVars.Status,
+		"strictMode": sessVars.StrictSQLMode,
 	}
-
 	if s.txn != nil {
 		// if txn is committed or rolled back, txn is nil.
 		data["txn"] = s.txn.String()
 	}
-
+	if sessVars.SnapshotTS != 0 {
+		data["snapshotTS"] = sessVars.SnapshotTS
+	}
+	if sessVars.LastInsertID > 0 {
+		data["lastInsertID"] = sessVars.LastInsertID
+	}
+	if len(sessVars.PreparedStmts) > 0 {
+		data["preparedStmtCount"] = len(sessVars.PreparedStmts)
+	}
 	b, _ := json.MarshalIndent(data, "", "  ")
 	return string(b)
 }
@@ -398,43 +412,18 @@ func (s *session) SetGlobalSysVar(ctx context.Context, name string, value string
 }
 
 // IsAutocommit checks if it is in the auto-commit mode.
-func (s *session) isAutocommit(ctx context.Context) (bool, error) {
+func (s *session) isAutocommit(ctx context.Context) bool {
 	sessionVar := variable.GetSessionVars(ctx)
-	autocommit := sessionVar.GetSystemVar("autocommit")
-	if autocommit.IsNull() {
-		if ctx.Value(context.Initing) != nil {
-			return false, nil
-		}
-		autocommitStr, err := s.GetGlobalSysVar(ctx, "autocommit")
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-		autocommit.SetString(autocommitStr)
-		err = sessionVar.SetSystemVar("autocommit", autocommit)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-	}
-	autocommitStr := autocommit.GetString()
-	if autocommitStr == "ON" || autocommitStr == "on" || autocommitStr == "1" {
-		variable.GetSessionVars(ctx).SetStatusFlag(mysql.ServerStatusAutocommit, true)
-		return true, nil
-	}
-	variable.GetSessionVars(ctx).SetStatusFlag(mysql.ServerStatusAutocommit, false)
-	return false, nil
+	return sessionVar.GetStatusFlag(mysql.ServerStatusAutocommit)
 }
 
-func (s *session) ShouldAutocommit(ctx context.Context) (bool, error) {
+func (s *session) ShouldAutocommit(ctx context.Context) bool {
 	// With START TRANSACTION, autocommit remains disabled until you end
 	// the transaction with COMMIT or ROLLBACK.
-	ac, err := s.isAutocommit(ctx)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if variable.GetSessionVars(ctx).Status&mysql.ServerStatusInTrans == 0 && ac {
-		return true, nil
-	}
-	return false, nil
+	sessVar := variable.GetSessionVars(ctx)
+	isAutomcommit := sessVar.GetStatusFlag(mysql.ServerStatusAutocommit)
+	inTransaction := sessVar.GetStatusFlag(mysql.ServerStatusInTrans)
+	return isAutomcommit && !inTransaction
 }
 
 func (s *session) ParseSQL(sql, charset, collation string) ([]ast.StmtNode, error) {
@@ -447,9 +436,10 @@ func (s *session) Execute(sql string) ([]ast.RecordSet, error) {
 	}
 	startTS := time.Now()
 	charset, collation := getCtxCharsetInfo(s)
+	connID := variable.GetSessionVars(s).ConnectionID
 	rawStmts, err := s.ParseSQL(sql, charset, collation)
 	if err != nil {
-		log.Warnf("compiling %s, error: %v", sql, err)
+		log.Warnf("[%d] parse error:\n%v\n%s", connID, err, sql)
 		return nil, errors.Trace(err)
 	}
 	sessionExecuteParseDuration.Observe(time.Since(startTS).Seconds())
@@ -460,20 +450,19 @@ func (s *session) Execute(sql string) ([]ast.RecordSet, error) {
 		startTS := time.Now()
 		st, err1 := Compile(s, rst)
 		if err1 != nil {
-			log.Errorf("Syntax error: %s", sql)
-			log.Errorf("Error occurs at %s.", err1)
+			log.Warnf("[%d] compile error:\n%v\n%s", connID, err1, sql)
 			return nil, errors.Trace(err1)
 		}
 		sessionExecuteCompileDuration.Observe(time.Since(startTS).Seconds())
-		id := variable.GetSessionVars(s).ConnectionID
-		s.stmtState = ph.StartStatement(sql, id, perfschema.CallerNameSessionExecute, rawStmts[i])
-		s.SetValue(context.QueryString, sql)
+
+		s.stmtState = ph.StartStatement(sql, connID, perfschema.CallerNameSessionExecute, rawStmts[i])
+		s.SetValue(context.QueryString, st.OriginText())
 
 		startTS = time.Now()
 		r, err := runStmt(s, st)
 		ph.EndStatement(s.stmtState)
 		if err != nil {
-			log.Warnf("session:%v, err:%v", s, err)
+			log.Warnf("[%d] session error:\n%v\n%s", connID, err, s)
 			return nil, errors.Trace(err)
 		}
 		sessionExecuteRunDuration.Observe(time.Since(startTS).Seconds())
@@ -583,20 +572,22 @@ func (s *session) GetTxn(forceNew bool) (kv.Transaction, error) {
 		err error
 		ac  bool
 	)
+	sessVars := variable.GetSessionVars(s)
 	if s.txn == nil {
+		err = s.loadCommonGlobalVariablesIfNeeded()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		s.resetHistory()
 		s.txn, err = s.store.Begin()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		ac, err = s.isAutocommit(s)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		ac = s.isAutocommit(s)
 		if !ac {
 			variable.GetSessionVars(s).SetStatusFlag(mysql.ServerStatusInTrans, true)
 		}
-		log.Infof("New txn:%s in session:%d", s.txn, s.sid)
+		log.Infof("[%d] new txn:%s", sessVars.ConnectionID, s.txn)
 	} else if forceNew {
 		err = s.CommitTxn()
 		if err != nil {
@@ -606,14 +597,11 @@ func (s *session) GetTxn(forceNew bool) (kv.Transaction, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		ac, err = s.isAutocommit(s)
+		ac = s.isAutocommit(s)
 		if !ac {
 			variable.GetSessionVars(s).SetStatusFlag(mysql.ServerStatusInTrans, true)
 		}
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		log.Warnf("Force new txn:%s in session:%d", s.txn, s.sid)
+		log.Warnf("[%d] force new txn:%s", sessVars.ConnectionID, s.txn)
 	}
 	retryInfo := variable.GetSessionVars(s).RetryInfo
 	if retryInfo.Retrying {
@@ -637,7 +625,6 @@ func (s *session) ClearValue(key fmt.Stringer) {
 
 // Close function does some clean work when session end.
 func (s *session) Close() error {
-	log.Info("RollbackTxn for session close.")
 	return s.RollbackTxn()
 }
 
@@ -708,7 +695,6 @@ func CreateSession(store kv.Storage) (Session, error) {
 	s := &session{
 		values:      make(map[fmt.Stringer]interface{}),
 		store:       store,
-		sid:         atomic.AddInt64(&sessionID, 1),
 		debugInfos:  make(map[string]interface{}),
 		maxRetryCnt: 10,
 		parser:      parser.New(),
@@ -762,7 +748,7 @@ func CreateSession(store kv.Storage) (Session, error) {
 
 const (
 	notBootstrapped         = 0
-	currentBootstrapVersion = 2
+	currentBootstrapVersion = 3
 )
 
 func getStoreBootstrapVersion(store kv.Storage) int64 {
@@ -804,4 +790,46 @@ func finishBootstrap(store kv.Storage) {
 	if err != nil {
 		log.Fatalf("finish bootstrap err %v", err)
 	}
+}
+
+const loadCommonGlobalVarsSQL = "select * from mysql.global_variables where variable_name in ('" +
+	variable.AutocommitVar + "', '" +
+	variable.SQLModeVar + "', '" +
+	variable.DistSQLJoinConcurrencyVar + "', '" +
+	variable.DistSQLScanConcurrencyVar + "')"
+
+// LoadCommonGlobalVariableIfNeeded loads and applies commonly used global variables for the session
+// right before creating a transaction for the first time.
+func (s *session) loadCommonGlobalVariablesIfNeeded() error {
+	vars := variable.GetSessionVars(s)
+	if vars.CommonGlobalLoaded {
+		return nil
+	}
+	if s.Value(context.Initing) != nil {
+		// When running bootstrap or upgrade, we should not access global storage.
+		return nil
+	}
+	// Set the variable to true to prevent cyclic recursive call.
+	vars.CommonGlobalLoaded = true
+	rs, err := s.ExecRestrictedSQL(s, loadCommonGlobalVarsSQL)
+	if err != nil {
+		vars.CommonGlobalLoaded = false
+		log.Errorf("Failed to load common global variables.")
+		return errors.Trace(err)
+	}
+	for {
+		row, err1 := rs.Next()
+		if err1 != nil {
+			vars.CommonGlobalLoaded = false
+			log.Errorf("Failed to load common global variables.")
+			return errors.Trace(err1)
+		}
+		if row == nil {
+			break
+		}
+		varName := row.Data[0].GetString()
+		vars.SetSystemVar(varName, row.Data[1])
+	}
+	vars.CommonGlobalLoaded = true
+	return nil
 }

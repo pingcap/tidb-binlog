@@ -39,8 +39,8 @@ type Expression interface {
 	// Get the expression return type.
 	GetType() *types.FieldType
 
-	// DeepCopy copies an expression totally.
-	DeepCopy() Expression
+	// Clone copies an expression totally.
+	Clone() Expression
 
 	// HashCode create the hashcode for expression
 	HashCode() []byte
@@ -132,8 +132,8 @@ func (col *Column) Eval(row []types.Datum, _ context.Context) (types.Datum, erro
 	return row[col.Index], nil
 }
 
-// DeepCopy implements Expression interface.
-func (col *Column) DeepCopy() Expression {
+// Clone implements Expression interface.
+func (col *Column) Clone() Expression {
 	if col.Correlated {
 		return col
 	}
@@ -160,8 +160,8 @@ func (s Schema) String() string {
 	return "[" + strings.Join(strs, ",") + "]"
 }
 
-// DeepCopy copies the total schema.
-func (s Schema) DeepCopy() Schema {
+// Clone copies the total schema.
+func (s Schema) Clone() Schema {
 	result := make(Schema, 0, len(s))
 	for _, col := range s {
 		newCol := *col
@@ -311,8 +311,8 @@ func ScalarFuncs2Exprs(funcs []*ScalarFunction) []Expression {
 	return result
 }
 
-// DeepCopy implements Expression interface.
-func (sf *ScalarFunction) DeepCopy() Expression {
+// Clone implements Expression interface.
+func (sf *ScalarFunction) Clone() Expression {
 	newFunc := &ScalarFunction{
 		FuncName:  sf.FuncName,
 		Function:  sf.Function,
@@ -320,7 +320,7 @@ func (sf *ScalarFunction) DeepCopy() Expression {
 		ArgValues: make([]types.Datum, len(sf.Args))}
 	newFunc.Args = make([]Expression, 0, len(sf.Args))
 	for _, arg := range sf.Args {
-		newFunc.Args = append(newFunc.Args, arg.DeepCopy())
+		newFunc.Args = append(newFunc.Args, arg.Clone())
 	}
 	return newFunc
 }
@@ -393,8 +393,8 @@ func (c *Constant) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// DeepCopy implements Expression interface.
-func (c *Constant) DeepCopy() Expression {
+// Clone implements Expression interface.
+func (c *Constant) Clone() Expression {
 	con := *c
 	return &con
 }
@@ -487,4 +487,29 @@ func SplitCNFItems(onExpr Expression) []Expression {
 // DNF means disjunctive normal form, e.g. "a or b or c".
 func SplitDNFItems(onExpr Expression) []Expression {
 	return splitNormalFormItems(onExpr, ast.OrOr)
+}
+
+// EvaluateExprWithNull sets columns in schema as null and calculate the final result of the scalar function.
+// If the Expression is a non-constant value, it means the result is unknown.
+func EvaluateExprWithNull(schema Schema, expr Expression) (Expression, error) {
+	switch x := expr.(type) {
+	case *ScalarFunction:
+		var err error
+		args := make([]Expression, len(x.Args))
+		for i, arg := range x.Args {
+			args[i], err = EvaluateExprWithNull(schema, arg)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+		return NewFunction(x.FuncName.L, types.NewFieldType(mysql.TypeTiny), args...)
+	case *Column:
+		if schema.GetIndex(x) == -1 {
+			return x, nil
+		}
+		constant := &Constant{Value: types.Datum{}}
+		return constant, nil
+	default:
+		return x.Clone(), nil
+	}
 }

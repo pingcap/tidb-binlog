@@ -144,7 +144,7 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 3542d756cbeb5eaf1494a378e73e62b938f025e7
+  version: 67f7c94e7b0ec01e4737dd72fc934ae18571adbc
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -157,14 +157,14 @@ import:
   - pkg/raft_serverpb
   - pkg/util
 - package: github.com/pingcap/pd
-  version: dcfe726e8c98451c554a88ce78bcd2f0b28fd680
+  version: 1cd8e8dcd5077c5748580543b238ae83816d03b6
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - package: github.com/pingcap/tidb
-  version: 0eee7c85224cbd7ea7b6887e5b07990f2e82bbb4
+  version: 2e8941aa4de8566de1b27d13e075f59ebdb0e7a6
   subpackages:
   - ast
   - context
@@ -218,7 +218,7 @@ import:
   - util/stringutil
   - util/types
 - package: github.com/pingcap/tipb
-  version: 627e9a203d065e3c4963403eadc235cb3eacbd7f
+  version: 0ff3e19786f9af44c072991f7ed697d9b30486cc
   subpackages:
   - go-binlog
   - go-tipb
@@ -297,4 +297,4 @@ import:
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 testImports:
 - package: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689

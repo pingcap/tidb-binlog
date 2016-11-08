@@ -29,7 +29,6 @@ const (
 // Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
-	ClusterID           uint64 `toml:"cluster-id" json:"cluster-id"`
 	ListenAddr          string `toml:"addr" json:"addr"`
 	DataDir             string `toml:"data-dir" json:"data-dir"`
 	CollectInterval     int    `toml:"collect-interval" json:"collect-interval"`
@@ -60,7 +59,6 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of cistern:")
 		fs.PrintDefaults()
 	}
-	fs.Uint64Var(&cfg.ClusterID, "cluster-id", 0, "specifies the ID of TiDB cluster that cistern in charge of")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
 	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
@@ -158,10 +156,6 @@ func (cfg *Config) validate() error {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
-	}
-	// clusterId must be configured
-	if cfg.ClusterID == 0 {
-		return errors.Errorf("cluster-id must be configured")
 	}
 	return nil
 }

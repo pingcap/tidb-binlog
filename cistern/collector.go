@@ -48,18 +48,17 @@ type Collector struct {
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.ClusterID)
+	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	tidb.RegisterStore("tikv", tikv.Driver{})
-	tiPath := fmt.Sprintf("tikv://%s?cluster=%d&disableGC=true", urlv.HostString(), cfg.ClusterID)
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := tidb.NewStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -69,7 +68,7 @@ func NewCollector(cfg *Config, s store.Store, w *DepositWindow) (*Collector, err
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID: cfg.ClusterID,
+		clusterID: clusterID,
 		batch:     int32(cfg.CollectBatch),
 		interval:  time.Duration(cfg.CollectInterval) * time.Second,
 		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),

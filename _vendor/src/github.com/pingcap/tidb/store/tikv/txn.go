@@ -138,10 +138,10 @@ func (txn *tikvTxn) Commit() error {
 	}
 	err = committer.Commit()
 	if err != nil {
-		committer.writeFinisheBinlog(binlog.BinlogType_Rollback, 0)
+		committer.writeFinishBinlog(binlog.BinlogType_Rollback, 0)
 		return errors.Trace(err)
 	}
-	committer.writeFinisheBinlog(binlog.BinlogType_Commit, int64(committer.commitTS))
+	committer.writeFinishBinlog(binlog.BinlogType_Commit, int64(committer.commitTS))
 	txn.commitTS = committer.commitTS
 	log.Debugf("[kv] finish commit txn %d", txn.StartTS())
 	return nil
@@ -157,7 +157,7 @@ func (txn *tikvTxn) Rollback() error {
 		return kv.ErrInvalidTxn
 	}
 	txn.close()
-	log.Warnf("[kv] Rollback txn %d", txn.StartTS())
+	log.Infof("[kv] Rollback txn %d", txn.StartTS())
 	txnCmdCounter.WithLabelValues("rollback").Inc()
 
 	return nil
