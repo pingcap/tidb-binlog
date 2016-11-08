@@ -139,6 +139,8 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 			res.err = errors.Trace(err)
 			return
 		}
+	} else {
+		collectRetryTimesGaugeVec.WithLabelValues(p.host).Set(float64(0))
 	}
 
 	return

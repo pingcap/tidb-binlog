@@ -72,7 +72,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cid))
 	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cid))
 
-	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
+	err = os.MkdirAll(cfg.DataDir, 0700)
+	if err != nil {
 		return nil, err
 	}
 
