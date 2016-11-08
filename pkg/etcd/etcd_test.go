@@ -171,7 +171,7 @@ func TestDelete(t *testing.T) {
 	defer cluster.Terminate(t)
 
 	key := "binlog/testkey"
-	keys := []string{key + "/level1", key + "/level2"}
+	keys := []string{key + "/level1", key + "/level2", key + "/level1" + "/level1"}
 	for _, k := range keys {
 		err := etcdCli.Create(ctx, k, k, nil)
 		if err != nil {
@@ -185,7 +185,21 @@ func TestDelete(t *testing.T) {
 	}
 
 	if len(root.Childs) != 2 {
-		t.Fatalf("etcd fail to get 2, have %d remaining", len(root.Childs))
+		t.Fatalf("etcd fail to get 2 kvs, have %d remaining", len(root.Childs))
+	}
+
+	err = etcdCli.Delete(ctx, keys[1], false)
+	if err != nil {
+		t.Fatalf("etcdClient.KV.Delete %v", err)
+	}
+
+	root, err = etcdCli.List(ctx, key)
+	if err != nil {
+		t.Fatalf("etcdClient.KV.delete failed: %v", err)
+	}
+
+	if len(root.Childs) != 1 {
+		t.Fatalf("etcd fail to get 2 kvs, have %d remaining", len(root.Childs))
 	}
 
 	err = etcdCli.Delete(ctx, key, true)
@@ -199,8 +213,9 @@ func TestDelete(t *testing.T) {
 	}
 
 	if len(root.Childs) != 0 {
-		t.Fatalf("etcd fail to delete level1, have %d remaining", len(root.Childs))
+		t.Fatalf("etcd fail to delete kvs, have %d remaining", len(root.Childs))
 	}
+
 }
 
 func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) {
