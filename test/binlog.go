@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
 	"time"
@@ -51,29 +52,60 @@ create table ntest(
 );
 `}
 
-	// generate sql and execute
-	dailytest.Run(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
-
-	time.Sleep(3 * time.Minute)
-
 	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer util.CloseDB(sourceDB)
+
 	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer util.CloseDB(targetDB)
 
+	// generate insert/update/delete sqls and execute
+	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+
+	// wait for sync to downstream sql server
+	time.Sleep(2 * time.Minute)
+
+	// diff the test schema
+	if !checkSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
+
+	// truncate test data
+	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
+
+	// wait for sync to downstream sql server
+	time.Sleep(1 * time.Minute)
+
+	// diff the test schema
+	if !checkSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
+
+	// drop test table
+	dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
+
+	// wait for sync to downstream sql server
+	time.Sleep(1 * time.Minute)
+
+	// diff the test schema
+	if !checkSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
+
+	log.Info("test pass!!!")
+}
+
+func checkSyncState(sourceDB, targetDB *sql.DB) bool {
 	d := diff.New(sourceDB, targetDB)
 	ok, err := d.Equal()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if !ok {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
-
-	log.Info("test pass!!!")
+	return ok
 }
