@@ -427,6 +427,7 @@ func equalStrings(str1, str2 []string) bool {
 	return true
 }
 
+// ShowDatabases returns a database lists.
 func ShowDatabases(db *sql.DB) ([]string, error) {
 	var ret []string
 	rows, err := querySQL(db, "show databases;")

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
-	"strconv"
 	"database/sql"
-	"strings"
 	"flag"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 
@@ -17,8 +17,8 @@ import (
 var (
 	databases string
 	all       bool
-	url1 string
-	url2 string
+	url1      string
+	url2      string
 )
 
 func init() {
@@ -80,22 +80,22 @@ func parseConfig(db1, db2 *dbConf) []string {
 		flag.PrintDefaults()
 		os.Exit(-1)
 	}
-	return strings.Split(databases , ",")
+	return strings.Split(databases, ",")
 }
 
 type dbConf struct {
-	user string
+	user     string
 	password string
-	host string
-	port int
+	host     string
+	port     int
 }
 
-var parseErr = errors.New("format: user[:password]@host:port")
+var errParse = errors.New("format: user[:password]@host:port")
 
 func (dbcf *dbConf) fromString(url string) error {
 	tmp := strings.Split(url, "@")
 	if len(tmp) != 2 {
-		return parseErr
+		return errParse
 	}
 
 	part1 := strings.Split(tmp[0], ":")
@@ -106,16 +106,16 @@ func (dbcf *dbConf) fromString(url string) error {
 		dbcf.user = part1[0]
 		dbcf.password = part1[1]
 	default:
-		return parseErr
+		return errParse
 	}
 
 	part2 := strings.Split(tmp[1], ":")
 	if len(part2) != 2 {
-		return parseErr
+		return errParse
 	}
 	port, err := strconv.ParseInt(part2[1], 10, 64)
 	if err != nil {
-		return parseErr
+		return errParse
 	}
 
 	dbcf.host = part2[0]
