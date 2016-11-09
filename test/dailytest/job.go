@@ -118,6 +118,12 @@ func doDMLProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, ba
 }
 
 func doDDLProcess(table *table, db *sql.DB) {
+	// do Truncation
+	if randBool() {
+		sql := fmt.Sprintf("truncate table %s ", table.name)
+		execSqls(db, []string{sql}, [][]interface{}{{}})
+	}
+
 	// do drop column ddl
 	index := randInt(2, len(table.columns)-1)
 	col := table.columns[index]
