@@ -11,7 +11,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/test/diff"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 var (

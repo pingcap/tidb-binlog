@@ -12,11 +12,11 @@ Usage of diff:
   -B string
     	Compare several databases. shorthand for -databases
   -databases string
-    	Compare several databases. Note the difference in usage; in this case no tables are given. All name arguments are regarded as database names. 'USE db_name;' will be included in the output.
+    	Compare several databases, database names separated by commas.
   -url1 string
-    	user[:password]@host:port (default "root@127.0.0.1:4000")
+    	user[:password]@host:port
   -url2 string
-    	user:password@host:port
+    	user[:password]@host:port
 ```
 
 
