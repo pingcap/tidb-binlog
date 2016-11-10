@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump cistern drainer fmt
+.PHONY: build test check update clean pump cistern drainer fmt diff
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""

@@ -26,7 +26,7 @@ func init() {
 	flag.BoolVar(&all, "all-databases", false, "Compare all the databases. This will be same as -databases with all databases selected.")
 
 	flag.StringVar(&databases, "B", "", "Compare several databases. shorthand for -databases")
-	flag.StringVar(&databases, "databases", "", "Compare several databases. Note the difference in usage; in this case no tables are given. All name arguments are regarded as database names. 'USE db_name;' will be included in the output.")
+	flag.StringVar(&databases, "databases", "", "Compare several databases, database names separated by commas.")
 
 	flag.StringVar(&url1, "url1", "root@127.0.0.1:4000", "input format user[:password]@host:port")
 	flag.StringVar(&url2, "url2", "", "input format user[:password]@host:port")
