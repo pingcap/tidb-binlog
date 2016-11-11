@@ -66,6 +66,13 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
 	}
+
+	rowDatas, _ := genRowDatas(c, tables[0].Columns)
+	binlog := genInsertBinlog(c, tables[0], rowDatas)
+	_, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
+	if err == nil {
+		c.Fatal("it's should panic")
+	}
 }
 
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
@@ -86,17 +93,68 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 			c.Assert(vals[0][index], DeepEquals, expected[index%3])
 		}
 	}
-}
 
-func testGenDeleteSQLsByID(c *C, s SQLTranslator) {
+	rowDatas, _ := genRowDatas(c, tables[0].Columns)
+	binlog := genUpdateBinlog(c, tables[0], rowDatas, rowDatas)
+	_, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
+	if err == nil {
+		c.Fatal("it's should panic")
+	}
 }
 
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
+	schema := "t"
+	tables := []*model.TableInfo{genTable(), genTableWithPK()}
+	exceptedSqls := []string{"delete from t.account where ID = ? and NAME = ? and SEX = ? limit 1;",
+		"delete from t.account where ID = ? and NAME = ? limit 1;"}
+	exceptedNums := []int{3, 2}
+	op := []OpType{DelByCol, DelByPK}
+	for index, t := range tables {
+		rowDatas, expected := genRowDatas(c, t.Columns)
+		binlog := genDeleteBinlog(c, t, rowDatas)
+		sqls, vals, err := s.GenDeleteSQLs(schema, t, op[index], [][]byte{binlog})
+		c.Assert(err, IsNil)
+		c.Assert(len(vals[0]), Equals, exceptedNums[index])
+		c.Assert(sqls[0], Equals, exceptedSqls[index])
+		for index := range vals {
+			c.Assert(vals[0][index], DeepEquals, expected[index])
+		}
+	}
 
+	rowDatas, _ := genRowDatas(c, tables[0].Columns)
+	binlog := genDeleteBinlog(c, tables[0], rowDatas)
+	_, _, err := s.GenDeleteSQLs(schema, tables[0], DelByCol, [][]byte{binlog[6:]})
+	if err == nil {
+		c.Fatal("it's should panic")
+	}
+}
+
+func testGenDeleteSQLsByID(c *C, s SQLTranslator) {
+	schema := "t"
+	tables := []*model.TableInfo{genTableWithID()}
+	exceptedSqls := []string{"delete from t.account where ID = ? limit 1;"}
+	exceptedNums := []int{1}
+	for index, t := range tables {
+		rowDatas, expected := genRowDatas(c, t.Columns)
+		binlog := genDeleteBinlogByID(c, t, rowDatas)
+		sqls, vals, err := s.GenDeleteSQLsByID(schema, t, []int64{binlog})
+		c.Assert(err, IsNil)
+		c.Assert(len(vals[0]), Equals, exceptedNums[index])
+		c.Assert(sqls[0], Equals, exceptedSqls[index])
+		for index := range vals {
+			c.Assert(vals[0][index], DeepEquals, expected[index])
+		}
+	}
 }
 
 func testGenDDLSQL(c *C, s SQLTranslator) {
+	sql, err := s.GenDDLSQL("create database t", "t")
+	c.Assert(err, IsNil)
+	c.Assert(sql, Equals, "create database t;")
 
+	sql, err = s.GenDDLSQL("drop table t", "t")
+	c.Assert(err, IsNil)
+	c.Assert(sql, Equals, "use t; drop table t;")
 }
 
 func genInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
@@ -127,7 +185,6 @@ func genInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 }
 
 func genUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
-
 	colIDs := make([]int64, 0, len(t.Columns))
 	for _, col := range t.Columns {
 		colIDs = append(colIDs, col.ID)
@@ -167,6 +224,56 @@ func genUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []
 	}
 
 	return bin
+}
+
+func genDeleteBinlogByID(c *C, t *model.TableInfo, r []types.Datum) int64 {
+	var h int64
+	var hasPK bool
+	if t.PKIsHandle {
+		for _, col := range t.Columns {
+			if isPKHandleColumn(t, col) {
+				hasPK = true
+				h = r[col.Offset].GetInt64()
+				break
+			}
+		}
+
+		if !hasPK {
+			c.Fatal("this case don't have primary id")
+		}
+		return h
+	}
+
+	c.Fatal("this case don't have primary id")
+	return 0
+}
+
+func genDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+	var primaryIdx *model.IndexInfo
+	for _, idx := range t.Indices {
+		if idx.Primary {
+			primaryIdx = idx
+			break
+		}
+	}
+	var data []byte
+	var err error
+	if primaryIdx != nil {
+		indexedValues := make([]types.Datum, len(primaryIdx.Columns))
+		for i := range indexedValues {
+			indexedValues[i] = r[primaryIdx.Columns[i].Offset]
+		}
+		data, err = codec.EncodeKey(nil, indexedValues...)
+		c.Assert(err, IsNil)
+		return data
+	}
+	colIDs := make([]int64, len(t.Columns))
+	for i, col := range t.Columns {
+		colIDs[i] = col.ID
+	}
+	data, err = tablecodec.EncodeRow(r, colIDs)
+	c.Assert(err, IsNil)
+	return data
 }
 
 func genRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface{}) {
