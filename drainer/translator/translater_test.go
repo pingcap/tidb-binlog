@@ -54,10 +54,10 @@ func (t *testTranslaterSuite) TestTranslater(c *C) {
 
 func testGenInsertSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{genTable(), genTableWithPK(), genTableWithID()}
+	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK(), testGenTableWithID()}
 	for _, table := range tables {
-		rowDatas, expected := genRowDatas(c, table.Columns)
-		binlog := genInsertBinlog(c, table, rowDatas)
+		rowDatas, expected := testGenRowDatas(c, table.Columns)
+		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
@@ -67,8 +67,8 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := genRowDatas(c, tables[0].Columns)
-	binlog := genInsertBinlog(c, tables[0], rowDatas)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	binlog := testGenInsertBinlog(c, tables[0], rowDatas)
 	_, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
@@ -77,14 +77,14 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{genTable(), genTableWithPK(), genTableWithID()}
+	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK(), testGenTableWithID()}
 	exceptedSqls := []string{"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? and SEX = ? limit 1;",
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? limit 1;",
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? limit 1;"}
 	exceptedNums := []int{6, 5, 4}
 	for index, t := range tables {
-		rowDatas, expected := genRowDatas(c, t.Columns)
-		binlog := genUpdateBinlog(c, t, rowDatas, rowDatas)
+		rowDatas, expected := testGenRowDatas(c, t.Columns)
+		binlog := testGenUpdateBinlog(c, t, rowDatas, rowDatas)
 		sqls, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
@@ -94,8 +94,8 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := genRowDatas(c, tables[0].Columns)
-	binlog := genUpdateBinlog(c, tables[0], rowDatas, rowDatas)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
 	_, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
@@ -104,14 +104,14 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{genTable(), genTableWithPK()}
+	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK()}
 	exceptedSqls := []string{"delete from t.account where ID = ? and NAME = ? and SEX = ? limit 1;",
 		"delete from t.account where ID = ? and NAME = ? limit 1;"}
 	exceptedNums := []int{3, 2}
 	op := []OpType{DelByCol, DelByPK}
 	for index, t := range tables {
-		rowDatas, expected := genRowDatas(c, t.Columns)
-		binlog := genDeleteBinlog(c, t, rowDatas)
+		rowDatas, expected := testGenRowDatas(c, t.Columns)
+		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, vals, err := s.GenDeleteSQLs(schema, t, op[index], [][]byte{binlog})
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
@@ -121,8 +121,8 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := genRowDatas(c, tables[0].Columns)
-	binlog := genDeleteBinlog(c, tables[0], rowDatas)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	binlog := testGenDeleteBinlog(c, tables[0], rowDatas)
 	_, _, err := s.GenDeleteSQLs(schema, tables[0], DelByCol, [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
@@ -131,12 +131,12 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 
 func testGenDeleteSQLsByID(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{genTableWithID()}
+	tables := []*model.TableInfo{testGenTableWithID()}
 	exceptedSqls := []string{"delete from t.account where ID = ? limit 1;"}
 	exceptedNums := []int{1}
 	for index, t := range tables {
-		rowDatas, expected := genRowDatas(c, t.Columns)
-		binlog := genDeleteBinlogByID(c, t, rowDatas)
+		rowDatas, expected := testGenRowDatas(c, t.Columns)
+		binlog := testGenDeleteBinlogByID(c, t, rowDatas)
 		sqls, vals, err := s.GenDeleteSQLsByID(schema, t, []int64{binlog})
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
@@ -157,10 +157,10 @@ func testGenDDLSQL(c *C, s SQLTranslator) {
 	c.Assert(sql, Equals, "use t; drop table t;")
 }
 
-func genInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	recordID := int64(11)
 	for _, col := range t.Columns {
-		if isPKHandleColumn(t, col) {
+		if testIsPKHandleColumn(t, col) {
 			recordID = r[col.Offset].GetInt64()
 			break
 		}
@@ -169,7 +169,7 @@ func genInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	colIDs := make([]int64, 0, len(r))
 	row := make([]types.Datum, 0, len(r))
 	for _, col := range t.Columns {
-		if isPKHandleColumn(t, col) {
+		if testIsPKHandleColumn(t, col) {
 			continue
 		}
 		colIDs = append(colIDs, col.ID)
@@ -184,7 +184,7 @@ func genInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	return bin
 }
 
-func genUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
+func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
 	colIDs := make([]int64, 0, len(t.Columns))
 	for _, col := range t.Columns {
 		colIDs = append(colIDs, col.ID)
@@ -197,7 +197,7 @@ func genUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []
 	hasPK := false
 	if t.PKIsHandle {
 		for _, col := range t.Columns {
-			if isPKHandleColumn(t, col) {
+			if testIsPKHandleColumn(t, col) {
 				hasPK = true
 				h = oldData[col.Offset].GetInt64()
 				break
@@ -226,12 +226,12 @@ func genUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []
 	return bin
 }
 
-func genDeleteBinlogByID(c *C, t *model.TableInfo, r []types.Datum) int64 {
+func testGenDeleteBinlogByID(c *C, t *model.TableInfo, r []types.Datum) int64 {
 	var h int64
 	var hasPK bool
 	if t.PKIsHandle {
 		for _, col := range t.Columns {
-			if isPKHandleColumn(t, col) {
+			if testIsPKHandleColumn(t, col) {
 				hasPK = true
 				h = r[col.Offset].GetInt64()
 				break
@@ -248,7 +248,7 @@ func genDeleteBinlogByID(c *C, t *model.TableInfo, r []types.Datum) int64 {
 	return 0
 }
 
-func genDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	var primaryIdx *model.IndexInfo
 	for _, idx := range t.Indices {
 		if idx.Primary {
@@ -276,11 +276,11 @@ func genDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	return data
 }
 
-func genRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface{}) {
+func testGenRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface{}) {
 	datas := make([]types.Datum, 3)
 	excepted := make([]interface{}, 3)
 	for index, col := range cols {
-		d, e := genDatum(c, col)
+		d, e := testGenDatum(c, col)
 		datas[index] = d
 		excepted[index] = e
 	}
@@ -288,7 +288,7 @@ func genRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface{}) 
 }
 
 // generate raw row data by column.Type
-func genDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
+func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 	var d types.Datum
 	var e interface{}
 	switch col.Tp {
@@ -354,7 +354,7 @@ func genDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 }
 
 // create table t(id int, name varchar(45), sex enum("male", "female"));
-func genTable() *model.TableInfo {
+func testGenTable() *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
@@ -408,7 +408,7 @@ func genTable() *model.TableInfo {
 }
 
 // create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
-func genTableWithPK() *model.TableInfo {
+func testGenTableWithPK() *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
@@ -468,7 +468,7 @@ func genTableWithPK() *model.TableInfo {
 }
 
 // create table t(id int primary key, name varchar(45), sex enum("male", "female"));
-func genTableWithID() *model.TableInfo {
+func testGenTableWithID() *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
@@ -522,6 +522,6 @@ func genTableWithID() *model.TableInfo {
 	return t
 }
 
-func isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
+func testIsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
 }
