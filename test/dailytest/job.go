@@ -163,5 +163,4 @@ func doProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, batch
 	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
 	doDDLProcess(table, dbs[0])
 	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
-
 }
