@@ -9,8 +9,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
-	"github.com/pingcap/tidb-binlog/test/diff"
 	"github.com/pingcap/tidb-binlog/test/util"
 )
 

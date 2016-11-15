@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump cistern drainer fmt
+.PHONY: build test check update clean pump cistern drainer fmt diff
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
@@ -44,6 +44,9 @@ cistern:
 
 drainer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go
+
+diff:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/diff cmd/diff/main.go
 
 install:
 	go install ./...
