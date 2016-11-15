@@ -48,6 +48,45 @@ func TestUpdateNodeInfo(t *testing.T) {
 	}
 }
 
+func TestUnregisterNode(t *testing.T) {
+	etcdclient, cluster := testSetup(t)
+	defer cluster.Terminate(t)
+
+	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+
+	nodeID := "test1"
+	host := "mytest"
+
+	err := r.RegisterNode(context.Background(), nodeID, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := r.Node(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if status.NodeID != nodeID || status.Host != host {
+		t.Fatalf("node info have error : %v", status)
+	}
+
+	host = "localhost:1234"
+	err = r.UnregisterNode(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exist, err := r.checkNodeExists(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if exist {
+		t.Fatal("fail to unregister node")
+	}
+}
+
 func TestRefreshNode(t *testing.T) {
 	etcdclient, cluster := testSetup(t)
 	defer cluster.Terminate(t)

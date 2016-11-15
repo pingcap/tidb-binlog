@@ -302,6 +302,10 @@ func (s *Server) startMetrics() {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
+	// unregister this node
+	if err := s.node.Unregister(s.ctx); err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
 	// notify other goroutines to exit
 	s.cancel()
 	// stop the gRPC server

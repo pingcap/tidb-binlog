@@ -90,6 +90,18 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, nodeID, host string) e
 
 }
 
+// UnregisterNode unregister the node in the etcd
+func (r *EtcdRegistry) UnregisterNode(pctx context.Context, nodeID string) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	key := r.prefixed(nodePrefix, nodeID)
+	if err := r.client.Delete(ctx, key, true); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func (r *EtcdRegistry) checkNodeExists(ctx context.Context, nodeID string) (bool, error) {
 	_, err := r.client.Get(ctx, r.prefixed(nodePrefix, nodeID, "object"))
 	if err != nil {

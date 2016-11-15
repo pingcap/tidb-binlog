@@ -173,6 +173,22 @@ func (e *Client) List(ctx context.Context, key string) (*Node, error) {
 	return root, nil
 }
 
+// Delete deletes the key/values with matching prefix or key
+func (e *Client) Delete(ctx context.Context, key string, withPrefix bool) error {
+	key = keyWithPrefix(e.rootPath, key)
+	var opts []clientv3.OpOption
+	if withPrefix {
+		opts = []clientv3.OpOption{clientv3.WithPrefix()}
+	}
+
+	_, err := e.client.KV.Delete(ctx, key, opts...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 func parseToDirTree(root *Node, path string) *Node {
 	pathDirs := strings.Split(path, "/")
 	current := root
