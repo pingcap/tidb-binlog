@@ -79,7 +79,7 @@ create table ntest(
 	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
 
 	// wait for sync to downstream sql server
-	time.Sleep(1 * time.Minute)
+	time.Sleep(2 * time.Minute)
 
 	// diff the test schema
 	if !checkSyncState(sourceDB, targetDB) {
@@ -90,7 +90,7 @@ create table ntest(
 	dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
 
 	// wait for sync to downstream sql server
-	time.Sleep(1 * time.Minute)
+	time.Sleep(2 * time.Minute)
 
 	// diff the test schema
 	if !checkSyncState(sourceDB, targetDB) {
