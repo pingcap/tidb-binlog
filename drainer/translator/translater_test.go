@@ -54,7 +54,7 @@ func (t *testTranslaterSuite) TestTranslater(c *C) {
 
 func testGenInsertSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK(), testGenTableWithID()}
+	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	for _, table := range tables {
 		rowDatas, expected := testGenRowDatas(c, table.Columns)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
@@ -77,7 +77,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK(), testGenTableWithID()}
+	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedSqls := []string{"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? and SEX = ? limit 1;",
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? limit 1;",
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? limit 1;"}
@@ -104,7 +104,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{testGenTable(), testGenTableWithPK()}
+	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK")}
 	exceptedSqls := []string{"delete from t.account where ID = ? and NAME = ? and SEX = ? limit 1;",
 		"delete from t.account where ID = ? and NAME = ? limit 1;"}
 	exceptedNums := []int{3, 2}
@@ -131,7 +131,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 
 func testGenDeleteSQLsByID(c *C, s SQLTranslator) {
 	schema := "t"
-	tables := []*model.TableInfo{testGenTableWithID()}
+	tables := []*model.TableInfo{testGenTable("hasID")}
 	exceptedSqls := []string{"delete from t.account where ID = ? limit 1;"}
 	exceptedNums := []int{1}
 	for index, t := range tables {
@@ -353,8 +353,10 @@ func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 	return d, e
 }
 
-// create table t(id int, name varchar(45), sex enum("male", "female"));
-func testGenTable() *model.TableInfo {
+// hasID: create table t(id int primary key, name varchar(45), sex enum("male", "female"));
+// hasPK: create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
+// normal: reate table t(id int, name varchar(45), sex enum("male", "female"));
+func testGenTable(tt string) *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
 
@@ -364,8 +366,8 @@ func testGenTable() *model.TableInfo {
 		Name:   model.NewCIStr("ID"),
 		Offset: 0,
 		FieldType: types.FieldType{
-			Tp:      0x3,
-			Flag:    128,
+			Tp:      mysql.TypeLong,
+			Flag:    mysql.BinaryFlag,
 			Flen:    11,
 			Decimal: -1,
 			Charset: "binary",
@@ -378,7 +380,7 @@ func testGenTable() *model.TableInfo {
 		Name:   model.NewCIStr("NAME"),
 		Offset: 1,
 		FieldType: types.FieldType{
-			Tp:      0xf,
+			Tp:      mysql.TypeVarchar,
 			Flag:    0,
 			Flen:    45,
 			Decimal: -1,
@@ -392,8 +394,8 @@ func testGenTable() *model.TableInfo {
 		Name:   model.NewCIStr("SEX"),
 		Offset: 2,
 		FieldType: types.FieldType{
-			Tp:      0xf7,
-			Flag:    128,
+			Tp:      mysql.TypeEnum,
+			Flag:    mysql.BinaryFlag,
 			Flen:    -1,
 			Decimal: -1,
 			Charset: "binary",
@@ -404,120 +406,20 @@ func testGenTable() *model.TableInfo {
 
 	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, sexCol}
 
-	return t
-}
+	switch tt {
+	case "hasPK":
+		index := &model.IndexInfo{
+			Primary: true,
+			Columns: []*model.IndexColumn{{Name: userIDCol.Name, Offset: 0, Length: -1}, {Name: userNameCol.Name, Offset: 1, Length: -1}},
+		}
+		t.Indices = []*model.IndexInfo{index}
+		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 
-// create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
-func testGenTableWithPK() *model.TableInfo {
-	t := &model.TableInfo{}
-	t.Name = model.NewCIStr("account")
-
-	// the hard values are from TiDB :-), so just ingore them
-	userIDCol := &model.ColumnInfo{
-		ID:     1,
-		Name:   model.NewCIStr("ID"),
-		Offset: 0,
-		FieldType: types.FieldType{
-			Tp:      0x3,
-			Flag:    4227,
-			Flen:    11,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-		},
+	case "hasID":
+		t.PKIsHandle = true
+		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
+		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
 	}
-
-	userNameCol := &model.ColumnInfo{
-		ID:     2,
-		Name:   model.NewCIStr("NAME"),
-		Offset: 1,
-		FieldType: types.FieldType{
-			Tp:      0xf,
-			Flag:    4099,
-			Flen:    45,
-			Decimal: -1,
-			Charset: "utf8",
-			Collate: "utf8_unicode_ci",
-		},
-	}
-
-	index := &model.IndexInfo{
-		Primary: true,
-		Columns: []*model.IndexColumn{{Name: userIDCol.Name, Offset: 0, Length: -1}, {Name: userNameCol.Name, Offset: 1, Length: -1}},
-	}
-	t.Indices = []*model.IndexInfo{index}
-
-	sexCol := &model.ColumnInfo{
-		ID:     3,
-		Name:   model.NewCIStr("SEX"),
-		Offset: 2,
-		FieldType: types.FieldType{
-			Tp:      0xf7,
-			Flag:    128,
-			Flen:    -1,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-			Elems:   []string{"male", "female"},
-		},
-	}
-
-	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, sexCol}
-
-	return t
-}
-
-// create table t(id int primary key, name varchar(45), sex enum("male", "female"));
-func testGenTableWithID() *model.TableInfo {
-	t := &model.TableInfo{}
-	t.Name = model.NewCIStr("account")
-
-	t.PKIsHandle = true
-	// the hard values are from TiDB :-), so just ingore them
-	userIDCol := &model.ColumnInfo{
-		ID:     1,
-		Name:   model.NewCIStr("ID"),
-		Offset: 0,
-		FieldType: types.FieldType{
-			Tp:      0x3,
-			Flag:    4227,
-			Flen:    11,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-		},
-	}
-
-	userNameCol := &model.ColumnInfo{
-		ID:     2,
-		Name:   model.NewCIStr("NAME"),
-		Offset: 1,
-		FieldType: types.FieldType{
-			Tp:      0xf,
-			Flag:    0,
-			Flen:    45,
-			Decimal: -1,
-			Charset: "utf8",
-			Collate: "utf8_unicode_ci",
-		},
-	}
-
-	sexCol := &model.ColumnInfo{
-		ID:     3,
-		Name:   model.NewCIStr("SEX"),
-		Offset: 2,
-		FieldType: types.FieldType{
-			Tp:      0xf7,
-			Flag:    128,
-			Flen:    -1,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-			Elems:   []string{"male", "female"},
-		},
-	}
-
-	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, sexCol}
 
 	return t
 }

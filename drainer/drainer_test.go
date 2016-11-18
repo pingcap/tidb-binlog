@@ -39,7 +39,7 @@ func (t *testDrainerSuite) TestNewDrainer(c *C) {
 
 func (t *testDrainerSuite) TestBatch(c *C) {
 	b := newBatch(true, false, 12)
-	b.addJob([]string{"select * from test"}, [][]interface{}{{}})
+	b.addJob([]string{"drop table test"}, [][]interface{}{{}})
 	c.Assert(b.sqls, HasLen, 1)
 	c.Assert(b.args, HasLen, 1)
 	c.Assert(b.commitTS, Equals, int64(12))
@@ -62,9 +62,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	// check not found job
 	_, sql, err := d.handleDDL(0)
 	c.Assert(sql, Equals, "")
-	if err == nil {
-		c.Fatal("should return not found job error")
-	}
+	c.Assert(err, NotNil, Commentf("should return not found job error"))
 
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobCancelled}
@@ -78,9 +76,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	d.jobs[job.ID] = job
 	_, sql, err = d.handleDDL(job.ID)
 	c.Assert(sql, Equals, "")
-	if err == nil {
-		c.Fatal("should return not found job.Query")
-	}
+	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
 	// db info
 	dbInfo := &model.DBInfo{
@@ -88,54 +84,19 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		Name:  dbName,
 		State: model.StatePublic,
 	}
-	// `createSchema` job
-	job = &model.Job{
-		ID:       3,
-		SchemaID: 2,
-		Type:     model.ActionCreateSchema,
-		Args:     []interface{}{123, dbInfo},
-		Query:    "create database Test",
-	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	_, ok := d.schema.SchemaByID(dbInfo.ID)
-	c.Assert(ok, IsTrue)
-
 	// ignoreDB info
 	ingnoreDBInfo := &model.DBInfo{
 		ID:    4,
 		Name:  ignoreDBName,
 		State: model.StatePublic,
 	}
-	// `createSchema` job
-	job = &model.Job{
-		ID:       5,
-		SchemaID: 4,
-		Type:     model.ActionCreateSchema,
-		Args:     []interface{}{123, ingnoreDBInfo},
-		Query:    "create database ignoreTest",
-	}
-	d.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
-	testDoDDLAndCheck(c, d, job, false, "", "")
-
-	// `createTable`
+	// table Info
 	tblInfo := &model.TableInfo{
 		ID:    6,
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	job = &model.Job{
-		ID:       7,
-		SchemaID: 2,
-		TableID:  6,
-		Type:     model.ActionCreateTable,
-		Args:     []interface{}{123, tblInfo},
-		Query:    "create table T(id int);",
-	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	_, ok = d.schema.TableByID(tblInfo.ID)
-	c.Assert(ok, IsTrue)
-
-	// `addColumn`
+	// column info
 	colInfo := &model.ColumnInfo{
 		ID:        8,
 		Name:      colName,
@@ -144,67 +105,76 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		State:     model.StatePublic,
 	}
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
-	job = &model.Job{
-		ID:       9,
-		SchemaID: 2,
-		TableID:  6,
-		Type:     model.ActionAddColumn,
-		Args:     []interface{}{123, tblInfo},
-		Query:    "alter table t add a varchar(45);",
-	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	tb, ok := d.schema.TableByID(tblInfo.ID)
-	c.Assert(ok, IsTrue)
-	c.Assert(tb.Columns, HasLen, 1)
 
-	// `truncate table`
-	tblInfo.ID = 10
-	job = &model.Job{
-		ID:       11,
-		SchemaID: 2,
-		TableID:  6,
-		Type:     model.ActionTruncateTable,
-		Args:     []interface{}{123, tblInfo},
-		Query:    "truncate table t;",
-	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	tb, ok = d.schema.TableByID(tblInfo.ID)
-	c.Assert(ok, IsTrue)
-	c.Assert(tb.Columns, HasLen, 1)
+	d.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
 
-	// `drop table`
-	job = &model.Job{
-		ID:       12,
-		SchemaID: 2,
-		TableID:  10,
-		Type:     model.ActionDropTable,
-		Query:    "drop table t;",
+	testCases := []struct {
+		name        string
+		jobID       int64
+		schemaID    int64
+		tableID     int64
+		jobType     model.ActionType
+		args        []interface{}
+		query       string
+		resultQuery string
+		schemaName  string
+	}{
+		{"createSchema", 3, 2, 0, model.ActionCreateSchema, []interface{}{123, dbInfo}, "create database Test", "create database Test", dbInfo.Name.L},
+		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, []interface{}{123, ingnoreDBInfo}, "create database ignoreTest", "", ""},
+		{"createTable", 7, 2, 6, model.ActionCreateTable, []interface{}{123, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L},
+		{"addColumn", 9, 2, 6, model.ActionAddColumn, []interface{}{123, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L},
+		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, []interface{}{123, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L},
+		{"dropTable", 12, 2, 10, model.ActionDropTable, []interface{}{}, "drop table t;", "drop table t;", dbInfo.Name.L},
+		{"dropSchema", 13, 2, 0, model.ActionDropSchema, []interface{}{}, "drop database test;", "drop database test;", dbInfo.Name.L},
 	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	_, ok = d.schema.TableByID(tblInfo.ID)
-	c.Assert(ok, IsFalse)
 
-	// `drop schema`
-	job = &model.Job{
-		ID:       13,
-		SchemaID: 2,
-		Type:     model.ActionDropSchema,
-		Query:    "drop database test;",
+	for _, testCase := range testCases {
+		// prepare for ddl
+		switch testCase.name {
+		case "addColumn":
+			tblInfo.Columns = []*model.ColumnInfo{colInfo}
+		case "truncateTable":
+			tblInfo.ID = 10
+		}
+
+		job = &model.Job{
+			ID:       testCase.jobID,
+			SchemaID: testCase.schemaID,
+			TableID:  testCase.tableID,
+			Type:     testCase.jobType,
+			Args:     testCase.args,
+			Query:    testCase.query,
+		}
+		testDoDDLAndCheck(c, d, job, false, testCase.resultQuery, testCase.schemaName)
+
+		// custom check after ddl
+		switch testCase.name {
+		case "createSchema":
+			_, ok := d.schema.SchemaByID(dbInfo.ID)
+			c.Assert(ok, IsTrue)
+		case "createTable":
+			_, ok := d.schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsTrue)
+		case "addColumn", "truncateTable":
+			tb, ok := d.schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsTrue)
+			c.Assert(tb.Columns, HasLen, 1)
+		case "dropTable":
+			_, ok := d.schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsFalse)
+		case "dropSchema":
+			_, ok := d.schema.SchemaByID(job.SchemaID)
+			c.Assert(ok, IsFalse)
+		}
+
 	}
-	testDoDDLAndCheck(c, d, job, false, job.Query, dbInfo.Name.L)
-	_, ok = d.schema.SchemaByID(job.SchemaID)
-	c.Assert(ok, IsFalse)
 }
 
 func testDoDDLAndCheck(c *C, d *Drainer, job *model.Job, isErr bool, sql string, schema string) {
-	jobs := testAppendJob(c, nil, job)
+	jobs := mustAppendJob(c, nil, job)
 	d.jobs[job.ID] = jobs[0]
 	schemaName, s, err := d.handleDDL(job.ID)
-	if isErr && err == nil {
-		c.Fatal("should return error")
-	} else if !isErr {
-		c.Assert(err, IsNil)
-	}
+	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, s)
 	c.Assert(schemaName, Equals, schema)
 }
