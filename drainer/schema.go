@@ -25,12 +25,11 @@ type tableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.reconstructSchema(jobs, ts, ignoreSchemaNames)
+	err := s.reconstructSchema(jobs, ignoreSchemaNames)
 	if err != nil {
-		log.Errorf("schema: sync schema at %d failed - %v", ts, err)
 		return nil, errors.Trace(err)
 	}
 
@@ -41,8 +40,8 @@ func NewSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{
 	return s, nil
 }
 
-// SyncTiDBSchema syncs the all schema infomations that at ts
-func (s *Schema) reconstructSchema(jobs []*model.Job, ts int64, ignoreSchemaNames map[string]struct{}) error {
+// reconstructSchema reconstruct the schema infomations by history jobs
+func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.tables = make(map[int64]*model.TableInfo)

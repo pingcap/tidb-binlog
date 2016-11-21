@@ -103,7 +103,7 @@ func (d *Drainer) Start() error {
 	}
 
 	// sync the schema at meta.Pos
-	d.schema, err = NewSchema(jobs, d.meta.Pos(), d.ignoreSchemaNames)
+	d.schema, err = NewSchema(jobs, d.ignoreSchemaNames)
 	if err != nil {
 		return errors.Trace(err)
 	}
