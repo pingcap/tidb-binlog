@@ -21,7 +21,7 @@ type testDrainerSuite struct{}
 func (t *testDrainerSuite) TestNewDrainer(c *C) {
 	args := []string{
 		"-metrics-addr", "127.0.0.1:9091",
-		"-config-file", "../cmd/drainer/config.toml",
+		"-config-file", "../cmd/drainer/drainer.toml",
 	}
 
 	cfg := NewConfig()
