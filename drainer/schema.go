@@ -40,7 +40,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 	return s, nil
 }
 
-// reconstructSchema syncs the all schema infomations that at ts
+// reconstructSchema reconstruct the schema infomations by history jobs
 func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
