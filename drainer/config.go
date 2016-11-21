@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -27,10 +28,11 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
 	fs.Int64Var(&cfg.InitCommitTS, "init-commit-ts", 0, "the position from which begin to sync and apply binlog.")
-	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
+	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
+	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
 
 	return cfg
 }
@@ -64,8 +66,6 @@ type CisternClientConfig struct {
 type Config struct {
 	*flag.FlagSet `json:"-"`
 
-	LogLevel string `toml:"log-level" json:"log-level"`
-
 	LogFile string `toml:"log-file" json:"log-file"`
 
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -90,7 +90,11 @@ type Config struct {
 
 	DestDBType string `toml:"db-type" json:"db-type"`
 
+	Debug bool
+
 	configFile string
+
+	printVersion bool
 }
 
 // Parse parses flag definitions from the argument list.
@@ -99,6 +103,15 @@ func (c *Config) Parse(arguments []string) error {
 	err := c.FlagSet.Parse(arguments)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if c.printVersion {
+		fmt.Printf("pump Version: %s\n", Version)
+		fmt.Printf("Git SHA: %s\n", GitSHA)
+		fmt.Printf("Build TS: %s\n", BuildTS)
+		fmt.Printf("Go Version: %s\n", runtime.Version())
+		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		os.Exit(0)
 	}
 
 	// Load config file if specified.

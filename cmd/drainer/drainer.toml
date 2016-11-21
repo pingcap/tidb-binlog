@@ -1,6 +1,6 @@
 # drainer Configuration.
 
-log-level = "info"
+debug = false
 
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 

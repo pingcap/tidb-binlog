@@ -36,7 +36,7 @@ type Config struct {
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string `toml:"data-dir" json:"data-dir"`
-	HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	GC                uint   `toml:"gc" json:"gc"`
 	LogFile           string `toml:"log-file" json:"log-file"`
 	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
@@ -66,7 +66,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
-	fs.UintVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
+	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.UintVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
 	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
@@ -126,7 +126,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustString(&cfg.Socket, defaultSocket)
-	adjustUint(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
 	return cfg.validate()
 }
@@ -142,7 +142,7 @@ func adjustString(v *string, defValue string) {
 	}
 }
 
-func adjustUint(v *uint, defValue uint) {
+func adjustInt(v *int, defValue int) {
 	if *v == 0 {
 		*v = defValue
 	}

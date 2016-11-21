@@ -30,19 +30,8 @@ func main() {
 		os.Exit(2)
 	}
 
-	log.SetLevelByString(cfg.LogLevel)
-
-	if len(cfg.LogFile) > 0 {
-		log.SetOutputByName(cfg.LogFile)
-		log.SetHighlighting(false)
-
-		if cfg.LogRotate == "hour" {
-			log.SetRotateByHour()
-		} else {
-			log.SetRotateByDay()
-		}
-	}
-
+	drainer.InitLogger(cfg)
+	drainer.PrintVersionInfo()
 	log.Infof("%v", cfg)
 
 	cisternClient := createCisternClient(cfg.CisternClient.Host, cfg.CisternClient.Port)
