@@ -27,7 +27,6 @@ LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.GitSHA=$(shell git rev-par
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.GitSHA=$(shell git rev-parse HEAD)"
 
-
 default: build buildsucc
 
 buildsucc:
