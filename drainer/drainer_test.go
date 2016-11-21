@@ -34,7 +34,6 @@ func (t *testDrainerSuite) TestNewDrainer(c *C) {
 	// test save point
 	d.savePoint(12)
 	c.Assert(d.meta.Pos(), Equals, int64(12))
-
 }
 
 func (t *testDrainerSuite) TestBatch(c *C) {
@@ -166,7 +165,6 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 			_, ok := d.schema.SchemaByID(job.SchemaID)
 			c.Assert(ok, IsFalse)
 		}
-
 	}
 }
 

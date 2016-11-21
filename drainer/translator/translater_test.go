@@ -353,9 +353,9 @@ func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 	return d, e
 }
 
-// hasID: create table t(id int primary key, name varchar(45), sex enum("male", "female"));
-// hasPK: create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
-// normal: reate table t(id int, name varchar(45), sex enum("male", "female"));
+// hasID:  create table t(id int primary key, name varchar(45), sex enum("male", "female"));
+// hasPK:  create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
+// normal: create table t(id int, name varchar(45), sex enum("male", "female"));
 func testGenTable(tt string) *model.TableInfo {
 	t := &model.TableInfo{}
 	t.Name = model.NewCIStr("account")
