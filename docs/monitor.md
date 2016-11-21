@@ -2,20 +2,6 @@
 
 这部分主要对 TiDB-Binlog 的状态、性能做监控，通过 Prometheus+Grafana 展现 metrics 数据，在下面一节会介绍如何搭建监控系统。
 
-### pump
-+ TiDB 写 binlog 的 RPC 请求处理时间，可以看到延迟和吞吐
-+ cistern 拉去 Binlog 的 RPC 处理时间，可以看到延迟和吞吐
-
-### cistern
-+ binlog 总数
-+ 窗口上下边界监控
-
-### drainer
-
-+ 各种类型 DML 总数
-+ DDL 总数
-+ 已同步到位置监控
-
 ## 使用 Prometheus+Grafana
 ### 搭建监控系统
 Prometheus Push Gateway
@@ -60,4 +46,7 @@ scrape_configs:
 
 + 导入 dashboard 配置文件
 
-  点击 Grafana Logo -> 点击 Data Sources -> 点击 Import -> 选择需要的 dashboard 配置文件上传 -> 选择对应的 data source
+  点击 Grafana Logo -> 点击 Data Sources -> 点击 Import -> 选择需要的 dashboard [配置文件][1]上传 -> 选择对应的 data source
+
+
+  [1]: https://github.com/pingcap/docs/tree/master/etc
