@@ -473,26 +473,6 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			continue
 		}
 
-		if len(mutation.GetInsertedRows()) > 0 {
-			sql, arg, err := d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
-			if err != nil {
-				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-			}
-
-			b.addJob(sql, arg)
-			d.addCount(translator.Insert, len(sql))
-		}
-
-		if len(mutation.GetUpdatedRows()) > 0 {
-			sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
-			if err != nil {
-				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-			}
-
-			b.addJob(sql, arg)
-			d.addCount(translator.Update, len(sql))
-		}
-
 		if len(mutation.GetDeletedIds()) > 0 {
 			sql, arg, err := d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
 			if err != nil {
@@ -521,6 +501,26 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 
 			b.addJob(sql, arg)
 			d.addCount(translator.Del, len(sql))
+		}
+
+		if len(mutation.GetInsertedRows()) > 0 {
+			sql, arg, err := d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
+			if err != nil {
+				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			b.addJob(sql, arg)
+			d.addCount(translator.Insert, len(sql))
+		}
+
+		if len(mutation.GetUpdatedRows()) > 0 {
+			sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			if err != nil {
+				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+			}
+
+			b.addJob(sql, arg)
+			d.addCount(translator.Update, len(sql))
 		}
 	}
 
