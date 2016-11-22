@@ -17,11 +17,14 @@ import (
 	"math"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/plan/statistics"
+	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util/types"
 )
 
@@ -38,16 +41,18 @@ const (
 // JoinConcurrency means the number of goroutines that participate in joining.
 var JoinConcurrency = 5
 
-func getRowCountByIndexRange(table *statistics.Table, indexRange *IndexRange, indexInfo *model.IndexInfo) (uint64, error) {
-	count := float64(table.Count)
-	for i := 0; i < len(indexRange.LowVal); i++ {
+func getRowCountByIndexRanges(table *statistics.Table, indexRanges []*IndexRange, indexInfo *model.IndexInfo) (uint64, error) {
+	totalCount := float64(0)
+	for _, indexRange := range indexRanges {
+		count := float64(table.Count)
+		i := len(indexRange.LowVal) - 1
 		l := indexRange.LowVal[i]
 		r := indexRange.HighVal[i]
 		var rowCount int64
 		var err error
 		offset := indexInfo.Columns[i].Offset
 		if l.Kind() == types.KindNull && r.Kind() == types.KindMaxValue {
-			break
+			return uint64(table.Count), nil
 		} else if l.Kind() == types.KindMinNotNull {
 			rowCount, err = table.Columns[offset].EqualRowCount(types.Datum{})
 			if r.Kind() == types.KindMaxValue {
@@ -74,8 +79,22 @@ func getRowCountByIndexRange(table *statistics.Table, indexRange *IndexRange, in
 			return 0, errors.Trace(err)
 		}
 		count = count / float64(table.Count) * float64(rowCount)
+		// If the condition is a = 1, b = 1, c = 1, d = 1, we think every a=1, b=1, c=1 only filtrate 1/100 data,
+		// so as to avoid collapsing too fast.
+		for j := 0; j < i; j++ {
+			count = count / float64(100)
+		}
+		totalCount += count
 	}
-	return uint64(count), nil
+	// To avoid the totalCount become too small.
+	if uint64(totalCount) < 1000 {
+		// We will not let the row count less than 1000 to avoid collapsing too fast in the future calculation.
+		totalCount = 1000.0
+	}
+	if totalCount > float64(table.Count) {
+		totalCount = float64(table.Count) / 3.0
+	}
+	return uint64(totalCount), nil
 }
 
 func getRowCountByTableRange(statsTbl *statistics.Table, ranges []TableRange, offset int) (uint64, error) {
@@ -137,11 +156,7 @@ func (p *DataSource) convert2TableScan(prop *requiredProperty) (*physicalPlanInf
 		}
 		ts.AccessCondition, newSel.Conditions = detachTableScanConditions(conds, table)
 		if client != nil {
-			var memDB bool
-			switch p.DBName.L {
-			case "information_schema", "performance_schema":
-				memDB = true
-			}
+			memDB := infoschema.IsMemoryDB(p.DBName.L)
 			if !memDB && client.SupportRequestType(kv.ReqTypeSelect, 0) {
 				ts.ConditionPBExpr, ts.conditions, newSel.Conditions = expressionsToPB(newSel.Conditions, client)
 			}
@@ -211,7 +226,6 @@ func (p *DataSource) convert2IndexScan(prop *requiredProperty, index *model.Inde
 	rowCount := uint64(statsTbl.Count)
 	resultPlan = is
 	if sel, ok := p.GetParentByIndex(0).(*Selection); ok {
-		rowCount = 0
 		newSel := *sel
 		conds := make([]expression.Expression, 0, len(sel.Conditions))
 		for _, cond := range sel.Conditions {
@@ -219,25 +233,21 @@ func (p *DataSource) convert2IndexScan(prop *requiredProperty, index *model.Inde
 		}
 		is.AccessCondition, newSel.Conditions = detachIndexScanConditions(conds, is)
 		if client != nil {
-			var memDB bool
-			switch p.DBName.L {
-			case "information_schema", "performance_schema":
-				memDB = true
-			}
+			memDB := infoschema.IsMemoryDB(p.DBName.L)
 			if !memDB && client.SupportRequestType(kv.ReqTypeIndex, 0) {
 				is.ConditionPBExpr, is.conditions, newSel.Conditions = expressionsToPB(newSel.Conditions, client)
 			}
 		}
 		err := buildIndexRange(is)
 		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		for _, idxRange := range is.Ranges {
-			cnt, err := getRowCountByIndexRange(statsTbl, idxRange, is.Index)
-			if err != nil {
+			if !terror.ErrorEqual(err, mysql.ErrTruncated) {
 				return nil, errors.Trace(err)
 			}
-			rowCount += cnt
+			log.Warn("truncate error in buildIndexRange")
+		}
+		rowCount, err = getRowCountByIndexRanges(statsTbl, is.Ranges, is.Index)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 		if len(newSel.Conditions) > 0 {
 			newSel.SetChildren(is)
@@ -372,6 +382,10 @@ func enforceProperty(prop *requiredProperty, info *physicalPlanInfo) *physicalPl
 }
 
 func sortCost(cnt uint64) float64 {
+	if cnt == 0 {
+		// If cnt is 0, the log(cnt) will be NAN.
+		return 0.0
+	}
 	return float64(cnt)*math.Log2(float64(cnt))*cpuFactor + memoryFactor*float64(cnt)
 }
 
@@ -521,6 +535,23 @@ func (p *Join) convert2PhysicalPlanLeft(prop *requiredProperty, innerJoin bool) 
 	return resultInfo, nil
 }
 
+// replaceColsInPropBySchema replaces the columns in original prop with the columns in schema.
+func replaceColsInPropBySchema(prop *requiredProperty, schema expression.Schema) *requiredProperty {
+	newProps := make([]*columnProp, 0, len(prop.props))
+	for _, p := range prop.props {
+		idx := schema.GetIndex(p.col)
+		if idx == -1 {
+			log.Errorf("Can't find column %s in schema", p.col)
+		}
+		newProps = append(newProps, &columnProp{col: schema[idx], desc: p.desc})
+	}
+	return &requiredProperty{
+		props:      newProps,
+		sortKeyLen: prop.sortKeyLen,
+		limit:      prop.limit,
+	}
+}
+
 // convert2PhysicalPlanRight converts the right join to *physicalPlanInfo.
 func (p *Join) convert2PhysicalPlanRight(prop *requiredProperty, innerJoin bool) (*physicalPlanInfo, error) {
 	lChild := p.GetChildByIndex(0).(LogicalPlan)
@@ -553,6 +584,8 @@ func (p *Join) convert2PhysicalPlanRight(prop *requiredProperty, innerJoin bool)
 	rProp := prop
 	if !allRight {
 		rProp = &requiredProperty{}
+	} else {
+		rProp = replaceColsInPropBySchema(rProp, rChild.GetSchema())
 	}
 	var rInfo *physicalPlanInfo
 	if innerJoin {
@@ -820,10 +853,11 @@ func (p *Selection) convert2PhysicalPlanPushOrder(prop *requiredProperty) (*phys
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if limit != nil {
+	if limit != nil && info.p != nil {
 		if np, ok := info.p.(physicalDistSQLPlan); ok {
 			np.addLimit(limit)
 			info.count = limit.Count
+			info.cost = np.calculateCost(info.count)
 		} else {
 			info = enforceProperty(&requiredProperty{limit: limit}, info)
 		}
@@ -994,7 +1028,7 @@ func (p *Apply) convert2PhysicalPlan(prop *requiredProperty) (*physicalPlanInfo,
 		return nil, errors.Trace(err)
 	}
 	np := &PhysicalApply{
-		OuterSchema: p.OuterSchema,
+		OuterSchema: p.corColsInCurPlan,
 		Checker:     p.Checker,
 		InnerPlan:   innerInfo.p,
 	}

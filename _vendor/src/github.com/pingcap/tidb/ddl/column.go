@@ -326,7 +326,7 @@ func (d *ddl) addTableColumn(t table.Table, columnInfo *model.ColumnInfo, reorgI
 }
 
 // backfillColumnInTxn deals with a part of backfilling column data in a Transaction.
-// This part of the column data rows is defaultSmallBatchSize.
+// This part of the column data rows is defaultSmallBatchCnt.
 func (d *ddl) backfillColumnInTxn(t table.Table, colID int64, handles []int64, colMap map[int64]*types.FieldType,
 	defaultVal types.Datum, txn kv.Transaction) (int64, error) {
 	nextHandle := handles[0]
@@ -391,8 +391,8 @@ func (d *ddl) backfillColumn(t table.Table, columnInfo *model.ColumnInfo, handle
 
 	var endIdx int
 	for len(handles) > 0 {
-		if len(handles) >= defaultSmallBatchSize {
-			endIdx = defaultSmallBatchSize
+		if len(handles) >= defaultSmallBatchCnt {
+			endIdx = defaultSmallBatchCnt
 		} else {
 			endIdx = len(handles)
 		}
@@ -415,5 +415,37 @@ func (d *ddl) backfillColumn(t table.Table, columnInfo *model.ColumnInfo, handle
 		handles = handles[endIdx:]
 	}
 
+	return nil
+}
+
+func (d *ddl) onModifyColumn(t *meta.Meta, job *model.Job) error {
+	tblInfo, err := d.getTableInfo(t, job)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	newCol := &model.ColumnInfo{}
+	err = job.DecodeArgs(newCol)
+	if err != nil {
+		job.State = model.JobCancelled
+		return errors.Trace(err)
+	}
+	oldCol := findCol(tblInfo.Columns, newCol.Name.L)
+	if oldCol == nil || oldCol.State != model.StatePublic {
+		job.State = model.JobCancelled
+		return infoschema.ErrColumnNotExists.Gen("column %s doesn't exist", newCol.Name)
+	}
+	*oldCol = *newCol
+	err = t.UpdateTable(job.SchemaID, tblInfo)
+	if err != nil {
+		job.State = model.JobCancelled
+		return errors.Trace(err)
+	}
+	ver, err := updateSchemaVersion(t, job)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	job.SchemaState = model.StatePublic
+	job.State = model.JobDone
+	addTableHistoryInfo(job, ver, tblInfo)
 	return nil
 }

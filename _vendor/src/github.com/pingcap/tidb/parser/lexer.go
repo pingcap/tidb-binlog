@@ -37,6 +37,9 @@ type Scanner struct {
 
 	errs         []error
 	stmtStartPos int
+
+	// for scanning such kind of comment: /*! MySQL-specific code */
+	specialComment *Scanner
 }
 
 // Errors returns the errors during a scan.
@@ -78,6 +81,9 @@ func (s *Scanner) Errorf(format string, a ...interface{}) {
 
 // Lex returns a token and store the token value in v.
 // Scanner satisfies yyLexer interface.
+// 0 and invalid are special token id this function would return:
+// return 0 tells parser that scanner meets EOF,
+// return invalid tells parser that scanner meets illegal character.
 func (s *Scanner) Lex(v *yySymType) int {
 	tok, pos, lit := s.scan()
 	v.offset = pos.Offset
@@ -96,11 +102,13 @@ func (s *Scanner) Lex(v *yySymType) int {
 		return toInt(s, v, lit)
 	case floatLit:
 		return toFloat(s, v, lit)
+	case decLit:
+		return toDecimal(s, v, lit)
 	case hexLit:
 		return toHex(s, v, lit)
 	case bitLit:
 		return toBit(s, v, lit)
-	case userVar, sysVar, database, currentUser, replace, cast, sysDate, currentTs, currentTime, currentDate, curDate, utcDate, extract, repeat, secondMicrosecond, minuteMicrosecond, minuteSecond, hourMicrosecond, hourMinute, hourSecond, dayMicrosecond, dayMinute, daySecond, dayHour, yearMonth, ifKwd, left, convert:
+	case userVar, sysVar, cast, sysDate, curDate, extract:
 		v.item = lit
 		return tok
 	case null:
@@ -124,13 +132,33 @@ func (s *Scanner) skipWhitespace() rune {
 }
 
 func (s *Scanner) scan() (tok int, pos Pos, lit string) {
+	if s.specialComment != nil {
+		// enter specialComment scan mode.
+		// for scanning such kind of comment: /*! MySQL-specific code */
+		specialComment := s.specialComment
+		tok, pos, lit = specialComment.scan()
+		if tok != 0 {
+			// return the specialComment scan result as the result
+			pos.Line += s.r.p.Line
+			pos.Offset += s.r.p.Col
+			return
+		}
+		// leave specialComment scan mode after all stream consumed.
+		s.specialComment = nil
+	}
+
 	ch0 := s.r.peek()
 	if unicode.IsSpace(ch0) {
 		ch0 = s.skipWhitespace()
 	}
 	pos = s.r.pos()
+	if s.r.eof() {
+		// when scanner meets EOF, the returned token should be 0,
+		// because 0 is a special token id to remind the parser that stream is end.
+		return 0, pos, ""
+	}
 
-	if ch0 != unicode.ReplacementChar && isIdentExtend(ch0) {
+	if !s.r.eof() && isIdentExtend(ch0) {
 		return scanIdentifier(s)
 	}
 
@@ -228,6 +256,15 @@ func startWithSlash(s *Scanner) (tok int, pos Pos, lit string) {
 				break
 			}
 		}
+
+		// See http://dev.mysql.com/doc/refman/5.7/en/comments.html
+		// Convert "/*!VersionNumber MySQL-specific-code */" to "MySQL-specific-code".
+		comment := s.r.data(&pos)
+		if strings.HasPrefix(comment, "/*!") {
+			sql := specCodePattern.ReplaceAllStringFunc(comment, trimComment)
+			s.specialComment = NewScanner(sql)
+		}
+
 		return s.scan()
 	}
 	tok = int('/')
@@ -445,7 +482,7 @@ func startWithNumber(s *Scanner) (tok int, pos Pos, lit string) {
 	}
 
 	// Identifiers may begin with a digit but unless quoted may not consist solely of digits.
-	if ch0 != unicode.ReplacementChar && isIdentChar(ch0) {
+	if !s.r.eof() && isIdentChar(ch0) {
 		s.r.incAsLongAs(isIdentChar)
 		return identifier, pos, s.r.data(&pos)
 	}
@@ -485,9 +522,16 @@ func (s *Scanner) scanFloat(beg *Pos) (tok int, pos Pos, lit string) {
 	}
 	if ch0 == 'e' || ch0 == 'E' {
 		s.r.inc()
+		ch0 = s.r.peek()
+		if ch0 == '-' || ch0 == '+' {
+			s.r.inc()
+		}
 		s.scanDigits()
+		tok = floatLit
+	} else {
+		tok = decLit
 	}
-	tok, pos, lit = floatLit, *beg, s.r.data(beg)
+	pos, lit = *beg, s.r.data(beg)
 	return
 }
 
@@ -509,6 +553,9 @@ func (r *reader) eof() bool {
 	return r.p.Offset >= len(r.s)
 }
 
+// peek() peeks a rune from underlying reader.
+// if reader meets EOF, it will return unicode.ReplacementChar. to distinguish from
+// the real unicode.ReplacementChar, the caller should call r.eof() again to check.
 func (r *reader) peek() rune {
 	if r.eof() {
 		return unicode.ReplacementChar
@@ -516,7 +563,8 @@ func (r *reader) peek() rune {
 	v, w := rune(r.s[r.p.Offset]), 1
 	switch {
 	case v == 0:
-		return unicode.ReplacementChar
+		r.w = w
+		return v // illegal UTF-8 encoding
 	case v >= 0x80:
 		v, w = utf8.DecodeRuneInString(r.s[r.p.Offset:])
 		if v == utf8.RuneError && w == 1 {

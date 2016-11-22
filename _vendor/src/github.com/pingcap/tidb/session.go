@@ -268,6 +268,8 @@ func (s *session) String() string {
 	return string(b)
 }
 
+const sqlLogMaxLen = 1024
+
 func (s *session) Retry() error {
 	variable.GetSessionVars(s).RetryInfo.Retrying = true
 	nh := s.history.clone()
@@ -300,7 +302,11 @@ func (s *session) Retry() error {
 		variable.GetSessionVars(s).RetryInfo.ResetOffset()
 		for _, sr := range nh.history {
 			st := sr.st
-			log.Warnf("Retry %s", st.OriginText())
+			txt := st.OriginText()
+			if len(txt) > sqlLogMaxLen {
+				txt = txt[:sqlLogMaxLen]
+			}
+			log.Warnf("Retry %s (len:%d)", txt, len(st.OriginText()))
 			_, err = runStmt(s, st)
 			if err != nil {
 				if kv.IsRetryableError(err) {
@@ -339,7 +345,7 @@ func (s *session) ExecRestrictedSQL(ctx context.Context, sql string) (ast.Record
 	}
 	if len(rawStmts) != 1 {
 		log.Errorf("ExecRestrictedSQL only executes one statement. Too many/few statement in %s", sql)
-		return nil, errors.New("Wrong number of statement.")
+		return nil, errors.New("wrong number of statement")
 	}
 	st, err := Compile(s, rawStmts[0])
 	if err != nil {
@@ -489,7 +495,7 @@ func (s *session) PrepareStmt(sql string) (stmtID uint32, paramCount int, fields
 		SQLText: sql,
 	}
 	prepareExec.DoPrepare()
-	return prepareExec.ID, prepareExec.ParamCount, prepareExec.ResultFields, prepareExec.Err
+	return prepareExec.ID, prepareExec.ParamCount, nil, prepareExec.Err
 }
 
 // checkArgs makes sure all the arguments' types are known and can be handled.
@@ -828,7 +834,9 @@ func (s *session) loadCommonGlobalVariablesIfNeeded() error {
 			break
 		}
 		varName := row.Data[0].GetString()
-		vars.SetSystemVar(varName, row.Data[1])
+		if d := vars.GetSystemVar(varName); d.IsNull() {
+			vars.SetSystemVar(varName, row.Data[1])
+		}
 	}
 	vars.CommonGlobalLoaded = true
 	return nil
