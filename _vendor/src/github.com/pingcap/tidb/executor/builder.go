@@ -15,6 +15,7 @@ package executor
 
 import (
 	"math"
+	"strings"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
@@ -23,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/parser/opcode"
 	"github.com/pingcap/tidb/plan"
 	"github.com/pingcap/tidb/sessionctx/autocommit"
 	"github.com/pingcap/tidb/sessionctx/variable"
@@ -64,9 +64,6 @@ func (b *executorBuilder) build(p plan.Plan) Executor {
 		return b.buildExecute(v)
 	case *plan.Explain:
 		return b.buildExplain(v)
-	case *plan.Filter:
-		src := b.build(v.GetChildByIndex(0))
-		return b.buildFilter(src, v.Conditions)
 	case *plan.Insert:
 		return b.buildInsert(v)
 	case *plan.LoadData:
@@ -123,21 +120,10 @@ func (b *executorBuilder) build(p plan.Plan) Executor {
 	}
 }
 
-func (b *executorBuilder) buildFilter(src Executor, conditions []ast.ExprNode) Executor {
-	if len(conditions) == 0 {
-		return src
-	}
-	return &FilterExec{
-		Src:       src,
-		Condition: b.joinConditions(conditions),
-		ctx:       b.ctx,
-	}
-}
-
 func (b *executorBuilder) buildShowDDL(v *plan.ShowDDL) Executor {
 	return &ShowDDLExec{
-		fields: v.Fields(),
 		ctx:    b.ctx,
+		schema: v.GetSchema(),
 	}
 }
 
@@ -153,22 +139,6 @@ func (b *executorBuilder) buildDeallocate(v *plan.Deallocate) Executor {
 		ctx:  b.ctx,
 		Name: v.Name,
 	}
-}
-
-func (b *executorBuilder) joinConditions(conditions []ast.ExprNode) ast.ExprNode {
-	if len(conditions) == 0 {
-		return nil
-	}
-	if len(conditions) == 1 {
-		return conditions[0]
-	}
-	condition := &ast.BinaryOperationExpr{
-		Op: opcode.AndAnd,
-		L:  conditions[0],
-		R:  b.joinConditions(conditions[1:]),
-	}
-	ast.MergeChildrenFlags(condition, condition.L, condition.R)
-	return condition
 }
 
 func (b *executorBuilder) buildSelectLock(v *plan.SelectLock) Executor {
@@ -235,7 +205,7 @@ func (b *executorBuilder) buildShow(v *plan.Show) Executor {
 		GlobalScope: v.GlobalScope,
 		ctx:         b.ctx,
 		is:          b.is,
-		fields:      v.Fields(),
+		schema:      v.GetSchema(),
 	}
 	if e.Tp == ast.ShowGrants && len(e.User) == 0 {
 		e.User = variable.GetSessionVars(e.ctx).User
@@ -521,11 +491,7 @@ func (b *executorBuilder) buildTableScan(v *plan.PhysicalTableScan) Executor {
 	}
 	table, _ := b.is.TableByID(v.Table.ID)
 	client := b.ctx.GetClient()
-	var memDB bool
-	switch v.DBName.L {
-	case "information_schema", "performance_schema":
-		memDB = true
-	}
+	memDB := infoschema.IsMemoryDB(v.DBName.L)
 	supportDesc := client.SupportRequestType(kv.ReqTypeSelect, kv.ReqSubTypeDesc)
 	if !memDB && client.SupportRequestType(kv.ReqTypeSelect, 0) {
 		st := &XSelectTableExec{
@@ -553,13 +519,14 @@ func (b *executorBuilder) buildTableScan(v *plan.PhysicalTableScan) Executor {
 	}
 
 	ts := &TableScanExec{
-		t:          table,
-		asName:     v.TableAsName,
-		ctx:        b.ctx,
-		columns:    v.Columns,
-		schema:     v.GetSchema(),
-		seekHandle: math.MinInt64,
-		ranges:     v.Ranges,
+		t:            table,
+		asName:       v.TableAsName,
+		ctx:          b.ctx,
+		columns:      v.Columns,
+		schema:       v.GetSchema(),
+		seekHandle:   math.MinInt64,
+		ranges:       v.Ranges,
+		isInfoSchema: strings.EqualFold(v.DBName.L, infoschema.Name),
 	}
 	if v.Desc {
 		return &ReverseExec{Src: ts}
@@ -574,11 +541,7 @@ func (b *executorBuilder) buildIndexScan(v *plan.PhysicalIndexScan) Executor {
 	}
 	table, _ := b.is.TableByID(v.Table.ID)
 	client := b.ctx.GetClient()
-	var memDB bool
-	switch v.DBName.L {
-	case "information_schema", "performance_schema":
-		memDB = true
-	}
+	memDB := infoschema.IsMemoryDB(v.DBName.L)
 	supportDesc := client.SupportRequestType(kv.ReqTypeIndex, kv.ReqSubTypeDesc)
 	if !memDB && client.SupportRequestType(kv.ReqTypeIndex, 0) {
 		st := &XSelectIndexExec{
@@ -599,7 +562,7 @@ func (b *executorBuilder) buildIndexScan(v *plan.PhysicalIndexScan) Executor {
 		st.scanConcurrency, b.err = getScanConcurrency(b.ctx)
 		return st
 	}
-	b.err = errors.New("Not implement yet.")
+	b.err = errors.New("not implement yet")
 	return nil
 }
 
@@ -667,7 +630,6 @@ func (b *executorBuilder) buildTrim(v *plan.Trim) Executor {
 func (b *executorBuilder) buildUnion(v *plan.Union) Executor {
 	e := &UnionExec{
 		schema: v.GetSchema(),
-		fields: v.Fields(),
 		Srcs:   make([]Executor, len(v.GetChildren())),
 	}
 	for i, sel := range v.GetChildren() {

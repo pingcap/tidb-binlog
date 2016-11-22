@@ -11,18 +11,6 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
-// OpType is defined for operation type
-type OpType byte
-
-const (
-	// Insert is the constant defined for insert OpType
-	Insert OpType = iota + 1
-	// Update is the constant defined for update OpType
-	Update
-	// Del is the constant defined for delete OpType
-	Del
-)
-
 func addJobs(jobCount int, jobChan chan struct{}) {
 	for i := 0; i < jobCount; i++ {
 		jobChan <- struct{}{}
@@ -31,19 +19,31 @@ func addJobs(jobCount int, jobChan chan struct{}) {
 	close(jobChan)
 }
 
-func doSqls(table *table, db *sql.DB, count int, op OpType) {
+func doSqls(table *table, db *sql.DB, count int) {
 	var sqls []string
 	var args [][]interface{}
 	var err error
 
-	switch op {
-	case Insert:
-		sqls, args, err = genInsertSqls(table, count)
-	case Update:
-		sqls, args, err = genUpdateSqls(table, db, count)
-	case Del:
-		sqls, args, err = genDeleteSqls(table, db, count)
+	sql, arg, err := genDeleteSqls(table, db, count)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
 	}
+	sqls = append(sqls, sql...)
+	args = append(args, arg...)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
+
+	sql, arg, err = genInsertSqls(table, count/10)
+	sqls = append(sqls, sql...)
+	args = append(args, arg...)
+	if err != nil {
+		log.Fatal(errors.ErrorStack(err))
+	}
+
+	sql, arg, err = genUpdateSqls(table, db, count/10)
+	sqls = append(sqls, sql...)
+	args = append(args, arg...)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
@@ -72,22 +72,16 @@ func execSqls(db *sql.DB, sqls []string, args [][]interface{}) {
 
 func doJob(table *table, db *sql.DB, batch int, jobChan chan struct{}, doneChan chan struct{}) {
 	count := 0
-	modifyCount := batch / 10
 	for range jobChan {
 		count++
 		if count == batch {
-			doSqls(table, db, count, Insert)
-			doSqls(table, db, modifyCount, Update)
-			doSqls(table, db, modifyCount, Del)
+			doSqls(table, db, count)
 			count = 0
 		}
 	}
 
 	if count > 0 {
-		modifyCount = count / 10
-		doSqls(table, db, count, Insert)
-		doSqls(table, db, modifyCount, Update)
-		doSqls(table, db, modifyCount, Del)
+		doSqls(table, db, count)
 		count = 0
 	}
 

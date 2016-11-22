@@ -46,7 +46,7 @@ type ShowExec struct {
 	// Used by show variables
 	GlobalScope bool
 
-	fields []*ast.ResultField
+	schema expression.Schema
 	ctx    context.Context
 	is     infoschema.InfoSchema
 
@@ -57,12 +57,7 @@ type ShowExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *ShowExec) Schema() expression.Schema {
-	return nil
-}
-
-// Fields implements the Executor Fields interface.
-func (e *ShowExec) Fields() []*ast.ResultField {
-	return e.fields
+	return e.schema
 }
 
 // Next implements Execution Next interface.
@@ -77,9 +72,6 @@ func (e *ShowExec) Next() (*Row, error) {
 		return nil, nil
 	}
 	row := e.rows[e.cursor]
-	for i, field := range e.fields {
-		field.Expr.SetValue(row.Data[i].GetValue())
-	}
 	e.cursor++
 	return row, nil
 }
@@ -175,16 +167,13 @@ func (e *ShowExec) fetchShowTableStatus() error {
 	}
 
 	// sort for tables
-	var tableNames []string
-	for _, v := range e.is.SchemaTables(e.DBName) {
-		tableNames = append(tableNames, v.Meta().Name.O)
-	}
-	sort.Strings(tableNames)
+	tables := e.is.SchemaTables(e.DBName)
+	sort.Sort(table.Slice(tables))
 
-	for _, v := range tableNames {
+	for _, t := range tables {
 		now := mysql.CurrentTime(mysql.TypeDatetime)
-		data := types.MakeDatums(v, "InnoDB", "10", "Compact", 100, 100, 100, 100, 100, 100, 100,
-			now, now, now, "utf8_general_ci", "", "", "")
+		data := types.MakeDatums(t.Meta().Name.O, "InnoDB", "10", "Compact", 100, 100, 100, 100, 100, 100, 100,
+			now, now, now, "utf8_general_ci", "", "", t.Meta().Comment)
 		e.rows = append(e.rows, &Row{Data: data})
 	}
 	return nil
@@ -537,7 +526,7 @@ func (e *ShowExec) fetchShowGrants() error {
 	// Get checker
 	checker := privilege.GetPrivilegeChecker(e.ctx)
 	if checker == nil {
-		return errors.New("Miss privilege checker!")
+		return errors.New("miss privilege checker")
 	}
 	gs, err := checker.ShowGrants(e.ctx, e.User)
 	if err != nil {

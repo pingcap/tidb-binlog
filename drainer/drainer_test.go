@@ -38,7 +38,7 @@ func (t *testDrainerSuite) TestNewDrainer(c *C) {
 
 func (t *testDrainerSuite) TestBatch(c *C) {
 	b := newBatch(true, false, 12)
-	b.addJob([]string{"drop table test"}, [][]interface{}{{}})
+	b.addJob("drop table test", []interface{}{})
 	c.Assert(b.sqls, HasLen, 1)
 	c.Assert(b.args, HasLen, 1)
 	c.Assert(b.commitTS, Equals, int64(12))

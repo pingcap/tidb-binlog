@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
@@ -72,10 +71,6 @@ const (
 // It is created from ast.Node first, then optimized by the optimizer,
 // finally used by the executor to create a Cursor which executes the statement.
 type Plan interface {
-	// Fields returns the result fields of the plan.
-	Fields() []*ast.ResultField
-	// SetFields sets the results fields of the plan.
-	SetFields(fields []*ast.ResultField)
 	// AddParent means appending a parent for plan.
 	AddParent(parent Plan)
 	// AddChild means appending a child for plan.
@@ -152,7 +147,7 @@ type LogicalPlan interface {
 	// This function returns a column slice representing columns from the outer environment and an error.
 	// We need to return the outer columns, because the Apply plan will prune the inner Planner and it will know
 	// the exact number of columns referenced by the inner plan.
-	PruneColumnsAndResolveIndices([]*expression.Column) ([]*expression.Column, error)
+	PruneColumnsAndResolveIndices([]*expression.Column) ([]*expression.CorrelatedColumn, error)
 
 	// convert2PhysicalPlan converts the logical plan to the physical plan.
 	// It is called recursively from the parent to the children to create the result physical plan.
@@ -184,7 +179,7 @@ type PhysicalPlan interface {
 type baseLogicalPlan struct {
 	basePlan
 	planMap map[string]*physicalPlanInfo
-	self    Plan
+	self    LogicalPlan
 }
 
 func (p *baseLogicalPlan) getPlanInfo(prop *requiredProperty) (*physicalPlanInfo, error) {
@@ -238,7 +233,7 @@ func newBaseLogicalPlan(tp string, a *idAllocator) baseLogicalPlan {
 // PredicatePushDown implements LogicalPlan PredicatePushDown interface.
 func (p *baseLogicalPlan) PredicatePushDown(predicates []expression.Expression) ([]expression.Expression, LogicalPlan, error) {
 	if len(p.GetChildren()) == 0 {
-		return predicates, nil, nil
+		return predicates, p.self, nil
 	}
 	child := p.GetChildByIndex(0).(LogicalPlan)
 	rest, _, err := child.PredicatePushDown(predicates)
@@ -251,11 +246,15 @@ func (p *baseLogicalPlan) PredicatePushDown(predicates []expression.Expression) 
 			return nil, nil, errors.Trace(err)
 		}
 	}
-	return nil, nil, nil
+	return nil, p.self, nil
 }
 
 // PruneColumnsAndResolveIndices implements LogicalPlan PruneColumnsAndResolveIndices interface.
-func (p *baseLogicalPlan) PruneColumnsAndResolveIndices(parentUsedCols []*expression.Column) ([]*expression.Column, error) {
+func (p *baseLogicalPlan) PruneColumnsAndResolveIndices(parentUsedCols []*expression.Column) ([]*expression.CorrelatedColumn, error) {
+	if len(p.children) == 0 {
+		p.schema.InitIndices()
+		return nil, nil
+	}
 	outer, err := p.GetChildByIndex(0).(LogicalPlan).PruneColumnsAndResolveIndices(parentUsedCols)
 	p.SetSchema(p.GetChildByIndex(0).GetSchema())
 	return outer, errors.Trace(err)
@@ -268,7 +267,6 @@ func (p *basePlan) initID() {
 // basePlan implements base Plan interface.
 // Should be used as embedded struct in Plan implementations.
 type basePlan struct {
-	fields     []*ast.ResultField
 	correlated bool
 
 	parents  []Plan
@@ -310,16 +308,6 @@ func (p *basePlan) SetSchema(schema expression.Schema) {
 // GetSchema implements Plan GetSchema interface.
 func (p *basePlan) GetSchema() expression.Schema {
 	return p.schema
-}
-
-// Fields implements Plan Fields interface.
-func (p *basePlan) Fields() []*ast.ResultField {
-	return p.fields
-}
-
-// SetFields implements Plan SetFields interface.
-func (p *basePlan) SetFields(fields []*ast.ResultField) {
-	p.fields = fields
 }
 
 // AddParent implements Plan AddParent interface.

@@ -348,9 +348,9 @@ func newBatch(isDDL, retry bool, commitTS int64) *batch {
 	}
 }
 
-func (b *batch) addJob(sqls []string, args [][]interface{}) {
-	b.sqls = append(b.sqls, sqls...)
-	b.args = append(b.args, args...)
+func (b *batch) addJob(sql string, arg []interface{}) {
+	b.sqls = append(b.sqls, sql)
+	b.args = append(b.args, arg)
 }
 
 func (b *batch) applyBatch(db *sql.DB) error {
@@ -445,7 +445,7 @@ func (d *Drainer) run() error {
 				d.addCount(translator.DDL, 1)
 
 				b := newBatch(true, false, commitTS)
-				b.addJob([]string{sql}, [][]interface{}{{}})
+				b.addJob(sql, []interface{}{})
 
 				err = b.applyBatch(d.toDB)
 				if err != nil {
@@ -473,54 +473,82 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			continue
 		}
 
+		var (
+			err error
+
+			// the restored sqls, 0 => insert, 1 => update, 2 => deleteByIds, 3 => deleteByPks, 4 => deleteByRows
+			sqls = make([][]string, 5)
+
+			// the restored sqls's args, ditto
+			args = make([][][]interface{}, 5)
+
+			// the offset of specified type sql
+			offsets = make([]int, 5)
+
+			// the binlog dml sort
+			sequences = mutation.GetSequence()
+		)
+
 		if len(mutation.GetInsertedRows()) > 0 {
-			sql, arg, err := d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
+			sqls[0], args[0], err = d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			b.addJob(sql, arg)
-			d.addCount(translator.Insert, len(sql))
+			d.addCount(translator.Insert, len(sqls[0]))
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sql, arg, err := d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			sqls[1], args[1], err = d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			b.addJob(sql, arg)
-			d.addCount(translator.Update, len(sql))
+			d.addCount(translator.Update, len(sqls[1]))
 		}
 
 		if len(mutation.GetDeletedIds()) > 0 {
-			sql, arg, err := d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
+			sqls[2], args[2], err = d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			b.addJob(sql, arg)
-			d.addCount(translator.Del, len(sql))
+			d.addCount(translator.Del, len(sqls[2]))
 		}
 
 		if len(mutation.GetDeletedPks()) > 0 {
-			sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
+			sqls[3], args[3], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			b.addJob(sql, arg)
-			d.addCount(translator.Del, len(sql))
+			d.addCount(translator.Del, len(sqls[3]))
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			sql, arg, err := d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
+			sqls[4], args[4], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 
-			b.addJob(sql, arg)
-			d.addCount(translator.Del, len(sql))
+			d.addCount(translator.Del, len(sqls[4]))
+		}
+
+		for _, dmlType := range sequences {
+			index := int32(dmlType)
+			if offsets[index] > len(sqls[index]) {
+				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
+			}
+
+			b.addJob(sqls[index][offsets[index]], args[index][offsets[index]])
+			offsets[index] = offsets[index] + 1
+		}
+
+		// Compatible with the old format that don't have sequence, will be remove in the futhure
+		for i := 0; i < 5; i++ {
+			for j := offsets[i]; j < len(sqls[i]); j++ {
+				b.addJob(sqls[i][j], args[i][j])
+			}
 		}
 	}
 
