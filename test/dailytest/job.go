@@ -24,7 +24,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 	var args [][]interface{}
 	var err error
 
-	sql, arg, err := genDeleteSqls(table, db, count)
+	sql, arg, err := genDeleteSqls(table, db, count/10)
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}
@@ -34,7 +34,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 		log.Fatal(errors.ErrorStack(err))
 	}
 
-	sql, arg, err = genInsertSqls(table, count/10)
+	sql, arg, err = genInsertSqls(table, count)
 	sqls = append(sqls, sql...)
 	args = append(args, arg...)
 	if err != nil {
