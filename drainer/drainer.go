@@ -536,7 +536,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 
 		for _, dmlType := range sequences {
 			index := int32(dmlType)
-			if offsets[index] > len(sqls[index]) {
+			if offsets[index] >= len(sqls[index]) {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
 			}
 
