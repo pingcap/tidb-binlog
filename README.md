@@ -1,12 +1,24 @@
 ## TiDB-Binlog
 
-A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binlog for real-time data backup and synchronization.
+A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binlog, with features:
 
+* *Data replication*: synchronize datas from TiDB cluster to heterogeneous databases.
+* *Real-time backup & recovery*: backup TiDB cluster into dump file and can be used for recovery.
+* *Multiple output format*: support mysql, dump file, etc.
+* *history replay*: replay from any history point.
+
+## Documentation
+
++ [简体中文](./docs/doc-cn.md)
+
+## Architecture
+
+![architecture](./docs/architecture.jpeg)
 
 ## How to build
 
 ```
-make build   # build all tools
+make build   # build all compoents
 
 make pump    # build pump
 
