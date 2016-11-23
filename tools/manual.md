@@ -36,7 +36,8 @@ mv mydumper-linux-amd64/conf/* binlog-latest-linux-amd64/conf/
 | -F, --chunk-filesize|  把 table 分割成指定大小文件分别储存，单位为 MB (建议大小 64)|
 
 ## 数据恢复
- 1. 配置 drainer 启动参数, 在配置文件(./conf/drainer.toml)中修改
+ 1. 启动 TIDB 集群／mysql, 注意必须为空的全新集群
+ 2. 配置 drainer 启动参数, 在配置文件(./conf/drainer.toml)中修改
   
 | 参数名         |  说明     |
 | --------       | -----:    |
@@ -50,7 +51,7 @@ mv mydumper-linux-amd64/conf/* binlog-latest-linux-amd64/conf/
 | ignore-schemas| 需要过滤掉的 databases|
 | log-file    | drainer log 存放目录 |
 | metrics-addr| prometheus 接口地址|
- 2. 运行 ./tools/recovery.sh 进行集群恢复/同步, 命令行参数如下：
+ 3. 运行 ./tools/recovery.sh 进行集群恢复/同步, 命令行参数如下：
  
 | 参数名         |  说明     |
 | --------       | -----:    |
