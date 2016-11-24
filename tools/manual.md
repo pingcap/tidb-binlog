@@ -1,10 +1,14 @@
 # TiDB 集群备份和恢复操作手册
 
 ## 概述
-利用 binlog/tools/checkpoint.sh 可以全量备份 TiDB 集群某个时间点数据。
-配合 binlog/tools/recovery.sh 实现集群数据恢复。
+tools/checkpoint.sh 利用 TiDB-Binlog + mydumper 实现全量备份 TiDB 集群某个时间点数据。
 
-## 前置安装
+tools/recovery.sh 利用 TiDB-Binlog + myloader 实现数据的恢复， 并且支持同步模式。
+* 恢复模式：将数据全量迁移到其他集群。如集群故障迁移数据的场景
+* 同步模式：恢复数据后进行数据的实时同步。 如添加从库的场景
+
+## 前置准备
+* 安装
 ```shell
 # 下载 TiDB-Binlog 压缩包
 wget http://download.pingcap.org/binlog-latest-linux-amd64.tar.gz
@@ -18,8 +22,8 @@ wget http://download.pingcap.org/mydumper-linux-amd64.tar.gz
 # 解开压缩包到
 tar -xzf mydumper-linux-amd64.tar.gz
 mv mydumper-linux-amd64/bin/* binlog-latest-linux-amd64/bin/
-mv mydumper-linux-amd64/conf/* binlog-latest-linux-amd64/conf/
 ```
+* 部署 TiDB-Binlog，[参考文档][1]（只需要部署 pump 和 cistern）
 
 ## 数据备份
  1. 选择备份时间，在没有 DDL 操作的时间点进行备份
@@ -36,7 +40,7 @@ mv mydumper-linux-amd64/conf/* binlog-latest-linux-amd64/conf/
 | -F, --chunk-filesize|  把 table 分割成指定大小文件分别储存，单位为 MB (建议大小 64)|
 
 ## 数据恢复
- 1. 启动 TIDB 集群／mysql, 注意必须为空的全新集群
+ 1. 启动 TIDB 集群/mysql, 注意必须为全新的集群，或者清空集群全部数据。
  2. 配置 drainer 启动参数, 在配置文件(./conf/drainer.toml)中修改
   
 | 参数名         |  说明     |
@@ -63,5 +67,6 @@ mv mydumper-linux-amd64/conf/* binlog-latest-linux-amd64/conf/
 | -d, --directory| 指定 dump files 的存放目录 |
 | -t, --threads|  load dump files 的进行成个数|
 | -r, --is-recovery| 是否开启恢复模式，不开启进入同步模式|
-* 恢复模式：适用于将数据全部迁移到其他集群的场景，如集群故障
-* 同步模式：适用于添加从库实时同步主库的场景
+
+
+  [1]: https://github.com/pingcap/tidb-binlog/blob/master/docs/doc-cn.md

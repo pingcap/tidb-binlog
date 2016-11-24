@@ -30,6 +30,11 @@ func main() {
 		os.Exit(2)
 	}
 
+	if cfg.RecoveryTS > 0 && cfg.RecoveryTS <= cfg.InitCommitTS {
+		log.Info("don't need recovery, the data is complete")
+		os.Exit(0)
+	}
+
 	log.SetLevelByString(cfg.LogLevel)
 
 	if len(cfg.LogFile) > 0 {

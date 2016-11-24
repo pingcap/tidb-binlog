@@ -10,6 +10,24 @@ DATADIR="."
 CHUNKSIZE=64
 CISTERN_ADDR="127.0.0.1:8249"
 
+# echo function
+echo_info () {
+    echo -e "\033[0;32m$@${NC}"
+}
+
+# print args
+print_args () {
+    echo_info  "arguments#########################"
+    echo_info  "db-host:  ${HOST}"
+    echo_info  "db-port:  ${PORT}"
+    echo_info  "db-user:  ${USERNAME}"
+    echo_info  "db-password: ${PASSWORD}"
+    echo_info  "outputdir: ${DATADIR}"
+    echo_info  "chunk-filesize: ${CHUNKSIZE}"
+    echo_info  "cistern-addr: ${CISTERN_ADDR}"
+    echo_info  "##################################"
+}
+
 # parse arguments
 while [[ $# -gt 1 ]]
 do
@@ -50,6 +68,10 @@ esac
 shift # past argument or value
 done
 
+# primt_args
+print_args
+
+
 TMP_DUMP_DIR="${DATADIR}/tmp_dump_files"
 DUMP_DIR="${DATADIR}/dump_files"
 
@@ -57,7 +79,7 @@ DUMP_DIR="${DATADIR}/dump_files"
 rm -rf ${TMP_DUMP_DIR} && mkdir ${TMP_DUMP_DIR}
 
 # get the cistern's status
-curl "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
+curl -s "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         rm -rf ${TMP_DUMP_DIR}
         exit
@@ -70,8 +92,11 @@ if [[ "${rc}" -ne 0 ]]; then
         exit
 fi
 
+# remove mysql schema dump file? how about test schema?
+rm ${TMP_DUMP_DIR}/mysql-schema-create.sql ${TMP_DUMP_DIR}/mysql.*
+
 # mv to specified dir
-rm -r ${DUMP_DIR} && mv ${TMP_DUMP_DIR} ${DUMP_DIR}
+rm -rf ${DUMP_DIR} && mv ${TMP_DUMP_DIR} ${DUMP_DIR}
 
 # filter and get latest commit TS
 cat ${DATADIR}/.cistern_status | grep -Po '"Upper":\d+'| grep -Po '\d+' > ${DATADIR}/latest_commit_ts
