@@ -76,25 +76,117 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
 ## 启动参数
 
 1. Pump.
-
+    示例
     ```bash
     ./bin/pump -socket unix:///tmp/pump.sock \
                -pd-urls http://127.0.0.1:2379 \
                -data-dir data.pump
     ```
     
+    参数解释
+    ```
+    Usage of pump:
+    -node-id string
+        pump 的 node ID (如果不指定则为 hostname:port)
+    -addr string
+        pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -advertise-addr string
+        pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -config-file string
+        pump 配置文件路径
+    -data-dir string
+        pump 数据存储位置路径
+    -debug
+        是否开启 debug 日志模式
+    -gc uint
+        日志最大保留天数 (默认 7)， 设置为 0 可永久保存
+    -heartbeat-interval uint
+        pump 向 pd 发送心跳间隔 (单位 秒)
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -pd-urls string
+        pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -socket string
+        unix socket 模式服务监听地址 (默认 unix:///tmp/pump.sock)
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -version
+        打印版本信息
+    ```
+    
 2. Cistern.
-
+    示例
     ```bash
     ./bin/cistern -deposit-window-period 10 \
                   -pd-urls http://127.0.0.1:2379 \
                   -data-dir data.cistern
     ```
-
+    
+    参数解释
+    ```
+    Usage of cistern:
+    -addr string
+        cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
+    -collect-batch int
+        每次请求向 pump 拉去的 binlog 数量 (默认 5000)
+    -collect-interval int
+        向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
+    -config-file string
+        配置文件路径
+    -data-dir string
+        cistern 数据存储位置路径 (默认 "data.cistern")
+    -debug
+        是否开启 debug 日志模式
+    -deposit-window-period int
+       binlog 收集的窗口期，该窗口是为了确保窗口外 binlog 完整 （默认 10，单位 分钟）
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -pd-urls string
+       pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -version
+       打印版本信息
+    ```
 3. Drainer.
-
+    示例
     ```bash
     ./bin/drainer -dest-db-type mysql \
                   -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
                   -data-dir data.drainer 
+    ```
+    
+    参数解释
+    ```
+    Usage of drainer:
+    -L string
+        日志输出信息设置: debug, info, warn, error, fatal (默认 "info")
+    -config-file string
+       配置文件路径
+    -data-dir string
+       drainer 数据存储位置路径 (默认 "data.drainer")
+    -dest-db-type string
+        drainer 下游服务类型 (默认为 mysql)
+    -ignore-schemas string
+         db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test")
+    -init-commit-ts int
+        drainer 同步起始位置设置
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -pprof-addr string
+        golang pprof addr (默认 ":10081")
     ```
