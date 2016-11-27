@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tipb/go-binlog"
@@ -59,7 +60,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 	}
 }
 
-func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
+func (s *testBinloggerSuite) TestGC(c *C) {
 	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
 	c.Assert(err, IsNil)
 
@@ -70,6 +71,53 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b, ok := tmp.(*binlogger)
 	c.Assert(ok, IsTrue)
+
+	b.rotate()
+	err = b.WriteTail([]byte("binlogtest"))
+	c.Assert(err, IsNil)
+
+	b.Close()
+
+	b.GC(0)
+
+	_, err = b.ReadFrom(binlog.Pos{}, 1)
+	c.Assert(err, Equals, ErrFileNotFound)
+}
+
+func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
+	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
+	c.Assert(err, IsNil)
+
+	defer os.RemoveAll(dir)
+
+	// test  empty dir
+	b := &binlogger{
+		dir: dir,
+	}
+	_, err = b.ReadFrom(binlog.Pos{}, 3)
+	c.Assert(err, NotNil)
+	b.GC(time.Second)
+	c.Assert(b.WriteTail([]byte{}), IsNil)
+	c.Assert(b.seq(), Equals, uint64(0))
+
+	// test empty dir
+	tmp, err := OpenBinlogger(dir)
+	c.Assert(err, NotNil)
+
+	tmp, err = CreateBinlogger(dir)
+	c.Assert(err, IsNil)
+
+	b, ok := tmp.(*binlogger)
+	c.Assert(ok, IsTrue)
+
+	// test read init dir
+	ents, err := b.ReadFrom(binlog.Pos{}, 3)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 0)
+
+	// read nenative entries
+	_, err = b.ReadFrom(binlog.Pos{}, -1)
+	c.Assert(err, NotNil)
 
 	b.rotate()
 	err = b.WriteTail([]byte("binlogtest"))

@@ -42,6 +42,11 @@ func (s *testFileSuite) TestCreate(c *C) {
 	}
 }
 
+func (s *testFileSuite) TestReadNorExistDir(c *C) {
+	_, err := ReadDir("testNoExistDir")
+	c.Assert(err, NotNil)
+}
+
 func (s *testFileSuite) TestCreateDirAll(c *C) {
 	tmpdir, err := ioutil.TempDir(os.TempDir(), "foo")
 	c.Assert(err, IsNil)

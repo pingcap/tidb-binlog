@@ -6,6 +6,7 @@ import (
 
 	"github.com/coreos/etcd/integration"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -117,12 +118,24 @@ func TestRefreshNode(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
+	// test update savepoint
+	err = r.UpdateSavepoint(context.Background(), nodeID, 1, binlog.Pos{})
+	if err != nil {
+		t.Fatalf("update savePoint err: %v", err)
+	}
+
 	status, err = r.Node(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.NodeID != nodeID || status.IsAlive {
+	if status.NodeID != nodeID || status.IsAlive || len(status.LastReadPos) != 1 {
 		t.Fatalf("node info have error : %v", status)
+	}
+
+	// check nodes
+	statuss, err := r.Nodes(context.Background())
+	if len(statuss) != 1 {
+		t.Fatal("nodes is corruption")
 	}
 }
 

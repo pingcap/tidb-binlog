@@ -20,7 +20,7 @@ var batchValues [][]byte
 var values [][]byte
 var testData = []int64{100, 101, 200, 1000}
 
-func init() {
+func testInit() {
 	batchData := []byte("test")
 	for i := 0; i < len(testData); i++ {
 		keys = append(keys, codec.EncodeInt([]byte{}, testData[i]))
@@ -38,6 +38,7 @@ var _ = Suite(&testStoreSuite{})
 type testStoreSuite struct{}
 
 func (s *testStoreSuite) TestBlot(c *C) {
+	testInit()
 	store, err := NewBoltStore("./test", [][]byte{windowNamespace, binlogNamespace})
 	c.Assert(err, IsNil)
 
@@ -51,6 +52,7 @@ func (s *testStoreSuite) TestBlot(c *C) {
 	testGet(c, store)
 	testScan(c, store)
 	testBatch(c, store)
+	testEndKey(c, store)
 }
 
 func testBuckets(c *C, store Store) {
@@ -133,4 +135,15 @@ func testBatch(c *C, store Store) {
 		c.Assert(err, IsNil)
 		c.Assert(val, DeepEquals, batchData)
 	}
+
+	// test batch delete
+	b = store.NewBatch()
+	b.Delete(keys[0])
+
+	c.Assert(b.Len(), Equals, 1)
+	err = store.Commit(binlogNamespace, b)
+	c.Assert(err, IsNil)
+
+	_, err = store.Get(binlogNamespace, keys[0])
+	c.Assert(err, NotNil)
 }

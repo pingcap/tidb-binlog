@@ -32,6 +32,32 @@ func (s *testConfigSuite) TestConfigParsingCmdLineFlags(c *C) {
 	validateConfig(c, cfg)
 }
 
+func (s *testConfigSuite) TestConfigParsingError(c *C) {
+	// test ListenAddr error
+	args := []string{
+		"--addr", "192.168.199.100:8260:826",
+		"--pd-urls", "http://192.168.199.110:2379,http://hostname:2379",
+		"--data-dir=/tmp/pump",
+		"--heartbeat-interval=1500",
+		"--debug",
+	}
+
+	cfg := NewConfig()
+	c.Assert(cfg.Parse(args), NotNil)
+
+	args = []string{
+		"--addr", "192.168.199.100:8260",
+		"--advertise-addr", "0.0.0.0",
+		"--pd-urls", "http://192.168.199.110:2379,http://hostname:2379",
+		"--data-dir=/tmp/pump",
+		"--heartbeat-interval=1500",
+		"--debug",
+	}
+
+	cfg = NewConfig()
+	c.Assert(cfg.Parse(args), NotNil)
+}
+
 func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 	args := []string{
 		"--addr", "192.168.199.100:8260",

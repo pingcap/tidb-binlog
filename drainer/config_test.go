@@ -23,5 +23,6 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.DataDir, Equals, "data.drainer")
 	c.Assert(cfg.DestDBType, Equals, "mysql")
 	c.Assert(cfg.To.Host, Equals, "127.0.0.1")
-	c.Assert(fmt.Sprintf("%s", cfg), Equals, fmt.Sprintf("Config(%+v)", *cfg))
+	c.Assert(cfg.String(), Equals, fmt.Sprintf("Config(%+v)", *cfg))
+	c.Assert(cfg.To.String(), Equals, fmt.Sprintf("DBConfig(%+v)", cfg.To))
 }
