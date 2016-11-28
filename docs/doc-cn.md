@@ -73,7 +73,11 @@ cd binlog-latest-linux-amd64
 
 TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> Drainer
 
-## 启动参数
+### 注意
+* 需要为一个 TiDB 集群中的每台 TiDB 部署一台 pump，设置 TiDB 启动参数 binlog-socket 为 pump 监听的 unix socket 文件 
+* 为 cistern 预留 200G+ 储存容量
+
+### 示例及参数解释
 
 1. Pump.
     示例
