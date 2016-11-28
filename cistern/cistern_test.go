@@ -43,6 +43,8 @@ func TestServer(t *testing.T) {
 		LogFile:         fmt.Sprintf("%s/pump.log", tmpDir),
 	}
 
+	InitLogger(cfg)
+	PrintVersionInfo()
 	s, err := testInitServer(cfg)
 	if err != nil {
 		t.Fatalf("test init server error: %v", err)

@@ -92,4 +92,5 @@ func (s *testCisternSuite) TestPump(c *C) {
 	p.client = &mockPumpClient{}
 	res := p.Collect(context.Background(), nil)
 	c.Assert(res.binlogs, HasLen, 2)
+	c.Assert(res.err, NotNil)
 }
