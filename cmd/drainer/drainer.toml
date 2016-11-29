@@ -1,16 +1,23 @@
 # drainer Configuration.
 
+# disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
+# drainer's data directory path
 data-dir = "data.drainer"
+
+# number of binlog events in a transaction batch
 txn-batch = 1
 
+# pprof addr
 pprof-addr = ":10081"
 
+# the host and port of cistern
 [client]
 host = "127.0.0.1"
 port = 8249
 
+# the downstream mysql protocol database
 [to]
 host = "127.0.0.1"
 user = "root"
