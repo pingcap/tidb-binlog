@@ -1,4 +1,4 @@
 # cistern Configuration.
 
-debug = false
 deposit-window-period = 10
+gc = 7

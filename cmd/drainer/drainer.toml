@@ -1,7 +1,5 @@
 # drainer Configuration.
 
-debug = false
-
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
 data-dir = "data.drainer"

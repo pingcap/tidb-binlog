@@ -28,7 +28,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.DataDir, "data-dir", "data.drainer", "drainer data directory path")
 	fs.Int64Var(&cfg.InitCommitTS, "init-commit-ts", 0, "the position from which begin to sync and apply binlog.")
-	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
+	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
@@ -66,6 +66,8 @@ type CisternClientConfig struct {
 type Config struct {
 	*flag.FlagSet `json:"-"`
 
+	LogLevel string `toml:"log-level" json:"log-level"`
+
 	LogFile string `toml:"log-file" json:"log-file"`
 
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -89,8 +91,6 @@ type Config struct {
 	CisternClient CisternClientConfig `toml:"client" json:"client"`
 
 	DestDBType string `toml:"db-type" json:"db-type"`
-
-	Debug bool
 
 	configFile string
 

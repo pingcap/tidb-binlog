@@ -28,7 +28,7 @@ const (
 // Config holds the configuration of pump
 type Config struct {
 	*flag.FlagSet
-
+	LogLevel          string `toml:"log-level" json:"log-level"`
 	NodeID            string `toml:"node-id" json:"node-id"`
 	ListenAddr        string `toml:"addr" json:"addr"`
 	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
@@ -40,7 +40,6 @@ type Config struct {
 	GC                uint   `toml:"gc" json:"gc"`
 	LogFile           string `toml:"log-file" json:"log-file"`
 	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
-	Debug             bool
 	MetricsAddr       string
 	MetricsInterval   int
 	configFile        string
@@ -68,7 +67,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.UintVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
-	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
+	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
