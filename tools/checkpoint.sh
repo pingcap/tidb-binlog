@@ -15,6 +15,10 @@ echo_info () {
     echo -e "\033[0;32m$@${NC}"
 }
 
+echo_error () {
+    >&2  echo -e "${RED}$@${NC}"
+}
+
 # print args
 print_args () {
     echo_info  "arguments#########################"
@@ -29,8 +33,7 @@ print_args () {
 }
 
 # parse arguments
-while [[ $# -gt 1 ]]
-do
+while [[ $# -gt 1 ]]; do
 arg="$1"
 case $arg in
     -c|--cistern-addr)
@@ -63,6 +66,7 @@ case $arg in
     ;;
     *)
     # unknown option
+    echo_error "$1=$2"
     ;;
 esac
 shift # past argument or value
@@ -76,9 +80,10 @@ TMP_DUMP_DIR="${DATADIR}/tmp_dump_files"
 DUMP_DIR="${DATADIR}/dump_files"
 
 # clean tmp dir
-rm -rf ${TMP_DUMP_DIR} && mkdir ${TMP_DUMP_DIR}
+rm -rf ${TMP_DUMP_DIR} || mkdir ${TMP_DUMP_DIR}
 
 # get the cistern's status
+rc=0
 curl -s "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         rm -rf ${TMP_DUMP_DIR}
@@ -86,6 +91,7 @@ if [[ "${rc}" -ne 0 ]]; then
 fi
 
 # backup tidb
+rc=0
 ${CP_ROOT}/bin/mydumper -h ${HOST} -P ${PORT} -u ${USERNAME} -p ${PASSWORD} -t 1 -F ${CHUNKSIZE} -o ${TMP_DUMP_DIR} || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         rm -rf ${TMP_DUMP_DIR}
@@ -93,7 +99,7 @@ if [[ "${rc}" -ne 0 ]]; then
 fi
 
 # remove mysql schema dump file? how about test schema?
-rm ${TMP_DUMP_DIR}/mysql-schema-create.sql ${TMP_DUMP_DIR}/mysql.*
+rm -v ${TMP_DUMP_DIR}/mysql-schema-create.sql ${TMP_DUMP_DIR}/mysql.*
 
 # mv to specified dir
 rm -rf ${DUMP_DIR} && mv ${TMP_DUMP_DIR} ${DUMP_DIR}

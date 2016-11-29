@@ -16,6 +16,10 @@ echo_info () {
     echo -e "\033[0;32m$@${NC}"
 }
 
+echo_error () {
+    >&2  echo -e "${RED}$@${NC}"
+}
+
 # print args
 print_args () {
     echo_info  "arguments#########################"
@@ -31,8 +35,7 @@ print_args () {
 }
 
 # parse arguments
-while [[ $# -gt 1 ]]
-do
+while [[ $# -gt 1 ]]; do
 arg="$1"
 case $arg in
     -c|--cistern-addr)
@@ -69,6 +72,7 @@ case $arg in
     ;;
     *)
     # unknown option
+    echo_error "$1=$2"
     ;;
 esac
 shift # past argument or value
@@ -81,6 +85,7 @@ print_args
 DUMP_DIR="${DATADIR}/dump_files"
 
 # backup tidb
+rc=0
 ${CP_ROOT}/bin/myloader -h ${HOST} -P ${PORT} -u ${USERNAME} -p ${PASSWORD} -t 1 -q ${THREADS} -d ${DUMP_DIR} || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         exit
@@ -90,6 +95,7 @@ fi
 INIT_TS=`cat ${DATADIR}/latest_commit_ts`
 
 if [[ "${ISRECOVERY}" -eq 1 ]]; then
+    rc=0
     curl -s "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
     if [[ "${rc}" -ne 0 ]]; then
         exit

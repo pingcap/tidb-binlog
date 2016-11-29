@@ -66,7 +66,7 @@ mv mydumper-linux-amd64/bin/* binlog-latest-linux-amd64/bin/
 | -c, --cistern-addr| TiDB-Binlog 的 cistern 接口地址|
 | -d, --directory| 指定 dump files 的存放目录 |
 | -t, --threads|  load dump files 的进行成个数|
-| -r, --is-recovery| 是否开启恢复模式，不开启进入同步模式|
+| -r, --is-recovery| 是否开启恢复模式，不开启则进入同步模式|
 
 
   [1]: https://github.com/pingcap/tidb-binlog/blob/master/docs/doc-cn.md

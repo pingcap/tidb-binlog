@@ -458,7 +458,7 @@ func (d *Drainer) run() error {
 			}
 		}
 
-		if d.cfg.RecoveryTS > 0 && commitTS >= d.cfg.RecoveryTS {
+		if d.cfg.EndCommitTS > 0 && commitTS >= d.cfg.EndCommitTS {
 			log.Info("recovery complete!")
 			return nil
 		}
