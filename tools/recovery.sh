@@ -17,7 +17,7 @@ echo_info () {
 }
 
 echo_error () {
-    >&2  echo -e "${RED}$@${NC}"
+    echo -e "${RED}$@${NC}"
 }
 
 # print args
@@ -36,46 +36,50 @@ print_args () {
 
 # parse arguments
 while [[ $# -gt 1 ]]; do
-arg="$1"
-case $arg in
+    arg="$1"
+    # if $2 is with prefix -, we should echo error and exit
+    if [[ "$2" =~ ^\- ]]; then
+        echo "$arg should be follow with it's argument value, not $2" && exit 1
+    fi
+    case $arg in
     -c|--cistern-addr)
-    CISTERN_ADDR="$2"
-    shift # past argument
-    ;;
+        CISTERN_ADDR="$2"
+        shift # past argument
+        ;;
     -h|--host)
-    HOST="$2"
-    shift # past argument
-    ;;
+        HOST="$2"
+        shift # past argument
+        ;;
     -P|--port)
-    PORT="$2"
-    shift # past argument
-    ;;
+        PORT="$2"
+        shift # past argument
+        ;;
     -u|--user)
-    USERNAME="$2"
-    shift # past argument
-    ;;
+        USERNAME="$2"
+        shift # past argument
+        ;;
     -p|--password)
-    PASSWORD="$2"
-    shift # past argument
-    ;;
+        PASSWORD="$2"
+        shift # past argument
+        ;;
     -d|--directory)
-    DATADIR="$2"
-    shift # past argument
-    ;;
+        DATADIR="$2"
+        shift # past argument
+        ;;
     -t|--threads)
-    THREADS="$2"
-    shift # past argument
-    ;;
+        THREADS="$2"
+        shift # past argument
+        ;;
     -r|--is-recovery)
-    ISRECOVERY="$2"
-    shift # past argument
-    ;;
+        ISRECOVERY="$2"
+        shift # past argument
+        ;;
     *)
-    # unknown option
-    echo_error "$1=$2"
-    ;;
-esac
-shift # past argument or value
+        # unknown option
+        echo_error "$1=$2" && exit 1
+        ;;
+    esac
+    shift
 done
 
 # print args
@@ -103,7 +107,7 @@ if [[ "${ISRECOVERY}" -eq 1 ]]; then
 
     RECOVRERY_TS=`cat ${DATADIR}/.cistern_status | grep -Po '"Upper":\d+'| grep -Po '\d+'`
     if [[ "${RECOVRERY_TS}" -gt "${INIT_TS}" ]]; then
-        ${CP_ROOT}/bin/drainer --config-file=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} --recovery-stop-ts=${RECOVRERY_TS}
+        ${CP_ROOT}/bin/drainer --config-file=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} --end-commit-ts=${RECOVRERY_TS}
     fi
     echo_info "recovery complete!"
     exit

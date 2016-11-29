@@ -16,7 +16,7 @@ echo_info () {
 }
 
 echo_error () {
-    >&2  echo -e "${RED}$@${NC}"
+    echo -e "${RED}$@${NC}"
 }
 
 # print args
@@ -34,42 +34,46 @@ print_args () {
 
 # parse arguments
 while [[ $# -gt 1 ]]; do
-arg="$1"
-case $arg in
+    arg="$1"
+    # if $2 is with prefix -, we should echo error and exit
+    if [[ "$2" =~ ^\- ]]; then
+        echo_error "$arg should be follow with it's argument value, not $2" && exit 1
+    fi
+    case $arg in
     -c|--cistern-addr)
-    CISTERN_ADDR="$2"
-    shift # past argument
-    ;;
+        CISTERN_ADDR="$2"
+        shift # past argument
+        ;;
     -h|--host)
-    HOST="$2"
-    shift # past argument
-    ;;
+        HOST="$2"
+        shift # past argument
+        ;;
     -P|--port)
-    PORT="$2"
-    shift # past argument
-    ;;
+        PORT="$2"
+        shift # past argument
+        ;;
     -u|--user)
-    USERNAME="$2"
-    shift # past argument
-    ;;
+        USERNAME="$2"
+        shift # past argument
+        ;;
     -p|--password)
-    PASSWORD="$2"
-    shift # past argument
-    ;;
+        PASSWORD="$2"
+        shift # past argument
+        ;;
     -o|--outputdir)
-    DATADIR="$2"
-    shift # past argument
-    ;;
+        DATADIR="$2"
+        shift # past argument
+        ;;
     -F|--chunk-filesize)
-    CHUNKSIZE="$2"
-    shift # past argument
-    ;;
+        CHUNKSIZE="$2"
+        shift # past argument
+        ;;
     *)
-    # unknown option
-    echo_error "$1=$2"
-    ;;
-esac
-shift # past argument or value
+        # unknown option
+        echo_error "$1=$2" && exit 1
+        ;;
+    esac
+    shift
 done
 
 # primt_args
