@@ -10,7 +10,7 @@ advertise-addr = ""
 gc = 7
 
 # path to the data directory of pump's data
-data-dir = data.pump
+data-dir = "data.pump"
 
 # number of seconds between heartbeat ticks (in 2 seconds)
 heartbeat-interval = 2
@@ -19,4 +19,4 @@ heartbeat-interval = 2
 pd-urls = "http://127.0.0.1:2379"
 
 # unix socket addr to listen on for client traffic
-socket = unix:///tmp/pump.sock
+socket = "unix:///tmp/pump.sock"
