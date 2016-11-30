@@ -13,12 +13,7 @@ const lengthOfBinaryTime = 15
 
 // InitLogger initalizes Pump's logger.
 func InitLogger(cfg *Config) {
-	if cfg.Debug {
-		log.SetLevelByString("debug")
-	} else {
-		log.SetLevelByString("info")
-	}
-	log.SetHighlighting(false)
+	log.SetLevelByString(cfg.LogLevel)
 
 	if len(cfg.LogFile) > 0 {
 		log.SetOutputByName(cfg.LogFile)

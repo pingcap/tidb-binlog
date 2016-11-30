@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -31,6 +32,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
+	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
 
 	return cfg
 }
@@ -91,6 +93,8 @@ type Config struct {
 	DestDBType string `toml:"db-type" json:"db-type"`
 
 	configFile string
+
+	printVersion bool
 }
 
 // Parse parses flag definitions from the argument list.
@@ -99,6 +103,15 @@ func (c *Config) Parse(arguments []string) error {
 	err := c.FlagSet.Parse(arguments)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if c.printVersion {
+		fmt.Printf("pump Version: %s\n", Version)
+		fmt.Printf("Git SHA: %s\n", GitSHA)
+		fmt.Printf("Build TS: %s\n", BuildTS)
+		fmt.Printf("Go Version: %s\n", runtime.Version())
+		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		os.Exit(0)
 	}
 
 	// Load config file if specified.

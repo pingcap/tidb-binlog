@@ -15,6 +15,21 @@ import (
 	"github.com/pingcap/tidb/terror"
 )
 
+// InitLogger initalizes Pump's logger.
+func InitLogger(cfg *Config) {
+	log.SetLevelByString(cfg.LogLevel)
+
+	if len(cfg.LogFile) > 0 {
+		log.SetOutputByName(cfg.LogFile)
+
+		if cfg.LogRotate == "hour" {
+			log.SetRotateByHour()
+		} else {
+			log.SetRotateByDay()
+		}
+	}
+}
+
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) error {
 	if len(sqls) == 0 {
 		return nil
