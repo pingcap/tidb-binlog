@@ -10,7 +10,7 @@ func (t *testCisternSuite) TestConfig(c *C) {
 		"--addr", "192.168.199.100:8260",
 		"--pd-urls", "http://192.168.199.110:2379,http://hostname:2379",
 		"--data-dir", "",
-		"--config-file", "../cmd/drainer/config.toml",
+		"--config-file", "../cmd/cistern/cistern.toml",
 		"--deposit-window-period", "0",
 	}
 

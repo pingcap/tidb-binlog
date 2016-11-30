@@ -195,9 +195,9 @@ func (t *mockTranslator) GenDDLSQL(schema string, sql string) (string, error) {
 func (t *testDrainerSuite) TestNewDrainer(c *C) {
 	args := []string{
 		"-metrics-addr", "127.0.0.1:9091",
-		"-config-file", "../cmd/drainer/config.toml",
 		"-dest-db-type", "mockSQL",
 		"-init-commit-ts", "1",
+		"-config-file", "../cmd/drainer/drainer.toml",
 	}
 
 	cfg := NewConfig()
