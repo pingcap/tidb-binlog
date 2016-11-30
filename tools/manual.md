@@ -62,28 +62,15 @@ cd binlog-latest-linux-amd64
 
 ## 数据恢复
  1. 启动 TIDB 集群/mysql, 注意必须为全新的集群，或者清空集群全部数据。
- 2. 配置 drainer 启动参数, 在配置文件(./conf/drainer.toml)中修改
-  
-| 参数名         |  说明     |
-| --------       | -----:    |
-| to:host     | 目标数据库的 HOST   |
-| to:port     | 目标数据库的 PORT   |
-| to:user     | 目标数据库的用户名  |
-| to:password | 目标数据库的密码    |
-| client:host | cistern 的 HOST     |
-| client:port | cistern 的 PORT     |
-| data-dir    | drainer 数据存放目录|
-| ignore-schemas| 需要过滤掉的 databases|
-| log-file    | drainer log 存放目录 |
-| metrics-addr| prometheus 接口地址|
+ 2. 配置 drainer 启动参数, 在配置文件(./conf/drainer.toml)中修改。
  3. 运行 ./tools/recovery.sh 进行集群恢复/同步, 命令行参数如下：
  
 | 参数名         |  说明     |
 | --------       | -----:    |
-| -h, --host     | TiDB 的 HOST   |
-| -p, --port     | TiDB 的 PORT   |
-| -u, --user     | TiDB 的用户名  |
-| -p, --password | TiDB 的密码    |
+| -h, --host     | 目的数据库的 HOST   |
+| -p, --port     | 目的数据库的 PORT   |
+| -u, --user     | 目的数据库的用户名  |
+| -p, --password | 目的数据库的密码    |
 | -c, --cistern-addr| TiDB-Binlog 的 cistern 接口地址|
 | -d, --directory| 指定 dump files 的存放目录 |
 | -t, --threads|  load dump files 的并发进程个数|
