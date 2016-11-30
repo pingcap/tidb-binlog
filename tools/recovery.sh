@@ -90,7 +90,7 @@ DUMP_DIR="${DATADIR}/dump_files"
 
 # backup tidb
 rc=0
-${CP_ROOT}/bin/myloader -h ${HOST} -P ${PORT} -u ${USERNAME} -p ${PASSWORD} -t 1 -q ${THREADS} -d ${DUMP_DIR} || rc=$?
+${CP_ROOT}/bin/loader -h ${HOST} -P ${PORT} -u ${USERNAME} -p ${PASSWORD} -t ${THREADS} -q 1 -d ${DUMP_DIR} || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         exit
 fi
