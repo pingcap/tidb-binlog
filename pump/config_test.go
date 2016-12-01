@@ -24,7 +24,7 @@ func (s *testConfigSuite) TestConfigParsingCmdLineFlags(c *C) {
 		"--pd-urls", "http://192.168.199.110:2379,http://hostname:2379",
 		"--data-dir=/tmp/pump",
 		"--heartbeat-interval=1500",
-		"--debug",
+		"-L", "debug",
 	}
 
 	cfg := NewConfig()
@@ -37,7 +37,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 		"--addr", "192.168.199.100:8260",
 		"-pd-urls", "http://192.168.199.110:2379,http://hostname:2379",
 		"-heartbeat-interval=1500",
-		"--debug",
+		"-L", "debug",
 	}
 
 	os.Clearenv()
@@ -76,7 +76,7 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	args := []string{
 		"--config-file",
 		tmpfile.Name(),
-		"--debug",
+		"-L", "debug",
 	}
 
 	os.Clearenv()
@@ -109,7 +109,7 @@ func validateConfig(c *C, cfg *Config) {
 		EtcdURLs:          "http://192.168.199.110:2379,http://hostname:2379",
 		DataDir:           "/tmp/pump",
 		HeartbeatInterval: 1500,
-		Debug:             true,
+		LogLevel:          "debug",
 	}
 
 	c.Assert(cfg.ListenAddr, Equals, vcfg.ListenAddr)
@@ -117,5 +117,5 @@ func validateConfig(c *C, cfg *Config) {
 	c.Assert(cfg.EtcdURLs, Equals, vcfg.EtcdURLs)
 	c.Assert(cfg.DataDir, Equals, vcfg.DataDir)
 	c.Assert(cfg.HeartbeatInterval, Equals, vcfg.HeartbeatInterval)
-	c.Assert(cfg.Debug, Equals, vcfg.Debug)
+	c.Assert(cfg.LogLevel, Equals, vcfg.LogLevel)
 }

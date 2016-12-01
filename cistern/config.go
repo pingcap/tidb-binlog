@@ -29,6 +29,7 @@ const (
 // Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
+	LogLevel            string `toml:"log-level" json:"log-level"`
 	ListenAddr          string `toml:"addr" json:"addr"`
 	DataDir             string `toml:"data-dir" json:"data-dir"`
 	CollectInterval     int    `toml:"collect-interval" json:"collect-interval"`
@@ -42,7 +43,6 @@ type Config struct {
 	PumpTimeout         time.Duration
 	MetricsAddr         string
 	MetricsInterval     int
-	Debug               bool
 	configFile          string
 	printVersion        bool
 }
@@ -65,7 +65,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.CollectBatch, "collect-batch", defaultCollectBatch, "the max number of binlog items in a pulling batch")
 	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in boltDB will become to public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
-	fs.BoolVar(&cfg.Debug, "debug", false, "whether to enable debug-level logging")
+	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
