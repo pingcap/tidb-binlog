@@ -35,7 +35,6 @@ type Server struct {
 	boltdb    store.Store
 	window    *DepositWindow
 	collector *Collector
-	publisher *Publisher
 	tcpAddr   string
 	gs        *grpc.Server
 	metrics   *metricClient
@@ -101,8 +100,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	p := NewPublisher(cfg, s, win)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var metrics *metricClient
@@ -122,7 +119,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		boltdb:    s,
 		window:    win,
 		collector: c,
-		publisher: p,
 		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,
 		gs:        grpc.NewServer(),
@@ -392,15 +388,6 @@ func (s *Server) StartCollect() {
 	}()
 }
 
-// StartPublish runs Publisher up in a goroutine.
-func (s *Server) StartPublish() {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		s.publisher.Start(s.ctx)
-	}()
-}
-
 // StartMetrics runs a metrics colletcor in a goroutine
 func (s *Server) StartMetrics() {
 	if s.metrics == nil {
@@ -441,9 +428,6 @@ func (s *Server) StartGC() {
 func (s *Server) Start() error {
 	// start to collect
 	s.StartCollect()
-
-	// start to publish
-	s.StartPublish()
 
 	// collect metrics to prometheus
 	s.StartMetrics()

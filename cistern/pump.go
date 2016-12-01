@@ -13,12 +13,13 @@ import (
 
 // Result keeps the result of pulling binlog from a pump in a round
 type Result struct {
-	err       error
-	nodeID    string
-	clusterID uint64
-	begin     binlog.Pos
-	end       binlog.Pos
-	binlogs   map[int64]*binlog.Binlog
+	err         error
+	nodeID      string
+	clusterID   uint64
+	begin       binlog.Pos
+	end         binlog.Pos
+	binlogs     map[int64]*binlog.Binlog
+	maxCommitTS int64
 }
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
@@ -71,62 +72,67 @@ func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) 
 		end:       p.current,
 		binlogs:   make(map[int64]*binlog.Binlog),
 	}
-
-	ctx, cancel := context.WithTimeout(pctx, p.timeout)
-	defer cancel()
-	req := &binlog.PullBinlogReq{
-		ClusterID: p.clusterID,
-		StartFrom: p.current,
-		Batch:     p.batch,
-	}
-	resp, err := p.client.PullBinlogs(ctx, req)
-	if err != nil {
-		res.err = errors.Trace(err)
-		return
-	}
-	if resp.Errmsg != "" {
-		res.err = errors.New(resp.Errmsg)
-		return
-	}
-	if len(resp.Entities) == 0 {
-		return
-	}
-
-	res.end = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
 	prewriteItems := make(map[int64]*binlog.Binlog)
 	rollbackItems := make(map[int64]*binlog.Binlog)
 	commitItems := make(map[int64]*binlog.Binlog)
 
-	for _, item := range resp.Entities {
-		b := new(binlog.Binlog)
-		err := b.Unmarshal(item.Payload)
+	for res.maxCommitTS == 0 {
+		ctx, cancel := context.WithTimeout(pctx, p.timeout)
+		defer cancel()
+		req := &binlog.PullBinlogReq{
+			ClusterID: p.clusterID,
+			StartFrom: res.end,
+			Batch:     p.batch,
+		}
+		resp, err := p.client.PullBinlogs(ctx, req)
 		if err != nil {
-			res.err = errors.Annotatef(err, "unmarshal payload error, host(%s), clusterID(%s), Pos(%v)",
-				p.host, p.clusterID, item.Pos)
+			res.err = errors.Trace(err)
 			return
 		}
-		switch b.Tp {
-		case binlog.BinlogType_Prewrite:
-			prewriteItems[b.StartTs] = b
-		case binlog.BinlogType_Commit:
-			commitItems[b.StartTs] = b
-		case binlog.BinlogType_Rollback:
-			rollbackItems[b.StartTs] = b
-		default:
-			res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
-				b.Tp, p.host, p.clusterID, item.Pos)
+		if resp.Errmsg != "" {
+			res.err = errors.New(resp.Errmsg)
+			return
 		}
-	}
+		if len(resp.Entities) == 0 {
+			return
+		}
 
-	// match dml binlog
-	for startTs, item := range prewriteItems {
-		if co, ok := commitItems[startTs]; ok {
-			item.CommitTs = co.CommitTs
-			item.Tp = co.Tp
-			res.binlogs[item.CommitTs] = item
-			delete(prewriteItems, startTs)
-		} else if _, ok := rollbackItems[startTs]; ok {
-			delete(prewriteItems, startTs)
+		res.end = CalculateNextPos(resp.Entities[len(resp.Entities)-1])
+
+		for _, item := range resp.Entities {
+			b := new(binlog.Binlog)
+			err := b.Unmarshal(item.Payload)
+			if err != nil {
+				res.err = errors.Annotatef(err, "unmarshal payload error, host(%s), clusterID(%s), Pos(%v)",
+					p.host, p.clusterID, item.Pos)
+				return
+			}
+			switch b.Tp {
+			case binlog.BinlogType_Prewrite:
+				prewriteItems[b.StartTs] = b
+			case binlog.BinlogType_Commit:
+				commitItems[b.StartTs] = b
+			case binlog.BinlogType_Rollback:
+				rollbackItems[b.StartTs] = b
+			default:
+				res.err = errors.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ",
+					b.Tp, p.host, p.clusterID, item.Pos)
+			}
+			if b.CommitTs > res.maxCommitTS {
+				res.maxCommitTS = b.CommitTs
+			}
+		}
+
+		// match dml binlog
+		for startTs, item := range prewriteItems {
+			if co, ok := commitItems[startTs]; ok {
+				item.CommitTs = co.CommitTs
+				item.Tp = co.Tp
+				res.binlogs[item.CommitTs] = item
+				delete(prewriteItems, startTs)
+			} else if _, ok := rollbackItems[startTs]; ok {
+				delete(prewriteItems, startTs)
+			}
 		}
 	}
 

@@ -161,6 +161,7 @@ func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 	}()
 
 	items := make(map[int64]*binlog.Binlog)
+	var lowerBoundary int64 = -1 << 63
 	savepoints := make(map[string]binlog.Pos)
 	for r := range resc {
 		if r.err != nil {
@@ -170,6 +171,10 @@ func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 		}
 		for commitTS, item := range r.binlogs {
 			items[commitTS] = item
+		}
+
+		if r.maxCommitTS < lowerBoundary {
+			lowerBoundary = r.maxCommitTS
 		}
 
 		if ComparePos(r.end, r.begin) > 0 {
@@ -187,6 +192,10 @@ func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
 		return
 	}
 	if err1 := c.store(items); err1 != nil {
+		err = errors.Trace(err1)
+		return
+	}
+	if err1 := c.publish(lowerBoundary); err != nil {
 		err = errors.Trace(err1)
 		return
 	}
@@ -421,6 +430,18 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 				return errors.Trace(err)
 			}
 		}
+	}
+	return nil
+}
+
+func (c *Collector) publish(end int64) error {
+	start := c.window.LoadLower()
+	if end > start {
+		if err := c.window.PersistLower(end); err != nil {
+			return errors.Trace(err)
+		}
+
+		windowGauge.WithLabelValues("lower").Set(float64(end))
 	}
 	return nil
 }
