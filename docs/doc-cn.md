@@ -100,8 +100,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         pump 配置文件路径
     -data-dir string
         pump 数据存储位置路径
-    -debug
-        是否开启 debug 日志模式
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
     -gc uint
         日志最大保留天数 (默认 7)， 设置为 0 可永久保存
     -heartbeat-interval uint
@@ -143,8 +143,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         配置文件路径
     -data-dir string
         cistern 数据存储位置路径 (默认 "data.cistern")
-    -debug
-        是否开启 debug 日志模式
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
     -deposit-window-period int
        binlog 收集的窗口期，该窗口是为了确保窗口外 binlog 完整 （默认 10，单位 分钟）
     -metrics-addr string
@@ -172,7 +172,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```
     Usage of drainer:
     -L string
-        日志输出信息设置: debug, info, warn, error, fatal (默认 "info")
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
     -config-file string
        配置文件路径
     -data-dir string
