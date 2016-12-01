@@ -31,7 +31,7 @@ func TestServer(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	listenAddr := "http://127.0.0.1:8250"
+	listenAddr := "http://127.0.0.1:8249"
 	cfg := &Config{
 		DataDir:         tmpDir,
 		EtcdURLs:        strings.Join(cluster.RandClient().Endpoints(), ","),
@@ -63,8 +63,8 @@ func TestServer(t *testing.T) {
 
 	go func() {
 		err = s.Start()
-		if err == nil {
-			t.Fatal("should return use closed socket")
+		if !strings.Contains(err.Error(), "use of closed network connection") {
+			t.Fatal("should return error: use of closed network connection")
 		}
 	}()
 

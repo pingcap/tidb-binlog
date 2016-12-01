@@ -19,10 +19,10 @@ func (p *mockPumpClient) WriteBinlog(ctx context.Context, in *binlog.WriteBinlog
 
 // Obtains a batch of binlog from a given location.
 func (p *mockPumpClient) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq, opts ...grpc.CallOption) (*binlog.PullBinlogResp, error) {
-	var ents []binlog.Entity
+	var bls []binlog.Binlog
 	if !furtherPullBinlog {
 		furtherPullBinlog = true
-		bls := []binlog.Binlog{
+		bls = []binlog.Binlog{
 			{
 				Tp:      binlog.BinlogType_Prewrite,
 				StartTs: 1,
@@ -48,39 +48,21 @@ func (p *mockPumpClient) PullBinlogs(ctx context.Context, in *binlog.PullBinlogR
 				StartTs: 5,
 			},
 		}
-		for _, bl := range bls {
-			rawBl, err := bl.Marshal()
-			if err != nil {
-				return nil, errors.New("pull binlog error")
-			}
-			ents = append(ents, binlog.Entity{Pos: binlog.Pos{Suffix: 1, Offset: 1}, Payload: rawBl})
+	} else {
+		bls = []binlog.Binlog{
+			{
+				Tp:       binlog.BinlogType_Commit,
+				StartTs:  3,
+				CommitTs: 4,
+			}, {
+				Tp:       binlog.BinlogType_Rollback,
+				StartTs:  4,
+				CommitTs: 5,
+			},
 		}
-		return &binlog.PullBinlogResp{
-			Entities: ents,
-		}, nil
 	}
 
-	bls := []binlog.Binlog{
-		{
-			Tp:       binlog.BinlogType_Commit,
-			StartTs:  3,
-			CommitTs: 4,
-		}, {
-			Tp:       binlog.BinlogType_Rollback,
-			StartTs:  4,
-			CommitTs: 5,
-		},
-	}
-	for _, bl := range bls {
-		rawBl, err := bl.Marshal()
-		if err != nil {
-			return nil, errors.New("pull binlog error")
-		}
-		ents = append(ents, binlog.Entity{Pos: binlog.Pos{Suffix: 1, Offset: 1}, Payload: rawBl})
-	}
-	return &binlog.PullBinlogResp{
-		Entities: ents,
-	}, nil
+	return testGenResponse(bls)
 }
 
 func (s *testCisternSuite) TestPump(c *C) {
@@ -93,4 +75,18 @@ func (s *testCisternSuite) TestPump(c *C) {
 	res := p.Collect(context.Background(), nil)
 	c.Assert(res.binlogs, HasLen, 2)
 	c.Assert(res.err, NotNil)
+}
+
+func testGenResponse(bls []binlog.Binlog) (*binlog.PullBinlogResp, error) {
+	var ents []binlog.Entity
+	for _, bl := range bls {
+		rawBl, err := bl.Marshal()
+		if err != nil {
+			return nil, errors.New("pull binlog error")
+		}
+		ents = append(ents, binlog.Entity{Pos: binlog.Pos{Suffix: 1, Offset: 1}, Payload: rawBl})
+	}
+	return &binlog.PullBinlogResp{
+		Entities: ents,
+	}, nil
 }
