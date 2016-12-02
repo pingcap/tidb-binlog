@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CP_ROOT=$(dirname "${BASH_SOURCE}")/..
-
+LockFile=".lock.file"
 HOST="127.0.0.1"
 PORT=3306
 USERNAME="root"
@@ -33,6 +33,13 @@ print_args () {
     echo_info  "is-recovery: ${ISRECOVERY}"
     echo_info  "##################################"
 }
+
+# lock the dir
+mkdir ${LockFile}
+if [ $? -ne 0 ];  then
+    echo_error "another same shell script is running" && exit 1
+fi
+trap 'rm -rf "${LockFile}"; exit $?' INT TERM EXIT
 
 # parse arguments
 while [[ $# -gt 1 ]]; do

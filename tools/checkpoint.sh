@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CP_ROOT=$(dirname "${BASH_SOURCE}")/..
-
+LockFile=".lock.file"
 HOST="127.0.0.1"
 PORT=4000
 USERNAME="root"
@@ -9,6 +9,7 @@ PASSWORD="''"
 DATADIR="."
 CHUNKSIZE=64
 CISTERN_ADDR="127.0.0.1:8249"
+
 
 # echo function
 echo_info () {
@@ -31,6 +32,13 @@ print_args () {
     echo_info  "cistern-addr: ${CISTERN_ADDR}"
     echo_info  "##################################"
 }
+
+# lock the dir
+mkdir ${LockFile}
+if [ $? -ne 0 ];  then
+	echo_error "another same shell script is running" && exit 1
+fi
+trap 'rm -rf "${LockFile}"; exit $?' INT TERM EXIT
 
 # parse arguments
 while [[ $# -gt 1 ]]; do
