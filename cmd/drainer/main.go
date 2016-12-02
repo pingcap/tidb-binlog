@@ -30,6 +30,11 @@ func main() {
 		os.Exit(2)
 	}
 
+	if cfg.EndCommitTS > 0 && cfg.EndCommitTS <= cfg.InitCommitTS {
+		log.Info("don't need recovery, the data is complete")
+		os.Exit(0)
+	}
+
 	drainer.InitLogger(cfg)
 	drainer.PrintVersionInfo()
 	log.Infof("%v", cfg)
