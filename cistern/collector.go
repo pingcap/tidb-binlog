@@ -2,6 +2,7 @@ package cistern
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -96,22 +97,18 @@ func (c *Collector) Start(ctx context.Context) {
 		log.Info("Collector goroutine exited")
 	}()
 
-	round := 1
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(c.interval):
 			start := time.Now()
-			synced, err := c.collect(ctx)
+			synced, err := c.DetectPumps(ctx)
 			if err != nil {
-				log.Errorf("collect error: %v", errors.ErrorStack(err))
+				log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 				synced = false
 			}
 			c.updateStatus(synced)
-			elapsed := time.Now().Sub(start)
-			log.Debugf("finished collecting at round[%d], elapsed time[%s]", round, elapsed)
-			round++
 		}
 	}
 }
@@ -136,87 +133,22 @@ func (c *Collector) updateStatus(synced bool) {
 
 // collect pulls binlog from pumps, return whether cistern is synced with
 // pump after this round of collect.
-func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
+func (c *Collector) DetectPumps(ctx context.Context) (synced bool, err error) {
 	if err1 := c.prepare(ctx); err1 != nil {
 		err = errors.Trace(err1)
 		return
 	}
 
-	// start to collect binlog from each pump
-	resc := make(chan Result)
-	var wg sync.WaitGroup
-	for _, p := range c.pumps {
-		wg.Add(1)
-		go func(p *Pump) {
-			select {
-			case resc <- p.Collect(ctx, c.tiClient):
-			case <-ctx.Done():
-			}
-			wg.Done()
-		}(p)
-	}
-	go func() {
-		wg.Wait()
-		close(resc)
-	}()
-
-	items := make(map[int64]*binlog.Binlog)
-	var lowerBoundary int64 = -1 << 63
-	savepoints := make(map[string]binlog.Pos)
-	for r := range resc {
-		if r.err != nil {
-			err = errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
-				r.clusterID, r.nodeID)
-			return
-		}
-		for commitTS, item := range r.binlogs {
-			items[commitTS] = item
-		}
-
-		if r.maxCommitTS < lowerBoundary {
-			lowerBoundary = r.maxCommitTS
-		}
-
-		if ComparePos(r.end, r.begin) > 0 {
-			savepoints[r.nodeID] = r.end
-		}
-	}
-
-	jobs, err1 := c.grabDDLJobs(ctx, items)
-	if err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-	if err1 := c.storeDDLJobs(jobs); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-	if err1 := c.store(items); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-	if err1 := c.publish(lowerBoundary); err != nil {
-		err = errors.Trace(err1)
-		return
-	}
-
-	if err1 := c.updateSavepoints(savepoints); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-
-	c.updateLatestCommitTS(items)
-	if len(items) == 0 {
+	windowUpper := c.getLatestCommitTS()
+	windowLower := c.getLaetsValidCommitTS()
+	if windowLower == windowUpper {
 		synced = true
 	}
 
-	// prometheus metrics
-	windowGauge.WithLabelValues("upper").Set(float64(c.window.LoadUpper()))
-	ddlJobsCounter.Add(float64(len(jobs)))
-	binlogCounter.Add(float64(len(items)))
-	for nodeID, pos := range savepoints {
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pos))
-	}
+	c.window.SaveUpper(windowUpper)
+	c.window.PersistLower(windowLower)
+	windowGauge.WithLabelValues("upper").Set(float64(windowUpper))
+	windowGauge.WithLabelValues("lower").Set(float64(windowLower))
 	return
 }
 
@@ -225,14 +157,11 @@ func (c *Collector) prepare(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	online := make(map[string]bool)
+	exists := make(map[string]bool)
 	for _, n := range nodes {
-		// stop collect if any pump node is offline
-		if !n.IsAlive {
-			return errors.Errorf("pump with nodeID(%s) is offline, give up this round of processing", n.NodeID)
-		}
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
+			// this is the best way to init pump, we will fix it in the new way
 			pos, err := c.getSavePoints(n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -245,10 +174,10 @@ func (c *Collector) prepare(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 		}
-		online[n.NodeID] = true
+		exists[n.NodeID] = true
 	}
 	for id, p := range c.pumps {
-		if !online[id] {
+		if !exists[id] {
 			// release invalid connection
 			p.Close()
 			delete(c.pumps, id)
@@ -258,6 +187,30 @@ func (c *Collector) prepare(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Collector) getLatestCommitTS() int64 {
+	var latest int64 = 0
+	for _, p := range c.pumps {
+		latestCommitTS = p.GetLatestCommitTS()
+		if latestCommitTS > latest {
+			latest = latestCommitTS
+		}
+	}
+
+	return latest
+}
+
+func (c *Collector) getLaetsValidCommitTS() int64 {
+	var latest int64 = math.MaxInt64
+	for _, p := range c.pumps {
+		latestCommitTS = p.GetLaetsValidCommitTS()
+		if latestCommitTS < latest {
+			latest = latestCommitTS
+		}
+	}
+
+	return latest
 }
 
 func (c *Collector) store(items map[int64]*binlog.Binlog) error {
@@ -300,16 +253,6 @@ func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
 		}
 	}
 	return nil
-}
-
-func (c *Collector) updateLatestCommitTS(items map[int64]*binlog.Binlog) {
-	max := c.window.LoadUpper()
-	for ts := range items {
-		if ts > max {
-			max = ts
-		}
-	}
-	c.window.SaveUpper(max)
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {

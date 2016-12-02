@@ -1,6 +1,7 @@
 package cistern
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -24,15 +25,18 @@ type Result struct {
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
 type Pump struct {
-	nodeID    string
-	clusterID uint64
-	host      string
-	conn      *grpc.ClientConn
-	timeout   time.Duration
-	client    binlog.PumpClient
-	current   binlog.Pos
-	batch     int32
-	interval  time.Duration
+	nodeID              string
+	clusterID           uint64
+	host                string
+	buf                 *buffer
+	conn                *grpc.ClientConn
+	timeout             time.Duration
+	client              binlog.PumpClient
+	current             binlog.Pos
+	batch               int32
+	interval            time.Duration
+	latestCommitTS      int64
+	latestValidCommitTS int64
 }
 
 // NewPump return an instance of Pump with opened gRPC connection
@@ -45,6 +49,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		nodeID:    nodeID,
 		clusterID: clusterID,
 		host:      host,
+		buf:       NewBuffer(),
 		conn:      conn,
 		timeout:   timeout,
 		client:    binlog.NewPumpClient(conn),
@@ -59,19 +64,108 @@ func (p *Pump) Close() {
 	p.conn.Close()
 }
 
+func (p *Pump) Collect1(pctx context.Context, t *tikv.LockResolver) {
+	go pullBinlogs(pctx)
+	prewriteItems := make(map[int64]index)
+	binlogs := make(map[int64]*Binlog)
+	start := b.GetStartCursor()
+	end := b.GetEndCursor()
+	for {
+		if start == end {
+			time.Sleep(retryTimeout)
+			start := b.GetStartCursor()
+			end := b.GetEndCursor()
+			continue
+		}
+
+		item := p.buf.Get(start)
+		b := new(binlog.Binlog)
+		err := b.Unmarshal(item.Payload)
+		log.Errorf("unmarshal payload error(%v), host(%s), clusterID(%s), Pos(%v)", p.host, p.clusterID, item.Pos)
+		switch b.Tp {
+		case binlog.BinlogType_Prewrite, binlog.BinlogType_Rollback:
+			prewriteItems[b.StartTs] = b
+		case binlog.BinlogType_Commit:
+			if co, ok := prewriteItems[b.startTs]; ok {
+				if b.Tp == binlog.BinlogType_Commit {
+					co.CommitTs = b.CommitTs
+					co.Tp = b.Tp
+					binlogs[co.CommitTs] = co
+				}
+				delete(prewriteItems, b.startTs)
+			}
+		case binlog.BinlogType_Rollback:
+			if co, ok := prewriteItems[startTs]; ok {
+				delete(prewriteItemsIndex, startTs)
+			}
+		default:
+			log.Errorf("unrecognized binlog type(%d), host(%s), clusterID(%d), Pos(%v) ", b.Tp, p.host, p.clusterID, item.Pos)
+		}
+
+		if item.CommitTs > p.latestCommitTS {
+			p.latestCommitTS = item.CommitTS
+			res.maxCommitTS = b.CommitTs
+		}
+
+	}
+}
+
+func (p *Pump) receiveBinlog(ctx context.Context, stream pb.Pump_DumpBinlogClient) error {
+	var nextTs int64
+	var err error
+	var resp *pb.DumpBinlogResp
+
+	for {
+		resp, err = stream.Recv()
+		if err != nil {
+			break
+		}
+
+		err = b.buf.Store(ctx, resp.Binlog)
+		if err != nil {
+			break
+		}
+	}
+
+	return errors.Trace(err)
+}
+
+func (p *Pump) pullBinlogs(pctx context.Context) {
+	var err error
+	var stream pb.Pump_DumpBinlogClient
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		default:
+			req := &pb.DumpBinlogReq{Pos: p.current}
+			stream, err = p.client.DumpBinlog(pctx, req)
+			if err != nil {
+				log.Errorf("[Get stream]%v", err)
+				time.Sleep(retryTimeout)
+				continue
+			}
+
+			err := p.receiveBinlog(ctx, stream)
+			if err != nil {
+				if errors.Cause(err) != io.EOF {
+					log.Errorf("[stream]%v", err)
+				}
+				time.Sleep(retryTimeout)
+				continue
+			}
+		}
+	}
+
+}
+
 // Collect pulls a batch of binlog items from pump server, and records the begin and end position to the result.
 // Note that the end position should be the next of the last one in batch.
 // Each Prewrite type item in batch must find a type of Commit or Rollback one with the same startTS,
 // if some ones don't find guys, it should pull another batch from pump and find their partners.
 // Eventually, if there are still some rest ones, calls abort() via tikv client for them.
 func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) {
-	res = Result{
-		nodeID:    p.nodeID,
-		clusterID: p.clusterID,
-		begin:     p.current,
-		end:       p.current,
-		binlogs:   make(map[int64]*binlog.Binlog),
-	}
 	prewriteItems := make(map[int64]*binlog.Binlog)
 	rollbackItems := make(map[int64]*binlog.Binlog)
 	commitItems := make(map[int64]*binlog.Binlog)
