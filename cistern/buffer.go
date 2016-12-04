@@ -10,7 +10,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-var defaultBufferSize int64 = 10000
+var defaultBufferSize int64 = 16384
 
 // Buffer is a ring buffer for binlog
 type Buffer struct {
@@ -40,7 +40,7 @@ func (b *Buffer) Store(ctx context.Context, data pb.Entity) error {
 			start := b.GetStartCursor()
 			end := b.endCursor
 			if end-start < b.size {
-				b.buf[b.endCursor&b.mask] = data
+				b.buf[end&b.mask] = data
 				atomic.AddInt64(&b.endCursor, 1)
 				return nil
 			}

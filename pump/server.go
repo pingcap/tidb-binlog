@@ -220,12 +220,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	pos := in.StartFrom
 
 	for {
-		binlogs, err := binlogger.ReadFrom(pos, in.Batch)
+		binlogs, err := binlogger.ReadFrom(pos, 1000)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		for _, bl := range binlogs {
+			pos = bl.Pos
+			pos.Offset += int64(len(bl.Payload) + 16)
 			resp := &binlog.PullBinlogResp{Entity: bl}
 			if err = stream.Send(resp); err != nil {
 				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))

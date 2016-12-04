@@ -81,6 +81,8 @@ func (p *Pump) Close() {
 // 3. forward the lower boundary and store the binlogs
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
+	p.mu.prewriteItems = make(map[int64]*pb.Binlog)
+	p.mu.binlogs = make(map[int64]*pb.Binlog)
 	go p.match()
 	go p.pullBinlogs()
 	go p.publish(t)
@@ -217,8 +219,8 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 					minStartTs = b.StartTs
 				}
 				if !isSavePoint {
-					isSavePoint = true
 					pos = item.Pos
+					isSavePoint = true
 				}
 			}
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
@@ -226,7 +228,9 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				maxCommitTs = b.CommitTs
 			}
 		}
-
+		if !isSavePoint {
+			pos = CalculateNextPos(item)
+		}
 		p.buf.Next()
 		start++
 	}
@@ -250,6 +254,7 @@ func (p *Pump) query(t *tikv.LockResolver, prewriteItems, binlogs map[int64]*pb.
 					b.CommitTs = int64(status.CommitTS())
 					b.Tp = pb.BinlogType_Commit
 					binlogs[b.CommitTs] = b
+					delete(p.mu.binlogs, b.CommitTs)
 				}
 				delete(p.mu.prewriteItems, b.StartTs)
 				p.mu.Unlock()
@@ -404,7 +409,7 @@ func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
 }
 
 func (p *Pump) updateSavepoint(pos pb.Pos) error {
-	if ComparePos(pos, p.current) <= 1 {
+	if ComparePos(pos, p.current) < 1 {
 		return nil
 	}
 
@@ -472,7 +477,7 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 		if err != nil {
 			break
 		}
-		pos = resp.Entity.Pos
+		pos = CalculateNextPos(resp.Entity)
 	}
 	return pos, errors.Trace(err)
 }
