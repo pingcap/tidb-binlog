@@ -58,14 +58,6 @@ var (
 			Name:      "ddl_jobs_total",
 			Help:      "Total ddl jobs count been stored.",
 		})
-
-	collectRetryTimesGaugeVec = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "cistern",
-			Name:      "collect_retry_times",
-			Help:      "How many times of collections to get a batch of coupled binlog from a pump node.",
-		}, []string{"host"})
 )
 
 func init() {
@@ -75,7 +67,6 @@ func init() {
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
-	prometheus.MustRegister(collectRetryTimesGaugeVec)
 }
 
 type metricClient struct {

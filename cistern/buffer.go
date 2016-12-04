@@ -2,61 +2,75 @@ package cistern
 
 import (
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/juju/errors"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-var defaultBufferSize = 100000
+var defaultBufferSize int64 = 10000
 
-type buffer struct {
+// Buffer is a ring buffer for binlog
+type Buffer struct {
 	startCursor int64
 	endCursor   int64
 	size        int64
 	mask        int64
-	buf         []*binlog.Binlog
+	buf         []pb.Entity
 }
 
-func NewBuffer() *binlogBuffer {
-	return &binlogBuffer{
+// NewBuffer returns a simple ring buffer that for binlog
+func NewBuffer() *Buffer {
+	return &Buffer{
 		size: defaultBufferSize,
 		mask: defaultBufferSize - 1,
-		buf:  make([]*binlog.Binlog, defaultBufferSize),
+		buf:  make([]pb.Entity, defaultBufferSize),
 	}
 }
 
-func (b *buffer) Store(ctx context.Context, data *binlog.Binlog) error {
+// Store stoores the binlog and forward the end cursor
+func (b *Buffer) Store(ctx context.Context, data pb.Entity) error {
 	for {
 		select {
-		case <-p.ctx.Done():
+		case <-ctx.Done():
 			return errors.New("context was canceled")
 		default:
 			start := b.GetStartCursor()
-			end := b.GetEndCursor()
+			end := b.endCursor
 			if end-start < b.size {
-				b.buf[b.end&b.mask] = data
-				atomic.AddInt64(&b.end, 1)
+				b.buf[b.endCursor&b.mask] = data
+				atomic.AddInt64(&b.endCursor, 1)
 				return nil
-			} else {
-				time.Sleep(retryTimeout)
 			}
+
+			time.Sleep(retryTimeout)
 		}
 	}
 }
 
-func (b *buffer) Get(index int64) *binlog.Binlog {
-	return b.buf[index&b.mask]
+// Get returns the first binlog in the buffer
+func (b *Buffer) Get() pb.Entity {
+	return b.buf[b.startCursor&b.mask]
 }
 
-func (b *buffer) Next() {
-	atomic.AddInt64(&b.start, 1)
+// Next forwards the start cursor by one step
+func (b *Buffer) Next() {
+	atomic.AddInt64(&b.startCursor, 1)
 }
 
-func (b *buffer) GetStartCursor() int64 {
+// GetStartCursor returns the start cursor
+func (b *Buffer) GetStartCursor() int64 {
 	return atomic.LoadInt64(&b.startCursor)
 }
 
-func (c *buffer) GetEndCursor() {
+// GetEndCursor returns the end cursor
+func (b *Buffer) GetEndCursor() int64 {
 	return atomic.LoadInt64(&b.endCursor)
+}
+
+// GetByIndex returns the binlog which locate the index
+func (b *Buffer) GetByIndex(index int64) pb.Entity {
+	return b.buf[index&b.mask]
 }

@@ -102,8 +102,7 @@ func (c *Collector) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(c.interval):
-			start := time.Now()
-			synced, err := c.DetectPumps(ctx)
+			synced, err := c.detectPumps(ctx)
 			if err != nil {
 				log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 				synced = false
@@ -133,7 +132,7 @@ func (c *Collector) updateStatus(synced bool) {
 
 // collect pulls binlog from pumps, return whether cistern is synced with
 // pump after this round of collect.
-func (c *Collector) DetectPumps(ctx context.Context) (synced bool, err error) {
+func (c *Collector) detectPumps(ctx context.Context) (synced bool, err error) {
 	if err1 := c.prepare(ctx); err1 != nil {
 		err = errors.Trace(err1)
 		return
@@ -146,9 +145,8 @@ func (c *Collector) DetectPumps(ctx context.Context) (synced bool, err error) {
 	}
 
 	c.window.SaveUpper(windowUpper)
-	c.window.PersistLower(windowLower)
 	windowGauge.WithLabelValues("upper").Set(float64(windowUpper))
-	windowGauge.WithLabelValues("lower").Set(float64(windowLower))
+	c.publish(windowLower)
 	return
 }
 
@@ -168,11 +166,12 @@ func (c *Collector) prepare(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
+			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, pos, c.boltdb, c.tiStore)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
+			p.StartCollect(ctx, c.tiClient)
 		}
 		exists[n.NodeID] = true
 	}
@@ -181,18 +180,30 @@ func (c *Collector) prepare(ctx context.Context) error {
 			// release invalid connection
 			p.Close()
 			delete(c.pumps, id)
-			log.Infof("node(%s) of cluster(%d) on host(%s) has been removed and release the connection to it",
-				id, p.clusterID, p.host)
+			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+				id, p.clusterID)
 		}
 	}
 
 	return nil
 }
 
+func (c *Collector) publish(end int64) error {
+	start := c.window.LoadLower()
+	if end > start {
+		if err := c.window.PersistLower(end); err != nil {
+			return errors.Trace(err)
+		}
+
+		windowGauge.WithLabelValues("lower").Set(float64(end))
+	}
+	return nil
+}
+
 func (c *Collector) getLatestCommitTS() int64 {
-	var latest int64 = 0
+	var latest int64
 	for _, p := range c.pumps {
-		latestCommitTS = p.GetLatestCommitTS()
+		latestCommitTS := p.GetLatestCommitTS()
 		if latestCommitTS > latest {
 			latest = latestCommitTS
 		}
@@ -204,55 +215,13 @@ func (c *Collector) getLatestCommitTS() int64 {
 func (c *Collector) getLaetsValidCommitTS() int64 {
 	var latest int64 = math.MaxInt64
 	for _, p := range c.pumps {
-		latestCommitTS = p.GetLaetsValidCommitTS()
+		latestCommitTS := p.GetLatestValidCommitTS()
 		if latestCommitTS < latest {
 			latest = latestCommitTS
 		}
 	}
 
 	return latest
-}
-
-func (c *Collector) store(items map[int64]*binlog.Binlog) error {
-	boundary := c.window.LoadLower()
-	b := c.boltdb.NewBatch()
-
-	for commitTS, item := range items {
-		if commitTS < boundary {
-			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
-				commitTS, item)
-		}
-		payload, err := item.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		key := codec.EncodeInt([]byte{}, commitTS)
-		data, err := encodePayload(payload)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		b.Put(key, data)
-	}
-
-	err := c.boltdb.Commit(binlogNamespace, b)
-	return errors.Trace(err)
-}
-
-func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
-	for id, pos := range savePoints {
-		data, err := pos.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = c.boltdb.Put(savepointNamespace, []byte(id), data)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if p, ok := c.pumps[id]; ok {
-			p.current = pos
-		}
-	}
-	return nil
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
@@ -269,72 +238,6 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 		return savePoint, errors.Trace(err)
 	}
 	return savePoint, nil
-}
-
-func (c *Collector) grabDDLJobs(ctx context.Context, items map[int64]*binlog.Binlog) (map[int64]*model.Job, error) {
-	res := make(map[int64]*model.Job)
-	for ts, item := range items {
-		if item.DdlJobId > 0 {
-			job, err := c.getDDLJob(item.DdlJobId)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			for job == nil {
-				select {
-				case <-ctx.Done():
-					return nil, errors.Trace(ctx.Err())
-				case <-time.After(c.timeout):
-					job, err = c.getDDLJob(item.DdlJobId)
-					if err != nil {
-						return nil, errors.Trace(err)
-					}
-				}
-			}
-			if job.State == model.JobCancelled {
-				delete(items, ts)
-			} else {
-				res[item.DdlJobId] = job
-			}
-		}
-	}
-	return res, nil
-}
-
-func (c *Collector) getDDLJob(id int64) (*model.Job, error) {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	job, err := snapMeta.GetHistoryDDLJob(id)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return job, nil
-}
-
-func (c *Collector) storeDDLJobs(jobs map[int64]*model.Job) error {
-	b := c.boltdb.NewBatch()
-	for id, job := range jobs {
-		if job.State == model.JobCancelled {
-			continue
-		}
-		if err := decodeJob(job); err != nil {
-			return errors.Trace(err)
-		}
-		payload, err := job.Encode()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		key := codec.EncodeInt([]byte{}, id)
-		b.Put(key, payload)
-	}
-	err := c.boltdb.Commit(ddlJobNamespace, b)
-	return errors.Trace(err)
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
@@ -373,18 +276,6 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 				return errors.Trace(err)
 			}
 		}
-	}
-	return nil
-}
-
-func (c *Collector) publish(end int64) error {
-	start := c.window.LoadLower()
-	if end > start {
-		if err := c.window.PersistLower(end); err != nil {
-			return errors.Trace(err)
-		}
-
-		windowGauge.WithLabelValues("lower").Set(float64(end))
 	}
 	return nil
 }

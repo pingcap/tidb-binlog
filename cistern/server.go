@@ -29,6 +29,7 @@ var binlogNamespace []byte
 var savepointNamespace []byte
 var ddlJobNamespace []byte
 var retryTimeout = 3 * time.Second
+var maxTxnTimeout = 600
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
