@@ -244,6 +244,11 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
+	// notify all cisterns
+	if err := s.node.Notify(s.ctx); err != nil {
+		return errors.Annotate(err, "fail to notify all living cistern")
+	}
+
 	// start heartbeat
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {

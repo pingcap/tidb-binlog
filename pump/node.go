@@ -14,8 +14,9 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tipb/go-binlog"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -23,6 +24,8 @@ const (
 	nodeIDFile = ".node"
 	lockFile   = ".lock"
 )
+
+var nodePrefix = "pumps"
 
 // Node holds the states of this pump node
 type Node interface {
@@ -38,6 +41,8 @@ type Node interface {
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
+	// query all living cistern from etcd, and notifies them
+	Notify(ctx context.Context) error
 }
 
 type pumpNode struct {
@@ -50,10 +55,9 @@ type pumpNode struct {
 
 // NodeStatus describes the status information of a node in etcd
 type NodeStatus struct {
-	NodeID      string
-	Host        string
-	IsAlive     bool
-	LastReadPos map[string]binlog.Pos
+	NodeID  string
+	Host    string
+	IsAlive bool
 }
 
 // NewPumpNode return a pumpNode obj that initialized by server config
@@ -114,7 +118,7 @@ func (p *pumpNode) ShortID() string {
 }
 
 func (p *pumpNode) Register(ctx context.Context) error {
-	err := p.RegisterNode(ctx, p.id, p.host)
+	err := p.RegisterNode(ctx, nodePrefix, p.id, p.host)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -122,10 +126,37 @@ func (p *pumpNode) Register(ctx context.Context) error {
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.UnregisterNode(ctx, p.id)
+	err := p.UnregisterNode(ctx, nodePrefix, p.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	return nil
+}
+
+func (p *pumpNode) Notify(ctx context.Context) error {
+	cisterns, err := p.Nodes(ctx, "cisterns")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	dialerOpt := grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+		return net.DialTimeout("tcp", addr, timeout)
+	})
+
+	for _, c := range cisterns {
+		if c.IsAlive {
+			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
+			if err != nil {
+				return errors.Errorf("notify cistern(%s); but return error(%v)", c.Host, err)
+			}
+			cistern := pb.NewCisternClient(clientConn)
+			_, err = cistern.Notify(ctx, nil)
+			clientConn.Close()
+			if err != nil {
+				return errors.Errorf("notify cistern(%s); but return error(%v)", c.Host, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -145,7 +176,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
-				if err := p.RefreshNode(ctx, p.id, p.heartbeatTTL); err != nil {
+				if err := p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}
 			}

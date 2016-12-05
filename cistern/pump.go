@@ -35,6 +35,7 @@ type Pump struct {
 	timeout   time.Duration
 
 	buf                 *Buffer
+	latestTS            int64
 	latestCommitTS      int64
 	latestValidCommitTS int64
 	mu                  struct {
@@ -93,7 +94,7 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 // At the same time, it updates the latestCommitTS of binlogs and hold the pre binlog that not matched
 func (p *Pump) match() {
 	end := p.buf.GetEndCursor()
-	cursor := atomic.LoadInt64(&p.mu.cursor)
+	cursor := p.mu.cursor
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -122,7 +123,7 @@ func (p *Pump) match() {
 		switch b.Tp {
 		case pb.BinlogType_Prewrite:
 			p.mu.prewriteItems[b.StartTs] = b
-			p.updateLatest(b.StartTs)
+			p.updateLatestTS(b.StartTs)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 				if b.Tp == pb.BinlogType_Commit {
@@ -132,7 +133,8 @@ func (p *Pump) match() {
 				}
 				delete(p.mu.prewriteItems, b.StartTs)
 			}
-			p.updateLatest(b.CommitTs)
+			p.updateLatestTS(b.CommitTs)
+			p.updateLatestCommitTS(b.CommitTs)
 		default:
 			log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, item.Pos)
 		}
@@ -142,9 +144,16 @@ func (p *Pump) match() {
 	}
 }
 
-func (p *Pump) updateLatest(ts int64) {
-	latestTS := atomic.LoadInt64(&p.latestCommitTS)
+func (p *Pump) updateLatestTS(ts int64) {
+	latestTS := atomic.LoadInt64(&p.latestTS)
 	if ts > latestTS {
+		atomic.StoreInt64(&p.latestTS, ts)
+	}
+}
+
+func (p *Pump) updateLatestCommitTS(ts int64) {
+	latestCommitTS := atomic.LoadInt64(&p.latestCommitTS)
+	if ts > latestCommitTS {
 		atomic.StoreInt64(&p.latestCommitTS, ts)
 	}
 }
@@ -157,7 +166,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		maxCommitTs   int64
 		isSavePoint   bool
 		isStore       bool
-		isQuery       bool
 		pos           pb.Pos
 		err           error
 		binlogs       map[int64]*pb.Binlog
@@ -171,14 +179,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 
 		if start == cursor {
-			if isQuery {
-				binlogs = p.query(t, prewriteItems, binlogs)
-				if err != nil {
-					time.Sleep(retryTimeout)
-					continue
-				}
-				isQuery = false
-			}
 			if isStore {
 				err = p.save(binlogs, maxCommitTs, pos)
 				if err != nil {
@@ -195,7 +195,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				continue
 			} else {
 				isStore = true
-				isQuery = true
 				isSavePoint = false
 				minStartTs = math.MaxInt64
 				maxCommitTs = 0
@@ -215,12 +214,16 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case pb.BinlogType_Prewrite:
 			_, ok := prewriteItems[b.StartTs]
 			if ok {
-				if b.StartTs < minStartTs {
-					minStartTs = b.StartTs
-				}
-				if !isSavePoint {
-					pos = item.Pos
-					isSavePoint = true
+				if bl := p.query(t, b); bl == nil {
+					if b.StartTs < minStartTs {
+						minStartTs = b.StartTs
+					}
+					if !isSavePoint {
+						pos = item.Pos
+						isSavePoint = true
+					}
+				} else {
+					binlogs[bl.CommitTs] = bl
 				}
 			}
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
@@ -236,35 +239,36 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	}
 }
 
-func (p *Pump) query(t *tikv.LockResolver, prewriteItems, binlogs map[int64]*pb.Binlog) map[int64]*pb.Binlog {
-	for _, b := range prewriteItems {
-		latestTs := atomic.LoadInt64(&p.latestCommitTS)
-		startTS := oracle.ExtractPhysical(uint64(b.StartTs)) / int64(time.Second/time.Millisecond)
-		maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
-		if (maxTS - startTS) > 600 {
-			if b.GetDdlJobId() == 0 {
-				primaryKey := b.GetPrewriteKey()
-				status, err := t.GetTxnStatus(uint64(b.StartTs), primaryKey)
-				if err != nil {
-					log.Errorf("get item's(%v) txn status error: %v", b, err)
-					continue
-				}
-				p.mu.Lock()
-				if status.IsCommitted() {
-					b.CommitTs = int64(status.CommitTS())
-					b.Tp = pb.BinlogType_Commit
-					binlogs[b.CommitTs] = b
-					delete(p.mu.binlogs, b.CommitTs)
-				}
-				delete(p.mu.prewriteItems, b.StartTs)
-				p.mu.Unlock()
-			} else {
-				// todo: get ddl from history job or continue waiting?
-				log.Errorf("some prewrite DDL items remain single after waiting for a long time, item(%v)", b)
+func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) *pb.Binlog {
+	latestTs := atomic.LoadInt64(&p.latestCommitTS)
+	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
+	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
+	if (maxTS - startTS) > 600 {
+		if binlog.GetDdlJobId() == 0 {
+			primaryKey := binlog.GetPrewriteKey()
+			status, err := t.GetTxnStatus(uint64(binlog.StartTs), primaryKey)
+			if err != nil {
+				log.Errorf("get item's(%v) txn status error: %v", binlog, err)
+				return nil
 			}
+			ts := binlog.StartTs
+			p.mu.Lock()
+			if status.IsCommitted() {
+				binlog.CommitTs = int64(status.CommitTS())
+				binlog.Tp = pb.BinlogType_Commit
+				delete(p.mu.binlogs, binlog.CommitTs)
+			} else {
+				binlog = nil
+			}
+			delete(p.mu.prewriteItems, ts)
+			p.mu.Unlock()
+			return binlog
 		}
+		// todo: get ddl from history job or continue waiting?
+		log.Errorf("some prewrite DDL items remain single after waiting for a long time, item(%v)", binlog)
+		return nil
 	}
-	return binlogs
+	return nil
 }
 
 func (p *Pump) getPumpStatus() (map[int64]*pb.Binlog, map[int64]*pb.Binlog, int64) {
@@ -468,16 +472,11 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 			break
 		}
 
-		if resp.Errmsg != "" {
-			err = errors.Errorf("resp has error message: %s", resp.Errmsg)
-			break
-		}
-
+		pos = CalculateNextPos(resp.Entity)
 		err = p.buf.Store(p.ctx, resp.Entity)
 		if err != nil {
 			break
 		}
-		pos = CalculateNextPos(resp.Entity)
 	}
 	return pos, errors.Trace(err)
 }

@@ -30,10 +30,15 @@ var savepointNamespace []byte
 var ddlJobNamespace []byte
 var retryTimeout = 3 * time.Second
 var maxTxnTimeout = 600
+var heartbeatTTL int64 = 60
+var nodePrefix = "cisterns"
+var heartbeatInterval = 10 * time.Second
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
+	ID        string
+	cfg       *Config
 	boltdb    store.Store
 	window    *DepositWindow
 	collector *Collector
@@ -54,6 +59,11 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
+	ID, err := genCisternID(cfg.ListenAddr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	// lockResolver and tikvStore doesn't exposed a method to get clusterID
 	// so have to create a PD client temporarily.
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
@@ -118,6 +128,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
+		ID:        ID,
+		cfg:       cfg,
 		boltdb:    s,
 		window:    win,
 		collector: c,
@@ -209,6 +221,16 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 		IsSynced: status.Synced,
 		CommitTS: status.DepositWindow.Upper,
 	}, nil
+}
+
+// Notify implements the gRPC interface of cistern server
+func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	err := s.collector.prepare(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return nil, nil
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server
@@ -426,8 +448,45 @@ func (s *Server) StartGC() {
 	}()
 }
 
+func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
+	errc := make(chan error, 1)
+	go func() {
+		defer func() {
+			s.Close()
+			close(errc)
+			log.Info("Heartbeat goroutine exited")
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(heartbeatInterval):
+				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+					errc <- errors.Trace(err)
+				}
+			}
+		}
+	}()
+	return errc
+}
+
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
+	// register cistern
+	err := s.collector.reg.RegisterNode(s.ctx, nodePrefix, s.ID, s.cfg.ListenAddr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// start heartbeat
+	errc := s.heartbeat(s.ctx, s.ID)
+	go func() {
+		for err := range errc {
+			log.Error(err)
+		}
+	}()
+
 	// start to collect
 	s.StartCollect()
 
@@ -462,11 +521,16 @@ func (s *Server) Start() error {
 
 // Close stops all goroutines started by cistern server gracefully
 func (s *Server) Close() {
-	// first stop gRPC server
+	//  stop gRPC server
 	s.gs.Stop()
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
+
+	// unregister cistern
+	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
 	s.boltdb.Close()
 }
