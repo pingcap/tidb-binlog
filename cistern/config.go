@@ -15,12 +15,10 @@ import (
 )
 
 const (
-	defaultListenAddr          = "127.0.0.1:8249"
-	defaultDataDir             = "data.cistern"
-	defaultCollectInterval     = 10
-	defaultCollectBatch        = 5000
-	defaultDepositWindowPeriod = 10
-	defaultEtcdURLs            = "http://127.0.0.1:2379"
+	defaultListenAddr      = "127.0.0.1:8249"
+	defaultDataDir         = "data.cistern"
+	defaultCollectInterval = 10
+	defaultEtcdURLs        = "http://127.0.0.1:2379"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout = 5 * time.Second
 	defaultPumpTimeout = 5 * time.Second
@@ -29,22 +27,20 @@ const (
 // Config holds the configuration of cistern
 type Config struct {
 	*flag.FlagSet
-	LogLevel            string `toml:"log-level" json:"log-level"`
-	ListenAddr          string `toml:"addr" json:"addr"`
-	DataDir             string `toml:"data-dir" json:"data-dir"`
-	CollectInterval     int    `toml:"collect-interval" json:"collect-interval"`
-	CollectBatch        int    `toml:"collect-batch" json:"collect-batch"`
-	DepositWindowPeriod int    `toml:"deposit-window-period" json:"deposit-window-period"`
-	EtcdURLs            string `toml:"pd-urls" json:"pd-urls"`
-	GC                  int    `toml:"gc" json:"gc"`
-	LogFile             string `toml:"log-file" json:"log-file"`
-	LogRotate           string `toml:"log-rotate" json:"log-rotate"`
-	EtcdTimeout         time.Duration
-	PumpTimeout         time.Duration
-	MetricsAddr         string
-	MetricsInterval     int
-	configFile          string
-	printVersion        bool
+	LogLevel        string `toml:"log-level" json:"log-level"`
+	ListenAddr      string `toml:"addr" json:"addr"`
+	DataDir         string `toml:"data-dir" json:"data-dir"`
+	CollectInterval int    `toml:"collect-interval" json:"collect-interval"`
+	EtcdURLs        string `toml:"pd-urls" json:"pd-urls"`
+	GC              int    `toml:"gc" json:"gc"`
+	LogFile         string `toml:"log-file" json:"log-file"`
+	LogRotate       string `toml:"log-rotate" json:"log-rotate"`
+	EtcdTimeout     time.Duration
+	PumpTimeout     time.Duration
+	MetricsAddr     string
+	MetricsInterval int
+	configFile      string
+	printVersion    bool
 }
 
 // NewConfig return an instance of configuration
@@ -62,8 +58,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
 	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
-	fs.IntVar(&cfg.CollectBatch, "collect-batch", defaultCollectBatch, "the max number of binlog items in a pulling batch")
-	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in boltDB will become to public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")
@@ -115,8 +109,6 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.CollectInterval, defaultCollectInterval)
-	adjustInt(&cfg.CollectBatch, defaultCollectBatch)
-	adjustInt(&cfg.DepositWindowPeriod, defaultDepositWindowPeriod)
 	return cfg.validate()
 }
 
