@@ -224,6 +224,9 @@ func (c *Collector) getLaetsValidCommitTS() int64 {
 			latest = latestCommitTS
 		}
 	}
+	if latest == math.MaxInt64 {
+		latest = 0
+	}
 
 	return latest
 }
