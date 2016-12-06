@@ -30,6 +30,7 @@ import (
 // and finally abort the txn in TiKV for that single ones.
 // After a batch processing is complete, collector will update the savepoint of each pump binlog stored in Etcd.
 type Collector struct {
+	sync.Mutex
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
@@ -39,11 +40,7 @@ type Collector struct {
 	boltdb    store.Store
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
-
-	muPump struct {
-		sync.Mutex
-		pumps map[string]*Pump
-	}
+	pumps     map[string]*Pump
 
 	// expose savepoints to HTTP.
 	mu struct {
@@ -77,6 +74,7 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 		interval:  time.Duration(cfg.CollectInterval) * time.Second,
 		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:   cfg.PumpTimeout,
+		pumps:     make(map[string]*Pump),
 		window:    w,
 		boltdb:    s,
 		tiClient:  tiClient,
@@ -86,25 +84,26 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
-	c.muPump.pumps = make(map[string]*Pump)
 	defer func() {
-		c.muPump.Lock()
-		for _, p := range c.muPump.pumps {
+		c.Lock()
+		for _, p := range c.pumps {
 			p.Close()
 		}
-		c.muPump.Unlock()
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
 		if err := c.tiStore.Close(); err != nil {
 			log.Error(err.Error())
 		}
+		c.Unlock()
 		log.Info("Collector goroutine exited")
 	}()
 
 	for {
+		c.Lock()
 		select {
 		case <-ctx.Done():
+			c.Unlock()
 			return
 		case <-time.After(c.interval):
 			synced, err := c.detectPumps(ctx)
@@ -113,6 +112,7 @@ func (c *Collector) Start(ctx context.Context) {
 				synced = false
 			}
 			c.updateStatus(synced)
+			c.Unlock()
 		}
 	}
 }
@@ -124,11 +124,9 @@ func (c *Collector) updateStatus(synced bool) {
 		PumpPos: make(map[string]binlog.Pos),
 	}
 
-	c.muPump.Lock()
-	for nodeID, pump := range c.muPump.pumps {
+	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.current
 	}
-	c.muPump.Lock()
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
 
@@ -163,10 +161,8 @@ func (c *Collector) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	exists := make(map[string]bool)
-	c.muPump.Lock()
-	defer c.muPump.Unlock()
 	for _, n := range nodes {
-		_, ok := c.muPump.pumps[n.NodeID]
+		_, ok := c.pumps[n.NodeID]
 		if !ok {
 			// this isn't the best way to init pump, we will fix it in the new way
 			pos, err := c.getSavePoints(n.NodeID)
@@ -179,16 +175,16 @@ func (c *Collector) prepare(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			c.muPump.pumps[n.NodeID] = p
+			c.pumps[n.NodeID] = p
 			p.StartCollect(ctx, c.tiClient)
 		}
 		exists[n.NodeID] = true
 	}
-	for id, p := range c.muPump.pumps {
+	for id, p := range c.pumps {
 		if !exists[id] {
 			// release invalid connection
 			p.Close()
-			delete(c.muPump.pumps, id)
+			delete(c.pumps, id)
 			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 				id, p.clusterID)
 		}
@@ -211,7 +207,7 @@ func (c *Collector) publish(end int64) error {
 
 func (c *Collector) getLatestCommitTS() int64 {
 	var latest int64
-	for _, p := range c.muPump.pumps {
+	for _, p := range c.pumps {
 		latestCommitTS := p.GetLatestCommitTS()
 		if latestCommitTS > latest {
 			latest = latestCommitTS
@@ -223,14 +219,12 @@ func (c *Collector) getLatestCommitTS() int64 {
 
 func (c *Collector) getLaetsValidCommitTS() int64 {
 	var latest int64 = math.MaxInt64
-	c.muPump.Lock()
-	for _, p := range c.muPump.pumps {
+	for _, p := range c.pumps {
 		latestCommitTS := p.GetLatestValidCommitTS()
 		if latestCommitTS < latest {
 			latest = latestCommitTS
 		}
 	}
-	c.muPump.Unlock()
 
 	return latest
 }

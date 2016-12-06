@@ -225,6 +225,8 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 
 // Notify implements the gRPC interface of cistern server
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	s.collector.Lock()
+	defer s.collector.Lock()
 	err := s.collector.prepare(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
