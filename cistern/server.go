@@ -476,7 +476,11 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// register cistern
-	err := s.collector.reg.RegisterNode(s.ctx, nodePrefix, s.ID, s.cfg.ListenAddr)
+	advURL, err := url.Parse(s.cfg.ListenAddr)
+	if err != nil {
+		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
+	}
+	err = s.collector.reg.RegisterNode(s.ctx, nodePrefix, s.ID, advURL.Host)
 	if err != nil {
 		return errors.Trace(err)
 	}
