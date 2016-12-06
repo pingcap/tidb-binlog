@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	genBinlogInterval    = 10 * time.Second
+	genBinlogInterval    = 3 * time.Second
 	tsoMaxBackoff        = 5000
 	oracleUpdateInterval = 2000
 )
@@ -345,6 +345,7 @@ func (s *Server) genForwardBinlog() {
 						log.Errorf("generate forward binlog, write binlog err %v", err)
 						continue
 					}
+					log.Info("generate binlog successfully")
 				}
 			}
 			s.needGenBinlog = true

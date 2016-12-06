@@ -100,12 +100,11 @@ func (c *Collector) Start(ctx context.Context) {
 	}()
 
 	for {
-		c.Lock()
 		select {
 		case <-ctx.Done():
-			c.Unlock()
 			return
 		case <-time.After(c.interval):
+			c.Lock()
 			synced, err := c.detectPumps(ctx)
 			if err != nil {
 				log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
