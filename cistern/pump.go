@@ -93,6 +93,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 // when it meet `end` of buffer , it would wait for a moment , then retry.
 // At the same time, it updates the latestCommitTS of binlogs and hold the pre binlog that not matched
 func (p *Pump) match() {
+	p.wg.Add(1)
+	defer p.wg.Done()
 	end := p.buf.GetEndCursor()
 	cursor := p.mu.cursor
 	for {
@@ -159,6 +161,8 @@ func (p *Pump) updateLatestCommitTS(ts int64) {
 }
 
 func (p *Pump) publish(t *tikv.LockResolver) {
+	p.wg.Add(1)
+	defer p.wg.Done()
 	start := p.buf.GetStartCursor()
 	cursor := start
 	var (

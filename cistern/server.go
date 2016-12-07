@@ -227,7 +227,7 @@ func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCom
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
 	s.collector.Lock()
 	defer s.collector.Unlock()
-	err := s.collector.prepare(ctx)
+	err := s.collector.prepare(s.ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

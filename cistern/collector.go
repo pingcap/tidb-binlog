@@ -148,9 +148,7 @@ func (c *Collector) detectPumps(ctx context.Context) (synced bool, err error) {
 		synced = true
 	}
 
-	c.window.SaveUpper(windowUpper)
-	windowGauge.WithLabelValues("upper").Set(float64(windowUpper))
-	c.publish(windowLower)
+	c.publish(windowUpper, windowLower)
 	return
 }
 
@@ -192,14 +190,20 @@ func (c *Collector) prepare(ctx context.Context) error {
 	return nil
 }
 
-func (c *Collector) publish(end int64) error {
-	start := c.window.LoadLower()
-	if end > start {
-		if err := c.window.PersistLower(end); err != nil {
+func (c *Collector) publish(upper, lower int64) error {
+	oldLower := c.window.LoadLower()
+	oldUpper := c.window.LoadUpper()
+
+	if lower > oldLower {
+		if err := c.window.PersistLower(lower); err != nil {
 			return errors.Trace(err)
 		}
 
-		windowGauge.WithLabelValues("lower").Set(float64(end))
+		windowGauge.WithLabelValues("lower").Set(float64(lower))
+	}
+	if upper > oldUpper {
+		c.window.SaveUpper(upper)
+		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
 	return nil
 }
