@@ -148,8 +148,8 @@ func (p *Pump) match() {
 
 func (p *Pump) updateLatestTS(ts int64) {
 	latestTS := atomic.LoadInt64(&p.latestTS)
-	if ts > latestTS {
-		atomic.StoreInt64(&p.latestTS, ts)
+	for ts > latestTS && !atomic.CompareAndSwapInt64(&p.latestTS, latestTS, ts) {
+		latestTS = atomic.LoadInt64(&p.latestTS)
 	}
 }
 
@@ -193,15 +193,24 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				isStore = false
 			}
 
+			oldCursor := cursor
 			prewriteItems, binlogs, cursor = p.getPumpStatus()
+			start = p.buf.GetStartCursor()
 			if start == cursor {
 				time.Sleep(retryTimeout)
 				continue
+			} else if oldCursor == cursor {
+				time.Sleep(retryTimeout)
+				version, err1 := p.tiStore.CurrentVersion()
+				if err1 != nil {
+					log.Errorf("get current version error: %v", err1)
+					continue
+				}
+				p.updateLatestTS(int64(version.Ver))
 			} else {
 				isStore = true
 				isSavePoint = false
 				minStartTs = math.MaxInt64
-				start = p.buf.GetStartCursor()
 				maxCommitTs = 0
 			}
 		}
