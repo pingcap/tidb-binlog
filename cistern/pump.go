@@ -164,6 +164,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	start := p.buf.GetStartCursor()
+	nextStart := start
 	cursor := start
 	var (
 		minStartTs    int64
@@ -183,6 +184,9 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 
 		if start == cursor {
+			if !isSavePoint {
+				nextStart = start
+			}
 			if isStore {
 				err = p.save(binlogs, maxCommitTs, pos)
 				if err != nil {
@@ -202,6 +206,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				isSavePoint = false
 				minStartTs = math.MaxInt64
 				maxCommitTs = 0
+				start = nextStart
 			}
 		}
 
@@ -225,6 +230,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 					if !isSavePoint {
 						pos = item.Pos
 						isSavePoint = true
+						nextStart = start
 					}
 				} else {
 					binlogs[bl.CommitTs] = bl
