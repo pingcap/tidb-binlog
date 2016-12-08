@@ -164,7 +164,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	start := p.buf.GetStartCursor()
-	nextStart := start
 	cursor := start
 	var (
 		minStartTs    int64
@@ -184,9 +183,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 
 		if start == cursor {
-			if !isSavePoint {
-				nextStart = start
-			}
 			if isStore {
 				err = p.save(binlogs, maxCommitTs, pos)
 				if err != nil {
@@ -205,16 +201,18 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				isStore = true
 				isSavePoint = false
 				minStartTs = math.MaxInt64
+				start = p.buf.GetStartCursor()
 				maxCommitTs = 0
-				start = nextStart
 			}
 		}
 
-		item := p.buf.Get()
+		item := p.buf.GetByIndex(start)
 		b := new(pb.Binlog)
 		err = b.Unmarshal(item.Payload)
 		if err != nil {
-			p.buf.Next()
+			if !isSavePoint {
+				p.buf.Next()
+			}
 			start++
 			log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error: %v", p.clusterID, item.Pos, err)
 			continue
@@ -230,7 +228,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 					if !isSavePoint {
 						pos = item.Pos
 						isSavePoint = true
-						nextStart = start
 					}
 				} else {
 					binlogs[bl.CommitTs] = bl
@@ -244,7 +241,10 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		if !isSavePoint {
 			pos = CalculateNextPos(item)
 		}
-		p.buf.Next()
+
+		if !isSavePoint {
+			p.buf.Next()
+		}
 		start++
 	}
 }
