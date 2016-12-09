@@ -70,16 +70,16 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 	}, nil
 }
 
-// Close cuts off connection to pump server
+// Close closes all process goroutine
 func (p *Pump) Close() {
 	p.cancel()
 	p.wg.Wait()
 }
 
-// StartCollect start to handle the pump's binlogs
-// 1. pull binlogs from pump, and put them in the Buffer
-// 2. match p+c binlogs
-// 3. forward the lower boundary and store the binlogs
+// StartCollect start to process the pump's binlogs
+// 1. pullBinlogs pulls binlogs from pump, and put them in the Buffer
+// 2. match matchs p+c binlogs
+// 3. publish forwards the lower boundary and store the binlogs
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
 	p.mu.prewriteItems = make(map[int64]*pb.Binlog)
@@ -90,8 +90,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 }
 
 // match is responsible for match p+c binlog and forward the pump's cursor.
-// when it meet `end` of buffer , it would wait for a moment , then retry.
-// At the same time, it updates the latestCommitTS of binlogs and hold the pre binlog that not matched
+// when it meets `end` of buffer , it would wait for a moment , then retry.
+// At the same time, it updates the latestCommitTS/latestValidCommitTS of binlogs and hold the pre binlog that not matched
 func (p *Pump) match() {
 	p.wg.Add(1)
 	defer p.wg.Done()
@@ -160,6 +160,7 @@ func (p *Pump) updateLatestCommitTS(ts int64) {
 	}
 }
 
+// publish finds the maxValidCommitts and blocks when it meets a preBinlog
 func (p *Pump) publish(t *tikv.LockResolver) {
 	p.wg.Add(1)
 	defer p.wg.Done()
@@ -199,15 +200,16 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			if start == cursor {
 				time.Sleep(retryTimeout)
 				continue
-			} else if oldCursor == cursor {
-				time.Sleep(retryTimeout)
-				version, err1 := p.tiStore.CurrentVersion()
-				if err1 != nil {
-					log.Errorf("get current version error: %v", err1)
-					continue
-				}
-				p.updateLatestTS(int64(version.Ver))
 			} else {
+				if oldCursor == cursor {
+					time.Sleep(retryTimeout)
+					version, err1 := p.tiStore.CurrentVersion()
+					if err1 != nil {
+						log.Errorf("get current version error: %v", err1)
+						continue
+					}
+					p.updateLatestTS(int64(version.Ver))
+				}
 				isStore = true
 				isSavePoint = false
 				minStartTs = math.MaxInt64
@@ -249,9 +251,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 		if !isSavePoint {
 			pos = CalculateNextPos(item)
-		}
-
-		if !isSavePoint {
 			p.buf.Next()
 		}
 		start++
@@ -262,7 +261,7 @@ func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) *pb.Binlog {
 	latestTs := atomic.LoadInt64(&p.latestCommitTS)
 	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
-	if (maxTS - startTS) > 600 {
+	if (maxTS - startTS) > maxTxnTimeout {
 		if binlog.GetDdlJobId() == 0 {
 			primaryKey := binlog.GetPrewriteKey()
 			status, err := t.GetTxnStatus(uint64(binlog.StartTs), primaryKey)
@@ -308,14 +307,14 @@ func (p *Pump) save(items map[int64]*pb.Binlog, lastValidCommitTS int64, pos pb.
 	if err != nil {
 		return errors.Trace(err)
 	}
-	latest := atomic.LoadInt64(&p.latestValidCommitTS)
-	if latest < lastValidCommitTS {
-		atomic.StoreInt64(&p.latestValidCommitTS, lastValidCommitTS)
-	}
-
 	err = p.updateSavepoint(pos)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	latest := atomic.LoadInt64(&p.latestValidCommitTS)
+	if latest < lastValidCommitTS {
+		atomic.StoreInt64(&p.latestValidCommitTS, lastValidCommitTS)
 	}
 
 	return nil
@@ -491,11 +490,11 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 			break
 		}
 
-		pos = CalculateNextPos(resp.Entity)
 		err = p.buf.Store(p.ctx, resp.Entity)
 		if err != nil {
 			break
 		}
+		pos = CalculateNextPos(resp.Entity)
 	}
 	return pos, errors.Trace(err)
 }

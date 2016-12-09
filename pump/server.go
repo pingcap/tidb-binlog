@@ -23,11 +23,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-var (
-	genBinlogInterval    = 3 * time.Second
-	tsoMaxBackoff        = 5000
-	oracleUpdateInterval = 2000
-)
+var genBinlogInterval = 3 * time.Second
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.

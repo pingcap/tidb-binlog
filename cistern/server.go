@@ -29,7 +29,7 @@ var binlogNamespace []byte
 var savepointNamespace []byte
 var ddlJobNamespace []byte
 var retryTimeout = 3 * time.Second
-var maxTxnTimeout = 600
+var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
@@ -220,7 +220,7 @@ func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.Noti
 	if err != nil {
 		log.Errorf("grpc call notify error: %v", err)
 	}
-	return nil, error.Trace(err)
+	return nil, errors.Trace(err)
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server

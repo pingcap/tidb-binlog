@@ -41,7 +41,7 @@ type Collector struct {
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 
-	// notify the new pump is comming
+	// notifyChan notifies the new pump is comming
 	notifyChan chan chan error
 	// expose savepoints to HTTP.
 	mu struct {
@@ -130,8 +130,7 @@ func (c *Collector) updateStatus(synced bool) {
 	c.mu.Unlock()
 }
 
-// collect pulls binlog from pumps, return whether cistern is synced with
-// pump after this round of collect.
+// detectPumps queries pumps' status and deletes the offline pump
 func (c *Collector) detectPumps(ctx context.Context) error {
 	if err := c.prepare(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
@@ -140,7 +139,7 @@ func (c *Collector) detectPumps(ctx context.Context) error {
 	}
 
 	windowUpper := c.getLatestCommitTS()
-	windowLower := c.getLaetsValidCommitTS()
+	windowLower := c.getLatestValidCommitTS()
 	c.publish(windowUpper, windowLower)
 	if windowLower == windowUpper {
 		c.updateStatus(true)
@@ -157,7 +156,6 @@ func (c *Collector) prepare(ctx context.Context) error {
 	for _, n := range nodes {
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
-			// this isn't the best way to init pump, we will fix it in the new way
 			pos, err := c.getSavePoints(n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -204,6 +202,7 @@ func (c *Collector) publish(upper, lower int64) error {
 	return nil
 }
 
+// query all pumps' latestCommitTS and select a bigger one
 func (c *Collector) getLatestCommitTS() int64 {
 	var latest int64
 	for _, p := range c.pumps {
@@ -216,7 +215,8 @@ func (c *Collector) getLatestCommitTS() int64 {
 	return latest
 }
 
-func (c *Collector) getLaetsValidCommitTS() int64 {
+// select min of all pumps' latestValidCommitTS
+func (c *Collector) getLatestValidCommitTS() int64 {
 	var latest int64 = math.MaxInt64
 	for _, p := range c.pumps {
 		latestCommitTS := p.GetLatestValidCommitTS()

@@ -10,7 +10,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-// the defauktBufferSize must be exponential power of 2
+// the defaultBufferSize must be exponential power of 2
 const defaultBufferSize int64 = 16 << 10
 
 // Buffer is a ring buffer for binlog
@@ -22,7 +22,7 @@ type Buffer struct {
 	buf         []pb.Entity
 }
 
-// NewBuffer returns a simple ring buffer that for binlog
+// NewBuffer returns a simple ring buffer that is for binlog
 func NewBuffer() *Buffer {
 	return &Buffer{
 		size: defaultBufferSize,
