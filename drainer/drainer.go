@@ -457,6 +457,11 @@ func (d *Drainer) run() error {
 				d.savePoint(commitTS)
 			}
 		}
+
+		if d.cfg.EndCommitTS > 0 && commitTS >= d.cfg.EndCommitTS {
+			log.Info("recovery complete!")
+			return nil
+		}
 	}
 }
 
