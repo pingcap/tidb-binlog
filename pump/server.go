@@ -246,6 +246,10 @@ func (s *Server) Start() error {
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
+		// unregister this node
+		if err := s.node.Unregister(s.ctx); err != nil {
+			log.Error(errors.ErrorStack(err))
+		}
 		return errors.Annotate(err, "fail to notify all living cistern")
 	}
 

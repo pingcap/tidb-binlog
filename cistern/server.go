@@ -214,25 +214,13 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 	}
 }
 
-// GetLatestCommitTS implements the gRPC interface of cistern server
-func (s *Server) GetLatestCommitTS(ctx context.Context, req *binlog.GetLatestCommitTSReq) (*binlog.GetLatestCommitTSResp, error) {
-	status := s.collector.HTTPStatus()
-	return &binlog.GetLatestCommitTSResp{
-		IsSynced: status.Synced,
-		CommitTS: status.DepositWindow.Upper,
-	}, nil
-}
-
 // Notify implements the gRPC interface of cistern server
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
-	s.collector.Lock()
-	defer s.collector.Unlock()
-	err := s.collector.prepare(s.ctx)
+	err := s.collector.Notify()
 	if err != nil {
-		return nil, errors.Trace(err)
+		log.Errorf("grpc call notify error: %v", err)
 	}
-
-	return nil, nil
+	return nil, error.Trace(err)
 }
 
 // DumpDDLJobs implements the gRPC interface of cistern server
@@ -452,6 +440,10 @@ func (s *Server) StartGC() {
 
 func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 	errc := make(chan error, 1)
+	// must refresh node firstly
+	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+		errc <- errors.Trace(err)
+	}
 	go func() {
 		defer func() {
 			s.Close()

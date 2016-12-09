@@ -30,7 +30,6 @@ import (
 // and finally abort the txn in TiKV for that single ones.
 // After a batch processing is complete, collector will update the savepoint of each pump binlog stored in Etcd.
 type Collector struct {
-	sync.Mutex
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
@@ -42,6 +41,8 @@ type Collector struct {
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 
+	// notify the new pump is comming
+	notifyChan chan chan error
 	// expose savepoints to HTTP.
 	mu struct {
 		sync.Mutex
@@ -70,22 +71,22 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID: clusterID,
-		interval:  time.Duration(cfg.CollectInterval) * time.Second,
-		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:   cfg.PumpTimeout,
-		pumps:     make(map[string]*Pump),
-		window:    w,
-		boltdb:    s,
-		tiClient:  tiClient,
-		tiStore:   tiStore,
+		clusterID:  clusterID,
+		interval:   time.Duration(cfg.CollectInterval) * time.Second,
+		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:    cfg.PumpTimeout,
+		pumps:      make(map[string]*Pump),
+		window:     w,
+		boltdb:     s,
+		tiClient:   tiClient,
+		tiStore:    tiStore,
+		notifyChan: make(chan chan error),
 	}, nil
 }
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		c.Lock()
 		for _, p := range c.pumps {
 			p.Close()
 		}
@@ -95,7 +96,6 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.tiStore.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		c.Unlock()
 		log.Info("Collector goroutine exited")
 	}()
 
@@ -103,15 +103,11 @@ func (c *Collector) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case errorC := <-c.notifyChan:
+			err := c.detectPumps(ctx)
+			errorC <- err
 		case <-time.After(c.interval):
-			c.Lock()
-			synced, err := c.detectPumps(ctx)
-			if err != nil {
-				log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
-				synced = false
-			}
-			c.updateStatus(synced)
-			c.Unlock()
+			c.detectPumps(ctx)
 		}
 	}
 }
@@ -136,20 +132,20 @@ func (c *Collector) updateStatus(synced bool) {
 
 // collect pulls binlog from pumps, return whether cistern is synced with
 // pump after this round of collect.
-func (c *Collector) detectPumps(ctx context.Context) (synced bool, err error) {
-	if err1 := c.prepare(ctx); err1 != nil {
-		err = errors.Trace(err1)
-		return
+func (c *Collector) detectPumps(ctx context.Context) error {
+	if err := c.prepare(ctx); err != nil {
+		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
+		c.updateStatus(false)
+		return errors.Trace(err)
 	}
 
 	windowUpper := c.getLatestCommitTS()
 	windowLower := c.getLaetsValidCommitTS()
-	if windowLower == windowUpper {
-		synced = true
-	}
-
 	c.publish(windowUpper, windowLower)
-	return
+	if windowLower == windowUpper {
+		c.updateStatus(true)
+	}
+	return nil
 }
 
 func (c *Collector) prepare(ctx context.Context) error {
@@ -289,6 +285,13 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		}
 	}
 	return nil
+}
+
+// Notify notifies to detcet pumps
+func (c *Collector) Notify() error {
+	errorC := make(chan error)
+	c.notifyChan <- errorC
+	return <-errorC
 }
 
 // Status exposes collector's status to HTTP handler.
