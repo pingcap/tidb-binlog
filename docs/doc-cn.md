@@ -12,7 +12,7 @@
  - [整体监控框架概述](https://github.com/pingcap/docs-cn/blob/master/op-guide/monitor-overview.md)
  - [组件状态 API & 监控](./monitor.md)
 + 其他功能
- - [TiDB checkpoint和恢复](tools/manual.md)
+ - [TiDB checkpoint和恢复](../tools/manual.md)
 
 ## TiDB-Binlog 简介
 
