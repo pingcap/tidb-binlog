@@ -10,16 +10,12 @@ Usage of cistern:
         log level: debug, info, warn, error, fatal (default "info")
   -addr string
         addr (i.e. 'host:port') to listen on for drainer connections (default "127.0.0.1:8249")
-  -collect-batch int
-        the max number of binlog items in a pulling batch (default 5000)
   -collect-interval int
         the interval time (in seconds) of binlog collection loop (default 10)
   -config-file string
         path to the configuration file
   -data-dir string
         path to the data directory of boltDB (default "data.cistern")
-  -deposit-window-period int
-        a period of time (in minutes) after that the binlog items stored in boltDB will become to public state (default 10)
   -gc int
         a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed.
   -log-file string

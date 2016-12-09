@@ -11,6 +11,8 @@
 + 运维 & 监控
  - [整体监控框架概述](https://github.com/pingcap/docs-cn/blob/master/op-guide/monitor-overview.md)
  - [组件状态 API & 监控](./monitor.md)
++ 其他功能
+ - [TiDB checkpoint和恢复](tools/manual.md)
 
 ## TiDB-Binlog 简介
 
@@ -135,8 +137,6 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     Usage of cistern:
     -addr string
         cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
-    -collect-batch int
-        每次请求向 pump 拉去的 binlog 数量 (默认 5000)
     -collect-interval int
         向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
     -config-file string
@@ -145,8 +145,6 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         cistern 数据存储位置路径 (默认 "data.cistern")
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
-    -deposit-window-period int
-       binlog 收集的窗口期，该窗口是为了确保窗口外 binlog 完整 （默认 10，单位 分钟）
     -metrics-addr string
        prometheus pushgataway 地址，不设置则禁止上报监控信息
     -metrics-interval int
