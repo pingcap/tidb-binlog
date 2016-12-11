@@ -390,9 +390,15 @@ func orderbyKey(descs []describeTable) string {
 		}
 	}
 	if buf.Len() == 0 {
-		// if no primary key found, use the a field as order by key
-		// when descs is empty, panic is the right behavior
-		return descs[0].Field
+		// if no primary key found, use all fields as order by key
+		for _, desc := range descs {
+			if firstTime {
+				fmt.Fprintf(&buf, "%s", desc.Field)
+				firstTime = false
+			} else {
+				fmt.Fprintf(&buf, ",%s", desc.Field)
+			}
+		}
 	}
 	return buf.String()
 }
