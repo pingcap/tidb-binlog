@@ -91,10 +91,12 @@ func (df *Diff) EqualIndex(tblName string) (bool, error) {
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	defer index1.Close()
 	index2, err := getTableIndex(df.db2, tblName)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	defer index2.Close()
 
 	eq, err := equalRows(index1, index2, &showIndex{}, &showIndex{})
 	if err != nil || !eq {
@@ -127,11 +129,13 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	defer rows1.Close()
 
 	rows2, err := getTableRows(df.db2, tblName)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	defer rows2.Close()
 
 	cols1, err := rows1.Columns()
 	if err != nil {
@@ -440,6 +444,7 @@ func ShowDatabases(db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var dbName string
