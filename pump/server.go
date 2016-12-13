@@ -63,13 +63,14 @@ type Server struct {
 	// node maintain the status of this pump and interact with etcd registry
 	node Node
 
-	tcpAddr       string
-	unixAddr      string
-	gs            *grpc.Server
-	ctx           context.Context
-	cancel        context.CancelFunc
-	gc            time.Duration
-	metrics       *metricClient
+	tcpAddr  string
+	unixAddr string
+	gs       *grpc.Server
+	ctx      context.Context
+	cancel   context.CancelFunc
+	gc       time.Duration
+	metrics  *metricClient
+	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog bool
 	tiStore       kv.Storage
 }
@@ -281,7 +282,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
 	}
-	// start generate binlog if pump dob't receive new binlogs
+	// start generate binlog if pump doesn't receive new binlogs
 	go s.genForwardBinlog()
 
 	// gc old binlog files
@@ -304,6 +305,7 @@ func (s *Server) Start() error {
 	return m.Serve()
 }
 
+// gennerate commit or rollback binlog can just forward the latestCommitTs, and don't block anything
 func (s *Server) genBinlog() ([]byte, error) {
 	version, err := s.tiStore.CurrentVersion()
 	if err != nil {
@@ -321,6 +323,7 @@ func (s *Server) genBinlog() ([]byte, error) {
 	return payload, nil
 }
 
+// we would generate binlog to forward the pump's latestCommitTs in cistern when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog = true
 	for {

@@ -23,12 +23,12 @@ import (
 	"golang.org/x/net/context"
 )
 
-// Collector keeps all connections to pumps, and pulls binlog from each pump server periodically.
-// If find any pump server gone away collector should halt processing until recovery.
-// Each Prewrite binlog in a batch must be paired up with a Commit or Abort binlog that have same startTS.
-// If there are some ones who don't have a girlfriend:), it should request for the next batch after a while,
-// and finally abort the txn in TiKV for that single ones.
-// After a batch processing is complete, collector will update the savepoint of each pump binlog stored in Etcd.
+type notifyResult struct {
+	err error
+	wg  sync.WaitGroup
+}
+
+// Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
 	clusterID uint64
 	batch     int32
@@ -42,7 +42,7 @@ type Collector struct {
 	pumps     map[string]*Pump
 
 	// notifyChan notifies the new pump is comming
-	notifyChan chan chan error
+	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
 	mu struct {
 		sync.Mutex
@@ -80,7 +80,7 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 		boltdb:     s,
 		tiClient:   tiClient,
 		tiStore:    tiStore,
-		notifyChan: make(chan chan error),
+		notifyChan: make(chan *notifyResult),
 	}, nil
 }
 
@@ -103,9 +103,9 @@ func (c *Collector) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case errorC := <-c.notifyChan:
-			err := c.detectPumps(ctx)
-			errorC <- err
+		case nr := <-c.notifyChan:
+			nr.err = c.detectPumps(ctx)
+			nr.wg.Done()
 		case <-time.After(c.interval):
 			c.detectPumps(ctx)
 		}
@@ -289,9 +289,11 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 
 // Notify notifies to detcet pumps
 func (c *Collector) Notify() error {
-	errorC := make(chan error)
-	c.notifyChan <- errorC
-	return <-errorC
+	nr := &notifyResult{}
+	nr.wg.Add(1)
+	c.notifyChan <- nr
+	nr.wg.Done()
+	return nr.err
 }
 
 // Status exposes collector's status to HTTP handler.
