@@ -42,9 +42,11 @@ type Pump struct {
 	window    *DepositWindow
 	timeout   time.Duration
 
-	binlogChan          chan *binlogEntity
-	latestTS            int64
-	latestCommitTS      int64
+	// pullBinlogs sends the binlogs to publish by it
+	binlogChan chan *binlogEntity
+	// the latestTS the pump meets or query from tso
+	latestTS int64
+	// binlogs are complete before latestValidCommitTS
 	latestValidCommitTS int64
 	mu                  struct {
 		sync.Mutex
@@ -52,13 +54,14 @@ type Pump struct {
 		binlogs       map[int64]*pb.Binlog
 	}
 
+	// record the count of query tikv, if queryCount%8==7, it would update the latestTS by quering tso
 	queryCount int64
 	wg         sync.WaitGroup
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
 
-// NewPump return an instance of Pump with opened gRPC connection
+// NewPump returns an instance of Pump with opened gRPC connection
 func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, pos pb.Pos, boltdb store.Store, tiStore kv.Storage) (*Pump, error) {
 	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
 	if err != nil {
@@ -78,13 +81,13 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 	}, nil
 }
 
-// Close closes all process goroutine
+// Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
 	p.cancel()
 	p.wg.Wait()
 }
 
-// StartCollect start to process the pump's binlogs
+// StartCollect starts to process the pump's binlogs
 // 1. pullBinlogs pulls binlogs from pump, match p+c binlog by using prewriteItems map
 // 2. publish query the non-match pre binlog and forwards the lower boundary, store the binlogs
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
@@ -95,8 +98,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	go p.publish(t)
 }
 
-// match is responsible for match p+c binlog and forward the pump's cursor.
-// At the same time, it updates the latestCommitTS/latestValidCommitTS of binlogs and hold the pre binlog that not matched
+// match is responsible for match p+c binlog.
+// it also updates the latestTS/latestValidCommitTS of binlogs
 func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
@@ -105,11 +108,12 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
 	}
+
+	latestTS := b.StartTs
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
 		p.mu.prewriteItems[b.StartTs] = b
-		p.updateLatestTS(b.StartTs)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
@@ -119,12 +123,12 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 			}
 			delete(p.mu.prewriteItems, b.StartTs)
 		}
-		p.updateLatestTS(b.CommitTs)
-		p.updateLatestCommitTS(b.CommitTs)
+		latestTS = b.CommitTs
 	default:
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
+	p.updateLatestTS(latestTS)
 	return b
 }
 
@@ -133,13 +137,6 @@ func (p *Pump) updateLatestTS(ts int64) {
 	latestTS := atomic.LoadInt64(&p.latestTS)
 	for ts > latestTS && !atomic.CompareAndSwapInt64(&p.latestTS, latestTS, ts) {
 		latestTS = atomic.LoadInt64(&p.latestTS)
-	}
-}
-
-func (p *Pump) updateLatestCommitTS(ts int64) {
-	latestCommitTS := atomic.LoadInt64(&p.latestCommitTS)
-	if ts > latestCommitTS {
-		atomic.StoreInt64(&p.latestCommitTS, ts)
 	}
 }
 
@@ -162,8 +159,10 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 
 		switch entity.tp {
 		case pb.BinlogType_Prewrite:
+			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
+			// if the commitTs if large than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
 			if entity.commitTS > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
 				maxCommitTs = entity.commitTS
@@ -178,21 +177,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	}
 }
 
-func (p *Pump) getBinlogs(binlogs map[int64]*pb.Binlog) map[int64]*pb.Binlog {
-	var tmpBinlogs map[int64]*pb.Binlog
-	p.mu.Lock()
-	tmpBinlogs = p.mu.binlogs
-	p.mu.binlogs = make(map[int64]*pb.Binlog)
-	p.mu.Unlock()
-	if binlogs == nil {
-		return tmpBinlogs
-	}
-	for ts, b := range tmpBinlogs {
-		binlogs[ts] = b
-	}
-	return binlogs
-}
-
 func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 	for {
 		select {
@@ -201,7 +185,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		default:
 		}
 
-		// p.queryCount % 8 == 7; to update ts by quering tso
+		// while p.queryCount % 8 == 7, is updates ts by quering tso
 		if p.queryCount&7 == 7 {
 			version, err := p.tiStore.CurrentVersion()
 			if err != nil {
@@ -215,7 +199,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		b, ok := p.mu.prewriteItems[startTS]
 		p.mu.Unlock()
 		if ok {
-			if bl := p.query(t, b); bl == nil {
+			if ok := p.query(t, b); !ok {
 				time.Sleep(retryTimeout)
 				p.queryCount++
 				continue
@@ -226,8 +210,9 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 	}
 }
 
-func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) *pb.Binlog {
-	latestTs := atomic.LoadInt64(&p.latestCommitTS)
+// query binlog's commit status from tikv client, return true if it already commit or rollback
+func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) bool {
+	latestTs := atomic.LoadInt64(&p.latestTS)
 	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
 	if (maxTS - startTS) > maxTxnTimeout {
@@ -236,7 +221,7 @@ func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) *pb.Binlog {
 			status, err := t.GetTxnStatus(uint64(binlog.StartTs), primaryKey)
 			if err != nil {
 				log.Errorf("get item's(%v) txn status error: %v", binlog, err)
-				return nil
+				return false
 			}
 			ts := binlog.StartTs
 			p.mu.Lock()
@@ -244,18 +229,32 @@ func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) *pb.Binlog {
 				binlog.CommitTs = int64(status.CommitTS())
 				binlog.Tp = pb.BinlogType_Commit
 				p.mu.binlogs[binlog.CommitTs] = binlog
-			} else {
-				binlog = nil
 			}
 			delete(p.mu.prewriteItems, ts)
 			p.mu.Unlock()
-			return binlog
+			return true
 		}
 		// todo: get ddl from history job or continue waiting?
 		log.Errorf("some prewrite DDL items remain single after waiting for a long time, item(%v)", binlog)
-		return nil
+		return false
 	}
-	return nil
+	return false
+}
+
+// get all binlogs that don't store in boltdb
+func (p *Pump) getBinlogs(binlogs map[int64]*pb.Binlog) map[int64]*pb.Binlog {
+	var tmpBinlogs map[int64]*pb.Binlog
+	p.mu.Lock()
+	tmpBinlogs = p.mu.binlogs
+	p.mu.binlogs = make(map[int64]*pb.Binlog)
+	p.mu.Unlock()
+	if binlogs == nil {
+		return tmpBinlogs
+	}
+	for ts, b := range tmpBinlogs {
+		binlogs[ts] = b
+	}
+	return binlogs
 }
 
 func (p *Pump) save(items map[int64]*pb.Binlog, lastValidCommitTS int64, pos pb.Pos) error {
@@ -403,6 +402,7 @@ func (p *Pump) updateSavepoint(pos pb.Pos) error {
 	return nil
 }
 
+// pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
 	defer p.wg.Done()
@@ -455,6 +455,7 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 				commitTS: b.CommitTs,
 				pos:      pos,
 			}
+			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(err)
@@ -464,9 +465,9 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 	}
 }
 
-// GetLatestCommitTS returns the latest commit ts
-func (p *Pump) GetLatestCommitTS() int64 {
-	return atomic.LoadInt64(&p.latestCommitTS)
+// GetLatestTS returns the latest ts
+func (p *Pump) GetLatestTS() int64 {
+	return atomic.LoadInt64(&p.latestTS)
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete

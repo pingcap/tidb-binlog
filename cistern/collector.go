@@ -138,7 +138,7 @@ func (c *Collector) detectPumps(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.getLatestCommitTS()
+	windowUpper := c.getLatestTS()
 	windowLower := c.getLatestValidCommitTS()
 	c.publish(windowUpper, windowLower)
 	if windowLower == windowUpper {
@@ -202,11 +202,11 @@ func (c *Collector) publish(upper, lower int64) error {
 	return nil
 }
 
-// query all pumps' latestCommitTS and select a bigger one
-func (c *Collector) getLatestCommitTS() int64 {
+// query all pumps' latestTS and select a bigger one
+func (c *Collector) getLatestTS() int64 {
 	var latest int64
 	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestCommitTS()
+		latestCommitTS := p.GetLatestTS()
 		if latestCommitTS > latest {
 			latest = latestCommitTS
 		}

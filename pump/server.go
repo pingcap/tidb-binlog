@@ -96,7 +96,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// new oracle
+	// use tiStore's currentVersion method to get the ts from tso
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -306,7 +306,7 @@ func (s *Server) Start() error {
 }
 
 // gennerate commit or rollback binlog can just forward the latestCommitTs, and don't block anything
-func (s *Server) genBinlog() ([]byte, error) {
+func (s *Server) genFakeBinlog() ([]byte, error) {
 	version, err := s.tiStore.CurrentVersion()
 	if err != nil {
 		return nil, err
@@ -323,6 +323,30 @@ func (s *Server) genBinlog() ([]byte, error) {
 	return payload, nil
 }
 
+func (s *Server) writeFakeBinlog() {
+	if s.needGenBinlog {
+		for cid := range s.dispatcher {
+			binlogger, err := s.getBinloggerToWrite(cid)
+			if err != nil {
+				log.Errorf("generate forward binlog, get binlogger err %v", err)
+				return
+			}
+			payload, err := s.genFakeBinlog()
+			if err != nil {
+				log.Errorf("generate forward binlog, generate binlog err %v", err)
+				return
+			}
+			err = binlogger.WriteTail(payload)
+			if err != nil {
+				log.Errorf("generate forward binlog, write binlog err %v", err)
+				return
+			}
+			log.Info("generate binlog successfully")
+		}
+	}
+	s.needGenBinlog = true
+}
+
 // we would generate binlog to forward the pump's latestCommitTs in cistern when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog = true
@@ -331,27 +355,7 @@ func (s *Server) genForwardBinlog() {
 		case <-s.ctx.Done():
 			return
 		case <-time.After(genBinlogInterval):
-			if s.needGenBinlog {
-				for cid := range s.dispatcher {
-					binlogger, err := s.getBinloggerToWrite(cid)
-					if err != nil {
-						log.Errorf("generate forward binlog, get binlogger err %v", err)
-						continue
-					}
-					payload, err := s.genBinlog()
-					if err != nil {
-						log.Errorf("generate forward binlog, generate binlog err %v", err)
-						continue
-					}
-					err = binlogger.WriteTail(payload)
-					if err != nil {
-						log.Errorf("generate forward binlog, write binlog err %v", err)
-						continue
-					}
-					log.Info("generate binlog successfully")
-				}
-			}
-			s.needGenBinlog = true
+			s.writeFakeBinlog()
 		}
 	}
 }
