@@ -23,6 +23,10 @@ import (
 
 const defaultBinlogChanSize int64 = 16 << 10
 
+// use and bit operator to achieve (%)module, the modulo must be Power of 2
+// and then we can set the module base as  modulo-1
+const queryModBase = 7
+
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -54,7 +58,7 @@ type Pump struct {
 		binlogs       map[int64]*pb.Binlog
 	}
 
-	// record the count of query tikv, if queryCount%8==7, it would update the latestTS by quering tso
+	// record the count of query tikv, if queryCount&queryModBase == queryModBase, it would update the latestTS by quering tso
 	queryCount int64
 	wg         sync.WaitGroup
 	ctx        context.Context
@@ -185,8 +189,8 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		default:
 		}
 
-		// while p.queryCount % 8 == 7, is updates ts by quering tso
-		if p.queryCount&7 == 7 {
+		// while p.queryCount&queryModBase == queryModBase, is updates ts by quering tso
+		if p.queryCount&queryModBase == queryModBase {
 			version, err := p.tiStore.CurrentVersion()
 			if err != nil {
 				log.Errorf("get current version error: %v", err)

@@ -292,7 +292,7 @@ func (c *Collector) Notify() error {
 	nr := &notifyResult{}
 	nr.wg.Add(1)
 	c.notifyChan <- nr
-	nr.wg.Done()
+	nr.wg.Wait()
 	return nr.err
 }
 
