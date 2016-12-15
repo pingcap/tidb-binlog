@@ -12,7 +12,7 @@ Usage of cistern:
         addr (i.e. 'host:port') to listen on for drainer connections (default "127.0.0.1:8249")
   -collect-interval int
         the interval time (in seconds) of binlog collection loop (default 10)
-  -config-file string
+  -config string
         path to the configuration file
   -data-dir string
         path to the data directory of boltDB (default "data.cistern")
@@ -43,5 +43,5 @@ Usage of cistern:
 or use configuration file
 
 ```
-./bin/cistern -config-file ./conf/cistern.toml
+./bin/cistern -config ./conf/cistern.toml
 ```

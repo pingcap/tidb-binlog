@@ -8,7 +8,7 @@ drainer transforms binlog to various dialects of SQL, and apply to downstream da
 Usage of drainer:
   -L string
         log level: debug, info, warn, error, fatal (default "info")
-  -config-file string
+  -config string
         Config file
   -data-dir string
         drainer data directory path (default "data.drainer")
@@ -45,7 +45,7 @@ Usage of drainer:
 or use configuration file
 
 ```
-./bin/drainer -config-file ./conf/drainer.toml
+./bin/drainer -config ./conf/drainer.toml
 ```
 
 ## Precautions

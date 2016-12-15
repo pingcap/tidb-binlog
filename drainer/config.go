@@ -20,7 +20,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 
-	fs.StringVar(&cfg.configFile, "config-file", "", "Config file")
+	fs.StringVar(&cfg.configFile, "config", "", "Config file")
 	fs.IntVar(&cfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", ":10081", "pprof addr")
 	fs.StringVar(&cfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync the meta schema")

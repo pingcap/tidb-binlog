@@ -98,8 +98,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
     -advertise-addr string
         pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
-    -config-file string
-        pump 配置文件路径
+    -config string
+        配置文件路径,如果你指定了配置文件，pump 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，pump 就会使用命令行参数的配置来覆盖配置文件里面的。
     -data-dir string
         pump 数据存储位置路径
     -L string
@@ -139,8 +139,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
     -collect-interval int
         向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
-    -config-file string
-        配置文件路径
+    -config string
+        配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，cistern 就会使用命令行参数的配置来覆盖配置文件里面的。
     -data-dir string
         cistern 数据存储位置路径 (默认 "data.cistern")
     -L string
@@ -171,8 +171,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     Usage of drainer:
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
-    -config-file string
-       配置文件路径
+    -config string
+       配置文件路径, drainer 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的。
     -data-dir string
        drainer 数据存储位置路径 (默认 "data.drainer")
     -dest-db-type string

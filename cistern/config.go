@@ -66,7 +66,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.DepositWindowPeriod, "deposit-window-period", defaultDepositWindowPeriod, "a period of time (in minutes) after that the binlog items stored in boltDB will become to public state")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.configFile, "config-file", "", "path to the configuration file")
+	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")

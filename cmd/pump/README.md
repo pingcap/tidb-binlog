@@ -12,7 +12,7 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
         addr(i.e. 'host:port') to listen on for client traffic (default "127.0.0.1:8250")
   -advertise-addr string
         addr(i.e. 'host:port') to advertise to the public
-  -config-file string
+  -config string
         path to the pump configuration file
   -data-dir string
         the path to store binlog data
@@ -49,7 +49,7 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
 or use configuration file
 
 ```
-./bin/pump -config-file ./conf/pump.toml
+./bin/pump -config ./conf/pump.toml
 ```
 
 ## Deployment
