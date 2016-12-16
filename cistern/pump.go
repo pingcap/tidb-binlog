@@ -166,7 +166,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
-			// if the commitTs if large than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
+			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
 			if entity.commitTS > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
 				maxCommitTs = entity.commitTS

@@ -305,7 +305,7 @@ func (s *Server) Start() error {
 	return m.Serve()
 }
 
-// gennerate commit or rollback binlog can just forward the latestCommitTs, and don't block anything
+// gennerate rollback binlog can forward the cistern's latestCommitTs, and just be discarded without any side effects
 func (s *Server) genFakeBinlog() ([]byte, error) {
 	version, err := s.tiStore.CurrentVersion()
 	if err != nil {
