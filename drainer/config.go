@@ -32,7 +32,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "target db type: Mysql, PostgreSQL")
+	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, postgresql")
 	fs.StringVar(&cfg.To.Host, "db-host", "127.0.0.1", "host of target database")
 	fs.IntVar(&cfg.To.Port, "db-port", 3306, "port of target database")
 	fs.StringVar(&cfg.To.User, "db-username", "root", "username of target database")
