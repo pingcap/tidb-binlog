@@ -13,6 +13,15 @@ var _ = Suite(&testLockSuite{})
 type testLockSuite struct{}
 
 func (s *testLockSuite) TestLockAndUnlock(c *C) {
+	// lock the nonexist file that would return error
+	_, err := LockFile("testNoExistFile", os.O_WRONLY, PrivateFileMode)
+	c.Assert(err, NotNil)
+
+	// lock the nonexist file that would return error
+	_, err = TryLockFile("testNoExistFile", os.O_WRONLY, PrivateFileMode)
+	c.Assert(err, NotNil)
+
+	// create test file
 	f, err := ioutil.TempFile("", "lock")
 	c.Assert(err, IsNil)
 	f.Close()
@@ -26,9 +35,8 @@ func (s *testLockSuite) TestLockAndUnlock(c *C) {
 	c.Assert(err, IsNil)
 
 	// try lock a locked file
-	if _, err = TryLockFile(f.Name(), os.O_WRONLY, PrivateFileMode); err != ErrLocked {
-		c.Fatal(err)
-	}
+	_, err = TryLockFile(f.Name(), os.O_WRONLY, PrivateFileMode)
+	c.Assert(err, Equals, ErrLocked)
 
 	// unlock the file
 	err = l.Close()

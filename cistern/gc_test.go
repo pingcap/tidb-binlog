@@ -1,28 +1,18 @@
-package cistern_test
+package cistern
 
 import (
 	"os"
-	"testing"
 	"time"
 
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/cistern"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
 )
 
-func Test(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testGCSuite{})
-
-type testGCSuite struct{}
-
-func (suite *testGCSuite) TestGColdBinLog(c *C) {
-	binlogNamespace := []byte("binlog")
+func (suite *testCisternSuite) TestGColdBinLog(c *C) {
+	binlogNamespace = []byte("binlog")
 	s, err := store.NewBoltStore("./test", [][]byte{binlogNamespace})
 	c.Assert(err, IsNil)
 	defer func() {
@@ -47,7 +37,7 @@ func (suite *testGCSuite) TestGColdBinLog(c *C) {
 	c.Check(err, IsNil)
 
 	// remove binlog older than 7 days
-	err = cistern.GCHistoryBinlog(s, binlogNamespace, 7*time.Hour*24)
+	err = GCHistoryBinlog(s, binlogNamespace, 7*time.Hour*24)
 	c.Check(err, IsNil)
 
 	// check
@@ -62,7 +52,7 @@ func (suite *testGCSuite) TestGColdBinLog(c *C) {
 	c.Check(v, NotNil)
 
 	// remove neally all data
-	err = cistern.GCHistoryBinlog(s, binlogNamespace, 5*time.Hour)
+	err = GCHistoryBinlog(s, binlogNamespace, 5*time.Hour)
 	c.Check(err, IsNil)
 	v, err = s.Get(binlogNamespace, keys[4])
 	c.Check(errors.IsNotFound(err), IsTrue)

@@ -85,6 +85,17 @@ func TestCreateWithKeyExist(t *testing.T) {
 	}
 }
 
+func TestUpdateOrCreate(t *testing.T) {
+	ctx, etcdCli, cluster := testSetup(t)
+	defer cluster.Terminate(t)
+
+	input := "updatetest"
+	key := "binlog/updatekey"
+	if err := etcdCli.UpdateOrCreate(ctx, key, input, 3); err != nil {
+		t.Fatalf("updateOrCreate failed: %v", err)
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	ctx, etcdCli, cluster := testSetup(t)
 	defer cluster.Terminate(t)
@@ -92,6 +103,11 @@ func TestUpdate(t *testing.T) {
 	input := "updatetest"
 	input2 := "updatetest2"
 	key := "binlog/updatekey"
+
+	err := etcdCli.Update(ctx, key, input, 2)
+	if !errors.IsNotFound(err) {
+		t.Fatal("update should return not found error")
+	}
 
 	lcr, err := etcdCli.client.Lease.Grant(ctx, 2)
 	if err != nil {
@@ -170,7 +186,7 @@ func TestDelete(t *testing.T) {
 	ctx, etcdCli, cluster := testSetup(t)
 	defer cluster.Terminate(t)
 
-	key := "binlog/testkey"
+	key := "testkey"
 	keys := []string{key + "/level1", key + "/level2", key + "/level1" + "/level1"}
 	for _, k := range keys {
 		err := etcdCli.Create(ctx, k, k, nil)

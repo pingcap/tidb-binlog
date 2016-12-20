@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Result keeps the result of pulling binlog from a pump in a round
-type Result struct {
+// PumpResult keeps the result of pulling binlog from a pump in a round
+type PumpResult struct {
 	err       error
 	nodeID    string
 	clusterID uint64
@@ -63,8 +63,8 @@ func (p *Pump) Close() {
 // Each Prewrite type item in batch must find a type of Commit or Rollback one with the same startTS,
 // if some ones don't find guys, it should pull another batch from pump and find their partners.
 // Eventually, if there are still some rest ones, calls abort() via tikv client for them.
-func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res Result) {
-	res = Result{
+func (p *Pump) Collect(pctx context.Context, t *tikv.LockResolver) (res PumpResult) {
+	res = PumpResult{
 		nodeID:    p.nodeID,
 		clusterID: p.clusterID,
 		begin:     p.current,

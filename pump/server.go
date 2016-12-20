@@ -202,14 +202,9 @@ func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*bi
 	ret := &binlog.PullBinlogResp{}
 	binlogger, err1 := s.getBinloggerToRead(cid)
 	if err1 != nil {
-		if errors.IsNotFound(err1) {
-			// return an empty slice and a nil error
-			ret.Entities = []binlog.Entity{}
-			return ret, nil
-		}
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+		// return an empty slice and a nil error
+		ret.Entities = []binlog.Entity{}
+		return ret, nil
 	}
 	binlogs, err1 := binlogger.ReadFrom(in.StartFrom, in.Batch)
 	if err1 != nil {
