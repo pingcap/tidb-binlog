@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -39,7 +38,7 @@ func main() {
 	drainer.PrintVersionInfo()
 	log.Infof("%v", cfg)
 
-	cisternClient := createCisternClient(cfg.CisternClient.Host, cfg.CisternClient.Port)
+	cisternClient := createCisternClient(cfg.CisternAddr)
 
 	ds, err := drainer.NewDrainer(cfg, cisternClient)
 	if err != nil {
@@ -73,12 +72,11 @@ func main() {
 	}
 }
 
-func createCisternClient(host string, port int) pb.CisternClient {
-	path := fmt.Sprintf("%s:%d", host, port)
+func createCisternClient(cisternAddr string) pb.CisternClient {
 	dialerOpt := grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 		return net.DialTimeout("tcp", addr, timeout)
 	})
-	clientCon, err := grpc.Dial(path, dialerOpt, grpc.WithInsecure())
+	clientCon, err := grpc.Dial(cisternAddr, dialerOpt, grpc.WithInsecure())
 	if err != nil {
 		log.Fatal(errors.ErrorStack(err))
 	}

@@ -32,7 +32,12 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "to db type: Mysql, PostgreSQL")
+	fs.StringVar(&cfg.DestDBType, "dest-db-type", "mysql", "target db type: Mysql, PostgreSQL")
+	fs.StringVar(&cfg.To.Host, "db-host", "127.0.0.1", "host of target database")
+	fs.IntVar(&cfg.To.Port, "db-port", 3306, "port of target database")
+	fs.StringVar(&cfg.To.User, "db-username", "root", "username of target database")
+	fs.StringVar(&cfg.To.Password, "db-password", "", "password of target database")
+	fs.StringVar(&cfg.CisternAddr, "cistern-addr", "127.0.0.1:8249", "address of upstream cistern")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
 
 	return cfg
@@ -40,13 +45,10 @@ func NewConfig() *Config {
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
-	Host string `toml:"host" json:"host"`
-
-	User string `toml:"user" json:"user"`
-
+	Host     string `toml:"host" json:"host"`
+	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
-
-	Port int `toml:"port" json:"port"`
+	Port     int    `toml:"port" json:"port"`
 }
 
 func (c *DBConfig) String() string {
@@ -56,48 +58,25 @@ func (c *DBConfig) String() string {
 	return fmt.Sprintf("DBConfig(%+v)", *c)
 }
 
-// CisternClientConfig is the cistern client configuration.
-type CisternClientConfig struct {
-	Host string `toml:"host" json:"host"`
-
-	Port int `toml:"port" json:"port"`
-}
-
 // Config is the configuration.
 type Config struct {
-	*flag.FlagSet `json:"-"`
-
-	LogLevel string `toml:"log-level" json:"log-level"`
-
-	LogFile string `toml:"log-file" json:"log-file"`
-
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
-
-	PprofAddr string `toml:"pprof-addr" json:"pprof-addr"`
-
-	IgnoreSchemas string `toml:"ignore-schemas" json:"ignore-schemas"`
-
-	MetricsAddr string `toml:"metrics-addr" json:"metrics-addr"`
-
-	MetricsInterval int `toml:"metrics-interval" json:"metrics-interval"`
-
-	TxnBatch int `toml:"txn-batch" json:"txn-batch"`
-
-	InitCommitTS int64 `toml:"init-commit-ts" json:"init-commit-ts"`
-
-	EndCommitTS int64 `toml:"end-commit-ts" json:"end-commit-ts"`
-
-	DataDir string `toml:"data-dir" json:"data-dir"`
-
-	To DBConfig `toml:"to" json:"to"`
-
-	CisternClient CisternClientConfig `toml:"client" json:"client"`
-
-	DestDBType string `toml:"db-type" json:"db-type"`
-
-	configFile string
-
-	printVersion bool
+	*flag.FlagSet   `json:"-"`
+	LogLevel        string   `toml:"log-level" json:"log-level"`
+	LogFile         string   `toml:"log-file" json:"log-file"`
+	LogRotate       string   `toml:"log-rotate" json:"log-rotate"`
+	PprofAddr       string   `toml:"pprof-addr" json:"pprof-addr"`
+	IgnoreSchemas   string   `toml:"ignore-schemas" json:"ignore-schemas"`
+	MetricsAddr     string   `toml:"metrics-addr" json:"metrics-addr"`
+	MetricsInterval int      `toml:"metrics-interval" json:"metrics-interval"`
+	TxnBatch        int      `toml:"txn-batch" json:"txn-batch"`
+	InitCommitTS    int64    `toml:"init-commit-ts" json:"init-commit-ts"`
+	EndCommitTS     int64    `toml:"end-commit-ts" json:"end-commit-ts"`
+	DataDir         string   `toml:"data-dir" json:"data-dir"`
+	To              DBConfig `toml:"to" json:"to"`
+	CisternAddr     string   `toml:"cistern-addr" json:"cistern-addr"`
+	DestDBType      string   `toml:"db-type" json:"db-type"`
+	configFile      string
+	printVersion    bool
 }
 
 // Parse parses flag definitions from the argument list.
