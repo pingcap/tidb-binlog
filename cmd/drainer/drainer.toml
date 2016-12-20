@@ -13,9 +13,7 @@ txn-batch = 1
 pprof-addr = ":10081"
 
 # the host and port of cistern
-[client]
-host = "127.0.0.1"
-port = 8249
+cistern-addr = "127.0.0.1:8249"
 
 # the downstream mysql protocol database
 [to]
