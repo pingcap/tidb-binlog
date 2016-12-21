@@ -44,7 +44,7 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
 ```
 ./bin/pump -socket unix:///tmp/pump.sock \
            -pd-urls http://127.0.0.1:2379 \
-           -data-dir data.pump
+           -data-dir ./data.pump
 ```
 or use configuration file
 

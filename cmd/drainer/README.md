@@ -11,7 +11,7 @@ Usage of drainer:
   -cistern-addr string
         address of upstream cistern (default "127.0.0.1:8249")
   -config string
-        Config file
+        config file
   -data-dir string
         drainer data directory path (default "data.drainer")
   -db-host string
@@ -27,13 +27,13 @@ Usage of drainer:
   -ignore-schemas string
         disable sync the meta schema (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql")
   -init-commit-ts int
-        the position from which begin to sync and apply binlog.
+        the position from which begin to sync and apply binlog
   -log-file string
         log file path
   -log-rotate string
         log file rotate type, hour/day
   -metrics-addr string
-        prometheus pushgateway address, leaves it empty will disable prometheus push.
+        prometheus pushgateway address, leave it empty to disable prometheus push
   -metrics-interval int
         prometheus client push interval in second, set "0" to disable prometheus push. (default 15)
   -pprof-addr string
@@ -50,7 +50,7 @@ Usage of drainer:
 ```
  ./bin/drainer -dest-db-type mysql \
                -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
-               -data-dir data.drainer 
+               -data-dir ./data.drainer 
 ```
 or use configuration file
 

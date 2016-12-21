@@ -86,7 +86,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```bash
     ./bin/pump -socket unix:///tmp/pump.sock \
                -pd-urls http://127.0.0.1:2379 \
-               -data-dir data.pump
+               -data-dir ./data.pump
     ```
     
     参数解释
@@ -99,7 +99,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -advertise-addr string
         pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
     -config string
-        配置文件路径,如果你指定了配置文件，pump 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，pump 就会使用命令行参数的配置来覆盖配置文件里面的。
+        配置文件路径,如果你指定了配置文件，pump 会首先读取配置文件的配置
+        如果对应的配置在命令行参数里面也存在，pump 就会使用命令行参数的配置来覆盖配置文件里面的
     -data-dir string
         pump 数据存储位置路径
     -L string
@@ -129,7 +130,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```bash
     ./bin/cistern -deposit-window-period 10 \
                   -pd-urls http://127.0.0.1:2379 \
-                  -data-dir data.cistern
+                  -data-dir ./data.cistern
     ```
     
     参数解释
@@ -140,7 +141,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -collect-interval int
         向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
     -config string
-        配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，cistern 就会使用命令行参数的配置来覆盖配置文件里面的。
+        配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置
+        如果对应的配置在命令行参数里面也存在，cistern 就会使用命令行参数的配置来覆盖配置文件里面的
     -data-dir string
         cistern 数据存储位置路径 (默认 "data.cistern")
     -L string
@@ -163,7 +165,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```bash
     ./bin/drainer -dest-db-type mysql \
                   -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
-                  -data-dir data.drainer 
+                  -data-dir ./data.drainer 
     ```
     
     参数解释
@@ -174,7 +176,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -cistern-addr string
         cistern 地址 (默认 "127.0.0.1:8249")
     -config string
-       配置文件路径, drainer 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的。
+       配置文件路径, drainer 会首先读取配置文件的配置
+       如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的
     -data-dir string
        drainer 数据存储位置路径 (默认 "data.drainer")
     -db-host string
@@ -188,7 +191,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -dest-db-type string
         drainer 下游服务类型 (默认为 mysql)
     -ignore-schemas string
-         db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test")
+        db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test")
     -init-commit-ts int
         drainer 同步起始位置设置
     -log-file string
