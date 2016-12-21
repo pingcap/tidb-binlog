@@ -171,10 +171,20 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     Usage of drainer:
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -cistern-addr string
+        cistern 地址 (默认 "127.0.0.1:8249")
     -config string
        配置文件路径, drainer 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的。
     -data-dir string
        drainer 数据存储位置路径 (默认 "data.drainer")
+    -db-host string
+        目标数据库 host (default "127.0.0.1")
+    -db-password string
+        目标数据库密码
+    -db-port int
+        目标数据库端口号 (默认 3306)
+    -db-username string
+        目标数据库用户名 (默认 "root")
     -dest-db-type string
         drainer 下游服务类型 (默认为 mysql)
     -ignore-schemas string

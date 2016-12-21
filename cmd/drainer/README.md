@@ -8,10 +8,20 @@ drainer transforms binlog to various dialects of SQL, and apply to downstream da
 Usage of drainer:
   -L string
         log level: debug, info, warn, error, fatal (default "info")
+  -cistern-addr string
+        address of upstream cistern (default "127.0.0.1:8249")
   -config string
         Config file
   -data-dir string
         drainer data directory path (default "data.drainer")
+  -db-host string
+        host of target database (default "127.0.0.1")
+  -db-password string
+        password of target database
+  -db-port int
+        port of target database (default 3306)
+  -db-username string
+        username of target database (default "root")
   -dest-db-type string
         to db type: Mysql, PostgreSQL (default "mysql")
   -ignore-schemas string

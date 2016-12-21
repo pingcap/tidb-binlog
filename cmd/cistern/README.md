@@ -17,7 +17,7 @@ Usage of cistern:
   -data-dir string
         path to the data directory of boltDB (default "data.cistern")
   -gc int
-        a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed.
+        an integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed.
   -log-file string
         log file path
   -log-rotate string
