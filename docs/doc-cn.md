@@ -105,7 +105,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         pump 数据存储位置路径
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
-    -gc uint
+    -gc int
         日志最大保留天数 (默认 7)， 设置为 0 可永久保存
     -heartbeat-interval uint
         pump 向 pd 发送心跳间隔 (单位 秒)
@@ -147,6 +147,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         cistern 数据存储位置路径 (默认 "data.cistern")
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -gc int
+        binlog 数据最大保留天数 (默认 7)， 设置为 0 可永久保存
     -metrics-addr string
        prometheus pushgataway 地址，不设置则禁止上报监控信息
     -metrics-interval int

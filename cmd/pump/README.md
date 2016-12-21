@@ -16,7 +16,7 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
         path to the pump configuration file
   -data-dir string
         the path to store binlog data
-  -gc uint
+  -gc int
         recycle binlog files older than gc days, zero means never recycle (default 7)
   -heartbeat-interval int
         number of seconds between heartbeat ticks (default 2)
