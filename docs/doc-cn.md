@@ -11,6 +11,8 @@
 + 运维 & 监控
  - [整体监控框架概述](https://github.com/pingcap/docs-cn/blob/master/op-guide/monitor-overview.md)
  - [组件状态 API & 监控](./monitor.md)
++ 其他功能
+ - [TiDB checkpoint和恢复](../tools/manual.md)
 
 ## TiDB-Binlog 简介
 
@@ -73,28 +75,135 @@ cd binlog-latest-linux-amd64
 
 TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> Drainer
 
-## 启动参数
+### 注意
+* 需要为一个 TiDB 集群中的每台 TiDB 部署一台 pump，设置 TiDB 启动参数 binlog-socket 为对应的 pump 监听的 unix socket 文件路径
+* 为 cistern 预留一定量储存空间。可根据 gc 设置和业务数据量预估（例如 gc 设置为 7，只保存最近 7 天的文件，可以预留 200G+ 储存容量）
+
+### 示例及参数解释
 
 1. Pump.
-
+    示例
     ```bash
     ./bin/pump -socket unix:///tmp/pump.sock \
                -pd-urls http://127.0.0.1:2379 \
-               -data-dir data.pump
+               -data-dir ./data.pump
+    ```
+    
+    参数解释
+    ```
+    Usage of pump:
+    -node-id string
+        pump 的 node ID (如果不指定则为 hostname:port)
+    -addr string
+        pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -advertise-addr string
+        pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -config string
+        配置文件路径,如果你指定了配置文件，pump 会首先读取配置文件的配置
+        如果对应的配置在命令行参数里面也存在，pump 就会使用命令行参数的配置来覆盖配置文件里面的
+    -data-dir string
+        pump 数据存储位置路径
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -gc int
+        日志最大保留天数 (默认 7)， 设置为 0 可永久保存
+    -heartbeat-interval uint
+        pump 向 pd 发送心跳间隔 (单位 秒)
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -pd-urls string
+        pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -socket string
+        unix socket 模式服务监听地址 (默认 unix:///tmp/pump.sock)
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -version
+        打印版本信息
     ```
     
 2. Cistern.
-
+    示例
     ```bash
     ./bin/cistern -deposit-window-period 10 \
                   -pd-urls http://127.0.0.1:2379 \
-                  -data-dir data.cistern
+                  -data-dir ./data.cistern
     ```
-
+    
+    参数解释
+    ```
+    Usage of cistern:
+    -addr string
+        cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
+    -collect-interval int
+        向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
+    -config string
+        配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置
+        如果对应的配置在命令行参数里面也存在，cistern 就会使用命令行参数的配置来覆盖配置文件里面的
+    -data-dir string
+        cistern 数据存储位置路径 (默认 "data.cistern")
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -gc int
+        binlog 数据最大保留天数 (默认 7)， 设置为 0 可永久保存
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -pd-urls string
+       pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -version
+       打印版本信息
+    ```
 3. Drainer.
-
+    示例
     ```bash
     ./bin/drainer -dest-db-type mysql \
                   -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
-                  -data-dir data.drainer 
+                  -data-dir ./data.drainer 
+    ```
+    
+    参数解释
+    ```
+    Usage of drainer:
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -cistern-addr string
+        cistern 地址 (默认 "127.0.0.1:8249")
+    -config string
+       配置文件路径, drainer 会首先读取配置文件的配置
+       如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的
+    -data-dir string
+       drainer 数据存储位置路径 (默认 "data.drainer")
+    -db-host string
+        目标数据库 host (default "127.0.0.1")
+    -db-password string
+        目标数据库密码
+    -db-port int
+        目标数据库端口号 (默认 3306)
+    -db-username string
+        目标数据库用户名 (默认 "root")
+    -dest-db-type string
+        drainer 下游服务类型 (默认为 mysql)
+    -ignore-schemas string
+        db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test")
+    -init-commit-ts int
+        drainer 同步起始位置设置
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -metrics-addr string
+       prometheus pushgataway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -pprof-addr string
+        golang pprof addr (默认 ":10081")
     ```

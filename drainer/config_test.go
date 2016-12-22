@@ -12,7 +12,7 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 		"-txn-batch", "1",
 		"-data-dir", "data.drainer",
 		"-dest-db-type", "mysql",
-		"-config-file", "../cmd/drainer/drainer.toml",
+		"-config", "../cmd/drainer/drainer.toml",
 	}
 
 	cfg := NewConfig()

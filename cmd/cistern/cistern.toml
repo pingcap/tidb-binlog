@@ -3,19 +3,14 @@
 # addr (i.e. 'host:port') to listen on for drainer connections
 addr = "127.0.0.1:8249"
 
-# the max number of binlog items in a pulling batch (default 5000)
-collect-batch = 5000
-
 # the interval time (in seconds) of binlog collection loop
 collect-interval = 10
 
 # path to the data directory of kv store
 data-dir = "data.cistern"
 
-# a period of time (in minutes) after that the binlog items stored in boltDB will become to public state
-deposit-window-period = 10
-
-# a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. (set value is 0, means binlog data would never be removed)
+# an integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored
+# (default value is 0, means binlog data would never be removed)
 gc = 0
 
 # a comma separated list of PD endpoints

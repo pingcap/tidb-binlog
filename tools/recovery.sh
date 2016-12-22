@@ -114,11 +114,11 @@ if [[ "${ISRECOVERY}" -eq 1 ]]; then
 
     RECOVRERY_TS=`cat ${DATADIR}/.cistern_status | grep -Po '"Upper":\d+'| grep -Po '\d+'`
     if [[ "${RECOVRERY_TS}" -gt "${INIT_TS}" ]]; then
-        ${CP_ROOT}/bin/drainer --config-file=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} --end-commit-ts=${RECOVRERY_TS}
+        ${CP_ROOT}/bin/drainer --config=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} --end-commit-ts=${RECOVRERY_TS}
     fi
     echo_info "recovery complete!"
     exit
 fi
 
 echo_info "start synchronization!"
-nohup ${CP_ROOT}/bin/drainer --config-file=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} >/dev/null 2>&1 &
+nohup ${CP_ROOT}/bin/drainer --config=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} >/dev/null 2>&1 &

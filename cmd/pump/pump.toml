@@ -6,7 +6,8 @@ addr = "127.0.0.1:8250"
 # addr(i.e. 'host:port') to advertise to the public
 advertise-addr = ""
 
-# a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. (set value is 0, means binlog data would never be removed)
+# a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. 
+# (default value is 0, means binlog data would never be removed)
 gc = 7
 
 # path to the data directory of pump's data

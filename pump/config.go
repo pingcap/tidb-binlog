@@ -37,7 +37,7 @@ type Config struct {
 	EtcdDialTimeout   time.Duration
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
-	GC                uint   `toml:"gc" json:"gc"`
+	GC                int    `toml:"gc" json:"gc"`
 	LogFile           string `toml:"log-file" json:"log-file"`
 	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
 	MetricsAddr       string
@@ -66,11 +66,11 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
-	fs.UintVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
+	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push.")
-	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push.")
-	fs.StringVar(&cfg.configFile, "config-file", "", "path to the pump configuration file")
+	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
+	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
+	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")

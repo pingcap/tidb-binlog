@@ -74,7 +74,7 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	defer os.Remove(tmpfile.Name())
 
 	args := []string{
-		"--config-file",
+		"--config",
 		tmpfile.Name(),
 		"-L", "debug",
 	}
