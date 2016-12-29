@@ -23,10 +23,6 @@ import (
 
 const defaultBinlogChanSize int64 = 16 << 10
 
-// use and bit operator to achieve (%)module, the modulo must be Power of 2
-// and then we can set the module base as  modulo-1
-const queryModBase = 7
-
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -48,7 +44,7 @@ type Pump struct {
 
 	// pullBinlogs sends the binlogs to publish by it
 	binlogChan chan *binlogEntity
-	// the latestTS the pump meets or query from tso
+	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before latestValidCommitTS
 	latestValidCommitTS int64
@@ -58,11 +54,9 @@ type Pump struct {
 		binlogs       map[int64]*pb.Binlog
 	}
 
-	// record the count of query tikv, if queryCount&queryModBase == queryModBase, it would update the latestTS by quering tso
-	queryCount int64
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
@@ -103,7 +97,6 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 }
 
 // match is responsible for match p+c binlog.
-// it also updates the latestTS/latestValidCommitTS of binlogs
 func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
@@ -113,7 +106,6 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		return nil
 	}
 
-	latestTS := b.StartTs
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
@@ -127,20 +119,18 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 			}
 			delete(p.mu.prewriteItems, b.StartTs)
 		}
-		latestTS = b.CommitTs
 	default:
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
-	p.updateLatestTS(latestTS)
 	return b
 }
 
-// match and publish could call it to update the max ts it meets or query from tso, so we should use cas method
-func (p *Pump) updateLatestTS(ts int64) {
+// UpdateLatestTS updates the latest ts that query from pd
+func (p *Pump) UpdateLatestTS(ts int64) {
 	latestTS := atomic.LoadInt64(&p.latestTS)
-	for ts > latestTS && !atomic.CompareAndSwapInt64(&p.latestTS, latestTS, ts) {
-		latestTS = atomic.LoadInt64(&p.latestTS)
+	if ts > latestTS {
+		atomic.StoreInt64(&p.latestTS, ts)
 	}
 }
 
@@ -189,27 +179,15 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		default:
 		}
 
-		// while p.queryCount&queryModBase == queryModBase, is updates ts by quering tso
-		if p.queryCount&queryModBase == queryModBase {
-			version, err := p.tiStore.CurrentVersion()
-			if err != nil {
-				log.Errorf("get current version error: %v", err)
-			} else {
-				p.updateLatestTS(int64(version.Ver))
-			}
-		}
-
 		p.mu.Lock()
 		b, ok := p.mu.prewriteItems[startTS]
 		p.mu.Unlock()
 		if ok {
 			if ok := p.query(t, b); !ok {
-				time.Sleep(retryTimeout)
-				p.queryCount++
+				time.Sleep(retryWaitTime)
 				continue
 			}
 		}
-		p.queryCount = 0
 		return
 	}
 }
@@ -423,7 +401,7 @@ func (p *Pump) pullBinlogs() {
 			stream, err = p.client.PullBinlogs(p.ctx, req)
 			if err != nil {
 				log.Errorf("[Get pull binlogs stream]%v", err)
-				time.Sleep(retryTimeout)
+				time.Sleep(retryWaitTime)
 				continue
 			}
 
@@ -432,7 +410,7 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != io.EOF {
 					log.Errorf("[stream]%v", err)
 				}
-				time.Sleep(retryTimeout)
+				time.Sleep(retryWaitTime)
 				continue
 			}
 		}
@@ -467,11 +445,6 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 			}
 		}
 	}
-}
-
-// GetLatestTS returns the latest ts
-func (p *Pump) GetLatestTS() int64 {
-	return atomic.LoadInt64(&p.latestTS)
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete

@@ -28,7 +28,7 @@ var windowNamespace []byte
 var binlogNamespace []byte
 var savepointNamespace []byte
 var ddlJobNamespace []byte
-var retryTimeout = 3 * time.Second
+var retryWaitTime = 3 * time.Second
 var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"

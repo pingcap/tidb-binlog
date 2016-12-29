@@ -40,6 +40,7 @@ type Collector struct {
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
+	latestTS  int64
 
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -104,16 +105,16 @@ func (c *Collector) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case nr := <-c.notifyChan:
-			nr.err = c.detectPumps(ctx)
+			nr.err = c.updateStatus(ctx)
 			nr.wg.Done()
 		case <-time.After(c.interval):
-			c.detectPumps(ctx)
+			c.updateStatus(ctx)
 		}
 	}
 }
 
-// updateStatus updates the http status of the Collector.
-func (c *Collector) updateStatus(synced bool) {
+// updateCollectStatus updates the http status of the Collector.
+func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
 		PumpPos: make(map[string]binlog.Pos),
@@ -130,24 +131,25 @@ func (c *Collector) updateStatus(synced bool) {
 	c.mu.Unlock()
 }
 
-// detectPumps queries pumps' status and deletes the offline pump
-func (c *Collector) detectPumps(ctx context.Context) error {
-	if err := c.prepare(ctx); err != nil {
+// updateStatus queries pumps' status , deletes the offline pump
+// and updates pumps' latest ts
+func (c *Collector) updateStatus(ctx context.Context) error {
+	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
-		c.updateStatus(false)
+		c.updateCollectStatus(false)
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.getLatestTS()
+	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
 	c.publish(windowUpper, windowLower)
 	if windowLower == windowUpper {
-		c.updateStatus(true)
+		c.updateCollectStatus(true)
 	}
 	return nil
 }
 
-func (c *Collector) prepare(ctx context.Context) error {
+func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	nodes, err := c.reg.Nodes(ctx, "pumps")
 	if err != nil {
 		return errors.Trace(err)
@@ -171,6 +173,9 @@ func (c *Collector) prepare(ctx context.Context) error {
 		}
 		exists[n.NodeID] = true
 	}
+
+	// query lastest ts from pd
+	c.latestTS = c.queryLatestTsFromPD()
 	for id, p := range c.pumps {
 		if !exists[id] {
 			// release invalid connection
@@ -178,10 +183,23 @@ func (c *Collector) prepare(ctx context.Context) error {
 			delete(c.pumps, id)
 			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 				id, p.clusterID)
+			continue
 		}
+		// update pumps' latestTS
+		p.UpdateLatestTS(c.latestTS)
 	}
 
 	return nil
+}
+
+func (c *Collector) queryLatestTsFromPD() int64 {
+	version, err := c.tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get current version error: %v", err)
+		return 0
+	}
+
+	return int64(version.Ver)
 }
 
 func (c *Collector) publish(upper, lower int64) error {
@@ -200,19 +218,6 @@ func (c *Collector) publish(upper, lower int64) error {
 		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
 	return nil
-}
-
-// query all pumps' latestTS and select a bigger one
-func (c *Collector) getLatestTS() int64 {
-	var latest int64
-	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestTS()
-		if latestCommitTS > latest {
-			latest = latestCommitTS
-		}
-	}
-
-	return latest
 }
 
 // select min of all pumps' latestValidCommitTS

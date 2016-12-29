@@ -44,7 +44,7 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
 			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
-			time.Sleep(retryTimeout)
+			time.Sleep(retryWaitTime)
 		}
 
 		err = appleTxn(db, sqls, args)
