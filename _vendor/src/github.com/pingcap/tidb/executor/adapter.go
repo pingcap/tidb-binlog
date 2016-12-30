@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/plan"
-	"github.com/pingcap/tidb/sessionctx/variable"
 )
 
 // recordSet wraps an executor, implements ast.RecordSet interface
@@ -29,11 +28,12 @@ type recordSet struct {
 	fields   []*ast.ResultField
 	executor Executor
 	schema   expression.Schema
+	ctx      context.Context
 }
 
 func (a *recordSet) Fields() ([]*ast.ResultField, error) {
 	if len(a.fields) == 0 {
-		for _, col := range a.schema {
+		for _, col := range a.schema.Columns {
 			rf := &ast.ResultField{
 				ColumnAsName: col.ColName,
 				TableAsName:  col.TblName,
@@ -64,10 +64,9 @@ func (a *recordSet) Close() error {
 // statement implements the ast.Statement interface, it builds a plan.Plan to an ast.Statement.
 type statement struct {
 	// The InfoSchema cannot change during execution, so we hold a reference to it.
-	is    infoschema.InfoSchema
-	plan  plan.Plan
-	text  string
-	isDDL bool
+	is   infoschema.InfoSchema
+	plan plan.Plan
+	text string
 }
 
 func (a *statement) OriginText() string {
@@ -77,10 +76,6 @@ func (a *statement) OriginText() string {
 func (a *statement) SetText(text string) {
 	a.text = text
 	return
-}
-
-func (a *statement) IsDDL() bool {
-	return a.isDDL
 }
 
 // Exec implements the ast.Statement Exec interface.
@@ -105,12 +100,12 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 	}
 
 	// Fields or Schema are only used for statements that return result set.
-	if len(e.Schema()) == 0 {
+	if e.Schema().Len() == 0 {
 		// Check if "tidb_snapshot" is set for the write executors.
 		// In history read mode, we can not do write operations.
 		switch e.(type) {
 		case *DeleteExec, *InsertExec, *UpdateExec, *ReplaceExec, *LoadData, *DDLExec:
-			snapshotTS := variable.GetSnapshotTS(ctx)
+			snapshotTS := ctx.GetSessionVars().SnapshotTS
 			if snapshotTS != 0 {
 				return nil, errors.New("can not execute write statement when 'tidb_snapshot' is set")
 			}
@@ -131,9 +126,9 @@ func (a *statement) Exec(ctx context.Context) (ast.RecordSet, error) {
 			}
 		}
 	}
-
 	return &recordSet{
 		executor: e,
 		schema:   e.Schema(),
+		ctx:      ctx,
 	}, nil
 }

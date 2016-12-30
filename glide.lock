@@ -1,5 +1,5 @@
-hash: 5c25f2f0cb064fc0c47a4ebc5abe918f3e73aaa08230849faf288bbbc5d2e030
-updated: 2016-11-22T18:23:34.27184638+08:00
+hash: 18959508b6a98b3009c60f998f61a7312b5072c36ea84d4e0d4c4685df201f12
+updated: 2016-12-30T17:35:16.08069842+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -145,7 +145,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 66805b4bc8a4c22f393922ee19650817321122a5
+  version: ed926a15a832c7461a4d18dc50973de98a845cc0
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -165,7 +165,7 @@ imports:
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: 3612ba0e0f6dbe4fa7b9aff05b13fcd5088d5bb2
+  version: 42dd3c8759f021fa3e39dca1e945959a2f6e407f
   subpackages:
   - ast
   - context
@@ -196,6 +196,7 @@ imports:
   - sessionctx/db
   - sessionctx/forupdate
   - sessionctx/variable
+  - sessionctx/varsutil
   - store/localstore
   - store/localstore/engine
   - store/localstore/goleveldb
@@ -214,12 +215,13 @@ imports:
   - util/codec
   - util/distinct
   - util/hack
+  - util/mock
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
   - util/types
 - name: github.com/pingcap/tipb
-  version: 17699c2d5e3b549d85eec896afd9d4f87879b0eb
+  version: 378c9b0cba112f6f7335b3c86df6fd76c0dcfb78
   subpackages:
   - go-binlog
   - go-tipb

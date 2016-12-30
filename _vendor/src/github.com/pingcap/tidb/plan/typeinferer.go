@@ -21,13 +21,15 @@ import (
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser/opcode"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/charset"
 	"github.com/pingcap/tidb/util/types"
 )
 
 // InferType infers result type for ast.ExprNode.
-func InferType(node ast.Node) error {
+func InferType(sc *variable.StatementContext, node ast.Node) error {
 	var inferrer typeInferrer
+	inferrer.sc = sc
 	// TODO: get the default charset from ctx
 	inferrer.defaultCharset = "utf8"
 	node.Accept(&inferrer)
@@ -35,6 +37,7 @@ func InferType(node ast.Node) error {
 }
 
 type typeInferrer struct {
+	sc             *variable.StatementContext
 	err            error
 	defaultCharset string
 }
@@ -238,7 +241,7 @@ func (v *typeInferrer) handleValuesExpr(x *ast.ValuesExpr) {
 
 func (v *typeInferrer) getFsp(x *ast.FuncCallExpr) int {
 	if len(x.Args) == 1 {
-		fsp, err := x.Args[0].GetDatum().ToInt64()
+		fsp, err := x.Args[0].GetDatum().ToInt64(v.sc)
 		if err != nil {
 			v.err = err
 		}
@@ -260,8 +263,8 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 			tp = types.NewFieldType(mysql.TypeDouble)
 		}
 	case "greatest":
-		for _, v := range x.Args {
-			InferType(v)
+		for _, arg := range x.Args {
+			InferType(v.sc, arg)
 		}
 		if len(x.Args) > 0 {
 			tp = x.Args[0].GetType()
@@ -278,11 +281,13 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		} else {
 			tp = types.NewFieldType(mysql.TypeLonglong)
 		}
+	case "ln", "log", "log2", "log10":
+		tp = types.NewFieldType(mysql.TypeDouble)
 	case "pow", "power", "rand":
 		tp = types.NewFieldType(mysql.TypeDouble)
 	case "curdate", "current_date", "date":
 		tp = types.NewFieldType(mysql.TypeDate)
-	case "curtime", "current_time":
+	case "curtime", "current_time", "timediff":
 		tp = types.NewFieldType(mysql.TypeDuration)
 		tp.Decimal = v.getFsp(x)
 	case "current_timestamp", "date_arith":
@@ -301,13 +306,15 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 			tp = types.NewFieldType(mysql.TypeVarString)
 			chs = v.defaultCharset
 		}
-	case "dayname", "version", "database", "user", "current_user",
+	case "str_to_date":
+		tp = types.NewFieldType(mysql.TypeDatetime)
+	case "dayname", "version", "database", "user", "current_user", "schema",
 		"concat", "concat_ws", "left", "lcase", "lower", "repeat",
 		"replace", "ucase", "upper", "convert", "substring",
-		"substring_index", "trim", "ltrim", "rtrim", "reverse", "hex", "unhex":
+		"substring_index", "trim", "ltrim", "rtrim", "reverse", "hex", "unhex", "date_format", "rpad", "char_func":
 		tp = types.NewFieldType(mysql.TypeVarString)
 		chs = v.defaultCharset
-	case "strcmp", "isnull":
+	case "strcmp", "isnull", "bit_length", "char_length", "character_length", "crc32":
 		tp = types.NewFieldType(mysql.TypeLonglong)
 	case "connection_id":
 		tp = types.NewFieldType(mysql.TypeLonglong)
@@ -404,7 +411,7 @@ func (v *typeInferrer) addCastToString(expr ast.ExprNode) ast.ExprNode {
 		castTp := types.NewFieldType(mysql.TypeString)
 		castTp.Charset, castTp.Collate = types.DefaultCharsetForType(mysql.TypeString)
 		if val, ok := expr.(*ast.ValueExpr); ok {
-			newVal, err := val.Datum.ConvertTo(castTp)
+			newVal, err := val.Datum.ConvertTo(v.sc, castTp)
 			if err != nil {
 				v.err = errors.Trace(err)
 			}
@@ -429,11 +436,11 @@ func (v *typeInferrer) convertValueToColumnTypeIfNeeded(x *ast.PatternInExpr) {
 		ft := cn.Refer.Column.FieldType
 		for _, expr := range x.List {
 			if valueExpr, ok := expr.(*ast.ValueExpr); ok {
-				newDatum, err := valueExpr.Datum.ConvertTo(&ft)
+				newDatum, err := valueExpr.Datum.ConvertTo(v.sc, &ft)
 				if err != nil {
 					v.err = errors.Trace(err)
 				}
-				cmp, err := newDatum.CompareDatum(valueExpr.Datum)
+				cmp, err := newDatum.CompareDatum(v.sc, valueExpr.Datum)
 				if err != nil {
 					v.err = errors.Trace(err)
 				}

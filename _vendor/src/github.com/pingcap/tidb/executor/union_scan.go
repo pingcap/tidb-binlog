@@ -72,21 +72,12 @@ type dirtyTable struct {
 	truncated   bool
 }
 
-type dirtyDBKeyType int
-
-func (u dirtyDBKeyType) String() string {
-	return "dirtyDBKeyType"
-}
-
-// DirtyDBKey is the key to *dirtyDB for a context.
-const DirtyDBKey dirtyDBKeyType = 1
-
 func getDirtyDB(ctx context.Context) *dirtyDB {
 	var udb *dirtyDB
-	x := ctx.Value(DirtyDBKey)
+	x := ctx.GetSessionVars().TxnCtx.DirtyDB
 	if x == nil {
 		udb = &dirtyDB{tables: make(map[int64]*dirtyTable)}
-		ctx.SetValue(DirtyDBKey, udb)
+		ctx.GetSessionVars().TxnCtx.DirtyDB = udb
 	} else {
 		udb = x.(*dirtyDB)
 	}
@@ -215,10 +206,11 @@ func (us *UnionScanExec) Close() error {
 }
 
 func (us *UnionScanExec) compare(a, b *Row) (int, error) {
+	sc := us.ctx.GetSessionVars().StmtCtx
 	for _, colOff := range us.usedIndex {
 		aColumn := a.Data[colOff]
 		bColumn := b.Data[colOff]
-		cmp, err := aColumn.CompareDatum(bColumn)
+		cmp, err := aColumn.CompareDatum(sc, bColumn)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -243,10 +235,10 @@ func (us *UnionScanExec) buildAndSortAddedRows(t table.Table, asName *model.CISt
 	us.addedRows = make([]*Row, 0, len(us.dirty.addedRows))
 	for h, data := range us.dirty.addedRows {
 		var newData []types.Datum
-		if len(us.Src.Schema()) == len(data) {
+		if us.Src.Schema().Len() == len(data) {
 			newData = data
 		} else {
-			newData = make([]types.Datum, 0, len(us.Src.Schema()))
+			newData = make([]types.Datum, 0, us.Src.Schema().Len())
 			var columns []*model.ColumnInfo
 			if t, ok := us.Src.(*XSelectTableExec); ok {
 				columns = t.Columns

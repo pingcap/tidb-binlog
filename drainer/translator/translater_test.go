@@ -2,7 +2,6 @@ package translator
 
 import (
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
@@ -307,7 +306,7 @@ func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 		d.SetFloat64(1)
 		e = 1.0
 	case mysql.TypeNewDecimal:
-		d.SetMysqlDecimal(mysql.NewDecFromInt(1))
+		d.SetMysqlDecimal(types.NewDecFromInt(1))
 		e = 1.0
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		d.SetString("test")
@@ -316,36 +315,36 @@ func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 		d.SetBytes([]byte("test"))
 		e = []byte("test")
 	case mysql.TypeDuration:
-		duration, err := mysql.ParseDuration("10:10:10", 0)
+		duration, err := types.ParseDuration("10:10:10", 0)
 		c.Assert(err, IsNil)
 		d.SetMysqlDuration(duration)
 		e = "10:10:10"
 	case mysql.TypeDate, mysql.TypeNewDate:
-		t := mysql.Time{Time: time.Now(), Type: mysql.TypeDate, Fsp: 0}
+		t := types.CurrentTime(mysql.TypeDate)
 		d.SetMysqlTime(t)
 		e = t.String()
 	case mysql.TypeTimestamp:
-		t := mysql.Time{Time: time.Now(), Type: mysql.TypeTimestamp, Fsp: 0}
+		t := types.CurrentTime(mysql.TypeTimestamp)
 		d.SetMysqlTime(t)
 		e = t.String()
 	case mysql.TypeDatetime:
-		t := mysql.Time{Time: time.Now(), Type: mysql.TypeDatetime, Fsp: 0}
+		t := types.CurrentTime(mysql.TypeDatetime)
 		d.SetMysqlTime(t)
 		e = t.String()
 	case mysql.TypeBit:
-		bit, err := mysql.ParseBit("0b01", 8)
+		bit, err := types.ParseBit("0b01", 8)
 		c.Assert(err, IsNil)
 		d.SetMysqlBit(bit)
 		e = bit.Value
 	case mysql.TypeSet:
 		elems := []string{"a", "b", "c", "d"}
-		set, err := mysql.ParseSetName(elems, "a")
+		set, err := types.ParseSetName(elems, "a")
 		c.Assert(err, IsNil)
 		d.SetMysqlSet(set)
 		e = set.Value
 	case mysql.TypeEnum:
 		elems := []string{"male", "female"}
-		enum, err := mysql.ParseEnumName(elems, "male")
+		enum, err := types.ParseEnumName(elems, "male")
 		c.Assert(err, IsNil)
 		d.SetMysqlEnum(enum)
 		e = enum.Value

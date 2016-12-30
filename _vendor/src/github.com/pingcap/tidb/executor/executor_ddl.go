@@ -15,6 +15,7 @@ package executor
 
 import (
 	"strings"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
@@ -25,7 +26,10 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/sessionctx/varsutil"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/util/types"
 )
 
 // DDLExec represents a DDL executor.
@@ -39,7 +43,7 @@ type DDLExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *DDLExec) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Next implements Execution Next interface.
@@ -47,20 +51,29 @@ func (e *DDLExec) Next() (*Row, error) {
 	if e.done {
 		return nil, nil
 	}
+	// For create/drop database, create/drop/truncate table
+	// DDL worker do not wait 2 lease, so we need to wait in executor to make sure
+	// all TiDB server has updated the schema.
+	var needWait bool
 	var err error
 	switch x := e.Statement.(type) {
 	case *ast.TruncateTableStmt:
 		err = e.executeTruncateTable(x)
+		needWait = true
 	case *ast.CreateDatabaseStmt:
 		err = e.executeCreateDatabase(x)
+		needWait = true
 	case *ast.CreateTableStmt:
 		err = e.executeCreateTable(x)
+		needWait = true
 	case *ast.CreateIndexStmt:
 		err = e.executeCreateIndex(x)
 	case *ast.DropDatabaseStmt:
 		err = e.executeDropDatabase(x)
+		needWait = true
 	case *ast.DropTableStmt:
 		err = e.executeDropTable(x)
+		needWait = true
 	case *ast.DropIndexStmt:
 		err = e.executeDropIndex(x)
 	case *ast.AlterTableStmt:
@@ -69,6 +82,22 @@ func (e *DDLExec) Next() (*Row, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if e.ctx.GetSessionVars().SkipDDLWait {
+		needWait = false
+	}
+
+	dom := sessionctx.GetDomain(e.ctx)
+	if needWait {
+		time.Sleep(dom.DDL().GetLease() * 2)
+	}
+
+	// Update InfoSchema in TxnCtx, so it will pass schema check.
+	is := dom.InfoSchema()
+	txnCtx := e.ctx.GetSessionVars().TxnCtx
+	txnCtx.InfoSchema = is
+	txnCtx.SchemaVersion = is.SchemaMetaVersion()
+	// DDL will force commit old transaction, after DDL, in transaction status should be false.
+	e.ctx.GetSessionVars().SetStatusFlag(mysql.ServerStatusInTrans, false)
 	e.done = true
 	return nil, nil
 }
@@ -113,7 +142,7 @@ func (e *DDLExec) executeCreateTable(s *ast.CreateTableStmt) error {
 		if s.IfNotExists {
 			return nil
 		}
-		return infoschema.ErrTableExists.Gen("CREATE TABLE: table exists %s", ident)
+		return err
 	}
 	return errors.Trace(err)
 }
@@ -125,12 +154,25 @@ func (e *DDLExec) executeCreateIndex(s *ast.CreateIndexStmt) error {
 }
 
 func (e *DDLExec) executeDropDatabase(s *ast.DropDatabaseStmt) error {
-	err := sessionctx.GetDomain(e.ctx).DDL().DropSchema(e.ctx, model.NewCIStr(s.Name))
+	dbName := model.NewCIStr(s.Name)
+	err := sessionctx.GetDomain(e.ctx).DDL().DropSchema(e.ctx, dbName)
 	if terror.ErrorEqual(err, infoschema.ErrDatabaseNotExists) {
 		if s.IfExists {
 			err = nil
 		} else {
-			err = infoschema.ErrDatabaseDropExists.Gen("Can't drop database '%s'; database doesn't exist", s.Name)
+			err = infoschema.ErrDatabaseDropExists.GenByArgs(s.Name)
+		}
+	}
+	sessionVars := e.ctx.GetSessionVars()
+	if err == nil && strings.ToLower(sessionVars.CurrentDB) == dbName.L {
+		sessionVars.CurrentDB = ""
+		err = varsutil.SetSystemVar(sessionVars, variable.CharsetDatabase, types.NewStringDatum("utf8"))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = varsutil.SetSystemVar(sessionVars, variable.CollationDatabase, types.NewStringDatum("utf8_unicode_ci"))
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return errors.Trace(err)
@@ -148,7 +190,7 @@ func (e *DDLExec) executeDropTable(s *ast.DropTableStmt) error {
 			continue
 		}
 		tb, err := e.is.TableByName(tn.Schema, tn.Name)
-		if err != nil && strings.HasSuffix(err.Error(), "not exist") {
+		if err != nil && infoschema.ErrTableNotExists.Equal(err) {
 			notExistTables = append(notExistTables, fullti.String())
 			continue
 		} else if err != nil {
@@ -172,7 +214,7 @@ func (e *DDLExec) executeDropTable(s *ast.DropTableStmt) error {
 		}
 	}
 	if len(notExistTables) > 0 && !s.IfExists {
-		return infoschema.ErrTableDropExists.Gen("DROP TABLE: table %s does not exist", strings.Join(notExistTables, ","))
+		return infoschema.ErrTableDropExists.GenByArgs(strings.Join(notExistTables, ","))
 	}
 	return nil
 }

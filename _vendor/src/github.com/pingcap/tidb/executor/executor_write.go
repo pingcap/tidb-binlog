@@ -21,11 +21,9 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
-	"github.com/pingcap/tidb/evaluator"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util/types"
@@ -43,9 +41,13 @@ func updateRecord(ctx context.Context, h int64, oldData, newData []types.Datum, 
 	cols := t.Cols()
 	touched := make(map[int]bool, len(cols))
 	assignExists := false
+	sc := ctx.GetSessionVars().StmtCtx
 	var newHandle types.Datum
 	for i, hasSetExpr := range assignFlag {
 		if !hasSetExpr {
+			if onDuplicateUpdate {
+				newData[i] = oldData[i]
+			}
 			continue
 		}
 		if i < offset || i >= offset+len(cols) {
@@ -62,7 +64,7 @@ func updateRecord(ctx context.Context, h int64, oldData, newData []types.Datum, 
 			if newData[i].IsNull() {
 				return errors.Errorf("Column '%v' cannot be null", col.Name.O)
 			}
-			val, err := newData[i].ToInt64()
+			val, err := newData[i].ToInt64(sc)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -94,7 +96,7 @@ func updateRecord(ctx context.Context, h int64, oldData, newData []types.Datum, 
 			continue
 		}
 
-		n, err := newData[i].CompareDatum(oldData[i])
+		n, err := newData[i].CompareDatum(sc, oldData[i])
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -105,8 +107,8 @@ func updateRecord(ctx context.Context, h int64, oldData, newData []types.Datum, 
 	}
 	if !rowChanged {
 		// See https://dev.mysql.com/doc/refman/5.7/en/mysql-real-connect.html  CLIENT_FOUND_ROWS
-		if variable.GetSessionVars(ctx).ClientCapability&mysql.ClientFoundRows > 0 {
-			variable.GetSessionVars(ctx).AddAffectedRows(1)
+		if ctx.GetSessionVars().ClientCapability&mysql.ClientFoundRows > 0 {
+			sc.AddAffectedRows(1)
 		}
 		return nil
 	}
@@ -132,9 +134,9 @@ func updateRecord(ctx context.Context, h int64, oldData, newData []types.Datum, 
 
 	// Record affected rows.
 	if !onDuplicateUpdate {
-		variable.GetSessionVars(ctx).AddAffectedRows(1)
+		sc.AddAffectedRows(1)
 	} else {
-		variable.GetSessionVars(ctx).AddAffectedRows(2)
+		sc.AddAffectedRows(2)
 	}
 	return nil
 }
@@ -153,7 +155,7 @@ type DeleteExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *DeleteExec) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Next implements the Executor Next interface.
@@ -241,7 +243,7 @@ func (e *DeleteExec) removeRow(ctx context.Context, t table.Table, h int64, data
 		return errors.Trace(err)
 	}
 	getDirtyDB(ctx).deleteRow(t.Meta().ID, h)
-	variable.GetSessionVars(ctx).AddAffectedRows(1)
+	ctx.GetSessionVars().StmtCtx.AddAffectedRows(1)
 	return nil
 }
 
@@ -256,6 +258,7 @@ func NewLoadDataInfo(row []types.Datum, ctx context.Context, tbl table.Table) *L
 		row:       row,
 		insertVal: &InsertValues{ctx: ctx, Table: tbl},
 		Table:     tbl,
+		Ctx:       ctx,
 	}
 }
 
@@ -268,6 +271,7 @@ type LoadDataInfo struct {
 	Table      table.Table
 	FieldsInfo *ast.FieldsClause
 	LinesInfo  *ast.LinesClause
+	Ctx        context.Context
 }
 
 // getValidData returns prevData and curData that starts from starting symbol.
@@ -409,7 +413,7 @@ func (e *LoadDataInfo) InsertData(prevData, curData []byte) ([]byte, error) {
 		e.insertVal.currRow++
 	}
 	if e.insertVal.lastInsertID != 0 {
-		variable.GetSessionVars(e.insertVal.ctx).LastInsertID = e.insertVal.lastInsertID
+		e.insertVal.ctx.GetSessionVars().SetLastInsertID(e.insertVal.lastInsertID)
 	}
 
 	return curData, nil
@@ -526,7 +530,7 @@ func (e *LoadData) Next() (*Row, error) {
 
 // Schema implements the Executor Schema interface.
 func (e *LoadData) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Close implements the Executor Close interface.
@@ -543,8 +547,8 @@ type InsertValues struct {
 
 	Table     table.Table
 	Columns   []*ast.ColumnName
-	Lists     [][]ast.ExprNode
-	Setlist   []*ast.Assignment
+	Lists     [][]expression.Expression
+	Setlist   []*expression.Assignment
 	IsPrepare bool
 }
 
@@ -552,8 +556,7 @@ type InsertValues struct {
 type InsertExec struct {
 	*InsertValues
 
-	OnDuplicate []*ast.Assignment
-	fields      []*ast.ResultField
+	OnDuplicate []*expression.Assignment
 
 	Priority int
 	Ignore   bool
@@ -563,7 +566,7 @@ type InsertExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *InsertExec) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Next implements the Executor Next interface.
@@ -575,7 +578,7 @@ func (e *InsertExec) Next() (*Row, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	txn, err := e.ctx.GetTxn(false)
+	txn := e.ctx.Txn()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -605,22 +608,25 @@ func (e *InsertExec) Next() (*Row, error) {
 			continue
 		}
 
-		if len(e.OnDuplicate) == 0 || !terror.ErrorEqual(err, kv.ErrKeyExists) {
-			// If you use the IGNORE keyword, errors that occur while executing the INSERT statement are ignored.
+		if terror.ErrorEqual(err, kv.ErrKeyExists) {
+			// If you use the IGNORE keyword, duplicate-key error that occurs while executing the INSERT statement are ignored.
 			// For example, without IGNORE, a row that duplicates an existing UNIQUE index or PRIMARY KEY value in
 			// the table causes a duplicate-key error and the statement is aborted. With IGNORE, the row is discarded and no error occurs.
 			if e.Ignore {
 				continue
 			}
-			return nil, errors.Trace(err)
+			if len(e.OnDuplicate) > 0 {
+				if err = e.onDuplicateUpdate(row, h, toUpdateColumns); err != nil {
+					return nil, errors.Trace(err)
+				}
+				continue
+			}
 		}
-		if err = e.onDuplicateUpdate(row, h, toUpdateColumns); err != nil {
-			return nil, errors.Trace(err)
-		}
+		return nil, errors.Trace(err)
 	}
 
 	if e.lastInsertID != 0 {
-		variable.GetSessionVars(e.ctx).LastInsertID = e.lastInsertID
+		e.ctx.GetSessionVars().SetLastInsertID(e.lastInsertID)
 	}
 	e.finished = true
 	return nil, nil
@@ -628,6 +634,7 @@ func (e *InsertExec) Next() (*Row, error) {
 
 // Close implements the Executor Close interface.
 func (e *InsertExec) Close() error {
+	e.ctx.GetSessionVars().CurrInsertValues = nil
 	if e.SelectExec != nil {
 		return e.SelectExec.Close()
 	}
@@ -647,7 +654,7 @@ func (e *InsertValues) getColumns(tableCols []*table.Column) ([]*table.Column, e
 		// Process `set` type column.
 		columns := make([]string, 0, len(e.Setlist))
 		for _, v := range e.Setlist {
-			columns = append(columns, v.Column.Name.O)
+			columns = append(columns, v.Col.ColName.O)
 		}
 
 		cols, err = table.FindCols(tableCols, columns)
@@ -689,7 +696,7 @@ func (e *InsertValues) fillValueList() error {
 		if len(e.Lists) > 0 {
 			return errors.Errorf("INSERT INTO %s: set type should not use values", e.Table)
 		}
-		var l []ast.ExprNode
+		l := make([]expression.Expression, 0, len(e.Setlist))
 		for _, v := range e.Setlist {
 			l = append(l, v.Expr)
 		}
@@ -699,6 +706,7 @@ func (e *InsertValues) fillValueList() error {
 }
 
 func (e *InsertValues) checkValueCount(insertValueCount, valueCount, num int, cols []*table.Column) error {
+	// TODO: This check should be done in plan builder.
 	if insertValueCount != valueCount {
 		// "insert into t values (), ()" is valid.
 		// "insert into t values (), (1)" is not valid.
@@ -716,27 +724,9 @@ func (e *InsertValues) checkValueCount(insertValueCount, valueCount, num int, co
 	return nil
 }
 
-func (e *InsertValues) getColumnDefaultValues(cols []*table.Column) (map[string]types.Datum, error) {
-	defaultValMap := map[string]types.Datum{}
-	for _, col := range cols {
-		if value, ok, err := table.GetColDefaultValue(e.ctx, col.ToInfo()); ok {
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			defaultValMap[col.Name.L] = value
-		}
-	}
-	return defaultValMap, nil
-}
-
 func (e *InsertValues) getRows(cols []*table.Column) (rows [][]types.Datum, err error) {
 	// process `insert|replace ... set x=y...`
 	if err = e.fillValueList(); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	defaultVals, err := e.getColumnDefaultValues(e.Table.Cols())
-	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -747,7 +737,7 @@ func (e *InsertValues) getRows(cols []*table.Column) (rows [][]types.Datum, err 
 			return nil, errors.Trace(err)
 		}
 		e.currRow = i
-		rows[i], err = e.getRow(cols, list, defaultVals)
+		rows[i], err = e.getRow(cols, list)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -755,28 +745,13 @@ func (e *InsertValues) getRows(cols []*table.Column) (rows [][]types.Datum, err 
 	return
 }
 
-func (e *InsertValues) getRow(cols []*table.Column, list []ast.ExprNode, defaultVals map[string]types.Datum) ([]types.Datum, error) {
+func (e *InsertValues) getRow(cols []*table.Column, list []expression.Expression) ([]types.Datum, error) {
 	vals := make([]types.Datum, len(list))
-	var err error
 	for i, expr := range list {
-		if d, ok := expr.(*ast.DefaultExpr); ok {
-			cn := d.Name
-			if cn == nil {
-				vals[i] = defaultVals[cols[i].Name.L]
-				continue
-			}
-			var found bool
-			vals[i], found = defaultVals[cn.Name.L]
-			if !found {
-				return nil, errors.Errorf("default column not found - %s", cn.Name.O)
-			}
-		} else {
-			var val types.Datum
-			val, err = evaluator.Eval(e.ctx, expr)
-			vals[i] = val
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+		val, err := expr.Eval(nil, e.ctx)
+		vals[i] = val
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 	return e.fillRowData(cols, vals, false)
@@ -784,8 +759,8 @@ func (e *InsertValues) getRow(cols []*table.Column, list []ast.ExprNode, default
 
 func (e *InsertValues) getRowsSelect(cols []*table.Column) ([][]types.Datum, error) {
 	// process `insert|replace into ... select ... from ...`
-	if len(e.SelectExec.Schema()) != len(cols) {
-		return nil, errors.Errorf("Column count %d doesn't match value count %d", len(cols), len(e.SelectExec.Schema()))
+	if e.SelectExec.Schema().Len() != len(cols) {
+		return nil, errors.Errorf("Column count %d doesn't match value count %d", len(cols), e.SelectExec.Schema().Len())
 	}
 	var rows [][]types.Datum
 	for {
@@ -842,11 +817,12 @@ func filterErr(err error, ignoreErr bool) error {
 
 func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struct{}, ignoreErr bool) error {
 	var defaultValueCols []*table.Column
+	sc := e.ctx.GetSessionVars().StmtCtx
 	for i, c := range e.Table.Cols() {
 		// It's used for retry.
 		if mysql.HasAutoIncrementFlag(c.Flag) && row[i].IsNull() &&
-			variable.GetSessionVars(e.ctx).RetryInfo.Retrying {
-			id, err := variable.GetSessionVars(e.ctx).RetryInfo.GetCurrAutoIncrementID()
+			e.ctx.GetSessionVars().RetryInfo.Retrying {
+			id, err := e.ctx.GetSessionVars().RetryInfo.GetCurrAutoIncrementID()
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -857,7 +833,7 @@ func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struc
 			if !mysql.HasAutoIncrementFlag(c.Flag) {
 				continue
 			}
-			val, err := row[i].ToInt64()
+			val, err := row[i].ToInt64(sc)
 			if filterErr(errors.Trace(err), ignoreErr) != nil {
 				return errors.Trace(err)
 			}
@@ -884,8 +860,8 @@ func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struc
 				e.lastInsertID = uint64(recordID)
 			}
 			// It's used for retry.
-			if !variable.GetSessionVars(e.ctx).RetryInfo.Retrying {
-				variable.GetSessionVars(e.ctx).RetryInfo.AddAutoIncrementID(recordID)
+			if !e.ctx.GetSessionVars().RetryInfo.Retrying {
+				e.ctx.GetSessionVars().RetryInfo.AddAutoIncrementID(recordID)
 			}
 		} else {
 			var err error
@@ -904,20 +880,17 @@ func (e *InsertValues) initDefaultValues(row []types.Datum, marked map[int]struc
 	return nil
 }
 
-func (e *InsertExec) onDuplicateUpdate(row []types.Datum, h int64, cols map[int]*ast.Assignment) error {
-	// On duplicate key update the duplicate row.
-	// Evaluate the updated value.
-	// TODO: report rows affected and last insert id.
+// onDuplicateUpdate updates the duplicate row.
+// TODO: Report rows affected and last insert id.
+func (e *InsertExec) onDuplicateUpdate(row []types.Datum, h int64, cols map[int]*expression.Assignment) error {
 	data, err := e.Table.Row(e.ctx, h)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// For evaluate ValuesExpr
-	// http://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-	for i, rf := range e.fields {
-		rf.Expr.SetValue(row[i].GetValue())
-	}
-	// Evaluate assignment
+
+	// See http://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
+	e.ctx.GetSessionVars().CurrInsertValues = row
+	// evaluate assignment
 	newData := make([]types.Datum, len(data))
 	for i, c := range row {
 		asgn, ok := cols[i]
@@ -925,12 +898,13 @@ func (e *InsertExec) onDuplicateUpdate(row []types.Datum, h int64, cols map[int]
 			newData[i] = c
 			continue
 		}
-		val, err1 := evaluator.Eval(e.ctx, asgn.Expr)
+		val, err1 := asgn.Expr.Eval(data, e.ctx)
 		if err1 != nil {
 			return errors.Trace(err1)
 		}
 		newData[i] = val
 	}
+
 	assignFlag := make([]bool, len(e.Table.Cols()))
 	for i, asgn := range cols {
 		if asgn != nil {
@@ -957,12 +931,12 @@ func findColumnByName(t table.Table, tableName, colName string) (*table.Column, 
 	return c, nil
 }
 
-func getOnDuplicateUpdateColumns(assignList []*ast.Assignment, t table.Table) (map[int]*ast.Assignment, error) {
-	m := make(map[int]*ast.Assignment, len(assignList))
+func getOnDuplicateUpdateColumns(assignList []*expression.Assignment, t table.Table) (map[int]*expression.Assignment, error) {
+	m := make(map[int]*expression.Assignment, len(assignList))
 
 	for _, v := range assignList {
-		col := v.Column
-		c, err := findColumnByName(t, col.Table.L, col.Name.L)
+		col := v.Col
+		c, err := findColumnByName(t, col.TblName.L, col.ColName.L)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -980,7 +954,7 @@ type ReplaceExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *ReplaceExec) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Close implements the Executor Close interface.
@@ -1025,6 +999,7 @@ func (e *ReplaceExec) Next() (*Row, error) {
 	 */
 	idx := 0
 	rowsLen := len(rows)
+	sc := e.ctx.GetSessionVars().StmtCtx
 	for {
 		if idx >= rowsLen {
 			break
@@ -1043,13 +1018,13 @@ func (e *ReplaceExec) Next() (*Row, error) {
 		if err1 != nil {
 			return nil, errors.Trace(err1)
 		}
-		rowUnchanged, err1 := types.EqualDatums(oldRow, row)
+		rowUnchanged, err1 := types.EqualDatums(sc, oldRow, row)
 		if err1 != nil {
 			return nil, errors.Trace(err1)
 		}
 		if rowUnchanged {
 			// If row unchanged, we do not need to do insert.
-			variable.GetSessionVars(e.ctx).AddAffectedRows(1)
+			e.ctx.GetSessionVars().StmtCtx.AddAffectedRows(1)
 			idx++
 			continue
 		}
@@ -1059,11 +1034,11 @@ func (e *ReplaceExec) Next() (*Row, error) {
 			return nil, errors.Trace(err1)
 		}
 		getDirtyDB(e.ctx).deleteRow(e.Table.Meta().ID, h)
-		variable.GetSessionVars(e.ctx).AddAffectedRows(1)
+		e.ctx.GetSessionVars().StmtCtx.AddAffectedRows(1)
 	}
 
 	if e.lastInsertID != 0 {
-		variable.GetSessionVars(e.ctx).LastInsertID = e.lastInsertID
+		e.ctx.GetSessionVars().SetLastInsertID(e.lastInsertID)
 	}
 	e.finished = true
 	return nil, nil
@@ -1086,7 +1061,7 @@ type UpdateExec struct {
 
 // Schema implements the Executor Schema interface.
 func (e *UpdateExec) Schema() expression.Schema {
-	return nil
+	return expression.NewSchema(nil)
 }
 
 // Next implements the Executor Next interface.
@@ -1157,9 +1132,9 @@ func (e *UpdateExec) fetchRows() error {
 		if row == nil {
 			return nil
 		}
-		data := make([]types.Datum, len(e.SelectExec.Schema()))
-		newData := make([]types.Datum, len(e.SelectExec.Schema()))
-		for i, s := range e.SelectExec.Schema() {
+		data := make([]types.Datum, e.SelectExec.Schema().Len())
+		newData := make([]types.Datum, e.SelectExec.Schema().Len())
+		for i, s := range e.SelectExec.Schema().Columns {
 			data[i], err = s.Eval(row.Data, e.ctx)
 			if err != nil {
 				return errors.Trace(err)
@@ -1188,8 +1163,8 @@ func (e *UpdateExec) getTableOffset(entry RowKeyEntry) int {
 		tblName = entry.TableAsName.L
 	}
 	schema := e.SelectExec.Schema()
-	for i := 0; i < len(schema); i++ {
-		s := schema[i]
+	for i := 0; i < schema.Len(); i++ {
+		s := schema.Columns[i]
 		if s.TblName.L == tblName {
 			return i
 		}
