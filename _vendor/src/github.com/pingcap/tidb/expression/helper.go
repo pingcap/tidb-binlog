@@ -1,4 +1,17 @@
-package evaluator
+// Copyright 2016 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package expression
 
 import (
 	"strings"
@@ -8,9 +21,21 @@ import (
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/sessionctx/varsutil"
 	"github.com/pingcap/tidb/util/types"
 )
+
+const (
+	zeroI64 int64 = 0
+	oneI64  int64 = 1
+)
+
+func boolToInt64(v bool) int64 {
+	if v {
+		return int64(1)
+	}
+	return int64(0)
+}
 
 var (
 	// CurrentTimestamp is the keyword getting default value for datetime and timestamp type.
@@ -30,7 +55,7 @@ func GetTimeValue(ctx context.Context, v interface{}, tp byte, fsp int) (types.D
 }
 
 func getTimeValue(ctx context.Context, v interface{}, tp byte, fsp int) (d types.Datum, err error) {
-	value := mysql.Time{
+	value := types.Time{
 		Type: tp,
 		Fsp:  fsp,
 	}
@@ -44,11 +69,11 @@ func getTimeValue(ctx context.Context, v interface{}, tp byte, fsp int) (d types
 	case string:
 		upperX := strings.ToUpper(x)
 		if upperX == CurrentTimestamp {
-			value.Time = defaultTime
+			value.Time = types.FromGoTime(defaultTime)
 		} else if upperX == ZeroTimestamp {
-			value, _ = mysql.ParseTimeFromNum(0, tp, fsp)
+			value, _ = types.ParseTimeFromNum(0, tp, fsp)
 		} else {
-			value, err = mysql.ParseTime(x, tp, fsp)
+			value, err = types.ParseTime(x, tp, fsp)
 			if err != nil {
 				return d, errors.Trace(err)
 			}
@@ -56,12 +81,12 @@ func getTimeValue(ctx context.Context, v interface{}, tp byte, fsp int) (d types
 	case *ast.ValueExpr:
 		switch x.Kind() {
 		case types.KindString:
-			value, err = mysql.ParseTime(x.GetString(), tp, fsp)
+			value, err = types.ParseTime(x.GetString(), tp, fsp)
 			if err != nil {
 				return d, errors.Trace(err)
 			}
 		case types.KindInt64:
-			value, err = mysql.ParseTimeFromNum(x.GetInt64(), tp, fsp)
+			value, err = types.ParseTimeFromNum(x.GetInt64(), tp, fsp)
 			if err != nil {
 				return d, errors.Trace(err)
 			}
@@ -78,17 +103,17 @@ func getTimeValue(ctx context.Context, v interface{}, tp byte, fsp int) (d types
 		return d, errors.Trace(errDefaultValue)
 	case *ast.UnaryOperationExpr:
 		// support some expression, like `-1`
-		v, err := Eval(ctx, x)
+		v, err := EvalAstExpr(x, ctx)
 		if err != nil {
 			return d, errors.Trace(err)
 		}
 		ft := types.NewFieldType(mysql.TypeLonglong)
-		xval, err := v.ConvertTo(ft)
+		xval, err := v.ConvertTo(ctx.GetSessionVars().StmtCtx, ft)
 		if err != nil {
 			return d, errors.Trace(err)
 		}
 
-		value, err = mysql.ParseTimeFromNum(xval.GetInt64(), tp, fsp)
+		value, err = types.ParseTimeFromNum(xval.GetInt64(), tp, fsp)
 		if err != nil {
 			return d, errors.Trace(err)
 		}
@@ -117,10 +142,10 @@ func getSystemTimestamp(ctx context.Context) (time.Time, error) {
 	}
 
 	// check whether use timestamp varibale
-	sessionVars := variable.GetSessionVars(ctx)
-	ts := sessionVars.GetSystemVar("timestamp")
+	sessionVars := ctx.GetSessionVars()
+	ts := varsutil.GetSystemVar(sessionVars, "timestamp")
 	if !ts.IsNull() && ts.GetString() != "" {
-		timestamp, err := ts.ToInt64()
+		timestamp, err := ts.ToInt64(ctx.GetSessionVars().StmtCtx)
 		if err != nil {
 			return time.Time{}, errors.Trace(err)
 		}

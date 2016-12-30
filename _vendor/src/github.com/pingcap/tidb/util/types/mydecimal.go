@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mysql
+package types
 
 import (
 	"math"
@@ -1040,6 +1040,9 @@ with the correct -1/0/+1 result
                 7E F2 04 C7 2D FB 2D
 */
 func (d *MyDecimal) ToBin(precision, frac int) ([]byte, error) {
+	if precision > digitsPerWord*maxWordBufLen || precision < 0 || frac > MaxFraction || frac < 0 {
+		return nil, ErrBadNumber
+	}
 	var err error
 	var mask int32
 	if d.negative {

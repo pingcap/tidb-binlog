@@ -82,7 +82,7 @@ func (s *Scanner) Next() error {
 		if s.idx >= len(s.cache) {
 			if s.eof {
 				s.Close()
-				return kv.ErrNotExist
+				return nil
 			}
 			err := s.getData(bo)
 			if err != nil {
@@ -131,7 +131,7 @@ func (s *Scanner) resolveCurrentLock(bo *Backoffer) error {
 func (s *Scanner) getData(bo *Backoffer) error {
 	log.Debugf("txn getData nextStartKey[%q], txn %d", s.nextStartKey, s.startTS())
 	for {
-		region, err := s.snapshot.store.regionCache.GetRegion(bo, s.nextStartKey)
+		loc, err := s.snapshot.store.regionCache.LocateKey(bo, s.nextStartKey)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -143,12 +143,12 @@ func (s *Scanner) getData(bo *Backoffer) error {
 				Version:  s.startTS(),
 			},
 		}
-		resp, err := s.snapshot.store.SendKVReq(bo, req, region.VerID(), readTimeoutMedium)
+		resp, err := s.snapshot.store.SendKVReq(bo, req, loc.Region, readTimeoutMedium)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if regionErr := resp.GetRegionError(); regionErr != nil {
-			log.Warnf("scanner getData failed: %s", regionErr)
+			log.Debugf("scanner getData failed: %s", regionErr)
 			err = bo.Backoff(boRegionMiss, errors.New(regionErr.String()))
 			if err != nil {
 				return errors.Trace(err)
@@ -176,8 +176,8 @@ func (s *Scanner) getData(bo *Backoffer) error {
 		if len(kvPairs) < s.batchSize {
 			// No more data in current Region. Next getData() starts
 			// from current Region's endKey.
-			s.nextStartKey = region.EndKey()
-			if len(region.EndKey()) == 0 {
+			s.nextStartKey = loc.EndKey
+			if len(loc.EndKey) == 0 {
 				// Current Region is the last one.
 				s.eof = true
 			}

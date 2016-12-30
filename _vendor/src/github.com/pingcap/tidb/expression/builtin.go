@@ -15,16 +15,96 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package evaluator
+package expression
 
 import (
 	"strings"
 
+	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/parser/opcode"
 	"github.com/pingcap/tidb/util/types"
 )
+
+// baseBuiltinFunc will be contained in every struct that implement builtinFunc interface.
+type baseBuiltinFunc struct {
+	args      []Expression
+	argValues []types.Datum
+	ctx       context.Context
+	self      builtinFunc
+}
+
+func newBaseBuiltinFunc(args []Expression, ctx context.Context) baseBuiltinFunc {
+	return baseBuiltinFunc{
+		args:      args,
+		argValues: make([]types.Datum, len(args)),
+		ctx:       ctx,
+	}
+}
+
+func (b *baseBuiltinFunc) evalArgs(row []types.Datum) (_ []types.Datum, err error) {
+	for i, arg := range b.args {
+		b.argValues[i], err = arg.Eval(row, b.ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return b.argValues, nil
+}
+
+// isDeterministic will be true by default. Non-deterministic function will override this function.
+func (b *baseBuiltinFunc) isDeterministic() bool {
+	return true
+}
+
+func (b *baseBuiltinFunc) getArgs() []Expression {
+	return b.args
+}
+
+// equal only checks if both functions are non-deterministic and if these arguments are same.
+// Function name will be checked outside.
+func (b *baseBuiltinFunc) equal(fun builtinFunc) bool {
+	if !b.self.isDeterministic() || !fun.isDeterministic() {
+		return false
+	}
+	funArgs := fun.getArgs()
+	if len(funArgs) != len(b.args) {
+		return false
+	}
+	for i := range b.args {
+		if !b.args[i].Equal(funArgs[i], b.ctx) {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *baseBuiltinFunc) getCtx() context.Context {
+	return b.ctx
+}
+
+// builtinFunc stands for a particular function signature.
+type builtinFunc interface {
+	// eval does evaluation by the given row.
+	eval([]types.Datum) (types.Datum, error)
+	// getArgs returns the arguments expressions.
+	getArgs() []Expression
+	// isDeterministic checks if a function is deterministic.
+	// A function is deterministic if it returns same results for same inputs.
+	// e.g. random is non-deterministic.
+	isDeterministic() bool
+	// equal check if this function equals to another function.
+	equal(builtinFunc) bool
+	// getCtx returns this function's context.
+	getCtx() context.Context
+}
+
+// builtinFunc stands for a class for a function which may contains multiple functions.
+type functionClass interface {
+	// getFunction gets a function signature by the types and the counts of given arguments.
+	getFunction(args []Expression, ctx context.Context) (builtinFunc, error)
+}
 
 // BuiltinFunc is the function signature for builtin functions
 type BuiltinFunc func([]types.Datum, context.Context) (types.Datum, error)
@@ -50,10 +130,16 @@ var Funcs = map[string]Func{
 	ast.Abs:     {builtinAbs, 1, 1},
 	ast.Ceil:    {builtinCeil, 1, 1},
 	ast.Ceiling: {builtinCeil, 1, 1},
+	ast.Ln:      {builtinLog, 1, 1},
+	ast.Log:     {builtinLog, 1, 2},
+	ast.Log2:    {builtinLog2, 1, 1},
+	ast.Log10:   {builtinLog10, 1, 1},
 	ast.Pow:     {builtinPow, 2, 2},
 	ast.Power:   {builtinPow, 2, 2},
 	ast.Rand:    {builtinRand, 0, 1},
 	ast.Round:   {builtinRound, 1, 2},
+	ast.Conv:    {builtinConv, 3, 3},
+	ast.CRC32:   {builtinCRC32, 1, 1},
 
 	// time functions
 	ast.Curdate:          {builtinCurrentDate, 0, 0},
@@ -77,6 +163,7 @@ var Funcs = map[string]Func{
 	ast.MonthName:        {builtinMonthName, 1, 1},
 	ast.Now:              {builtinNow, 0, 1},
 	ast.Second:           {builtinSecond, 1, 1},
+	ast.StrToDate:        {builtinStrToDate, 2, 2},
 	ast.Sysdate:          {builtinSysDate, 0, 1},
 	ast.Time:             {builtinTime, 1, 1},
 	ast.UTCDate:          {builtinUTCDate, 0, 0},
@@ -86,6 +173,7 @@ var Funcs = map[string]Func{
 	ast.Year:             {builtinYear, 1, 1},
 	ast.YearWeek:         {builtinYearWeek, 1, 2},
 	ast.FromUnixTime:     {builtinFromUnixTime, 1, 2},
+	ast.TimeDiff:         {builtinTimeDiff, 2, 2},
 
 	// string functions
 	ast.ASCII:          {builtinASCII, 1, 1},
@@ -111,11 +199,18 @@ var Funcs = map[string]Func{
 	ast.Ucase:          {builtinUpper, 1, 1},
 	ast.Hex:            {builtinHex, 1, 1},
 	ast.Unhex:          {builtinUnHex, 1, 1},
+	ast.Rpad:           {builtinRpad, 3, 3},
+	ast.BitLength:      {builtinBitLength, 1, 1},
+	ast.CharFunc:       {builtinChar, 2, -1},
+	ast.CharLength:     {builtinCharLength, 1, 1},
 
 	// information functions
 	ast.ConnectionID: {builtinConnectionID, 0, 0},
 	ast.CurrentUser:  {builtinCurrentUser, 0, 0},
 	ast.Database:     {builtinDatabase, 0, 0},
+	// This function is a synonym for DATABASE().
+	// See http://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_schema
+	ast.Schema:       {builtinDatabase, 0, 0},
 	ast.FoundRows:    {builtinFoundRows, 0, 0},
 	ast.LastInsertId: {builtinLastInsertID, 0, 1},
 	ast.User:         {builtinUser, 0, 0},
@@ -187,6 +282,7 @@ var DynamicFuncs = map[string]int{
 	"sleep":          0,
 	ast.GetVar:       0,
 	ast.SetVar:       0,
+	ast.Values:       0,
 }
 
 // See http://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_coalesce
@@ -210,8 +306,9 @@ func builtinIsNull(args []types.Datum, _ context.Context) (d types.Datum, err er
 }
 
 // See http://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#function_greatest
-func builtinGreatest(args []types.Datum, _ context.Context) (d types.Datum, err error) {
+func builtinGreatest(args []types.Datum, ctx context.Context) (d types.Datum, err error) {
 	max := 0
+	sc := ctx.GetSessionVars().StmtCtx
 	for i := 0; i < len(args); i++ {
 		if args[i].IsNull() {
 			d.SetNull()
@@ -219,7 +316,7 @@ func builtinGreatest(args []types.Datum, _ context.Context) (d types.Datum, err 
 		}
 
 		var cmp int
-		if cmp, err = args[i].CompareDatum(args[max]); err != nil {
+		if cmp, err = args[i].CompareDatum(sc, args[max]); err != nil {
 			return
 		}
 

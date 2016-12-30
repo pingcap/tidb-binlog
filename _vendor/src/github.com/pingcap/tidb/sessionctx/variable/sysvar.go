@@ -16,7 +16,6 @@ package variable
 import (
 	"strings"
 
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
 )
@@ -65,7 +64,7 @@ var tidbSysVars map[string]bool
 // Variable errors
 var (
 	UnknownStatusVar = terror.ClassVariable.New(CodeUnknownStatusVar, "unknown status variable")
-	UnknownSystemVar = terror.ClassVariable.New(CodeUnknownSystemVar, "unknown system variable")
+	UnknownSystemVar = terror.ClassVariable.New(CodeUnknownSystemVar, "unknown system variable '%s'")
 )
 
 func init() {
@@ -85,6 +84,7 @@ func init() {
 	tidbSysVars[DistSQLJoinConcurrencyVar] = true
 	tidbSysVars[TiDBSnapshot] = true
 	tidbSysVars[TiDBSkipConstraintCheck] = true
+	tidbSysVars[TiDBSkipDDLWait] = true
 }
 
 // we only support MySQL now
@@ -365,7 +365,7 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, "binlog_direct_non_transactional_updates", "OFF"},
 	{ScopeGlobal, "innodb_change_buffering", "all"},
 	{ScopeGlobal | ScopeSession, "sql_big_selects", "ON"},
-	{ScopeGlobal | ScopeSession, characterSetResults, "latin1"},
+	{ScopeGlobal | ScopeSession, CharacterSetResults, "latin1"},
 	{ScopeGlobal, "innodb_max_purge_lag_delay", "0"},
 	{ScopeGlobal | ScopeSession, "session_track_schema", ""},
 	{ScopeGlobal, "innodb_io_capacity_max", "2000"},
@@ -592,6 +592,7 @@ var defaultSysVars = []*SysVar{
 	{ScopeGlobal | ScopeSession, DistSQLScanConcurrencyVar, "10"},
 	{ScopeGlobal | ScopeSession, DistSQLJoinConcurrencyVar, "5"},
 	{ScopeSession, TiDBSkipConstraintCheck, "0"},
+	{ScopeSession, TiDBSkipDDLWait, "0"},
 }
 
 // TiDB system variables
@@ -600,6 +601,7 @@ const (
 	DistSQLScanConcurrencyVar = "tidb_distsql_scan_concurrency"
 	DistSQLJoinConcurrencyVar = "tidb_distsql_join_concurrency"
 	TiDBSkipConstraintCheck   = "tidb_skip_constraint_check"
+	TiDBSkipDDLWait           = "tidb_skip_ddl_wait"
 )
 
 // SetNamesVariables is the system variable names related to set names statements.
@@ -621,31 +623,7 @@ const (
 // GlobalVarAccessor is the interface for accessing global scope system and status variables.
 type GlobalVarAccessor interface {
 	// GetGlobalSysVar gets the global system variable value for name.
-	GetGlobalSysVar(ctx context.Context, name string) (string, error)
+	GetGlobalSysVar(name string) (string, error)
 	// SetGlobalSysVar sets the global system variable name to value.
-	SetGlobalSysVar(ctx context.Context, name string, value string) error
-}
-
-// globalSysVarAccessorKeyType is a dummy type to avoid naming collision in context.
-type globalSysVarAccessorKeyType int
-
-// String defines a Stringer function for debugging and pretty printing.
-func (k globalSysVarAccessorKeyType) String() string {
-	return "global_sysvar_accessor"
-}
-
-const accessorKey globalSysVarAccessorKeyType = 0
-
-// BindGlobalVarAccessor binds global var accessor to context.
-func BindGlobalVarAccessor(ctx context.Context, accessor GlobalVarAccessor) {
-	ctx.SetValue(accessorKey, accessor)
-}
-
-// GetGlobalVarAccessor gets accessor from ctx.
-func GetGlobalVarAccessor(ctx context.Context) GlobalVarAccessor {
-	v, ok := ctx.Value(accessorKey).(GlobalVarAccessor)
-	if !ok {
-		panic("Miss global sysvar accessor")
-	}
-	return v
+	SetGlobalSysVar(name string, value string) error
 }
