@@ -25,18 +25,18 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	}
 	// `createSchema` job
 	job := &model.Job{
-		ID:       3,
-		SchemaID: 1,
-		Type:     model.ActionCreateSchema,
-		Args:     []interface{}{123, dbInfo},
+		ID:         3,
+		SchemaID:   1,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
 	}
 	jobs = mustAppendJob(c, jobs, job)
 	// `createIgnoreSchema` job
 	job1 := &model.Job{
-		ID:       4,
-		SchemaID: 2,
-		Type:     model.ActionCreateSchema,
-		Args:     []interface{}{123, ingnoreDBInfo},
+		ID:         4,
+		SchemaID:   2,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil},
 	}
 	jobs = mustAppendJob(c, jobs, job1)
 	// construct a cancelled job
@@ -61,12 +61,6 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	jobs = mustAppendJob(c, jobs, job)
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
-
-	// test schema decodeArgs error
-	jobs = jobs[:0]
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 8, SchemaID: 1, Args: []interface{}{123, 123}, Type: model.ActionCreateSchema})
-	_, err = NewSchema(jobs, ignoreNames)
-	c.Assert(err, NotNil, Commentf("should return  schema decodeArgs error"))
 
 	// test schema drop schema error
 	jobs = jobs[:0]
@@ -120,42 +114,42 @@ func (*testDrainerSuite) TestTable(c *C) {
 
 	// `createSchema` job
 	job := &model.Job{
-		ID:       5,
-		SchemaID: 3,
-		Type:     model.ActionCreateSchema,
-		Args:     []interface{}{123, dbInfo},
+		ID:         5,
+		SchemaID:   3,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
 	}
 	jobs = mustAppendJob(c, jobs, job)
 
 	// `createTable` job
 	job = &model.Job{
-		ID:       6,
-		SchemaID: 3,
-		TableID:  2,
-		Type:     model.ActionCreateTable,
-		Args:     []interface{}{123, tblInfo},
+		ID:         6,
+		SchemaID:   3,
+		TableID:    2,
+		Type:       model.ActionCreateTable,
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
 	jobs = mustAppendJob(c, jobs, job)
 
 	// `addColumn` job
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 	job = &model.Job{
-		ID:       7,
-		SchemaID: 3,
-		TableID:  2,
-		Type:     model.ActionAddColumn,
-		Args:     []interface{}{123, tblInfo},
+		ID:         7,
+		SchemaID:   3,
+		TableID:    2,
+		Type:       model.ActionAddColumn,
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
 	jobs = mustAppendJob(c, jobs, job)
 
 	// construct a historical `addIndex` job
 	tblInfo.Indices = []*model.IndexInfo{idxInfo}
 	job = &model.Job{
-		ID:       8,
-		SchemaID: 3,
-		TableID:  2,
-		Type:     model.ActionAddIndex,
-		Args:     []interface{}{123, tblInfo},
+		ID:         8,
+		SchemaID:   3,
+		TableID:    2,
+		Type:       model.ActionAddIndex,
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
 	jobs = mustAppendJob(c, jobs, job)
 
@@ -174,11 +168,15 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(table.Columns, HasLen, 1)
 	c.Assert(table.Indices, HasLen, 1)
 	// check truncate table
-	tblInfo.ID = 9
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, Args: []interface{}{123, tblInfo}})
+	tblInfo1 := &model.TableInfo{
+		ID:    9,
+		Name:  tbName,
+		State: model.StatePublic,
+	}
+	jobs = mustAppendJob(c, jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
 	schema1, err := NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)
-	table, ok = schema1.TableByID(tblInfo.ID)
+	table, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
 	table, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
@@ -199,10 +197,6 @@ func (*testDrainerSuite) TestTable(c *C) {
 }
 
 func mustAppendJob(c *C, jobs []*model.Job, job *model.Job) []*model.Job {
-	rawJob, err := job.Encode()
-	c.Assert(err, IsNil)
-	err = job.Decode(rawJob)
-	c.Assert(err, IsNil)
 	jobs = append(jobs, job)
 	return jobs
 }

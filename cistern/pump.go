@@ -353,9 +353,6 @@ func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
 		if job.State == model.JobCancelled {
 			continue
 		}
-		if err := decodeJob(job); err != nil {
-			return errors.Trace(err)
-		}
 		payload, err := job.Encode()
 		if err != nil {
 			return errors.Trace(err)

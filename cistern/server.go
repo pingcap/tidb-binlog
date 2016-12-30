@@ -361,11 +361,7 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 			if err1 := job.Decode(val); err1 != nil {
 				return false, errors.Trace(err1)
 			}
-			var ver int64
-			if err1 := job.DecodeArgs(&ver); err1 != nil {
-				return false, errors.Trace(err1)
-			}
-			if ver > upperSchemaVer {
+			if job.BinlogInfo.SchemaVersion > upperSchemaVer {
 				return false, nil
 			}
 			ddlJobs = append(ddlJobs, val)

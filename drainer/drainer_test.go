@@ -113,18 +113,18 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		schemaID    int64
 		tableID     int64
 		jobType     model.ActionType
-		args        []interface{}
+		binlogInfo  *model.HistoryInfo
 		query       string
 		resultQuery string
 		schemaName  string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, []interface{}{123, dbInfo}, "create database Test", "create database Test", dbInfo.Name.L},
-		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, []interface{}{123, ingnoreDBInfo}, "create database ignoreTest", "", ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, []interface{}{123, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, []interface{}{123, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, []interface{}{123, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L},
-		{"dropTable", 12, 2, 10, model.ActionDropTable, []interface{}{}, "drop table t;", "drop table t;", dbInfo.Name.L},
-		{"dropSchema", 13, 2, 0, model.ActionDropSchema, []interface{}{}, "drop database test;", "drop database test;", dbInfo.Name.L},
+		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.L},
+		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil}, "create database ignoreTest", "", ""},
+		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L},
+		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L},
+		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L},
+		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table t;", "drop table t;", dbInfo.Name.L},
+		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.L},
 	}
 
 	for _, testCase := range testCases {
@@ -137,12 +137,12 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		}
 
 		job = &model.Job{
-			ID:       testCase.jobID,
-			SchemaID: testCase.schemaID,
-			TableID:  testCase.tableID,
-			Type:     testCase.jobType,
-			Args:     testCase.args,
-			Query:    testCase.query,
+			ID:         testCase.jobID,
+			SchemaID:   testCase.schemaID,
+			TableID:    testCase.tableID,
+			Type:       testCase.jobType,
+			BinlogInfo: testCase.binlogInfo,
+			Query:      testCase.query,
 		}
 		testDoDDLAndCheck(c, d, job, false, testCase.resultQuery, testCase.schemaName)
 

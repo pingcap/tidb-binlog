@@ -183,11 +183,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 	switch job.Type {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
-		schema := &model.DBInfo{}
-		if err := job.DecodeArgs(nil, schema); err != nil {
-			return "", "", errors.Trace(err)
-		}
-
+		schema := job.BinlogInfo.DBInfo
 		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
 			d.schema.AddIgnoreSchema(schema)
 			return "", "", nil
@@ -216,10 +212,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 
 	case model.ActionCreateTable:
 		// get the TableInfo from job rawArgs
-		table := &model.TableInfo{}
-		if err := job.DecodeArgs(nil, table); err != nil {
-			return "", "", errors.Trace(err)
-		}
+		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -275,10 +268,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 			return "", "", errors.Trace(err)
 		}
 
-		table := &model.TableInfo{}
-		if err := job.DecodeArgs(nil, table); err != nil {
-			return "", "", errors.Trace(err)
-		}
+		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -291,11 +281,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 		return schema.Name.L, sql, nil
 
 	default:
-		tbInfo := &model.TableInfo{}
-		err := job.DecodeArgs(nil, tbInfo)
-		if err != nil {
-			return "", "", errors.Trace(err)
-		}
+		tbInfo := job.BinlogInfo.TableInfo
 		if tbInfo == nil {
 			return "", "", errors.NotFoundf("table %d", job.TableID)
 		}

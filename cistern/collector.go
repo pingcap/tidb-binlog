@@ -277,9 +277,6 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 			if !errors.IsNotFound(err) {
 				return errors.Trace(err)
 			}
-			if err := decodeJob(job); err != nil {
-				return errors.Trace(err)
-			}
 			payload, err := job.Encode()
 			if err != nil {
 				return errors.Trace(err)
