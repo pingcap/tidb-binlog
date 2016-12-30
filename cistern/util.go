@@ -1,6 +1,10 @@
 package cistern
 
 import (
+	"fmt"
+	"net"
+	"net/url"
+	"os"
 	"time"
 
 	"github.com/juju/errors"
@@ -111,4 +115,23 @@ func decodeJob(job *model.Job) error {
 		return errors.Errorf("invalid ddl %v", job)
 	}
 	return nil
+}
+
+func genCisternID(listenAddr string) (string, error) {
+	urllis, err := url.Parse(listenAddr)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	_, port, err := net.SplitHostPort(urllis.Host)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return fmt.Sprintf("%s:%s", hostname, port), nil
 }

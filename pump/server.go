@@ -12,12 +12,18 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
+
+var genBinlogInterval = 3 * time.Second
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -64,6 +70,9 @@ type Server struct {
 	cancel   context.CancelFunc
 	gc       time.Duration
 	metrics  *metricClient
+	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
+	needGenBinlog bool
+	tiStore       kv.Storage
 }
 
 func init() {
@@ -86,6 +95,19 @@ func NewServer(cfg *Config) (*Server, error) {
 			interval: cfg.MetricsInterval,
 		}
 	}
+
+	// use tiStore's currentVersion method to get the ts from tso
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tidb.RegisterStore("tikv", tikv.Driver{})
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := tidb.NewStore(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
@@ -98,6 +120,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:     cancel,
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
+		tiStore:    tiStore,
 	}, nil
 }
 
@@ -167,6 +190,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 	}()
 
+	s.needGenBinlog = false
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.WriteBinlogResp{}
 	binlogger, err1 := s.getBinloggerToWrite(cid)
@@ -183,42 +207,31 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	return ret, nil
 }
 
-// PullBinlogs implements the gRPC interface of pump server
-func (s *Server) PullBinlogs(ctx context.Context, in *binlog.PullBinlogReq) (*binlog.PullBinlogResp, error) {
-	var err error
-	beginTime := time.Now()
-	defer func() {
-		var label string
-		if err != nil {
-			label = "fail"
-		} else {
-			label = "succ"
-		}
-		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("PullBinlogs", label).Add(1)
-	}()
-
+// PullBinlogs sends binlogs in the streaming way
+func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
 	cid := fmt.Sprintf("%d", in.ClusterID)
-	ret := &binlog.PullBinlogResp{}
-	binlogger, err1 := s.getBinloggerToRead(cid)
-	if err1 != nil {
-		if errors.IsNotFound(err1) {
-			// return an empty slice and a nil error
-			ret.Entities = []binlog.Entity{}
-			return ret, nil
+	binlogger, err := s.getBinloggerToRead(cid)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	pos := in.StartFrom
+
+	for {
+		binlogs, err := binlogger.ReadFrom(pos, 1000)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+
+		for _, bl := range binlogs {
+			pos = bl.Pos
+			pos.Offset += int64(len(bl.Payload) + 16)
+			resp := &binlog.PullBinlogResp{Entity: bl}
+			if err = stream.Send(resp); err != nil {
+				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
+				return errors.Trace(err)
+			}
+		}
 	}
-	binlogs, err1 := binlogger.ReadFrom(in.StartFrom, in.Batch)
-	if err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
-	}
-	ret.Entities = binlogs
-	return ret, nil
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
@@ -226,6 +239,15 @@ func (s *Server) Start() error {
 	// register this node
 	if err := s.node.Register(s.ctx); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
+	}
+
+	// notify all cisterns
+	if err := s.node.Notify(s.ctx); err != nil {
+		// unregister this node
+		if err := s.node.Unregister(s.ctx); err != nil {
+			log.Error(errors.ErrorStack(err))
+		}
+		return errors.Annotate(err, "fail to notify all living cistern")
 	}
 
 	// start heartbeat
@@ -260,6 +282,8 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
 	}
+	// start generate binlog if pump doesn't receive new binlogs
+	go s.genForwardBinlog()
 
 	// gc old binlog files
 	go s.gcBinlogFile()
@@ -279,6 +303,61 @@ func (s *Server) Start() error {
 	go http.Serve(httpL, nil)
 
 	return m.Serve()
+}
+
+// gennerate rollback binlog can forward the cistern's latestCommitTs, and just be discarded without any side effects
+func (s *Server) genFakeBinlog() ([]byte, error) {
+	version, err := s.tiStore.CurrentVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	bl := &binlog.Binlog{
+		Tp:       binlog.BinlogType_Rollback,
+		CommitTs: int64(version.Ver),
+	}
+	payload, err := bl.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (s *Server) writeFakeBinlog() {
+	if s.needGenBinlog {
+		for cid := range s.dispatcher {
+			binlogger, err := s.getBinloggerToWrite(cid)
+			if err != nil {
+				log.Errorf("generate forward binlog, get binlogger err %v", err)
+				return
+			}
+			payload, err := s.genFakeBinlog()
+			if err != nil {
+				log.Errorf("generate forward binlog, generate binlog err %v", err)
+				return
+			}
+			err = binlogger.WriteTail(payload)
+			if err != nil {
+				log.Errorf("generate forward binlog, write binlog err %v", err)
+				return
+			}
+			log.Info("generate binlog successfully")
+		}
+	}
+	s.needGenBinlog = true
+}
+
+// we would generate binlog to forward the pump's latestCommitTs in cistern when there is no binlogs in this pump
+func (s *Server) genForwardBinlog() {
+	s.needGenBinlog = true
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-time.After(genBinlogInterval):
+			s.writeFakeBinlog()
+		}
+	}
 }
 
 func (s *Server) gcBinlogFile() {
@@ -305,6 +384,12 @@ func (s *Server) Close() {
 	// unregister this node
 	if err := s.node.Unregister(s.ctx); err != nil {
 		log.Error(errors.ErrorStack(err))
+	}
+	// close tiStore
+	if s.tiStore != nil {
+		if err := s.tiStore.Close(); err != nil {
+			log.Error(err.Error())
+		}
 	}
 	// notify other goroutines to exit
 	s.cancel()

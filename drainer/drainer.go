@@ -21,7 +21,7 @@ var (
 	maxRetryCount = 100
 
 	maxWaitGetJobTime = 5 * time.Minute
-	retryTimeout      = 3 * time.Second
+	retryWaitTime     = 3 * time.Second
 	waitTime          = 10 * time.Millisecond
 	maxWaitTime       = 3 * time.Second
 	eventTimeout      = 3 * time.Second
@@ -130,7 +130,7 @@ func (d *Drainer) getHistoryJob(ts int64) ([]*model.Job, error) {
 			select {
 			case <-d.ctx.Done():
 				return nil, nil
-			case <-time.After(retryTimeout):
+			case <-time.After(retryWaitTime):
 			}
 			continue
 		}
@@ -618,7 +618,7 @@ func (d *Drainer) inputStreaming() {
 			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
 			if err != nil {
 				log.Errorf("[Get stream]%v", err)
-				time.Sleep(retryTimeout)
+				time.Sleep(retryWaitTime)
 				continue
 			}
 
@@ -630,7 +630,7 @@ func (d *Drainer) inputStreaming() {
 				if errors.Cause(err) != io.EOF {
 					log.Errorf("[stream]%v", err)
 				}
-				time.Sleep(retryTimeout)
+				time.Sleep(retryWaitTime)
 				continue
 			}
 		}

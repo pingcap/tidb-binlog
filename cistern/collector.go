@@ -2,6 +2,7 @@ package cistern
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -22,24 +23,27 @@ import (
 	"golang.org/x/net/context"
 )
 
-// Collector keeps all connections to pumps, and pulls binlog from each pump server periodically.
-// If find any pump server gone away collector should halt processing until recovery.
-// Each Prewrite binlog in a batch must be paired up with a Commit or Abort binlog that have same startTS.
-// If there are some ones who don't have a girlfriend:), it should request for the next batch after a while,
-// and finally abort the txn in TiKV for that single ones.
-// After a batch processing is complete, collector will update the savepoint of each pump binlog stored in Etcd.
+type notifyResult struct {
+	err error
+	wg  sync.WaitGroup
+}
+
+// Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
 	reg       *pump.EtcdRegistry
-	pumps     map[string]*Pump
 	timeout   time.Duration
 	window    *DepositWindow
 	boltdb    store.Store
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
+	pumps     map[string]*Pump
+	latestTS  int64
 
+	// notifyChan notifies the new pump is comming
+	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
 	mu struct {
 		sync.Mutex
@@ -68,16 +72,16 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID: clusterID,
-		batch:     int32(cfg.CollectBatch),
-		interval:  time.Duration(cfg.CollectInterval) * time.Second,
-		reg:       pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		pumps:     make(map[string]*Pump),
-		timeout:   cfg.PumpTimeout,
-		window:    w,
-		boltdb:    s,
-		tiClient:  tiClient,
-		tiStore:   tiStore,
+		clusterID:  clusterID,
+		interval:   time.Duration(cfg.CollectInterval) * time.Second,
+		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:    cfg.PumpTimeout,
+		pumps:      make(map[string]*Pump),
+		window:     w,
+		boltdb:     s,
+		tiClient:   tiClient,
+		tiStore:    tiStore,
+		notifyChan: make(chan *notifyResult),
 	}, nil
 }
 
@@ -96,28 +100,21 @@ func (c *Collector) Start(ctx context.Context) {
 		log.Info("Collector goroutine exited")
 	}()
 
-	round := 1
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case nr := <-c.notifyChan:
+			nr.err = c.updateStatus(ctx)
+			nr.wg.Done()
 		case <-time.After(c.interval):
-			start := time.Now()
-			synced, err := c.collect(ctx)
-			if err != nil {
-				log.Errorf("collect error: %v", errors.ErrorStack(err))
-				synced = false
-			}
-			c.updateStatus(synced)
-			elapsed := time.Now().Sub(start)
-			log.Debugf("finished collecting at round[%d], elapsed time[%s]", round, elapsed)
-			round++
+			c.updateStatus(ctx)
 		}
 	}
 }
 
-// updateStatus updates the http status of the Collector.
-func (c *Collector) updateStatus(synced bool) {
+// updateCollectStatus updates the http status of the Collector.
+func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
 		PumpPos: make(map[string]binlog.Pos),
@@ -134,94 +131,31 @@ func (c *Collector) updateStatus(synced bool) {
 	c.mu.Unlock()
 }
 
-// collect pulls binlog from pumps, return whether cistern is synced with
-// pump after this round of collect.
-func (c *Collector) collect(ctx context.Context) (synced bool, err error) {
-	if err1 := c.prepare(ctx); err1 != nil {
-		err = errors.Trace(err1)
-		return
+// updateStatus queries pumps' status , deletes the offline pump
+// and updates pumps' latest ts
+func (c *Collector) updateStatus(ctx context.Context) error {
+	if err := c.updatePumpStatus(ctx); err != nil {
+		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
+		c.updateCollectStatus(false)
+		return errors.Trace(err)
 	}
 
-	// start to collect binlog from each pump
-	resc := make(chan Result)
-	var wg sync.WaitGroup
-	for _, p := range c.pumps {
-		wg.Add(1)
-		go func(p *Pump) {
-			select {
-			case resc <- p.Collect(ctx, c.tiClient):
-			case <-ctx.Done():
-			}
-			wg.Done()
-		}(p)
+	windowUpper := c.latestTS
+	windowLower := c.getLatestValidCommitTS()
+	c.publish(windowUpper, windowLower)
+	if windowLower == windowUpper {
+		c.updateCollectStatus(true)
 	}
-	go func() {
-		wg.Wait()
-		close(resc)
-	}()
-
-	items := make(map[int64]*binlog.Binlog)
-	savepoints := make(map[string]binlog.Pos)
-	for r := range resc {
-		if r.err != nil {
-			err = errors.Annotatef(r.err, "failed to collect binlog of cluster(%d) from pump node(%s)",
-				r.clusterID, r.nodeID)
-			return
-		}
-		for commitTS, item := range r.binlogs {
-			items[commitTS] = item
-		}
-
-		if ComparePos(r.end, r.begin) > 0 {
-			savepoints[r.nodeID] = r.end
-		}
-	}
-
-	jobs, err1 := c.grabDDLJobs(ctx, items)
-	if err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-	if err1 := c.storeDDLJobs(jobs); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-	if err1 := c.store(items); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-
-	if err1 := c.updateSavepoints(savepoints); err1 != nil {
-		err = errors.Trace(err1)
-		return
-	}
-
-	c.updateLatestCommitTS(items)
-	if len(items) == 0 {
-		synced = true
-	}
-
-	// prometheus metrics
-	windowGauge.WithLabelValues("upper").Set(float64(c.window.LoadUpper()))
-	ddlJobsCounter.Add(float64(len(jobs)))
-	binlogCounter.Add(float64(len(items)))
-	for nodeID, pos := range savepoints {
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pos))
-	}
-	return
+	return nil
 }
 
-func (c *Collector) prepare(ctx context.Context) error {
-	nodes, err := c.reg.Nodes(ctx)
+func (c *Collector) updatePumpStatus(ctx context.Context) error {
+	nodes, err := c.reg.Nodes(ctx, "pumps")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	online := make(map[string]bool)
+	exists := make(map[string]bool)
 	for _, n := range nodes {
-		// stop collect if any pump node is offline
-		if !n.IsAlive {
-			return errors.Errorf("pump with nodeID(%s) is offline, give up this round of processing", n.NodeID)
-		}
 		_, ok := c.pumps[n.NodeID]
 		if !ok {
 			pos, err := c.getSavePoints(n.NodeID)
@@ -230,77 +164,76 @@ func (c *Collector) prepare(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, pos, c.batch, c.interval)
+			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, pos, c.boltdb, c.tiStore)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
+			p.StartCollect(ctx, c.tiClient)
 		}
-		online[n.NodeID] = true
+		exists[n.NodeID] = true
 	}
+
+	// query lastest ts from pd
+	c.latestTS = c.queryLatestTsFromPD()
 	for id, p := range c.pumps {
-		if !online[id] {
+		if !exists[id] {
 			// release invalid connection
 			p.Close()
 			delete(c.pumps, id)
-			log.Infof("node(%s) of cluster(%d) on host(%s) has been removed and release the connection to it",
-				id, p.clusterID, p.host)
+			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+				id, p.clusterID)
+			continue
 		}
+		// update pumps' latestTS
+		p.UpdateLatestTS(c.latestTS)
 	}
 
 	return nil
 }
 
-func (c *Collector) store(items map[int64]*binlog.Binlog) error {
-	boundary := c.window.LoadLower()
-	b := c.boltdb.NewBatch()
-
-	for commitTS, item := range items {
-		if commitTS < boundary {
-			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
-				commitTS, item)
-		}
-		payload, err := item.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		key := codec.EncodeInt([]byte{}, commitTS)
-		data, err := encodePayload(payload)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		b.Put(key, data)
+func (c *Collector) queryLatestTsFromPD() int64 {
+	version, err := c.tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get current version error: %v", err)
+		return 0
 	}
 
-	err := c.boltdb.Commit(binlogNamespace, b)
-	return errors.Trace(err)
+	return int64(version.Ver)
 }
 
-func (c *Collector) updateSavepoints(savePoints map[string]binlog.Pos) error {
-	for id, pos := range savePoints {
-		data, err := pos.Marshal()
-		if err != nil {
+func (c *Collector) publish(upper, lower int64) error {
+	oldLower := c.window.LoadLower()
+	oldUpper := c.window.LoadUpper()
+
+	if lower > oldLower {
+		if err := c.window.PersistLower(lower); err != nil {
 			return errors.Trace(err)
 		}
-		err = c.boltdb.Put(savepointNamespace, []byte(id), data)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if p, ok := c.pumps[id]; ok {
-			p.current = pos
-		}
+
+		windowGauge.WithLabelValues("lower").Set(float64(lower))
+	}
+	if upper > oldUpper {
+		c.window.SaveUpper(upper)
+		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
 	return nil
 }
 
-func (c *Collector) updateLatestCommitTS(items map[int64]*binlog.Binlog) {
-	max := c.window.LoadUpper()
-	for ts := range items {
-		if ts > max {
-			max = ts
+// select min of all pumps' latestValidCommitTS
+func (c *Collector) getLatestValidCommitTS() int64 {
+	var latest int64 = math.MaxInt64
+	for _, p := range c.pumps {
+		latestCommitTS := p.GetLatestValidCommitTS()
+		if latestCommitTS < latest {
+			latest = latestCommitTS
 		}
 	}
-	c.window.SaveUpper(max)
+	if latest == math.MaxInt64 {
+		latest = 0
+	}
+
+	return latest
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
@@ -317,72 +250,6 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 		return savePoint, errors.Trace(err)
 	}
 	return savePoint, nil
-}
-
-func (c *Collector) grabDDLJobs(ctx context.Context, items map[int64]*binlog.Binlog) (map[int64]*model.Job, error) {
-	res := make(map[int64]*model.Job)
-	for ts, item := range items {
-		if item.DdlJobId > 0 {
-			job, err := c.getDDLJob(item.DdlJobId)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			for job == nil {
-				select {
-				case <-ctx.Done():
-					return nil, errors.Trace(ctx.Err())
-				case <-time.After(c.timeout):
-					job, err = c.getDDLJob(item.DdlJobId)
-					if err != nil {
-						return nil, errors.Trace(err)
-					}
-				}
-			}
-			if job.State == model.JobCancelled {
-				delete(items, ts)
-			} else {
-				res[item.DdlJobId] = job
-			}
-		}
-	}
-	return res, nil
-}
-
-func (c *Collector) getDDLJob(id int64) (*model.Job, error) {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	job, err := snapMeta.GetHistoryDDLJob(id)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return job, nil
-}
-
-func (c *Collector) storeDDLJobs(jobs map[int64]*model.Job) error {
-	b := c.boltdb.NewBatch()
-	for id, job := range jobs {
-		if job.State == model.JobCancelled {
-			continue
-		}
-		if err := decodeJob(job); err != nil {
-			return errors.Trace(err)
-		}
-		payload, err := job.Encode()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		key := codec.EncodeInt([]byte{}, id)
-		b.Put(key, payload)
-	}
-	err := c.boltdb.Commit(ddlJobNamespace, b)
-	return errors.Trace(err)
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
@@ -423,6 +290,15 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 		}
 	}
 	return nil
+}
+
+// Notify notifies to detcet pumps
+func (c *Collector) Notify() error {
+	nr := &notifyResult{}
+	nr.wg.Add(1)
+	c.notifyChan <- nr
+	nr.wg.Wait()
+	return nr.err
 }
 
 // Status exposes collector's status to HTTP handler.

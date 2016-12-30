@@ -18,12 +18,12 @@ func TestUpdateNodeInfo(t *testing.T) {
 	nodeID := "test1"
 	host := "mytest"
 
-	err := r.RegisterNode(context.Background(), nodeID, host)
+	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Node(context.Background(), nodeID)
+	status, err := r.Node(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,12 +33,12 @@ func TestUpdateNodeInfo(t *testing.T) {
 	}
 
 	host = "localhost:1234"
-	err = r.UpdateNode(context.Background(), nodeID, host)
+	err = r.UpdateNode(context.Background(), nodePrefix, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err = r.Node(context.Background(), nodeID)
+	status, err = r.Node(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,12 +57,12 @@ func TestUnregisterNode(t *testing.T) {
 	nodeID := "test1"
 	host := "mytest"
 
-	err := r.RegisterNode(context.Background(), nodeID, host)
+	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Node(context.Background(), nodeID)
+	status, err := r.Node(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,12 +72,12 @@ func TestUnregisterNode(t *testing.T) {
 	}
 
 	host = "localhost:1234"
-	err = r.UnregisterNode(context.Background(), nodeID)
+	err = r.UnregisterNode(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	exist, err := r.checkNodeExists(context.Background(), nodeID)
+	exist, err := r.checkNodeExists(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,17 +96,17 @@ func TestRefreshNode(t *testing.T) {
 	nodeID := "test1"
 	host := "mytest"
 
-	err := r.RegisterNode(context.Background(), nodeID, host)
+	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = r.RefreshNode(context.Background(), nodeID, 2)
+	err = r.RefreshNode(context.Background(), nodePrefix, nodeID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := r.Node(context.Background(), nodeID)
+	status, err := r.Node(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestRefreshNode(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	status, err = r.Node(context.Background(), nodeID)
+	status, err = r.Node(context.Background(), nodePrefix, nodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
