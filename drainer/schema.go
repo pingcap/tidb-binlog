@@ -55,11 +55,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 
 		switch job.Type {
 		case model.ActionCreateSchema:
-			schema := &model.DBInfo{}
-			if err := job.DecodeArgs(nil, schema); err != nil {
-				return errors.Trace(err)
-			}
-
+			schema := job.BinlogInfo.DBInfo
 			if filterIgnoreSchema(schema, ignoreSchemaNames) {
 				s.AddIgnoreSchema(schema)
 				continue
@@ -83,11 +79,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionCreateTable:
-			table := &model.TableInfo{}
-			if err := job.DecodeArgs(nil, table); err != nil {
-				return errors.Trace(err)
-			}
-
+			table := job.BinlogInfo.TableInfo
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
 				continue
@@ -135,10 +127,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.Trace(err)
 			}
 
-			table := &model.TableInfo{}
-			if err := job.DecodeArgs(nil, table); err != nil {
-				return errors.Trace(err)
-			}
+			table := job.BinlogInfo.TableInfo
 			if table == nil {
 				return errors.NotFoundf("table %d", job.TableID)
 			}
@@ -149,11 +138,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		default:
-			tbInfo := &model.TableInfo{}
-			err := job.DecodeArgs(nil, tbInfo)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			tbInfo := job.BinlogInfo.TableInfo
 			if tbInfo == nil {
 				return errors.NotFoundf("table %d", job.TableID)
 			}
