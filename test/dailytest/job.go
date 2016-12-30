@@ -26,26 +26,26 @@ func doSqls(table *table, db *sql.DB, count int) {
 
 	sql, arg, err := genDeleteSqls(table, db, count/10)
 	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
-	}
-	sqls = append(sqls, sql...)
-	args = append(args, arg...)
-	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
+		log.Error(errors.ErrorStack(err))
+	} else {
+		sqls = append(sqls, sql...)
+		args = append(args, arg...)
 	}
 
 	sql, arg, err = genInsertSqls(table, count)
-	sqls = append(sqls, sql...)
-	args = append(args, arg...)
 	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
+		log.Error(errors.ErrorStack(err))
+	} else {
+		sqls = append(sqls, sql...)
+		args = append(args, arg...)
 	}
 
 	sql, arg, err = genUpdateSqls(table, db, count/10)
-	sqls = append(sqls, sql...)
-	args = append(args, arg...)
 	if err != nil {
-		log.Fatal(errors.ErrorStack(err))
+		log.Error(errors.ErrorStack(err))
+	} else {
+		sqls = append(sqls, sql...)
+		args = append(args, arg...)
 	}
 
 	execSqls(db, sqls, args)
@@ -60,7 +60,7 @@ func execSqls(db *sql.DB, sqls []string, args [][]interface{}) {
 	for i := range sqls {
 		_, err = txn.Exec(sqls[i], args[i]...)
 		if err != nil {
-			log.Fatalf(errors.ErrorStack(err))
+			log.Error(errors.ErrorStack(err))
 		}
 	}
 
