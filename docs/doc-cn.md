@@ -128,8 +128,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
 2. Cistern.
     示例
     ```bash
-    ./bin/cistern -deposit-window-period 10 \
-                  -pd-urls http://127.0.0.1:2379 \
+    ./bin/cistern -pd-urls http://127.0.0.1:2379 \
                   -data-dir ./data.cistern
     ```
     
@@ -138,8 +137,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     Usage of cistern:
     -addr string
         cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
-    -collect-interval int
-        向 pump 拉取 binlog 的时间间隔 (默认 10，单位 秒)
+    -detch-interval int
+        向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
     -config string
         配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置
         如果对应的配置在命令行参数里面也存在，cistern 就会使用命令行参数的配置来覆盖配置文件里面的

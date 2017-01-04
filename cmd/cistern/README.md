@@ -10,8 +10,8 @@ Usage of cistern:
         log level: debug, info, warn, error, fatal (default "info")
   -addr string
         addr (i.e. 'host:port') to listen on for drainer connections (default "127.0.0.1:8249")
-  -collect-interval int
-        the interval time (in seconds) of binlog collection loop (default 10)
+  -detch-interval int
+        the interval time (in seconds) of detch pumps' status (default 10)
   -config string
         path to the configuration file
   -data-dir string

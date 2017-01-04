@@ -3,8 +3,8 @@
 # addr (i.e. 'host:port') to listen on for drainer connections
 addr = "127.0.0.1:8249"
 
-# the interval time (in seconds) of binlog collection loop
-collect-interval = 10
+# the interval time (in seconds) of detch pumps' status
+detch-interval = 10
 
 # path to the data directory of kv store
 data-dir = "data.cistern"
