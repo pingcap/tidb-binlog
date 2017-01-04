@@ -128,8 +128,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
 2. Cistern.
     示例
     ```bash
-    ./bin/cistern -deposit-window-period 10 \
-                  -pd-urls http://127.0.0.1:2379 \
+    ./bin/cistern -pd-urls http://127.0.0.1:2379 \
                   -data-dir ./data.cistern
     ```
     
