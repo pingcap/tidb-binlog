@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	defaultListenAddr      = "127.0.0.1:8249"
-	defaultDataDir         = "data.cistern"
-	defaultCollectInterval = 10
-	defaultEtcdURLs        = "http://127.0.0.1:2379"
+	defaultListenAddr    = "127.0.0.1:8249"
+	defaultDataDir       = "data.cistern"
+	defaultDetchInterval = 10
+	defaultEtcdURLs      = "http://127.0.0.1:2379"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout = 5 * time.Second
 	defaultPumpTimeout = 5 * time.Second
@@ -30,7 +30,7 @@ type Config struct {
 	LogLevel        string `toml:"log-level" json:"log-level"`
 	ListenAddr      string `toml:"addr" json:"addr"`
 	DataDir         string `toml:"data-dir" json:"data-dir"`
-	CollectInterval int    `toml:"collect-interval" json:"collect-interval"`
+	DetchInterval   int    `toml:"detch-interval" json:"detch-interval"`
 	EtcdURLs        string `toml:"pd-urls" json:"pd-urls"`
 	GC              int    `toml:"gc" json:"gc"`
 	LogFile         string `toml:"log-file" json:"log-file"`
@@ -57,7 +57,7 @@ func NewConfig() *Config {
 	}
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
-	fs.IntVar(&cfg.CollectInterval, "collect-interval", defaultCollectInterval, "the interval time (in seconds) of binlog collection loop")
+	fs.IntVar(&cfg.DetchInterval, "detch-interval", defaultDetchInterval, "the interval time (in seconds) of detch pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
@@ -108,7 +108,7 @@ func (cfg *Config) Parse(args []string) error {
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.CollectInterval, defaultCollectInterval)
+	adjustInt(&cfg.DetchInterval, defaultDetchInterval)
 	return cfg.validate()
 }
 
