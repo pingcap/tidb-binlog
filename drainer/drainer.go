@@ -603,7 +603,7 @@ func (d *Drainer) inputStreaming() {
 			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
 			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
 			if err != nil {
-				log.Errorf("[Get stream]%v", err)
+				log.Warningf("[Get stream]%v", err)
 				time.Sleep(retryWaitTime)
 				continue
 			}
@@ -614,7 +614,7 @@ func (d *Drainer) inputStreaming() {
 			}
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
-					log.Errorf("[stream]%v", err)
+					log.Warningf("[stream]%v", err)
 				}
 				time.Sleep(retryWaitTime)
 				continue
