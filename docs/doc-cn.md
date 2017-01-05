@@ -76,7 +76,10 @@ cd binlog-latest-linux-amd64
 TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> Drainer
 
 ### 注意
-* 需要为一个 TiDB 集群中的每台 TiDB 部署一台 pump，设置 TiDB 启动参数 binlog-socket 为对应的 pump 监听的 unix socket 文件路径
+* 需要为一个 TiDB 集群中的每台 TiDB server 部署一个 pump，目前 TiDB server 只支持以 unix socket 方式的输出 binlog，
+  设置 TiDB 启动参数 binlog-socket 为对应的 pump 的参数 socket 所指定的 unix socket 文件路径，最终部署结构如下图所示：
+  ![tidb-pump-deployment](./tidb_pump_deployment.jpeg)
+
 * 为 cistern 预留一定量储存空间。可根据 gc 设置和业务数据量预估（例如 gc 设置为 7，只保存最近 7 天的文件，可以预留 200G+ 储存容量）
 
 ### 示例及参数解释
@@ -137,7 +140,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     Usage of cistern:
     -addr string
         cistern 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
-    -detch-interval int
+    -detect-interval int
         向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
     -config string
         配置文件路径, 如果你指定了配置文件，cistern 会首先读取配置文件的配置
