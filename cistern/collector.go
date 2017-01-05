@@ -73,7 +73,7 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, w *DepositWindow
 	}
 	return &Collector{
 		clusterID:  clusterID,
-		interval:   time.Duration(cfg.DetchInterval) * time.Second,
+		interval:   time.Duration(cfg.DetectInterval) * time.Second,
 		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:    cfg.PumpTimeout,
 		pumps:      make(map[string]*Pump),
