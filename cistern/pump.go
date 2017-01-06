@@ -397,7 +397,7 @@ func (p *Pump) pullBinlogs() {
 			req := &pb.PullBinlogReq{StartFrom: pos, ClusterID: p.clusterID}
 			stream, err = p.client.PullBinlogs(p.ctx, req)
 			if err != nil {
-				log.Errorf("[Get pull binlogs stream]%v", err)
+				log.Warningf("[Get pull binlogs stream]%v", err)
 				time.Sleep(retryWaitTime)
 				continue
 			}
@@ -405,7 +405,7 @@ func (p *Pump) pullBinlogs() {
 			pos, err = p.receiveBinlog(stream)
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
-					log.Errorf("[stream]%v", err)
+					log.Warningf("[stream]%v", err)
 				}
 				time.Sleep(retryWaitTime)
 				continue
