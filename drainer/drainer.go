@@ -210,6 +210,17 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 
 		return schemaName, sql, nil
 
+	case model.ActionRenameTable:
+		_, ok := d.schema.SchemaByTableID(job.TableID)
+		if ok {
+			// first drop the table
+			_, err := d.schema.DropTable(job.TableID)
+			if err != nil {
+				return "", "", errors.Trace(err)
+			}
+		}
+		fallthrough
+
 	case model.ActionCreateTable:
 		// get the TableInfo from job rawArgs
 		table := job.BinlogInfo.TableInfo
@@ -252,7 +263,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 
 		return schema.Name.L, sql, nil
 
-	case model.ActionTruncateTable, model.ActionRenameTable:
+	case model.ActionTruncateTable:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", nil
