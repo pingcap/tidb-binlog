@@ -81,10 +81,10 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionRenameTable:
-			_, ok := d.schema.SchemaByTableID(job.TableID)
+			_, ok := s.SchemaByTableID(job.TableID)
 			if ok {
 				// first drop the table
-				_, err := d.schema.DropTable(job.TableID)
+				_, err := s.DropTable(job.TableID)
 				if err != nil {
 					return errors.Trace(err)
 				}
