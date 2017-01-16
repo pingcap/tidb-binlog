@@ -13,7 +13,14 @@
 
 package expression
 
-import "github.com/pingcap/tidb/ast"
+import (
+	"unicode"
+
+	"github.com/juju/errors"
+	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/util/types"
+)
 
 // ExtractColumns extracts all columns from an expression.
 func ExtractColumns(expr Expression) (cols []*Column) {
@@ -52,4 +59,83 @@ func ColumnSubstitute(expr Expression, schema Schema, newExprs []Expression) Exp
 		return fun
 	}
 	return expr
+}
+
+// calculateSum adds v to sum.
+func calculateSum(sc *variable.StatementContext, sum, v types.Datum) (data types.Datum, err error) {
+	// for avg and sum calculation
+	// avg and sum use decimal for integer and decimal type, use float for others
+	// see https://dev.mysql.com/doc/refman/5.7/en/group-by-functions.html
+
+	switch v.Kind() {
+	case types.KindNull:
+	case types.KindInt64, types.KindUint64:
+		var d *types.MyDecimal
+		d, err = v.ToDecimal(sc)
+		if err == nil {
+			data = types.NewDecimalDatum(d)
+		}
+	case types.KindMysqlDecimal:
+		data = v
+	default:
+		var f float64
+		f, err = v.ToFloat64(sc)
+		if err == nil {
+			data = types.NewFloat64Datum(f)
+		}
+	}
+
+	if err != nil {
+		return data, errors.Trace(err)
+	}
+	if data.IsNull() {
+		return sum, nil
+	}
+	switch sum.Kind() {
+	case types.KindNull:
+		return data, nil
+	case types.KindFloat64, types.KindMysqlDecimal:
+		return types.ComputePlus(sum, data)
+	default:
+		return data, errors.Errorf("invalid value %v for aggregate", sum.Kind())
+	}
+}
+
+// getValidPrefix gets a prefix of string which can parsed to a number with base. the minimun base is 2 and the maximum is 36.
+func getValidPrefix(s string, base int64) string {
+	var (
+		validLen int
+		upper    rune
+	)
+	switch {
+	case base >= 2 && base <= 9:
+		upper = rune('0' + base)
+	case base <= 36:
+		upper = rune('A' + base - 10)
+	default:
+		return ""
+	}
+Loop:
+	for i := 0; i < len(s); i++ {
+		c := rune(s[i])
+		switch {
+		case unicode.IsDigit(c) || unicode.IsLower(c) || unicode.IsUpper(c):
+			c = unicode.ToUpper(c)
+			if c < upper {
+				validLen = i + 1
+			} else {
+				break Loop
+			}
+		case c == '+' || c == '-':
+			if i != 0 {
+				break Loop
+			}
+		default:
+			break Loop
+		}
+	}
+	if validLen > 1 && s[0] == '+' {
+		return s[1:validLen]
+	}
+	return s[:validLen]
 }

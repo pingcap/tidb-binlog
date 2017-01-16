@@ -61,7 +61,7 @@ func supportExpr(exprType tipb.ExprType) bool {
 		return true
 	case tipb.ExprType_Plus, tipb.ExprType_Div:
 		return true
-	case tipb.ExprType_Case:
+	case tipb.ExprType_Case, tipb.ExprType_If:
 		return true
 	case tipb.ExprType_Count, tipb.ExprType_First, tipb.ExprType_Max, tipb.ExprType_Min, tipb.ExprType_Sum, tipb.ExprType_Avg:
 		return true
@@ -276,8 +276,6 @@ func buildCopTasks(bo *Backoffer, cache *RegionCache, ranges *copRanges, desc bo
 	if elapsed := time.Since(start); elapsed > time.Millisecond*500 {
 		log.Warnf("buildCopTasks takes too much time (%v), range len %v, task len %v", elapsed, rangesLen, len(tasks))
 	}
-	copBuildTaskHistogram.Observe(time.Since(start).Seconds())
-	copTaskLenHistogram.Observe(float64(len(tasks)))
 	return tasks, nil
 }
 
@@ -326,7 +324,12 @@ func (it *copIterator) work() {
 		task.status = taskRunning
 		it.mu.Unlock()
 		bo := NewBackoffer(copNextMaxBackoff, context.Background())
+		startTime := time.Now()
 		resp, err := it.handleTask(bo, task)
+		coprocessorHistogram.Observe(time.Since(startTime).Seconds())
+		if bo.totalSleep > 0 {
+			backoffHistogram.Observe(float64(bo.totalSleep) / 1000)
+		}
 		if err != nil {
 			it.errChan <- err
 			break

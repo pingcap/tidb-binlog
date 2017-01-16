@@ -9,7 +9,8 @@ import (
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
-	tableIDToName map[int64]tableName
+	tableIDToName  map[int64]tableName
+	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
@@ -44,6 +45,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]tableName)
 	s.schemas = make(map[int64]*model.DBInfo)
+	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*model.TableInfo)
 	s.ignoreSchema = make(map[int64]struct{})
 
@@ -184,6 +186,19 @@ func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
 	return
 }
 
+// SchemaByTableID returns the schema ID by table ID
+func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
+	tn, ok := s.tableIDToName[tableID]
+	if !ok {
+		return nil, false
+	}
+	schemaID, ok := s.schemaNameToID[tn.schema]
+	if !ok {
+		return nil, false
+	}
+	return s.SchemaByID(schemaID)
+}
+
 // IgnoreSchemaByID returns the schema that whether to be ignored
 func (s *Schema) IgnoreSchemaByID(id int64) (val struct{}, ok bool) {
 	val, ok = s.ignoreSchema[id]
@@ -219,6 +234,7 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 	}
 
 	delete(s.schemas, id)
+	delete(s.schemaNameToID, schema.Name.L)
 
 	return schema.Name.L, nil
 }
@@ -230,6 +246,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	}
 
 	s.schemas[db.ID] = db
+	s.schemaNameToID[db.Name.L] = db.ID
 
 	return nil
 }
@@ -239,6 +256,10 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	table, ok := s.tables[id]
 	if !ok {
 		return "", errors.NotFoundf("table %d", id)
+	}
+	err := s.removeTable(id)
+	if err != nil {
+		return "", errors.Trace(err)
 	}
 
 	delete(s.tables, id)
@@ -269,5 +290,21 @@ func (s *Schema) ReplaceTable(table *model.TableInfo) error {
 
 	s.tables[table.ID] = table
 
+	return nil
+}
+
+func (s *Schema) removeTable(tableID int64) error {
+	schema, ok := s.SchemaByTableID(tableID)
+	if !ok {
+		return errors.NotFoundf("table(%d)'s schema", tableID)
+	}
+
+	for i := range schema.Tables {
+		if schema.Tables[i].ID == tableID {
+			copy(schema.Tables[i:], schema.Tables[i+1:])
+			schema.Tables = schema.Tables[:len(schema.Tables)-1]
+			return nil
+		}
+	}
 	return nil
 }

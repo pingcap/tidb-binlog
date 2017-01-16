@@ -136,7 +136,7 @@ type TimeInternal interface {
 	YearWeek(mode int) (int, int)
 	Week(mode int) int
 	Microsecond() int
-	GoTime() (gotime.Time, error)
+	GoTime(*gotime.Location) (gotime.Time, error)
 }
 
 // FromGoTime translates time.Time to mysql time internal representation.
@@ -191,6 +191,11 @@ func (t Time) String() string {
 // IsZero returns a boolean indicating whether the time is equal to ZeroTime.
 func (t Time) IsZero() bool {
 	return compareTime(t.Time, ZeroTime) == 0
+}
+
+// InvalidZero returns a boolean indicating whether the month or day is zero.
+func (t Time) InvalidZero() bool {
+	return t.Time.Month() == 0 || t.Time.Day() == 0
 }
 
 const numberFormat = "%Y%m%d%H%i%s"
@@ -322,7 +327,8 @@ func (t Time) roundFrac(fsp int) (Time, error) {
 	}
 
 	var nt TimeInternal
-	if t1, err := t.Time.GoTime(); err == nil {
+	// TODO: Consider time_zone variable.
+	if t1, err := t.Time.GoTime(gotime.Local); err == nil {
 		t1 = roundTime(t1, fsp)
 		nt = FromGoTime(t1)
 	} else {
@@ -376,7 +382,8 @@ func (t Time) ToPackedUint() (uint64, error) {
 		return 0, nil
 	}
 	if t.Type == mysql.TypeTimestamp {
-		if t1, err := t.Time.GoTime(); err == nil {
+		// TODO: Consider time_zone variable.
+		if t1, err := t.Time.GoTime(gotime.Local); err == nil {
 			utc := t1.UTC()
 			tm = FromGoTime(utc)
 		} else {
@@ -442,8 +449,9 @@ func (t *Time) check() error {
 func (t *Time) Sub(t1 *Time) Duration {
 	var duration gotime.Duration
 	if t.Type == mysql.TypeTimestamp && t1.Type == mysql.TypeTimestamp {
-		a, _ := t.Time.GoTime()
-		b, _ := t1.Time.GoTime()
+		// TODO: Consider time_zone variable.
+		a, _ := t.Time.GoTime(gotime.Local)
+		b, _ := t1.Time.GoTime(gotime.Local)
 		duration = a.Sub(b)
 	} else {
 		seconds, microseconds, neg := calcTimeDiff(t.Time, t1.Time, 1)
@@ -461,6 +469,13 @@ func (t *Time) Sub(t1 *Time) Duration {
 		Duration: duration,
 		Fsp:      fsp,
 	}
+}
+
+// TimestampDiff returns t2 - t1 where t1 and t2 are date or datetime expressions.
+// The unit for the result (an integer) is given by the unit argument.
+// The legal values for unit are "YEAR" "QUARTER" "MONTH" "DAY" "HOUR" "SECOND" and so on.
+func TimestampDiff(unit string, t1 Time, t2 Time) int64 {
+	return timestampDiff(unit, t1.Time, t2.Time)
 }
 
 func parseDateFormat(format string) []string {
@@ -576,13 +591,19 @@ func parseDatetime(str string, fsp int) (Time, error) {
 	if err != nil {
 		return ZeroDatetime, errors.Trace(err)
 	}
+
+	tmp := FromDate(year, month, day, hour, minute, second, microsecond)
 	if overflow {
-		microsecond = 0
-		second++
+		// Convert to Go time and add 1 second, to handle input like 2017-01-05 08:40:59.575601
+		t1, err := tmp.GoTime(gotime.Local)
+		if err != nil {
+			return ZeroDatetime, errors.Trace(err)
+		}
+		tmp = FromGoTime(t1.Add(gotime.Second))
 	}
 
 	nt := Time{
-		Time: FromDate(year, month, day, hour, minute, second, microsecond),
+		Time: tmp,
 		Type: mysql.TypeDatetime,
 		Fsp:  fsp}
 
@@ -1110,6 +1131,24 @@ func ParseDateFromNum(num int64) (Time, error) {
 	return ParseTimeFromNum(num, mysql.TypeDate, MinFsp)
 }
 
+// TimeFromDays Converts a day number to a date.
+func TimeFromDays(num int64) Time {
+	if num < 0 {
+		return Time{
+			Time: FromDate(0, 0, 0, 0, 0, 0, 0),
+			Type: mysql.TypeDate,
+			Fsp:  0,
+		}
+	}
+	year, month, day := getDateFromDaynr(uint(num))
+
+	return Time{
+		Time: FromDate(int(year), int(month), int(day), 0, 0, 0, 0),
+		Type: mysql.TypeDate,
+		Fsp:  0,
+	}
+}
+
 func checkDateType(t TimeInternal) error {
 	year, month, day := t.Year(), t.Month(), t.Day()
 	if year == 0 && month == 0 && day == 0 {
@@ -1163,7 +1202,8 @@ func checkTimestampType(t TimeInternal) error {
 		return nil
 	}
 
-	t1, err := t.GoTime()
+	// TODO: Consider time_zone variable.
+	t1, err := t.GoTime(gotime.Local)
 	if err != nil {
 		log.Infof("checkTimestampType failed, t=%v", t)
 		return errors.Trace(err)
@@ -1211,7 +1251,8 @@ func ExtractTimeNum(unit string, t Time) (int64, error) {
 		week := t.Time.Week(0)
 		return int64(week), nil
 	case "MONTH":
-		t1, err := t.Time.GoTime()
+		// TODO: Consider time_zone variable.
+		t1, err := t.Time.GoTime(gotime.Local)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}

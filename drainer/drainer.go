@@ -252,7 +252,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 
 		return schema.Name.L, sql, nil
 
-	case model.ActionTruncateTable:
+	case model.ActionTruncateTable, model.ActionRenameTable:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", nil
