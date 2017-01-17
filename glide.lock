@@ -1,5 +1,5 @@
-hash: 18959508b6a98b3009c60f998f61a7312b5072c36ea84d4e0d4c4685df201f12
-updated: 2016-12-30T17:35:16.08069842+08:00
+hash: c78d256d3599322b95fb337787109713a16a5830710b30a95a3f2e4dbf0ee037
+updated: 2017-01-16T16:04:20.631564209+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -145,7 +145,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: ed926a15a832c7461a4d18dc50973de98a845cc0
+  version: b66543960fb3508671152f6c9f4a09ee9d7a2322
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -165,7 +165,7 @@ imports:
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: 42dd3c8759f021fa3e39dca1e945959a2f6e407f
+  version: fce6256117ca0281702c02d1b619d8e510a838f1
   subpackages:
   - ast
   - context
@@ -188,6 +188,7 @@ imports:
   - perfschema
   - plan
   - plan/statistics
+  - plan/statscache
   - privilege
   - privilege/privileges
   - sessionctx

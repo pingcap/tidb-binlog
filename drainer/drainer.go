@@ -210,8 +210,36 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 
 		return schemaName, sql, nil
 
+	case model.ActionRenameTable:
+		// ignore schema doesn't support reanme ddl
+		_, ok := d.schema.SchemaByTableID(job.TableID)
+		if !ok {
+			return "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
+		}
+		_, ok = d.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
+		}
+		// first drop the table
+		_, err := d.schema.DropTable(job.TableID)
+		if err != nil {
+			return "", "", errors.Trace(err)
+		}
+		// create table
+		table := job.BinlogInfo.TableInfo
+		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		err = d.schema.CreateTable(schema, table)
+		if err != nil {
+			return "", "", errors.Trace(err)
+		}
+
+		return schema.Name.L, sql, nil
+
 	case model.ActionCreateTable:
-		// get the TableInfo from job rawArgs
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", errors.NotFoundf("table %d", job.TableID)

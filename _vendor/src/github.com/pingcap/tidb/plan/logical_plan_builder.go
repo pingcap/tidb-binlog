@@ -21,7 +21,8 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/plan/statistics"
+	"github.com/pingcap/tidb/plan/statscache"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/types"
 )
 
@@ -50,7 +51,7 @@ func (b *planBuilder) buildAggregation(p LogicalPlan, aggFuncList []*ast.Aggrega
 	agg.self = agg
 	agg.initIDAndContext(b.ctx)
 	addChild(agg, p)
-	schema := expression.NewSchema(make([]*expression.Column, 0, len(aggFuncList)))
+	schema := expression.NewSchema(make([]*expression.Column, 0, len(aggFuncList)+p.GetSchema().Len()))
 	// aggIdxMap maps the old index to new index after applying common aggregation functions elimination.
 	aggIndexMap := make(map[int]int)
 	for i, aggFunc := range aggFuncList {
@@ -85,6 +86,11 @@ func (b *planBuilder) buildAggregation(p LogicalPlan, aggFuncList []*ast.Aggrega
 				RetType:     aggFunc.GetType()})
 		}
 	}
+	for _, col := range p.GetSchema().Columns {
+		newFunc := expression.NewAggFunction(ast.AggFuncFirstRow, []expression.Expression{col.Clone()}, false)
+		agg.AggFuncs = append(agg.AggFuncs, newFunc)
+		schema.Append(col.Clone().(*expression.Column))
+	}
 	agg.GroupByItems = gbyItems
 	agg.SetSchema(schema)
 	agg.collectGroupByColumns()
@@ -116,8 +122,7 @@ func (b *planBuilder) buildResultSetNode(node ast.ResultSetNode) LogicalPlan {
 			v.TableAsName = &x.AsName
 		}
 		if x.AsName.L != "" {
-			schema := p.GetSchema()
-			for _, col := range schema.Columns {
+			for _, col := range p.GetSchema().Columns {
 				col.TblName = x.AsName
 				col.DBName = model.NewCIStr("")
 			}
@@ -419,10 +424,43 @@ func (b *planBuilder) buildSort(p LogicalPlan, byItems []*ast.ByItem, aggMapper 
 	return sort
 }
 
+// getUintForLimitOffset gets uint64 value for limit/offset.
+// For ordinary statement, limit/offset should be uint64 constant value.
+// For prepared statement, limit/offset is string. We should convert it to uint64.
+func getUintForLimitOffset(sc *variable.StatementContext, val interface{}) (uint64, error) {
+	switch v := val.(type) {
+	case uint64:
+		return v, nil
+	case string:
+		uVal, err := types.StrToUint(sc, v)
+		return uVal, errors.Trace(err)
+	}
+	return 0, errors.Errorf("Invalid type %T for Limit/Offset", val)
+}
+
 func (b *planBuilder) buildLimit(src LogicalPlan, limit *ast.Limit) LogicalPlan {
+	var (
+		offset, count uint64
+		err           error
+	)
+	sc := b.ctx.GetSessionVars().StmtCtx
+	if limit.Offset != nil {
+		offset, err = getUintForLimitOffset(sc, limit.Offset.GetValue())
+		if err != nil {
+			b.err = ErrWrongArguments
+			return nil
+		}
+	}
+	if limit.Count != nil {
+		count, err = getUintForLimitOffset(sc, limit.Count.GetValue())
+		if err != nil {
+			b.err = ErrWrongArguments
+			return nil
+		}
+	}
 	li := &Limit{
-		Offset:          limit.Offset,
-		Count:           limit.Count,
+		Offset:          offset,
+		Count:           count,
 		baseLogicalPlan: newBaseLogicalPlan(Lim, b.allocator),
 	}
 	li.self = li
@@ -650,7 +688,7 @@ func (b *planBuilder) resolveHavingAndOrderBy(sel *ast.SelectStmt, p LogicalPlan
 }
 
 func (b *planBuilder) extractAggFuncs(fields []*ast.SelectField) ([]*ast.AggregateFuncExpr, map[*ast.AggregateFuncExpr]int) {
-	extractor := &ast.AggregateFuncExtractor{}
+	extractor := &AggregateFuncExtractor{}
 	for _, f := range fields {
 		n, _ := f.Expr.Accept(extractor)
 		f.Expr = n.(ast.ExprNode)
@@ -871,13 +909,8 @@ func (b *planBuilder) buildTableDual() LogicalPlan {
 	return dual
 }
 
-func (b *planBuilder) getTableStats(table *model.TableInfo) *statistics.Table {
-	// TODO: Currently we always return a pseudo table for good performance. We will use a cache in future.
-	return statistics.PseudoTable(table)
-}
-
 func (b *planBuilder) buildDataSource(tn *ast.TableName) LogicalPlan {
-	statisticTable := b.getTableStats(tn.TableInfo)
+	statisticTable := statscache.GetStatisticsTableCache(b.ctx, tn.TableInfo)
 	if b.err != nil {
 		return nil
 	}
@@ -1090,6 +1123,7 @@ func (b *planBuilder) buildUpdateLists(list []*ast.Assignment, p LogicalPlan) ([
 		offset := schema.GetColumnIndex(col)
 		if offset == -1 {
 			b.err = errors.Trace(errors.Errorf("could not find column %s.%s", col.TblName, col.ColName))
+			return nil, nil
 		}
 		newExpr, np, err := b.rewrite(assign.Expr, p, nil, false)
 		if err != nil {

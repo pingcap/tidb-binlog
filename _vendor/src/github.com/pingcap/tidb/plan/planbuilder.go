@@ -34,6 +34,7 @@ var (
 	ErrUnsupportedType      = terror.ClassOptimizerPlan.New(CodeUnsupportedType, "Unsupported type")
 	SystemInternalErrorType = terror.ClassOptimizerPlan.New(SystemInternalError, "System internal error")
 	ErrUnknownColumn        = terror.ClassOptimizerPlan.New(CodeUnknownColumn, "Unknown column '%s' in '%s'")
+	ErrWrongArguments       = terror.ClassOptimizerPlan.New(CodeWrongArguments, "Incorrect arguments to EXECUTE")
 )
 
 // Error codes.
@@ -41,11 +42,13 @@ const (
 	CodeUnsupportedType terror.ErrCode = 1
 	SystemInternalError terror.ErrCode = 2
 	CodeUnknownColumn   terror.ErrCode = 1054
+	CodeWrongArguments  terror.ErrCode = 1210
 )
 
 func init() {
 	tableMySQLErrCodes := map[terror.ErrCode]uint16{
-		CodeUnknownColumn: mysql.ErrBadField,
+		CodeUnknownColumn:  mysql.ErrBadField,
+		CodeWrongArguments: mysql.ErrWrongArguments,
 	}
 	terror.ErrClassToMySQLCodes[terror.ClassOptimizerPlan] = tableMySQLErrCodes
 }
@@ -114,6 +117,8 @@ func (b *planBuilder) build(node ast.Node) Plan {
 		*ast.GrantStmt, *ast.DropUserStmt, *ast.AlterUserStmt:
 		return b.buildSimple(node.(ast.StmtNode))
 	case *ast.TruncateTableStmt:
+		return b.buildDDL(x)
+	case *ast.RenameTableStmt:
 		return b.buildDDL(x)
 	}
 	b.err = ErrUnsupportedType.Gen("Unsupported type %T", node)

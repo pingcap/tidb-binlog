@@ -31,6 +31,8 @@ const (
 	BinlogData
 	// Skip existing check when "prewrite".
 	SkipCheckForWrite
+	// SchemaLeaseChecker is used for schema lease check.
+	SchemaLeaseChecker
 )
 
 // Retriever is the interface wraps the basic Get and Seek methods.
@@ -65,12 +67,18 @@ type RetrieverMutator interface {
 }
 
 // MemBuffer is an in-memory kv collection, can be used to buffer write operations.
-type MemBuffer RetrieverMutator
+type MemBuffer interface {
+	RetrieverMutator
+	// Size returns sum of keys and values length.
+	Size() int
+	// Len returns the number of entries in the DB.
+	Len() int
+}
 
 // Transaction defines the interface for operations inside a Transaction.
 // This is not thread safe.
 type Transaction interface {
-	RetrieverMutator
+	MemBuffer
 	// Commit commits the transaction operations to KV store.
 	Commit() error
 	// Rollback undoes the transaction operations to KV store.
