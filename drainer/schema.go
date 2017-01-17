@@ -82,14 +82,29 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 
 		case model.ActionRenameTable:
 			_, ok := s.SchemaByTableID(job.TableID)
-			if ok {
-				// first drop the table
-				_, err := s.DropTable(job.TableID)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			if !ok {
+				return errors.NotFoundf("table(%d) or it's schema", job.TableID)
 			}
-			fallthrough
+			_, ok = s.IgnoreSchemaByID(job.SchemaID)
+			if ok {
+				return errors.Errorf("ignore schema %d don't support rename ddl sql %s", job.SchemaID, job.Query)
+			}
+			// first drop the table
+			_, err := s.DropTable(job.TableID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			// create table
+			table := job.BinlogInfo.TableInfo
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err = s.CreateTable(schema, table)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
 		case model.ActionCreateTable:
 			table := job.BinlogInfo.TableInfo
