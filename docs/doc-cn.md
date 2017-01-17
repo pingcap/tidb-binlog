@@ -82,7 +82,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
 
 * 为 cistern 预留一定量储存空间。可根据 gc 设置和业务数据量预估（例如 gc 设置为 7，只保存最近 7 天的文件，可以预留 200G+ 储存容量）
 
-* drainer 不支持对 ignore schemas（db 过滤列表）进行 rename DDL 操作
+* drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
 
 ### 示例及参数解释
 
@@ -197,7 +197,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -dest-db-type string
         drainer 下游服务类型 (默认为 mysql)
     -ignore-schemas string
-        db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"), 不支持对 ignore schemas 进行 rename DDL 操作。
+        db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),   
+        不支持对 ignore schemas 的 table 进行 rename DDL 操作
     -init-commit-ts int
         drainer 同步起始位置设置
     -log-file string
