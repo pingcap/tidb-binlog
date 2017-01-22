@@ -17,46 +17,52 @@
 ## TiDB-Binlog 简介
 
 TiDB-Binlog 用于收集 TiDB 的 Binlog，并提供实时备份和同步功能的商业工具。
+
 TiDB-Binlog 支持以下功能场景:
- * *数据同步*:       同步 TiDB 集群数据到其他数据库
- * *实时备份和恢复*:  备份 TiDB 集群数据，同时可以用于 TiDB 集群故障时恢复
+
+* *数据同步*:       同步 TiDB 集群数据到其他数据库
+* *实时备份和恢复*:  备份 TiDB 集群数据，同时可以用于 TiDB 集群故障时恢复
 
 ## TiDB-Binlog 架构
 
 首先介绍 TiDB-Binlog 的整体架构。
-![architecture](./architecture.jpeg)
+
+![TiDB-Binlog 架构](./architecture.jpeg)
+
 TiDB-Binlog 集群主要分为三个组件：
+
 ### Pump 
+
 Pump 是一个守护进程，在每个 TiDB 的主机上后台运行。他的主要功能是实时记录 TiDB 产生的 Binlog 并顺序写入磁盘文件
 
 ### Cistern
+
 Cistern 从各个 Pump 节点收集 Binlog，并按照在 TiDB 中事务的提交顺序进行持久化保存；并向 Drainer 提供从任意位置顺序读取 Binlog 的功能
 
 ### Drainer
-Drainer 从 Cistern 顺序读取 Binlog，然后转化为指定数据库兼容的 SQL 语句，最后同步到目的数据库或者文件系统
 
+Drainer 从 Cistern 顺序读取 Binlog，然后转化为指定数据库兼容的 SQL 语句，最后同步到目的数据库或者文件系统
 
 ## TiDB-Binlog 安装
 
 ### 从源码编译
+
 ```
 git clone https://github.com/pingcap/tidb-binlog.git  # git 下载源代码
-
 make build   # 编译所有组件
 ```
 
 也可以分开编译
+
 ```
 make pump    # 编译 pump
-
 make cistern # 编译 cistern
-
 make drainer # 编译 drainer
 ```
 
 ### 下载官方 Binary
 
-#### Linux (CentOS 7+, Ubuntu 14.04+)
+- (CentOS 7+, Ubuntu 14.04+)
 
 ```bash
 # 下载压缩包
@@ -70,24 +76,28 @@ tar -xzf binlog-latest-linux-amd64.tar.gz
 cd binlog-latest-linux-amd64
 ```
 
-
 ## TiDB-Binlog 部署建议
 
 TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> Drainer
 
 ### 注意
-* 需要为一个 TiDB 集群中的每台 TiDB server 部署一个 pump，目前 TiDB server 只支持以 unix socket 方式的输出 binlog。
-  我们设置 TiDB 启动参数 binlog-socket 为对应的 pump 的参数 socket 所指定的 unix socket 文件路径，最终部署结构如下图所示：  
-  ![tidb-pump-deployment](./tidb_pump_deployment.jpeg)
 
-* 为 cistern 预留一定量储存空间。可根据 gc 设置和业务数据量预估（例如 gc 设置为 7，只保存最近 7 天的文件，可以预留 200G+ 储存容量）
+*   需要为一个 TiDB 集群中的每台 TiDB server 部署一个 pump，目前 TiDB server 只支持以 unix socket 方式的输出 binlog。
 
-* drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
+    我们设置 TiDB 启动参数 binlog-socket 为对应的 pump 的参数 socket 所指定的 unix socket 文件路径，最终部署结构如下图所示：
+
+    ![TiDB pump 模块部署结构](./tidb_pump_deployment.jpeg)
+
+*   为 cistern 预留一定量储存空间。可根据 gc 设置和业务数据量预估（例如 gc 设置为 7，只保存最近 7 天的文件，可以预留 200G+ 储存容量）
+
+*   drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
 
 ### 示例及参数解释
 
-1. Pump.
+1.  Pump
+
     示例
+
     ```bash
     ./bin/pump -socket unix:///tmp/pump.sock \
                -pd-urls http://127.0.0.1:2379 \
@@ -95,6 +105,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```
     
     参数解释
+
     ```
     Usage of pump:
     -node-id string
@@ -130,14 +141,17 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
         打印版本信息
     ```
     
-2. Cistern.
+2.  Cistern
+
     示例
+
     ```bash
     ./bin/cistern -pd-urls http://127.0.0.1:2379 \
                   -data-dir ./data.cistern
     ```
     
     参数解释
+
     ```
     Usage of cistern:
     -addr string
@@ -166,8 +180,11 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     -version
        打印版本信息
     ```
-3. Drainer.
+
+3.  Drainer
+
     示例
+
     ```bash
     ./bin/drainer -dest-db-type mysql \
                   -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
@@ -175,6 +192,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Cistern -> D
     ```
     
     参数解释
+
     ```
     Usage of drainer:
     -L string
