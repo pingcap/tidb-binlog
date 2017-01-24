@@ -23,6 +23,8 @@ import (
 
 const defaultBinlogChanSize int64 = 16 << 10
 
+var maxBatchWaitTime = 15 * time.Second
+
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -139,10 +141,12 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	var (
-		maxCommitTs int64
-		entity      *binlogEntity
-		binlogs     map[int64]*pb.Binlog
-		binlogNums  int
+		maxCommitTs    int64
+		entity         *binlogEntity
+		binlogs        map[int64]*pb.Binlog
+		binlogNums     int
+		latestCommitTS int
+		latestPos      pb.Pos
 	)
 	for {
 		select {
@@ -158,9 +162,11 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			p.mustFindCommitBinlog(t, entity.startTS)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
+			binlogNums++
 			if entity.commitTS > maxCommitTs {
-				binlogNums++
 				if binlogNums < saveBatch {
+					latestCommitTS = entity.commitTS
+					latesPos = entity.pos
 					continue
 				}
 				binlogNums = 0
@@ -173,6 +179,15 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				} else {
 					binlogs = make(map[int64]*pb.Binlog)
 				}
+			}
+		case time.After(maxBatchWaitTime):
+			binlogs = p.getBinlogs(binlogs)
+			binlogNums = 0
+			err := p.save(binlogs, latestCommitTS, latestPos)
+			if err != nil {
+				log.Errorf("save binlogs and status error at postion (%v)", latestPos)
+			} else {
+				binlogs = make(map[int64]*pb.Binlog)
 			}
 		}
 	}
