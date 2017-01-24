@@ -54,10 +54,12 @@ func (t *testTranslaterSuite) TestTranslater(c *C) {
 func testGenInsertSQLs(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	for _, table := range tables {
+	exceptedKeys := []string{"", "ID = ? and NAME = ?", "ID = ?"}
+	for i, table := range tables {
 		rowDatas, expected := testGenRowDatas(c, table.Columns)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
-		sqls, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
+		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
+		c.Assert(keys[0], Equals, exceptedKeys[i])
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		c.Assert(sqls[0], Equals, "replace into t.account (id,name,sex) values (?,?,?);")
@@ -68,7 +70,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 
 	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
 	binlog := testGenInsertBinlog(c, tables[0], rowDatas)
-	_, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
+	_, _, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
 	}
@@ -81,10 +83,12 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? limit 1;",
 		"update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? limit 1;"}
 	exceptedNums := []int{6, 5, 4}
+	exceptedKeys := []string{"", "ID = ? and NAME = ?", "ID = ?"}
 	for index, t := range tables {
 		rowDatas, expected := testGenRowDatas(c, t.Columns)
 		binlog := testGenUpdateBinlog(c, t, rowDatas, rowDatas)
-		sqls, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
+		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
+		c.Assert(keys[0], Equals, exceptedKeys[index])
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
 		c.Assert(sqls[0], Equals, exceptedSqls[index])
@@ -95,7 +99,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 
 	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
 	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
-	_, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
+	_, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
 	}
@@ -107,11 +111,13 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	exceptedSqls := []string{"delete from t.account where ID = ? and NAME = ? and SEX = ? limit 1;",
 		"delete from t.account where ID = ? and NAME = ? limit 1;"}
 	exceptedNums := []int{3, 2}
+	exceptedKeys := []string{"", "ID = ? and NAME = ?"}
 	op := []OpType{DelByCol, DelByPK}
 	for index, t := range tables {
 		rowDatas, expected := testGenRowDatas(c, t.Columns)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
-		sqls, vals, err := s.GenDeleteSQLs(schema, t, op[index], [][]byte{binlog})
+		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, op[index], [][]byte{binlog})
+		c.Assert(keys[0], Equals, exceptedKeys[index])
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
 		c.Assert(sqls[0], Equals, exceptedSqls[index])
@@ -122,7 +128,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 
 	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
 	binlog := testGenDeleteBinlog(c, tables[0], rowDatas)
-	_, _, err := s.GenDeleteSQLs(schema, tables[0], DelByCol, [][]byte{binlog[6:]})
+	_, _, _, err := s.GenDeleteSQLs(schema, tables[0], DelByCol, [][]byte{binlog[6:]})
 	if err == nil {
 		c.Fatal("it's should panic")
 	}
@@ -132,11 +138,13 @@ func testGenDeleteSQLsByID(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("hasID")}
 	exceptedSqls := []string{"delete from t.account where ID = ? limit 1;"}
+	exceptedKeys := []string{"ID = ?"}
 	exceptedNums := []int{1}
 	for index, t := range tables {
 		rowDatas, expected := testGenRowDatas(c, t.Columns)
 		binlog := testGenDeleteBinlogByID(c, t, rowDatas)
-		sqls, vals, err := s.GenDeleteSQLsByID(schema, t, []int64{binlog})
+		sqls, keys, vals, err := s.GenDeleteSQLsByID(schema, t, []int64{binlog})
+		c.Assert(keys[0], Equals, exceptedKeys[index])
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNums[index])
 		c.Assert(sqls[0], Equals, exceptedSqls[index])
