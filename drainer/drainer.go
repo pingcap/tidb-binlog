@@ -362,11 +362,9 @@ func (d *Drainer) checkWait(job *job) bool {
 	if job.tp == translator.DDL {
 		return true
 	}
-
 	if d.meta.Check() {
 		return true
 	}
-
 	return false
 }
 

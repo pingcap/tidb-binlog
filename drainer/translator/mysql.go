@@ -89,7 +89,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
-		// generate dispatch key
 		key, err := m.generateDispatchKey(pcs, columnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
