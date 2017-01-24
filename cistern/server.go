@@ -33,7 +33,7 @@ var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
-var saveBatch = 100
+var saveBatch = 20
 
 // Server implements the gRPC interface,
 // and maintains the runtime status

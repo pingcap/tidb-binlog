@@ -23,7 +23,7 @@ import (
 
 const defaultBinlogChanSize int64 = 16 << 10
 
-var maxBatchWaitTime = 15 * time.Second
+var maxBatchWaitTime = 10 * time.Second
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -145,7 +145,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		entity         *binlogEntity
 		binlogs        map[int64]*pb.Binlog
 		binlogNums     int
-		latestCommitTS int
+		latestCommitTS int64
 		latestPos      pb.Pos
 	)
 	for {
@@ -153,7 +153,15 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case <-p.ctx.Done():
 			return
 		case entity = <-p.binlogChan:
-
+		case <-time.After(maxBatchWaitTime):
+			binlogs = p.getBinlogs(binlogs)
+			binlogNums = 0
+			err := p.save(binlogs, latestCommitTS, latestPos)
+			if err != nil {
+				log.Errorf("save binlogs and status error at postion (%v)", latestPos)
+			} else {
+				binlogs = make(map[int64]*pb.Binlog)
+			}
 		}
 
 		switch entity.tp {
@@ -166,7 +174,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			if entity.commitTS > maxCommitTs {
 				if binlogNums < saveBatch {
 					latestCommitTS = entity.commitTS
-					latesPos = entity.pos
+					latestPos = entity.pos
 					continue
 				}
 				binlogNums = 0
@@ -179,15 +187,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				} else {
 					binlogs = make(map[int64]*pb.Binlog)
 				}
-			}
-		case time.After(maxBatchWaitTime):
-			binlogs = p.getBinlogs(binlogs)
-			binlogNums = 0
-			err := p.save(binlogs, latestCommitTS, latestPos)
-			if err != nil {
-				log.Errorf("save binlogs and status error at postion (%v)", latestPos)
-			} else {
-				binlogs = make(map[int64]*pb.Binlog)
 			}
 		}
 	}
