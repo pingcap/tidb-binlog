@@ -143,9 +143,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
 	c.publish(windowUpper, windowLower)
-	if windowLower == windowUpper {
-		c.updateCollectStatus(true)
-	}
+	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
