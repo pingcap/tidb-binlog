@@ -149,7 +149,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case <-p.ctx.Done():
 			return
 		case entity = <-p.binlogChan:
-
 		}
 
 		switch entity.tp {
@@ -158,8 +157,8 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			p.mustFindCommitBinlog(t, entity.startTS)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
+			binlogNums++
 			if entity.commitTS > maxCommitTs {
-				binlogNums++
 				if binlogNums < saveBatch {
 					continue
 				}

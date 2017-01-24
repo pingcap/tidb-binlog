@@ -36,6 +36,12 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 		return nil
 	}
 
+	// compute txn duration
+	beginTime := time.Now()
+	defer func() {
+		txnHistogram.Observe(time.Since(beginTime).Seconds())
+	}()
+
 	retryCount := 1
 	if retry {
 		retryCount = maxRetryCount
