@@ -83,7 +83,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		sqls = append(sqls, sql)
 		values = append(values, vals)
 
-		// generate dispatch key
+		// generate dispatching key
 		// find primary keys
 		pcs, err := m.pkIndexColumns(table)
 		if err != nil {
@@ -187,7 +187,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		sqls = append(sqls, sql)
 		values = append(values, value)
 
-		// generate dispatch key
+		// generate dispatching key
 		if pcs != nil {
 			keys = append(keys, where)
 		} else {
@@ -279,7 +279,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 		where := m.genWhere(whereColumns, value)
 		values = append(values, value)
 
-		// generate dispatch key
+		// generate dispatching key
 		if op == DelByPK {
 			keys = append(keys, where)
 		} else {

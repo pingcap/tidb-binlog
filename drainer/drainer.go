@@ -382,6 +382,11 @@ func newJob(tp translator.OpType, sql string, args []interface{}, key string, re
 }
 
 func (d *Drainer) addJob(job *job) {
+	// make all DMLs be executed before DDL
+	if job.tp == translator.DDL {
+		d.jobWg.Wait()
+	}
+
 	d.jobWg.Add(1)
 	idx := int(genHashKey(job.key)) % d.cfg.WorkerCount
 	d.jobCh[idx] <- job
