@@ -142,6 +142,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		maxCommitTs int64
 		entity      *binlogEntity
 		binlogs     map[int64]*pb.Binlog
+		binlogNums  int
 	)
 	for {
 		select {
@@ -158,6 +159,12 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
 			if entity.commitTS > maxCommitTs {
+				binlogNums++
+				if binlogNums < saveBatch {
+					continue
+				}
+				binlogNums = 0
+
 				binlogs = p.getBinlogs(binlogs)
 				maxCommitTs = entity.commitTS
 				err := p.save(binlogs, maxCommitTs, entity.pos)
