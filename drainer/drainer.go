@@ -434,11 +434,6 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 			idx++
 
 			if job.tp == translator.DDL {
-				err = executeSQLs(db, sqls, args, true)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-
 				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, false)
 				if err != nil {
 					if !ignoreDDLError(err) {
@@ -447,10 +442,8 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 					}
 				}
-
 				tpCnt[job.tp]++
 				clearF()
-
 			} else {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
