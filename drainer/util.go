@@ -3,6 +3,7 @@ package drainer
 import (
 	"database/sql"
 	"fmt"
+	"hash/crc32"
 	"strings"
 	"time"
 
@@ -116,6 +117,33 @@ func openDB(username string, password string, host string, port int, proto strin
 
 func closeDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
+}
+
+func closeDBs(dbs ...*sql.DB) {
+	for _, db := range dbs {
+		err := closeDB(db)
+		if err != nil {
+			log.Errorf("close db failed - %v", err)
+		}
+	}
+}
+
+func createDBs(destDBType string, cfg DBConfig, count int) ([]*sql.DB, error) {
+	dbs := make([]*sql.DB, 0, count)
+	for i := 0; i < count; i++ {
+		db, err := openDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, destDBType)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		dbs = append(dbs, db)
+	}
+
+	return dbs, nil
+}
+
+func genHashKey(key string) uint32 {
+	return crc32.ChecksumIEEE([]byte(key))
 }
 
 func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {

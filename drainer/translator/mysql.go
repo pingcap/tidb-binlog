@@ -22,9 +22,10 @@ func init() {
 	Register("mysql", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	columnList := m.genColumnList(columns)
@@ -35,7 +36,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		//decode the pk value
 		remain, pk, err := codec.DecodeOne(row)
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 
 		var r []types.Datum
@@ -44,12 +45,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		if remain[0] != codec.NilFlag {
 			r, err = codec.Decode(remain, 2*(len(columns)-1))
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, nil, nil, errors.Trace(err)
 			}
 		}
 
 		if len(r)%2 != 0 {
-			return nil, nil, errors.Errorf("table %s.%s insert row raw data is corruption %v", schema, table.Name, r)
+			return nil, nil, nil, errors.Errorf("table %s.%s insert row raw data is corruption %v", schema, table.Name, r)
 		}
 
 		var columnValues = make(map[int64]types.Datum)
@@ -60,6 +61,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		var vals []interface{}
 		for _, col := range columns {
 			if m.isPKHandleColumn(table, col) {
+				columnValues[col.ID] = pk
 				vals = append(vals, pk.GetValue())
 				continue
 			}
@@ -71,7 +73,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 				value, err := m.formatData(val, col.FieldType)
 				if err != nil {
-					return nil, nil, errors.Trace(err)
+					return nil, nil, nil, errors.Trace(err)
 				}
 
 				vals = append(vals, value)
@@ -80,14 +82,27 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 		sqls = append(sqls, sql)
 		values = append(values, vals)
+
+		// generate dispatching key
+		// find primary keys
+		pcs, err := m.pkIndexColumns(table)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		key, err := m.generateDispatchKey(pcs, columnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		keys = append(keys, key)
 	}
 
-	return sqls, values, nil
+	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
@@ -98,14 +113,14 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		// it has pkHandle, get the columm
 		pcs, err := m.pkIndexColumns(table)
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 
 		// decode one to get the pk
 		if pcs != nil {
 			remain, _, err := codec.DecodeOne(row)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, nil, nil, errors.Trace(err)
 			}
 			row = remain
 		}
@@ -117,11 +132,11 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		// 2 no pk index columns: [oldColID, oldColVal, ..., newColID, colVal, ..]
 		r, err := codec.Decode(row, 2*(len(columns)-1))
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 
 		if len(r)%2 != 0 {
-			return nil, nil, errors.Errorf("table %s.%s update row data is corruption %v", schema, table.Name, r)
+			return nil, nil, nil, errors.Errorf("table %s.%s update row data is corruption %v", schema, table.Name, r)
 		}
 
 		// TODO: if meet old schema that before drop pk index,
@@ -135,7 +150,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 			updateColumns, oldValues, err = m.generateColumnAndValue(columns, columnValues)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, nil, nil, errors.Trace(err)
 			}
 
 			columnValues = make(map[int64]types.Datum)
@@ -150,7 +165,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 			updateColumns, oldValues, err = m.generateColumnAndValue(pcs, columnValues)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, nil, nil, errors.Trace(err)
 			}
 		}
 
@@ -159,7 +174,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		updateColumns, newValues, err = m.generateColumnAndValue(columns, columnValues)
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 
 		var value []interface{}
@@ -171,17 +186,25 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		sql := fmt.Sprintf("update %s.%s set %s where %s limit 1;", schema, table.Name.L, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
+
+		// generate dispatching key
+		if pcs != nil {
+			keys = append(keys, where)
+		} else {
+			keys = append(keys, "")
+		}
 	}
 
-	return sqls, values, nil
+	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInfo, rows []int64) ([]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInfo, rows []int64) ([]string, []string, [][]interface{}, error) {
 	sqls := make([]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	column := m.pkHandleColumn(table)
 	if column == nil {
-		return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
+		return nil, nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 	}
 	whereColumns := []*model.ColumnInfo{column}
 
@@ -194,14 +217,16 @@ func (m *mysqlTranslator) GenDeleteSQLsByID(schema string, table *model.TableInf
 
 		sql := fmt.Sprintf("delete from %s.%s where %s limit 1;", schema, table.Name, where)
 		sqls = append(sqls, sql)
+		keys = append(keys, where)
 	}
 
-	return sqls, values, nil
+	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, op OpType, rows [][]byte) ([]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, op OpType, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
@@ -209,24 +234,24 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 		var value []interface{}
 		r, err := codec.Decode(row, len(columns))
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 
 		switch op {
 		case DelByPK:
 			whereColumns, _ = m.pkIndexColumns(table)
 			if whereColumns == nil {
-				return nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
+				return nil, nil, nil, errors.Errorf("table %s.%s doesn't have pkHandle column", schema, table.Name)
 			}
 
 			if len(r) != len(whereColumns) {
-				return nil, nil, errors.Errorf("table %s.%s the delete row by pks binlog %v is courruption", schema, table.Name, r)
+				return nil, nil, nil, errors.Errorf("table %s.%s the delete row by pks binlog %v is courruption", schema, table.Name, r)
 			}
 
 			for index, val := range r {
 				newValue, err := m.formatData(val, whereColumns[index].FieldType)
 				if err != nil {
-					return nil, nil, errors.Trace(err)
+					return nil, nil, nil, errors.Trace(err)
 				}
 
 				value = append(value, newValue)
@@ -234,7 +259,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 
 		case DelByCol:
 			if len(r)%2 != 0 {
-				return nil, nil, errors.Errorf("table %s.%s the delete row by cols binlog %v is courruption", schema, table.Name, r)
+				return nil, nil, nil, errors.Errorf("table %s.%s the delete row by cols binlog %v is courruption", schema, table.Name, r)
 			}
 
 			var columnValues = make(map[int64]types.Datum)
@@ -244,21 +269,28 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 
 			whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, nil, nil, errors.Trace(err)
 			}
 
 		default:
-			return nil, nil, errors.Errorf("delete row error type %v", op)
+			return nil, nil, nil, errors.Errorf("delete row error type %v", op)
 		}
 
 		where := m.genWhere(whereColumns, value)
 		values = append(values, value)
 
+		// generate dispatching key
+		if op == DelByPK {
+			keys = append(keys, where)
+		} else {
+			keys = append(keys, "")
+		}
+
 		sql := fmt.Sprintf("delete from %s.%s where %s limit 1;", schema, table.Name, where)
 		sqls = append(sqls, sql)
 	}
 
-	return sqls, values, nil
+	return sqls, keys, values, nil
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
@@ -393,6 +425,30 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 	}
 
 	return newColumn, newColumnsValues, nil
+}
+
+func (m *mysqlTranslator) generateDispatchKey(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) (string, error) {
+	var newColumn []*model.ColumnInfo
+	var newColumnsValues []interface{}
+
+	for _, col := range columns {
+		newColumn = append(newColumn, col)
+		val, ok := columnValues[col.ID]
+		if ok {
+			value, err := m.formatData(val, col.FieldType)
+			if err != nil {
+				return "", errors.Trace(err)
+			}
+			newColumnsValues = append(newColumnsValues, value)
+		} else {
+			newColumnsValues = append(newColumnsValues, col.DefaultValue)
+		}
+	}
+
+	// reuse genWhere to generate key list
+	// todo: genWhere is a not good name, fix it later
+	dispatchKey := m.genWhere(newColumn, newColumnsValues)
+	return dispatchKey, nil
 }
 
 func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (interface{}, error) {

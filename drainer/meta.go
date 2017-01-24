@@ -26,6 +26,9 @@ type Meta interface {
 	// Save saves meta information.
 	Save(pos int64) error
 
+	// Check checks whether we should save meta.
+	Check() bool
+
 	// Pos gets position information.
 	Pos() int64
 }
@@ -83,6 +86,18 @@ func (lm *localMeta) Save(pos int64) error {
 
 	lm.saveTime = time.Now()
 	return nil
+}
+
+// Check implements Meta.Check interface.
+func (lm *localMeta) Check() bool {
+	lm.RLock()
+	defer lm.RUnlock()
+
+	if time.Since(lm.saveTime) >= maxSaveTime {
+		return true
+	}
+
+	return false
 }
 
 // Pos implements Meta.Pos interface.

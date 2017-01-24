@@ -39,14 +39,16 @@ type Drainer struct {
 
 	translator translator.SQLTranslator
 
-	wg sync.WaitGroup
+	jobWg sync.WaitGroup
+	wg    sync.WaitGroup
 
 	input chan []byte
 
 	jLock sync.RWMutex
 	jobs  map[int64]*model.Job
+	jobCh []chan *job
 
-	toDB          *sql.DB
+	toDBs         []*sql.DB
 	cisternClient pb.CisternClient
 
 	ignoreSchemaNames map[string]struct{}
@@ -70,6 +72,7 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
 	drainer.input = make(chan []byte, 1024)
 	drainer.jobs = make(map[int64]*model.Job)
+	drainer.jobCh = newJobChans(cfg.WorkerCount)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
 
 	var metrics *metricClient
@@ -83,6 +86,15 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	drainer.metrics = metrics
 
 	return drainer, nil
+}
+
+func newJobChans(count int) []chan *job {
+	jobCh := make([]chan *job, 0, count)
+	for i := 0; i < count; i++ {
+		jobCh = append(jobCh, make(chan *job, 1000))
+	}
+
+	return jobCh
 }
 
 // Start starts to sync.
@@ -346,39 +358,119 @@ func (d *Drainer) addCount(tp translator.OpType, nums int) {
 	}
 }
 
-type batch struct {
-	isDDL    bool
-	sqls     []string
-	args     [][]interface{}
-	retry    bool
-	commitTS int64
+func (d *Drainer) checkWait(job *job) bool {
+	if job.tp == translator.DDL {
+		return true
+	}
+	if d.meta.Check() {
+		return true
+	}
+	return false
 }
 
-func newBatch(isDDL, retry bool, commitTS int64) *batch {
-	return &batch{
-		isDDL:    isDDL,
-		retry:    retry,
-		commitTS: commitTS,
+type job struct {
+	tp    translator.OpType
+	sql   string
+	args  []interface{}
+	key   string
+	retry bool
+	pos   int64
+}
+
+func newJob(tp translator.OpType, sql string, args []interface{}, key string, retry bool, pos int64) *job {
+	return &job{tp: tp, sql: sql, args: args, key: key, retry: retry, pos: pos}
+}
+
+func (d *Drainer) addJob(job *job) {
+	// make all DMLs be executed before DDL
+	if job.tp == translator.DDL {
+		d.jobWg.Wait()
+	}
+
+	d.jobWg.Add(1)
+	idx := int(genHashKey(job.key)) % d.cfg.WorkerCount
+	d.jobCh[idx] <- job
+
+	wait := d.checkWait(job)
+	if wait {
+		d.jobWg.Wait()
+		d.savePoint(job.pos)
 	}
 }
 
-func (b *batch) addJob(sql string, arg []interface{}) {
-	b.sqls = append(b.sqls, sql)
-	b.args = append(b.args, arg)
-}
+func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
+	d.wg.Add(1)
+	defer d.wg.Done()
 
-func (b *batch) applyBatch(db *sql.DB) error {
-	beginTime := time.Now()
-	err := executeSQLs(db, b.sqls, b.args, b.retry)
-	if err != nil {
-		if !b.isDDL || !ignoreDDLError(err) {
-			return errors.Trace(err)
+	idx := 0
+	count := d.cfg.TxnBatch
+	sqls := make([]string, 0, count)
+	args := make([][]interface{}, 0, count)
+	lastSyncTime := time.Now()
+	tpCnt := make(map[translator.OpType]int)
+
+	clearF := func() {
+		for i := 0; i < idx; i++ {
+			d.jobWg.Done()
 		}
 
-		log.Warnf("[ignore ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
+		idx = 0
+		sqls = sqls[0:0]
+		args = args[0:0]
+		lastSyncTime = time.Now()
+		for tpName, v := range tpCnt {
+			d.addCount(tpName, v)
+			tpCnt[tpName] = 0
+		}
 	}
-	txnHistogram.Observe(time.Since(beginTime).Seconds())
-	return nil
+
+	var err error
+	for {
+		select {
+		case job, ok := <-jobChan:
+			if !ok {
+				return
+			}
+			idx++
+
+			if job.tp == translator.DDL {
+				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, false)
+				if err != nil {
+					if !ignoreDDLError(err) {
+						log.Fatalf(errors.ErrorStack(err))
+					} else {
+						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
+					}
+				}
+				tpCnt[job.tp]++
+				clearF()
+			} else {
+				sqls = append(sqls, job.sql)
+				args = append(args, job.args)
+				tpCnt[job.tp]++
+			}
+
+			if idx >= count {
+				err = executeSQLs(db, sqls, args, true)
+				if err != nil {
+					log.Fatalf(errors.ErrorStack(err))
+				}
+				clearF()
+			}
+
+		default:
+			now := time.Now()
+			if now.Sub(lastSyncTime) >= maxWaitTime {
+				err = executeSQLs(db, sqls, args, true)
+				if err != nil {
+					log.Fatalf(errors.ErrorStack(err))
+				}
+				clearF()
+			}
+
+			time.Sleep(waitTime)
+		}
+	}
 }
 
 func (d *Drainer) run() error {
@@ -388,7 +480,7 @@ func (d *Drainer) run() error {
 	var err error
 	var rawBinlog []byte
 
-	d.toDB, err = openDB(d.cfg.To.User, d.cfg.To.Password, d.cfg.To.Host, d.cfg.To.Port, d.cfg.DestDBType)
+	d.toDBs, err = createDBs(d.cfg.DestDBType, d.cfg.To, d.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -400,6 +492,10 @@ func (d *Drainer) run() error {
 
 	go d.pushMetrics()
 	go d.inputStreaming()
+
+	for i := 0; i < d.cfg.WorkerCount; i++ {
+		go d.sync(d.toDBs[i], d.jobCh[i])
+	}
 
 	for {
 
@@ -425,20 +521,10 @@ func (d *Drainer) run() error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-
-			b := newBatch(false, true, commitTS)
-			err = d.translateSqls(preWrite.GetMutations(), b)
+			err = d.translateSqls(preWrite.GetMutations(), commitTS)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			err = b.applyBatch(d.toDB)
-			if err != nil {
-				log.Errorf("[exec sqls error][dml error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
-				return errors.Trace(err)
-			}
-			d.savePoint(commitTS)
-
 		} else if jobID > 0 {
 			schema, sql, err := d.handleDDL(jobID)
 			if err != nil {
@@ -455,20 +541,9 @@ func (d *Drainer) run() error {
 				}
 
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
-
-				d.addCount(translator.DDL, 1)
-
-				b := newBatch(true, false, commitTS)
-				b.addJob(sql, []interface{}{})
-
-				err = b.applyBatch(d.toDB)
-				if err != nil {
-					log.Errorf("[exec ddl error][ddl error][sql]%v[args]%v[error]%v", b.sqls, b.args, err)
-					return errors.Trace(err)
-				}
-
+				job := newJob(translator.DDL, sql, nil, "", false, commitTS)
+				d.addJob(job)
 				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
-				d.savePoint(commitTS)
 			}
 		}
 
@@ -479,7 +554,7 @@ func (d *Drainer) run() error {
 	}
 }
 
-func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
+func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 	for _, mutation := range mutations {
 
 		table, ok := d.schema.TableByID(mutation.GetTableId())
@@ -498,6 +573,9 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 			// the restored sqls, 0 => insert, 1 => update, 2 => deleteByIds, 3 => deleteByPks, 4 => deleteByRows
 			sqls = make([][]string, 5)
 
+			// the dispatch keys
+			keys = make([][]string, 5)
+
 			// the restored sqls's args, ditto
 			args = make([][][]interface{}, 5)
 
@@ -506,51 +584,44 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 
 			// the binlog dml sort
 			sequences = mutation.GetSequence()
+
+			// sql opType
+			tps = []translator.OpType{translator.Insert, translator.Update, translator.Del, translator.Del, translator.Del}
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			sqls[0], args[0], err = d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
+			sqls[0], keys[0], args[0], err = d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-
-			d.addCount(translator.Insert, len(sqls[0]))
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[1], args[1], err = d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			sqls[1], keys[1], args[1], err = d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-
-			d.addCount(translator.Update, len(sqls[1]))
 		}
 
 		if len(mutation.GetDeletedIds()) > 0 {
-			sqls[2], args[2], err = d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
+			sqls[2], keys[2], args[2], err = d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-
-			d.addCount(translator.Del, len(sqls[2]))
 		}
 
 		if len(mutation.GetDeletedPks()) > 0 {
-			sqls[3], args[3], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
+			sqls[3], keys[3], args[3], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-
-			d.addCount(translator.Del, len(sqls[3]))
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			sqls[4], args[4], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
+			sqls[4], keys[4], args[4], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-
-			d.addCount(translator.Del, len(sqls[4]))
 		}
 
 		for _, dmlType := range sequences {
@@ -559,14 +630,16 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, b *batch) error {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
 			}
 
-			b.addJob(sqls[index][offsets[index]], args[index][offsets[index]])
+			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], true, pos)
+			d.addJob(job)
 			offsets[index] = offsets[index] + 1
 		}
 
 		// Compatible with the old format that don't have sequence, will be remove in the futhure
 		for i := 0; i < 5; i++ {
 			for j := offsets[i]; j < len(sqls[i]); j++ {
-				b.addJob(sqls[i][j], args[i][j])
+				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], true, pos)
+				d.addJob(job)
 			}
 		}
 	}
@@ -660,7 +733,5 @@ func (d *Drainer) Close() {
 
 	d.wg.Wait()
 
-	if d.toDB != nil {
-		closeDB(d.toDB)
-	}
+	closeDBs(d.toDBs...)
 }

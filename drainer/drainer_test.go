@@ -36,16 +36,6 @@ func (t *testDrainerSuite) TestNewDrainer(c *C) {
 	c.Assert(d.meta.Pos(), Equals, int64(12))
 }
 
-func (t *testDrainerSuite) TestBatch(c *C) {
-	b := newBatch(true, false, 12)
-	b.addJob("drop table test", []interface{}{})
-	c.Assert(b.sqls, HasLen, 1)
-	c.Assert(b.args, HasLen, 1)
-	c.Assert(b.commitTS, Equals, int64(12))
-	c.Assert(b.isDDL, Equals, true)
-	c.Assert(b.retry, Equals, false)
-}
-
 func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
 	d := &Drainer{}
