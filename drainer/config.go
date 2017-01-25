@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -76,9 +77,12 @@ type Config struct {
 	DataDir         string   `toml:"data-dir" json:"data-dir"`
 	To              DBConfig `toml:"to" json:"to"`
 	CisternAddr     string   `toml:"cistern-addr" json:"cistern-addr"`
-	DestDBType      string   `toml:"db-type" json:"db-type"`
-	configFile      string
-	printVersion    bool
+	// Ref: http://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-do-table
+	DoTables     []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs        []string    `toml:"replicate-do-db" json:"replicate-do-db"`
+	DestDBType   string      `toml:"db-type" json:"db-type"`
+	configFile   string
+	printVersion bool
 }
 
 // Parse parses flag definitions from the argument list.
@@ -116,7 +120,18 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
 	}
 
+	c.adjustDoDBAndTable()
 	return nil
+}
+
+func (c *Config) adjustDoDBAndTable() {
+	for i := 0; i < len(c.DoTables); i++ {
+		c.DoTables[i].Table = strings.ToLower(c.DoTables[i].Table)
+		c.DoTables[i].Schema = strings.ToLower(c.DoTables[i].Schema)
+	}
+	for i := 0; i < len(c.DoDBs); i++ {
+		c.DoDBs[i] = strings.ToLower(c.DoDBs[i])
+	}
 }
 
 func (c *Config) String() string {

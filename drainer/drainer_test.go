@@ -49,21 +49,21 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	tbName := model.NewCIStr("T")
 
 	// check not found job
-	_, sql, err := d.handleDDL(0)
+	_, _, sql, err := d.handleDDL(0)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job error"))
 
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobCancelled}
 	d.jobs[job.ID] = job
-	_, sql, err = d.handleDDL(job.ID)
+	_, _, sql, err = d.handleDDL(job.ID)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobDone}
 	d.jobs[job.ID] = job
-	_, sql, err = d.handleDDL(job.ID)
+	_, _, sql, err = d.handleDDL(job.ID)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -107,14 +107,15 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		query       string
 		resultQuery string
 		schemaName  string
+		tableName   string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.L},
-		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil}, "create database ignoreTest", "", ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L},
-		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table t;", "drop table t;", dbInfo.Name.L},
-		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.L},
+		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.L, ""},
+		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil}, "create database ignoreTest", "", "", ""},
+		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L, tblInfo.Name.L},
+		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L, tblInfo.Name.L},
+		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L, tblInfo.Name.L},
+		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table t;", "drop table t;", dbInfo.Name.L, "t"},
+		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.L, ""},
 	}
 
 	for _, testCase := range testCases {
@@ -134,7 +135,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 			BinlogInfo: testCase.binlogInfo,
 			Query:      testCase.query,
 		}
-		testDoDDLAndCheck(c, d, job, false, testCase.resultQuery, testCase.schemaName)
+		testDoDDLAndCheck(c, d, job, false, testCase.resultQuery, testCase.schemaName, testCase.tableName)
 
 		// custom check after ddl
 		switch testCase.name {
@@ -158,11 +159,12 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 }
 
-func testDoDDLAndCheck(c *C, d *Drainer, job *model.Job, isErr bool, sql string, schema string) {
+func testDoDDLAndCheck(c *C, d *Drainer, job *model.Job, isErr bool, sql string, schema string, table string) {
 	jobs := mustAppendJob(c, nil, job)
 	d.jobs[job.ID] = jobs[0]
-	schemaName, s, err := d.handleDDL(job.ID)
+	schemaName, tableName, s, err := d.handleDDL(job.ID)
 	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, s)
 	c.Assert(schemaName, Equals, schema)
+	c.Assert(tableName, Equals, table)
 }

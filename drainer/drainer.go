@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"sync"
 	"time"
 
@@ -57,6 +58,8 @@ type Drainer struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	reMap map[string]*regexp.Regexp
 }
 
 // NewDrainer returns a Drainer instance
@@ -74,6 +77,7 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	drainer.jobs = make(map[int64]*model.Job)
 	drainer.jobCh = newJobChans(cfg.WorkerCount)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
+	drainer.reMap = make(map[string]*regexp.Regexp)
 
 	var metrics *metricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
@@ -174,21 +178,21 @@ func (d *Drainer) savePoint(ts int64) {
 // the first value[string]: the schema name
 // the second value[string]: the sql that is corresponding to the job
 // the third value[error]: the handleDDL execution's err
-func (d *Drainer) handleDDL(id int64) (string, string, error) {
+func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
 	d.jLock.RLock()
 	job, ok := d.jobs[id]
 	d.jLock.RUnlock()
 	if !ok {
-		return "", "", errors.Errorf("[ddl job miss]%v", id)
+		return "", "", "", errors.Errorf("[ddl job miss]%v", id)
 	}
 
 	if job.State == model.JobCancelled {
-		return "", "", nil
+		return "", "", "", nil
 	}
 
 	sql := job.Query
 	if sql == "" {
-		return "", "", errors.Errorf("[ddl job sql miss]%v", id)
+		return "", "", "", errors.Errorf("[ddl job sql miss]%v", id)
 	}
 
 	var err error
@@ -198,150 +202,150 @@ func (d *Drainer) handleDDL(id int64) (string, string, error) {
 		schema := job.BinlogInfo.DBInfo
 		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
 			d.schema.AddIgnoreSchema(schema)
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		err = d.schema.CreateSchema(schema)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, "", sql, nil
 
 	case model.ActionDropSchema:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			d.schema.DropIgnoreSchema(job.SchemaID)
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		schemaName, err := d.schema.DropSchema(job.SchemaID)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schemaName, sql, nil
+		return schemaName, "", sql, nil
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
 		_, ok := d.schema.SchemaByTableID(job.TableID)
 		if !ok {
-			return "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
+			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
 		_, ok = d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
+			return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 		// first drop the table
 		_, err := d.schema.DropTable(job.TableID)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = d.schema.CreateTable(schema, table)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, table.Name.L, sql, nil
 
 	case model.ActionCreateTable:
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
-			return "", "", errors.NotFoundf("table %d", job.TableID)
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = d.schema.CreateTable(schema, table)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, table.Name.L, sql, nil
 
 	case model.ActionDropTable:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		_, err := d.schema.DropTable(job.TableID)
+		tableName, err := d.schema.DropTable(job.TableID)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, tableName, sql, nil
 
 	case model.ActionTruncateTable:
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		_, err := d.schema.DropTable(job.TableID)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
-			return "", "", errors.NotFoundf("table %d", job.TableID)
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		err = d.schema.CreateTable(schema, table)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, table.Name.L, sql, nil
 
 	default:
 		tbInfo := job.BinlogInfo.TableInfo
 		if tbInfo == nil {
-			return "", "", errors.NotFoundf("table %d", job.TableID)
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return "", "", nil
+			return "", "", "", nil
 		}
 
 		schema, ok := d.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = d.schema.ReplaceTable(tbInfo)
 		if err != nil {
-			return "", "", errors.Trace(err)
+			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, sql, nil
+		return schema.Name.L, tbInfo.Name.L, sql, nil
 	}
 }
 
@@ -526,13 +530,18 @@ func (d *Drainer) run() error {
 				return errors.Trace(err)
 			}
 		} else if jobID > 0 {
-			schema, sql, err := d.handleDDL(jobID)
+			schema, table, sql, err := d.handleDDL(jobID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			d.jLock.Lock()
 			delete(d.jobs, jobID)
 			d.jLock.Unlock()
+
+			if d.skipDDL(schema, table) {
+				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commitTS %d", schema, table, sql, commitTS)
+				continue
+			}
 
 			if sql != "" {
 				sql, err = d.translator.GenDDLSQL(sql, schema)
@@ -564,6 +573,11 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 
 		schemaName, tableName, ok := d.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
+			continue
+		}
+
+		if d.skipDML(schemaName, tableName) {
+			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}
 
