@@ -24,6 +24,7 @@ import (
 )
 
 var genBinlogInterval = 3 * time.Second
+var pullBinlogInterval = 50 * time.Millisecond
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -231,6 +232,8 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				return errors.Trace(err)
 			}
 		}
+		// sleep 50 ms to prevent cpu occupied
+		time.Sleep(pullBinlogInterval)
 	}
 }
 
