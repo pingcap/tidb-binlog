@@ -17,7 +17,7 @@ import (
 var (
 	// SegmentSizeBytes is size of each binlog segment file,
 	// as an exported variable, you can define a different size
-	SegmentSizeBytes int64 = 64 * 1024 * 1024
+	SegmentSizeBytes int64 = 512 * 1024 * 1024
 
 	// ErrFileNotFound means that a ReadFrom call can't find file to read
 	ErrFileNotFound = errors.New("binlogger: file not found")

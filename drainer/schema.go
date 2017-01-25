@@ -9,7 +9,7 @@ import (
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
-	tableIDToName  map[int64]tableName
+	tableIDToName  map[int64]TableName
 	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
@@ -20,9 +20,10 @@ type Schema struct {
 	schemaMetaVersion int64
 }
 
-type tableName struct {
-	schema string
-	table  string
+// TableName stores the table and schema name
+type TableName struct {
+	Schema string `toml:"db-name" json:"db-name"`
+	Table  string `toml:"tbl-name" json:"tbl-name"`
 }
 
 // NewSchema returns the Schema object
@@ -43,7 +44,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 
 // reconstructSchema reconstruct the schema infomations by history jobs
 func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
-	s.tableIDToName = make(map[int64]tableName)
+	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*model.TableInfo)
@@ -203,7 +204,7 @@ func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
 		return "", "", false
 	}
 
-	return tn.schema, tn.table, true
+	return tn.Schema, tn.Table, true
 }
 
 // SchemaByID returns the DBInfo by schema id
@@ -218,7 +219,7 @@ func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 	if !ok {
 		return nil, false
 	}
-	schemaID, ok := s.schemaNameToID[tn.schema]
+	schemaID, ok := s.schemaNameToID[tn.Schema]
 	if !ok {
 		return nil, false
 	}
@@ -302,7 +303,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
-	s.tableIDToName[table.ID] = tableName{schema: schema.Name.L, table: table.Name.L}
+	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.L, Table: table.Name.L}
 
 	return nil
 }
