@@ -83,6 +83,8 @@ func init() {
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
+	prometheus.MustRegister(tikvQueryCount)
+	prometheus.MustRegister(errorBinlogCount)
 }
 
 type metricClient struct {
