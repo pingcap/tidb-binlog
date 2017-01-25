@@ -58,6 +58,22 @@ var (
 			Name:      "ddl_jobs_total",
 			Help:      "Total ddl jobs count been stored.",
 		})
+
+	tikvQueryCount = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "query_tikv_count",
+			Help:      "Total count that queried tikv.",
+		})
+
+	errorBinlogCount = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "cistern",
+			Name:      "error_binlog_count",
+			Help:      "Total count of binlog that store too late.",
+		})
 )
 
 func init() {

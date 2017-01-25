@@ -205,6 +205,8 @@ func (p *Pump) query(t *tikv.LockResolver, binlog *pb.Binlog) bool {
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
 	if (maxTS - startTS) > maxTxnTimeout {
 		if binlog.GetDdlJobId() == 0 {
+			//log.Infof("binlog (%d) need to query tikv", binlog.StartTs)
+			tikvQueryCount.Add(1)
 			primaryKey := binlog.GetPrewriteKey()
 			status, err := t.GetTxnStatus(uint64(binlog.StartTs), primaryKey)
 			if err != nil {
@@ -279,15 +281,19 @@ func (p *Pump) saveItems(items map[int64]*pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
+	ddlJobsCounter.Add(float64(len(jobs)))
+	binlogCounter.Add(float64(len(items)))
 	return nil
 }
 
 func (p *Pump) store(items map[int64]*pb.Binlog) error {
 	boundary := p.window.LoadLower()
 	b := p.boltdb.NewBatch()
+	var errorBinlogs int
 
 	for commitTS, item := range items {
 		if commitTS < boundary {
+			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
 				commitTS, item)
 		}
@@ -303,6 +309,7 @@ func (p *Pump) store(items map[int64]*pb.Binlog) error {
 		b.Put(key, data)
 	}
 
+	errorBinlogCount.Add(float64(errorBinlogs))
 	err := p.boltdb.Commit(binlogNamespace, b)
 	return errors.Trace(err)
 }
