@@ -21,7 +21,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanSize int64 = 16 << 10
+const defaultBinlogChanSize int64 = 16 << 16
 
 type binlogEntity struct {
 	tp       pb.BinlogType
