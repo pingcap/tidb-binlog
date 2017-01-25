@@ -122,6 +122,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.current
+		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.current))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -143,9 +144,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
 	c.publish(windowUpper, windowLower)
-	if windowLower == windowUpper {
-		c.updateCollectStatus(true)
-	}
+	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
