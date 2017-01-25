@@ -46,12 +46,7 @@ func (d *Drainer) whiteFilter(stbs []TableName) []TableName {
 }
 
 func (d *Drainer) skipDML(schema string, table string) bool {
-	tbs := []TableName{
-		{
-			Schema: schema,
-			Table:  table,
-		},
-	}
+	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = d.whiteFilter(tbs)
 	if len(tbs) == 0 {
 		return true

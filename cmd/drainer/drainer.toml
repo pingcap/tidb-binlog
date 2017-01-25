@@ -9,6 +9,18 @@ data-dir = "data.drainer"
 # number of binlog events in a transaction batch
 txn-batch = 1
 
+##replicate-do-db priority over replicate-do-table if have same db name
+##and we support regex expression , start with '~' declare use regex expression.
+#
+#replicate-do-db = ["~^b.*","s1"]
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "log"
+
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
+
 # pprof addr
 pprof-addr = ":10081"
 

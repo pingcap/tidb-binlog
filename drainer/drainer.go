@@ -484,6 +484,7 @@ func (d *Drainer) run() error {
 	var err error
 	var rawBinlog []byte
 
+	d.genRegexMap()
 	d.toDBs, err = createDBs(d.cfg.DestDBType, d.cfg.To, d.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
