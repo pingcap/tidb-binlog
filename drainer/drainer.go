@@ -73,7 +73,7 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 	drainer.cisternClient = cisternClient
 	drainer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
-	drainer.input = make(chan []byte, 10240)
+	drainer.input = make(chan []byte, 1024*cfg.WorkerCount)
 	drainer.jobs = make(map[int64]*model.Job)
 	drainer.jobCh = newJobChans(cfg.WorkerCount)
 	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
@@ -95,7 +95,7 @@ func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
 func newJobChans(count int) []chan *job {
 	jobCh := make([]chan *job, 0, count)
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, 1000))
+		jobCh = append(jobCh, make(chan *job, 1024))
 	}
 
 	return jobCh
