@@ -698,7 +698,7 @@ func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, erro
 		}
 
 		nextTs = resp.CommitTS
-		log.Debugf("next request commitTS %d, input channel length %d", nextTs, d.input)
+		log.Debugf("next request commitTS %d, input channel length %d", nextTs, len(d.input))
 		d.input <- resp.Payload
 	}
 
