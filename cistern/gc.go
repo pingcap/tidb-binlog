@@ -37,7 +37,7 @@ func GCHistoryBinlog(store store.Store, ns []byte, duration time.Duration) error
 	log.Infof("GC binlog older than timestamp: %v, until date: %v", gcToTS, time.Unix(prevPhysical/1000, (prevPhysical%1000)*1e6))
 
 	var done bool
-	if !done {
+	for !done {
 		batch := store.NewBatch()
 		num := 0
 		err = store.Scan(ns, nil, func(key []byte, val []byte) (bool, error) {
@@ -74,4 +74,3 @@ func GCHistoryBinlog(store store.Store, ns []byte, duration time.Duration) error
 	log.Infof("FINISHED! GC binlog older than timestamp: %v, until date: %v", gcToTS, time.Unix(prevPhysical/1000, (prevPhysical%1000)*1e6))
 	return nil
 }
-
