@@ -21,7 +21,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanSize int64 = 16 << 16
+const defaultBinlogChanSize int64 = 16 << 10
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -289,9 +289,13 @@ func (p *Pump) saveItems(items map[int64]*pb.Binlog) error {
 func (p *Pump) store(items map[int64]*pb.Binlog) error {
 	boundary := p.window.LoadLower()
 	b := p.boltdb.NewBatch()
-	var errorBinlogs int
+	var (
+		errorBinlogs int
+		itemCnt      int
+	)
 
 	for commitTS, item := range items {
+		itemCnt++
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
@@ -307,11 +311,25 @@ func (p *Pump) store(items map[int64]*pb.Binlog) error {
 			return errors.Trace(err)
 		}
 		b.Put(key, data)
+		if itemCnt >= 1000 {
+			err := p.boltdb.Commit(binlogNamespace, b)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			errorBinlogCount.Add(float64(errorBinlogs))
+			errorBinlogs = 0
+			itemCnt = 0
+			b = p.boltdb.NewBatch()
+		}
 	}
-
-	errorBinlogCount.Add(float64(errorBinlogs))
-	err := p.boltdb.Commit(binlogNamespace, b)
-	return errors.Trace(err)
+	if itemCnt > 0 {
+		err := p.boltdb.Commit(binlogNamespace, b)
+		errorBinlogCount.Add(float64(errorBinlogs))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
 func (p *Pump) grabDDLJobs(items map[int64]*pb.Binlog) (map[int64]*model.Job, error) {
