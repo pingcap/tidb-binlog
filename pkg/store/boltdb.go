@@ -16,6 +16,17 @@ func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	// Setting the NoSync flag will cause the database to skip fsync()
+	// calls after each commit. This can be useful when bulk loading data
+	// into a database and you can restart the bulk load in the event of
+	// a system failure or database corruption. Do not set this flag for
+	// normal use.
+	//
+	// If the package global IgnoreNoSync constant is true, this value is
+	// ignored.  See the comment on that constant for more details.
+	//
+	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
+	db.NoSync = true
 
 	tx, err := db.Begin(true)
 	if err != nil {
