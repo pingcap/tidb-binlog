@@ -165,27 +165,27 @@ func (bs *BinlogStorage) Commit(b *Batch) error {
 	segments := make(map[int64]store.Store)
 	// firstly, dispatch into different segment
 	for _, w := range b.writes {
-		ts := bs.segmentKey(w.key)
-		segment, ok := segments[ts]
+		key := bs.segmentKey(w.key)
+		segment, ok := segments[key]
 		if !ok {
 			segment, err = bs.getOrCreateSegment(w.key)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			segments[ts] = segment
+			segments[key] = segment
 		}
 
-		bt, ok := batches[ts]
+		bt, ok := batches[key]
 		if !ok {
 			bt = segment.NewBatch()
-			batches[ts] = bt
+			batches[key] = bt
 		}
 		bt.Put(codec.EncodeInt([]byte{}, w.key), w.value)
 	}
 
 	// secondly, commit it one by one
-	for ts := range batches {
-		err = segments[ts].Commit(binlogNamespace, batches[ts])
+	for key := range batches {
+		err = segments[key].Commit(binlogNamespace, batches[key])
 		if err != nil {
 			return errors.Trace(err)
 		}
