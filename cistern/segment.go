@@ -84,12 +84,9 @@ func (ds *BinlogStorage) Put(ts int64, payload []byte) error {
 	var err error
 	// get the corresponding segment
 	// if not found, open it
-	segment, ok := ds.getSegment(ts)
-	if !ok {
-		segment, err = ds.createSegment(ts)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	segment, err := ds.getOrCreateSegment(ts)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return segment.Put(binlogNamespace, codec.EncodeInt([]byte{}, ts), payload)
 }
@@ -167,12 +164,9 @@ func (ds *BinlogStorage) Commit(b *Batch) error {
 		ts := ds.segmentTS(w.key)
 		segment, ok := segments[ts]
 		if !ok {
-			segment, ok = ds.getSegment(w.key)
-			if !ok {
-				segment, err = ds.createSegment(w.key)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			segment, err = ds.getOrCreateSegment(w.key)
+			if err != nil {
+				return errors.Trace(err)
 			}
 			segments[ts] = segment
 		}
@@ -273,6 +267,27 @@ func (b *Batch) Put(key int64, value []byte) {
 		value: append([]byte(nil), value...),
 	}
 	b.writes = append(b.writes, w)
+}
+
+func (ds *BinlogStorage) getOrCreateSegment(ts int64) (store.Store, error) {
+	var err error
+	ds.mu.Lock()
+	segmentKey := ds.segmentTS(ts)
+	segment, ok := ds.mu.segments[segmentKey]
+	if !ok {
+		segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", segmentKey))
+		segment, err = store.NewBoltStore(segmentPath, [][]byte{binlogNamespace}, ds.nosync)
+		if err != nil {
+			ds.mu.Unlock()
+			return nil, errors.Annotatef(err, "failed to open BoltDB store, path %s", segmentPath)
+		}
+		ds.mu.segments[segmentKey] = segment
+		ds.mu.segmentTSs = append(ds.mu.segmentTSs, segmentKey)
+		sort.Sort(ds.mu.segmentTSs)
+		ds.metaStore.Put(segmentNamespace, codec.EncodeInt([]byte{}, segmentKey), []byte(segmentPath))
+	}
+	ds.mu.Unlock()
+	return segment, nil
 }
 
 func (ds *BinlogStorage) getSegment(ts int64) (store.Store, bool) {
