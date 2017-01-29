@@ -120,8 +120,12 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 	}
 
 	var segmentTSs segmentRange
+	var segments = make(map[int64]store.Store)
 	ds.mu.Lock()
-	copy(segmentTSs, ds.mu.segmentTSs)
+	for _, ts := range ds.mu.segmentTSs {
+		segmentTSs = append(segmentTSs, ts)
+		segments[ts] = ds.mu.segments[ts]
+	}
 	ds.mu.Unlock()
 	for _, segmentTS := range segmentTSs {
 		if segmentTS < startSegmentTS {
@@ -131,7 +135,7 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 			if segmentTS == startSegmentTS {
 				key = codec.EncodeInt([]byte{}, startTS)
 			}
-			segment, ok := ds.getSegment(segmentTS)
+			segment, ok := segments[segmentTS]
 			if !ok {
 				return errors.NotFoundf("segment %d is corruption", segmentTS)
 			}
@@ -199,6 +203,7 @@ func (ds *BinlogStorage) Commit(b *Batch) error {
 // Purge gcs the binlogs
 func (ds *BinlogStorage) Purge(ts int64) error {
 	startSegmentTS := ds.segmentTS(ts)
+	fmt.Println(startSegmentTS)
 	b := ds.metaStore.NewBatch()
 	ds.mu.Lock()
 	var index int
