@@ -109,9 +109,9 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 		return valid, err
 	}
 
-	var segmentTSs segmentRange
-	var segments = make(map[int64]store.Store)
 	ds.mu.Lock()
+	var segmentTSs = make(segmentRange, 0, len(ds.mu.segmentTSs))
+	var segments = make(map[int64]store.Store, 0, len(ds.mu.segments))
 	for _, ts := range ds.mu.segmentTSs {
 		segmentTSs = append(segmentTSs, ts)
 		segments[ts] = ds.mu.segments[ts]
@@ -194,7 +194,7 @@ func (ds *BinlogStorage) Commit(b *Batch) error {
 // Purge gcs the binlogs
 func (ds *BinlogStorage) Purge(ts int64) error {
 	startSegmentTS := ds.segmentTS(ts)
-	fmt.Println(startSegmentTS)
+	log.Infof("purge boltdb files that before %d", ts)
 	b := ds.metaStore.NewBatch()
 	ds.mu.Lock()
 	var index int
@@ -282,7 +282,7 @@ func (ds *BinlogStorage) createSegment(ts int64) (store.Store, error) {
 	segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", segmentTS))
 	segment, err := store.NewBoltStore(segmentPath, [][]byte{binlogNamespace}, ds.nosync)
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to open BoltDB store at %s", segmentPath)
+		return nil, errors.Annotatef(err, "failed to open BoltDB store, path %s", segmentPath)
 	}
 	ds.mu.Lock()
 	ds.mu.segments[segmentTS] = segment
