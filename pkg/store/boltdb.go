@@ -3,6 +3,7 @@ package store
 import (
 	"github.com/boltdb/bolt"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 // BoltStore wraps BoltDB as Store
@@ -53,6 +54,8 @@ func (s *BoltStore) EndKey(namespace []byte) ([]byte, error) {
 			// key only valid for the life of the transaction, so make a copy
 			ret = make([]byte, len(key))
 			copy(ret, key)
+		} else {
+			ret = codec.EncodeInt([]byte{}, 0)
 		}
 		return nil
 	})
