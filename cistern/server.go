@@ -361,8 +361,9 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	upperSchemaVer := prewriteValue.SchemaVersion
 
 	ddlJobs := [][]byte{}
-	err = DS.Scan(
-		0,
+	err = s.boltdb.Scan(
+		ddlJobNamespace,
+		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
 			job := &model.Job{}
 			if err1 := job.Decode(val); err1 != nil {
