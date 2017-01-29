@@ -12,6 +12,8 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
+var testDS *BinlogStorage
+
 func Test(t *testing.T) {
 	binlogNamespace := []byte("binlog")
 	segmentNamespace := []byte("meta")
@@ -26,7 +28,7 @@ func Test(t *testing.T) {
 		os.RemoveAll(dir)
 	}()
 
-	err = InitTest(binlogNamespace, segmentNamespace, s, dir, 29, false)
+	testDS, err = NewBinlogStorage(s, dir, 29, false)
 	if err != nil {
 		t.Fatalf("init binlogStorage", err)
 	}
@@ -68,21 +70,21 @@ func (t *testCisternSuite) TestBinlogStorage(c *C) {
 	testScan(c, keys, 6)
 	testEndKeys(c, keys[8])
 	testGColdBinLog(c, keys)
-	DS.Close()
+	testDS.Close()
 }
 
 func testBatchAndCommit(c *C, keys []int64) {
-	batch := DS.NewBatch()
+	batch := testDS.NewBatch()
 	for _, key := range keys {
 		batch.Put(key, []byte("hello"))
 	}
-	err := DS.Commit(batch)
+	err := testDS.Commit(batch)
 	c.Check(err, IsNil)
 }
 
 func testGet(c *C, keys []int64) {
 	for _, ts := range keys {
-		val, err := DS.Get(ts)
+		val, err := testDS.Get(ts)
 		c.Assert(err, IsNil)
 		c.Assert(val, DeepEquals, []byte("hello"))
 	}
@@ -90,13 +92,13 @@ func testGet(c *C, keys []int64) {
 
 func testPut(c *C, keys []int64) {
 	for _, key := range keys {
-		err := DS.Put(key, []byte("hello"))
+		err := testDS.Put(key, []byte("hello"))
 		c.Assert(err, IsNil)
 	}
 }
 
 func testScan(c *C, keys []int64, index int) {
-	err := DS.Scan(keys[index], func(key, val []byte) (bool, error) {
+	err := testDS.Scan(keys[index], func(key, val []byte) (bool, error) {
 		exceptedKey := codec.EncodeInt([]byte{}, keys[index])
 		c.Assert(exceptedKey, HasLen, len(key))
 		for i := range exceptedKey {
@@ -111,7 +113,7 @@ func testScan(c *C, keys []int64, index int) {
 }
 
 func testEndKeys(c *C, ts int64) {
-	key, err := DS.EndKey()
+	key, err := testDS.EndKey()
 	c.Assert(err, IsNil)
 	exceptedKey := codec.EncodeInt([]byte{}, ts)
 	c.Assert(exceptedKey, HasLen, len(key))
@@ -121,14 +123,14 @@ func testEndKeys(c *C, ts int64) {
 }
 
 func mustCheckSegments(c *C, count int) {
-	c.Assert(len(DS.mu.segments), Equals, count)
-	c.Assert(len(DS.mu.segmentTSs), Equals, count)
+	c.Assert(len(testDS.mu.segments), Equals, count)
+	c.Assert(len(testDS.mu.segmentTSs), Equals, count)
 	nums := 0
-	err := DS.metaStore.Scan(segmentNamespace, nil, func(key []byte, val []byte) (bool, error) {
+	err := testDS.metaStore.Scan(segmentNamespace, nil, func(key []byte, val []byte) (bool, error) {
 		_, segmentTS, err := codec.DecodeInt(key)
 		c.Assert(err, IsNil)
-		c.Assert(segmentTS, Equals, DS.mu.segmentTSs[nums])
-		_, ok := DS.mu.segments[segmentTS]
+		c.Assert(segmentTS, Equals, testDS.mu.segmentTSs[nums])
+		_, ok := testDS.mu.segments[segmentTS]
 		c.Assert(ok, IsTrue)
 		nums++
 		return true, nil

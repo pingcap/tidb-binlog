@@ -11,8 +11,8 @@ import (
 
 // GCHistoryBinlog recycle old binlog data in the store.
 // duration indicates for how long binlog will be preserve.
-func GCHistoryBinlog(duration time.Duration) error {
-	endkey, err := DS.EndKey()
+func GCHistoryBinlog(ds *BinlogStorage, duration time.Duration) error {
+	endkey, err := ds.EndKey()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -34,7 +34,7 @@ func GCHistoryBinlog(duration time.Duration) error {
 	if gcToTS <= 0 {
 		gcToTS = 0
 	} else {
-		err = DS.Purge(gcToTS)
+		err = ds.Purge(gcToTS)
 	}
 	log.Infof("FINISHED! GC binlog older than timestamp: %v, until date: %v", gcToTS, time.Unix(prevPhysical/1000, (prevPhysical%1000)*1e6))
 	return errors.Trace(err)

@@ -15,12 +15,13 @@ var windowKeyName = []byte("window")
 type DepositWindow struct {
 	upper int64
 	lower int64
-	bolt  store.Store
+	meta  store.Store
+	ds    *BinlogStorage
 }
 
 // NewDepositWindow return an instance of DepositWindow
-func NewDepositWindow(s store.Store) (*DepositWindow, error) {
-	l, u, err := loadMark(s)
+func NewDepositWindow(s store.Store, ds *BinlogStorage) (*DepositWindow, error) {
+	l, u, err := loadMark(s, ds)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -28,7 +29,8 @@ func NewDepositWindow(s store.Store) (*DepositWindow, error) {
 	return &DepositWindow{
 		upper: u,
 		lower: l,
-		bolt:  s,
+		meta:  s,
+		ds:    ds,
 	}, nil
 }
 
@@ -55,7 +57,7 @@ func (d *DepositWindow) SaveUpper(val int64) {
 // PersistLower updates the lower boundary of window, and write it into storage.
 func (d *DepositWindow) PersistLower(val int64) error {
 	data := codec.EncodeInt([]byte{}, val)
-	err := d.bolt.Put(windowNamespace, windowKeyName, data)
+	err := d.meta.Put(windowNamespace, windowKeyName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -64,7 +66,7 @@ func (d *DepositWindow) PersistLower(val int64) error {
 }
 
 // loadMark loads the lower upper boundary of the window from store.
-func loadMark(s store.Store) (int64, int64, error) {
+func loadMark(s store.Store, ds *BinlogStorage) (int64, int64, error) {
 	var l, u int64
 	data, err := s.Get(windowNamespace, windowKeyName)
 	if err != nil {
@@ -80,7 +82,7 @@ func loadMark(s store.Store) (int64, int64, error) {
 		return 0, 0, errors.Trace(err)
 	}
 
-	ts, err := DS.EndKey()
+	ts, err := ds.EndKey()
 	if err != nil {
 		return l, 0, errors.Trace(err)
 	}

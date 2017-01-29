@@ -37,7 +37,8 @@ type Pump struct {
 	conn      *grpc.ClientConn
 	client    pb.PumpClient
 	current   pb.Pos
-	boltdb    store.Store
+	meta      store.Store
+	ds        *BinlogStorage
 	tiStore   kv.Storage
 	window    *DepositWindow
 	timeout   time.Duration
@@ -60,7 +61,8 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, pos pb.Pos, boltdb store.Store, tiStore kv.Storage) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, pos pb.Pos,
+	meta store.Store, ds *BinlogStorage, tiStore kv.Storage) (*Pump, error) {
 	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to connect to pump node(%s) at host(%s)", nodeID, host)
@@ -71,7 +73,8 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		conn:       conn,
 		client:     pb.NewPumpClient(conn),
 		current:    pos,
-		boltdb:     boltdb,
+		meta:       meta,
+		ds:         ds,
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
@@ -288,7 +291,7 @@ func (p *Pump) saveItems(items map[int64]*pb.Binlog) error {
 
 func (p *Pump) store(items map[int64]*pb.Binlog) error {
 	boundary := p.window.LoadLower()
-	b := DS.NewBatch()
+	b := p.ds.NewBatch()
 	var (
 		errorBinlogs int
 		itemCnt      int
@@ -311,18 +314,18 @@ func (p *Pump) store(items map[int64]*pb.Binlog) error {
 		}
 		b.Put(commitTS, data)
 		if itemCnt >= batchSize {
-			err := DS.Commit(b)
+			err := p.ds.Commit(b)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			errorBinlogCount.Add(float64(errorBinlogs))
 			errorBinlogs = 0
 			itemCnt = 0
-			b = DS.NewBatch()
+			b = p.ds.NewBatch()
 		}
 	}
 	if itemCnt > 0 {
-		err := DS.Commit(b)
+		err := p.ds.Commit(b)
 		errorBinlogCount.Add(float64(errorBinlogs))
 		if err != nil {
 			return errors.Trace(err)
@@ -378,7 +381,7 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 }
 
 func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
-	b := p.boltdb.NewBatch()
+	b := p.meta.NewBatch()
 	for id, job := range jobs {
 		if job.State == model.JobCancelled {
 			continue
@@ -390,7 +393,7 @@ func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
 		key := codec.EncodeInt([]byte{}, id)
 		b.Put(key, payload)
 	}
-	err := p.boltdb.Commit(ddlJobNamespace, b)
+	err := p.meta.Commit(ddlJobNamespace, b)
 	return errors.Trace(err)
 }
 
@@ -403,7 +406,7 @@ func (p *Pump) updateSavepoint(pos pb.Pos) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = p.boltdb.Put(savepointNamespace, []byte(p.nodeID), data)
+	err = p.meta.Put(savepointNamespace, []byte(p.nodeID), data)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -13,6 +13,7 @@ import (
 )
 
 var codecEncodeZero = codec.EncodeInt([]byte{}, 0)
+var binlogNamespace = []byte("binlog")
 
 // BinlogStorage used to store binlogs
 type BinlogStorage struct {
@@ -29,18 +30,8 @@ type BinlogStorage struct {
 	}
 }
 
-// DS is the BinlogStorage instance
-var DS *BinlogStorage
-
-// InitTest initials the BinlogStorage's test data
-func InitTest(bn, sn []byte, metaStore store.Store, dataDir string, maskShift uint, nosync bool) error {
-	binlogNamespace = bn
-	segmentNamespace = sn
-	return InitBinlogStorage(metaStore, dataDir, maskShift, nosync)
-}
-
 // InitBinlogStorage initials the BinlogStorage
-func InitBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nosync bool) error {
+func NewBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nosync bool) (*BinlogStorage, error) {
 	ds := &BinlogStorage{
 		metaStore: metaStore,
 		maskShift: maskShift,
@@ -69,12 +60,11 @@ func InitBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, no
 		return true, nil
 	})
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	sort.Sort(ds.mu.segmentTSs)
-	DS = ds
-	return nil
+	return ds, nil
 }
 
 // Get returns the value by the given key
@@ -288,7 +278,7 @@ func (ds *BinlogStorage) getSegment(ts int64) (store.Store, bool) {
 
 func (ds *BinlogStorage) createSegment(ts int64) (store.Store, error) {
 	segmentTS := ds.segmentTS(ts)
-	segmentPath := path.Join(ds.dataDir, fmt.Sprintf("binlog-%d.data", segmentTS))
+	segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", segmentTS))
 	segment, err := store.NewBoltStore(segmentPath, [][]byte{binlogNamespace}, ds.nosync)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store at %s", segmentPath)
