@@ -80,7 +80,7 @@ func loadMark(s store.Store) (int64, int64, error) {
 		return 0, 0, errors.Trace(err)
 	}
 
-	ts, err := s.EndKey(binlogNamespace)
+	ts, err := DS.EndKey()
 	if err != nil {
 		return l, 0, errors.Trace(err)
 	}

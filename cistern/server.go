@@ -28,12 +28,14 @@ var windowNamespace []byte
 var binlogNamespace []byte
 var savepointNamespace []byte
 var ddlJobNamespace []byte
+var segmentNamespace []byte
 var retryWaitTime = 3 * time.Second
 var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
-var saveBatch = 20
+var batchInterval int
+var batchSize int
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -64,6 +66,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	batchInterval = cfg.BatchInterval
+	batchSize = cfg.BatchSize
 
 	// lockResolver and tikvStore doesn't exposed a method to get clusterID
 	// so have to create a PD client temporarily.
@@ -80,7 +84,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	pdCli.Close()
 
 	windowNamespace = []byte(fmt.Sprintf("window_%d", cid))
-	binlogNamespace = []byte(fmt.Sprintf("binlog_%d", cid))
+	segmentNamespace = []byte(fmt.Sprintf("segment_%d", cid))
 	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cid))
 	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cid))
 
@@ -89,14 +93,19 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{
+	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "meta.bolt"), [][]byte{
 		windowNamespace,
-		binlogNamespace,
+		segmentNamespace,
 		savepointNamespace,
 		ddlJobNamespace,
-	})
+	}, cfg.NoSync)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
+	}
+
+	err = InitBinlogStorage(s, cfg.DataDir, cfg.Mask, cfg.NoSync)
+	if err != nil {
+		return nil, errors.Errorf("fail to init binlog storage, error %v", err)
 	}
 
 	win, err := NewDepositWindow(s)
@@ -156,9 +165,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		}
 
 		var resps []*binlog.DumpBinlogResp
-		err = s.boltdb.Scan(
-			binlogNamespace,
-			codec.EncodeInt([]byte{}, latest),
+		err = DS.Scan(
+			latest,
 			func(key []byte, val []byte) (bool, error) {
 				_, cts, err1 := codec.DecodeInt(key)
 				if err1 != nil {
@@ -245,9 +253,8 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		lastDDLJobID int64
 	)
 
-	err = s.boltdb.Scan(
-		binlogNamespace,
-		codec.EncodeInt([]byte{}, lowerTS),
+	err = DS.Scan(
+		lowerTS,
 		func(key []byte, val []byte) (bool, error) {
 			_, cts, err1 := codec.DecodeInt(key)
 			if err1 != nil {
@@ -325,7 +332,7 @@ func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlo
 }
 
 func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, error) {
-	val, err := s.boltdb.Get(binlogNamespace, codec.EncodeInt([]byte{}, ts))
+	val, err := DS.Get(ts)
 	if err != nil {
 		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
 		return nil, errors.Trace(err)
@@ -354,9 +361,8 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	upperSchemaVer := prewriteValue.SchemaVersion
 
 	ddlJobs := [][]byte{}
-	err = s.boltdb.Scan(
-		ddlJobNamespace,
-		codec.EncodeInt([]byte{}, 0),
+	err = DS.Scan(
+		0,
 		func(key []byte, val []byte) (bool, error) {
 			job := &model.Job{}
 			if err1 := job.Decode(val); err1 != nil {
@@ -426,7 +432,7 @@ func (s *Server) StartGC() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				err := GCHistoryBinlog(s.boltdb, binlogNamespace, s.gc)
+				err := GCHistoryBinlog(s.gc)
 				if err != nil {
 					log.Error("GC binlog error:", errors.ErrorStack(err))
 				}

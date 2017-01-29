@@ -35,6 +35,10 @@ type Config struct {
 	GC              int    `toml:"gc" json:"gc"`
 	LogFile         string `toml:"log-file" json:"log-file"`
 	LogRotate       string `toml:"log-rotate" json:"log-rotate"`
+	NoSync          bool   `toml:"nosync" json:"nosync"`
+	BatchInterval   int    `toml:"batch-interval" json:"batch-interval"`
+	BatchSize       int    `toml:"batch-size" json:"batch-size"`
+	Mask            uint   `toml:"mask" json:"mask"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -67,6 +71,10 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.GC, "gc", 0, "an integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. default value is 0, means binlog data would never be removed")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
+	fs.BoolVar(&cfg.NoSync, "nosync", false, "enable boltdb don't fsync every commit")
+	fs.IntVar(&cfg.BatchInterval, "batch-interval", 20, "the commit binlog inteval to commit binlogs")
+	fs.IntVar(&cfg.BatchSize, "batch-size", 1000, "the max size of binlog in one batch to commit")
+	fs.UintVar(&cfg.Mask, "mask", 20, "the mask would be use to compute segmant range like 1485663338123(2017/1/29 12:15:38) << mask")
 	return cfg
 }
 

@@ -21,7 +21,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanSize int64 = 16 << 10
+const defaultBinlogChanSize int64 = 16 << 12
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -159,7 +159,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
 			binlogNums++
 			if entity.commitTS > maxCommitTs {
-				if binlogNums < saveBatch {
+				if binlogNums < batchInterval {
 					continue
 				}
 				binlogNums = 0
@@ -288,7 +288,7 @@ func (p *Pump) saveItems(items map[int64]*pb.Binlog) error {
 
 func (p *Pump) store(items map[int64]*pb.Binlog) error {
 	boundary := p.window.LoadLower()
-	b := p.boltdb.NewBatch()
+	b := DS.NewBatch()
 	var (
 		errorBinlogs int
 		itemCnt      int
@@ -305,25 +305,24 @@ func (p *Pump) store(items map[int64]*pb.Binlog) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		key := codec.EncodeInt([]byte{}, commitTS)
 		data, err := encodePayload(payload)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		b.Put(key, data)
-		if itemCnt >= 1000 {
-			err := p.boltdb.Commit(binlogNamespace, b)
+		b.Put(commitTS, data)
+		if itemCnt >= batchSize {
+			err := DS.Commit(b)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			errorBinlogCount.Add(float64(errorBinlogs))
 			errorBinlogs = 0
 			itemCnt = 0
-			b = p.boltdb.NewBatch()
+			b = DS.NewBatch()
 		}
 	}
 	if itemCnt > 0 {
-		err := p.boltdb.Commit(binlogNamespace, b)
+		err := DS.Commit(b)
 		errorBinlogCount.Add(float64(errorBinlogs))
 		if err != nil {
 			return errors.Trace(err)
