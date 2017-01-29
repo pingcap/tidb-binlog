@@ -149,6 +149,7 @@ func (ds *BinlogStorage) EndKey() ([]byte, error) {
 	segmentTS := ds.mu.segmentTSs[len(ds.mu.segmentTSs)-1]
 	segment, ok := ds.mu.segments[segmentTS]
 	if !ok {
+		ds.mu.Unlock()
 		return nil, errors.NotFoundf("segment %d is corruption", segmentTS)
 	}
 	ds.mu.Unlock()
