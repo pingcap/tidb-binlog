@@ -1,6 +1,7 @@
 package cistern
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"testing"
@@ -19,7 +20,9 @@ func Test(t *testing.T) {
 	segmentNamespace := []byte("meta")
 	dir := "./test"
 	os.MkdirAll(dir, 07777)
-	s, err := store.NewBoltStore(path.Join(dir, "test"), [][]byte{binlogNamespace, segmentNamespace}, false)
+	subDir := fmt.Sprintf("./test/%d", clusterID)
+	os.MkdirAll(subDir, 0777)
+	s, err := store.NewBoltStore(path.Join(subDir, "test"), [][]byte{binlogNamespace, segmentNamespace}, false)
 	if err != nil {
 		t.Fatalf("create meta store", err)
 	}
@@ -30,7 +33,7 @@ func Test(t *testing.T) {
 
 	testDS, err = NewBinlogStorage(s, dir, 29, false)
 	if err != nil {
-		t.Fatalf("init binlogStorage", err)
+		t.Fatalf("init binlogStorage %s", err)
 	}
 	TestingT(t)
 }

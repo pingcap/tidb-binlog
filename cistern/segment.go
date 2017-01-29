@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -59,7 +60,7 @@ func NewBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nos
 		ds.mu.segmentTSs = append(ds.mu.segmentTSs, segmentTS)
 		return true, nil
 	})
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return nil, errors.Trace(err)
 	}
 
@@ -109,9 +110,9 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 		return valid, err
 	}
 
+	var segments = make(map[int64]store.Store)
 	ds.mu.Lock()
 	var segmentTSs = make(segmentRange, 0, len(ds.mu.segmentTSs))
-	var segments = make(map[int64]store.Store, 0, len(ds.mu.segments))
 	for _, ts := range ds.mu.segmentTSs {
 		segmentTSs = append(segmentTSs, ts)
 		segments[ts] = ds.mu.segments[ts]
