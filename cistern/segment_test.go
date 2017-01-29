@@ -16,8 +16,7 @@ import (
 var testDS *BinlogStorage
 
 func Test(t *testing.T) {
-	binlogNamespace := []byte("binlog")
-	segmentNamespace := []byte("meta")
+	segmentNamespace = []byte("meta")
 	dir := "./test"
 	os.MkdirAll(dir, 07777)
 	subDir := fmt.Sprintf("./test/%d", clusterID)

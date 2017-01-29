@@ -60,7 +60,7 @@ func NewBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nos
 		ds.mu.segmentTSs = append(ds.mu.segmentTSs, segmentTS)
 		return true, nil
 	})
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -217,7 +217,7 @@ func (ds *BinlogStorage) Purge(ts int64) error {
 		if err != nil {
 			return errors.Errorf("can't close segement %d", ts)
 		}
-		segmentPath := path.Join(ds.dataDir, fmt.Sprintf("binlog-%d.data", ts))
+		segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", ts))
 		err = os.Remove(segmentPath)
 		if err != nil {
 			return errors.Trace(err)
