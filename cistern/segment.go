@@ -160,30 +160,34 @@ func (ds *BinlogStorage) EndKey() ([]byte, error) {
 // Commit commits the batch operators
 func (ds *BinlogStorage) Commit(b *Batch) error {
 	var err error
-	batchs := make(map[int64]store.Batch)
+	batches := make(map[int64]store.Batch)
 	segments := make(map[int64]store.Store)
 	// firstly, dispatch into different segment
 	for _, w := range b.writes {
 		ts := ds.segmentTS(w.key)
-		segment, ok := ds.getSegment(w.key)
+		segment, ok := segments[ts]
 		if !ok {
-			segment, err = ds.createSegment(w.key)
-			if err != nil {
-				return errors.Trace(err)
+			segment, ok = ds.getSegment(w.key)
+			if !ok {
+				segment, err = ds.createSegment(w.key)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 			segments[ts] = segment
 		}
-		bt, ok := batchs[ts]
+
+		bt, ok := batches[ts]
 		if !ok {
 			bt = segment.NewBatch()
-			batchs[ts] = bt
+			batches[ts] = bt
 		}
 		bt.Put(codec.EncodeInt([]byte{}, w.key), w.value)
 	}
 
 	// secondly, commit it one by one
-	for ts := range batchs {
-		err = segments[ts].Commit(binlogNamespace, batchs[ts])
+	for ts := range batches {
+		err = segments[ts].Commit(binlogNamespace, batches[ts])
 		if err != nil {
 			return errors.Trace(err)
 		}
