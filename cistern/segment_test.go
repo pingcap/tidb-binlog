@@ -23,14 +23,14 @@ func Test(t *testing.T) {
 	os.MkdirAll(subDir, 0777)
 	s, err := store.NewBoltStore(path.Join(subDir, "test"), [][]byte{binlogNamespace, segmentNamespace}, false)
 	if err != nil {
-		t.Fatalf("create meta store", err)
+		t.Fatalf("create meta store %v", err)
 	}
 	defer func() {
 		s.Close()
 		os.RemoveAll(dir)
 	}()
 
-	testDS, err = NewBinlogStorage(s, dir, 29, false)
+	testDS, err = NewBinlogStorage(s, dir, false)
 	if err != nil {
 		t.Fatalf("init binlogStorage %s", err)
 	}
@@ -126,13 +126,13 @@ func testEndKeys(c *C, ts int64) {
 
 func mustCheckSegments(c *C, count int) {
 	c.Assert(len(testDS.mu.segments), Equals, count)
-	c.Assert(len(testDS.mu.segmentTSs), Equals, count)
+	c.Assert(len(testDS.mu.segmentKeys), Equals, count)
 	nums := 0
 	err := testDS.metaStore.Scan(segmentNamespace, nil, func(key []byte, val []byte) (bool, error) {
-		_, segmentTS, err := codec.DecodeInt(key)
+		_, segmentKey, err := codec.DecodeInt(key)
 		c.Assert(err, IsNil)
-		c.Assert(segmentTS, Equals, testDS.mu.segmentTSs[nums])
-		_, ok := testDS.mu.segments[segmentTS]
+		c.Assert(segmentKey, Equals, testDS.mu.segmentKeys[nums])
+		_, ok := testDS.mu.segments[segmentKey]
 		c.Assert(ok, IsTrue)
 		nums++
 		return true, nil

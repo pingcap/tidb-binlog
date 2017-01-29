@@ -103,7 +103,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
 
-	s, err := NewBinlogStorage(meta, cfg.DataDir, cfg.Mask, cfg.NoSync)
+	s, err := NewBinlogStorage(meta, cfg.DataDir, cfg.NoSync)
 	if err != nil {
 		return nil, errors.Errorf("fail to init binlog storage, error %v", err)
 	}

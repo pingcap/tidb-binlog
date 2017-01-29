@@ -38,7 +38,6 @@ type Config struct {
 	NoSync          bool   `toml:"nosync" json:"nosync"`
 	BatchInterval   int    `toml:"batch-interval" json:"batch-interval"`
 	BatchSize       int    `toml:"batch-size" json:"batch-size"`
-	Mask            uint   `toml:"mask" json:"mask"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -74,7 +73,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.NoSync, "nosync", false, "make boltdb not fsync every commit")
 	fs.IntVar(&cfg.BatchInterval, "batch-interval", 20, "the commit binlog inteval to save binlogs")
 	fs.IntVar(&cfg.BatchSize, "batch-size", 1000, "the max size of binlog in one batch")
-	fs.UintVar(&cfg.Mask, "mask", 20, "the mask would be use to compute segmant range like 1485663338123(2017/1/29 12:15:38) >> mask")
 	return cfg
 }
 
