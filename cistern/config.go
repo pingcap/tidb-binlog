@@ -68,7 +68,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
-	fs.IntVar(&cfg.GC, "gc", 0, "an integer value to control expiry date of the binlog data, indicates for how long (in hours) the binlog data would be stored. default value is 0, means binlog data would never be removed")
+	fs.IntVar(&cfg.GC, "gc", 0, "an integer value to control expiry date of the binlog data, indicates for how long (in minutes) the binlog data would be stored. default value is 0, means binlog data would never be removed")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.BoolVar(&cfg.NoSync, "nosync", false, "make boltdb not fsync every commit")

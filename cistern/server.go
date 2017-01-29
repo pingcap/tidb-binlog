@@ -135,7 +135,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	var gc time.Duration
 	if cfg.GC > 0 {
-		gc = time.Duration(cfg.GC) * time.Hour
+		gc = time.Duration(cfg.GC) * time.Minute
 	}
 
 	return &Server{
