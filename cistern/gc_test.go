@@ -30,7 +30,7 @@ func (suite *testGCSuite) TestGColdBinLog(c *C) {
 	c.Assert(err, IsNil)
 	defer func() {
 		s.Close()
-		os.Remove("./test")
+		os.RemoveAll(dir)
 	}()
 
 	err = cistern.InitTest(binlogNamespace, segmentNamespace, s, dir, 20, false)
@@ -66,6 +66,7 @@ func (suite *testGCSuite) TestGColdBinLog(c *C) {
 	v, err := cistern.DS.Get(keys[3])
 	c.Check(err, IsNil)
 	c.Check(v, NotNil)
+	cistern.DS.Close()
 }
 
 func getBinlogTS(date string) int64 {

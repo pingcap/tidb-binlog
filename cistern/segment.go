@@ -218,6 +218,20 @@ func (ds *BinlogStorage) Purge(ts int64) error {
 	return errors.Trace(err)
 }
 
+// Close closes all boltdbs
+func (ds *BinlogStorage) Close() error {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	for _, segement := range ds.mu.segments {
+		err := segement.Close()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // NewBatch implements the NewBatch() interface of Store
 func (ds *BinlogStorage) NewBatch() *Batch {
 	return &Batch{}
