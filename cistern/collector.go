@@ -12,7 +12,6 @@ import (
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -36,8 +35,7 @@ type Collector struct {
 	reg       *pump.EtcdRegistry
 	timeout   time.Duration
 	window    *DepositWindow
-	meta      store.Store
-	ds        *BinlogStorage
+	storage   *BinlogStorage
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
@@ -53,7 +51,7 @@ type Collector struct {
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, s store.Store, ds *BinlogStorage, w *DepositWindow) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, s *BinlogStorage, w *DepositWindow) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -79,8 +77,7 @@ func NewCollector(cfg *Config, clusterID uint64, s store.Store, ds *BinlogStorag
 		timeout:    cfg.PumpTimeout,
 		pumps:      make(map[string]*Pump),
 		window:     w,
-		meta:       s,
-		ds:         ds,
+		storage:    s,
 		tiClient:   tiClient,
 		tiStore:    tiStore,
 		notifyChan: make(chan *notifyResult),
@@ -165,7 +162,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, pos, c.meta, c.ds, c.tiStore)
+			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, pos, c.storage, c.tiStore)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -239,7 +236,7 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	var savePoint = binlog.Pos{}
-	payload, err := c.meta.Get(savepointNamespace, []byte(nodeID))
+	payload, err := c.storage.Meta().Get(savepointNamespace, []byte(nodeID))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return savePoint, nil
@@ -273,7 +270,7 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 			continue
 		}
 		key := codec.EncodeInt([]byte{}, job.ID)
-		_, err = c.meta.Get(ddlJobNamespace, key)
+		_, err = c.storage.Meta().Get(ddlJobNamespace, key)
 		if err != nil {
 			if !errors.IsNotFound(err) {
 				return errors.Trace(err)
@@ -282,7 +279,7 @@ func (c *Collector) LoadHistoryDDLJobs() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if err := c.meta.Put(ddlJobNamespace, key, payload); err != nil {
+			if err := c.storage.Meta().Put(ddlJobNamespace, key, payload); err != nil {
 				return errors.Trace(err)
 			}
 		}

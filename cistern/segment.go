@@ -33,13 +33,13 @@ type BinlogStorage struct {
 
 // InitBinlogStorage initials the BinlogStorage
 func NewBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nosync bool) (*BinlogStorage, error) {
-	ds := &BinlogStorage{
+	bs := &BinlogStorage{
 		metaStore: metaStore,
 		maskShift: maskShift,
 		dataDir:   dataDir,
 		nosync:    nosync,
 	}
-	ds.mu.segments = make(map[int64]store.Store)
+	bs.mu.segments = make(map[int64]store.Store)
 
 	// initial segments' infomation
 	err := metaStore.Scan(segmentNamespace, nil, func(key []byte, val []byte) (bool, error) {
@@ -56,22 +56,26 @@ func NewBinlogStorage(metaStore store.Store, dataDir string, maskShift uint, nos
 		}
 
 		// add into ds.mu.segments and du.mu.segmentTSs
-		ds.mu.segments[segmentTS] = s
-		ds.mu.segmentTSs = append(ds.mu.segmentTSs, segmentTS)
+		bs.mu.segments[segmentTS] = s
+		bs.mu.segmentTSs = append(bs.mu.segmentTSs, segmentTS)
 		return true, nil
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	sort.Sort(ds.mu.segmentTSs)
-	return ds, nil
+	sort.Sort(bs.mu.segmentTSs)
+	return bs, nil
+}
+
+func (bs *BinlogStorage) Meta() store.Store {
+	return bs.metaStore
 }
 
 // Get returns the value by the given key
-func (ds *BinlogStorage) Get(ts int64) ([]byte, error) {
+func (bs *BinlogStorage) Get(ts int64) ([]byte, error) {
 	// get the corresponding segment
-	segment, ok := ds.getSegment(ts)
+	segment, ok := bs.getSegment(ts)
 	if !ok {
 		return nil, errors.NotFoundf("binlog has key %d", ts)
 	}
@@ -80,13 +84,13 @@ func (ds *BinlogStorage) Get(ts int64) ([]byte, error) {
 }
 
 // Put puts the key/value in the store
-func (ds *BinlogStorage) Put(ts int64, payload []byte) error {
+func (bs *BinlogStorage) Put(ts int64, payload []byte) error {
 	var err error
 	// get the corresponding segment
 	// if not found, open it
-	segment, ok := ds.getSegment(ts)
+	segment, ok := bs.getSegment(ts)
 	if !ok {
-		segment, err = ds.createSegment(ts)
+		segment, err = bs.createSegment(ts)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -95,8 +99,8 @@ func (ds *BinlogStorage) Put(ts int64, payload []byte) error {
 }
 
 // Scan scans the key and exec given function
-func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error)) error {
-	startSegmentTS := ds.segmentTS(startTS)
+func (bs *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error)) error {
+	startSegmentTS := bs.segmentTS(startTS)
 	var isEnd bool
 	// wrap the operation in the scan to make it can cross multiple boltdbs
 	scanFunc := func(key, val []byte) (bool, error) {
@@ -111,13 +115,13 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 	}
 
 	var segments = make(map[int64]store.Store)
-	ds.mu.Lock()
-	var segmentTSs = make(segmentRange, 0, len(ds.mu.segmentTSs))
-	for _, ts := range ds.mu.segmentTSs {
+	bs.mu.Lock()
+	var segmentTSs = make(segmentRange, 0, len(bs.mu.segmentTSs))
+	for _, ts := range bs.mu.segmentTSs {
 		segmentTSs = append(segmentTSs, ts)
-		segments[ts] = ds.mu.segments[ts]
+		segments[ts] = bs.mu.segments[ts]
 	}
-	ds.mu.Unlock()
+	bs.mu.Unlock()
 	for _, segmentTS := range segmentTSs {
 		if segmentTS < startSegmentTS {
 			continue
@@ -141,35 +145,35 @@ func (ds *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 }
 
 // EndKey gets the latest key
-func (ds *BinlogStorage) EndKey() ([]byte, error) {
-	ds.mu.Lock()
-	if len(ds.mu.segmentTSs) == 0 {
-		ds.mu.Unlock()
+func (bs *BinlogStorage) EndKey() ([]byte, error) {
+	bs.mu.Lock()
+	if len(bs.mu.segmentTSs) == 0 {
+		bs.mu.Unlock()
 		return codecEncodeZero, nil
 	}
-	segmentTS := ds.mu.segmentTSs[len(ds.mu.segmentTSs)-1]
-	segment, ok := ds.mu.segments[segmentTS]
+	segmentTS := bs.mu.segmentTSs[len(bs.mu.segmentTSs)-1]
+	segment, ok := bs.mu.segments[segmentTS]
 	if !ok {
-		ds.mu.Unlock()
+		bs.mu.Unlock()
 		return nil, errors.NotFoundf("segment %d is corruption", segmentTS)
 	}
-	ds.mu.Unlock()
+	bs.mu.Unlock()
 	return segment.EndKey(binlogNamespace)
 }
 
 // Commit commits the batch operators
-func (ds *BinlogStorage) Commit(b *Batch) error {
+func (bs *BinlogStorage) Commit(b *Batch) error {
 	var err error
 	batches := make(map[int64]store.Batch)
 	segments := make(map[int64]store.Store)
 	// firstly, dispatch into different segment
 	for _, w := range b.writes {
-		ts := ds.segmentTS(w.key)
+		ts := bs.segmentTS(w.key)
 		segment, ok := segments[ts]
 		if !ok {
-			segment, ok = ds.getSegment(w.key)
+			segment, ok = bs.getSegment(w.key)
 			if !ok {
-				segment, err = ds.createSegment(w.key)
+				segment, err = bs.createSegment(w.key)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -197,19 +201,19 @@ func (ds *BinlogStorage) Commit(b *Batch) error {
 }
 
 // Purge gcs the binlogs
-func (ds *BinlogStorage) Purge(ts int64) error {
-	startSegmentTS := ds.segmentTS(ts)
+func (bs *BinlogStorage) Purge(ts int64) error {
+	startSegmentTS := bs.segmentTS(ts)
 	log.Infof("purge boltdb files that before %d", ts)
-	b := ds.metaStore.NewBatch()
-	ds.mu.Lock()
+	b := bs.metaStore.NewBatch()
+	bs.mu.Lock()
 	var index int
-	for i, ts := range ds.mu.segmentTSs {
+	for i, ts := range bs.mu.segmentTSs {
 		// gc until to the biger or equal ts
 		if ts >= startSegmentTS {
 			break
 		}
 
-		segment, ok := ds.mu.segments[ts]
+		segment, ok := bs.mu.segments[ts]
 		if !ok {
 			return errors.NotFoundf("sgement %d, but it should be found", ts)
 		}
@@ -217,7 +221,7 @@ func (ds *BinlogStorage) Purge(ts int64) error {
 		if err != nil {
 			return errors.Errorf("can't close segement %d", ts)
 		}
-		segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", ts))
+		segmentPath := path.Join(bs.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", ts))
 		err = os.Remove(segmentPath)
 		if err != nil {
 			return errors.Trace(err)
@@ -227,21 +231,21 @@ func (ds *BinlogStorage) Purge(ts int64) error {
 	}
 
 	for i := 0; i <= index; i++ {
-		delete(ds.mu.segments, ds.mu.segmentTSs[i])
+		delete(bs.mu.segments, bs.mu.segmentTSs[i])
 	}
-	ds.mu.segmentTSs = ds.mu.segmentTSs[index+1:]
-	ds.mu.Unlock()
+	bs.mu.segmentTSs = bs.mu.segmentTSs[index+1:]
+	bs.mu.Unlock()
 
-	err := ds.metaStore.Commit(segmentNamespace, b)
+	err := bs.metaStore.Commit(segmentNamespace, b)
 	return errors.Trace(err)
 }
 
 // Close closes all boltdbs
-func (ds *BinlogStorage) Close() error {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
+func (bs *BinlogStorage) Close() error {
+	bs.mu.Lock()
+	defer bs.mu.Unlock()
 
-	for _, segement := range ds.mu.segments {
+	for _, segement := range bs.mu.segments {
 		err := segement.Close()
 		if err != nil {
 			return errors.Trace(err)
@@ -251,7 +255,7 @@ func (ds *BinlogStorage) Close() error {
 }
 
 // NewBatch return a Batch object
-func (ds *BinlogStorage) NewBatch() *Batch {
+func (bs *BinlogStorage) NewBatch() *Batch {
 	return &Batch{}
 }
 
@@ -275,31 +279,31 @@ func (b *Batch) Put(key int64, value []byte) {
 	b.writes = append(b.writes, w)
 }
 
-func (ds *BinlogStorage) getSegment(ts int64) (store.Store, bool) {
-	ds.mu.Lock()
-	segment, ok := ds.mu.segments[ds.segmentTS(ts)]
-	ds.mu.Unlock()
+func (bs *BinlogStorage) getSegment(ts int64) (store.Store, bool) {
+	bs.mu.Lock()
+	segment, ok := bs.mu.segments[bs.segmentTS(ts)]
+	bs.mu.Unlock()
 	return segment, ok
 }
 
-func (ds *BinlogStorage) createSegment(ts int64) (store.Store, error) {
-	segmentTS := ds.segmentTS(ts)
-	segmentPath := path.Join(ds.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", segmentTS))
-	segment, err := store.NewBoltStore(segmentPath, [][]byte{binlogNamespace}, ds.nosync)
+func (bs *BinlogStorage) createSegment(ts int64) (store.Store, error) {
+	segmentTS := bs.segmentTS(ts)
+	segmentPath := path.Join(bs.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", segmentTS))
+	segment, err := store.NewBoltStore(segmentPath, [][]byte{binlogNamespace}, bs.nosync)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store, path %s", segmentPath)
 	}
-	ds.mu.Lock()
-	ds.mu.segments[segmentTS] = segment
-	ds.mu.segmentTSs = append(ds.mu.segmentTSs, segmentTS)
-	sort.Sort(ds.mu.segmentTSs)
-	ds.metaStore.Put(segmentNamespace, codec.EncodeInt([]byte{}, segmentTS), []byte(segmentPath))
-	ds.mu.Unlock()
+	bs.mu.Lock()
+	bs.mu.segments[segmentTS] = segment
+	bs.mu.segmentTSs = append(bs.mu.segmentTSs, segmentTS)
+	sort.Sort(bs.mu.segmentTSs)
+	bs.metaStore.Put(segmentNamespace, codec.EncodeInt([]byte{}, segmentTS), []byte(segmentPath))
+	bs.mu.Unlock()
 	return segment, nil
 }
 
-func (ds *BinlogStorage) segmentTS(ts int64) int64 {
-	return ts >> ds.maskShift
+func (bs *BinlogStorage) segmentTS(ts int64) int64 {
+	return ts >> bs.maskShift
 }
 
 type segmentRange []int64

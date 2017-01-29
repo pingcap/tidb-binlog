@@ -42,8 +42,7 @@ var clusterID uint64
 type Server struct {
 	ID        string
 	cfg       *Config
-	meta      store.Store
-	ds        *BinlogStorage
+	storage   *BinlogStorage
 	window    *DepositWindow
 	collector *Collector
 	tcpAddr   string
@@ -94,7 +93,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "meta.bolt"), [][]byte{
+	meta, err := store.NewBoltStore(path.Join(cfg.DataDir, "meta.bolt"), [][]byte{
 		windowNamespace,
 		segmentNamespace,
 		savepointNamespace,
@@ -104,17 +103,17 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
 
-	ds, err := NewBinlogStorage(s, cfg.DataDir, cfg.Mask, cfg.NoSync)
+	s, err := NewBinlogStorage(meta, cfg.DataDir, cfg.Mask, cfg.NoSync)
 	if err != nil {
 		return nil, errors.Errorf("fail to init binlog storage, error %v", err)
 	}
 
-	win, err := NewDepositWindow(s, ds)
+	win, err := NewDepositWindow(s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, s, ds, win)
+	c, err := NewCollector(cfg, clusterID, s, win)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -141,8 +140,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	return &Server{
 		ID:        ID,
 		cfg:       cfg,
-		meta:      s,
-		ds:        ds,
+		storage:   s,
 		window:    win,
 		collector: c,
 		metrics:   metrics,
@@ -167,7 +165,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		}
 
 		var resps []*binlog.DumpBinlogResp
-		err = s.ds.Scan(
+		err = s.storage.Scan(
 			latest,
 			func(key []byte, val []byte) (bool, error) {
 				_, cts, err1 := codec.DecodeInt(key)
@@ -207,7 +205,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
-				data, err1 := s.meta.Get(ddlJobNamespace, key)
+				data, err1 := s.storage.Meta().Get(ddlJobNamespace, key)
 				if err1 != nil {
 					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err1))
 					return errors.Annotatef(err,
@@ -255,7 +253,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		lastDDLJobID int64
 	)
 
-	err = s.ds.Scan(
+	err = s.storage.Scan(
 		lowerTS,
 		func(key []byte, val []byte) (bool, error) {
 			_, cts, err1 := codec.DecodeInt(key)
@@ -304,7 +302,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 
 func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlog.DumpDDLJobsResp, error) {
 	ddlJobs := [][]byte{}
-	err := s.meta.Scan(
+	err := s.storage.Meta().Scan(
 		ddlJobNamespace,
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
@@ -334,7 +332,7 @@ func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlo
 }
 
 func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, error) {
-	val, err := s.ds.Get(ts)
+	val, err := s.storage.Get(ts)
 	if err != nil {
 		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
 		return nil, errors.Trace(err)
@@ -363,7 +361,7 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	upperSchemaVer := prewriteValue.SchemaVersion
 
 	ddlJobs := [][]byte{}
-	err = s.meta.Scan(
+	err = s.storage.Meta().Scan(
 		ddlJobNamespace,
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
@@ -435,7 +433,7 @@ func (s *Server) StartGC() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				err := GCHistoryBinlog(s.ds, s.gc)
+				err := GCHistoryBinlog(s.storage, s.gc)
 				if err != nil {
 					log.Error("GC binlog error:", errors.ErrorStack(err))
 				}
@@ -538,6 +536,6 @@ func (s *Server) Close() {
 	}
 
 	// close stores
-	s.meta.Close()
-	s.ds.Close()
+	s.storage.Meta().Close()
+	s.storage.Close()
 }
