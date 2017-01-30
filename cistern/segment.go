@@ -24,9 +24,9 @@ type BinlogStorage struct {
 	nosync    bool
 	mu        struct {
 		sync.Mutex
-		// segmentTS -> boltdb
+		// segmentKey -> boltdb
 		segments map[int64]store.Store
-		// segmentTSs that sorted
+		// segmentKeys that sorted
 		segmentKeys segmentRange
 	}
 }
@@ -217,37 +217,41 @@ func (bs *BinlogStorage) Purge(ts int64) error {
 		if err != nil {
 			return errors.Errorf("can't close segement %d", key)
 		}
+		b.Delete(codec.EncodeInt([]byte{}, key))
+		index = i
+	}
+	// delete segment meta infomation firstly
+	err := bs.metaStore.Commit(segmentNamespace, b)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// delete files and update local infomations
+	for i := 0; i <= index; i++ {
+		key := bs.mu.segmentKeys[i]
 		segmentPath := path.Join(bs.dataDir, fmt.Sprintf("%d", clusterID), fmt.Sprintf("binlog-%d.data", key))
 		err = os.Remove(segmentPath)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		b.Delete(codec.EncodeInt([]byte{}, key))
 		log.Info("removed file: ", segmentPath)
-		index = i
-	}
 
-	for i := 0; i <= index; i++ {
 		delete(bs.mu.segments, bs.mu.segmentKeys[i])
 	}
 	bs.mu.segmentKeys = bs.mu.segmentKeys[index+1:]
-
-	err := bs.metaStore.Commit(segmentNamespace, b)
-	return errors.Trace(err)
+	return nil
 }
 
 // Close closes all boltdbs
-func (bs *BinlogStorage) Close() error {
+func (bs *BinlogStorage) Close() {
 	bs.mu.Lock()
 	defer bs.mu.Unlock()
 
-	for _, segement := range bs.mu.segments {
+	for key, segement := range bs.mu.segments {
 		err := segement.Close()
 		if err != nil {
-			return errors.Trace(err)
+			log.Errorf("fail to close segment, key %d, error %v", key, err)
 		}
 	}
-	return nil
 }
 
 // NewBatch return a Batch object
