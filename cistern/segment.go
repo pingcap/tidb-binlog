@@ -63,6 +63,7 @@ func NewBinlogStorage(metaStore store.Store, dataDir string, nosync bool) (*Binl
 		return nil, errors.Trace(err)
 	}
 
+	log.Info("open segement stores successfully, total num: [%d], loaded keys: [%v]", len(bs.mu.segments), bs.mu.segmentKeys)
 	sort.Sort(bs.mu.segmentKeys)
 	return bs, nil
 }
@@ -197,7 +198,7 @@ func (bs *BinlogStorage) Commit(b *Batch) error {
 // Purge gcs the binlogs
 func (bs *BinlogStorage) Purge(ts int64) error {
 	startSegmentKey := bs.segmentKey(ts)
-	log.Infof("purge boltdb files that before %d", ts)
+	log.Infof("purge boltdb files that before %d", startSegmentKey)
 	b := bs.metaStore.NewBatch()
 	bs.mu.Lock()
 	defer bs.mu.Unlock()
@@ -222,6 +223,7 @@ func (bs *BinlogStorage) Purge(ts int64) error {
 			return errors.Trace(err)
 		}
 		b.Delete(codec.EncodeInt([]byte{}, key))
+		log.Info("removed file: %s", segmentPath)
 		index = i
 	}
 
