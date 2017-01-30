@@ -202,7 +202,7 @@ func (bs *BinlogStorage) Purge(ts int64) error {
 	b := bs.metaStore.NewBatch()
 	bs.mu.Lock()
 	defer bs.mu.Unlock()
-	var index int
+	var index = -1
 	for i, key := range bs.mu.segmentKeys {
 		// gc until to the biger or equal ts
 		if key >= startSegmentKey {
