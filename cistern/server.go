@@ -246,7 +246,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
 	}()
 	upperTS := req.BeginCommitTS
-	lowerTS := calculatePreviousHourTimestamp(upperTS)
+	lowerTS := calculateForwardAShortTime(upperTS)
 
 	var (
 		lastTS       int64
@@ -387,9 +387,9 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	return resp, nil
 }
 
-func calculatePreviousHourTimestamp(current int64) int64 {
+func calculateForwardAShortTime(current int64) int64 {
 	physical := oracle.ExtractPhysical(uint64(current))
-	prevPhysical := physical - int64(1*time.Hour/time.Millisecond)
+	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
 	previous := oracle.ComposeTS(prevPhysical, 0)
 	if previous < 0 {
 		return 0
