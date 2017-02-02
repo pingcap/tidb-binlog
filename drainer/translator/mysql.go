@@ -157,7 +157,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			for ; i < len(r); i += 2 {
 				columnValues[r[i].GetInt64()] = r[i+1]
 			}
-			keys = append(keys, "")
+			keys = append(keys, "[]")
 		} else {
 			for ; i < len(r); i += 2 {
 				columnValues[r[i].GetInt64()] = r[i+1]
@@ -266,7 +266,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, o
 			if err != nil {
 				return nil, nil, nil, errors.Trace(err)
 			}
-			keys = append(keys, "")
+			keys = append(keys, "[]")
 
 		default:
 			return nil, nil, nil, errors.Errorf("delete row error type %v", op)
