@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	maxRetryCount = 100
+	maxDMLRetryCount = 100
+	maxDDLRetryCount = 5
 
 	maxWaitGetJobTime = 5 * time.Minute
 	retryWaitTime     = 3 * time.Second
@@ -374,16 +375,15 @@ func (d *Drainer) checkWait(job *job) bool {
 }
 
 type job struct {
-	tp    translator.OpType
-	sql   string
-	args  []interface{}
-	key   string
-	retry bool
-	pos   int64
+	tp   translator.OpType
+	sql  string
+	args []interface{}
+	key  string
+	pos  int64
 }
 
-func newJob(tp translator.OpType, sql string, args []interface{}, key string, retry bool, pos int64) *job {
-	return &job{tp: tp, sql: sql, args: args, key: key, retry: retry, pos: pos}
+func newJob(tp translator.OpType, sql string, args []interface{}, key string, pos int64) *job {
+	return &job{tp: tp, sql: sql, args: args, key: key, pos: pos}
 }
 
 func (d *Drainer) addJob(job *job) {
@@ -439,7 +439,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 			idx++
 
 			if job.tp == translator.DDL {
-				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, false)
+				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, true)
 				if err != nil {
 					if !ignoreDDLError(err) {
 						log.Fatalf(errors.ErrorStack(err))
@@ -456,7 +456,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 			}
 
 			if idx >= count {
-				err = executeSQLs(db, sqls, args, true)
+				err = executeSQLs(db, sqls, args, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
@@ -466,7 +466,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 		default:
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxWaitTime {
-				err = executeSQLs(db, sqls, args, true)
+				err = executeSQLs(db, sqls, args, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
@@ -552,7 +552,7 @@ func (d *Drainer) run() error {
 				}
 
 				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
-				job := newJob(translator.DDL, sql, nil, "", false, commitTS)
+				job := newJob(translator.DDL, sql, nil, "", commitTS)
 				d.addJob(job)
 				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
 			}
@@ -646,7 +646,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
 			}
 
-			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], true, pos)
+			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], pos)
 			d.addJob(job)
 			offsets[index] = offsets[index] + 1
 		}
@@ -654,7 +654,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 		// Compatible with the old format that don't have sequence, will be remove in the futhure
 		for i := 0; i < 5; i++ {
 			for j := offsets[i]; j < len(sqls[i]); j++ {
-				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], true, pos)
+				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], pos)
 				d.addJob(job)
 			}
 		}
