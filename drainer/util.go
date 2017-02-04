@@ -101,6 +101,10 @@ func ignoreDDLError(err error) bool {
 	}
 
 	errCode := terror.ErrCode(mysqlErr.Number)
+	// we can get error code from:
+	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
+	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
+	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
 	switch errCode {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
