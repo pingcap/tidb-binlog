@@ -25,22 +25,24 @@ import (
 )
 
 var windowNamespace []byte
-var binlogNamespace []byte
 var savepointNamespace []byte
 var ddlJobNamespace []byte
+var segmentNamespace []byte
 var retryWaitTime = 3 * time.Second
 var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
-var saveBatch = 20
+var batchInterval int
+var batchSize int
+var clusterID uint64
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
 	ID        string
 	cfg       *Config
-	boltdb    store.Store
+	storage   *BinlogStorage
 	window    *DepositWindow
 	collector *Collector
 	tcpAddr   string
@@ -64,6 +66,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	batchInterval = cfg.BatchInterval
+	batchSize = cfg.BatchSize
 
 	// lockResolver and tikvStore doesn't exposed a method to get clusterID
 	// so have to create a PD client temporarily.
@@ -75,28 +79,33 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cid := pdCli.GetClusterID()
-	log.Infof("clusterID of cistern server is %v", cid)
+	clusterID = pdCli.GetClusterID()
+	log.Infof("clusterID of cistern server is %v", clusterID)
 	pdCli.Close()
 
-	windowNamespace = []byte(fmt.Sprintf("window_%d", cid))
-	binlogNamespace = []byte(fmt.Sprintf("binlog_%d", cid))
-	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", cid))
-	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", cid))
+	windowNamespace = []byte(fmt.Sprintf("window_%d", clusterID))
+	segmentNamespace = []byte(fmt.Sprintf("segment_%d", clusterID))
+	savepointNamespace = []byte(fmt.Sprintf("savepoint_%d", clusterID))
+	ddlJobNamespace = []byte(fmt.Sprintf("ddljob_%d", clusterID))
 
-	err = os.MkdirAll(cfg.DataDir, 0700)
+	err = os.MkdirAll(path.Join(cfg.DataDir, fmt.Sprintf("%d", clusterID)), 0700)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := store.NewBoltStore(path.Join(cfg.DataDir, "data.bolt"), [][]byte{
+	meta, err := store.NewBoltStore(path.Join(cfg.DataDir, "meta.bolt"), [][]byte{
 		windowNamespace,
-		binlogNamespace,
+		segmentNamespace,
 		savepointNamespace,
 		ddlJobNamespace,
-	})
+	}, false)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
+	}
+
+	s, err := NewBinlogStorage(meta, cfg.DataDir, cfg.NoSync)
+	if err != nil {
+		return nil, errors.Errorf("fail to init binlog storage, error %v", err)
 	}
 
 	win, err := NewDepositWindow(s)
@@ -104,7 +113,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, cid, s, win)
+	c, err := NewCollector(cfg, clusterID, s, win)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -125,13 +134,13 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	var gc time.Duration
 	if cfg.GC > 0 {
-		gc = time.Duration(cfg.GC) * 24 * time.Hour
+		gc = time.Duration(cfg.GC) * time.Minute
 	}
 
 	return &Server{
 		ID:        ID,
 		cfg:       cfg,
-		boltdb:    s,
+		storage:   s,
 		window:    win,
 		collector: c,
 		metrics:   metrics,
@@ -156,9 +165,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 		}
 
 		var resps []*binlog.DumpBinlogResp
-		err = s.boltdb.Scan(
-			binlogNamespace,
-			codec.EncodeInt([]byte{}, latest),
+		err = s.storage.Scan(
+			latest,
 			func(key []byte, val []byte) (bool, error) {
 				_, cts, err1 := codec.DecodeInt(key)
 				if err1 != nil {
@@ -197,7 +205,7 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 			}
 			if item.DdlJobId > 0 {
 				key := codec.EncodeInt([]byte{}, item.DdlJobId)
-				data, err1 := s.boltdb.Get(ddlJobNamespace, key)
+				data, err1 := s.storage.Meta().Get(ddlJobNamespace, key)
 				if err1 != nil {
 					log.Errorf("DDL Job(%d) not found, with binlog commitTS(%d), %s", item.DdlJobId, resp.CommitTS, errors.ErrorStack(err1))
 					return errors.Annotatef(err,
@@ -238,16 +246,15 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 		rpcCounter.WithLabelValues("DumpDDLJobs", label).Add(1)
 	}()
 	upperTS := req.BeginCommitTS
-	lowerTS := calculatePreviousHourTimestamp(upperTS)
+	lowerTS := calculateForwardAShortTime(upperTS)
 
 	var (
 		lastTS       int64
 		lastDDLJobID int64
 	)
 
-	err = s.boltdb.Scan(
-		binlogNamespace,
-		codec.EncodeInt([]byte{}, lowerTS),
+	err = s.storage.Scan(
+		lowerTS,
 		func(key []byte, val []byte) (bool, error) {
 			_, cts, err1 := codec.DecodeInt(key)
 			if err1 != nil {
@@ -295,7 +302,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 
 func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlog.DumpDDLJobsResp, error) {
 	ddlJobs := [][]byte{}
-	err := s.boltdb.Scan(
+	err := s.storage.Meta().Scan(
 		ddlJobNamespace,
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
@@ -325,7 +332,7 @@ func (s *Server) getAllHistoryDDLJobsByID(upperJobID int64, exceed bool) (*binlo
 }
 
 func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, error) {
-	val, err := s.boltdb.Get(binlogNamespace, codec.EncodeInt([]byte{}, ts))
+	val, err := s.storage.Get(ts)
 	if err != nil {
 		log.Errorf("gRPC: DumpDDLJobs getAllHistoryDDLJobsByTS get boltdb error, %v", errors.ErrorStack(err))
 		return nil, errors.Trace(err)
@@ -354,7 +361,7 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	upperSchemaVer := prewriteValue.SchemaVersion
 
 	ddlJobs := [][]byte{}
-	err = s.boltdb.Scan(
+	err = s.storage.Meta().Scan(
 		ddlJobNamespace,
 		codec.EncodeInt([]byte{}, 0),
 		func(key []byte, val []byte) (bool, error) {
@@ -380,9 +387,9 @@ func (s *Server) getAllHistoryDDLJobsByTS(ts int64) (*binlog.DumpDDLJobsResp, er
 	return resp, nil
 }
 
-func calculatePreviousHourTimestamp(current int64) int64 {
+func calculateForwardAShortTime(current int64) int64 {
 	physical := oracle.ExtractPhysical(uint64(current))
-	prevPhysical := physical - int64(1*time.Hour/time.Millisecond)
+	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
 	previous := oracle.ComposeTS(prevPhysical, 0)
 	if previous < 0 {
 		return 0
@@ -426,7 +433,7 @@ func (s *Server) StartGC() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				err := GCHistoryBinlog(s.boltdb, binlogNamespace, s.gc)
+				err := GCHistoryBinlog(s.storage, s.gc)
 				if err != nil {
 					log.Error("GC binlog error:", errors.ErrorStack(err))
 				}
@@ -527,5 +534,8 @@ func (s *Server) Close() {
 	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
 		log.Error(errors.ErrorStack(err))
 	}
-	s.boltdb.Close()
+
+	// close stores
+	s.storage.Meta().Close()
+	s.storage.Close()
 }

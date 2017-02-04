@@ -3,6 +3,7 @@ package store
 import (
 	"github.com/boltdb/bolt"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 // BoltStore wraps BoltDB as Store
@@ -11,11 +12,12 @@ type BoltStore struct {
 }
 
 // NewBoltStore return a bolt store
-func NewBoltStore(path string, namespaces [][]byte) (Store, error) {
+func NewBoltStore(path string, namespaces [][]byte, nosync bool) (Store, error) {
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	db.NoSync = nosync
 
 	tx, err := db.Begin(true)
 	if err != nil {
@@ -52,6 +54,8 @@ func (s *BoltStore) EndKey(namespace []byte) ([]byte, error) {
 			// key only valid for the life of the transaction, so make a copy
 			ret = make([]byte, len(key))
 			copy(ret, key)
+		} else {
+			ret = codec.EncodeInt([]byte{}, 0)
 		}
 		return nil
 	})
@@ -76,7 +80,6 @@ func (s *BoltStore) Get(namespace []byte, key []byte) ([]byte, error) {
 		value = append(value, v...)
 		return nil
 	})
-
 	return value, errors.Trace(err)
 }
 

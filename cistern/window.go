@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -13,22 +12,22 @@ var windowKeyName = []byte("window")
 // DepositWindow holds the upper and lower boundary of the window
 // The value of lower boundary should be persisted to store.
 type DepositWindow struct {
-	upper int64
-	lower int64
-	bolt  store.Store
+	upper   int64
+	lower   int64
+	storage *BinlogStorage
 }
 
 // NewDepositWindow return an instance of DepositWindow
-func NewDepositWindow(s store.Store) (*DepositWindow, error) {
+func NewDepositWindow(s *BinlogStorage) (*DepositWindow, error) {
 	l, u, err := loadMark(s)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &DepositWindow{
-		upper: u,
-		lower: l,
-		bolt:  s,
+		upper:   u,
+		lower:   l,
+		storage: s,
 	}, nil
 }
 
@@ -55,7 +54,7 @@ func (d *DepositWindow) SaveUpper(val int64) {
 // PersistLower updates the lower boundary of window, and write it into storage.
 func (d *DepositWindow) PersistLower(val int64) error {
 	data := codec.EncodeInt([]byte{}, val)
-	err := d.bolt.Put(windowNamespace, windowKeyName, data)
+	err := d.storage.Meta().Put(windowNamespace, windowKeyName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -64,9 +63,9 @@ func (d *DepositWindow) PersistLower(val int64) error {
 }
 
 // loadMark loads the lower upper boundary of the window from store.
-func loadMark(s store.Store) (int64, int64, error) {
+func loadMark(s *BinlogStorage) (int64, int64, error) {
 	var l, u int64
-	data, err := s.Get(windowNamespace, windowKeyName)
+	data, err := s.Meta().Get(windowNamespace, windowKeyName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return 0, 0, nil
@@ -80,7 +79,7 @@ func loadMark(s store.Store) (int64, int64, error) {
 		return 0, 0, errors.Trace(err)
 	}
 
-	ts, err := s.EndKey(binlogNamespace)
+	ts, err := s.EndKey()
 	if err != nil {
 		return l, 0, errors.Trace(err)
 	}

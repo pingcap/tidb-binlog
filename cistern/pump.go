@@ -11,7 +11,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -21,7 +20,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanSize int64 = 16 << 10
+const defaultBinlogChanLength int64 = 16 << 12
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -37,7 +36,7 @@ type Pump struct {
 	conn      *grpc.ClientConn
 	client    pb.PumpClient
 	current   pb.Pos
-	boltdb    store.Store
+	storage   *BinlogStorage
 	tiStore   kv.Storage
 	window    *DepositWindow
 	timeout   time.Duration
@@ -60,7 +59,8 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, pos pb.Pos, boltdb store.Store, tiStore kv.Storage) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, pos pb.Pos,
+	s *BinlogStorage, tiStore kv.Storage) (*Pump, error) {
 	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to connect to pump node(%s) at host(%s)", nodeID, host)
@@ -71,11 +71,11 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		conn:       conn,
 		client:     pb.NewPumpClient(conn),
 		current:    pos,
-		boltdb:     boltdb,
+		storage:    s,
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, defaultBinlogChanSize),
+		binlogChan: make(chan *binlogEntity, defaultBinlogChanLength),
 	}, nil
 }
 
@@ -159,7 +159,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
 			binlogNums++
 			if entity.commitTS > maxCommitTs {
-				if binlogNums < saveBatch {
+				if binlogNums < batchInterval {
 					continue
 				}
 				binlogNums = 0
@@ -288,7 +288,7 @@ func (p *Pump) saveItems(items map[int64]*pb.Binlog) error {
 
 func (p *Pump) store(items map[int64]*pb.Binlog) error {
 	boundary := p.window.LoadLower()
-	b := p.boltdb.NewBatch()
+	b := p.storage.NewBatch()
 	var (
 		errorBinlogs int
 		itemCnt      int
@@ -305,25 +305,24 @@ func (p *Pump) store(items map[int64]*pb.Binlog) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		key := codec.EncodeInt([]byte{}, commitTS)
 		data, err := encodePayload(payload)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		b.Put(key, data)
-		if itemCnt >= 1000 {
-			err := p.boltdb.Commit(binlogNamespace, b)
+		b.Put(commitTS, data)
+		if itemCnt >= batchSize {
+			err := p.storage.Commit(b)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			errorBinlogCount.Add(float64(errorBinlogs))
 			errorBinlogs = 0
 			itemCnt = 0
-			b = p.boltdb.NewBatch()
+			b = p.storage.NewBatch()
 		}
 	}
 	if itemCnt > 0 {
-		err := p.boltdb.Commit(binlogNamespace, b)
+		err := p.storage.Commit(b)
 		errorBinlogCount.Add(float64(errorBinlogs))
 		if err != nil {
 			return errors.Trace(err)
@@ -379,7 +378,7 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 }
 
 func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
-	b := p.boltdb.NewBatch()
+	b := p.storage.Meta().NewBatch()
 	for id, job := range jobs {
 		if job.State == model.JobCancelled {
 			continue
@@ -391,7 +390,7 @@ func (p *Pump) storeDDLJobs(jobs map[int64]*model.Job) error {
 		key := codec.EncodeInt([]byte{}, id)
 		b.Put(key, payload)
 	}
-	err := p.boltdb.Commit(ddlJobNamespace, b)
+	err := p.storage.Meta().Commit(ddlJobNamespace, b)
 	return errors.Trace(err)
 }
 
@@ -404,7 +403,7 @@ func (p *Pump) updateSavepoint(pos pb.Pos) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = p.boltdb.Put(savepointNamespace, []byte(p.nodeID), data)
+	err = p.storage.Meta().Put(savepointNamespace, []byte(p.nodeID), data)
 	if err != nil {
 		return errors.Trace(err)
 	}

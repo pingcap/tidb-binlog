@@ -38,7 +38,7 @@ var _ = Suite(&testStoreSuite{})
 type testStoreSuite struct{}
 
 func (s *testStoreSuite) TestBlot(c *C) {
-	store, err := NewBoltStore("./test", [][]byte{windowNamespace, binlogNamespace})
+	store, err := NewBoltStore("./test", [][]byte{windowNamespace, binlogNamespace}, false)
 	c.Assert(err, IsNil)
 
 	defer func() {
