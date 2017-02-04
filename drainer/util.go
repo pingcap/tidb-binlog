@@ -13,6 +13,7 @@ import (
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
+	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
 )
 
@@ -31,7 +32,7 @@ func InitLogger(cfg *Config) {
 	}
 }
 
-func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) error {
+func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
 	if len(sqls) == 0 {
 		return nil
 	}
@@ -42,9 +43,9 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, retry bool) er
 		txnHistogram.Observe(time.Since(beginTime).Seconds())
 	}()
 
-	retryCount := 1
-	if retry {
-		retryCount = maxRetryCount
+	retryCount := maxDMLRetryCount
+	if isDDL {
+		retryCount = maxDDLRetryCount
 	}
 
 	var err error
@@ -100,11 +101,15 @@ func ignoreDDLError(err error) bool {
 	}
 
 	errCode := terror.ErrCode(mysqlErr.Number)
+	// we can get error code from:
+	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
+	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
+	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
 	switch errCode {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(),
-		infoschema.ErrIndexExists.Code(), tddl.ErrCantDropFieldOrKey.Code():
+		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
+		tddl.ErrCantDropFieldOrKey.Code(), tmysql.ErrDupKeyName:
 		return true
 	default:
 		return false
