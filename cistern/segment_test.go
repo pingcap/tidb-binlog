@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/store"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -122,6 +123,20 @@ func testEndKeys(c *C, ts int64) {
 	for i := range exceptedKey {
 		c.Assert(exceptedKey[i], Equals, key[i])
 	}
+}
+
+func testGColdBinLog(c *C, keys []int64) {
+	err := GCHistoryBinlog(testDS, 2*time.Hour*24)
+	c.Check(err, IsNil)
+	// check
+	for i := 0; i <= 7; i++ {
+		_, err = testDS.Get(keys[i])
+		c.Check(errors.IsNotFound(err), IsTrue)
+	}
+
+	_, err = testDS.Get(keys[8])
+	c.Assert(err, IsNil)
+	mustCheckSegments(c, 1)
 }
 
 func mustCheckSegments(c *C, count int) {

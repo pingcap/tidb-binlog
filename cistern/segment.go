@@ -31,7 +31,7 @@ type BinlogStorage struct {
 	}
 }
 
-// NewBinlogStorage initials the BinlogStorage
+// NewBinlogStorage initializes the BinlogStorage
 func NewBinlogStorage(metaStore store.Store, dataDir string, nosync bool) (*BinlogStorage, error) {
 	bs := &BinlogStorage{
 		metaStore: metaStore,
@@ -68,7 +68,7 @@ func NewBinlogStorage(metaStore store.Store, dataDir string, nosync bool) (*Binl
 	return bs, nil
 }
 
-// Meta returns the BinlogStore's meta fd
+// Meta returns the BinlogStore's meta store
 func (bs *BinlogStorage) Meta() store.Store {
 	return bs.metaStore
 }
@@ -112,7 +112,7 @@ func (bs *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 		return valid, err
 	}
 
-	var segments = make(map[int64]store.Store)
+	segments := make(map[int64]store.Store)
 	bs.mu.Lock()
 	var segmentKeys = make(segmentRange, 0, len(bs.mu.segmentKeys))
 	for _, key := range bs.mu.segmentKeys {
@@ -132,7 +132,7 @@ func (bs *BinlogStorage) Scan(startTS int64, f func([]byte, []byte) (bool, error
 			if !ok {
 				return errors.NotFoundf("segment %d is corruption", segmentKey)
 			}
-			// we can view the isEnd flag to determind to scan next boltdb
+			// we can view the isEnd flag to determine to scan next boltdb
 			err := segment.Scan(binlogNamespace, key, scanFunc)
 			if err != nil || isEnd {
 				return errors.Trace(err)
@@ -195,7 +195,7 @@ func (bs *BinlogStorage) Commit(b *Batch) error {
 	return nil
 }
 
-// Purge gcs the binlogs
+// Purge removes the old binlogs
 func (bs *BinlogStorage) Purge(ts int64) error {
 	startSegmentKey := bs.segmentKey(ts)
 	log.Infof("purge boltdb files that before [%d]", startSegmentKey)

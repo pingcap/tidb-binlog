@@ -98,7 +98,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		segmentNamespace,
 		savepointNamespace,
 		ddlJobNamespace,
-	}, cfg.NoSync)
+	}, false)
 	if err != nil {
 		return nil, errors.Annotatef(err, "failed to open BoltDB store in dir(%s)", cfg.DataDir)
 	}
