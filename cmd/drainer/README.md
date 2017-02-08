@@ -15,7 +15,7 @@ Usage of drainer:
   -config string
         path to the configuration file
   -data-dir string
-        path to the data directory of boltDB (default "data.drainer")
+        drainer data directory path (default data.drainer)
   -db-host string
         host of target database (default "127.0.0.1")
   -db-password string
@@ -28,8 +28,6 @@ Usage of drainer:
         target db type: mysql, postgresql (default "mysql")
   -detect-interval int
         the interval time (in seconds) of detect pumps' status (default 10)
-  -gc int
-        an integer value to control expiry date of the binlog data, indicates for how long (in minutes) the binlog data would be stored. default value is 0, means binlog data would never be removed
   -ignore-schemas string
         disable sync the meta schema (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql")
   -log-file string
