@@ -9,9 +9,9 @@ import (
 
 // HTTPStatus exposes current status of all pumps via HTTP
 type HTTPStatus struct {
-	LatestBinlog map[string]binlog.Pos `json:"LatestBinlog"`
-	CommitTS     int64                 `json:"CommitTS"`
-	ErrMsg       string                `json:"ErrMsg"`
+	BinlogPos map[string]binlog.Pos `json:"LatestBinlog"`
+	CommitTS  int64                 `json:"CommitTS"`
+	ErrMsg    string                `json:"ErrMsg"`
 }
 
 // Status implements http.ServeHTTP interface

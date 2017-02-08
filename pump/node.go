@@ -183,6 +183,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
+				// RefreshNode would carry lastBinlogFile infomation
 				if err := p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL); err != nil {
 					errc <- errors.Trace(err)
 				}

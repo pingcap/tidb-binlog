@@ -25,6 +25,8 @@ import (
 
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
+
+// use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
 
 // Server implements the gRPC interface,
@@ -401,7 +403,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	// get all pumps' latest binlog position
-	latestBinlog := make(map[string]binlog.Pos)
+	binlogPos := make(map[string]binlog.Pos)
 	for _, st := range status {
 		seq, err := parseBinlogName(path.Base(st.LatestBinlogFile))
 		if err != nil {
@@ -410,7 +412,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 				ErrMsg: err.Error(),
 			}
 		}
-		latestBinlog[st.NodeID] = binlog.Pos{
+		binlogPos[st.NodeID] = binlog.Pos{
 			Suffix: seq,
 		}
 	}
@@ -425,8 +427,8 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	commitTS := int64(version.Ver)
 
 	return &HTTPStatus{
-		LatestBinlog: latestBinlog,
-		CommitTS:     commitTS,
+		BinlogPos: binlogPos,
+		CommitTS:  commitTS,
 	}
 }
 
