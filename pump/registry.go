@@ -7,7 +7,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -156,35 +155,29 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 
 	aliveKey := r.prefixed(prefix, nodeID, "alive")
 	// try to touch alive state of node, update ttl
-	if err := r.client.UpdateOrCreate(ctx, aliveKey, "", ttl); err != nil {
+	if err := r.client.UpdateOrCreate(ctx, aliveKey, latestBinlogFile, ttl); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func nodeStatusFromEtcdNode(nodeID string, node *etcd.Node) (*NodeStatus, error) {
+func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	status := &NodeStatus{}
+	latestFileName := fileName(0)
 	var isAlive bool
-	savepoints := make(map[string]binlog.Pos)
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
 			if err := json.Unmarshal(n.Value, &status); err != nil {
-				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", nodeID)
+				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
 			}
 		case "alive":
 			isAlive = true
-		case "savepoints":
-			for cid, nn := range n.Childs {
-				var pos binlog.Pos
-				if err := json.Unmarshal(nn.Value, &pos); err != nil {
-					return nil, errors.Annotatef(err, "error unmarshal savepoint of cluster(%s) in node(%s)", cid, nodeID)
-				}
-				savepoints[cid] = pos
-			}
+			latestFileName = string(n.Value)
 		}
 	}
 	status.IsAlive = isAlive
+	status.LatestBinlogFile = latestFileName
 	return status, nil
 }
 

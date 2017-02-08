@@ -41,8 +41,10 @@ type Node interface {
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
-	// query all living cistern from etcd, and notifies them
+	// Notify queries all living cistern from etcd, and notifies them
 	Notify(ctx context.Context) error
+	// Nodes returns all pump nodes
+	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
 }
 
 type pumpNode struct {
@@ -55,9 +57,10 @@ type pumpNode struct {
 
 // NodeStatus describes the status information of a node in etcd
 type NodeStatus struct {
-	NodeID  string
-	Host    string
-	IsAlive bool
+	NodeID           string
+	Host             string
+	IsAlive          bool
+	LatestBinlogFile string
 }
 
 // NewPumpNode return a pumpNode obj that initialized by server config
@@ -158,6 +161,10 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *pumpNode) NodesStatus(ctx context.Context) ([]*NodeStatus, error) {
+	return p.Nodes(ctx, nodePrefix)
 }
 
 func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {

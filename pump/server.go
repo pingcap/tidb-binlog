@@ -25,6 +25,7 @@ import (
 
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
+var latestBinlogFile = fileName(0)
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -303,6 +304,8 @@ func (s *Server) Start() error {
 	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
+
+	http.HandleFunc("/status", s.Status)
 	go http.Serve(httpL, nil)
 
 	return m.Serve()
@@ -380,6 +383,49 @@ func (s *Server) startMetrics() {
 		return
 	}
 	s.metrics.Start(s.ctx)
+}
+
+func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
+	s.PumpStatus().Status(w, r)
+}
+
+func (s *Server) PumpStatus() *HTTPStatus {
+	status, err := s.node.NodesStatus(s.ctx)
+	if err != nil {
+		log.Errorf("get pumps' status error %v", err)
+		return &HTTPStatus{
+			ErrMsg: err.Error(),
+		}
+	}
+
+	// get all pumps' latest binlog position
+	latestBinlog := make(map[string]binlog.Pos)
+	for _, st := range status {
+		seq, err := parseBinlogName(path.Base(st.LatestBinlogFile))
+		if err != nil {
+			log.Errorf("parse file name, error %v", err)
+			return &HTTPStatus{
+				ErrMsg: err.Error(),
+			}
+		}
+		latestBinlog[st.NodeID] = binlog.Pos{
+			Suffix: seq,
+		}
+	}
+	// get newest ts from pd
+	version, err := s.tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get ts from pd, error %v", err)
+		return &HTTPStatus{
+			ErrMsg: err.Error(),
+		}
+	}
+	commitTS := int64(version.Ver)
+
+	return &HTTPStatus{
+		LatestBinlog: latestBinlog,
+		CommitTS:     commitTS,
+	}
 }
 
 // Close gracefully releases resource of pump server
