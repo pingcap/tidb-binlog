@@ -385,10 +385,12 @@ func (s *Server) startMetrics() {
 	s.metrics.Start(s.ctx)
 }
 
+// Status exposes pumps' status to HTTP handler.
 func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 	s.PumpStatus().Status(w, r)
 }
 
+// PumpStatus returns all pumps' status.
 func (s *Server) PumpStatus() *HTTPStatus {
 	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {

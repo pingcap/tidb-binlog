@@ -125,7 +125,7 @@ func (p *pumpNode) Register(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return nil
+	return p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL)
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
