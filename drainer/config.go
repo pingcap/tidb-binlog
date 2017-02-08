@@ -52,12 +52,8 @@ type Config struct {
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
-	GC              int             `toml:"gc" json:"gc"`
 	LogFile         string          `toml:"log-file" json:"log-file"`
 	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
-	NoSync          bool            `toml:"nosync" json:"nosync"`
-	BatchInterval   int             `toml:"batch-interval" json:"batch-interval"`
-	BatchSize       int             `toml:"batch-size" json:"batch-size"`
 	ExecutorCfg     *ExecutorConfig `toml:"executor" json:"executor"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
@@ -81,7 +77,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
-	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "path to the data directory of boltDB")
+	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
@@ -89,7 +85,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
-	fs.IntVar(&cfg.GC, "gc", 0, "an integer value to control expiry date of the binlog data, indicates for how long (in minutes) the binlog data would be stored. default value is 0, means binlog data would never be removed")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.IntVar(&cfg.ExecutorCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
