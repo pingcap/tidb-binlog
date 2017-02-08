@@ -50,7 +50,6 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 	s.tables = make(map[int64]*model.TableInfo)
 	s.ignoreSchema = make(map[int64]struct{})
 
-	var err error
 	for _, job := range jobs {
 		if job.State == model.JobCancelled {
 			continue
@@ -64,7 +63,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				continue
 			}
 
-			err = s.CreateSchema(schema)
+			err := s.CreateSchema(schema)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -119,7 +118,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err = s.CreateTable(schema, table)
+			err := s.CreateTable(schema, table)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -182,7 +181,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err = s.ReplaceTable(tbInfo)
+			err := s.ReplaceTable(tbInfo)
 			if err != nil {
 				return errors.Trace(err)
 			}

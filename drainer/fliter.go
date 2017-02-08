@@ -4,7 +4,7 @@ import (
 	"regexp"
 )
 
-func (d *Drainer) genRegexMap() {
+func (d *Executor) genRegexMap() {
 	for _, db := range d.cfg.DoDBs {
 		if db[0] != '~' {
 			continue
@@ -29,7 +29,7 @@ func (d *Drainer) genRegexMap() {
 }
 
 // whiteFilter whitelist filtering
-func (d *Drainer) whiteFilter(stbs []TableName) []TableName {
+func (d *Executor) whiteFilter(stbs []TableName) []TableName {
 	var tbs []TableName
 	if len(d.cfg.DoTables) == 0 && len(d.cfg.DoDBs) == 0 {
 		return stbs
@@ -45,7 +45,7 @@ func (d *Drainer) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-func (d *Drainer) skipDML(schema string, table string) bool {
+func (d *Executor) skipDML(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = d.whiteFilter(tbs)
 	if len(tbs) == 0 {
@@ -54,7 +54,7 @@ func (d *Drainer) skipDML(schema string, table string) bool {
 	return false
 }
 
-func (d *Drainer) skipDDL(schema, table string) bool {
+func (d *Executor) skipDDL(schema, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = d.whiteFilter(tbs)
 	if len(tbs) == 0 {
@@ -63,14 +63,14 @@ func (d *Drainer) skipDDL(schema, table string) bool {
 	return false
 }
 
-func (d *Drainer) matchString(pattern string, t string) bool {
+func (d *Executor) matchString(pattern string, t string) bool {
 	if re, ok := d.reMap[pattern]; ok {
 		return re.MatchString(t)
 	}
 	return pattern == t
 }
 
-func (d *Drainer) matchDB(patternDBS []string, a string) bool {
+func (d *Executor) matchDB(patternDBS []string, a string) bool {
 	for _, b := range patternDBS {
 		if d.matchString(b, a) {
 			return true
@@ -79,7 +79,7 @@ func (d *Drainer) matchDB(patternDBS []string, a string) bool {
 	return false
 }
 
-func (d *Drainer) matchTable(patternTBS []TableName, tb TableName) bool {
+func (d *Executor) matchTable(patternTBS []TableName, tb TableName) bool {
 	for _, ptb := range patternTBS {
 		if d.matchString(ptb.Table, tb.Table) && d.matchString(ptb.Schema, tb.Schema) {
 			return true

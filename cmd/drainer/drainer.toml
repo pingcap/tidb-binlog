@@ -1,35 +1,48 @@
 # drainer Configuration.
 
+# addr (i.e. 'host:port') to listen on for drainer connections
+addr = "127.0.0.1:8249"
+
+# the interval time (in seconds) of detect pumps' status
+detect-interval = 10
+
+# path to the data directory of kv store
+data-dir = "data.drainer"
+
+# an integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored
+# (default value is 0, means binlog data would never be removed)
+gc = 0
+
+# a comma separated list of PD endpoints
+pd-urls = "http://127.0.0.1:2379"
+
+# Executor Configuration.
+[executor]
+
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
-# drainer's data directory path
-data-dir = "data.drainer"
-
 # number of binlog events in a transaction batch
 txn-batch = 1
+
+# work count to execute binlogs
+worker-count = 1
+
+# the downstream mysql protocol database
+[executor.to]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 3306
 
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regex expression , start with '~' declare use regex expression.
 #
 #replicate-do-db = ["~^b.*","s1"]
-#[[replicate-do-table]]
+#[[executor.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "log"
 
-#[[replicate-do-table]]
+#[[executor.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "~^a.*"
-
-# pprof addr
-pprof-addr = ":10081"
-
-# the host and port of cistern
-cistern-addr = "127.0.0.1:8249"
-
-# the downstream mysql protocol database
-[to]
-host = "127.0.0.1"
-user = "root"
-password = ""
-port = 3306

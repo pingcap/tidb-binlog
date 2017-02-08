@@ -10,6 +10,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/siddontang/go/ioutil2"
 )
 
@@ -24,13 +25,13 @@ type Meta interface {
 	Load() error
 
 	// Save saves meta information.
-	Save(pos int64) error
+	Save(int64, map[string]pb.Pos) error
 
 	// Check checks whether we should save meta.
 	Check() bool
 
 	// Pos gets position information.
-	Pos() int64
+	Pos() (int64, map[string]pb.Pos)
 }
 
 // LocalMeta is local meta struct.
@@ -40,7 +41,8 @@ type localMeta struct {
 	name     string
 	saveTime time.Time
 
-	BinLogPos int64 `toml:"binlog-pos" json:"binlog-pos"`
+	CommitTS int64             `toml:"commitTS" json:"commitTS"`
+	Suffixs  map[string]uint64 `toml:"suffixs" json:"suffixs"`
 }
 
 // NewLocalMeta creates a new LocalMeta.
@@ -64,11 +66,20 @@ func (lm *localMeta) Load() error {
 }
 
 // Save implements Meta.Save interface.
-func (lm *localMeta) Save(pos int64) error {
+func (lm *localMeta) Save(ts int64, poss map[string]pb.Pos) error {
 	lm.Lock()
 	defer lm.Unlock()
 
-	lm.BinLogPos = pos
+	suffixs := make(map[string]uint64)
+	for nodeID, pos := range poss {
+		suffixs[nodeID] = 0
+		if pos.Suffix > 2 {
+			suffixs[nodeID] = pos.Suffix - 2
+		}
+	}
+
+	lm.CommitTS = ts
+	lm.Suffixs = suffixs
 
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
@@ -101,13 +112,21 @@ func (lm *localMeta) Check() bool {
 }
 
 // Pos implements Meta.Pos interface.
-func (lm *localMeta) Pos() int64 {
+func (lm *localMeta) Pos() (int64, map[string]pb.Pos) {
 	lm.RLock()
 	defer lm.RUnlock()
 
-	return lm.BinLogPos
+	poss := make(map[string]pb.Pos)
+	for nodeID, suffix := range lm.Suffixs {
+		poss[nodeID] = pb.Pos{
+			Suffix: suffix,
+			Offset: 0,
+		}
+	}
+	return lm.CommitTS, poss
 }
 
 func (lm *localMeta) String() string {
-	return fmt.Sprintf("binlog %s pos = %d", lm.name, lm.Pos())
+	ts, poss := lm.Pos()
+	return fmt.Sprintf("binlog %s commitTS = %d positions = %+v", lm.name, ts, poss)
 }
