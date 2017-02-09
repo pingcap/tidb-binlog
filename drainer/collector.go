@@ -203,14 +203,12 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	return int64(version.Ver)
 }
 
-func (c *Collector) publish(upper, lower int64) error {
+func (c *Collector) publish(upper, lower int64) {
 	oldLower := c.window.LoadLower()
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
-		if err := c.window.PersistLower(lower); err != nil {
-			return errors.Trace(err)
-		}
+		c.window.SaveLower(lower)
 		c.publishBinlogs(lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
@@ -218,7 +216,6 @@ func (c *Collector) publish(upper, lower int64) error {
 		c.window.SaveUpper(upper)
 		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
-	return nil
 }
 
 // select min of all pumps' latestValidCommitTS
@@ -256,6 +253,10 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 }
 
 func (c *Collector) publishBinlogs(lower int64) {
+	// multiple ways sort:
+	// 1. get multiple way sorted binlogs
+	// 2. use heap to merge sort
+	// todo: use multiple goroutines to collect sorted binlogs
 	bss := make(map[string]binlogItems)
 	binlogOffsets := make(map[string]int)
 	for id, p := range c.pumps {
@@ -271,7 +272,7 @@ func (c *Collector) publishBinlogs(lower int64) {
 	item := c.bh.pop()
 	for item != nil {
 		c.executor.AddToExectorChan(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, then delete it from map
+		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, then delete it from bss
 		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
 			delete(bss, item.nodeID)
 		} else {

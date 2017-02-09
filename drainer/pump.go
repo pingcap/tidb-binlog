@@ -28,17 +28,17 @@ type Pump struct {
 	conn      *grpc.ClientConn
 	client    pb.PumpClient
 	current   pb.Pos
-	// use heap to store binlogs in memory
+	// store binlogs in a heap
 	bh      *binlogHeap
 	tiStore kv.Storage
 	window  *DepositWindow
 	timeout time.Duration
 
-	// pullBinlogs sends the binlogs to publish by it
+	// pullBinlogs sends the binlogs to publish function by this channel
 	binlogChan chan *pb.Binlog
 	// the latestTS from tso
 	latestTS int64
-	// binlogs are complete before latestValidCommitTS
+	// binlogs are complete before this latestValidCommitTS
 	latestValidCommitTS int64
 	mu                  struct {
 		sync.Mutex
@@ -79,7 +79,7 @@ func (p *Pump) Close() {
 
 // StartCollect starts to process the pump's binlogs
 // 1. pullBinlogs pulls binlogs from pump, match p+c binlog by using prewriteItems map
-// 2. publish query the non-match pre binlog and forwards the lower boundary, store the binlogs
+// 2. publish query the non-match pre binlog and forwards the lower boundary, push them into a heap
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
@@ -149,7 +149,10 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.StartTs)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
-			// if the commitTs is larger than maxCommitTs, we would store all binlogs that already matched, lateValidCommitTs and savpoint
+			// if the commitTs is larger than maxCommitTs,
+			// we would publish all binlogs:
+			// 1. push binlog that matched into a heap
+			// 2. update lateValidCommitTs
 			if entity.CommitTs > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
 				maxCommitTs = entity.CommitTs
@@ -241,6 +244,7 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 		return errors.Trace(err)
 	}
 
+	// this judgment seems to be unnecessary, but to ensure safety
 	latest := atomic.LoadInt64(&p.latestValidCommitTS)
 	if latest < lastValidCommitTS {
 		atomic.StoreInt64(&p.latestValidCommitTS, lastValidCommitTS)
@@ -256,16 +260,12 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 		return errors.Trace(err)
 	}
 
-	err = p.putIntoHeap(items)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	p.putIntoHeap(items)
 	binlogCounter.Add(float64(len(items)))
 	return nil
 }
 
-func (p *Pump) putIntoHeap(items map[int64]*binlogItem) error {
+func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -279,7 +279,6 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) error {
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
-	return nil
 }
 
 func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
@@ -399,7 +398,7 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
-				return pos, errors.Trace(err)
+				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- b:
 			}
 		}

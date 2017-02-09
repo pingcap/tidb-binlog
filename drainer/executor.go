@@ -91,6 +91,8 @@ func (d *Executor) Start(jobs []*model.Job) error {
 	return nil
 }
 
+// the binlog maybe not complete before the initCommitTS, so we should ignore them.
+// at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
 func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
 	var b *binlogItem
@@ -131,6 +133,7 @@ func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
+		// find all ddl job that need to reconstruct local schemas
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
@@ -374,7 +377,6 @@ func (d *Executor) addJob(job *job) {
 }
 
 func (d *Executor) savePoint(ts int64, poss map[string]pb.Pos) {
-	// todo: fix save point
 	err := d.meta.Save(ts, poss)
 	if err != nil {
 		log.Fatalf("[write save point]%d[error]%v", ts, err)
@@ -630,8 +632,6 @@ func (d *Executor) AddToExectorChan(b *binlogItem) {
 // Close closes syncer.
 func (d *Executor) Close() {
 	d.cancel()
-
 	d.wg.Wait()
-
 	closeDBs(d.toDBs...)
 }

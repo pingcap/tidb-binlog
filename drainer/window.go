@@ -35,9 +35,3 @@ func (d *DepositWindow) LoadUpper() int64 {
 func (d *DepositWindow) SaveUpper(val int64) {
 	atomic.StoreInt64(&d.upper, val)
 }
-
-// PersistLower updates the lower boundary of window, and write it into storage.
-func (d *DepositWindow) PersistLower(val int64) error {
-	atomic.StoreInt64(&d.lower, val)
-	return nil
-}
