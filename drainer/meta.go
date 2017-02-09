@@ -41,8 +41,9 @@ type localMeta struct {
 	name     string
 	saveTime time.Time
 
-	CommitTS int64             `toml:"commitTS" json:"commitTS"`
-	Suffixs  map[string]uint64 `toml:"suffixs" json:"suffixs"`
+	CommitTS int64 `toml:"commitTS" json:"commitTS"`
+	// drainer only stores the binlog file suffix
+	Suffixs map[string]uint64 `toml:"suffixs" json:"suffixs"`
 }
 
 // NewLocalMeta creates a new LocalMeta.
@@ -72,6 +73,9 @@ func (lm *localMeta) Save(ts int64, poss map[string]pb.Pos) error {
 
 	suffixs := make(map[string]uint64)
 	for nodeID, pos := range poss {
+		// for safe restart, we should forward two binlog files
+		// make sure drainer can get binlogs larger than commitTS
+		// this is a simple way , if meet problem we would replace by an accurate algorithm
 		suffixs[nodeID] = 0
 		if pos.Suffix > 2 {
 			suffixs[nodeID] = pos.Suffix - 2
