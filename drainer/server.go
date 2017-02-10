@@ -27,6 +27,7 @@ var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
+var maxHeapSize int = 16 << 12
 
 // Server implements the gRPC interface,
 // and maintains the runtime status

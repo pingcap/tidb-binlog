@@ -63,7 +63,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		conn:       conn,
 		current:    pos,
 		client:     pb.NewPumpClient(conn),
-		bh:         newBinlogHeap(),
+		bh:         newBinlogHeap(maxHeapSize),
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
@@ -275,7 +275,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
 				commitTS, item)
 		}
-		p.bh.push(item)
+		p.bh.push(p.ctx, item)
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
@@ -343,7 +343,7 @@ func (p *Pump) collectBinlogs(maxTS int64) binlogItems {
 	}
 
 	if item != nil {
-		p.bh.push(item)
+		p.bh.push(p.ctx, item)
 	}
 	return bs
 }

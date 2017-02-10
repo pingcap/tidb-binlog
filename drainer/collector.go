@@ -77,7 +77,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, e *Executor, 
 		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:    cfg.PumpTimeout,
 		pumps:      make(map[string]*Pump),
-		bh:         newBinlogHeap(),
+		bh:         newBinlogHeap(maxHeapSize),
 		window:     w,
 		executor:   e,
 		meta:       m,
@@ -145,7 +145,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
-	c.publish(windowUpper, windowLower)
+	c.publish(ctx, windowUpper, windowLower)
 	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
@@ -203,13 +203,13 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	return int64(version.Ver)
 }
 
-func (c *Collector) publish(upper, lower int64) {
+func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 	oldLower := c.window.LoadLower()
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
 		c.window.SaveLower(lower)
-		c.publishBinlogs(lower)
+		c.publishBinlogs(ctx, lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
@@ -252,7 +252,7 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	return jobs, nil
 }
 
-func (c *Collector) publishBinlogs(lower int64) {
+func (c *Collector) publishBinlogs(ctx context.Context, lower int64) {
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
@@ -265,7 +265,7 @@ func (c *Collector) publishBinlogs(lower int64) {
 			bss[id] = bs
 			binlogOffsets[id] = 1
 			// first push the first item into heap every pump
-			c.bh.push(bs[0])
+			c.bh.push(ctx, bs[0])
 		}
 	}
 
@@ -277,7 +277,7 @@ func (c *Collector) publishBinlogs(lower int64) {
 			delete(bss, item.nodeID)
 		} else {
 			// push next item into heap and increase the offset
-			c.bh.push(bss[item.nodeID][binlogOffsets[item.nodeID]])
+			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
 			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
 		}
 		item = c.bh.pop()

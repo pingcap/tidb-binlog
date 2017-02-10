@@ -3,9 +3,16 @@ package drainer
 import (
 	"container/heap"
 	"sync"
+	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
+)
+
+var (
+	pushRetryTime = 10 * time.Millisecond
 )
 
 type binlogItem struct {
@@ -49,19 +56,34 @@ func (b *binlogItems) Pop() interface{} {
 
 type binlogHeap struct {
 	sync.Mutex
-	bh heap.Interface
+	bh   heap.Interface
+	size int
 }
 
-func newBinlogHeap() *binlogHeap {
+func newBinlogHeap(size int) *binlogHeap {
 	return &binlogHeap{
-		bh: &binlogItems{},
+		bh:   &binlogItems{},
+		size: size,
 	}
 }
 
-func (b *binlogHeap) push(item *binlogItem) {
-	b.Lock()
-	heap.Push(b.bh, item)
-	b.Unlock()
+func (b *binlogHeap) push(ctx context.Context, item *binlogItem) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			b.Lock()
+			if b.bh.Len() == b.size {
+				b.Unlock()
+				time.Sleep(pushRetryTime)
+				continue
+			}
+			b.Unlock()
+			heap.Push(b.bh, item)
+			return
+		}
+	}
 }
 
 func (b *binlogHeap) pop() *binlogItem {

@@ -1,0 +1,31 @@
+Searching 1239 files for "newBinlogHeap" (whole word)
+
+/Users/ericcartman/Work/go/src/github.com/pingcap/tidb-binlog/drainer/collector.go:
+   78  		timeout:    cfg.PumpTimeout,
+   79  		pumps:      make(map[string]*Pump),
+   80: 		bh:         newBinlogHeap(),
+   81  		window:     w,
+   82  		executor:   e,
+
+/Users/ericcartman/Work/go/src/github.com/pingcap/tidb-binlog/drainer/heap.go:
+   61  }
+   62  
+   63: func newBinlogHeap(size int64) *binlogHeap {
+   64  	return &binlogHeap{
+   65  		bh:   &binlogItems{},
+
+/Users/ericcartman/Work/go/src/github.com/pingcap/tidb-binlog/drainer/heap_test.go:
+   33  	}
+   34  
+   35: 	bh := newBinlogHeap()
+   36  	// test pop from empty heap
+   37  	c.Assert(bh.pop(), IsNil)
+
+/Users/ericcartman/Work/go/src/github.com/pingcap/tidb-binlog/drainer/pump.go:
+   64  		current:    pos,
+   65  		client:     pb.NewPumpClient(conn),
+   66: 		bh:         newBinlogHeap(),
+   67  		tiStore:    tiStore,
+   68  		window:     w,
+
+4 matches across 4 files
