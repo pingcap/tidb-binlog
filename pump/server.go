@@ -250,7 +250,7 @@ func (s *Server) Start() error {
 		if err := s.node.Unregister(s.ctx); err != nil {
 			log.Error(errors.ErrorStack(err))
 		}
-		return errors.Annotate(err, "fail to notify all living cistern")
+		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
 	// start heartbeat
@@ -308,7 +308,7 @@ func (s *Server) Start() error {
 	return m.Serve()
 }
 
-// gennerate rollback binlog can forward the cistern's latestCommitTs, and just be discarded without any side effects
+// gennerate rollback binlog can forward the drainer's latestCommitTs, and just be discarded without any side effects
 func (s *Server) genFakeBinlog() ([]byte, error) {
 	version, err := s.tiStore.CurrentVersion()
 	if err != nil {
@@ -350,7 +350,7 @@ func (s *Server) writeFakeBinlog() {
 	s.needGenBinlog = true
 }
 
-// we would generate binlog to forward the pump's latestCommitTs in cistern when there is no binlogs in this pump
+// we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog = true
 	for {

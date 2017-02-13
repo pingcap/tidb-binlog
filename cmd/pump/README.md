@@ -1,4 +1,4 @@
-## Pump
+## pump
 
 pump is a daemon that receives realtime binlog from tidb-server and writes in sequential disk files synchronously.
 

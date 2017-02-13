@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump cistern drainer fmt diff
+.PHONY: build test check update clean pump drainer fmt diff
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
@@ -22,8 +22,6 @@ FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/cistern.GitSHA=$(shell git rev-parse HEAD)"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.GitSHA=$(shell git rev-parse HEAD)"
 
@@ -36,13 +34,10 @@ all: dev install
 
 dev: check test build
 
-build: pump cistern drainer
+build: pump drainer
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
-
-cistern:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cistern cmd/cistern/main.go
 
 drainer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/drainer cmd/drainer/main.go

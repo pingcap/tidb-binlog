@@ -2,9 +2,6 @@ package drainer
 
 import (
 	"database/sql"
-	"io"
-	"os"
-	"path"
 	"regexp"
 	"sync"
 	"time"
@@ -22,40 +19,31 @@ var (
 	maxDMLRetryCount = 100
 	maxDDLRetryCount = 5
 
-	maxWaitGetJobTime = 5 * time.Minute
-	retryWaitTime     = 3 * time.Second
-	waitTime          = 10 * time.Millisecond
-	maxWaitTime       = 3 * time.Second
-	eventTimeout      = 3 * time.Second
-	statusTime        = 30 * time.Second
+	executionWaitTime    = 10 * time.Millisecond
+	maxExecutionWaitTime = 3 * time.Second
 )
 
-// Drainer converts tidb binlog to the specified DB sqls, and sync it to target DB
-type Drainer struct {
-	sync.Mutex
-
-	cfg *Config
-
+// Executor converts tidb binlog to the specified DB sqls, and sync it to target DB
+type Executor struct {
 	schema *Schema
 	meta   Meta
 
+	cfg *ExecutorConfig
+
 	translator translator.SQLTranslator
 
+	wg sync.WaitGroup
+
+	input chan *binlogItem
 	jobWg sync.WaitGroup
-	wg    sync.WaitGroup
-
-	input chan []byte
-
-	jLock sync.RWMutex
-	jobs  map[int64]*model.Job
 	jobCh []chan *job
 
-	toDBs         []*sql.DB
-	cisternClient pb.CisternClient
+	toDBs []*sql.DB
+
+	poss         map[string]pb.Pos
+	initCommitTS int64
 
 	ignoreSchemaNames map[string]struct{}
-
-	metrics *metricClient
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -63,34 +51,19 @@ type Drainer struct {
 	reMap map[string]*regexp.Regexp
 }
 
-// NewDrainer returns a Drainer instance
-func NewDrainer(cfg *Config, cisternClient pb.CisternClient) (*Drainer, error) {
-	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
-		return nil, err
-	}
+// NewExecutor returns a Drainer instance
+func NewExecutor(ctx context.Context, meta Meta, cfg *ExecutorConfig) (*Executor, error) {
+	executor := new(Executor)
+	executor.cfg = cfg
+	executor.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
+	executor.meta = meta
+	executor.input = make(chan *binlogItem, 1024*cfg.WorkerCount)
+	executor.jobCh = newJobChans(cfg.WorkerCount)
+	executor.reMap = make(map[string]*regexp.Regexp)
+	executor.ctx, executor.cancel = context.WithCancel(ctx)
+	executor.initCommitTS, executor.poss = meta.Pos()
 
-	drainer := new(Drainer)
-	drainer.cfg = cfg
-	drainer.cisternClient = cisternClient
-	drainer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
-	drainer.meta = NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
-	drainer.input = make(chan []byte, 1024*cfg.WorkerCount)
-	drainer.jobs = make(map[int64]*model.Job)
-	drainer.jobCh = newJobChans(cfg.WorkerCount)
-	drainer.ctx, drainer.cancel = context.WithCancel(context.Background())
-	drainer.reMap = make(map[string]*regexp.Regexp)
-
-	var metrics *metricClient
-	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
-		metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
-		}
-	}
-
-	drainer.metrics = metrics
-
-	return drainer, nil
+	return executor, nil
 }
 
 func newJobChans(count int) []chan *job {
@@ -103,29 +76,14 @@ func newJobChans(count int) []chan *job {
 }
 
 // Start starts to sync.
-func (d *Drainer) Start() error {
-	var err error
-	if d.cfg.InitCommitTS == 0 {
-		err = d.meta.Load()
-	} else {
-		err = d.meta.Save(d.cfg.InitCommitTS)
-	}
-	if err != nil {
+func (d *Executor) Start(jobs []*model.Job) error {
+	// prepare schema for work
+	b, err := d.prepare(jobs)
+	if err != nil || b == nil {
 		return errors.Trace(err)
 	}
 
-	jobs, err := d.getHistoryJob(d.meta.Pos())
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// sync the schema at meta.Pos
-	d.schema, err = NewSchema(jobs, d.ignoreSchemaNames)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = d.run()
+	err = d.run(b)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -133,46 +91,63 @@ func (d *Drainer) Start() error {
 	return nil
 }
 
-func (d *Drainer) getHistoryJob(ts int64) ([]*model.Job, error) {
-	var resp *pb.DumpDDLJobsResp
-	var jobs []*model.Job
+// the binlog maybe not complete before the initCommitTS, so we should ignore them.
+// at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
+func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
+	var latestSchemaVersion int64
+	var b *binlogItem
 	var err error
 
-	req := &pb.DumpDDLJobsReq{BeginCommitTS: ts}
-
 	for {
-		resp, err = d.cisternClient.DumpDDLJobs(d.ctx, req)
-		if err != nil {
-			log.Warningf("[can't get history job]%v", err)
-			select {
-			case <-d.ctx.Done():
-				return nil, nil
-			case <-time.After(retryWaitTime):
+		select {
+		case <-d.ctx.Done():
+			return nil, nil
+		case b = <-d.input:
+		}
+
+		binlog := b.binlog
+		commitTS := binlog.GetCommitTs()
+		jobID := binlog.GetDdlJobId()
+		if commitTS < d.initCommitTS {
+			if jobID > 0 {
+				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion
 			}
 			continue
 		}
-		break
-	}
 
-	for _, Ddljob := range resp.Ddljobs {
-		job := &model.Job{}
-		err = job.Decode(Ddljob)
+		// if don't meet ddl, we need to set lasteSchemaVersion to
+		// 1. the current DML's schemaVerion
+		// 2. the version that less than current DDL's version
+		if latestSchemaVersion == 0 {
+			if jobID == 0 {
+				preWriteValue := binlog.GetPrewriteValue()
+				preWrite := &pb.PrewriteValue{}
+				err = preWrite.Unmarshal(preWriteValue)
+				if err != nil {
+					return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
+				}
+				latestSchemaVersion = preWrite.GetSchemaVersion()
+			} else {
+				// make the latestSchemaVersion less than the current ddl
+				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
+			}
+		}
+
+		// find all ddl job that need to reconstruct local schemas
+		var exceptedJobs []*model.Job
+		for _, job := range jobs {
+			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
+				exceptedJobs = append(exceptedJobs, job)
+			}
+		}
+
+		d.schema, err = NewSchema(exceptedJobs, d.ignoreSchemaNames)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		jobs = append(jobs, job)
+
+		return b, nil
 	}
-
-	return jobs, nil
-}
-
-func (d *Drainer) savePoint(ts int64) {
-	err := d.meta.Save(ts)
-	if err != nil {
-		log.Fatalf("[write save point]%d[error]%v", ts, err)
-	}
-
-	positionGauge.Set(float64(ts))
 }
 
 // handleDDL has four return values,
@@ -180,24 +155,16 @@ func (d *Drainer) savePoint(ts int64) {
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
-	d.jLock.RLock()
-	job, ok := d.jobs[id]
-	d.jLock.RUnlock()
-	if !ok {
-		return "", "", "", errors.Errorf("[ddl job miss]%v", id)
-	}
-
+func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 	if job.State == model.JobCancelled {
 		return "", "", "", nil
 	}
 
 	sql := job.Query
 	if sql == "" {
-		return "", "", "", errors.Errorf("[ddl job sql miss]%v", id)
+		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
 	}
 
-	var err error
 	switch job.Type {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
@@ -207,7 +174,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
 			return "", "", "", nil
 		}
 
-		err = d.schema.CreateSchema(schema)
+		err := d.schema.CreateSchema(schema)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -273,7 +240,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = d.schema.CreateTable(schema, table)
+		err := d.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -342,7 +309,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = d.schema.ReplaceTable(tbInfo)
+		err := d.schema.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -351,7 +318,7 @@ func (d *Drainer) handleDDL(id int64) (string, string, string, error) {
 	}
 }
 
-func (d *Drainer) addCount(tp translator.OpType, nums int) {
+func (d *Executor) addCount(tp translator.OpType, nums int) {
 	switch tp {
 	case translator.Insert:
 		eventCounter.WithLabelValues("Insert").Add(float64(nums))
@@ -364,7 +331,7 @@ func (d *Drainer) addCount(tp translator.OpType, nums int) {
 	}
 }
 
-func (d *Drainer) checkWait(job *job) bool {
+func (d *Executor) checkWait(job *job) bool {
 	if job.tp == translator.DDL {
 		return true
 	}
@@ -375,18 +342,20 @@ func (d *Drainer) checkWait(job *job) bool {
 }
 
 type job struct {
-	tp   translator.OpType
-	sql  string
-	args []interface{}
-	key  string
-	pos  int64
+	tp       translator.OpType
+	sql      string
+	args     []interface{}
+	key      string
+	commitTS int64
+	pos      pb.Pos
+	nodeID   string
 }
 
-func newJob(tp translator.OpType, sql string, args []interface{}, key string, pos int64) *job {
-	return &job{tp: tp, sql: sql, args: args, key: key, pos: pos}
+func newJob(tp translator.OpType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	return &job{tp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
-func (d *Drainer) addJob(job *job) {
+func (d *Executor) addJob(job *job) {
 	// make all DMLs be executed before DDL
 	if job.tp == translator.DDL {
 		d.jobWg.Wait()
@@ -396,14 +365,27 @@ func (d *Drainer) addJob(job *job) {
 	idx := int(genHashKey(job.key)) % d.cfg.WorkerCount
 	d.jobCh[idx] <- job
 
+	if pos, ok := d.poss[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
+		d.poss[job.nodeID] = job.pos
+	}
+
 	wait := d.checkWait(job)
 	if wait {
 		d.jobWg.Wait()
-		d.savePoint(job.pos)
+		d.savePoint(job.commitTS, d.poss)
 	}
 }
 
-func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
+func (d *Executor) savePoint(ts int64, poss map[string]pb.Pos) {
+	err := d.meta.Save(ts, poss)
+	if err != nil {
+		log.Fatalf("[write save point]%d[error]%v", ts, err)
+	}
+
+	positionGauge.Set(float64(ts))
+}
+
+func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
 	d.wg.Add(1)
 	defer d.wg.Done()
 
@@ -465,7 +447,7 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 
 		default:
 			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxWaitTime {
+			if now.Sub(lastSyncTime) >= maxExecutionWaitTime {
 				err = executeSQLs(db, sqls, args, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -473,17 +455,13 @@ func (d *Drainer) sync(db *sql.DB, jobChan chan *job) {
 				clearF()
 			}
 
-			time.Sleep(waitTime)
+			time.Sleep(executionWaitTime)
 		}
 	}
 }
 
-func (d *Drainer) run() error {
-	d.wg.Add(1)
-	defer d.wg.Done()
-
+func (d *Executor) run(b *binlogItem) error {
 	var err error
-	var rawBinlog []byte
 
 	d.genRegexMap()
 	d.toDBs, err = createDBs(d.cfg.DestDBType, d.cfg.To, d.cfg.WorkerCount)
@@ -496,27 +474,12 @@ func (d *Drainer) run() error {
 		return errors.Trace(err)
 	}
 
-	go d.pushMetrics()
-	go d.inputStreaming()
-
 	for i := 0; i < d.cfg.WorkerCount; i++ {
 		go d.sync(d.toDBs[i], d.jobCh[i])
 	}
 
 	for {
-
-		select {
-		case <-d.ctx.Done():
-			return nil
-		case rawBinlog = <-d.input:
-		}
-
-		binlog := &pb.Binlog{}
-		err := binlog.Unmarshal(rawBinlog)
-		if err != nil {
-			return errors.Errorf("binlog %v unmarshal error %v", rawBinlog, err)
-		}
-
+		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
@@ -527,21 +490,18 @@ func (d *Drainer) run() error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-			err = d.translateSqls(preWrite.GetMutations(), commitTS)
+			err = d.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if jobID > 0 {
-			schema, table, sql, err := d.handleDDL(jobID)
+			schema, table, sql, err := d.handleDDL(b.job)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			d.jLock.Lock()
-			delete(d.jobs, jobID)
-			d.jLock.Unlock()
 
 			if d.skipDDL(schema, table) {
-				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commitTS %d", schema, table, sql, commitTS)
+				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 				continue
 			}
 
@@ -551,21 +511,22 @@ func (d *Drainer) run() error {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[pos]%v", sql, commitTS)
-				job := newJob(translator.DDL, sql, nil, "", commitTS)
+				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				job := newJob(translator.DDL, sql, nil, "", commitTS, b.pos, b.nodeID)
 				d.addJob(job)
-				log.Infof("[ddl][end]%s[pos]%v", sql, commitTS)
+				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
 		}
 
-		if d.cfg.EndCommitTS > 0 && commitTS >= d.cfg.EndCommitTS {
-			log.Info("recovery complete!")
+		select {
+		case <-d.ctx.Done():
 			return nil
+		case b = <-d.input:
 		}
 	}
 }
 
-func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
+func (d *Executor) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
 	for _, mutation := range mutations {
 
 		table, ok := d.schema.TableByID(mutation.GetTableId())
@@ -646,7 +607,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
 			}
 
-			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], pos)
+			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], commitTS, pos, nodeID)
 			d.addJob(job)
 			offsets[index] = offsets[index] + 1
 		}
@@ -654,7 +615,7 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 		// Compatible with the old format that don't have sequence, will be remove in the futhure
 		for i := 0; i < 5; i++ {
 			for j := offsets[i]; j < len(sqls[i]); j++ {
-				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], pos)
+				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], commitTS, pos, nodeID)
 				d.addJob(job)
 			}
 		}
@@ -663,92 +624,14 @@ func (d *Drainer) translateSqls(mutations []pb.TableMutation, pos int64) error {
 	return nil
 }
 
-func (d *Drainer) pushMetrics() {
-	if d.metrics == nil {
-		return
-	}
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
-		d.metrics.Start(d.ctx)
-	}()
-}
-
-func (d *Drainer) receiveBinlog(stream pb.Cistern_DumpBinlogClient) (int64, error) {
-	var nextTs int64
-	var err error
-	var resp *pb.DumpBinlogResp
-
-	for {
-		resp, err = stream.Recv()
-		if err != nil {
-			break
-		}
-
-		if resp.Ddljob != nil {
-			job := &model.Job{}
-			err = job.Decode(resp.Ddljob)
-			if err != nil {
-				break
-			}
-
-			d.jLock.Lock()
-			d.jobs[job.ID] = job
-			d.jLock.Unlock()
-		}
-
-		nextTs = resp.CommitTS
-		log.Debugf("next request commitTS %d, input channel length %d", nextTs, len(d.input))
-		d.input <- resp.Payload
-	}
-
-	return nextTs, errors.Trace(err)
-}
-
-func (d *Drainer) inputStreaming() {
-	d.wg.Add(1)
-	defer d.wg.Done()
-
-	var err error
-	var stream pb.Cistern_DumpBinlogClient
-	nextRequestTS := d.meta.Pos()
-
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		default:
-			req := &pb.DumpBinlogReq{BeginCommitTS: nextRequestTS}
-			stream, err = d.cisternClient.DumpBinlog(d.ctx, req)
-			if err != nil {
-				log.Warningf("[Get stream]%v", err)
-				time.Sleep(retryWaitTime)
-				continue
-			}
-
-			nextTs, err := d.receiveBinlog(stream)
-			if nextTs != 0 {
-				nextRequestTS = nextTs
-			}
-			if err != nil {
-				if errors.Cause(err) != io.EOF {
-					log.Warningf("[stream]%v", err)
-				}
-				time.Sleep(retryWaitTime)
-				continue
-			}
-		}
-	}
+// AddToExectorChan adds binlogItem to the Executor's input channel
+func (d *Executor) AddToExectorChan(b *binlogItem) {
+	d.input <- b
 }
 
 // Close closes syncer.
-func (d *Drainer) Close() {
-	d.Lock()
-	defer d.Unlock()
-
+func (d *Executor) Close() {
 	d.cancel()
-
 	d.wg.Wait()
-
 	closeDBs(d.toDBs...)
 }
