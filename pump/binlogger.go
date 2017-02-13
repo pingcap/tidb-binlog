@@ -100,6 +100,7 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	} else {
 		lastFileName = names[len(names)-1]
 	}
+	latestBinlogFile = lastFileName
 
 	p := path.Join(dirpath, lastFileName)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
@@ -258,7 +259,9 @@ func (b *binlogger) WriteTail(payload []byte) error {
 
 // Rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
-	fpath := path.Join(b.dir, fileName(b.seq()+1))
+	filename := fileName(b.seq() + 1)
+	latestBinlogFile = filename
+	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
