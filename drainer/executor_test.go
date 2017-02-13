@@ -1,45 +1,15 @@
 package drainer
 
 import (
-	"os"
-	"testing"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/types"
 )
 
-func TestClient(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testDrainerSuite{})
-
-type testDrainerSuite struct{}
-
-func (t *testDrainerSuite) TestNewDrainer(c *C) {
-	args := []string{
-		"-metrics-addr", "127.0.0.1:9091",
-		"-config", "../cmd/drainer/drainer.toml",
-	}
-
-	cfg := NewConfig()
-	err := cfg.Parse(args)
-	c.Assert(err, IsNil)
-	d, err := NewDrainer(cfg, nil)
-	defer os.RemoveAll(cfg.DataDir)
-	c.Assert(err, IsNil)
-
-	// test save point
-	d.savePoint(12)
-	c.Assert(d.meta.Pos(), Equals, int64(12))
-}
-
 func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
-	d := &Drainer{}
-	d.jobs = make(map[int64]*model.Job)
+	d := &Executor{}
 	d.ignoreSchemaNames = make(map[string]struct{})
 	d.schema, err = NewSchema(nil, nil)
 	c.Assert(err, IsNil)
@@ -48,22 +18,15 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	colName := model.NewCIStr("A")
 	tbName := model.NewCIStr("T")
 
-	// check not found job
-	_, _, sql, err := d.handleDDL(0)
-	c.Assert(sql, Equals, "")
-	c.Assert(err, NotNil, Commentf("should return not found job error"))
-
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobCancelled}
-	d.jobs[job.ID] = job
-	_, _, sql, err = d.handleDDL(job.ID)
+	_, _, sql, err := d.handleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobDone}
-	d.jobs[job.ID] = job
-	_, _, sql, err = d.handleDDL(job.ID)
+	_, _, sql, err = d.handleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -159,10 +122,8 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 }
 
-func testDoDDLAndCheck(c *C, d *Drainer, job *model.Job, isErr bool, sql string, schema string, table string) {
-	jobs := mustAppendJob(c, nil, job)
-	d.jobs[job.ID] = jobs[0]
-	schemaName, tableName, s, err := d.handleDDL(job.ID)
+func testDoDDLAndCheck(c *C, d *Executor, job *model.Job, isErr bool, sql string, schema string, table string) {
+	schemaName, tableName, s, err := d.handleDDL(job)
 	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, s)
 	c.Assert(schemaName, Equals, schema)

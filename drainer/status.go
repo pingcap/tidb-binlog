@@ -1,4 +1,4 @@
-package cistern
+package drainer
 
 import (
 	"encoding/json"

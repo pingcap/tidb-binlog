@@ -1,4 +1,4 @@
-package cistern
+package drainer
 
 import (
 	"fmt"
@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -35,11 +34,13 @@ type Collector struct {
 	reg       *pump.EtcdRegistry
 	timeout   time.Duration
 	window    *DepositWindow
-	storage   *BinlogStorage
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
+	bh        *binlogHeap
+	executor  *Executor
 	latestTS  int64
+	meta      Meta
 
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -51,7 +52,7 @@ type Collector struct {
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, s *BinlogStorage, w *DepositWindow) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, e *Executor, m Meta) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -76,8 +77,10 @@ func NewCollector(cfg *Config, clusterID uint64, s *BinlogStorage, w *DepositWin
 		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:    cfg.PumpTimeout,
 		pumps:      make(map[string]*Pump),
+		bh:         newBinlogHeap(maxHeapSize),
 		window:     w,
-		storage:    s,
+		executor:   e,
+		meta:       m,
 		tiClient:   tiClient,
 		tiStore:    tiStore,
 		notifyChan: make(chan *notifyResult),
@@ -142,7 +145,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
-	c.publish(windowUpper, windowLower)
+	c.publish(ctx, windowUpper, windowLower)
 	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
@@ -162,7 +165,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, pos, c.storage, c.tiStore)
+			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, c.tiStore, pos)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -200,22 +203,19 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	return int64(version.Ver)
 }
 
-func (c *Collector) publish(upper, lower int64) error {
+func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 	oldLower := c.window.LoadLower()
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
-		if err := c.window.PersistLower(lower); err != nil {
-			return errors.Trace(err)
-		}
-
+		c.window.SaveLower(lower)
+		c.publishBinlogs(ctx, lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
 		c.window.SaveUpper(upper)
 		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
-	return nil
 }
 
 // select min of all pumps' latestValidCommitTS
@@ -234,57 +234,63 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 	return latest
 }
 
-func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
-	var savePoint = binlog.Pos{}
-	payload, err := c.storage.Meta().Get(savepointNamespace, []byte(nodeID))
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return savePoint, nil
-		}
-
-		return savePoint, errors.Trace(err)
-	}
-	if err := savePoint.Unmarshal(payload); err != nil {
-		return savePoint, errors.Trace(err)
-	}
-	return savePoint, nil
-}
-
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
-func (c *Collector) LoadHistoryDDLJobs() error {
+func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	version, err := c.tiStore.CurrentVersion()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	snapshot, err := c.tiStore.GetSnapshot(version)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	snapMeta := meta.NewSnapshotMeta(snapshot)
 	jobs, err := snapMeta.GetAllHistoryDDLJobs()
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	for _, job := range jobs {
-		if job.State == model.JobCancelled {
-			continue
-		}
-		key := codec.EncodeInt([]byte{}, job.ID)
-		_, err = c.storage.Meta().Get(ddlJobNamespace, key)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				return errors.Trace(err)
-			}
-			payload, err := job.Encode()
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if err := c.storage.Meta().Put(ddlJobNamespace, key, payload); err != nil {
-				return errors.Trace(err)
-			}
+	return jobs, nil
+}
+
+func (c *Collector) publishBinlogs(ctx context.Context, lower int64) {
+	// multiple ways sort:
+	// 1. get multiple way sorted binlogs
+	// 2. use heap to merge sort
+	// todo: use multiple goroutines to collect sorted binlogs
+	bss := make(map[string]binlogItems)
+	binlogOffsets := make(map[string]int)
+	for id, p := range c.pumps {
+		bs := p.collectBinlogs(lower)
+		if bs.Len() > 0 {
+			bss[id] = bs
+			binlogOffsets[id] = 1
+			// first push the first item into heap every pump
+			c.bh.push(ctx, bs[0])
 		}
 	}
-	return nil
+
+	item := c.bh.pop()
+	for item != nil {
+		c.executor.AddToExectorChan(item)
+		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, then delete it from bss
+		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
+			delete(bss, item.nodeID)
+		} else {
+			// push next item into heap and increase the offset
+			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
+			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
+		}
+		item = c.bh.pop()
+	}
+}
+
+func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+	_, poss := c.meta.Pos()
+	pos, ok := poss[nodeID]
+	if !ok {
+		return binlog.Pos{}, nil
+	}
+	return pos, nil
 }
 
 // Notify notifies to detcet pumps

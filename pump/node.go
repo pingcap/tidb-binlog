@@ -41,7 +41,7 @@ type Node interface {
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
-	// Notify queries all living cistern from etcd, and notifies them
+	// query all living drainer from etcd, and notifies them
 	Notify(ctx context.Context) error
 	// Nodes returns all pump nodes
 	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
@@ -149,13 +149,13 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 		if c.IsAlive {
 			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
 			if err != nil {
-				return errors.Errorf("notify cistern(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
 			}
-			cistern := pb.NewCisternClient(clientConn)
-			_, err = cistern.Notify(ctx, nil)
+			drainer := pb.NewCisternClient(clientConn)
+			_, err = drainer.Notify(ctx, nil)
 			clientConn.Close()
 			if err != nil {
-				return errors.Errorf("notify cistern(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
 			}
 		}
 	}
