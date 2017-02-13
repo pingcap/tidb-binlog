@@ -41,7 +41,7 @@ type Node interface {
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
-	// query all living drainer from etcd, and notifies them
+	// Notify queries all living drainer from etcd, and notifies them
 	Notify(ctx context.Context) error
 	// Nodes returns all pump nodes
 	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
