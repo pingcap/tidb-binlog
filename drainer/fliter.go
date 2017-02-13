@@ -4,90 +4,90 @@ import (
 	"regexp"
 )
 
-func (d *Executor) genRegexMap() {
-	for _, db := range d.cfg.DoDBs {
+func (s *Syncer) genRegexMap() {
+	for _, db := range s.cfg.DoDBs {
 		if db[0] != '~' {
 			continue
 		}
-		if _, ok := d.reMap[db]; !ok {
-			d.reMap[db] = regexp.MustCompile(db[1:])
+		if _, ok := s.reMap[db]; !ok {
+			s.reMap[db] = regexp.MustCompile(db[1:])
 		}
 	}
 
-	for _, tb := range d.cfg.DoTables {
+	for _, tb := range s.cfg.DoTables {
 		if tb.Table[0] == '~' {
-			if _, ok := d.reMap[tb.Table]; !ok {
-				d.reMap[tb.Table] = regexp.MustCompile(tb.Table[1:])
+			if _, ok := s.reMap[tb.Table]; !ok {
+				s.reMap[tb.Table] = regexp.MustCompile(tb.Table[1:])
 			}
 		}
 		if tb.Schema[0] == '~' {
-			if _, ok := d.reMap[tb.Schema]; !ok {
-				d.reMap[tb.Schema] = regexp.MustCompile(tb.Schema[1:])
+			if _, ok := s.reMap[tb.Schema]; !ok {
+				s.reMap[tb.Schema] = regexp.MustCompile(tb.Schema[1:])
 			}
 		}
 	}
 }
 
 // whiteFilter whitelist filtering
-func (d *Executor) whiteFilter(stbs []TableName) []TableName {
+func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 	var tbs []TableName
-	if len(d.cfg.DoTables) == 0 && len(d.cfg.DoDBs) == 0 {
+	if len(s.cfg.DoTables) == 0 && len(s.cfg.DoDBs) == 0 {
 		return stbs
 	}
 	for _, tb := range stbs {
-		if d.matchTable(d.cfg.DoTables, tb) {
+		if s.matchTable(s.cfg.DoTables, tb) {
 			tbs = append(tbs, tb)
 		}
-		if d.matchDB(d.cfg.DoDBs, tb.Schema) {
+		if s.matchDB(s.cfg.DoDBs, tb.Schema) {
 			tbs = append(tbs, tb)
 		}
 	}
 	return tbs
 }
 
-func (d *Executor) skipDML(schema string, table string) bool {
+func (s *Syncer) skipDML(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
-	tbs = d.whiteFilter(tbs)
+	tbs = s.whiteFilter(tbs)
 	if len(tbs) == 0 {
 		return true
 	}
 	return false
 }
 
-func (d *Executor) skipDDL(schema, table string) bool {
+func (s *Syncer) skipDDL(schema, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
-	tbs = d.whiteFilter(tbs)
+	tbs = s.whiteFilter(tbs)
 	if len(tbs) == 0 {
 		return true
 	}
 	return false
 }
 
-func (d *Executor) matchString(pattern string, t string) bool {
-	if re, ok := d.reMap[pattern]; ok {
+func (s *Syncer) matchString(pattern string, t string) bool {
+	if re, ok := s.reMap[pattern]; ok {
 		return re.MatchString(t)
 	}
 	return pattern == t
 }
 
-func (d *Executor) matchDB(patternDBS []string, a string) bool {
+func (s *Syncer) matchDB(patternDBS []string, a string) bool {
 	for _, b := range patternDBS {
-		if d.matchString(b, a) {
+		if s.matchString(b, a) {
 			return true
 		}
 	}
 	return false
 }
 
-func (d *Executor) matchTable(patternTBS []TableName, tb TableName) bool {
+func (s *Syncer) matchTable(patternTBS []TableName, tb TableName) bool {
 	for _, ptb := range patternTBS {
-		if d.matchString(ptb.Table, tb.Table) && d.matchString(ptb.Schema, tb.Schema) {
+		if s.matchString(ptb.Table, tb.Table) && s.matchString(ptb.Schema, tb.Schema) {
 			return true
 		}
 
 		//create database or drop database
 		if tb.Table == "" {
-			if d.matchString(tb.Schema, ptb.Schema) {
+			if s.matchString(tb.Schema, ptb.Schema) {
 				return true
 			}
 		}

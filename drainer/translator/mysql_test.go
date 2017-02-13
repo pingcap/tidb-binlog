@@ -5,31 +5,31 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
-// test the already implemented translater, register and unregister function
-func (t *testTranslaterSuite) TestGenColumnList(c *C) {
+// test the already implemented translator, register and unregister function
+func (t *testTranslatorSuite) TestGenColumnList(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
 	c.Assert(m.genColumnList(table.Columns), Equals, "id,name,sex")
 }
 
-func (t *testTranslaterSuite) TestGenColumnPlaceholders(c *C) {
+func (t *testTranslatorSuite) TestGenColumnPlaceholders(c *C) {
 	m := testGenMysqlTranslator(c)
 	c.Assert(m.genColumnPlaceholders(3), Equals, "?,?,?")
 }
 
-func (t *testTranslaterSuite) TestGenKVs(c *C) {
+func (t *testTranslatorSuite) TestGenKVs(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
 	c.Assert(m.genKVs(table.Columns), Equals, "ID = ?, NAME = ?, SEX = ?")
 }
 
-func (t *testTranslaterSuite) TestGenWhere(c *C) {
+func (t *testTranslatorSuite) TestGenWhere(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
 	c.Assert(m.genWhere(table.Columns, []interface{}{1, "test", nil}), Equals, "ID = ? and NAME = ? and SEX is ?")
 }
 
-func (t *testTranslaterSuite) TestPkHandleColumn(c *C) {
+func (t *testTranslatorSuite) TestPkHandleColumn(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
 	c.Assert(m.pkHandleColumn(table), IsNil)
@@ -40,7 +40,7 @@ func (t *testTranslaterSuite) TestPkHandleColumn(c *C) {
 	}
 }
 
-func (t *testTranslaterSuite) TestPkIndexColumns(c *C) {
+func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("hasPK")
 	cols, err := m.pkIndexColumns(table)
@@ -58,7 +58,7 @@ func (t *testTranslaterSuite) TestPkIndexColumns(c *C) {
 	c.Assert(len(cols), Equals, 0)
 }
 
-func (t *testTranslaterSuite) testGenerateColumnAndValue(c *C) {
+func (t *testTranslatorSuite) testGenerateColumnAndValue(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
 	rawData, expected := testGenRowDatas(c, table.Columns)

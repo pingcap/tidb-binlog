@@ -3,6 +3,7 @@ package drainer
 import (
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 )
 
@@ -25,36 +27,29 @@ const (
 	defaultPumpTimeout = 5 * time.Second
 )
 
-// DBConfig is the DB configuration.
-type DBConfig struct {
-	Host     string `toml:"host" json:"host"`
-	User     string `toml:"user" json:"user"`
-	Password string `toml:"password" json:"password"`
-	Port     int    `toml:"port" json:"port"`
-}
-
-// ExecutorConfig is the Executor's configuration.
-type ExecutorConfig struct {
-	IgnoreSchemas string      `toml:"ignore-schemas" json:"ignore-schemas"`
-	TxnBatch      int         `toml:"txn-batch" json:"txn-batch"`
-	WorkerCount   int         `toml:"worker-count" json:"worker-count"`
-	To            DBConfig    `toml:"to" json:"to"`
-	DoTables      []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs         []string    `toml:"replicate-do-db" json:"replicate-do-db"`
-	DestDBType    string      `toml:"db-type" json:"db-type"`
+// SyncerConfig is the Syncer's configuration.
+type SyncerConfig struct {
+	IgnoreSchemas   string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	TxnBatch        int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount     int                `toml:"worker-count" json:"worker-count"`
+	To              *executor.DBConfig `toml:"to" json:"to"`
+	DoTables        []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs           []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	DestDBType      string             `toml:"db-type" json:"db-type"`
+	DisableDispatch bool               `toml:"disable-dispatch" json:"disable-dispatch"`
 }
 
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet
-	LogLevel        string          `toml:"log-level" json:"log-level"`
-	ListenAddr      string          `toml:"addr" json:"addr"`
-	DataDir         string          `toml:"data-dir" json:"data-dir"`
-	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
-	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
-	LogFile         string          `toml:"log-file" json:"log-file"`
-	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
-	ExecutorCfg     *ExecutorConfig `toml:"executor" json:"executor"`
+	LogLevel        string        `toml:"log-level" json:"log-level"`
+	ListenAddr      string        `toml:"addr" json:"addr"`
+	DataDir         string        `toml:"data-dir" json:"data-dir"`
+	DetectInterval  int           `toml:"detect-interval" json:"detect-interval"`
+	EtcdURLs        string        `toml:"pd-urls" json:"pd-urls"`
+	LogFile         string        `toml:"log-file" json:"log-file"`
+	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
+	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -68,7 +63,7 @@ func NewConfig() *Config {
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
-		ExecutorCfg: new(ExecutorConfig),
+		SyncerCfg:   new(SyncerConfig),
 	}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
@@ -87,14 +82,11 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.IntVar(&cfg.ExecutorCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
-	fs.StringVar(&cfg.ExecutorCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync the meta schema")
-	fs.IntVar(&cfg.ExecutorCfg.WorkerCount, "c", 1, "parallel worker count")
-	fs.StringVar(&cfg.ExecutorCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, postgresql")
-	fs.StringVar(&cfg.ExecutorCfg.To.Host, "db-host", "127.0.0.1", "host of target database")
-	fs.IntVar(&cfg.ExecutorCfg.To.Port, "db-port", 3306, "port of target database")
-	fs.StringVar(&cfg.ExecutorCfg.To.User, "db-username", "root", "username of target database")
-	fs.StringVar(&cfg.ExecutorCfg.To.Password, "db-password", "", "password of target database")
+	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
+	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync the meta schema")
+	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, postgresql")
+	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatch sqls that are in one binlog while syncing;  when set true, work-count and txn-batch would be useless")
 	return cfg
 }
 
@@ -137,11 +129,19 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.ExecutorCfg.adjustDoDBAndTable()
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
 	return cfg.validate()
 }
 
-func (c *ExecutorConfig) adjustDoDBAndTable() {
+func (c *SyncerConfig) adjustWorkCount() {
+	if c.DisableDispatch {
+		c.WorkerCount = 1
+		c.TxnBatch = math.MaxInt32
+	}
+}
+
+func (c *SyncerConfig) adjustDoDBAndTable() {
 	for i := 0; i < len(c.DoTables); i++ {
 		c.DoTables[i].Table = strings.ToLower(c.DoTables[i].Table)
 		c.DoTables[i].Schema = strings.ToLower(c.DoTables[i].Schema)

@@ -12,8 +12,8 @@ data-dir = "data.drainer"
 # a comma separated list of PD endpoints
 pd-urls = "http://127.0.0.1:2379"
 
-# Executor Configuration.
-[executor]
+# syncer Configuration.
+[syncer]
 
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
@@ -24,8 +24,10 @@ txn-batch = 1
 # work count to execute binlogs
 worker-count = 1
 
+disable-dispatch = true
+
 # the downstream mysql protocol database
-[executor.to]
+[syncer.to]
 host = "127.0.0.1"
 user = "root"
 password = ""
@@ -35,10 +37,10 @@ port = 3306
 ##and we support regex expression , start with '~' declare use regex expression.
 #
 #replicate-do-db = ["~^b.*","s1"]
-#[[executor.replicate-do-table]]
+#[[syncer.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "log"
 
-#[[executor.replicate-do-table]]
+#[[syncer.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "~^a.*"
