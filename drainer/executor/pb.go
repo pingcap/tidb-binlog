@@ -39,14 +39,18 @@ func newPB(cfg *DBConfig) (Executor, error) {
 }
 
 func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	binlog := &pb.Binlog{DmlData: new(pb.DMLData)}
+	binlog := &pb.Binlog{CommitTs: commitTSs[0]}
+	if isDDL {
+		binlog.Tp = pb.BinlogType_DDL
+		binlog.DdlQuery = []byte(sqls[0])
+		return nil
+	}
+
+	binlog.Tp = pb.BinlogType_DML
+	binlog.DmlData = new(pb.DMLData)
 	for i := range sqls {
-		if isDDL {
-			binlog.DdlQuery = []byte(sqls[0])
-		} else {
-			event := args[i][0].(*pb.Event)
-			binlog.DmlData.Events = append(binlog.DmlData.Events, *event)
-		}
+		event := args[i][0].(*pb.Event)
+		binlog.DmlData.Events = append(binlog.DmlData.Events, *event)
 	}
 	return p.saveBinlog(binlog)
 }
