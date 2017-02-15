@@ -626,7 +626,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 }
 
 // AddToExectorChan adds binlogItem to the syncer's input channel
-func (s *Syncer) AddToExectorChan(b *binlogItem) {
+func (s *Syncer) Add(b *binlogItem) {
 	s.input <- b
 }
 

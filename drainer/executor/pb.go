@@ -43,7 +43,7 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 	if isDDL {
 		binlog.Tp = pb.BinlogType_DDL
 		binlog.DdlQuery = []byte(sqls[0])
-		return nil
+		return p.saveBinlog(binlog)
 	}
 
 	binlog.Tp = pb.BinlogType_DML

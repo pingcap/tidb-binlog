@@ -6,7 +6,7 @@ import (
 
 // Executor is the interface for execute TiDB binlog's sql
 type Executor interface {
-	// Execute executes TiDB binlog's sqls
+	// Execute executes TiDB binlogs
 	Execute([]string, [][]interface{}, []int64, bool) error
 	// Close closes the executor
 	Close() error

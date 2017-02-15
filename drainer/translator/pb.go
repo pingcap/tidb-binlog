@@ -27,7 +27,6 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
-		mutation := &pb.Event{}
 		//decode the pk value
 		remain, pk, err := codec.DecodeOne(row)
 		if err != nil {
@@ -75,18 +74,13 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			}
 		}
 
-		rowVal, err := encodeRow(vals, cols, tps)
+		rowData, err := encodeRow(vals, cols, tps)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		mutation.Row = rowVal
-		mutation.SchemaName = proto.String(schema)
-		mutation.TableName = proto.String(table.Name.L)
-		mutation.Tp = pb.EventType_Insert
-
 		sqls = append(sqls, "")
-		values = append(values, []interface{}{mutation})
+		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Insert, rowData))
 		keys = append(keys, "")
 	}
 
@@ -145,17 +139,13 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 			}
 		}
 
-		rowVal, err := encodeUpdateRow(oldVals, newVals, cols, tps)
+		rowData, err := encodeUpdateRow(oldVals, newVals, cols, tps)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		mutation.Row = rowVal
-		mutation.SchemaName = proto.String(schema)
-		mutation.TableName = proto.String(table.Name.L)
-		mutation.Tp = pb.EventType_Update
 		sqls = append(sqls, "")
-		values = append(values, []interface{}{mutation})
+		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Update, rowData))
 		keys = append(keys, "")
 	}
 
@@ -202,17 +192,13 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 			}
 		}
 
-		rowVal, err := encodeRow(vals, cols, tps)
+		rowData, err := encodeRow(vals, cols, tps)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		mutation.Row = rowVal
-		mutation.SchemaName = proto.String(schema)
-		mutation.TableName = proto.String(table.Name.L)
-		mutation.Tp = pb.EventType_Delete
 		sqls = append(sqls, "")
-		values = append(values, []interface{}{mutation})
+		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Delete, rowData))
 		keys = append(keys, "")
 	}
 
@@ -272,4 +258,15 @@ func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []strin
 		return []byte{codec.NilFlag}, nil
 	}
 	return codec.EncodeValue(nil, values...)
+}
+
+func packEvent(schemaName, tableName string, tp pb.EventType, rowData []byte) []interface{} {
+	event := &pb.Event{
+		SchemaName: proto.String(schemaName),
+		TableName:  proto.String(tableName),
+		Row:        rowData,
+		Tp:         tp,
+	}
+
+	return []interface{}{event}
 }
