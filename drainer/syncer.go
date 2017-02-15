@@ -435,7 +435,8 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			idx++
 
 			if job.binlogTp == translator.DDL {
-				err = executor.Execute([]string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
+				// compute txn duration
+				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
 					if !ignoreDDLError(err) {
 						log.Fatalf(errors.ErrorStack(err))
@@ -625,7 +626,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 	return nil
 }
 
-// AddToExectorChan adds binlogItem to the syncer's input channel
+// Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
 	s.input <- b
 }

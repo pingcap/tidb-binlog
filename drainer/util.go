@@ -118,36 +118,14 @@ func genDrainerID(listenAddr string) (string, error) {
 	return fmt.Sprintf("%s:%s", hostname, port), nil
 }
 
-func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
-	if len(sqls) == 0 {
-		return nil
-	}
-
+func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
 	// compute txn duration
 	beginTime := time.Now()
 	defer func() {
 		txnHistogram.Observe(time.Since(beginTime).Seconds())
 	}()
 
-	retryCount := maxDMLRetryCount
-	if isDDL {
-		retryCount = maxDDLRetryCount
-	}
-
-	var err error
-	for i := 0; i < retryCount; i++ {
-		if i > 0 {
-			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
-			time.Sleep(retryWaitTime)
-		}
-
-		err = appleTxn(db, sqls, args)
-		if err == nil {
-			return nil
-		}
-	}
-
-	return errors.Trace(err)
+	return executor.Execute(sqls, args, commitTSs, isDDL)
 }
 
 func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {

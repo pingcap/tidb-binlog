@@ -93,7 +93,6 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
-		mutation := &pb.Event{}
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
@@ -159,7 +158,6 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
-		mutation := &pb.Event{}
 		r, err := codec.Decode(row, len(columns))
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
