@@ -172,7 +172,8 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		select {
 		case <-p.ctx.Done():
 			return
-		default:
+		// wait a moment to query tikv
+		case <-time.After(waitTime):
 		}
 
 		p.mu.Lock()
@@ -180,7 +181,6 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		p.mu.Unlock()
 		if ok {
 			if ok := p.query(t, b); !ok {
-				time.Sleep(retryWaitTime)
 				continue
 			}
 		}
@@ -365,7 +365,7 @@ func (p *Pump) pullBinlogs() {
 			stream, err = p.client.PullBinlogs(p.ctx, req)
 			if err != nil {
 				log.Warningf("[Get pull binlogs stream]%v", err)
-				time.Sleep(retryWaitTime)
+				time.Sleep(waitTime)
 				continue
 			}
 
@@ -374,7 +374,7 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream]%v", err)
 				}
-				time.Sleep(retryWaitTime)
+				time.Sleep(waitTime)
 				continue
 			}
 		}

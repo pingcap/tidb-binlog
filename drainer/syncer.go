@@ -363,6 +363,7 @@ func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos p
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
+// binlog bounadary job is used to group jobs, like a barrier
 func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
 	return &job{binlogTp: translator.DML, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
 }
@@ -510,7 +511,7 @@ func (s *Syncer) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// send binlog boundary job for dml binlog
+			// send binlog boundary job for dml binlog, disdispatch also disables batch
 			if s.cfg.DisableDispatch {
 				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
 			}

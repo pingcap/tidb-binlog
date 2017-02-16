@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-var retryWaitTime = 3 * time.Second
+var waitTime = 3 * time.Second
 var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
