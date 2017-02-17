@@ -79,8 +79,8 @@ func (b *binlogHeap) push(ctx context.Context, item *binlogItem) {
 				time.Sleep(pushRetryTime)
 				continue
 			}
-			b.Unlock()
 			heap.Push(b.bh, item)
+			b.Unlock()
 			return
 		}
 	}
