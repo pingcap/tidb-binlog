@@ -21,6 +21,13 @@ import (
 
 const defaultBinlogChanLength int64 = 16 << 12
 
+type binlogEntity struct {
+	tp       pb.BinlogType
+	startTS  int64
+	commitTS int64
+	pos      pb.Pos
+}
+
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
 type Pump struct {
 	nodeID    string
@@ -35,7 +42,7 @@ type Pump struct {
 	timeout time.Duration
 
 	// pullBinlogs sends the binlogs to publish function by this channel
-	binlogChan chan *pb.Binlog
+	binlogChan chan *binlogEntity
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -67,7 +74,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *pb.Binlog, defaultBinlogChanLength),
+		binlogChan: make(chan *binlogEntity, defaultBinlogChanLength),
 	}, nil
 }
 
@@ -134,7 +141,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	defer p.wg.Done()
 	var (
 		maxCommitTs int64
-		entity      *pb.Binlog
+		entity      *binlogEntity
 		binlogs     map[int64]*binlogItem
 	)
 	for {
@@ -144,21 +151,21 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case entity = <-p.binlogChan:
 		}
 
-		switch entity.Tp {
+		switch entity.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
-			p.mustFindCommitBinlog(t, entity.StartTs)
+			p.mustFindCommitBinlog(t, entity.startTS)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
-			if entity.CommitTs > maxCommitTs {
+			if entity.commitTS > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
-				maxCommitTs = entity.CommitTs
+				maxCommitTs = entity.commitTS
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
-					log.Errorf("save binlogs and status error at ts(%v)", entity.CommitTs)
+					log.Errorf("save binlogs and status error at ts(%v)", entity.commitTS)
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
@@ -175,13 +182,15 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		default:
 		}
 
-		p.mu.Lock()
-		b, ok := p.mu.prewriteItems[startTS]
-		p.mu.Unlock()
+		 b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
-			if ok := p.query(t, b); !ok {
-				time.Sleep(retryWaitTime)
-				continue
+			time.Sleep(waitTime)
+			// check again after sleep a moment
+			b, ok = p.getPrewriteBinlogEntity(startTS)
+			if ok {
+				if ok := p.query(t, b); !ok {
+					continue
+				}
 			}
 		}
 		return
@@ -272,8 +281,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	for commitTS, item := range items {
 		if commitTS < boundary {
 			errorBinlogs++
-			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window, may miss processing, ITEM(%v)",
-				commitTS, item)
+			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
 		}
 		p.bh.push(p.ctx, item)
 	}
@@ -365,7 +373,7 @@ func (p *Pump) pullBinlogs() {
 			stream, err = p.client.PullBinlogs(p.ctx, req)
 			if err != nil {
 				log.Warningf("[Get pull binlogs stream]%v", err)
-				time.Sleep(retryWaitTime)
+				time.Sleep(waitTime)
 				continue
 			}
 
@@ -374,7 +382,7 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream]%v", err)
 				}
-				time.Sleep(retryWaitTime)
+				time.Sleep(waitTime)
 				continue
 			}
 		}
@@ -395,14 +403,27 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
 		pos = CalculateNextPos(resp.Entity)
 		b := p.match(resp.Entity)
 		if b != nil {
+			binlogEnt := &binlogEntity{
+				tp:       b.Tp,
+				startTS:  b.StartTs,
+				commitTS: b.CommitTs,
+				pos:      pos,
+			}
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- b:
+			case p.binlogChan <- binlogEnt:
 			}
 		}
 	}
+}
+
+func (p *Pump) getPrewriteBinlogEntity(startTS int64) (b *binlogItem, ok bool) {
+	p.mu.Lock()
+	b, ok = p.mu.prewriteItems[startTS]
+	p.mu.Unlock()
+	return
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete
