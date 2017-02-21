@@ -215,7 +215,7 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 		return fmt.Sprintf("%s;", sql), nil
 	}
 
-	return fmt.Sprintf("use %s; %s;", schema, sql), nil
+	return fmt.Sprintf("use `%s`; %s;", schema, sql), nil
 }
 
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
