@@ -62,7 +62,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[i]]))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
-		c.Assert(sqls[0], Equals, "replace into t.account (id,name,sex) values (?,?,?);")
+		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`id`,`name`,`sex`) values (?,?,?);")
 		for index := range vals {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
@@ -79,7 +79,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	exceptedSQL := "update t.account set ID = ?, NAME = ?, SEX = ? where ID = ? and NAME = ? and SEX = ? limit 1;"
+	exceptedSQL := "update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;"
 	exceptedNum := 6
 	exceptedKeys := []int{0, 2, 1}
 	for index, t := range tables {
@@ -106,7 +106,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK")}
-	exceptedSQL := "delete from t.account where ID = ? and NAME = ? and SEX = ? limit 1;"
+	exceptedSQL := "delete from `t`.`account` where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;"
 	exceptedNum := 3
 	exceptedKeys := []int{0, 2}
 	for index, t := range tables {
@@ -137,7 +137,7 @@ func testGenDDLSQL(c *C, s SQLTranslator) {
 
 	sql, err = s.GenDDLSQL("drop table t", "t")
 	c.Assert(err, IsNil)
-	c.Assert(sql, Equals, "use t; drop table t;")
+	c.Assert(sql, Equals, "use `t`; drop table t;")
 }
 
 func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {

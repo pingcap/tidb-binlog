@@ -30,7 +30,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders((len(columns)))
-	sql := fmt.Sprintf("replace into %s.%s (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
 		//decode the pk value
@@ -50,7 +50,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		}
 
 		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s insert row raw data is corruption %v", schema, table.Name, r)
+			return nil, nil, nil, errors.Errorf("table `%s`.`%s` insert row raw data is corruption %v", schema, table.Name, r)
 		}
 
 		var columnValues = make(map[int64]types.Datum)
@@ -111,7 +111,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		}
 
 		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s update row data is corruption %v", schema, table.Name, r)
+			return nil, nil, nil, errors.Errorf("table `%s`.`%s` update row data is corruption %v", schema, table.Name, r)
 		}
 
 		var i int
@@ -142,7 +142,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		value = append(value, oldValues...)
 
 		where := m.genWhere(whereColumns, oldValues)
-		sql := fmt.Sprintf("update %s.%s set %s where %s limit 1;", schema, table.Name.L, kvs, where)
+		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name.L, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
 		// generate dispatching key
@@ -173,7 +173,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		}
 
 		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s the delete row by cols binlog %v is courruption", schema, table.Name, r)
+			return nil, nil, nil, errors.Errorf("table `%s`.`%s` the delete row by cols binlog %v is courruption", schema, table.Name, r)
 		}
 
 		var columnValues = make(map[int64]types.Datum)
@@ -188,7 +188,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 
 		where := m.genWhere(whereColumns, value)
 		values = append(values, value)
-		sql := fmt.Sprintf("delete from %s.%s where %s limit 1;", schema, table.Name, where)
+		sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
 		sqls = append(sqls, sql)
 		// generate dispatching key
 		// find primary keys
@@ -221,7 +221,8 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for i, column := range columns {
-		columnList = append(columnList, []byte(column.Name.L)...)
+		name := fmt.Sprintf("`%s`", column.Name.L)
+		columnList = append(columnList, []byte(name)...)
 
 		if i != len(columns)-1 {
 			columnList = append(columnList, ',')
@@ -243,9 +244,9 @@ func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {
 	var kvs bytes.Buffer
 	for i := range columns {
 		if i == len(columns)-1 {
-			fmt.Fprintf(&kvs, "%s = ?", columns[i].Name)
+			fmt.Fprintf(&kvs, "`%s` = ?", columns[i].Name)
 		} else {
-			fmt.Fprintf(&kvs, "%s = ?, ", columns[i].Name)
+			fmt.Fprintf(&kvs, "`%s` = ?, ", columns[i].Name)
 		}
 	}
 
@@ -261,9 +262,9 @@ func (m *mysqlTranslator) genWhere(columns []*model.ColumnInfo, data []interface
 		}
 
 		if i == len(columns)-1 {
-			fmt.Fprintf(&kvs, "%s %s ?", columns[i].Name, kvSplit)
+			fmt.Fprintf(&kvs, "`%s` %s ?", columns[i].Name, kvSplit)
 		} else {
-			fmt.Fprintf(&kvs, "%s %s ? and ", columns[i].Name, kvSplit)
+			fmt.Fprintf(&kvs, "`%s` %s ? and ", columns[i].Name, kvSplit)
 		}
 	}
 
