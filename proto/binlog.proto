@@ -22,13 +22,13 @@ message Event {
 
     // For inserted rows, we save all column values of the row[column_name, column_type, column_value, ...].
     // For updated  rows, we save all old and new column values of the row[column_name, column_type, column_old_value, column_new_value, ...].
-    // For Deleted  rowm, we save all column values of the row[column_name, column_type, column_value, ...].
+    // For Deleted  rows, we save all column values of the row[column_name, column_type, column_value, ...].
     optional bytes row = 4;
 }
 
 message DMLData {
     // mutations contains all the row changes.
-    repeated Event events      = 2 [(gogoproto.nullable) = false];
+    repeated Event events      = 1 [(gogoproto.nullable) = false];
 }
 
 enum BinlogType {
@@ -39,12 +39,12 @@ enum BinlogType {
 // Binlog contains all the changes in a transaction.
 message Binlog {
     optional BinlogType    tp             = 1 [(gogoproto.nullable) = false];
-    optional int64         commit_ts      = 3 [(gogoproto.nullable) = false];
+    optional int64         commit_ts      = 2 [(gogoproto.nullable) = false];
 
 
     // dml_data is marshalled from DML type,
-    optional DMLData       dml_data = 5;
+    optional DMLData       dml_data = 3;
 
     // ddl_query is the original ddl statement query.
-    optional bytes         ddl_query      = 6;
+    optional bytes         ddl_query      = 4;
 }
