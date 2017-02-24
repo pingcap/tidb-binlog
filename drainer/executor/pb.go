@@ -49,6 +49,7 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 	binlog.Tp = pb.BinlogType_DML
 	binlog.DmlData = new(pb.DMLData)
 	for i := range sqls {
+		// event can be only pb.Event, otherwise need to panic
 		event := args[i][0].(*pb.Event)
 		binlog.DmlData.Events = append(binlog.DmlData.Events, *event)
 	}
