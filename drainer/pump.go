@@ -182,7 +182,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		default:
 		}
 
-		 b, ok := p.getPrewriteBinlogEntity(startTS)
+		b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
 			time.Sleep(waitTime)
 			// check again after sleep a moment
