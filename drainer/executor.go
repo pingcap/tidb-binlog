@@ -478,10 +478,15 @@ func (d *Executor) run(b *binlogItem) error {
 		go d.sync(d.toDBs[i], d.jobCh[i])
 	}
 
+	maxCommitTS := d.initCommitTS
 	for {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+		if commitTS <= maxCommitTS {
+			continue
+		}
+		maxCommitTS = commitTS
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
