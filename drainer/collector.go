@@ -209,7 +209,7 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 
 	if lower > oldLower {
 		c.window.SaveLower(lower)
-		c.publishBinlogs(ctx, lower, oldLower)
+		c.publishBinlogs(ctx, oldLower, lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
