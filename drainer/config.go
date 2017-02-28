@@ -3,7 +3,6 @@ package drainer
 import (
 	"flag"
 	"fmt"
-	"math"
 	"net"
 	"net/url"
 	"os"
