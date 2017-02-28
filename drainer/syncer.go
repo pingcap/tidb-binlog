@@ -515,7 +515,6 @@ func (s *Syncer) run(b *binlogItem) error {
 			if s.cfg.DisableDispatch {
 				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
 			}
-			log.Debugf("[dml] commit ts %d, pos %v", commitTS, b.pos)
 
 		} else if jobID > 0 {
 			schema, table, sql, err := s.handleDDL(b.job)
