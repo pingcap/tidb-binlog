@@ -403,10 +403,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	defer s.wg.Done()
 
 	idx := 0
-	count := 1024
-	if s.cfg.TxnBatch < 1024 {
-		count = s.cfg.TxnBatch
-	}
+	count := s.cfg.TxnBatch
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
