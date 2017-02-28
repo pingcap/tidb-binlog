@@ -338,11 +338,14 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 	return job, nil
 }
 
-func (p *Pump) collectBinlogs(maxTS int64) binlogItems {
+func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= maxTS {
-		bs = append(bs, item)
+		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
+		if item.binlog.CommitTs > minTS {
+			bs = append(bs, item)
+		}
 		// update pump's current position
 		if ComparePos(p.current, item.pos) == -1 {
 			p.current = item.pos

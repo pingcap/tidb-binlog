@@ -108,7 +108,7 @@ func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		if commitTS < d.initCommitTS {
+		if commitTS <= d.initCommitTS {
 			if jobID > 0 {
 				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion
 			}
@@ -478,15 +478,10 @@ func (d *Executor) run(b *binlogItem) error {
 		go d.sync(d.toDBs[i], d.jobCh[i])
 	}
 
-	maxCommitTS := d.initCommitTS
 	for {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		if commitTS <= maxCommitTS {
-			continue
-		}
-		maxCommitTS = commitTS
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
@@ -507,10 +502,7 @@ func (d *Executor) run(b *binlogItem) error {
 
 			if d.skipDDL(schema, table) {
 				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
-				continue
-			}
-
-			if sql != "" {
+			} else if sql != "" {
 				sql, err = d.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)

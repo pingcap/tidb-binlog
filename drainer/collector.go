@@ -209,7 +209,7 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 
 	if lower > oldLower {
 		c.window.SaveLower(lower)
-		c.publishBinlogs(ctx, lower)
+		c.publishBinlogs(ctx, lower, oldLower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
@@ -252,7 +252,8 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	return jobs, nil
 }
 
-func (c *Collector) publishBinlogs(ctx context.Context, lower int64) {
+// publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
+func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
@@ -260,7 +261,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, lower int64) {
 	bss := make(map[string]binlogItems)
 	binlogOffsets := make(map[string]int)
 	for id, p := range c.pumps {
-		bs := p.collectBinlogs(lower)
+		bs := p.collectBinlogs(minTS, maxTS)
 		if bs.Len() > 0 {
 			bss[id] = bs
 			binlogOffsets[id] = 1
