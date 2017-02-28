@@ -42,7 +42,7 @@ type Server struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
-	executor  *Executor
+	syncer    *Syncer
 }
 
 func init() {
@@ -53,7 +53,7 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	ID, err := genCisternID(cfg.ListenAddr)
+	ID, err := genDrainerID(cfg.ListenAddr)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -84,12 +84,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	executor, err := NewExecutor(ctx, meta, cfg.ExecutorCfg)
+	syncer, err := NewSyncer(ctx, meta, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, executor, meta)
+	c, err := NewCollector(cfg, clusterID, win, syncer, meta)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -112,7 +112,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:        grpc.NewServer(),
 		ctx:       ctx,
 		cancel:    cancel,
-		executor:  executor,
+		syncer:    syncer,
 	}, nil
 }
 
@@ -166,14 +166,14 @@ func (s *Server) StartMetrics() {
 	}()
 }
 
-// StartExecutor runs a executor in a goroutine
-func (s *Server) StartExecutor(jobs []*model.Job) {
+// StartSyncer runs a syncer in a goroutine
+func (s *Server) StartSyncer(jobs []*model.Job) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		err := s.executor.Start(jobs)
+		err := s.syncer.Start(jobs)
 		if err != nil {
-			log.Errorf("executor exited, error %v", err)
+			log.Errorf("syncer exited, error %v", err)
 		}
 		s.Close()
 	}()
@@ -237,8 +237,8 @@ func (s *Server) Start() error {
 	// collect metrics to prometheus
 	s.StartMetrics()
 
-	// start a executor
-	s.StartExecutor(jobs)
+	// start a syncer
+	s.StartSyncer(jobs)
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -267,8 +267,8 @@ func (s *Server) Start() error {
 func (s *Server) Close() {
 	//  stop gRPC server
 	s.gs.Stop()
-	// stop executor
-	s.executor.Close()
+	// stop syncer
+	s.syncer.Close()
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit

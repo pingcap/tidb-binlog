@@ -10,18 +10,8 @@ import (
 type OpType byte
 
 const (
-	// Insert is the constant OpType for insert operation
-	Insert = iota + 1
-	// Update is the constant OpType for update operation
-	Update
-	// Del is the constant OpType for delete operation
-	Del
-	// DelByID is the constant OpType for delete operation
-	DelByID
-	// DelByPK is the constant OpType for delete operation
-	DelByPK
-	// DelByCol is the constant OpType for delete operation
-	DelByCol
+	// DML is the constant OpType for delete operation
+	DML = iota + 1
 	// DDL is the constant OpType for ddl operation
 	DDL
 )
@@ -36,11 +26,8 @@ type SQLTranslator interface {
 	// GenUpdateSQLs generates the update sqls
 	GenUpdateSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
-	// GenDeleteSQLsByID generates the delete by ID sqls
-	GenDeleteSQLsByID(string, *model.TableInfo, []int64) ([]string, []string, [][]interface{}, error)
-
 	// GenDeleteSQLs generates the delete sqls by cols values
-	GenDeleteSQLs(string, *model.TableInfo, OpType, [][]byte) ([]string, []string, [][]interface{}, error)
+	GenDeleteSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
 	// GenDDLSQL generates the ddl sql by query string
 	GenDDLSQL(string, string) (string, error)

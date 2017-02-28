@@ -13,6 +13,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/executor"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
@@ -98,7 +99,7 @@ func posToFloat(pos *binlog.Pos) float64 {
 	return float64(pos.Offset) + decimal
 }
 
-func genCisternID(listenAddr string) (string, error) {
+func genDrainerID(listenAddr string) (string, error) {
 	urllis, err := url.Parse(listenAddr)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -117,36 +118,14 @@ func genCisternID(listenAddr string) (string, error) {
 	return fmt.Sprintf("%s:%s", hostname, port), nil
 }
 
-func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
-	if len(sqls) == 0 {
-		return nil
-	}
-
+func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
 	// compute txn duration
 	beginTime := time.Now()
 	defer func() {
 		txnHistogram.Observe(time.Since(beginTime).Seconds())
 	}()
 
-	retryCount := maxDMLRetryCount
-	if isDDL {
-		retryCount = maxDDLRetryCount
-	}
-
-	var err error
-	for i := 0; i < retryCount; i++ {
-		if i > 0 {
-			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
-			time.Sleep(waitTime)
-		}
-
-		err = appleTxn(db, sqls, args)
-		if err == nil {
-			return nil
-		}
-	}
-
-	return errors.Trace(err)
+	return executor.Execute(sqls, args, commitTSs, isDDL)
 }
 
 func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
@@ -201,41 +180,27 @@ func ignoreDDLError(err error) bool {
 	}
 }
 
-func openDB(username string, password string, host string, port int, proto string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&multiStatements=true", username, password, host, port)
-	db, err := sql.Open(proto, dbDSN)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return db, nil
-}
-
-func closeDB(db *sql.DB) error {
-	return errors.Trace(db.Close())
-}
-
-func closeDBs(dbs ...*sql.DB) {
-	for _, db := range dbs {
-		err := closeDB(db)
+func closeExecutors(executors ...executor.Executor) {
+	for _, e := range executors {
+		err := e.Close()
 		if err != nil {
 			log.Errorf("close db failed - %v", err)
 		}
 	}
 }
 
-func createDBs(destDBType string, cfg DBConfig, count int) ([]*sql.DB, error) {
-	dbs := make([]*sql.DB, 0, count)
+func createExecutors(destDBType string, cfg *executor.DBConfig, count int) ([]executor.Executor, error) {
+	executors := make([]executor.Executor, 0, count)
 	for i := 0; i < count; i++ {
-		db, err := openDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, destDBType)
+		executor, err := executor.New(destDBType, cfg)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
-		dbs = append(dbs, db)
+		executors = append(executors, executor)
 	}
 
-	return dbs, nil
+	return executors, nil
 }
 
 func genHashKey(key string) uint32 {

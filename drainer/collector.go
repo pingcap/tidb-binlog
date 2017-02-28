@@ -38,7 +38,7 @@ type Collector struct {
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 	bh        *binlogHeap
-	executor  *Executor
+	syncer    *Syncer
 	latestTS  int64
 	meta      Meta
 
@@ -52,7 +52,7 @@ type Collector struct {
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, e *Executor, m Meta) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, m Meta) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -79,7 +79,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, e *Executor, 
 		pumps:      make(map[string]*Pump),
 		bh:         newBinlogHeap(maxHeapSize),
 		window:     w,
-		executor:   e,
+		syncer:     s,
 		meta:       m,
 		tiClient:   tiClient,
 		tiStore:    tiStore,
@@ -272,8 +272,8 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 
 	item := c.bh.pop()
 	for item != nil {
-		c.executor.AddToExectorChan(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, then delete it from bss
+		c.syncer.Add(item)
+		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
 		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
 			delete(bss, item.nodeID)
 		} else {

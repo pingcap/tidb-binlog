@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"database/sql"
 	"regexp"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -23,12 +23,12 @@ var (
 	maxExecutionWaitTime = 3 * time.Second
 )
 
-// Executor converts tidb binlog to the specified DB sqls, and sync it to target DB
-type Executor struct {
+// Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
+type Syncer struct {
 	schema *Schema
 	meta   Meta
 
-	cfg *ExecutorConfig
+	cfg *SyncerConfig
 
 	translator translator.SQLTranslator
 
@@ -38,7 +38,7 @@ type Executor struct {
 	jobWg sync.WaitGroup
 	jobCh []chan *job
 
-	toDBs []*sql.DB
+	executors []executor.Executor
 
 	poss         map[string]pb.Pos
 	initCommitTS int64
@@ -51,19 +51,19 @@ type Executor struct {
 	reMap map[string]*regexp.Regexp
 }
 
-// NewExecutor returns a Drainer instance
-func NewExecutor(ctx context.Context, meta Meta, cfg *ExecutorConfig) (*Executor, error) {
-	executor := new(Executor)
-	executor.cfg = cfg
-	executor.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
-	executor.meta = meta
-	executor.input = make(chan *binlogItem, 1024*cfg.WorkerCount)
-	executor.jobCh = newJobChans(cfg.WorkerCount)
-	executor.reMap = make(map[string]*regexp.Regexp)
-	executor.ctx, executor.cancel = context.WithCancel(ctx)
-	executor.initCommitTS, executor.poss = meta.Pos()
+// NewSyncer returns a Drainer instance
+func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, error) {
+	syncer := new(Syncer)
+	syncer.cfg = cfg
+	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
+	syncer.meta = meta
+	syncer.input = make(chan *binlogItem, 1024*cfg.WorkerCount)
+	syncer.jobCh = newJobChans(cfg.WorkerCount)
+	syncer.reMap = make(map[string]*regexp.Regexp)
+	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
+	syncer.initCommitTS, syncer.poss = meta.Pos()
 
-	return executor, nil
+	return syncer, nil
 }
 
 func newJobChans(count int) []chan *job {
@@ -76,14 +76,14 @@ func newJobChans(count int) []chan *job {
 }
 
 // Start starts to sync.
-func (d *Executor) Start(jobs []*model.Job) error {
+func (s *Syncer) Start(jobs []*model.Job) error {
 	// prepare schema for work
-	b, err := d.prepare(jobs)
+	b, err := s.prepare(jobs)
 	if err != nil || b == nil {
 		return errors.Trace(err)
 	}
 
-	err = d.run(b)
+	err = s.run(b)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -93,22 +93,22 @@ func (d *Executor) Start(jobs []*model.Job) error {
 
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
-func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
+func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
 	var b *binlogItem
 	var err error
 
 	for {
 		select {
-		case <-d.ctx.Done():
+		case <-s.ctx.Done():
 			return nil, nil
-		case b = <-d.input:
+		case b = <-s.input:
 		}
 
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		if commitTS <= d.initCommitTS {
+		if commitTS <= s.initCommitTS {
 			if jobID > 0 {
 				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion
 			}
@@ -141,7 +141,7 @@ func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
-		d.schema, err = NewSchema(exceptedJobs, d.ignoreSchemaNames)
+		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -155,7 +155,7 @@ func (d *Executor) prepare(jobs []*model.Job) (*binlogItem, error) {
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
+func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 	if job.State == model.JobCancelled {
 		return "", "", "", nil
 	}
@@ -169,12 +169,12 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := job.BinlogInfo.DBInfo
-		if filterIgnoreSchema(schema, d.ignoreSchemaNames) {
-			d.schema.AddIgnoreSchema(schema)
+		if filterIgnoreSchema(schema, s.ignoreSchemaNames) {
+			s.schema.AddIgnoreSchema(schema)
 			return "", "", "", nil
 		}
 
-		err := d.schema.CreateSchema(schema)
+		err := s.schema.CreateSchema(schema)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -182,13 +182,13 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.L, "", sql, nil
 
 	case model.ActionDropSchema:
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			d.schema.DropIgnoreSchema(job.SchemaID)
+			s.schema.DropIgnoreSchema(job.SchemaID)
 			return "", "", "", nil
 		}
 
-		schemaName, err := d.schema.DropSchema(job.SchemaID)
+		schemaName, err := s.schema.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -197,27 +197,27 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
-		_, ok := d.schema.SchemaByTableID(job.TableID)
+		_, ok := s.schema.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
-		_, ok = d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok = s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 		// first drop the table
-		_, err := d.schema.DropTable(job.TableID)
+		_, err := s.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = d.schema.CreateTable(schema, table)
+		err = s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -230,17 +230,17 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := d.schema.CreateTable(schema, table)
+		err := s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -248,17 +248,17 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.L, table.Name.L, sql, nil
 
 	case model.ActionDropTable:
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		tableName, err := d.schema.DropTable(job.TableID)
+		tableName, err := s.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -266,17 +266,17 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.L, tableName, sql, nil
 
 	case model.ActionTruncateTable:
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		_, err := d.schema.DropTable(job.TableID)
+		_, err := s.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -286,7 +286,7 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		err = d.schema.CreateTable(schema, table)
+		err = s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -299,17 +299,17 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := d.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := d.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := d.schema.ReplaceTable(tbInfo)
+		err := s.schema.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -318,66 +318,79 @@ func (d *Executor) handleDDL(job *model.Job) (string, string, string, error) {
 	}
 }
 
-func (d *Executor) addCount(tp translator.OpType, nums int) {
+func (s *Syncer) addDMLCount(tp pb.MutationType, nums int) {
 	switch tp {
-	case translator.Insert:
+	case pb.MutationType_Insert:
 		eventCounter.WithLabelValues("Insert").Add(float64(nums))
-	case translator.Update:
+	case pb.MutationType_Update:
 		eventCounter.WithLabelValues("Update").Add(float64(nums))
-	case translator.Del:
+	case pb.MutationType_DeleteRow:
 		eventCounter.WithLabelValues("Delete").Add(float64(nums))
-	case translator.DDL:
-		eventCounter.WithLabelValues("DDL").Add(float64(nums))
 	}
 }
 
-func (d *Executor) checkWait(job *job) bool {
-	if job.tp == translator.DDL {
+func (s *Syncer) addDDLCount() {
+	eventCounter.WithLabelValues("DDL").Add(1)
+}
+
+func (s *Syncer) checkWait(job *job) bool {
+	if job.binlogTp == translator.DDL {
 		return true
 	}
-	if d.meta.Check() {
+	if (!s.cfg.DisableDispatch && s.meta.Check()) && job.isCompleteBinlog {
 		return true
 	}
 	return false
 }
 
 type job struct {
-	tp       translator.OpType
-	sql      string
-	args     []interface{}
-	key      string
-	commitTS int64
-	pos      pb.Pos
-	nodeID   string
+	binlogTp         translator.OpType
+	mutationTp       pb.MutationType
+	sql              string
+	args             []interface{}
+	key              string
+	commitTS         int64
+	pos              pb.Pos
+	nodeID           string
+	isCompleteBinlog bool
 }
 
-func newJob(tp translator.OpType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{tp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
-func (d *Executor) addJob(job *job) {
+func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+}
+
+// binlog bounadary job is used to group jobs, like a barrier
+func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
+	return &job{binlogTp: translator.DML, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
+}
+
+func (s *Syncer) addJob(job *job) {
 	// make all DMLs be executed before DDL
-	if job.tp == translator.DDL {
-		d.jobWg.Wait()
+	if job.binlogTp == translator.DDL {
+		s.jobWg.Wait()
 	}
 
-	d.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % d.cfg.WorkerCount
-	d.jobCh[idx] <- job
+	s.jobWg.Add(1)
+	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+	s.jobCh[idx] <- job
 
-	if pos, ok := d.poss[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
-		d.poss[job.nodeID] = job.pos
+	if pos, ok := s.poss[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
+		s.poss[job.nodeID] = job.pos
 	}
 
-	wait := d.checkWait(job)
+	wait := s.checkWait(job)
 	if wait {
-		d.jobWg.Wait()
-		d.savePoint(job.commitTS, d.poss)
+		s.jobWg.Wait()
+		s.savePoint(job.commitTS, s.poss)
 	}
 }
 
-func (d *Executor) savePoint(ts int64, poss map[string]pb.Pos) {
-	err := d.meta.Save(ts, poss)
+func (s *Syncer) savePoint(ts int64, poss map[string]pb.Pos) {
+	err := s.meta.Save(ts, poss)
 	if err != nil {
 		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
@@ -385,28 +398,30 @@ func (d *Executor) savePoint(ts int64, poss map[string]pb.Pos) {
 	positionGauge.Set(float64(ts))
 }
 
-func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
-	d.wg.Add(1)
-	defer d.wg.Done()
+func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
+	s.wg.Add(1)
+	defer s.wg.Done()
 
 	idx := 0
-	count := d.cfg.TxnBatch
+	count := s.cfg.TxnBatch
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
+	commitTSs := make([]int64, 0, count)
 	lastSyncTime := time.Now()
-	tpCnt := make(map[translator.OpType]int)
+	tpCnt := make(map[pb.MutationType]int)
 
 	clearF := func() {
 		for i := 0; i < idx; i++ {
-			d.jobWg.Done()
+			s.jobWg.Done()
 		}
 
 		idx = 0
 		sqls = sqls[0:0]
 		args = args[0:0]
+		commitTSs = commitTSs[0:0]
 		lastSyncTime = time.Now()
 		for tpName, v := range tpCnt {
-			d.addCount(tpName, v)
+			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
 		}
 	}
@@ -420,8 +435,9 @@ func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
 			}
 			idx++
 
-			if job.tp == translator.DDL {
-				err = executeSQLs(db, []string{job.sql}, [][]interface{}{job.args}, true)
+			if job.binlogTp == translator.DDL {
+				// compute txn duration
+				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
 					if !ignoreDDLError(err) {
 						log.Fatalf(errors.ErrorStack(err))
@@ -429,16 +445,17 @@ func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 					}
 				}
-				tpCnt[job.tp]++
+				s.addDDLCount()
 				clearF()
-			} else {
+			} else if !job.isCompleteBinlog {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
-				tpCnt[job.tp]++
+				commitTSs = append(commitTSs, job.commitTS)
+				tpCnt[job.mutationTp]++
 			}
 
-			if idx >= count {
-				err = executeSQLs(db, sqls, args, false)
+			if (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+				err = executor.Execute(sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
@@ -447,8 +464,8 @@ func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
 
 		default:
 			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxExecutionWaitTime {
-				err = executeSQLs(db, sqls, args, false)
+			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+				err = executor.Execute(sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
@@ -460,22 +477,22 @@ func (d *Executor) sync(db *sql.DB, jobChan chan *job) {
 	}
 }
 
-func (d *Executor) run(b *binlogItem) error {
+func (s *Syncer) run(b *binlogItem) error {
 	var err error
 
-	d.genRegexMap()
-	d.toDBs, err = createDBs(d.cfg.DestDBType, d.cfg.To, d.cfg.WorkerCount)
+	s.genRegexMap()
+	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	d.translator, err = translator.New(d.cfg.DestDBType)
+	s.translator, err = translator.New(s.cfg.DestDBType)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for i := 0; i < d.cfg.WorkerCount; i++ {
-		go d.sync(d.toDBs[i], d.jobCh[i])
+	for i := 0; i < s.cfg.WorkerCount; i++ {
+		go s.sync(s.executors[i], s.jobCh[i])
 	}
 
 	for {
@@ -490,130 +507,116 @@ func (d *Executor) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-			err = d.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
+			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// send binlog boundary job for dml binlog, disdispatch also disables batch
+			if s.cfg.DisableDispatch {
+				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
+			}
+
 		} else if jobID > 0 {
-			schema, table, sql, err := d.handleDDL(b.job)
+			schema, table, sql, err := s.handleDDL(b.job)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
-			if d.skipDDL(schema, table) {
+			if s.skipDDL(schema, table) {
 				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
-				sql, err = d.translator.GenDDLSQL(sql, schema)
+				sql, err = s.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
 				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
-				job := newJob(translator.DDL, sql, nil, "", commitTS, b.pos, b.nodeID)
-				d.addJob(job)
+				job := newDDLJob(sql, nil, "", commitTS, b.pos, b.nodeID)
+				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
 		}
 
 		select {
-		case <-d.ctx.Done():
+		case <-s.ctx.Done():
 			return nil
-		case b = <-d.input:
+		case b = <-s.input:
 		}
 	}
 }
 
-func (d *Executor) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
+func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
 	for _, mutation := range mutations {
 
-		table, ok := d.schema.TableByID(mutation.GetTableId())
+		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
 		}
 
-		schemaName, tableName, ok := d.schema.SchemaAndTableName(mutation.GetTableId())
+		schemaName, tableName, ok := s.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
 			continue
 		}
 
-		if d.skipDML(schemaName, tableName) {
+		if s.skipDML(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}
 
 		var (
-			err error
-
-			// the restored sqls, 0 => insert, 1 => update, 2 => deleteByIds, 3 => deleteByPks, 4 => deleteByRows
-			sqls = make([][]string, 5)
+			err  error
+			sqls = make(map[pb.MutationType][]string)
 
 			// the dispatch keys
-			keys = make([][]string, 5)
+			keys = make(map[pb.MutationType][]string)
 
 			// the restored sqls's args, ditto
-			args = make([][][]interface{}, 5)
+			args = make(map[pb.MutationType][][]interface{})
 
 			// the offset of specified type sql
-			offsets = make([]int, 5)
+			offsets = make(map[pb.MutationType]int)
 
 			// the binlog dml sort
 			sequences = mutation.GetSequence()
-
-			// sql opType
-			tps = []translator.OpType{translator.Insert, translator.Update, translator.Del, translator.Del, translator.Del}
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			sqls[0], keys[0], args[0], err = d.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
+			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
+			offsets[pb.MutationType_Insert] = 0
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[1], keys[1], args[1], err = d.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
-		}
-
-		if len(mutation.GetDeletedIds()) > 0 {
-			sqls[2], keys[2], args[2], err = d.translator.GenDeleteSQLsByID(schemaName, table, mutation.GetDeletedIds())
-			if err != nil {
-				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-			}
-		}
-
-		if len(mutation.GetDeletedPks()) > 0 {
-			sqls[3], keys[3], args[3], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByPK, mutation.GetDeletedPks())
-			if err != nil {
-				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
-			}
+			offsets[pb.MutationType_Update] = 0
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			sqls[4], keys[4], args[4], err = d.translator.GenDeleteSQLs(schemaName, table, translator.DelByCol, mutation.GetDeletedRows())
+			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
+			offsets[pb.MutationType_DeleteRow] = 0
 		}
 
 		for _, dmlType := range sequences {
-			index := int32(dmlType)
-			if offsets[index] >= len(sqls[index]) {
-				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[index])
+			if offsets[dmlType] >= len(sqls[dmlType]) {
+				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			job := newJob(tps[index], sqls[index][offsets[index]], args[index][offsets[index]], keys[index][offsets[index]], commitTS, pos, nodeID)
-			d.addJob(job)
-			offsets[index] = offsets[index] + 1
+			job := newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+			s.addJob(job)
+			offsets[dmlType] = offsets[dmlType] + 1
 		}
 
-		// Compatible with the old format that don't have sequence, will be remove in the futhure
-		for i := 0; i < 5; i++ {
-			for j := offsets[i]; j < len(sqls[i]); j++ {
-				job := newJob(tps[i], sqls[i][j], args[i][j], keys[i][j], commitTS, pos, nodeID)
-				d.addJob(job)
+		for tp := range sqls {
+			if offsets[tp] != len(sqls[tp]) {
+				return errors.Errorf("binlog is corruption, item %v", mutations)
 			}
 		}
 	}
@@ -621,14 +624,14 @@ func (d *Executor) translateSqls(mutations []pb.TableMutation, commitTS int64, p
 	return nil
 }
 
-// AddToExectorChan adds binlogItem to the Executor's input channel
-func (d *Executor) AddToExectorChan(b *binlogItem) {
-	d.input <- b
+// Add adds binlogItem to the syncer's input channel
+func (s *Syncer) Add(b *binlogItem) {
+	s.input <- b
 }
 
 // Close closes syncer.
-func (d *Executor) Close() {
-	d.cancel()
-	d.wg.Wait()
-	closeDBs(d.toDBs...)
+func (s *Syncer) Close() {
+	s.cancel()
+	s.wg.Wait()
+	closeExecutors(s.executors...)
 }

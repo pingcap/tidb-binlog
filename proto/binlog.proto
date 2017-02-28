@@ -1,0 +1,50 @@
+syntax = "proto2";
+
+package pb_binlog;
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
+enum EventType {
+    Insert = 0;
+    Update = 1;
+    Delete = 2;
+}
+
+// TableMutation contains mutations in a table.
+message Event {
+    optional string schema_name     = 1;
+    optional string table_name      = 2;
+    optional EventType tp           = 3 [(gogoproto.nullable) = false];
+
+    // For inserted rows, we save all column values of the row[column_name, column_type, column_value, ...].
+    // For updated  rows, we save all old and new column values of the row[column_name, column_type, column_old_value, column_new_value, ...].
+    // For Deleted  rows, we save all column values of the row[column_name, column_type, column_value, ...].
+    optional bytes row = 4;
+}
+
+message DMLData {
+    // mutations contains all the row changes.
+    repeated Event events      = 1 [(gogoproto.nullable) = false];
+}
+
+enum BinlogType {
+    DML = 0; // has commit_ts, dml_data
+    DDL = 1; // has commit_ts, ddl_query
+}
+
+// Binlog contains all the changes in a transaction.
+message Binlog {
+    optional BinlogType    tp             = 1 [(gogoproto.nullable) = false];
+    optional int64         commit_ts      = 2 [(gogoproto.nullable) = false];
+
+
+    // dml_data is marshalled from DML type,
+    optional DMLData       dml_data = 3;
+
+    // ddl_query is the original ddl statement query.
+    optional bytes         ddl_query      = 4;
+}

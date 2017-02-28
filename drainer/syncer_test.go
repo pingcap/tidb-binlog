@@ -9,9 +9,9 @@ import (
 
 func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
-	d := &Executor{}
-	d.ignoreSchemaNames = make(map[string]struct{})
-	d.schema, err = NewSchema(nil, nil)
+	s := &Syncer{}
+	s.ignoreSchemaNames = make(map[string]struct{})
+	s.schema, err = NewSchema(nil, nil)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	ignoreDBName := model.NewCIStr("ignoreTest")
@@ -20,13 +20,13 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobCancelled}
-	_, _, sql, err := d.handleDDL(job)
+	_, _, sql, err := s.handleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobDone}
-	_, _, sql, err = d.handleDDL(job)
+	_, _, sql, err = s.handleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -58,7 +58,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 
-	d.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
+	s.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
 
 	testCases := []struct {
 		name        string
@@ -98,34 +98,34 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 			BinlogInfo: testCase.binlogInfo,
 			Query:      testCase.query,
 		}
-		testDoDDLAndCheck(c, d, job, false, testCase.resultQuery, testCase.schemaName, testCase.tableName)
+		testDoDDLAndCheck(c, s, job, false, testCase.resultQuery, testCase.schemaName, testCase.tableName)
 
 		// custom check after ddl
 		switch testCase.name {
 		case "createSchema":
-			_, ok := d.schema.SchemaByID(dbInfo.ID)
+			_, ok := s.schema.SchemaByID(dbInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "createTable":
-			_, ok := d.schema.TableByID(tblInfo.ID)
+			_, ok := s.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "addColumn", "truncateTable":
-			tb, ok := d.schema.TableByID(tblInfo.ID)
+			tb, ok := s.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 			c.Assert(tb.Columns, HasLen, 1)
 		case "dropTable":
-			_, ok := d.schema.TableByID(tblInfo.ID)
+			_, ok := s.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsFalse)
 		case "dropSchema":
-			_, ok := d.schema.SchemaByID(job.SchemaID)
+			_, ok := s.schema.SchemaByID(job.SchemaID)
 			c.Assert(ok, IsFalse)
 		}
 	}
 }
 
-func testDoDDLAndCheck(c *C, d *Executor, job *model.Job, isErr bool, sql string, schema string, table string) {
-	schemaName, tableName, s, err := d.handleDDL(job)
+func testDoDDLAndCheck(c *C, s *Syncer, job *model.Job, isErr bool, sql string, schema string, table string) {
+	schemaName, tableName, resSQL, err := s.handleDDL(job)
 	c.Assert(err != nil, Equals, isErr)
-	c.Assert(sql, Equals, s)
+	c.Assert(sql, Equals, resSQL)
 	c.Assert(schemaName, Equals, schema)
 	c.Assert(tableName, Equals, table)
 }
