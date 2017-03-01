@@ -179,7 +179,6 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		select {
 		case <-p.ctx.Done():
 			return
-		// wait a moment to query tikv
 		default:
 		}
 
