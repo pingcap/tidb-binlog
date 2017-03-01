@@ -35,7 +35,7 @@ Pump 是一个守护进程，在每个 TiDB 的主机上后台运行。他的主
 
 ### Drainer
 
-Drainer 从各个 Pump 节点收集 Binlog，并按照在 TiDB 中事务的提交顺序转化为指定数据库兼容的 SQL 语句，最后同步到目的数据库或者文件系统
+Drainer 从各个 Pump 节点收集 Binlog，并按照在 TiDB 中事务的提交顺序转化为指定数据库兼容的 SQL 语句，最后同步到目的数据库或者写到顺序文件
 
 ## TiDB-Binlog 安装
 
@@ -151,7 +151,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
     -addr string
         drainer 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
     -c int
-        并发输出到下游数据库或者文件系统 goroutine 数量 (default 1)
+        同步下游的并发数，该值设置越高同步的吞吐性能越好 (default 1)
     -config string
        配置文件路径, drainer 会首先读取配置文件的配置
        如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的
@@ -162,7 +162,7 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
     -detect-interval int
         向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
     -disable-dispatch
-        是否禁用拆分 TiDB binlog 事务中 sql 的功能，如果设置为 true，则按照每个 binlog顺序依次还原成单个事务进行同步
+        是否禁用拆分单个 binlog 的 sqls 的功能，如果设置为 true，则按照每个 binlog 顺序依次还原成单个事务进行同步
     -ignore-schemas string
         db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),   
         不支持对 ignore schemas 的 table 进行 rename DDL 操作
