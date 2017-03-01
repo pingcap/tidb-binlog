@@ -1,6 +1,6 @@
 ## drainer
 
-drainer collects binlog from each pump in cluster, and apply to downstream database or filesystem.
+drainer collects binlog from each pump in cluster, transforms binlog to various dialects of SQL, and applies to downstream database or filesystem.
 
 ## How to use
 
@@ -15,21 +15,15 @@ Usage of drainer:
   -config string
         path to the configuration file
   -data-dir string
-        drainer data directory path (default data.drainer)
-  -db-host string
-        host of target database (default "127.0.0.1")
-  -db-password string
-        password of target database
-  -db-port int
-        port of target database (default 3306)
-  -db-username string
-        username of target database (default "root")
+        drainer data directory path (default data.drainer) (default "data.drainer")
   -dest-db-type string
         target db type: mysql, postgresql (default "mysql")
   -detect-interval int
         the interval time (in seconds) of detect pumps' status (default 10)
+  -disable-dispatch
+        disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless
   -ignore-schemas string
-        disable sync the meta schema (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql")
+        disable sync those schemas (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql")
   -log-file string
         log file path
   -log-rotate string

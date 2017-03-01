@@ -22,8 +22,6 @@ make build   # build all compoents
 
 make pump    # build pump
 
-make cistern # build cistern
-
 make drainer # build drainer
 ```
 
@@ -35,14 +33,10 @@ When build successfully, you can find the binary in bin directory.
 
 pump is a daemon that receives realtime binlog from tidb-server and writes in sequential disk files synchronously.
 
-[cistern](./cmd/cistern)
-
-cistern collects binlog from each pump in cluster, and store them on disk in order of commitTS.
-
 [drainer](./cmd/drainer)
 
-drainer transforms binlog to various dialects of SQL, and apply to downstream database or filesystem.
+drainer collects binlog from each pump in cluster, transforms binlog to various dialects of SQL, and applies to downstream database or filesystem.
 
 ## Deployment
 
-The recommended startup sequence: PD -> TiKV -> [pump](./cmd/pump) -> TiDB -> [cistern](./cmd/cistern) -> [drainer](./cmd/drainer)
+The recommended startup sequence: PD -> TiKV -> [pump](./cmd/pump) -> TiDB -> [drainer](./cmd/drainer)
