@@ -334,10 +334,10 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL {
+	if job.binlogTp == translator.DDL || job.isCompleteBinlog {
 		return true
 	}
-	if (!s.cfg.DisableDispatch && s.meta.Check()) && job.isCompleteBinlog {
+	if !s.cfg.DisableDispatch && s.meta.Check() {
 		return true
 	}
 	return false
@@ -523,7 +523,7 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 
 			if s.skipDDL(schema, table) {
-				log.Debugf("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
+				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema)
 				if err != nil {

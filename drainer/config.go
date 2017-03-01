@@ -3,7 +3,6 @@ package drainer
 import (
 	"flag"
 	"fmt"
-	"math"
 	"net"
 	"net/url"
 	"os"
@@ -137,7 +136,6 @@ func (cfg *Config) Parse(args []string) error {
 func (c *SyncerConfig) adjustWorkCount() {
 	if c.DisableDispatch {
 		c.WorkerCount = 1
-		c.TxnBatch = math.MaxInt32
 	}
 }
 
