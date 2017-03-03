@@ -4,14 +4,12 @@ import:
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
   - quantile
-- package: github.com/boltdb/bolt
-  version: 583e8937c61f1af6513608ccc75c97b6abdf4ff9
 - package: github.com/BurntSushi/toml
   version: 99064174e013895bbd9b025c31100bd1d9b590ca
 - package: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - package: github.com/coreos/etcd
-  version: e53b99588a05d1f4ef172c178d4ed8e8106b8be4
+  version: 6bef2bddcaced4fc6ed136e7434c4ee72c9e6782
   subpackages:
   - alarm
   - auth
@@ -283,7 +281,7 @@ import:
   - encoding/unicode
   - transform
 - package: google.golang.org/grpc
-  version: 02fca896ff5f50c6bbbee0860345a49344b37a03
+  version: v1.0.4
   subpackages:
   - codes
   - credentials

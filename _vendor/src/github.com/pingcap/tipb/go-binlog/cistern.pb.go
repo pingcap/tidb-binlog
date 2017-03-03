@@ -56,6 +56,13 @@ func (m *DumpBinlogReq) String() string            { return proto.CompactTextStr
 func (*DumpBinlogReq) ProtoMessage()               {}
 func (*DumpBinlogReq) Descriptor() ([]byte, []int) { return fileDescriptorCistern, []int{0} }
 
+func (m *DumpBinlogReq) GetBeginCommitTS() int64 {
+	if m != nil {
+		return m.BeginCommitTS
+	}
+	return 0
+}
+
 type DumpBinlogResp struct {
 	// CommitTS specifies the commitTS of binlog
 	CommitTS int64 `protobuf:"varint,1,opt,name=commitTS,proto3" json:"commitTS,omitempty"`
@@ -70,6 +77,27 @@ func (m *DumpBinlogResp) String() string            { return proto.CompactTextSt
 func (*DumpBinlogResp) ProtoMessage()               {}
 func (*DumpBinlogResp) Descriptor() ([]byte, []int) { return fileDescriptorCistern, []int{1} }
 
+func (m *DumpBinlogResp) GetCommitTS() int64 {
+	if m != nil {
+		return m.CommitTS
+	}
+	return 0
+}
+
+func (m *DumpBinlogResp) GetPayload() []byte {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *DumpBinlogResp) GetDdljob() []byte {
+	if m != nil {
+		return m.Ddljob
+	}
+	return nil
+}
+
 type DumpDDLJobsReq struct {
 	// beginCommitTS is the start point of drainer processing binlog, DumpDDLJobs() returns
 	// all history DDL jobs before this position, then drainer will apply these DDL jobs
@@ -82,6 +110,13 @@ func (m *DumpDDLJobsReq) String() string            { return proto.CompactTextSt
 func (*DumpDDLJobsReq) ProtoMessage()               {}
 func (*DumpDDLJobsReq) Descriptor() ([]byte, []int) { return fileDescriptorCistern, []int{2} }
 
+func (m *DumpDDLJobsReq) GetBeginCommitTS() int64 {
+	if m != nil {
+		return m.BeginCommitTS
+	}
+	return 0
+}
+
 type DumpDDLJobsResp struct {
 	// ddljobs is an array of JSON encoded history DDL jobs
 	Ddljobs [][]byte `protobuf:"bytes,1,rep,name=ddljobs" json:"ddljobs,omitempty"`
@@ -91,6 +126,13 @@ func (m *DumpDDLJobsResp) Reset()                    { *m = DumpDDLJobsResp{} }
 func (m *DumpDDLJobsResp) String() string            { return proto.CompactTextString(m) }
 func (*DumpDDLJobsResp) ProtoMessage()               {}
 func (*DumpDDLJobsResp) Descriptor() ([]byte, []int) { return fileDescriptorCistern, []int{3} }
+
+func (m *DumpDDLJobsResp) GetDdljobs() [][]byte {
+	if m != nil {
+		return m.Ddljobs
+	}
+	return nil
+}
 
 type NotifyReq struct {
 }
@@ -123,7 +165,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion3
+const _ = grpc.SupportPackageIsVersion4
 
 // Client API for Cistern service
 
@@ -288,127 +330,127 @@ var _Cistern_serviceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: fileDescriptorCistern,
+	Metadata: "cistern.proto",
 }
 
-func (m *DumpBinlogReq) Marshal() (data []byte, err error) {
+func (m *DumpBinlogReq) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DumpBinlogReq) MarshalTo(data []byte) (int, error) {
+func (m *DumpBinlogReq) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.BeginCommitTS != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintCistern(data, i, uint64(m.BeginCommitTS))
+		i = encodeVarintCistern(dAtA, i, uint64(m.BeginCommitTS))
 	}
 	return i, nil
 }
 
-func (m *DumpBinlogResp) Marshal() (data []byte, err error) {
+func (m *DumpBinlogResp) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DumpBinlogResp) MarshalTo(data []byte) (int, error) {
+func (m *DumpBinlogResp) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.CommitTS != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintCistern(data, i, uint64(m.CommitTS))
+		i = encodeVarintCistern(dAtA, i, uint64(m.CommitTS))
 	}
 	if len(m.Payload) > 0 {
-		data[i] = 0x12
+		dAtA[i] = 0x12
 		i++
-		i = encodeVarintCistern(data, i, uint64(len(m.Payload)))
-		i += copy(data[i:], m.Payload)
+		i = encodeVarintCistern(dAtA, i, uint64(len(m.Payload)))
+		i += copy(dAtA[i:], m.Payload)
 	}
 	if len(m.Ddljob) > 0 {
-		data[i] = 0x1a
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintCistern(data, i, uint64(len(m.Ddljob)))
-		i += copy(data[i:], m.Ddljob)
+		i = encodeVarintCistern(dAtA, i, uint64(len(m.Ddljob)))
+		i += copy(dAtA[i:], m.Ddljob)
 	}
 	return i, nil
 }
 
-func (m *DumpDDLJobsReq) Marshal() (data []byte, err error) {
+func (m *DumpDDLJobsReq) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DumpDDLJobsReq) MarshalTo(data []byte) (int, error) {
+func (m *DumpDDLJobsReq) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.BeginCommitTS != 0 {
-		data[i] = 0x8
+		dAtA[i] = 0x8
 		i++
-		i = encodeVarintCistern(data, i, uint64(m.BeginCommitTS))
+		i = encodeVarintCistern(dAtA, i, uint64(m.BeginCommitTS))
 	}
 	return i, nil
 }
 
-func (m *DumpDDLJobsResp) Marshal() (data []byte, err error) {
+func (m *DumpDDLJobsResp) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *DumpDDLJobsResp) MarshalTo(data []byte) (int, error) {
+func (m *DumpDDLJobsResp) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Ddljobs) > 0 {
 		for _, b := range m.Ddljobs {
-			data[i] = 0xa
+			dAtA[i] = 0xa
 			i++
-			i = encodeVarintCistern(data, i, uint64(len(b)))
-			i += copy(data[i:], b)
+			i = encodeVarintCistern(dAtA, i, uint64(len(b)))
+			i += copy(dAtA[i:], b)
 		}
 	}
 	return i, nil
 }
 
-func (m *NotifyReq) Marshal() (data []byte, err error) {
+func (m *NotifyReq) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *NotifyReq) MarshalTo(data []byte) (int, error) {
+func (m *NotifyReq) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -416,17 +458,17 @@ func (m *NotifyReq) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func (m *NotifyResp) Marshal() (data []byte, err error) {
+func (m *NotifyResp) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
 	if err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return dAtA[:n], nil
 }
 
-func (m *NotifyResp) MarshalTo(data []byte) (int, error) {
+func (m *NotifyResp) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -434,31 +476,31 @@ func (m *NotifyResp) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
-func encodeFixed64Cistern(data []byte, offset int, v uint64) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
-	data[offset+4] = uint8(v >> 32)
-	data[offset+5] = uint8(v >> 40)
-	data[offset+6] = uint8(v >> 48)
-	data[offset+7] = uint8(v >> 56)
+func encodeFixed64Cistern(dAtA []byte, offset int, v uint64) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
+	dAtA[offset+4] = uint8(v >> 32)
+	dAtA[offset+5] = uint8(v >> 40)
+	dAtA[offset+6] = uint8(v >> 48)
+	dAtA[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Cistern(data []byte, offset int, v uint32) int {
-	data[offset] = uint8(v)
-	data[offset+1] = uint8(v >> 8)
-	data[offset+2] = uint8(v >> 16)
-	data[offset+3] = uint8(v >> 24)
+func encodeFixed32Cistern(dAtA []byte, offset int, v uint32) int {
+	dAtA[offset] = uint8(v)
+	dAtA[offset+1] = uint8(v >> 8)
+	dAtA[offset+2] = uint8(v >> 16)
+	dAtA[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintCistern(data []byte, offset int, v uint64) int {
+func encodeVarintCistern(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		data[offset] = uint8(v&0x7f | 0x80)
+		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	data[offset] = uint8(v)
+	dAtA[offset] = uint8(v)
 	return offset + 1
 }
 func (m *DumpBinlogReq) Size() (n int) {
@@ -533,8 +575,8 @@ func sovCistern(x uint64) (n int) {
 func sozCistern(x uint64) (n int) {
 	return sovCistern(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *DumpBinlogReq) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DumpBinlogReq) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -546,7 +588,7 @@ func (m *DumpBinlogReq) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -574,7 +616,7 @@ func (m *DumpBinlogReq) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.BeginCommitTS |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -583,7 +625,7 @@ func (m *DumpBinlogReq) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -602,8 +644,8 @@ func (m *DumpBinlogReq) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DumpBinlogResp) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DumpBinlogResp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -615,7 +657,7 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -643,7 +685,7 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.CommitTS |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -662,7 +704,7 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -676,7 +718,7 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Payload = append(m.Payload[:0], data[iNdEx:postIndex]...)
+			m.Payload = append(m.Payload[:0], dAtA[iNdEx:postIndex]...)
 			if m.Payload == nil {
 				m.Payload = []byte{}
 			}
@@ -693,7 +735,7 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -707,14 +749,14 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Ddljob = append(m.Ddljob[:0], data[iNdEx:postIndex]...)
+			m.Ddljob = append(m.Ddljob[:0], dAtA[iNdEx:postIndex]...)
 			if m.Ddljob == nil {
 				m.Ddljob = []byte{}
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -733,8 +775,8 @@ func (m *DumpBinlogResp) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DumpDDLJobsReq) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DumpDDLJobsReq) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -746,7 +788,7 @@ func (m *DumpDDLJobsReq) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -774,7 +816,7 @@ func (m *DumpDDLJobsReq) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				m.BeginCommitTS |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -783,7 +825,7 @@ func (m *DumpDDLJobsReq) Unmarshal(data []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -802,8 +844,8 @@ func (m *DumpDDLJobsReq) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *DumpDDLJobsResp) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *DumpDDLJobsResp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -815,7 +857,7 @@ func (m *DumpDDLJobsResp) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -843,7 +885,7 @@ func (m *DumpDDLJobsResp) Unmarshal(data []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				byteLen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -858,11 +900,11 @@ func (m *DumpDDLJobsResp) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Ddljobs = append(m.Ddljobs, make([]byte, postIndex-iNdEx))
-			copy(m.Ddljobs[len(m.Ddljobs)-1], data[iNdEx:postIndex])
+			copy(m.Ddljobs[len(m.Ddljobs)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -881,8 +923,8 @@ func (m *DumpDDLJobsResp) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *NotifyReq) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *NotifyReq) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -894,7 +936,7 @@ func (m *NotifyReq) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -912,7 +954,7 @@ func (m *NotifyReq) Unmarshal(data []byte) error {
 		switch fieldNum {
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -931,8 +973,8 @@ func (m *NotifyReq) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *NotifyResp) Unmarshal(data []byte) error {
-	l := len(data)
+func (m *NotifyResp) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -944,7 +986,7 @@ func (m *NotifyResp) Unmarshal(data []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -962,7 +1004,7 @@ func (m *NotifyResp) Unmarshal(data []byte) error {
 		switch fieldNum {
 		default:
 			iNdEx = preIndex
-			skippy, err := skipCistern(data[iNdEx:])
+			skippy, err := skipCistern(dAtA[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -981,8 +1023,8 @@ func (m *NotifyResp) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func skipCistern(data []byte) (n int, err error) {
-	l := len(data)
+func skipCistern(dAtA []byte) (n int, err error) {
+	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -993,7 +1035,7 @@ func skipCistern(data []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := data[iNdEx]
+			b := dAtA[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1011,7 +1053,7 @@ func skipCistern(data []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if data[iNdEx-1] < 0x80 {
+				if dAtA[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -1028,7 +1070,7 @@ func skipCistern(data []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := data[iNdEx]
+				b := dAtA[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1051,7 +1093,7 @@ func skipCistern(data []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := data[iNdEx]
+					b := dAtA[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -1062,7 +1104,7 @@ func skipCistern(data []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipCistern(data[start:])
+				next, err := skipCistern(dAtA[start:])
 				if err != nil {
 					return 0, err
 				}
