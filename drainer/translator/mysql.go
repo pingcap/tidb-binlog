@@ -71,12 +71,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 				vals = append(vals, col.DefaultValue)
 			} else {
 
-				value, err := m.formatData(val, col.FieldType)
+				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
 
-				vals = append(vals, value)
+				vals = append(vals, value.GetValue())
 			}
 		}
 
@@ -325,12 +325,12 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 		val, ok := columnValues[col.ID]
 		if ok {
 			newColumn = append(newColumn, col)
-			value, err := m.formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 
-			newColumnsValues = append(newColumnsValues, value)
+			newColumnsValues = append(newColumnsValues, value.GetValue())
 		}
 	}
 
@@ -346,11 +346,11 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if ok {
-			value, err := m.formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType)
 			if err != nil {
 				return "", errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, value)
+			columnsValues = append(columnsValues, value.GetValue())
 		} else {
 			columnsValues = append(columnsValues, col.DefaultValue)
 		}
@@ -359,27 +359,22 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	return fmt.Sprintf("%v", columnsValues), nil
 }
 
-func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (interface{}, error) {
+func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	value, err := tablecodec.Unflatten(data, &ft, false)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return types.Datum{}, errors.Trace(err)
 	}
 
 	switch ft.Tp {
-	case mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
-		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
-		mysql.TypeString:
-		return value.GetValue(), nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
-		return fmt.Sprintf("%v", value.GetValue()), nil
+		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
 	case mysql.TypeEnum:
-		return value.GetMysqlEnum().Value, nil
+		value = types.NewDatum(value.GetMysqlEnum().Value)
 	case mysql.TypeSet:
-		return value.GetMysqlSet().Value, nil
+		value = types.NewDatum(value.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		return value.GetMysqlBit().Value, nil
+		value = types.NewDatum(value.GetMysqlBit().Value)
 	}
 
-	return value.GetValue(), nil
+	return value, nil
 }
