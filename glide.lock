@@ -1,5 +1,5 @@
-hash: d11ab4c3a660ca8c47c05498c7ffbd2efc6d7d7e2296101e243e11dd6932df8f
-updated: 2017-03-03T19:52:49.39937883+08:00
+hash: e8bce7d3b544b86f6b8a85d66448e4549ce4bd3d037880bb7a5b1abe274a0bb1
+updated: 2017-03-06T10:28:37.994417758+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -228,7 +228,7 @@ imports:
   - util/stringutil
   - util/types
 - name: github.com/pingcap/tipb
-  version: 378c9b0cba112f6f7335b3c86df6fd76c0dcfb78
+  version: 05a4d27c130a965745196e4da8ca395a15d7928f
   subpackages:
   - go-binlog
   - go-tipb
