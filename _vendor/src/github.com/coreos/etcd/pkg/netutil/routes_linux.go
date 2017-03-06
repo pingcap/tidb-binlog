@@ -13,9 +13,6 @@
 // limitations under the License.
 
 // +build linux
-// +build 386 amd64
-
-// TODO support native endian but without using "unsafe"
 
 package netutil
 
@@ -25,6 +22,8 @@ import (
 	"fmt"
 	"net"
 	"syscall"
+
+	"github.com/coreos/etcd/pkg/cpuutil"
 )
 
 var errNoDefaultRoute = fmt.Errorf("could not find default route")
@@ -35,33 +34,21 @@ func GetDefaultHost() (string, error) {
 		return "", rerr
 	}
 
-	attrs, aerr := syscall.ParseNetlinkRouteAttr(rmsg)
-	if aerr != nil {
-		return "", aerr
+	host, oif, err := parsePREFSRC(rmsg)
+	if err != nil {
+		return "", err
 	}
-
-	oif := uint32(0)
-	for _, attr := range attrs {
-		if attr.Attr.Type == syscall.RTA_PREFSRC {
-			return net.IP(attr.Value).String(), nil
-		}
-		if attr.Attr.Type == syscall.RTA_OIF {
-			oif = binary.LittleEndian.Uint32(attr.Value)
-		}
-	}
-
-	if oif == 0 {
-		return "", errNoDefaultRoute
+	if host != "" {
+		return host, nil
 	}
 
 	// prefsrc not detected, fall back to getting address from iface
-
 	ifmsg, ierr := getIface(oif)
 	if ierr != nil {
 		return "", ierr
 	}
 
-	attrs, aerr = syscall.ParseNetlinkRouteAttr(ifmsg)
+	attrs, aerr := syscall.ParseNetlinkRouteAttr(ifmsg)
 	if aerr != nil {
 		return "", aerr
 	}
@@ -92,7 +79,7 @@ func getDefaultRoute() (*syscall.NetlinkMessage, error) {
 			continue
 		}
 		buf := bytes.NewBuffer(m.Data[:syscall.SizeofRtMsg])
-		if rerr := binary.Read(buf, binary.LittleEndian, &rtmsg); rerr != nil {
+		if rerr := binary.Read(buf, cpuutil.ByteOrder(), &rtmsg); rerr != nil {
 			continue
 		}
 		if rtmsg.Dst_len == 0 {
@@ -121,7 +108,7 @@ func getIface(idx uint32) (*syscall.NetlinkMessage, error) {
 			continue
 		}
 		buf := bytes.NewBuffer(m.Data[:syscall.SizeofIfAddrmsg])
-		if rerr := binary.Read(buf, binary.LittleEndian, &ifaddrmsg); rerr != nil {
+		if rerr := binary.Read(buf, cpuutil.ByteOrder(), &ifaddrmsg); rerr != nil {
 			continue
 		}
 		if ifaddrmsg.Index == idx {
@@ -130,4 +117,61 @@ func getIface(idx uint32) (*syscall.NetlinkMessage, error) {
 	}
 
 	return nil, errNoDefaultRoute
+}
+
+var errNoDefaultInterface = fmt.Errorf("could not find default interface")
+
+func GetDefaultInterface() (string, error) {
+	rmsg, rerr := getDefaultRoute()
+	if rerr != nil {
+		return "", rerr
+	}
+
+	_, oif, err := parsePREFSRC(rmsg)
+	if err != nil {
+		return "", err
+	}
+
+	ifmsg, ierr := getIface(oif)
+	if ierr != nil {
+		return "", ierr
+	}
+
+	attrs, aerr := syscall.ParseNetlinkRouteAttr(ifmsg)
+	if aerr != nil {
+		return "", aerr
+	}
+
+	for _, attr := range attrs {
+		if attr.Attr.Type == syscall.IFLA_IFNAME {
+			return string(attr.Value[:len(attr.Value)-1]), nil
+		}
+	}
+	return "", errNoDefaultInterface
+}
+
+// parsePREFSRC returns preferred source address and output interface index (RTA_OIF).
+func parsePREFSRC(m *syscall.NetlinkMessage) (host string, oif uint32, err error) {
+	var attrs []syscall.NetlinkRouteAttr
+	attrs, err = syscall.ParseNetlinkRouteAttr(m)
+	if err != nil {
+		return "", 0, err
+	}
+
+	for _, attr := range attrs {
+		if attr.Attr.Type == syscall.RTA_PREFSRC {
+			host = net.IP(attr.Value).String()
+		}
+		if attr.Attr.Type == syscall.RTA_OIF {
+			oif = cpuutil.ByteOrder().Uint32(attr.Value)
+		}
+		if host != "" && oif != uint32(0) {
+			break
+		}
+	}
+
+	if oif == 0 {
+		err = errNoDefaultRoute
+	}
+	return
 }
