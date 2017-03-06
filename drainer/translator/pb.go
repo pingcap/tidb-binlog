@@ -9,7 +9,6 @@ import (
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
 )
@@ -64,7 +63,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 
 			val, ok := columnValues[col.ID]
 			if ok {
-				value, err := tablecodec.Unflatten(val, &col.FieldType, false)
+				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
@@ -123,11 +122,11 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 		for _, col := range columns {
 			val, ok := newColumnVlaues[col.ID]
 			if ok {
-				newValue, err := tablecodec.Unflatten(val, &col.FieldType, false)
+				oldValue, err := formatData(oldColumnValues[col.ID], col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
-				oldValue, err := tablecodec.Unflatten(oldColumnValues[col.ID], &col.FieldType, false)
+				newValue, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
@@ -180,7 +179,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 		for _, col := range columns {
 			val, ok := columnValues[col.ID]
 			if ok {
-				value, err := tablecodec.Unflatten(val, &col.FieldType, false)
+				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
