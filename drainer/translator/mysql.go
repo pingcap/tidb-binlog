@@ -71,12 +71,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 				vals = append(vals, col.DefaultValue)
 			} else {
 
-				value, err := m.formatData(val, col.FieldType)
+				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
 
-				vals = append(vals, value)
+				vals = append(vals, value.GetValue())
 			}
 		}
 
@@ -139,9 +139,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var value []interface{}
 		kvs := m.genKVs(updateColumns)
 		value = append(value, newValues...)
-		value = append(value, oldValues...)
 
-		where := m.genWhere(whereColumns, oldValues)
+		var where string
+		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		value = append(value, oldValues...)
 		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name.L, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
@@ -186,7 +190,11 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		where := m.genWhere(whereColumns, value)
+		var where string
+		where, value, err = m.genWhere(table, whereColumns, value)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
 		values = append(values, value)
 		sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
 		sqls = append(sqls, sql)
@@ -216,6 +224,44 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 	}
 
 	return fmt.Sprintf("use `%s`; %s;", schema, sql), nil
+}
+
+func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
+	var kvs bytes.Buffer
+	cols, err := m.pkIndexColumns(table)
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+
+	hasPK := (len(cols) != 0)
+	cm := make(map[int64]*model.ColumnInfo)
+	for _, col := range cols {
+		cm[col.ID] = col
+	}
+
+	var res []interface{}
+	first := true
+	for i := range columns {
+		_, ok := cm[columns[i].ID]
+		if !ok && hasPK {
+			continue
+		}
+
+		res = append(res, data[i])
+		kvSplit := "="
+		if data[i] == nil {
+			kvSplit = "is"
+		}
+
+		if first {
+			first = false
+			fmt.Fprintf(&kvs, "`%s` %s ?", columns[i].Name, kvSplit)
+		} else {
+			fmt.Fprintf(&kvs, " and `%s` %s ?", columns[i].Name, kvSplit)
+		}
+	}
+
+	return kvs.String(), res, nil
 }
 
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
@@ -253,23 +299,7 @@ func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {
 	return kvs.String()
 }
 
-func (m *mysqlTranslator) genWhere(columns []*model.ColumnInfo, data []interface{}) string {
-	var kvs bytes.Buffer
-	for i := range columns {
-		kvSplit := "="
-		if data[i] == nil {
-			kvSplit = "is"
-		}
 
-		if i == len(columns)-1 {
-			fmt.Fprintf(&kvs, "`%s` %s ?", columns[i].Name, kvSplit)
-		} else {
-			fmt.Fprintf(&kvs, "`%s` %s ? and ", columns[i].Name, kvSplit)
-		}
-	}
-
-	return kvs.String()
-}
 
 func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
@@ -325,12 +355,12 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 		val, ok := columnValues[col.ID]
 		if ok {
 			newColumn = append(newColumn, col)
-			value, err := m.formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 
-			newColumnsValues = append(newColumnsValues, value)
+			newColumnsValues = append(newColumnsValues, value.GetValue())
 		}
 	}
 
@@ -346,11 +376,11 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if ok {
-			value, err := m.formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType)
 			if err != nil {
 				return "", errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, value)
+			columnsValues = append(columnsValues, value.GetValue())
 		} else {
 			columnsValues = append(columnsValues, col.DefaultValue)
 		}
@@ -359,27 +389,22 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	return fmt.Sprintf("%v", columnsValues), nil
 }
 
-func (m *mysqlTranslator) formatData(data types.Datum, ft types.FieldType) (interface{}, error) {
+func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	value, err := tablecodec.Unflatten(data, &ft, false)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return types.Datum{}, errors.Trace(err)
 	}
 
 	switch ft.Tp {
-	case mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
-		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
-		mysql.TypeString:
-		return value.GetValue(), nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
-		return fmt.Sprintf("%v", value.GetValue()), nil
+		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
 	case mysql.TypeEnum:
-		return value.GetMysqlEnum().Value, nil
+		value = types.NewDatum(value.GetMysqlEnum().Value)
 	case mysql.TypeSet:
-		return value.GetMysqlSet().Value, nil
+		value = types.NewDatum(value.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		return value.GetMysqlBit().Value, nil
+		value = types.NewDatum(value.GetMysqlBit().Value)
 	}
 
-	return value.GetValue(), nil
+	return value, nil
 }

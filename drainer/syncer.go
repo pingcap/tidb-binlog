@@ -455,7 +455,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			}
 
 			if (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
-				err = executor.Execute(sqls, args, commitTSs, false)
+				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
@@ -465,7 +465,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		default:
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
-				err = executor.Execute(sqls, args, commitTSs, false)
+				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}

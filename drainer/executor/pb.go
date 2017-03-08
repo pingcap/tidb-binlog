@@ -39,6 +39,9 @@ func newPB(cfg *DBConfig) (Executor, error) {
 }
 
 func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
+	if len(sqls) == 0 {
+		return nil
+	}
 	binlog := &pb.Binlog{CommitTs: commitTSs[0]}
 	if isDDL {
 		binlog.Tp = pb.BinlogType_DDL
