@@ -26,7 +26,10 @@ func (t *testTranslatorSuite) TestGenKVs(c *C) {
 func (t *testTranslatorSuite) TestGenWhere(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
-	c.Assert(m.genWhere(table.Columns, []interface{}{1, "test", nil}), Equals, "`ID` = ? and `NAME` = ? and `SEX` is ?")
+	where, values, err := m.genWhere(table, table.Columns, []interface{}{1, "test", nil})
+	c.Assert(err, IsNil)
+	c.Assert(where, Equals, "`ID` = ? and `NAME` = ? and `SEX` is ?")
+	c.Assert(values, DeepEquals, []interface{}{1, "test", nil})
 }
 
 func (t *testTranslatorSuite) TestPkHandleColumn(c *C) {

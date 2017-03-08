@@ -299,8 +299,6 @@ func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {
 	return kvs.String()
 }
 
-
-
 func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
 		if isPKHandleColumn(table, col) {
