@@ -228,26 +228,28 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
 	var kvs bytes.Buffer
-	cols, err := m.pkIndexColumns(table)
+	// if has primary key, use it to construct where condition
+	pcs, err := m.pkIndexColumns(table)
 	if err != nil {
 		return "", nil, errors.Trace(err)
 	}
 
-	hasPK := (len(cols) != 0)
-	cm := make(map[int64]*model.ColumnInfo)
-	for _, col := range cols {
-		cm[col.ID] = col
+	hasPK := (len(pcs) != 0)
+	pcsMap := make(map[int64]*model.ColumnInfo)
+	for _, col := range pcs {
+		pcsMap[col.ID] = col
 	}
 
-	var res []interface{}
+	var conditionValues []interface{}
 	first := true
-	for i := range columns {
-		_, ok := cm[columns[i].ID]
+	for i, col := range columns {
+		_, ok := pcsMap[col.ID]
 		if !ok && hasPK {
+			// if table has primary key, just ignore the non primary key column
 			continue
 		}
 
-		res = append(res, data[i])
+		conditionValues = append(conditionValues, data[i])
 		kvSplit := "="
 		if data[i] == nil {
 			kvSplit = "is"
@@ -261,7 +263,7 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 		}
 	}
 
-	return kvs.String(), res, nil
+	return kvs.String(), conditionValues, nil
 }
 
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
