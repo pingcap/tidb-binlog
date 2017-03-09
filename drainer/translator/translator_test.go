@@ -79,8 +79,12 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	exceptedSQL := "update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;"
-	exceptedNum := 6
+	exceptedSQL := []string{
+		"update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;",
+		"update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? and `NAME` = ? limit 1;",
+		"update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? limit 1;",
+	}
+	exceptedNum := []int{6, 5, 4}
 	exceptedKeys := []int{0, 2, 1}
 	for index, t := range tables {
 		rowDatas, expected := testGenRowDatas(c, t.Columns)
@@ -88,8 +92,8 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[index]]))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals[0]), Equals, exceptedNum)
-		c.Assert(sqls[0], Equals, exceptedSQL)
+		c.Assert(len(vals[0]), Equals, exceptedNum[index])
+		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals {
 			c.Assert(vals[0][index], DeepEquals, expected[index%3])
 		}
@@ -106,8 +110,11 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK")}
-	exceptedSQL := "delete from `t`.`account` where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;"
-	exceptedNum := 3
+	exceptedSQL := []string{
+		"delete from `t`.`account` where `ID` = ? and `NAME` = ? and `SEX` = ? limit 1;",
+		"delete from `t`.`account` where `ID` = ? and `NAME` = ? limit 1;",
+	}
+	exceptedNum := []int{3, 2}
 	exceptedKeys := []int{0, 2}
 	for index, t := range tables {
 		rowDatas, expected := testGenRowDatas(c, t.Columns)
@@ -115,8 +122,8 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[index]]))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals[0]), Equals, exceptedNum)
-		c.Assert(sqls[0], Equals, exceptedSQL)
+		c.Assert(len(vals[0]), Equals, exceptedNum[index])
+		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
