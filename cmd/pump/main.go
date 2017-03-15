@@ -21,8 +21,7 @@ func main() {
 
 	cfg := pump.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "verifying flags error, %v. See 'pump --help'.\n", err)
-		os.Exit(2)
+		log.Fatalf("verifying flags error, %v. See 'pump --help'.", err)
 	}
 
 	pump.InitLogger(cfg)
@@ -30,8 +29,7 @@ func main() {
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "creating pump server error, %v", err)
-		os.Exit(2)
+		log.Fatalf("creating pump server error, %v", err)
 	}
 
 	sc := make(chan os.Signal, 1)

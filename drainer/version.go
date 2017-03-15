@@ -18,9 +18,9 @@ var (
 
 // PrintVersionInfo show version info to Stdout
 func PrintVersionInfo() {
-	log.Infof("drainer Version: %s\n", Version)
-	log.Infof("Git SHA: %s\n", GitSHA)
-	log.Infof("Build TS: %s\n", BuildTS)
-	log.Infof("Go Version: %s\n", runtime.Version())
-	log.Infof("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+	log.Infof("drainer Version: %s", Version)
+	log.Infof("Git SHA: %s", GitSHA)
+	log.Infof("Build TS: %s", BuildTS)
+	log.Infof("Go Version: %s", runtime.Version())
+	log.Infof("Go OS/Arch: %s%s", runtime.GOOS, runtime.GOARCH)
 }
