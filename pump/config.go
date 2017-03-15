@@ -85,8 +85,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	switch perr {
 	case nil:
 	case flag.ErrHelp:
-		fmt.Fprintln(os.Stderr, flagsline)
-		os.Exit(1)
+		os.Exit(0)
 	default:
 		os.Exit(2)
 	}

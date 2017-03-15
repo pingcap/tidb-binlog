@@ -96,7 +96,7 @@ func (cfg *Config) Parse(args []string) error {
 	switch perr {
 	case nil:
 	case flag.ErrHelp:
-		os.Exit(1)
+		os.Exit(0)
 	default:
 		os.Exit(2)
 	}
