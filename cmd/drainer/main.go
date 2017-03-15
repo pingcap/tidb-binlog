@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	_ "net/http/pprof"
 	"os"
@@ -21,8 +20,7 @@ func main() {
 
 	cfg := drainer.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "verifying flags error, See 'drainer --help'.\n %s", errors.ErrorStack(err))
-		os.Exit(2)
+		log.Fatalf("verifying flags error, See 'drainer --help'. %s", errors.ErrorStack(err))
 	}
 
 	drainer.InitLogger(cfg)
@@ -30,8 +28,7 @@ func main() {
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {
-		log.Errorf("create drainer server error, %s", errors.ErrorStack(err))
-		os.Exit(2)
+		log.Fatalf("create drainer server error, %s", errors.ErrorStack(err))
 	}
 
 	sc := make(chan os.Signal, 1)

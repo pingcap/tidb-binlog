@@ -21,9 +21,9 @@ PACKAGES  := $$(go list ./...| grep -vE 'vendor')
 FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitSHA=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitHash=$(shell git rev-parse HEAD)"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.GitSHA=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.GitHash=$(shell git rev-parse HEAD)"
 
 default: build buildsucc
 
