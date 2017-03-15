@@ -92,7 +92,7 @@ func (cfg *Config) Parse(arguments []string) error {
 
 	if cfg.printVersion {
 		fmt.Printf("pump Version: %s\n", Version)
-		fmt.Printf("Git SHA: %s\n", GitSHA)
+		fmt.Printf("Git Commit Hash: %s\n", GitHash)
 		fmt.Printf("Build TS: %s\n", BuildTS)
 		fmt.Printf("Go Version: %s\n", runtime.Version())
 		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
