@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -47,7 +46,7 @@ func main() {
 	}()
 
 	if err := p.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "pump server error, %v", err)
+		log.Errorf("pump server error, %v", err)
 		os.Exit(2)
 	}
 }
