@@ -380,7 +380,7 @@ func (p *Pump) pullBinlogs() {
 				continue
 			}
 
-			pos, err = p.receiveBinlog(stream)
+			pos, err = p.receiveBinlog(stream, pos)
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream]%v", err)
@@ -392,9 +392,8 @@ func (p *Pump) pullBinlogs() {
 	}
 }
 
-func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient) (pb.Pos, error) {
+func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.Pos, error) {
 	var err error
-	var pos pb.Pos
 	var resp *pb.PullBinlogResp
 
 	for {

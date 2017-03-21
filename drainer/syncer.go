@@ -61,7 +61,8 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS, syncer.poss = meta.Pos()
+	syncer.initCommitTS, _ = meta.Pos()
+	syncer.poss = make(map[string]pb.Pos)
 
 	return syncer, nil
 }

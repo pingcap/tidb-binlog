@@ -3,6 +3,7 @@ package translator
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/juju/errors"
@@ -115,23 +116,29 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		}
 
 		var i int
-		columnValues := make(map[int64]types.Datum)
+		oldColumnValues := make(map[int64]types.Datum)
 		for ; i < len(r)/2; i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+			oldColumnValues[r[i].GetInt64()] = r[i+1]
 		}
 
-		updateColumns, oldValues, err = m.generateColumnAndValue(columns, columnValues)
+		updateColumns, oldValues, err = m.generateColumnAndValue(columns, oldColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 		whereColumns := updateColumns
 
-		columnValues = make(map[int64]types.Datum)
+		newColumnValues := make(map[int64]types.Datum)
 		for ; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+			cid := r[i].GetInt64()
+			if val, ok := oldColumnValues[cid]; ok {
+				if reflect.DeepEqual(val.GetValue(), r[i].GetInt64()) {
+					continue
+				}
+			}
+			newColumnValues[cid] = r[i+1]
 		}
 
-		updateColumns, newValues, err = m.generateColumnAndValue(columns, columnValues)
+		updateColumns, newValues, err = m.generateColumnAndValue(columns, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -151,7 +158,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		values = append(values, value)
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, columnValues)
+		key, err := m.generateDispatchKey(table, oldColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}

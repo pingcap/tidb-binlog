@@ -71,19 +71,17 @@ func (lm *localMeta) Save(ts int64, poss map[string]pb.Pos) error {
 	lm.Lock()
 	defer lm.Unlock()
 
-	suffixs := make(map[string]uint64)
 	for nodeID, pos := range poss {
 		// for safe restart, we should forward two binlog files
 		// make sure drainer can get binlogs larger than commitTS
 		// this is a simple way , if meet problem we would replace by an accurate algorithm
-		suffixs[nodeID] = 0
+		lm.Suffixs[nodeID] = 0
 		if pos.Suffix > 2 {
-			suffixs[nodeID] = pos.Suffix - 2
+			lm.Suffixs[nodeID] = pos.Suffix - 2
 		}
 	}
 
 	lm.CommitTS = ts
-	lm.Suffixs = suffixs
 
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
