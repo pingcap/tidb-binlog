@@ -65,6 +65,8 @@ type Server struct {
 	//
 	dataDir string
 
+	clusterID string
+
 	// node maintain the status of this pump and interact with etcd registry
 	node Node
 
@@ -122,9 +124,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	pdCli.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{
+	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
+		clusterID:  fmt.Sprintf("%s", clusterID),
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
@@ -134,15 +137,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 		tiStore:    tiStore,
-	}
-
-	// init cluster data dir
-	_, err = s.getBinloggerToWrite(fmt.Sprintf("%s", clusterID))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return s, nil
+	}, nil
 }
 
 // init scan the dataDir to find all clusterIDs, and for each to create binlogger,
@@ -168,6 +163,13 @@ func (s *Server) init() error {
 		}
 		s.dispatcher[n] = binlogger
 	}
+
+	// init cluster data dir if not exist
+	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
