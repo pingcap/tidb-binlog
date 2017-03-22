@@ -127,7 +127,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
-		clusterID:  fmt.Sprintf("%s", clusterID),
+		clusterID:  fmt.Sprintf("%d", clusterID),
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
