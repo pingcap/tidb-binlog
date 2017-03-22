@@ -39,7 +39,7 @@ func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 	var err error
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
-			log.Warnf("exec sql retry %d - %v - %v", i, sqls, args)
+			log.Warnf("exec sql retry %d - %v", i, sqls)
 			time.Sleep(retryWaitTime)
 		}
 
@@ -67,7 +67,7 @@ func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 			log.Warnf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
 			rerr := txn.Rollback()
 			if rerr != nil {
-				log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], rerr)
+				log.Errorf("[rollback][error]%v", rerr)
 			}
 			return errors.Trace(err)
 		}
