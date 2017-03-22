@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -111,9 +112,17 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	// get cluster ID
+	pdCli, err := pd.NewClient(urlv.StringSlice())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	clusterID := pdCli.GetClusterID()
+	log.Infof("clusterID of pump server is %v", clusterID)
+	pdCli.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{
+	s := &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
 		node:       n,
@@ -125,7 +134,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 		tiStore:    tiStore,
-	}, nil
+	}
+
+	// init cluster data dir
+	_, err = s.getBinloggerToWrite(fmt.Sprintf("%s", clusterID))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return s, nil
 }
 
 // init scan the dataDir to find all clusterIDs, and for each to create binlogger,
