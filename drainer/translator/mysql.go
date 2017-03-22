@@ -249,18 +249,18 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 			continue
 		}
 
-		kvSplit := "="
+		valueClause := "= ?"
 		if data[i] == nil {
-			kvSplit = "is NULL"
+			valueClause = "is NULL"
 		} else {
 			conditionValues = append(conditionValues, data[i])
 		}
 
 		if first {
 			first = false
-			fmt.Fprintf(&kvs, "`%s` %s ?", columns[i].Name, kvSplit)
+			fmt.Fprintf(&kvs, "`%s` %s", columns[i].Name, valueClause)
 		} else {
-			fmt.Fprintf(&kvs, " and `%s` %s ?", columns[i].Name, kvSplit)
+			fmt.Fprintf(&kvs, " and `%s` %s", columns[i].Name, valueClause)
 		}
 	}
 

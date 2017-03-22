@@ -48,7 +48,7 @@ type localMeta struct {
 
 // NewLocalMeta creates a new LocalMeta.
 func NewLocalMeta(name string) Meta {
-	return &localMeta{name: name}
+	return &localMeta{name: name, Suffixs: make(map[string]uint64)}
 }
 
 // Load implements Meta.Load interface.
