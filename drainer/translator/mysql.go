@@ -249,10 +249,11 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 			continue
 		}
 
-		conditionValues = append(conditionValues, data[i])
 		kvSplit := "="
 		if data[i] == nil {
-			kvSplit = "is"
+			kvSplit = "is NULL"
+		} else {
+			conditionValues = append(conditionValues, data[i])
 		}
 
 		if first {
