@@ -56,7 +56,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedKeys := []int{0, 2, 1}
 	for i, table := range tables {
-		rowDatas, expected := testGenRowDatas(c, table.Columns)
+		rowDatas, expected := testGenRowDatas(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[i]]))
@@ -68,7 +68,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
 	binlog := testGenInsertBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -87,19 +87,24 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	exceptedNum := []int{6, 5, 4}
 	exceptedKeys := []int{0, 2, 1}
 	for index, t := range tables {
-		rowDatas, expected := testGenRowDatas(c, t.Columns)
-		binlog := testGenUpdateBinlog(c, t, rowDatas, rowDatas)
+		oldRowDatas, whereExpected := testGenRowDatas(c, t.Columns, 1)
+		newRowDatas, changeExpected := testGenRowDatas(c, t.Columns, 2)
+		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
-		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[index]]))
+		c.Assert(keys[0], Equals, fmt.Sprintf("%v", whereExpected[:exceptedKeys[index]]))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals {
-			c.Assert(vals[0][index], DeepEquals, expected[index%3])
+			if index < 3 {
+				c.Assert(vals[0][index], DeepEquals, changeExpected[index])
+				continue
+			}
+			c.Assert(vals[0][index], DeepEquals, whereExpected[index%3])
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
 	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
 	_, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -117,7 +122,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	exceptedNum := []int{3, 2}
 	exceptedKeys := []int{0, 2}
 	for index, t := range tables {
-		rowDatas, expected := testGenRowDatas(c, t.Columns)
+		rowDatas, expected := testGenRowDatas(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[index]]))
@@ -129,7 +134,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns)
+	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
 	binlog := testGenDeleteBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenDeleteSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -201,11 +206,11 @@ func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	return data
 }
 
-func testGenRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface{}) {
+func testGenRowDatas(c *C, cols []*model.ColumnInfo, base int) ([]types.Datum, []interface{}) {
 	datas := make([]types.Datum, 3)
 	excepted := make([]interface{}, 3)
 	for index, col := range cols {
-		d, e := testGenDatum(c, col)
+		d, e := testGenDatum(c, col, base)
 		datas[index] = d
 		excepted[index] = e
 	}
@@ -213,33 +218,43 @@ func testGenRowDatas(c *C, cols []*model.ColumnInfo) ([]types.Datum, []interface
 }
 
 // generate raw row data by column.Type
-func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
+func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface{}) {
 	var d types.Datum
 	var e interface{}
 	switch col.Tp {
 	case mysql.TypeTiny, mysql.TypeInt24, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeYear:
 		if mysql.HasUnsignedFlag(col.Flag) {
-			d.SetUint64(1)
-			e = int64(1)
+			d.SetUint64(uint64(base))
+			e = int64(base)
 		} else {
-			d.SetInt64(1)
-			e = int64(1)
+			d.SetInt64(int64(base))
+			e = int64(base)
 		}
 	case mysql.TypeFloat:
-		d.SetFloat32(1)
-		e = 1.0
+		d.SetFloat32(float32(base))
+		e = float32(base)
 	case mysql.TypeDouble:
-		d.SetFloat64(1)
-		e = 1.0
+		d.SetFloat64(float64(base))
+		e = float64(base)
 	case mysql.TypeNewDecimal:
-		d.SetMysqlDecimal(types.NewDecFromInt(1))
-		e = 1.0
+		d.SetMysqlDecimal(types.NewDecFromInt(int64(base)))
+		e = fmt.Sprintf("%v", base)
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		d.SetString("test")
-		e = []byte("test")
+		baseVal := "test"
+		val := ""
+		for i := 0; i < base; i++ {
+			val = fmt.Sprintf("%s%s", val, baseVal)
+		}
+		d.SetString(val)
+		e = []byte(val)
 	case mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
-		d.SetBytes([]byte("test"))
-		e = []byte("test")
+		baseVal := "test"
+		val := ""
+		for i := 0; i < base; i++ {
+			val = fmt.Sprintf("%s%s", baseVal)
+		}
+		d.SetBytes([]byte(val))
+		e = []byte(val)
 	case mysql.TypeDuration:
 		duration, err := types.ParseDuration("10:10:10", 0)
 		c.Assert(err, IsNil)
@@ -264,13 +279,13 @@ func testGenDatum(c *C, col *model.ColumnInfo) (types.Datum, interface{}) {
 		e = bit.Value
 	case mysql.TypeSet:
 		elems := []string{"a", "b", "c", "d"}
-		set, err := types.ParseSetName(elems, "a")
+		set, err := types.ParseSetName(elems, elems[base-1])
 		c.Assert(err, IsNil)
 		d.SetMysqlSet(set)
 		e = set.Value
 	case mysql.TypeEnum:
 		elems := []string{"male", "female"}
-		enum, err := types.ParseEnumName(elems, "male")
+		enum, err := types.ParseEnumName(elems, elems[base-1])
 		c.Assert(err, IsNil)
 		d.SetMysqlEnum(enum)
 		e = enum.Value
