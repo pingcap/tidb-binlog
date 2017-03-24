@@ -56,7 +56,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedKeys := []int{0, 2, 1}
 	for i, table := range tables {
-		rowDatas, expected := testGenRowDatas(c, table.Columns, 1)
+		rowDatas, expected := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[i]]))
@@ -68,7 +68,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
+	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenInsertBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -87,8 +87,8 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	exceptedNum := []int{6, 5, 4}
 	exceptedKeys := []int{0, 2, 1}
 	for index, t := range tables {
-		oldRowDatas, whereExpected := testGenRowDatas(c, t.Columns, 1)
-		newRowDatas, changeExpected := testGenRowDatas(c, t.Columns, 2)
+		oldRowDatas, whereExpected := testGenRowData(c, t.Columns, 1)
+		newRowDatas, changeExpected := testGenRowData(c, t.Columns, 2)
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", whereExpected[:exceptedKeys[index]]))
@@ -104,7 +104,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
+	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
 	_, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -122,7 +122,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	exceptedNum := []int{3, 2}
 	exceptedKeys := []int{0, 2}
 	for index, t := range tables {
-		rowDatas, expected := testGenRowDatas(c, t.Columns, 1)
+		rowDatas, expected := testGenRowData(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog})
 		c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[index]]))
@@ -134,7 +134,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		}
 	}
 
-	rowDatas, _ := testGenRowDatas(c, tables[0].Columns, 1)
+	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenDeleteBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenDeleteSQLs(schema, tables[0], [][]byte{binlog[6:]})
 	if err == nil {
@@ -206,7 +206,7 @@ func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	return data
 }
 
-func testGenRowDatas(c *C, cols []*model.ColumnInfo, base int) ([]types.Datum, []interface{}) {
+func testGenRowData(c *C, cols []*model.ColumnInfo, base int) ([]types.Datum, []interface{}) {
 	datas := make([]types.Datum, 3)
 	excepted := make([]interface{}, 3)
 	for index, col := range cols {
