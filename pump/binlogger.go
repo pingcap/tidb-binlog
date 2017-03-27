@@ -15,14 +15,14 @@ import (
 )
 
 var (
-	// SegmentSizeBytes is max threshold of binlog segment file size
+	// SegmentSizeBytes is the max threshold of binlog segment file size
 	// as an exported variable, you can define a different size
 	SegmentSizeBytes int64 = 512 * 1024 * 1024
 
-	// ErrFileNotFound is an error represents not found binlog file
+	// ErrFileNotFound is an error represents binlog file not found
 	ErrFileNotFound = errors.New("binlogger: file not found")
 
-	// ErrFileContentCorruption is an error represents file or directory's content is curruption for some season
+	// ErrFileContentCorruption represents file or directory's content is curruption for some season
 	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
 
 	// ErrCRCMismatch is the error represents crc don't match
@@ -45,7 +45,7 @@ type Binlogger interface {
 	GC(days time.Duration)
 }
 
-// filelog is a logical representation of the log storage
+// binlogger is a logical representation of the log storage
 // it is either in read mode or append mode.
 type binlogger struct {
 	dir string
@@ -121,7 +121,7 @@ func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
 
-// Read reads `nums` binlogs from the given binlog position
+// ReadFrom reads `nums` binlogs from the given binlog position
 // read all binlogs from one file then close it and open the following file
 func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 	var ent = &binlog.Entity{}
