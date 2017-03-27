@@ -15,17 +15,17 @@ import (
 )
 
 var (
-	// SegmentSizeBytes is size of each binlog segment file,
+	// SegmentSizeBytes is max threshold of binlog segment file size
 	// as an exported variable, you can define a different size
 	SegmentSizeBytes int64 = 512 * 1024 * 1024
 
-	// ErrFileNotFound means that a ReadFrom call can't find file to read
+	// ErrFileNotFound is an error represents not found binlog file
 	ErrFileNotFound = errors.New("binlogger: file not found")
 
-	// ErrFileContentCorruption means that detect the content is curruption for some season
+	// ErrFileContentCorruption is an error represents file or directory's content is curruption for some season
 	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
 
-	// ErrCRCMismatch means that detech the crc don't match
+	// ErrCRCMismatch is the error represents crc don't match
 	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
 	crcTable       = crc32.MakeTable(crc32.Castagnoli)
 )
@@ -58,7 +58,7 @@ type binlogger struct {
 	mutex sync.Mutex
 }
 
-// CreateBinlogger creates a binlog directory, then can append binlogs.
+// CreateBinlogger creates a binlog directory, then can append binlogs
 func CreateBinlogger(dirpath string) (Binlogger, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
@@ -94,12 +94,7 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 		return nil, ErrFileContentCorruption
 	}
 
-	var lastFileName string
-	if len(names) == 0 {
-		lastFileName = fileName(0)
-	} else {
-		lastFileName = names[len(names)-1]
-	}
+	lastFileName := names[len(names)-1]
 	latestBinlogFile = lastFileName
 
 	p := path.Join(dirpath, lastFileName)
@@ -126,9 +121,8 @@ func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
 
-// Read reads nums logs from the given log position.
-// it reads binlogs from files and append to result set util the count = num
-// after reads all binlog from one file  then close it and open the following file
+// Read reads `nums` binlogs from the given binlog position.
+// read all binlogs from one file then close it and open the following file
 func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 	var ent = &binlog.Entity{}
 	var ents = []binlog.Entity{}
@@ -257,7 +251,21 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	return b.rotate()
 }
 
-// Rotate creates a new file for append binlog
+// Close closes the binlogger
+func (b *binlogger) Close() error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b.file != nil {
+		if err := b.file.Close(); err != nil {
+			log.Errorf("failed to unlock during closing file: %s", err)
+		}
+	}
+
+	return nil
+}
+
+// rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
 	filename := fileName(b.seq() + 1)
 	latestBinlogFile = filename
@@ -274,22 +282,7 @@ func (b *binlogger) rotate() error {
 	b.file = newTail
 
 	b.encoder = newEncoder(b.file)
-
 	log.Infof("segmented binlog file %v is created", fpath)
-	return nil
-}
-
-// Close closes the binlogger
-func (b *binlogger) Close() error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	if b.file != nil {
-		if err := b.file.Close(); err != nil {
-			log.Errorf("failed to unlock during closing file: %s", err)
-		}
-	}
-
 	return nil
 }
 
