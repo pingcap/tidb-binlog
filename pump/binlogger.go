@@ -45,7 +45,7 @@ type Binlogger interface {
 	GC(days time.Duration)
 }
 
-// filelog is a logical representation of the log storage.
+// filelog is a logical representation of the log storage
 // it is either in read mode or append mode.
 type binlogger struct {
 	dir string
@@ -121,7 +121,7 @@ func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
 
-// Read reads `nums` binlogs from the given binlog position.
+// Read reads `nums` binlogs from the given binlog position
 // read all binlogs from one file then close it and open the following file
 func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 	var ent = &binlog.Entity{}
