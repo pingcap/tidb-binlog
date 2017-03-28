@@ -10,7 +10,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// EtcdRegistry wraps the reaction with etcd
+// EtcdRegistry wraps the reactions with etcd
 type EtcdRegistry struct {
 	client     *etcd.Client
 	reqTimeout time.Duration
@@ -24,12 +24,10 @@ func NewEtcdRegistry(cli *etcd.Client, reqTimeout time.Duration) *EtcdRegistry {
 	}
 }
 
-// Close cuts off the client connection
+// Close closes the etcd client
 func (r *EtcdRegistry) Close() error {
-	if err := r.client.Close(); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	err := r.client.Close()
+	return errors.Trace(err)
 }
 
 func (r *EtcdRegistry) prefixed(p ...string) string {
@@ -61,14 +59,14 @@ func (r *EtcdRegistry) Nodes(pctx context.Context, prefix string) ([]*NodeStatus
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	statuses, err := nodeStatusesFromEtcdNode(resp)
+	status, err := nodesStatusFromEtcdNode(resp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return statuses, nil
+	return status, nil
 }
 
-// RegisterNode register the node in the etcd
+// RegisterNode registers the node in the etcd
 func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
@@ -85,16 +83,14 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host s
 
 }
 
-// UnregisterNode unregister the node in the etcd
+// UnregisterNode unregisters the node in the etcd
 func (r *EtcdRegistry) UnregisterNode(pctx context.Context, prefix, nodeID string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
 	key := r.prefixed(prefix, nodeID)
-	if err := r.client.Delete(ctx, key, true); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	err := r.client.Delete(ctx, key, true)
+	return errors.Trace(err)
 }
 
 func (r *EtcdRegistry) checkNodeExists(ctx context.Context, prefix, nodeID string) (bool, error) {
@@ -108,7 +104,7 @@ func (r *EtcdRegistry) checkNodeExists(ctx context.Context, prefix, nodeID strin
 	return true, nil
 }
 
-// UpdateNode updates the node
+// UpdateNode updates the node infomation
 func (r *EtcdRegistry) UpdateNode(pctx context.Context, prefix, nodeID, host string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
@@ -126,10 +122,8 @@ func (r *EtcdRegistry) updateNode(ctx context.Context, prefix, nodeID, host stri
 		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
 	}
 	key := r.prefixed(prefix, nodeID, "object")
-	if err := r.client.Update(ctx, key, string(objstr), 0); err != nil {
-		return errors.Annotatef(err, "fail to update node with NodeStatus(%v)", obj)
-	}
-	return nil
+	err = r.client.Update(ctx, key, string(objstr), 0)
+	return errors.Trace(err)
 }
 
 func (r *EtcdRegistry) createNode(ctx context.Context, prefix, nodeID, host string) error {
@@ -142,10 +136,8 @@ func (r *EtcdRegistry) createNode(ctx context.Context, prefix, nodeID, host stri
 		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
 	}
 	key := r.prefixed(prefix, nodeID, "object")
-	if err := r.client.Create(ctx, key, string(objstr), nil); err != nil {
-		return errors.Annotatef(err, "fail to create node with NodeStatus(%v)", obj)
-	}
-	return nil
+	err = r.client.Create(ctx, key, string(objstr), nil)
+	return errors.Trace(err)
 }
 
 // RefreshNode keeps the heartbeats with etcd
@@ -155,10 +147,8 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 
 	aliveKey := r.prefixed(prefix, nodeID, "alive")
 	// try to touch alive state of node, update ttl
-	if err := r.client.UpdateOrCreate(ctx, aliveKey, latestBinlogFile, ttl); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	err := r.client.UpdateOrCreate(ctx, aliveKey, latestBinlogFile, ttl)
+	return errors.Trace(err)
 }
 
 func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
@@ -181,7 +171,7 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	return status, nil
 }
 
-func nodeStatusesFromEtcdNode(root *etcd.Node) ([]*NodeStatus, error) {
+func nodesStatusFromEtcdNode(root *etcd.Node) ([]*NodeStatus, error) {
 	var statuses []*NodeStatus
 	for id, n := range root.Childs {
 		status, err := nodeStatusFromEtcdNode(id, n)

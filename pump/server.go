@@ -64,7 +64,7 @@ type Server struct {
 	//
 	dataDir string
 
-	// node maintain the status of this pump and interact with etcd registry
+	// node maintains the status of this pump and interact with etcd registry
 	node Node
 
 	tcpAddr  string
@@ -75,7 +75,7 @@ type Server struct {
 	gc       time.Duration
 	metrics  *metricClient
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
-	needGenBinlog bool
+	needGenBinlog AtomicBool
 	tiStore       kv.Storage
 }
 
@@ -85,7 +85,7 @@ func init() {
 	grpc.EnableTracing = false
 }
 
-// NewServer return a instance of pump server
+// NewServer returns a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
 	n, err := NewPumpNode(cfg)
 	if err != nil {
@@ -128,8 +128,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	}, nil
 }
 
-// init scan the dataDir to find all clusterIDs, and for each to create binlogger,
-// then add them to dispathcer map
+// inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
+// then adds them to dispathcer map
 func (s *Server) init() error {
 	clusterDir := path.Join(s.dataDir, "clusters")
 	if !file.Exist(clusterDir) {
@@ -194,7 +194,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 	}()
 
-	s.needGenBinlog = false
+	s.needGenBinlog.Set(false)
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	ret := &binlog.WriteBinlogResp{}
 	binlogger, err1 := s.getBinloggerToWrite(cid)
@@ -249,14 +249,14 @@ func (s *Server) Start() error {
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
-		// unregister this node
+		// if fail, unregister this node
 		if err := s.node.Unregister(s.ctx); err != nil {
 			log.Error(errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
-	// start heartbeat
+	// start heartbeat loop
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
@@ -332,7 +332,9 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 }
 
 func (s *Server) writeFakeBinlog() {
-	if s.needGenBinlog {
+	// there are only one binlogger for the specified cluster
+	// so we can use only one needGrenBinlog flag
+	if s.needGenBinlog.Get() {
 		for cid := range s.dispatcher {
 			binlogger, err := s.getBinloggerToWrite(cid)
 			if err != nil {
@@ -352,12 +354,12 @@ func (s *Server) writeFakeBinlog() {
 			log.Info("generate binlog successfully")
 		}
 	}
-	s.needGenBinlog = true
+	s.needGenBinlog.Set(true)
 }
 
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
-	s.needGenBinlog = true
+	s.needGenBinlog.Set(true)
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -416,7 +418,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 			Suffix: seq,
 		}
 	}
-	// get newest ts from pd
+	// get ts from pd
 	version, err := s.tiStore.CurrentVersion()
 	if err != nil {
 		log.Errorf("get ts from pd, error %v", err)

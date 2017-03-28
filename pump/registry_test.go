@@ -1,133 +1,91 @@
 package pump
 
 import (
-	"testing"
 	"time"
 
-	"github.com/coreos/etcd/integration"
+	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"golang.org/x/net/context"
 )
 
-func TestUpdateNodeInfo(t *testing.T) {
-	etcdclient, cluster := testSetup(t)
-	defer cluster.Terminate(t)
+var _ = Suite(&testRegistrySuite{})
 
-	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+type testRegistrySuite struct{}
 
-	nodeID := "test1"
-	host := "mytest"
-
-	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	status, err := r.Node(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if status.NodeID != nodeID || status.Host != host {
-		t.Fatalf("node info have error : %v", status)
-	}
-
-	host = "localhost:1234"
-	err = r.UpdateNode(context.Background(), nodePrefix, nodeID, host)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	status, err = r.Node(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if status.NodeID != nodeID || status.Host != host {
-		t.Fatalf("node info have error : %v", status)
-	}
+type RegisrerTestClient interface {
+	Node(context.Context, string, string) (*NodeStatus, error)
 }
 
-func TestUnregisterNode(t *testing.T) {
-	etcdclient, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-
+func (t *testRegistrySuite) TestUpdateNodeInfo(c *C) {
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
-	nodeID := "test1"
-	host := "mytest"
-
-	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
-	if err != nil {
-		t.Fatal(err)
+	ns := &NodeStatus{
+		NodeID:           "test",
+		Host:             "test",
+		LatestBinlogFile: latestBinlogFile,
 	}
 
-	status, err := r.Node(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	err := r.RegisterNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
+	c.Assert(err, IsNil)
+	mustEqualStatus(c, r, ns.NodeID, ns)
 
-	if status.NodeID != nodeID || status.Host != host {
-		t.Fatalf("node info have error : %v", status)
-	}
-
-	host = "localhost:1234"
-	err = r.UnregisterNode(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	exist, err := r.checkNodeExists(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if exist {
-		t.Fatal("fail to unregister node")
-	}
+	ns.Host = "localhost:1234"
+	err = r.UpdateNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
+	c.Assert(err, IsNil)
+	mustEqualStatus(c, r, ns.NodeID, ns)
+	// use Nodes() to query node status
+	ss, err := r.Nodes(context.Background(), nodePrefix)
+	c.Assert(err, IsNil)
+	c.Assert(ss, HasLen, 1)
 }
 
-func TestRefreshNode(t *testing.T) {
-	etcdclient, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-
+func (t *testRegistrySuite) TestRegisterNode(c *C) {
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
-	nodeID := "test1"
-	host := "mytest"
-
-	err := r.RegisterNode(context.Background(), nodePrefix, nodeID, host)
-	if err != nil {
-		t.Fatal(err)
+	ns := &NodeStatus{
+		NodeID: "test",
+		Host:   "test",
 	}
 
-	err = r.RefreshNode(context.Background(), nodePrefix, nodeID, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
+	err := r.RegisterNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
+	c.Assert(err, IsNil)
+	mustEqualStatus(c, r, ns.NodeID, ns)
 
-	status, err := r.Node(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if status.NodeID != nodeID || !status.IsAlive {
-		t.Fatalf("node info have error : %v", status)
-	}
-
-	time.Sleep(3 * time.Second)
-
-	status, err = r.Node(context.Background(), nodePrefix, nodeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.NodeID != nodeID || status.IsAlive {
-		t.Fatalf("node info have error : %v", status)
-	}
+	err = r.UnregisterNode(context.Background(), nodePrefix, ns.NodeID)
+	c.Assert(err, IsNil)
+	exist, err := r.checkNodeExists(context.Background(), nodePrefix, ns.NodeID)
+	c.Assert(err, IsNil)
+	c.Assert(exist, IsFalse)
 }
 
-func testSetup(t *testing.T) (*etcd.Client, *integration.ClusterV3) {
-	cluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
-	etcdclient := etcd.NewClient(cluster.RandClient(), "binlog")
-	return etcdclient, cluster
+func (t *testRegistrySuite) TestRefreshNode(c *C) {
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
+	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+
+	ns := &NodeStatus{
+		NodeID: "test",
+		Host:   "test",
+	}
+
+	err := r.RegisterNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
+	c.Assert(err, IsNil)
+
+	err = r.RefreshNode(context.Background(), nodePrefix, ns.NodeID, 1)
+	c.Assert(err, IsNil)
+
+	ns.IsAlive = true
+	mustEqualStatus(c, r, ns.NodeID, ns)
+	time.Sleep(2 * time.Second)
+	ns.IsAlive = false
+	mustEqualStatus(c, r, ns.NodeID, ns)
+}
+
+func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *NodeStatus) {
+	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
+	// ignore the LatestBinlogFile and alive
+	status.LatestBinlogFile = ns.LatestBinlogFile
+	c.Assert(err, IsNil)
+	c.Assert(ns, DeepEquals, status)
 }
