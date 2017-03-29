@@ -7,129 +7,110 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/integration"
 	"github.com/juju/errors"
+	. "github.com/pingcap/check"
 	"golang.org/x/net/context"
 )
 
-func TestCreate(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-	etcdClient := cluster.RandClient()
+var (
+	etcdMockCluster *integration.ClusterV3
+	etcdCli         *Client
+	ctx             context.Context
+)
 
-	key := "binlog/testkey"
+func TestClient(t *testing.T) {
+	ctx, etcdCli, etcdMockCluster = testSetup(t)
+	defer etcdMockCluster.Terminate(t)
+	TestingT(t)
+}
+
+var _ = Suite(&testEtcdSuite{})
+
+type testEtcdSuite struct{}
+
+func (t *testEtcdSuite) TestCreate(c *C) {
+	etcdClient := etcdMockCluster.RandClient()
+
+	key := "binlogcreate/testkey"
 	obj := "test"
 
 	// verify that kv pair is empty before set
 	getResp, err := etcdClient.KV.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.Get failed: %v", err)
-	}
-
-	if len(getResp.Kvs) != 0 {
-		t.Fatalf("expecting empty result on key: %s", key)
-	}
+	c.Assert(err, IsNil)
+	c.Assert(getResp.Kvs, HasLen, 0)
 
 	err = etcdCli.Create(ctx, key, obj, nil)
-	if err != nil {
-		t.Fatalf("Set failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	getResp, err = etcdClient.KV.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.Get failed: %v", err)
-	}
-
-	if len(getResp.Kvs) == 0 {
-		t.Fatalf("expecting non empty result on key: %s", key)
-	}
+	c.Assert(err, IsNil)
+	c.Assert(getResp.Kvs, HasLen, 1)
 }
 
-func TestCreateWithTTL(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-
-	key := "binlog/ttlkey"
-	input := "ttltest"
+func (t *testEtcdSuite) TestCreateWithTTL(c *C) {
+	key := "binlogttl/ttlkey"
+	obj := "ttltest"
 
 	lcr, err := etcdCli.client.Lease.Grant(ctx, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, IsNil)
 	opts := []clientv3.OpOption{clientv3.WithLease(clientv3.LeaseID(lcr.ID))}
 
-	if err := etcdCli.Create(ctx, key, input, opts); err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
+	err = etcdCli.Create(ctx, key, obj, opts)
+	c.Assert(err, IsNil)
 
 	time.Sleep(2 * time.Second)
 	_, err = etcdCli.Get(ctx, key)
-	if err == nil || !errors.IsNotFound(err) {
-		t.Fatalf("ttl failed: %v", err)
-	}
+	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
-func TestCreateWithKeyExist(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
+func (t *testEtcdSuite) TestCreateWithKeyExist(c *C) {
 	obj := "existtest"
-	key := "binlog/exist"
+	key := "binlogexist/exist"
 
-	etcdClient := cluster.RandClient()
+	etcdClient := etcdMockCluster.RandClient()
 	_, err := etcdClient.KV.Put(ctx, key, obj, nil...)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.put failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	err = etcdCli.Create(ctx, key, obj, nil)
-	if err == nil || !errors.IsAlreadyExists(err) {
-		t.Errorf("expecting key exists error, but get: %s", err)
-	}
+	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 }
 
-func TestUpdate(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-
-	input := "updatetest"
-	input2 := "updatetest2"
-	key := "binlog/updatekey"
+func (t *testEtcdSuite) TestUpdate(c *C) {
+	obj1 := "updatetest"
+	obj2 := "updatetest2"
+	key := "binlogupdate/updatekey"
 
 	lcr, err := etcdCli.client.Lease.Grant(ctx, 2)
-	if err != nil {
-		t.Fatalf("get lease failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	opts := []clientv3.OpOption{clientv3.WithLease(lcr.ID)}
-	err = etcdCli.Create(ctx, key, input, opts)
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
+	err = etcdCli.Create(ctx, key, obj1, opts)
+	c.Assert(err, IsNil)
 
 	time.Sleep(time.Second)
 
-	err = etcdCli.Update(ctx, key, input2, 3)
-	if err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
+	err = etcdCli.Update(ctx, key, obj2, 3)
+	c.Assert(err, IsNil)
 
 	time.Sleep(2 * time.Second)
 
 	res, err := etcdCli.Get(ctx, key)
-	if err != nil || string(res) != input2 {
-		t.Fatalf("ttl failed: %v", err)
-	}
+	c.Assert(err, IsNil)
+	c.Assert(string(res), Equals, obj2)
 
 	time.Sleep(2 * time.Second)
 	res, err = etcdCli.Get(ctx, key)
-	if err == nil || !errors.IsNotFound(err) {
-		t.Fatalf("ttl failed: %v", err)
-	}
+	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
-func TestList(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
+func (t *testEtcdSuite) TestUpdateOrCreate(c *C) {
+	obj := "updatetest"
+	key := "binlogupdatecreate/updatekey"
+	err := etcdCli.UpdateOrCreate(ctx, key, obj, 3)
+	c.Assert(err, IsNil)
+}
 
-	key := "binlog/testkey"
+func (t *testEtcdSuite) TestList(c *C) {
+	key := "binloglist/testkey"
 
 	k1 := key + "/level1"
 	k2 := key + "/level2"
@@ -137,85 +118,50 @@ func TestList(t *testing.T) {
 	k11 := key + "/level1/level1"
 
 	err := etcdCli.Create(ctx, k1, k1, nil)
-	if err != nil {
-		t.Fatalf("Set failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	err = etcdCli.Create(ctx, k2, k2, nil)
-	if err != nil {
-		t.Fatalf("Set failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	err = etcdCli.Create(ctx, k3, k3, nil)
-	if err != nil {
-		t.Fatalf("Set failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	err = etcdCli.Create(ctx, k11, k11, nil)
-	if err != nil {
-		t.Fatalf("Set failed: %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	root, err := etcdCli.List(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.Get failed: %v", err)
-	}
-
-	if string(root.Childs["level1"].Value) != k1 || string(root.Childs["level1"].Childs["level1"].Value) != k11 || string(root.Childs["level2"].Value) != k2 || string(root.Childs["level3"].Value) != k3 {
-		t.Fatalf("list result is error: %v", root)
-	}
+	c.Assert(err, IsNil)
+	c.Assert(string(root.Childs["level1"].Value), Equals, k1)
+	c.Assert(string(root.Childs["level1"].Childs["level1"].Value), Equals, k11)
+	c.Assert(string(root.Childs["level2"].Value), Equals, k2)
+	c.Assert(string(root.Childs["level3"].Value), Equals, k3)
 }
 
-func TestDelete(t *testing.T) {
-	ctx, etcdCli, cluster := testSetup(t)
-	defer cluster.Terminate(t)
-
-	key := "binlog/testkey"
+func (t *testEtcdSuite) TestDelete(c *C) {
+	key := "binlogdelete/testkey"
 	keys := []string{key + "/level1", key + "/level2", key + "/level1" + "/level1"}
 	for _, k := range keys {
 		err := etcdCli.Create(ctx, k, k, nil)
-		if err != nil {
-			t.Fatalf("Set failed: %v", err)
-		}
+		c.Assert(err, IsNil)
 	}
 
 	root, err := etcdCli.List(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.List failed: %v", err)
-	}
-
-	if len(root.Childs) != 2 {
-		t.Fatalf("etcd fail to get 2 kvs, have %d remaining", len(root.Childs))
-	}
+	c.Assert(err, IsNil)
+	c.Assert(root.Childs, HasLen, 2)
 
 	err = etcdCli.Delete(ctx, keys[1], false)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.Delete %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	root, err = etcdCli.List(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.delete failed: %v", err)
-	}
-
-	if len(root.Childs) != 1 {
-		t.Fatalf("etcd fail to get 2 kvs, have %d remaining", len(root.Childs))
-	}
+	c.Assert(err, IsNil)
+	c.Assert(root.Childs, HasLen, 1)
 
 	err = etcdCli.Delete(ctx, key, true)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.Delete %v", err)
-	}
+	c.Assert(err, IsNil)
 
 	root, err = etcdCli.List(ctx, key)
-	if err != nil {
-		t.Fatalf("etcdClient.KV.delete failed: %v", err)
-	}
-
-	if len(root.Childs) != 0 {
-		t.Fatalf("etcd fail to delete kvs, have %d remaining", len(root.Childs))
-	}
-
+	c.Assert(err, IsNil)
+	c.Assert(root.Childs, HasLen, 0)
 }
 
 func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) {
