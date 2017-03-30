@@ -30,7 +30,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
 	}
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
 	// `createIgnoreSchema` job
 	job1 := &model.Job{
 		ID:         4,
@@ -38,9 +38,9 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil},
 	}
-	jobs = mustAppendJob(c, jobs, job1)
+	jobs = append(jobs, job1)
 	// construct a cancelled job
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 5, State: model.JobCancelled})
+	jobs = append(jobs, &model.Job{ID: 5, State: model.JobCancelled})
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
@@ -51,20 +51,20 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)
 	c.Assert(ok, IsTrue)
 	// test drop schema and drop ignore schema
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema})
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema})
+	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema})
+	jobs = append(jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema})
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)
 	// test create schema already exist error
 	jobs = jobs[:0]
-	jobs = mustAppendJob(c, jobs, job)
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
+	jobs = append(jobs, job)
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
 	// test schema drop schema error
 	jobs = jobs[:0]
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
@@ -76,7 +76,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	tbName := model.NewCIStr("T")
 	colName := model.NewCIStr("A")
 	idxName := model.NewCIStr("idx")
-
+	// column info
 	colInfo := &model.ColumnInfo{
 		ID:        1,
 		Name:      colName,
@@ -84,7 +84,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		FieldType: *types.NewFieldType(mysql.TypeLonglong),
 		State:     model.StatePublic,
 	}
-
+	// index info
 	idxInfo := &model.IndexInfo{
 		Name:  idxName,
 		Table: tbName,
@@ -99,13 +99,13 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Primary: true,
 		State:   model.StatePublic,
 	}
-
+	// table info
 	tblInfo := &model.TableInfo{
 		ID:    2,
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-
+	// db info
 	dbInfo := &model.DBInfo{
 		ID:    3,
 		Name:  dbName,
@@ -119,7 +119,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
 	}
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
 
 	// `createTable` job
 	job = &model.Job{
@@ -129,7 +129,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Type:       model.ActionCreateTable,
 		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
 
 	// `addColumn` job
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
@@ -140,7 +140,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Type:       model.ActionAddColumn,
 		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
 
 	// construct a historical `addIndex` job
 	tblInfo.Indices = []*model.IndexInfo{idxInfo}
@@ -151,7 +151,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Type:       model.ActionAddIndex,
 		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
 	}
-	jobs = mustAppendJob(c, jobs, job)
+	jobs = append(jobs, job)
 
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
@@ -173,7 +173,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
 	schema1, err := NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)
 	table, ok = schema1.TableByID(tblInfo1.ID)
@@ -181,7 +181,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	table, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
-	jobs = mustAppendJob(c, jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
 	schema2, err := NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)
 	table, ok = schema2.TableByID(tblInfo.ID)
@@ -194,9 +194,4 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(err, IsNil)
 	// test schema version
 	c.Assert(schema.SchemaMetaVersion(), Equals, int64(0))
-}
-
-func mustAppendJob(c *C, jobs []*model.Job, job *model.Job) []*model.Job {
-	jobs = append(jobs, job)
-	return jobs
 }

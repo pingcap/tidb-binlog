@@ -63,32 +63,6 @@ func CalculateNextPos(item binlog.Entity) binlog.Pos {
 	return pos
 }
 
-func encodePayload(payload []byte) ([]byte, error) {
-	nowBinary, err := time.Now().MarshalBinary()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	n1 := len(nowBinary)
-	n2 := len(payload)
-	data := make([]byte, n1+n2)
-	copy(data[:n1], nowBinary)
-	copy(data[n1:], payload)
-	return data, nil
-}
-
-func decodePayload(value []byte) ([]byte, time.Duration, error) {
-	var ts time.Time
-	n1 := lengthOfBinaryTime
-
-	data := make([]byte, len(value))
-	copy(data, value)
-
-	if err := ts.UnmarshalBinary(data[:n1]); err != nil {
-		return nil, 0, errors.Trace(err)
-	}
-	return data[n1:], time.Now().Sub(ts), nil
-}
-
 // combine suffix offset in one float, the format would be suffix.offset
 func posToFloat(pos *binlog.Pos) float64 {
 	var decimal float64
