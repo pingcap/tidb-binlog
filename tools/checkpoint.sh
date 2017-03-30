@@ -6,7 +6,8 @@ HOST="127.0.0.1"
 PORT=4000
 USERNAME="root"
 PASSWORD="''"
-DATADIR="."
+DUMPDIR="."
+DRAINERDIR="data.drainer"
 CHUNKSIZE=64
 PD_ADDR="127.0.0.1:2379"
 
@@ -27,7 +28,8 @@ print_args () {
     echo_info  "db-port:  ${PORT}"
     echo_info  "db-user:  ${USERNAME}"
     echo_info  "db-password: ${PASSWORD}"
-    echo_info  "outputdir: ${DATADIR}"
+    echo_info  "dump-files-dir: ${DUMPDIR}"
+    echo_info  "drainer-meta: ${DRAINERDIR}"
     echo_info  "chunk-filesize: ${CHUNKSIZE}"
     echo_info  "pd-addr: ${PD_ADDR}"
     echo_info  "##################################"
@@ -48,7 +50,7 @@ while [[ $# -gt 1 ]]; do
         echo_error "$arg should be follow with it's argument value, not $2" && exit 1
     fi
     case $arg in
-    -c|--pd-addr)
+    -pd|--pd-addr)
         PD_ADDR="$2"
         shift # past argument
         ;;
@@ -68,8 +70,12 @@ while [[ $# -gt 1 ]]; do
         PASSWORD="$2"
         shift # past argument
         ;;
-    -o|--outputdir)
-        DATADIR="$2"
+    -d|--dump-dir)
+        DUMPDIR="$2"
+        shift # past argument
+        ;;
+    -m|--drainer-meta)
+        DRAINERDIR="$2"
         shift # past argument
         ;;
     -F|--chunk-filesize)
@@ -88,15 +94,15 @@ done
 print_args
 
 
-TMP_DUMP_DIR="${DATADIR}/tmp_dump_files"
-DUMP_DIR="${DATADIR}/dump_files"
+TMP_DUMP_DIR="${DUMPDIR}/tmp_dump_files"
+DUMP_DIR="${DUMPDIR}/dump_files"
 
 # clean tmp dir
 rm -rf ${TMP_DUMP_DIR} || mkdir ${TMP_DUMP_DIR}
 
 # get the cistern's status
 rc=0
-${CP_ROOT}/bin/drainer -generate-meta --data-dir=${DATADIR} --pd-urls=${PD_ADDR} || rc=$?
+${CP_ROOT}/bin/drainer -generate-meta --data-dir=${DRAINERDIR} --pd-urls=${PD_ADDR} || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         rm -rf ${TMP_DUMP_DIR}
         exit

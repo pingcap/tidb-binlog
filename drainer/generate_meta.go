@@ -18,7 +18,7 @@ import (
 
 // GenMetaInfo generates drainer meta from pd
 func GenMetaInfo(cfg *Config) error {
-	if err1 := os.MkdirAll(cfg.DataDir, 0700); err1 != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return errors.Trace(err)
 	}
 
