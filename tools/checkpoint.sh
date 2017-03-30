@@ -8,7 +8,7 @@ USERNAME="root"
 PASSWORD="''"
 DATADIR="."
 CHUNKSIZE=64
-CISTERN_ADDR="127.0.0.1:8249"
+PD_ADDR="127.0.0.1:2379"
 
 
 # echo function
@@ -29,7 +29,7 @@ print_args () {
     echo_info  "db-password: ${PASSWORD}"
     echo_info  "outputdir: ${DATADIR}"
     echo_info  "chunk-filesize: ${CHUNKSIZE}"
-    echo_info  "cistern-addr: ${CISTERN_ADDR}"
+    echo_info  "pd-addr: ${PD_ADDR}"
     echo_info  "##################################"
 }
 
@@ -48,8 +48,8 @@ while [[ $# -gt 1 ]]; do
         echo_error "$arg should be follow with it's argument value, not $2" && exit 1
     fi
     case $arg in
-    -c|--cistern-addr)
-        CISTERN_ADDR="$2"
+    -c|--pd-addr)
+        PD_ADDR="$2"
         shift # past argument
         ;;
     -h|--host)
@@ -96,7 +96,7 @@ rm -rf ${TMP_DUMP_DIR} || mkdir ${TMP_DUMP_DIR}
 
 # get the cistern's status
 rc=0
-curl -s "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
+${CP_ROOT}/bin/drainer -generate-meta --data-dir=${DATADIR} --pd-urls=${PD_ADDR} || rc=$?
 if [[ "${rc}" -ne 0 ]]; then
         rm -rf ${TMP_DUMP_DIR}
         exit
@@ -115,6 +115,3 @@ rm -v ${TMP_DUMP_DIR}/mysql-schema-create.sql ${TMP_DUMP_DIR}/mysql.*
 
 # mv to specified dir
 rm -rf ${DUMP_DIR} && mv ${TMP_DUMP_DIR} ${DUMP_DIR}
-
-# filter and get latest commit TS
-cat ${DATADIR}/.cistern_status | grep -Po '"Upper":\d+'| grep -Po '\d+' > ${DATADIR}/latest_commit_ts

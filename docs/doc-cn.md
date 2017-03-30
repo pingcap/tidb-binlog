@@ -163,6 +163,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
         向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
     -disable-dispatch
         是否禁用拆分单个 binlog 的 sqls 的功能，如果设置为 true，则按照每个 binlog 顺序依次还原成单个事务进行同步
+    -generate-meta
+        如果设置为 true, 则只生成 drainer 的 meta 文件, 可以配合 mydumper 生成 drainer 启动的 meta
     -ignore-schemas string
         db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),   
         不支持对 ignore schemas 的 table 进行 rename DDL 操作
