@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"strings"
 
@@ -17,6 +18,10 @@ import (
 
 // GenMetaInfo generates drainer meta from pd
 func GenMetaInfo(cfg *Config) error {
+	if err1 := os.MkdirAll(cfg.DataDir, 0700); err1 != nil {
+		return errors.Trace(err)
+	}
+
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return errors.Trace(err)
