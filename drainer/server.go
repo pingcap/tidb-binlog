@@ -62,6 +62,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// lockResolver and tikvStore doesn't exposed a method to get clusterID
 	// so have to create a PD client temporarily.
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
@@ -72,7 +74,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	clusterID = pdCli.GetClusterID()
+	clusterID = pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
@@ -83,7 +85,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	syncer, err := NewSyncer(ctx, meta, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
