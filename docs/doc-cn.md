@@ -98,14 +98,14 @@ cd binlog-latest-linux-amd64
     *  设置 savepoint 文件路径，然后启动 drainer， `bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}`
 
 *   drainer 输出的 pb, 需要在配置文件设置下面的参数
-```
-[syncer]
-db-type = "pb"
-disable-dispatch = true
+    ```
+    [syncer]
+    db-type = "pb"
+    disable-dispatch = true
 
-[syncer.to]
-dir = "/path/pb-dir"
-```
+    [syncer.to]
+    dir = "/path/pb-dir"
+    ```
 
 
 ### 示例及参数解释
