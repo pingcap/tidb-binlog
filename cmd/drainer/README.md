@@ -22,8 +22,8 @@ Usage of drainer:
         the interval time (in seconds) of detect pumps' status (default 10)
   -disable-dispatch
         disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless
-  -generate-meta
-        generate meta infomation from pd
+  -gen-savepoint
+        generate savepoint from cluster
   -ignore-schemas string
         disable sync those schemas (default "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql")
   -log-file string

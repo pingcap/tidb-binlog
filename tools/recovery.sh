@@ -27,7 +27,7 @@ print_args () {
     echo_info  "db-user:  ${USERNAME}"
     echo_info  "db-password: ${PASSWORD}"
     echo_info  "dump-files-dir: ${DUMPDIR}"
-    echo_info  "drainer-meta: ${DRAINERDIR}"
+    echo_info  "drainer-savepoint: ${DRAINERDIR}"
     echo_info  "threads: ${THREADS}"
     echo_info  "##################################"
 }
