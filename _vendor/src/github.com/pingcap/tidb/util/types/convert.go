@@ -145,7 +145,7 @@ func StrToInt(sc *variable.StatementContext, str string) (int64, error) {
 	return iVal, errors.Trace(err)
 }
 
-// StrToUint converts a string to an unsigned interger at the best-effortt.
+// StrToUint converts a string to an unsigned integer at the best-effortt.
 func StrToUint(sc *variable.StatementContext, str string) (uint64, error) {
 	str = strings.TrimSpace(str)
 	validPrefix, err := getValidIntPrefix(sc, str)
@@ -202,7 +202,7 @@ func floatStrToIntStr(validFloat string) (string, error) {
 	if err != nil {
 		return validFloat, errors.Trace(err)
 	}
-	if exp > 0 && intCnt > (math.MaxInt64-exp) {
+	if exp > 0 && int64(intCnt) > (math.MaxInt64-int64(exp)) {
 		// (exp + incCnt) overflows MaxInt64.
 		return validFloat, errors.Trace(ErrOverflow)
 	}

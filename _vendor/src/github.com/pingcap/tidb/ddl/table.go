@@ -83,31 +83,27 @@ func (d *ddl) onDropTable(t *meta.Meta, job *model.Job) error {
 		return errors.Trace(infoschema.ErrTableNotExists)
 	}
 
-	ver, err := updateSchemaVersion(t, job)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	originalState := job.SchemaState
 	switch tblInfo.State {
 	case model.StatePublic:
 		// public -> write only
 		job.SchemaState = model.StateWriteOnly
 		tblInfo.State = model.StateWriteOnly
-		err = t.UpdateTable(schemaID, tblInfo)
+		_, err = updateTableInfo(t, job, tblInfo, originalState)
 	case model.StateWriteOnly:
 		// write only -> delete only
 		job.SchemaState = model.StateDeleteOnly
 		tblInfo.State = model.StateDeleteOnly
-		err = t.UpdateTable(schemaID, tblInfo)
+		_, err = updateTableInfo(t, job, tblInfo, originalState)
 	case model.StateDeleteOnly:
 		tblInfo.State = model.StateNone
-		err = t.UpdateTable(schemaID, tblInfo)
+		job.SchemaState = model.StateNone
+		ver, err := updateTableInfo(t, job, tblInfo, originalState)
 		if err = t.DropTable(job.SchemaID, job.TableID); err != nil {
 			break
 		}
 		// Finish this job.
 		job.State = model.JobDone
-		job.SchemaState = model.StateNone
 		job.BinlogInfo.AddTableInfo(ver, tblInfo)
 		startKey := tablecodec.EncodeTablePrefix(tableID)
 		job.Args = append(job.Args, startKey)
@@ -142,6 +138,9 @@ func (d *ddl) delReorgTable(t *meta.Meta, job *model.Job) error {
 }
 
 func (d *ddl) getTable(schemaID int64, tblInfo *model.TableInfo) (table.Table, error) {
+	if tblInfo.OldSchemaID != 0 {
+		schemaID = tblInfo.OldSchemaID
+	}
 	alloc := autoid.NewAllocator(d.store, schemaID)
 	tbl, err := table.TableFromMeta(alloc, tblInfo)
 	return tbl, errors.Trace(err)
@@ -236,6 +235,9 @@ func (d *ddl) onRenameTable(t *meta.Meta, job *model.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if tblInfo.OldSchemaID == 0 {
+			tblInfo.OldSchemaID = oldSchemaID
+		}
 	}
 
 	err = t.DropTable(oldSchemaID, tblInfo.ID)
@@ -255,6 +257,7 @@ func (d *ddl) onRenameTable(t *meta.Meta, job *model.Job) error {
 		return errors.Trace(err)
 	}
 	job.State = model.JobDone
+	job.SchemaState = model.StatePublic
 	job.BinlogInfo.AddTableInfo(ver, tblInfo)
 	return nil
 }
@@ -265,7 +268,7 @@ func checkTableNotExists(t *meta.Meta, job *model.Job, schemaID int64, tableName
 	if err != nil {
 		if terror.ErrorEqual(err, meta.ErrDBNotExists) {
 			job.State = model.JobCancelled
-			return errors.Trace(infoschema.ErrDatabaseNotExists)
+			return infoschema.ErrDatabaseNotExists.GenByArgs("")
 		}
 		return errors.Trace(err)
 	}
@@ -275,9 +278,21 @@ func checkTableNotExists(t *meta.Meta, job *model.Job, schemaID int64, tableName
 		if tbl.Name.L == tableName {
 			// This table already exists and can't be created, we should cancel this job now.
 			job.State = model.JobCancelled
-			return errors.Trace(infoschema.ErrTableExists.GenByArgs(tbl.Name))
+			return infoschema.ErrTableExists.GenByArgs(tbl.Name)
 		}
 	}
 
 	return nil
+}
+
+func updateTableInfo(t *meta.Meta, job *model.Job, tblInfo *model.TableInfo, originalState model.SchemaState) (
+	ver int64, err error) {
+	if originalState != job.SchemaState {
+		ver, err = updateSchemaVersion(t, job)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
+
+	return ver, t.UpdateTable(job.SchemaID, tblInfo)
 }

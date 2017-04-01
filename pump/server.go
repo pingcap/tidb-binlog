@@ -349,7 +349,7 @@ func (s *Server) writeFakeBinlog() {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
-			log.Info("generate binlog successfully")
+			log.Info("generate fake binlog successfully")
 		}
 	}
 	s.needGenBinlog = true

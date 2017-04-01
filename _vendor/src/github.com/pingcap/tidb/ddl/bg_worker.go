@@ -74,6 +74,7 @@ func (d *ddl) handleBgJobQueue() error {
 
 // runBgJob runs a background job.
 func (d *ddl) runBgJob(t *meta.Meta, job *model.Job) {
+	log.Infof("[ddl] run background job %s", job)
 	job.State = model.JobRunning
 
 	var err error
@@ -130,7 +131,7 @@ func (d *ddl) updateBgJob(t *meta.Meta, job *model.Job) error {
 	return errors.Trace(err)
 }
 
-// finishBgJob finishs a background job.
+// finishBgJob finishes a background job.
 func (d *ddl) finishBgJob(t *meta.Meta, job *model.Job) error {
 	log.Infof("[ddl] finish background job %v", job)
 	if _, err := t.DeQueueBgJob(); err != nil {
