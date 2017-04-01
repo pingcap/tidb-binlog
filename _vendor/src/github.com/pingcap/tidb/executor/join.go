@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tidb/util/mvmap"
 	"github.com/pingcap/tidb/util/types"
 )
 
@@ -34,7 +35,7 @@ var (
 
 // HashJoinExec implements the hash join algorithm.
 type HashJoinExec struct {
-	hashTable     map[string][]*Row
+	hashTable     *mvmap.MVMap
 	smallHashKey  []*expression.Column
 	bigHashKey    []*expression.Column
 	smallExec     Executor
@@ -44,7 +45,7 @@ type HashJoinExec struct {
 	smallFilter   expression.Expression
 	bigFilter     expression.Expression
 	otherFilter   expression.Expression
-	schema        expression.Schema
+	schema        *expression.Schema
 	outer         bool
 	leftSmall     bool
 	cursor        int
@@ -58,15 +59,18 @@ type HashJoinExec struct {
 	// closeCh add a lock for closing executor.
 	closeCh chan struct{}
 
+	rows []*Row
 	// Concurrent channels.
 	concurrency      int
-	bigTableRows     []chan []*Row
-	bigTableErr      chan error
+	bigTableResultCh []chan *execResult
 	hashJoinContexts []*hashJoinCtx
 
 	// Channels for output.
-	resultErr  chan error
-	resultRows chan *Row
+	resultCh chan *execResult
+
+	// rowKeyCache is used to store the table and table name from a row.
+	// Because every row has the same table name and table, we can use a single row key cache.
+	rowKeyCache []*RowKeyEntry
 }
 
 // hashJoinCtx holds the variables needed to do a hash join in one of many concurrent goroutines.
@@ -81,9 +85,14 @@ type hashJoinCtx struct {
 // Close implements the Executor Close interface.
 func (e *HashJoinExec) Close() error {
 	e.finished.Store(true)
-	<-e.closeCh
+	if e.prepared {
+		for range e.resultCh {
+		}
+		<-e.closeCh
+	}
 	e.prepared = false
 	e.cursor = 0
+	e.rows = nil
 	return e.smallExec.Close()
 }
 
@@ -100,13 +109,13 @@ func makeJoinRow(a *Row, b *Row) *Row {
 	return ret
 }
 
-// getHashKey gets the hash key when given a row and hash columns.
+// getJoinKey gets the hash key when given a row and hash columns.
 // It will return a boolean value representing if the hash key has null, a byte slice representing the result hash code.
-func getHashKey(sc *variable.StatementContext, cols []*expression.Column, row *Row, targetTypes []*types.FieldType,
+func getJoinKey(sc *variable.StatementContext, cols []*expression.Column, row *Row, targetTypes []*types.FieldType,
 	vals []types.Datum, bytes []byte) (bool, []byte, error) {
 	var err error
 	for i, col := range cols {
-		vals[i], err = col.Eval(row.Data, nil)
+		vals[i], err = col.Eval(row.Data)
 		if err != nil {
 			return false, nil, errors.Trace(err)
 		}
@@ -126,7 +135,7 @@ func getHashKey(sc *variable.StatementContext, cols []*expression.Column, row *R
 }
 
 // Schema implements the Executor Schema interface.
-func (e *HashJoinExec) Schema() expression.Schema {
+func (e *HashJoinExec) Schema() *expression.Schema {
 	return e.schema
 }
 
@@ -137,23 +146,25 @@ var batchSize = 128
 func (e *HashJoinExec) fetchBigExec() {
 	cnt := 0
 	defer func() {
-		for _, cn := range e.bigTableRows {
+		for _, cn := range e.bigTableResultCh {
 			close(cn)
 		}
 		e.bigExec.Close()
 		e.wg.Done()
 	}()
 	curBatchSize := 1
+	result := &execResult{rows: make([]*Row, 0, batchSize)}
 	for {
-		rows := make([]*Row, 0, batchSize)
 		done := false
+		idx := cnt % e.concurrency
 		for i := 0; i < curBatchSize; i++ {
 			if e.finished.Load().(bool) {
 				return
 			}
 			row, err := e.bigExec.Next()
 			if err != nil {
-				e.bigTableErr <- errors.Trace(err)
+				result.err = errors.Trace(err)
+				e.bigTableResultCh[idx] <- result
 				done = true
 				break
 			}
@@ -161,12 +172,25 @@ func (e *HashJoinExec) fetchBigExec() {
 				done = true
 				break
 			}
-			rows = append(rows, row)
+			result.rows = append(result.rows, row)
+			if len(result.rows) >= batchSize {
+				select {
+				case <-e.ctx.Done():
+					return
+				case e.bigTableResultCh[idx] <- result:
+					result = &execResult{rows: make([]*Row, 0, batchSize)}
+				}
+			}
 		}
-		idx := cnt % e.concurrency
-		e.bigTableRows[idx] <- rows
 		cnt++
 		if done {
+			if len(result.rows) > 0 && len(result.rows) < batchSize {
+				select {
+				case <-e.ctx.Done():
+					return
+				case e.bigTableResultCh[idx] <- result:
+				}
+			}
 			break
 		}
 		if curBatchSize < batchSize {
@@ -180,20 +204,19 @@ func (e *HashJoinExec) fetchBigExec() {
 func (e *HashJoinExec) prepare() error {
 	e.closeCh = make(chan struct{})
 	e.finished.Store(false)
-	e.bigTableRows = make([]chan []*Row, e.concurrency)
+	e.bigTableResultCh = make([]chan *execResult, e.concurrency)
 	e.wg = sync.WaitGroup{}
 	for i := 0; i < e.concurrency; i++ {
-		e.bigTableRows[i] = make(chan []*Row, e.concurrency*batchSize)
+		e.bigTableResultCh[i] = make(chan *execResult, e.concurrency)
 	}
-	e.bigTableErr = make(chan error, 1)
-
 	// Start a worker to fetch big table rows.
 	e.wg.Add(1)
 	go e.fetchBigExec()
 
-	e.hashTable = make(map[string][]*Row)
+	e.hashTable = mvmap.NewMVMap()
 	e.cursor = 0
 	sc := e.ctx.GetSessionVars().StmtCtx
+	var buffer []byte
 	for {
 		row, err := e.smallExec.Next()
 		if err != nil {
@@ -214,22 +237,22 @@ func (e *HashJoinExec) prepare() error {
 				continue
 			}
 		}
-		hasNull, hashcode, err := getHashKey(sc, e.smallHashKey, row, e.targetTypes, e.hashJoinContexts[0].datumBuffer, nil)
+		hasNull, joinKey, err := getJoinKey(sc, e.smallHashKey, row, e.targetTypes, e.hashJoinContexts[0].datumBuffer, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if hasNull {
 			continue
 		}
-		if rows, ok := e.hashTable[string(hashcode)]; !ok {
-			e.hashTable[string(hashcode)] = []*Row{row}
-		} else {
-			e.hashTable[string(hashcode)] = append(rows, row)
+		buffer = buffer[:0]
+		buffer, err = e.encodeRow(buffer, row)
+		if err != nil {
+			return errors.Trace(err)
 		}
+		e.hashTable.Put(joinKey, buffer)
 	}
 
-	e.resultRows = make(chan *Row, e.concurrency*1000)
-	e.resultErr = make(chan error, 1)
+	e.resultCh = make(chan *execResult, e.concurrency)
 
 	for i := 0; i < e.concurrency; i++ {
 		e.wg.Add(1)
@@ -241,38 +264,98 @@ func (e *HashJoinExec) prepare() error {
 	return nil
 }
 
+func (e *HashJoinExec) encodeRow(b []byte, row *Row) ([]byte, error) {
+	numRowKeys := int64(len(row.RowKeys))
+	b = codec.EncodeVarint(b, numRowKeys)
+	for _, rowKey := range row.RowKeys {
+		b = codec.EncodeVarint(b, rowKey.Handle)
+	}
+	if numRowKeys > 0 && e.rowKeyCache == nil {
+		e.rowKeyCache = make([]*RowKeyEntry, len(row.RowKeys))
+		for i := 0; i < len(row.RowKeys); i++ {
+			rk := new(RowKeyEntry)
+			rk.Tbl = row.RowKeys[i].Tbl
+			rk.TableName = row.RowKeys[i].TableName
+			e.rowKeyCache[i] = rk
+		}
+	}
+	b, err := codec.EncodeValue(b, row.Data...)
+	return b, errors.Trace(err)
+}
+
+func (e *HashJoinExec) decodeRow(data []byte) (*Row, error) {
+	row := new(Row)
+	data, entryLen, err := codec.DecodeVarint(data)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for i := 0; i < int(entryLen); i++ {
+		entry := new(RowKeyEntry)
+		data, entry.Handle, err = codec.DecodeVarint(data)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		entry.Tbl = e.rowKeyCache[i].Tbl
+		entry.TableName = e.rowKeyCache[i].TableName
+		row.RowKeys = append(row.RowKeys, entry)
+	}
+	values := make([]types.Datum, e.smallExec.Schema().Len())
+	err = codec.SetRawValues(data, values)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	err = decodeRawValues(values, e.smallExec.Schema())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	row.Data = values
+	return row, nil
+}
+
 func (e *HashJoinExec) waitJoinWorkersAndCloseResultChan() {
 	e.wg.Wait()
-	close(e.resultRows)
+	close(e.resultCh)
 	e.hashTable = nil
 	close(e.closeCh)
 }
 
 // doJoin does join job in one goroutine.
 func (e *HashJoinExec) runJoinWorker(idx int) {
+	maxRowsCnt := 1000
+	result := &execResult{rows: make([]*Row, 0, maxRowsCnt)}
 	for {
-		var (
-			bigRows []*Row
-			ok      bool
-			err     error
-		)
+		var bigTableResult *execResult
+		var exit bool
 		select {
-		case bigRows, ok = <-e.bigTableRows[idx]:
-		case err = <-e.bigTableErr:
+		case <-e.ctx.Done():
+			exit = true
+		case tmp, ok := <-e.bigTableResultCh[idx]:
+			if !ok {
+				exit = true
+			}
+			bigTableResult = tmp
 		}
-		if err != nil {
-			e.resultErr <- errors.Trace(err)
+		if exit || e.finished.Load().(bool) {
 			break
 		}
-		if !ok || e.finished.Load().(bool) {
+
+		if bigTableResult.err != nil {
+			e.resultCh <- &execResult{err: errors.Trace(bigTableResult.err)}
 			break
 		}
-		for _, bigRow := range bigRows {
-			succ := e.joinOneBigRow(e.hashJoinContexts[idx], bigRow)
+		for _, bigRow := range bigTableResult.rows {
+			succ := e.joinOneBigRow(e.hashJoinContexts[idx], bigRow, result)
 			if !succ {
 				break
 			}
+			if len(result.rows) >= maxRowsCnt {
+				e.resultCh <- result
+				result = &execResult{rows: make([]*Row, 0, maxRowsCnt)}
+			}
 		}
+	}
+	if len(result.rows) != 0 || result.err != nil {
+		e.resultCh <- result
 	}
 	e.wg.Done()
 }
@@ -280,7 +363,7 @@ func (e *HashJoinExec) runJoinWorker(idx int) {
 // joinOneBigRow creates result rows from a row in a big table and sends them to resultRows channel.
 // Every matching row generates a result row.
 // If there are no matching rows and it is outer join, a null filled result row is created.
-func (e *HashJoinExec) joinOneBigRow(ctx *hashJoinCtx, bigRow *Row) bool {
+func (e *HashJoinExec) joinOneBigRow(ctx *hashJoinCtx, bigRow *Row, result *execResult) bool {
 	var (
 		matchedRows []*Row
 		err         error
@@ -289,23 +372,23 @@ func (e *HashJoinExec) joinOneBigRow(ctx *hashJoinCtx, bigRow *Row) bool {
 	if e.bigFilter != nil {
 		bigMatched, err = expression.EvalBool(ctx.bigFilter, bigRow.Data, e.ctx)
 		if err != nil {
-			e.resultErr <- errors.Trace(err)
+			result.err = errors.Trace(err)
 			return false
 		}
 	}
 	if bigMatched {
 		matchedRows, err = e.constructMatchedRows(ctx, bigRow)
 		if err != nil {
-			e.resultErr <- errors.Trace(err)
+			result.err = errors.Trace(err)
 			return false
 		}
 	}
 	for _, r := range matchedRows {
-		e.resultRows <- r
+		result.rows = append(result.rows, r)
 	}
 	if len(matchedRows) == 0 && e.outer {
 		r := e.fillRowWithDefaultValues(bigRow)
-		e.resultRows <- r
+		result.rows = append(result.rows, r)
 	}
 	return true
 }
@@ -313,7 +396,7 @@ func (e *HashJoinExec) joinOneBigRow(ctx *hashJoinCtx, bigRow *Row) bool {
 // constructMatchedRows creates matching result rows from a row in the big table.
 func (e *HashJoinExec) constructMatchedRows(ctx *hashJoinCtx, bigRow *Row) (matchedRows []*Row, err error) {
 	sc := e.ctx.GetSessionVars().StmtCtx
-	hasNull, hashcode, err := getHashKey(sc, e.bigHashKey, bigRow, e.targetTypes, ctx.datumBuffer, ctx.hashKeyBuffer[0:0:cap(ctx.hashKeyBuffer)])
+	hasNull, joinKey, err := getJoinKey(sc, e.bigHashKey, bigRow, e.targetTypes, ctx.datumBuffer, ctx.hashKeyBuffer[0:0:cap(ctx.hashKeyBuffer)])
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -321,12 +404,17 @@ func (e *HashJoinExec) constructMatchedRows(ctx *hashJoinCtx, bigRow *Row) (matc
 	if hasNull {
 		return
 	}
-	rows, ok := e.hashTable[string(hashcode)]
-	if !ok {
+	values := e.hashTable.Get(joinKey)
+	if len(values) == 0 {
 		return
 	}
 	// match eq condition
-	for _, smallRow := range rows {
+	for _, value := range values {
+		var smallRow *Row
+		smallRow, err = e.decodeRow(value)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		otherMatched := true
 		var matchedRow *Row
 		if e.leftSmall {
@@ -344,7 +432,6 @@ func (e *HashJoinExec) constructMatchedRows(ctx *hashJoinCtx, bigRow *Row) (matc
 			matchedRows = append(matchedRows, matchedRow)
 		}
 	}
-
 	return matchedRows, nil
 }
 
@@ -370,22 +457,29 @@ func (e *HashJoinExec) Next() (*Row, error) {
 			return nil, errors.Trace(err)
 		}
 	}
-	var (
-		row *Row
-		err error
-		ok  bool
-	)
-	select {
-	case row, ok = <-e.resultRows:
-	case err, ok = <-e.resultErr:
+	if e.cursor >= len(e.rows) {
+		var result *execResult
+		select {
+		case tmp, ok := <-e.resultCh:
+			if !ok {
+				return nil, nil
+			}
+			result = tmp
+			if result.err != nil {
+				e.finished.Store(true)
+				return nil, errors.Trace(result.err)
+			}
+		case <-e.ctx.Done():
+			return nil, nil
+		}
+		if len(result.rows) == 0 {
+			return nil, nil
+		}
+		e.rows = result.rows
+		e.cursor = 0
 	}
-	if err != nil {
-		e.finished.Store(true)
-		return nil, errors.Trace(err)
-	}
-	if !ok {
-		return nil, nil
-	}
+	row := e.rows[e.cursor]
+	e.cursor++
 	return row, nil
 }
 
@@ -393,16 +487,16 @@ func (e *HashJoinExec) Next() (*Row, error) {
 type joinExec interface {
 	Executor
 
-	// fetchBigRow fetches a valid row from big Exec.
-	fetchBigRow() (*Row, error)
+	// fetchBigRow fetches a valid row from big Exec and returns a bool value that means if it is matched.
+	fetchBigRow() (*Row, bool, error)
 	// prepare reads all records from small Exec and stores them.
 	prepare() error
-	// doJoin fetch a row from big exec and get all the rows matches the on condition.
-	doJoin(*Row) ([]*Row, error)
+	// doJoin fetches a row from big exec and a bool value that means if it's matched with big filter,
+	// then get all the rows matches the on condition.
+	doJoin(*Row, bool) ([]*Row, error)
 }
 
 // NestedLoopJoinExec implements nested-loop algorithm for join.
-// TODO: Currently we only implements inner join for it. We will complete it in future.
 type NestedLoopJoinExec struct {
 	innerRows   []*Row
 	cursor      int
@@ -414,11 +508,12 @@ type NestedLoopJoinExec struct {
 	SmallFilter expression.Expression
 	BigFilter   expression.Expression
 	OtherFilter expression.Expression
-	schema      expression.Schema
+	schema      *expression.Schema
+	outer       bool
 }
 
 // Schema implements Executor interface.
-func (e *NestedLoopJoinExec) Schema() expression.Schema {
+func (e *NestedLoopJoinExec) Schema() *expression.Schema {
 	return e.schema
 }
 
@@ -435,25 +530,27 @@ func (e *NestedLoopJoinExec) Close() error {
 	return e.SmallExec.Close()
 }
 
-func (e *NestedLoopJoinExec) fetchBigRow() (*Row, error) {
+func (e *NestedLoopJoinExec) fetchBigRow() (*Row, bool, error) {
 	for {
 		bigRow, err := e.BigExec.Next()
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, false, errors.Trace(err)
 		}
 		if bigRow == nil {
-			return nil, e.BigExec.Close()
+			return nil, false, e.BigExec.Close()
 		}
 
 		matched := true
 		if e.BigFilter != nil {
 			matched, err = expression.EvalBool(e.BigFilter, bigRow.Data, e.Ctx)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, false, errors.Trace(err)
 			}
 		}
 		if matched {
-			return bigRow, nil
+			return bigRow, true, nil
+		} else if e.outer {
+			return bigRow, false, nil
 		}
 	}
 }
@@ -461,6 +558,11 @@ func (e *NestedLoopJoinExec) fetchBigRow() (*Row, error) {
 // Prepare runs the first time when 'Next' is called and it reads all data from the small table and stores
 // them in a slice.
 func (e *NestedLoopJoinExec) prepare() error {
+	err := e.SmallExec.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	e.innerRows = e.innerRows[:0]
 	e.prepared = true
 	for {
 		row, err := e.SmallExec.Next()
@@ -487,8 +589,22 @@ func (e *NestedLoopJoinExec) prepare() error {
 	}
 }
 
-func (e *NestedLoopJoinExec) doJoin(bigRow *Row) ([]*Row, error) {
+func (e *NestedLoopJoinExec) fillRowWithNullValue(row *Row) *Row {
+	newRow := &Row{
+		RowKeys: row.RowKeys,
+		Data:    make([]types.Datum, len(row.Data)+e.SmallExec.Schema().Len()),
+	}
+	copy(newRow.Data, row.Data)
+	return newRow
+}
+
+func (e *NestedLoopJoinExec) doJoin(bigRow *Row, match bool) ([]*Row, error) {
 	e.resultRows = e.resultRows[0:0]
+	if !match && e.outer {
+		row := e.fillRowWithNullValue(bigRow)
+		e.resultRows = append(e.resultRows, row)
+		return e.resultRows, nil
+	}
 	for _, row := range e.innerRows {
 		mergedRow := makeJoinRow(bigRow, row)
 		if e.OtherFilter != nil {
@@ -501,6 +617,9 @@ func (e *NestedLoopJoinExec) doJoin(bigRow *Row) ([]*Row, error) {
 			}
 		}
 		e.resultRows = append(e.resultRows, mergedRow)
+	}
+	if len(e.resultRows) == 0 && e.outer {
+		e.resultRows = append(e.resultRows, e.fillRowWithNullValue(bigRow))
 	}
 	return e.resultRows, nil
 }
@@ -519,11 +638,11 @@ func (e *NestedLoopJoinExec) Next() (*Row, error) {
 			e.cursor++
 			return retRow, nil
 		}
-		bigRow, err := e.fetchBigRow()
+		bigRow, match, err := e.fetchBigRow()
 		if bigRow == nil || err != nil {
 			return bigRow, errors.Trace(err)
 		}
-		e.resultRows, err = e.doJoin(bigRow)
+		e.resultRows, err = e.doJoin(bigRow, match)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -543,7 +662,7 @@ type HashSemiJoinExec struct {
 	smallFilter  expression.Expression
 	bigFilter    expression.Expression
 	otherFilter  expression.Expression
-	schema       expression.Schema
+	schema       *expression.Schema
 	resultRows   []*Row
 	// In auxMode, the result row always returns with an extra column which stores a boolean
 	// or NULL value to indicate if this row is matched.
@@ -568,13 +687,17 @@ func (e *HashSemiJoinExec) Close() error {
 }
 
 // Schema implements the Executor Schema interface.
-func (e *HashSemiJoinExec) Schema() expression.Schema {
+func (e *HashSemiJoinExec) Schema() *expression.Schema {
 	return e.schema
 }
 
 // Prepare runs the first time when 'Next' is called and it reads all data from the small table and stores
 // them in a hash table.
 func (e *HashSemiJoinExec) prepare() error {
+	err := e.smallExec.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	e.hashTable = make(map[string][]*Row)
 	sc := e.ctx.GetSessionVars().StmtCtx
 	e.resultRows = make([]*Row, 1)
@@ -598,7 +721,7 @@ func (e *HashSemiJoinExec) prepare() error {
 				continue
 			}
 		}
-		hasNull, hashcode, err := getHashKey(sc, e.smallHashKey, row, e.targetTypes, make([]types.Datum, len(e.smallHashKey)), nil)
+		hasNull, hashcode, err := getJoinKey(sc, e.smallHashKey, row, e.targetTypes, make([]types.Datum, len(e.smallHashKey)), nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -619,7 +742,7 @@ func (e *HashSemiJoinExec) prepare() error {
 
 func (e *HashSemiJoinExec) rowIsMatched(bigRow *Row) (matched bool, hasNull bool, err error) {
 	sc := e.ctx.GetSessionVars().StmtCtx
-	hasNull, hashcode, err := getHashKey(sc, e.bigHashKey, bigRow, e.targetTypes, make([]types.Datum, len(e.smallHashKey)), nil)
+	hasNull, hashcode, err := getJoinKey(sc, e.bigHashKey, bigRow, e.targetTypes, make([]types.Datum, len(e.smallHashKey)), nil)
 	if err != nil {
 		return false, false, errors.Trace(err)
 	}
@@ -648,31 +771,37 @@ func (e *HashSemiJoinExec) rowIsMatched(bigRow *Row) (matched bool, hasNull bool
 	return
 }
 
-func (e *HashSemiJoinExec) fetchBigRow() (*Row, error) {
+func (e *HashSemiJoinExec) fetchBigRow() (*Row, bool, error) {
 	for {
 		bigRow, err := e.bigExec.Next()
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, false, errors.Trace(err)
 		}
 		if bigRow == nil {
-			e.bigExec.Close()
-			return nil, nil
+			return nil, false, errors.Trace(e.bigExec.Close())
 		}
 
 		matched := true
 		if e.bigFilter != nil {
 			matched, err = expression.EvalBool(e.bigFilter, bigRow.Data, e.ctx)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, false, errors.Trace(err)
 			}
 		}
 		if matched {
-			return bigRow, err
+			return bigRow, true, nil
+		} else if e.auxMode {
+			return bigRow, false, nil
 		}
 	}
 }
 
-func (e *HashSemiJoinExec) doJoin(bigRow *Row) ([]*Row, error) {
+func (e *HashSemiJoinExec) doJoin(bigRow *Row, match bool) ([]*Row, error) {
+	if e.auxMode && !match {
+		bigRow.Data = append(bigRow.Data, types.NewDatum(false))
+		e.resultRows[0] = bigRow
+		return e.resultRows, nil
+	}
 	matched, isNull, err := e.rowIsMatched(bigRow)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -709,11 +838,11 @@ func (e *HashSemiJoinExec) Next() (*Row, error) {
 	}
 
 	for {
-		bigRow, err := e.fetchBigRow()
+		bigRow, match, err := e.fetchBigRow()
 		if bigRow == nil || err != nil {
 			return bigRow, errors.Trace(err)
 		}
-		resultRows, err := e.doJoin(bigRow)
+		resultRows, err := e.doJoin(bigRow, match)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -724,18 +853,17 @@ func (e *HashSemiJoinExec) Next() (*Row, error) {
 }
 
 // ApplyJoinExec is the new logic of apply.
-// TODO: I will add test for it after refactoring the plan part of apply.
 type ApplyJoinExec struct {
 	join        joinExec
-	innerExec   Executor
 	outerSchema []*expression.CorrelatedColumn
 	cursor      int
 	resultRows  []*Row
+	schema      *expression.Schema
 }
 
 // Schema implements the Executor interface.
-func (e *ApplyJoinExec) Schema() expression.Schema {
-	return e.join.Schema()
+func (e *ApplyJoinExec) Schema() *expression.Schema {
+	return e.schema
 }
 
 // Close implements the Executor interface.
@@ -753,7 +881,7 @@ func (e *ApplyJoinExec) Next() (*Row, error) {
 			e.cursor++
 			return row, nil
 		}
-		bigRow, err := e.join.fetchBigRow()
+		bigRow, match, err := e.join.fetchBigRow()
 		if bigRow == nil || err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -764,127 +892,10 @@ func (e *ApplyJoinExec) Next() (*Row, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		e.resultRows, err = e.join.doJoin(bigRow)
+		e.resultRows, err = e.join.doJoin(bigRow, match)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		e.cursor = 0
-	}
-}
-
-// ApplyExec represents apply executor.
-// Apply gets one row from outer executor and gets one row from inner executor according to outer row.
-type ApplyExec struct {
-	schema      expression.Schema
-	Src         Executor
-	outerSchema []*expression.CorrelatedColumn
-	innerExec   Executor
-	// checker checks if an Src row with an inner row matches the condition,
-	// and if it needs to check more inner rows.
-	checker *conditionChecker
-}
-
-// conditionChecker checks if all or any of the row match this condition.
-type conditionChecker struct {
-	cond        expression.Expression
-	trimLen     int
-	ctx         context.Context
-	all         bool
-	dataHasNull bool
-}
-
-// Check returns finished for checking if the input row can determine the final result,
-// and returns data for the evaluation result.
-func (c *conditionChecker) check(rowData []types.Datum) (finished bool, data types.Datum, err error) {
-	data, err = c.cond.Eval(rowData, c.ctx)
-	if err != nil {
-		return false, data, errors.Trace(err)
-	}
-	var matched int64
-	if data.IsNull() {
-		c.dataHasNull = true
-		matched = 0
-	} else {
-		matched, err = data.ToBool(c.ctx.GetSessionVars().StmtCtx)
-		if err != nil {
-			return false, data, errors.Trace(err)
-		}
-	}
-	return (matched != 0) != c.all, data, nil
-}
-
-// Reset resets dataHasNull to false, so it can be reused for the next row from ApplyExec.Src.
-func (c *conditionChecker) reset() {
-	c.dataHasNull = false
-}
-
-// Schema implements the Executor Schema interface.
-func (e *ApplyExec) Schema() expression.Schema {
-	return e.schema
-}
-
-// Close implements the Executor Close interface.
-func (e *ApplyExec) Close() error {
-	if e.checker != nil {
-		e.checker.dataHasNull = false
-	}
-	return e.Src.Close()
-}
-
-// Next implements the Executor Next interface.
-func (e *ApplyExec) Next() (*Row, error) {
-	srcRow, err := e.Src.Next()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if srcRow == nil {
-		return nil, nil
-	}
-	for {
-		for _, col := range e.outerSchema {
-			idx := col.Index
-			*col.Data = srcRow.Data[idx]
-		}
-		innerRow, err := e.innerExec.Next()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		trimLen := len(srcRow.Data)
-		if innerRow != nil {
-			srcRow.Data = append(srcRow.Data, innerRow.Data...)
-		}
-		if e.checker == nil {
-			e.innerExec.Close()
-			return srcRow, nil
-		}
-		if innerRow == nil {
-			// When inner exec finishes, we need to append a result column to true, false or NULL.
-			var result types.Datum
-			if e.checker.all {
-				result = types.NewDatum(true)
-			} else {
-				// If 'any' meets a null value, the result will be null.
-				if e.checker.dataHasNull {
-					result = types.NewDatum(nil)
-				} else {
-					result = types.NewDatum(false)
-				}
-			}
-			srcRow.Data = append(srcRow.Data, result)
-			e.checker.reset()
-			e.innerExec.Close()
-			return srcRow, nil
-		}
-		finished, data, err := e.checker.check(srcRow.Data)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		srcRow.Data = srcRow.Data[:trimLen]
-		if finished {
-			e.checker.reset()
-			e.innerExec.Close()
-			srcRow.Data = append(srcRow.Data, data)
-			return srcRow, nil
-		}
 	}
 }

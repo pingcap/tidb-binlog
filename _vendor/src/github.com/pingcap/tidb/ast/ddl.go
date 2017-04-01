@@ -397,6 +397,7 @@ type CreateTableStmt struct {
 
 	IfNotExists bool
 	Table       *TableName
+	ReferTable  *TableName
 	Cols        []*ColumnDef
 	Constraints []*Constraint
 	Options     []*TableOption
@@ -414,6 +415,13 @@ func (n *CreateTableStmt) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Table = node.(*TableName)
+	if n.ReferTable != nil {
+		node, ok = n.ReferTable.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.ReferTable = node.(*TableName)
+	}
 	for i, val := range n.Cols {
 		node, ok = val.Accept(v)
 		if !ok {
@@ -635,6 +643,9 @@ const (
 	AlterTableDropForeignKey
 	AlterTableModifyColumn
 	AlterTableChangeColumn
+	AlterTableRenameTable
+	AlterTableAlterColumn
+	AlterTableLock
 
 // TODO: Add more actions
 )
@@ -647,6 +658,7 @@ type AlterTableSpec struct {
 	Name          string
 	Constraint    *Constraint
 	Options       []*TableOption
+	NewTable      *TableName
 	NewColumn     *ColumnDef
 	OldColumnName *ColumnName
 	Position      *ColumnPosition
@@ -665,6 +677,13 @@ func (n *AlterTableSpec) Accept(v Visitor) (Node, bool) {
 			return n, false
 		}
 		n.Constraint = node.(*Constraint)
+	}
+	if n.NewTable != nil {
+		node, ok := n.NewTable.Accept(v)
+		if !ok {
+			return n, false
+		}
+		n.NewTable = node.(*TableName)
 	}
 	if n.NewColumn != nil {
 		node, ok := n.NewColumn.Accept(v)
