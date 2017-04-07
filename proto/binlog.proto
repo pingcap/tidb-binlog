@@ -11,7 +11,7 @@ option (gogoproto.unmarshaler_all) = true;
 message column {
     optional string  name       = 1 [(gogoproto.nullable) = false];
 
-    // column field type in binlog
+    // tp[0] is the column field type in binlog, used for decode column value
     optional bytes    tp         = 2;
     // column field type in mysql
     optional string  mysql_type = 3 [(gogoproto.nullable) = false];
