@@ -40,7 +40,7 @@ type Syncer struct {
 
 	executors []executor.Executor
 
-	poss         map[string]pb.Pos
+	positions    map[string]pb.Pos
 	initCommitTS int64
 
 	ignoreSchemaNames map[string]struct{}
@@ -61,7 +61,8 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS, syncer.poss = meta.Pos()
+	syncer.initCommitTS, _ = meta.Pos()
+	syncer.positions = make(map[string]pb.Pos)
 
 	return syncer, nil
 }
@@ -378,21 +379,21 @@ func (s *Syncer) addJob(job *job) {
 	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
 
-	if pos, ok := s.poss[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
-		s.poss[job.nodeID] = job.pos
+	if pos, ok := s.positions[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
+		s.positions[job.nodeID] = job.pos
 	}
 
 	wait := s.checkWait(job)
 	if wait {
 		s.jobWg.Wait()
-		s.savePoint(job.commitTS, s.poss)
+		s.savePoint(job.commitTS, s.positions)
 	}
 }
 
-func (s *Syncer) savePoint(ts int64, poss map[string]pb.Pos) {
-	err := s.meta.Save(ts, poss)
+func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
+	err := s.meta.Save(ts, positions)
 	if err != nil {
-		log.Fatalf("[write save point]%d[error]%v", ts, err)
+		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
 	}
 
 	positionGauge.Set(float64(ts))
