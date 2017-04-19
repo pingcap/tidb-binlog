@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -64,6 +65,8 @@ type Server struct {
 	//
 	dataDir string
 
+	clusterID string
+
 	// node maintain the status of this pump and interact with etcd registry
 	node Node
 
@@ -111,11 +114,20 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	// get cluster ID
+	pdCli, err := pd.NewClient(urlv.StringSlice())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	clusterID := pdCli.GetClusterID()
+	log.Infof("clusterID of pump server is %v", clusterID)
+	pdCli.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
+		clusterID:  fmt.Sprintf("%d", clusterID),
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
@@ -151,6 +163,13 @@ func (s *Server) init() error {
 		}
 		s.dispatcher[n] = binlogger
 	}
+
+	// init cluster data dir if not exist
+	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
