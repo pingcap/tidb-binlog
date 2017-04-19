@@ -119,11 +119,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	clusterID := pdCli.GetClusterID()
+	ctx, cancel := context.WithCancel(context.Background())
+	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 	pdCli.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
