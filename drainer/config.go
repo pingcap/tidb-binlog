@@ -84,7 +84,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, postgresql")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, pb")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	return cfg
 }
@@ -130,6 +130,7 @@ func (cfg *Config) Parse(args []string) error {
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
 	cfg.SyncerCfg.adjustWorkCount()
 	cfg.SyncerCfg.adjustDoDBAndTable()
+
 	return cfg.validate()
 }
 
@@ -185,6 +186,10 @@ func (cfg *Config) validate() error {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
+	}
+	// check dest-db-* configures.
+	if cfg.SyncerCfg.To == nil {
+		return errors.Errorf("bad destination database, please specify `syncer.to` in the configuration file")
 	}
 	return nil
 }
