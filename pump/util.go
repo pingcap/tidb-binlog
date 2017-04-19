@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -14,6 +15,20 @@ import (
 var (
 	errBadBinlogName = errors.New("bad file name")
 )
+
+type AtomicBool int32
+
+func (b *AtomicBool) Set(v bool) {
+	if v {
+		atomic.StoreInt32((*int32)(b), 1)
+	} else {
+		atomic.StoreInt32((*int32)(b), 0)
+	}
+}
+
+func (b *AtomicBool) Get() bool {
+	return atomic.LoadInt32((*int32)(b)) == 1
+}
 
 // InitLogger initalizes Pump's logger.
 func InitLogger(cfg *Config) {
