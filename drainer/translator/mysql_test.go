@@ -28,8 +28,8 @@ func (t *testTranslatorSuite) TestGenWhere(c *C) {
 	table := testGenTable("normal")
 	where, values, err := m.genWhere(table, table.Columns, []interface{}{1, "test", nil})
 	c.Assert(err, IsNil)
-	c.Assert(where, Equals, "`ID` = ? and `NAME` = ? and `SEX` is ?")
-	c.Assert(values, DeepEquals, []interface{}{1, "test", nil})
+	c.Assert(where, Equals, "`ID` = ? and `NAME` = ? and `SEX` is NULL")
+	c.Assert(values, DeepEquals, []interface{}{1, "test"})
 }
 
 func (t *testTranslatorSuite) TestPkHandleColumn(c *C) {
@@ -64,7 +64,7 @@ func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 func (t *testTranslatorSuite) testGenerateColumnAndValue(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
-	rawData, expected := testGenRowDatas(c, table.Columns)
+	rawData, expected := testGenRowData(c, table.Columns, 1)
 	rawData = append(rawData, rawData[0])
 	data := make(map[int64]types.Datum)
 	for index, d := range rawData {
