@@ -65,6 +65,8 @@ type Server struct {
 	//
 	dataDir string
 
+	clusterID string
+
 	// node maintains the status of this pump and interact with etcd registry
 	node Node
 
