@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/sessionctx/varsutil"
 	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/util/charset"
 	"github.com/pingcap/tidb/util/types"
 )
@@ -47,7 +49,7 @@ type ShowExec struct {
 	// Used by show variables
 	GlobalScope bool
 
-	schema expression.Schema
+	schema *expression.Schema
 	ctx    context.Context
 	is     infoschema.InfoSchema
 
@@ -57,7 +59,7 @@ type ShowExec struct {
 }
 
 // Schema implements the Executor Schema interface.
-func (e *ShowExec) Schema() expression.Schema {
+func (e *ShowExec) Schema() *expression.Schema {
 	return e.schema
 }
 
@@ -109,7 +111,11 @@ func (e *ShowExec) fetchAll() error {
 		return e.fetchShowTriggers()
 	case ast.ShowVariables:
 		return e.fetchShowVariables()
-	case ast.ShowWarnings, ast.ShowProcessList, ast.ShowEvents:
+	case ast.ShowWarnings:
+		return e.fetchShowWarnings()
+	case ast.ShowProcessList:
+		return e.fetchShowProcessList()
+	case ast.ShowEvents:
 		// empty result
 	}
 	return nil
@@ -132,10 +138,43 @@ func (e *ShowExec) fetchShowEngines() error {
 
 func (e *ShowExec) fetchShowDatabases() error {
 	dbs := e.is.AllSchemaNames()
+	checker := privilege.GetPrivilegeManager(e.ctx)
 	// TODO: let information_schema be the first database
 	sort.Strings(dbs)
 	for _, d := range dbs {
+		if checker != nil && !checker.DBIsVisible(d) {
+			continue
+		}
 		e.rows = append(e.rows, &Row{Data: types.MakeDatums(d)})
+	}
+	return nil
+}
+
+func (e *ShowExec) fetchShowProcessList() error {
+	sm := e.ctx.GetSessionManager()
+	if sm == nil {
+		return nil
+	}
+
+	pl := sm.ShowProcessList()
+	for _, pi := range pl {
+		var t uint64
+		if len(pi.Info) != 0 {
+			t = uint64(time.Since(pi.Time) / time.Second)
+		}
+		row := &Row{
+			Data: []types.Datum{
+				types.NewUintDatum(pi.ID),
+				types.NewStringDatum(pi.User),
+				types.NewStringDatum(pi.Host),
+				types.NewStringDatum(pi.DB),
+				types.NewStringDatum(pi.Command),
+				types.NewUintDatum(t),
+				types.NewStringDatum(fmt.Sprintf("%d", pi.State)),
+				types.NewStringDatum(pi.Info),
+			},
+		}
+		e.rows = append(e.rows, row)
 	}
 	return nil
 }
@@ -144,9 +183,15 @@ func (e *ShowExec) fetchShowTables() error {
 	if !e.is.SchemaExists(e.DBName) {
 		return errors.Errorf("Can not find DB: %s", e.DBName)
 	}
+	checker := privilege.GetPrivilegeManager(e.ctx)
 	// sort for tables
 	var tableNames []string
 	for _, v := range e.is.SchemaTables(e.DBName) {
+		// Test with mysql.AllPrivMask means any privilege would be OK.
+		// TODO: Should consider column privileges, which also make a table visible.
+		if checker != nil && !checker.RequestVerification(e.DBName.O, v.Meta().Name.O, "", mysql.AllPrivMask) {
+			continue
+		}
 		tableNames = append(tableNames, v.Meta().Name.O)
 	}
 	sort.Strings(tableNames)
@@ -426,11 +471,15 @@ func (e *ShowExec) fetchShowCreateTable() error {
 		buf.WriteString(",\n")
 	}
 
+	firstFK := true
 	for _, fk := range tb.Meta().ForeignKeys {
 		if fk.State != model.StatePublic {
 			continue
 		}
-
+		if !firstFK {
+			buf.WriteString(",\n")
+		}
+		firstFK = false
 		cols := make([]string, 0, len(fk.Cols))
 		for _, c := range fk.Cols {
 			cols = append(cols, c.O)
@@ -512,7 +561,7 @@ func (e *ShowExec) fetchShowCollation() error {
 
 func (e *ShowExec) fetchShowGrants() error {
 	// Get checker
-	checker := privilege.GetPrivilegeChecker(e.ctx)
+	checker := privilege.GetPrivilegeManager(e.ctx)
 	if checker == nil {
 		return errors.New("miss privilege checker")
 	}
@@ -532,6 +581,25 @@ func (e *ShowExec) fetchShowTriggers() error {
 }
 
 func (e *ShowExec) fetchShowProcedureStatus() error {
+	return nil
+}
+
+func (e *ShowExec) fetchShowWarnings() error {
+	warns := e.ctx.GetSessionVars().StmtCtx.GetWarnings()
+	for _, warn := range warns {
+		datums := make([]types.Datum, 3)
+		datums[0] = types.NewStringDatum("Warning")
+		switch x := warn.(type) {
+		case *terror.Error:
+			sqlErr := x.ToSQLError()
+			datums[1] = types.NewIntDatum(int64(sqlErr.Code))
+			datums[2] = types.NewStringDatum(sqlErr.Message)
+		default:
+			datums[1] = types.NewIntDatum(int64(mysql.ErrUnknown))
+			datums[2] = types.NewStringDatum(warn.Error())
+		}
+		e.rows = append(e.rows, &Row{Data: datums})
+	}
 	return nil
 }
 

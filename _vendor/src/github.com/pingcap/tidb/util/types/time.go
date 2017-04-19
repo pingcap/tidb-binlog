@@ -471,6 +471,14 @@ func (t *Time) Sub(t1 *Time) Duration {
 	}
 }
 
+// Add adds d to t, returns a duration value.
+// Note that add should not be done on different time types.
+func (t *Time) Add(d *Duration) Duration {
+	d.Duration = gotime.Duration(-int64(d.Duration))
+	t2, _ := d.ConvertToTime(t.Type)
+	return t.Sub(&t2)
+}
+
 // TimestampDiff returns t2 - t1 where t1 and t2 are date or datetime expressions.
 // The unit for the result (an integer) is given by the unit argument.
 // The legal values for unit are "YEAR" "QUARTER" "MONTH" "DAY" "HOUR" "SECOND" and so on.
@@ -582,7 +590,7 @@ func parseDatetime(str string, fsp int) (Time, error) {
 
 	// If str is sepereated by delimiters, the first one is year, and if the year is 2 digit,
 	// we should adjust it.
-	// TODO: ajust year is very complex, now we only consider the simplest way.
+	// TODO: adjust year is very complex, now we only consider the simplest way.
 	if len(seps[0]) == 2 {
 		year = adjustYear(year)
 	}
@@ -853,7 +861,7 @@ func ParseDuration(str string, fsp int) (Duration, error) {
 
 	var overflow bool
 	if n := strings.IndexByte(str, '.'); n >= 0 {
-		// It has fractional precesion parts.
+		// It has fractional precision parts.
 		fracStr := str[n+1:]
 		frac, overflow, err = parseFrac(fracStr, fsp)
 		if err != nil {
@@ -871,7 +879,10 @@ func ParseDuration(str string, fsp int) (Duration, error) {
 			hour, err = strconv.Atoi(seps[0])
 		} else {
 			// No delimiter.
-			if len(str) == 6 {
+			if len(str) == 7 {
+				// HHHMMSS
+				_, err = fmt.Sscanf(str, "%3d%2d%2d", &hour, &minute, &second)
+			} else if len(str) == 6 {
 				// HHMMSS
 				_, err = fmt.Sscanf(str, "%2d%2d%2d", &hour, &minute, &second)
 			} else if len(str) == 4 {
@@ -1756,14 +1767,14 @@ func (t Time) convertDateFormat(b rune, buf *bytes.Buffer) error {
 	case 'X':
 		year, _ := t.Time.YearWeek(2)
 		if year < 0 {
-			fmt.Fprintf(buf, "%v", math.MaxUint32)
+			fmt.Fprintf(buf, "%v", uint64(math.MaxUint32))
 		} else {
 			fmt.Fprintf(buf, "%04d", year)
 		}
 	case 'x':
 		year, _ := t.Time.YearWeek(3)
 		if year < 0 {
-			fmt.Fprintf(buf, "%v", math.MaxUint32)
+			fmt.Fprintf(buf, "%v", uint64(math.MaxUint32))
 		} else {
 			fmt.Fprintf(buf, "%04d", year)
 		}

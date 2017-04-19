@@ -14,19 +14,28 @@
 package privileges
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"github.com/pingcap/tidb/util/types"
 )
+
+// Enable enables the new privilege check feature.
+var Enable = false
+
+// SkipWithGrant causes the server to start without using the privilege system at all.
+var SkipWithGrant = false
 
 // privilege error codes.
 const (
@@ -39,7 +48,7 @@ var (
 	errInvalidUserNameFormat = terror.ClassPrivilege.New(codeInvalidUserNameFormat, "wrong username format")
 )
 
-var _ privilege.Checker = (*UserPrivileges)(nil)
+var _ privilege.Manager = (*UserPrivileges)(nil)
 
 type privileges struct {
 	Level ast.GrantLevelType
@@ -164,14 +173,111 @@ func (ps *userPrivileges) ShowGrants() []string {
 	return gs
 }
 
-// UserPrivileges implements privilege.Checker interface.
+// UserPrivileges implements privilege.Manager interface.
 // This is used to check privilege for the current user.
 type UserPrivileges struct {
+	// TODO: Clean up the old implementation.
 	User  string
 	privs *userPrivileges
+
+	*Handle
 }
 
-// Check implements Checker.Check interface.
+// RequestVerification implements the Manager interface.
+func (p *UserPrivileges) RequestVerification(db, table, column string, priv mysql.PrivilegeType) bool {
+	if !Enable || SkipWithGrant {
+		return true
+	}
+
+	if p.User == "" {
+		return true
+	}
+
+	mysqlPriv := p.Handle.Get()
+
+	// TODO: Store it to UserPrivileges and avoid do it everytime.
+	strs := strings.Split(p.User, "@")
+	if len(strs) != 2 {
+		log.Warnf("Invalid format for user: %s", p.User)
+		return false
+	}
+	// Get user password.
+	user := strs[0]
+	host := strs[1]
+
+	log.Debug("verify privilege use:", user, host)
+
+	return mysqlPriv.RequestVerification(user, host, db, table, column, priv)
+}
+
+// PWDHashLen is the length of password's hash.
+const PWDHashLen = 40
+
+// ConnectionVerification implements the Manager interface.
+func (p *UserPrivileges) ConnectionVerification(user, host string, auth, salt []byte) bool {
+	if SkipWithGrant {
+		p.User = user + "@" + host
+		return true
+	}
+
+	mysqlPriv := p.Handle.Get()
+	record := mysqlPriv.connectionVerification(user, host)
+	if record == nil {
+		log.Errorf("Get user privilege record fail: user %v, host %v", user, host)
+		return false
+	}
+
+	pwd := record.Password
+	if len(pwd) != 0 && len(pwd) != PWDHashLen {
+		log.Errorf("User [%s] password from SystemDB not like a sha1sum", user)
+		return false
+	}
+	hpwd, err := util.DecodePassword(pwd)
+	if err != nil {
+		log.Errorf("Decode password string error %v", err)
+		return false
+	}
+	checkAuth := util.CalcPassword(salt, hpwd)
+	if !bytes.Equal(auth, checkAuth) {
+		return false
+	}
+	p.User = user + "@" + host
+
+	return true
+}
+
+// DBIsVisible implements the Manager interface.
+func (p *UserPrivileges) DBIsVisible(db string) bool {
+	if !Enable || SkipWithGrant {
+		return true
+	}
+
+	if p.User == "" {
+		return true
+	}
+
+	mysqlPriv := p.Handle.Get()
+
+	// TODO: Store it to UserPrivileges and avoid do it everytime.
+	strs := strings.Split(p.User, "@")
+	if len(strs) != 2 {
+		log.Warnf("Invalid format for user: %s", p.User)
+		return false
+	}
+	// Get user password.
+	user := strs[0]
+	host := strs[1]
+
+	return mysqlPriv.DBIsVisible(user, host, db)
+}
+
+// UserPrivilegesTable implements the Manager interface.
+func (p *UserPrivileges) UserPrivilegesTable() [][]types.Datum {
+	mysqlPriv := p.Handle.Get()
+	return mysqlPriv.UserPrivilegesTable()
+}
+
+// Check implements Manager.Check interface.
 func (p *UserPrivileges) Check(ctx context.Context, db *model.DBInfo, tbl *model.TableInfo, privilege mysql.PrivilegeType) (bool, error) {
 	if p.privs == nil {
 		// Lazy load
@@ -250,26 +356,15 @@ const userTablePrivColumnStartIndex = 3
 const dbTablePrivColumnStartIndex = 3
 
 func (p *UserPrivileges) loadGlobalPrivileges(ctx context.Context) error {
-	sql := fmt.Sprintf(`SELECT * FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
+	sql := fmt.Sprintf(`SELECT Host,User,Password,Select_priv,Insert_priv,Update_priv,Delete_priv,Create_priv,Drop_priv,Grant_priv,Alter_priv,Show_db_priv,Execute_priv,Index_priv,Create_user_priv FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
 		mysql.SystemDB, mysql.UserTable, p.privs.User, p.privs.Host)
-	rs, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
+	rows, fs, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer rs.Close()
+
 	ps := &privileges{Level: ast.GrantLevelGlobal}
-	fs, err := rs.Fields()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for {
-		row, err := rs.Next()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if row == nil {
-			break
-		}
+	for _, row := range rows {
 		for i := userTablePrivColumnStartIndex; i < len(fs); i++ {
 			d := row.Data[i]
 			if d.Kind() != types.KindMysqlEnum {
@@ -292,26 +387,14 @@ func (p *UserPrivileges) loadGlobalPrivileges(ctx context.Context) error {
 }
 
 func (p *UserPrivileges) loadDBScopePrivileges(ctx context.Context) error {
-	sql := fmt.Sprintf(`SELECT * FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
+	sql := fmt.Sprintf(`SELECT Host,DB,User,Select_priv,Insert_priv,Update_priv,Delete_priv,Create_priv,Drop_priv,Grant_priv,Index_priv,Alter_priv,Execute_priv FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
 		mysql.SystemDB, mysql.DBTable, p.privs.User, p.privs.Host)
-	rs, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
+	rows, fs, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer rs.Close()
 	ps := make(map[string]*privileges)
-	fs, err := rs.Fields()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for {
-		row, err := rs.Next()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if row == nil {
-			break
-		}
+	for _, row := range rows {
 		// DB
 		dbStr := row.Data[1].GetString()
 		ps[dbStr] = &privileges{Level: ast.GrantLevelDB}
@@ -337,22 +420,14 @@ func (p *UserPrivileges) loadDBScopePrivileges(ctx context.Context) error {
 }
 
 func (p *UserPrivileges) loadTableScopePrivileges(ctx context.Context) error {
-	sql := fmt.Sprintf(`SELECT * FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
+	sql := fmt.Sprintf(`SELECT Host,DB,User,Table_name,Grantor,Timestamp,Table_priv,Column_priv FROM %s.%s WHERE User="%s" AND (Host="%s" OR Host="%%");`,
 		mysql.SystemDB, mysql.TablePrivTable, p.privs.User, p.privs.Host)
-	rs, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
+	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer rs.Close()
 	ps := make(map[string]map[string]*privileges)
-	for {
-		row, err := rs.Next()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if row == nil {
-			break
-		}
+	for _, row := range rows {
 		// DB
 		dbStr := row.Data[1].GetString()
 		// Table_name
@@ -377,10 +452,10 @@ func (p *UserPrivileges) loadTableScopePrivileges(ctx context.Context) error {
 	return nil
 }
 
-// ShowGrants implements privilege.Checker ShowGrants interface.
+// ShowGrants implements privilege.Manager ShowGrants interface.
 func (p *UserPrivileges) ShowGrants(ctx context.Context, user string) ([]string, error) {
 	// If user is current user
-	if user == p.User {
+	if user == p.User && p.privs != nil {
 		return p.privs.ShowGrants(), nil
 	}
 	userp := &UserPrivileges{User: user}

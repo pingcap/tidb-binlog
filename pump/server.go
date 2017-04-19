@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -111,11 +112,20 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	// get cluster ID
+	pdCli, err := pd.NewClient(urlv.StringSlice())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
+	clusterID := pdCli.GetClusterID(ctx)
+	log.Infof("clusterID of pump server is %v", clusterID)
+	pdCli.Close()
+
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
+		clusterID:  fmt.Sprintf("%d", clusterID),
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
@@ -151,6 +161,13 @@ func (s *Server) init() error {
 		}
 		s.dispatcher[n] = binlogger
 	}
+
+	// init cluster data dir if not exist
+	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
@@ -351,7 +368,7 @@ func (s *Server) writeFakeBinlog() {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
-			log.Info("generate binlog successfully")
+			log.Info("generate fake binlog successfully")
 		}
 	}
 	s.needGenBinlog.Set(true)

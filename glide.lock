@@ -1,5 +1,5 @@
-hash: e8bce7d3b544b86f6b8a85d66448e4549ce4bd3d037880bb7a5b1abe274a0bb1
-updated: 2017-03-06T10:28:37.994417758+08:00
+hash: e289836ae487c44988fc485e595d9ea355b53c7b8be8406faa391380309fe3af
+updated: 2017-04-01T13:32:04.550865316+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -89,7 +89,7 @@ imports:
 - name: github.com/go-sql-driver/mysql
   version: dbc3fe23a4aced10a53834106e288b155d17e2ee
 - name: github.com/gogo/protobuf
-  version: 909568be09de550ed094403c2bf8a261b5bb730a
+  version: 100ba4e885062801d56799d78530b73b178a78f3
   subpackages:
   - proto
 - name: github.com/golang/groupcache
@@ -151,7 +151,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: b66543960fb3508671152f6c9f4a09ee9d7a2322
+  version: 1ce19dac18a11abf6a04a11034bf42f2fbf57f1b
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -164,14 +164,14 @@ imports:
   - pkg/raft_serverpb
   - pkg/util
 - name: github.com/pingcap/pd
-  version: 1cd8e8dcd5077c5748580543b238ae83816d03b6
+  version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: fce6256117ca0281702c02d1b619d8e510a838f1
+  version: 172381f892deed5a8e964f1ae61354c79d6cb6fe
   subpackages:
   - ast
   - context
@@ -194,7 +194,6 @@ imports:
   - perfschema
   - plan
   - plan/statistics
-  - plan/statscache
   - privilege
   - privilege/privileges
   - sessionctx
@@ -204,6 +203,7 @@ imports:
   - sessionctx/forupdate
   - sessionctx/variable
   - sessionctx/varsutil
+  - statistics
   - store/localstore
   - store/localstore/engine
   - store/localstore/goleveldb
@@ -221,17 +221,20 @@ imports:
   - util/charset
   - util/codec
   - util/distinct
+  - util/encrypt
   - util/hack
   - util/mock
+  - util/mvmap
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
   - util/types
 - name: github.com/pingcap/tipb
-  version: 05a4d27c130a965745196e4da8ca395a15d7928f
+  version: 9cc6927f2246516ce8a2e9517e3ebdf81554a2d2
   subpackages:
   - go-binlog
   - go-tipb
+  - sharedbytes
 - name: github.com/prometheus/client_golang
   version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
@@ -311,4 +314,4 @@ imports:
   - transport
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481

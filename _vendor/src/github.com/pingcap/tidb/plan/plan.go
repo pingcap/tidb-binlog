@@ -26,48 +26,66 @@ import (
 )
 
 const (
-	// Sel is the type of Selection.
-	Sel = "Selection"
-	// St is the type of Set.
-	St = "Set"
-	// Proj is the type of Projection.
-	Proj = "Projection"
-	// Agg is the type of Aggregation.
-	Agg = "Aggregation"
-	// Jn is the type of Join.
-	Jn = "Join"
-	// Un is the type of Union.
-	Un = "Union"
-	// Tbl is the type of TableScan.
-	Tbl = "TableScan"
-	// Idx is the type of IndexScan.
-	Idx = "IndexScan"
-	// Srt is the type of Sort.
-	Srt = "Sort"
-	// Lim is the type of Limit.
-	Lim = "Limit"
-	// App is the type of Apply.
-	App = "Apply"
-	// Dis is the type of Distinct.
-	Dis = "Distinct"
-	// Trm is the type of Trim.
-	Trm = "Trim"
-	// MOR is the type of MaxOneRow.
-	MOR = "MaxOneRow"
-	// Ext is the type of Exists.
-	Ext = "Exists"
-	// Dual is the type of TableDual.
-	Dual = "TableDual"
-	// Lock is the type of SelectLock.
-	Lock = "SelectLock"
-	// Load is the type of LoadData.
-	Load = "LoadData"
-	// Ins is the type of Insert
-	Ins = "Insert"
-	// Up is the type of Update.
-	Up = "Update"
-	// Del is the type of Delete.
-	Del = "Delete"
+	// TypeSel is the type of Selection.
+	TypeSel = "Selection"
+	// TypeSet is the type of Set.
+	TypeSet = "Set"
+	// TypeProj is the type of Projection.
+	TypeProj = "Projection"
+	// TypeAgg is the type of Aggregation.
+	TypeAgg = "Aggregation"
+	// TypeStreamAgg is the type of StreamAgg.
+	TypeStreamAgg = "StreamAgg"
+	// TypeHashAgg is the type of HashAgg.
+	TypeHashAgg = "HashAgg"
+	// TypeCache is the type of cache.
+	TypeCache = "Cache"
+	// TypeShow is the type of show.
+	TypeShow = "Show"
+	// TypeJoin is the type of Join.
+	TypeJoin = "Join"
+	// TypeUnion is the type of Union.
+	TypeUnion = "Union"
+	// TypeTableScan is the type of TableScan.
+	TypeTableScan = "TableScan"
+	// TypeMemTableScan is the type of TableScan.
+	TypeMemTableScan = "MemTableScan"
+	// TypeDummy is the type of TableScan.
+	TypeDummy = "Dummy"
+	// TypeUnionScan is the type of UnionScan.
+	TypeUnionScan = "UnionScan"
+	// TypeIdxScan is the type of IndexScan.
+	TypeIdxScan = "IndexScan"
+	// TypeSort is the type of Sort.
+	TypeSort = "Sort"
+	// TypeLimit is the type of Limit.
+	TypeLimit = "Limit"
+	// TypeHashSemiJoin is the type of hash semi join.
+	TypeHashSemiJoin = "HashSemiJoin"
+	// TypeHashLeftJoin is the type of left hash join.
+	TypeHashLeftJoin = "HashLeftJoin"
+	// TypeHashRightJoin is the type of right hash join.
+	TypeHashRightJoin = "HashRightJoin"
+	// TypeMergeJoin is the type of merge join.
+	TypeMergeJoin = "MergeJoin"
+	// TypeApply is the type of Apply.
+	TypeApply = "Apply"
+	// TypeMaxOneRow is the type of MaxOneRow.
+	TypeMaxOneRow = "MaxOneRow"
+	// TypeExists is the type of Exists.
+	TypeExists = "Exists"
+	// TypeDual is the type of TableDual.
+	TypeDual = "TableDual"
+	// TypeLock is the type of SelectLock.
+	TypeLock = "SelectLock"
+	// TypeInsert is the type of Insert
+	TypeInsert = "Insert"
+	// TypeUpate is the type of Update.
+	TypeUpate = "Update"
+	// TypeDelete is the type of Delete.
+	TypeDelete = "Delete"
+	// TypeAnalyze is the type of Analyze.
+	TypeAnalyze = "Analyze"
 )
 
 // Plan is the description of an execution flow.
@@ -82,27 +100,18 @@ type Plan interface {
 	ReplaceParent(parent, newPar Plan) error
 	// ReplaceChild means replacing a child with another one.
 	ReplaceChild(children, newChild Plan) error
-	// Retrieve the parent by index.
-	GetParentByIndex(index int) Plan
-	// Retrieve the child by index.
-	GetChildByIndex(index int) Plan
 	// Get all the parents.
-	GetParents() []Plan
+	Parents() []Plan
 	// Get all the children.
-	GetChildren() []Plan
+	Children() []Plan
 	// Set the schema.
-	SetSchema(schema expression.Schema)
+	SetSchema(schema *expression.Schema)
 	// Get the schema.
-	GetSchema() expression.Schema
+	Schema() *expression.Schema
 	// Get the ID.
-	GetID() string
-	// Check whether this plan is correlated or not.
-	IsCorrelated() bool
-	// Set the value of attribute "correlated".
-	// A plan will be correlated if one of its expressions or its child plans is correlated, except Apply.
-	// As for Apply, it will be correlated if the outer plan is correlated or the inner plan has column that the outer doesn't has.
-	// It will be called in the final step of logical plan building and the PhysicalInitialize process after convert2PhysicalPlan process.
-	SetCorrelated()
+	ID() string
+	// Get id allocator
+	Allocator() *idAllocator
 	// SetParents sets the parents for the plan.
 	SetParents(...Plan)
 	// SetParents sets the children for the plan.
@@ -137,6 +146,19 @@ func (p *requiredProperty) getHashKey() ([]byte, error) {
 	}
 	bytes, err := codec.EncodeValue(nil, datums...)
 	return bytes, errors.Trace(err)
+}
+
+// String implements fmt.Stringer interface. Just for test.
+func (p *requiredProperty) String() string {
+	ret := "Prop{"
+	for _, colProp := range p.props {
+		ret += fmt.Sprintf("col: %s, desc %v, ", colProp.col, colProp.desc)
+	}
+	ret += fmt.Sprintf("}, Len: %d", p.sortKeyLen)
+	if p.limit != nil {
+		ret += fmt.Sprintf(", Limit: %d,%d", p.limit.Offset, p.limit.Count)
+	}
+	return ret
 }
 
 type physicalPlanInfo struct {
@@ -236,17 +258,17 @@ func (p *baseLogicalPlan) storePlanInfo(prop *requiredProperty, info *physicalPl
 }
 
 func (p *baseLogicalPlan) buildKeyInfo() {
-	for _, child := range p.GetChildren() {
+	for _, child := range p.Children() {
 		child.(LogicalPlan).buildKeyInfo()
 	}
 	if len(p.children) == 1 {
 		switch p.self.(type) {
-		case *Exists, *Aggregation, *Projection, *Trim:
+		case *Exists, *Aggregation, *Projection:
 			p.schema.Keys = nil
 		case *SelectLock:
-			p.schema.Keys = p.children[0].GetSchema().Keys
+			p.schema.Keys = p.children[0].Schema().Keys
 		default:
-			p.schema.Keys = p.children[0].GetSchema().Clone().Keys
+			p.schema.Keys = p.children[0].Schema().Clone().Keys
 		}
 	} else {
 		p.schema.Keys = nil
@@ -265,10 +287,10 @@ func newBaseLogicalPlan(tp string, a *idAllocator) baseLogicalPlan {
 
 // PredicatePushDown implements LogicalPlan interface.
 func (p *baseLogicalPlan) PredicatePushDown(predicates []expression.Expression) ([]expression.Expression, LogicalPlan, error) {
-	if len(p.GetChildren()) == 0 {
+	if len(p.Children()) == 0 {
 		return predicates, p.self, nil
 	}
-	child := p.GetChildByIndex(0).(LogicalPlan)
+	child := p.children[0].(LogicalPlan)
 	rest, _, err := child.PredicatePushDown(predicates)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -290,6 +312,10 @@ func (p *basePlan) extractCorrelatedCols() []*expression.CorrelatedColumn {
 	return corCols
 }
 
+func (p *basePlan) Allocator() *idAllocator {
+	return p.allocator
+}
+
 // ResolveIndicesAndCorCols implements LogicalPlan interface.
 func (p *baseLogicalPlan) ResolveIndicesAndCorCols() {
 	for _, child := range p.children {
@@ -302,9 +328,9 @@ func (p *baseLogicalPlan) PruneColumns(parentUsedCols []*expression.Column) {
 	if len(p.children) == 0 {
 		return
 	}
-	child := p.GetChildByIndex(0).(LogicalPlan)
+	child := p.children[0].(LogicalPlan)
 	child.PruneColumns(parentUsedCols)
-	p.SetSchema(child.GetSchema())
+	p.SetSchema(child.Schema())
 }
 
 func (p *basePlan) initIDAndContext(ctx context.Context) {
@@ -315,12 +341,10 @@ func (p *basePlan) initIDAndContext(ctx context.Context) {
 // basePlan implements base Plan interface.
 // Should be used as embedded struct in Plan implementations.
 type basePlan struct {
-	correlated bool
-
 	parents  []Plan
 	children []Plan
 
-	schema    expression.Schema
+	schema    *expression.Schema
 	tp        string
 	id        string
 	allocator *idAllocator
@@ -331,7 +355,7 @@ type basePlan struct {
 func (p *basePlan) MarshalJSON() ([]byte, error) {
 	children := make([]string, 0, len(p.children))
 	for _, child := range p.children {
-		children = append(children, child.GetID())
+		children = append(children, child.ID())
 	}
 	childrenStrs, err := json.Marshal(children)
 	if err != nil {
@@ -343,29 +367,18 @@ func (p *basePlan) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// IsCorrelated implements Plan IsCorrelated interface.
-func (p *basePlan) IsCorrelated() bool {
-	return p.correlated
-}
-
-func (p *basePlan) SetCorrelated() {
-	for _, child := range p.children {
-		p.correlated = p.correlated || child.IsCorrelated()
-	}
-}
-
-// GetID implements Plan GetID interface.
-func (p *basePlan) GetID() string {
+// ID implements Plan ID interface.
+func (p *basePlan) ID() string {
 	return p.id
 }
 
 // SetSchema implements Plan SetSchema interface.
-func (p *basePlan) SetSchema(schema expression.Schema) {
+func (p *basePlan) SetSchema(schema *expression.Schema) {
 	p.schema = schema
 }
 
-// GetSchema implements Plan GetSchema interface.
-func (p *basePlan) GetSchema() expression.Schema {
+// Schema implements Plan Schema interface.
+func (p *basePlan) Schema() *expression.Schema {
 	return p.schema
 }
 
@@ -382,7 +395,7 @@ func (p *basePlan) AddChild(child Plan) {
 // ReplaceParent means replace a parent for another one.
 func (p *basePlan) ReplaceParent(parent, newPar Plan) error {
 	for i, par := range p.parents {
-		if par.GetID() == parent.GetID() {
+		if par.ID() == parent.ID() {
 			p.parents[i] = newPar
 			return nil
 		}
@@ -393,7 +406,7 @@ func (p *basePlan) ReplaceParent(parent, newPar Plan) error {
 // ReplaceChild means replace a child with another one.
 func (p *basePlan) ReplaceChild(child, newChild Plan) error {
 	for i, ch := range p.children {
-		if ch.GetID() == child.GetID() {
+		if ch.ID() == child.ID() {
 			p.children[i] = newChild
 			return nil
 		}
@@ -401,29 +414,13 @@ func (p *basePlan) ReplaceChild(child, newChild Plan) error {
 	return SystemInternalErrorType.Gen("ReplaceChildren Failed!")
 }
 
-// GetParentByIndex implements Plan GetParentByIndex interface.
-func (p *basePlan) GetParentByIndex(index int) (parent Plan) {
-	if index < len(p.parents) && index >= 0 {
-		return p.parents[index]
-	}
-	return nil
-}
-
-// GetChildByIndex implements Plan GetChildByIndex interface.
-func (p *basePlan) GetChildByIndex(index int) (parent Plan) {
-	if index < len(p.children) && index >= 0 {
-		return p.children[index]
-	}
-	return nil
-}
-
-// GetParents implements Plan GetParents interface.
-func (p *basePlan) GetParents() []Plan {
+// Parents implements Plan Parents interface.
+func (p *basePlan) Parents() []Plan {
 	return p.parents
 }
 
-// GetChildren implements Plan GetChildren interface.
-func (p *basePlan) GetChildren() []Plan {
+// Children implements Plan Children interface.
+func (p *basePlan) Children() []Plan {
 	return p.children
 }
 
