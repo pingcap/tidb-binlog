@@ -27,16 +27,16 @@ const (
 
 var nodePrefix = "pumps"
 
-// Node holds the states of this pump node
+// Node defines pump node
 type Node interface {
-	// ID return the uuid representing of this pump node
+	// ID returns the uuid representing of this pump node
 	ID() string
 	// a short ID as 8 bytes length
 	ShortID() string
-	// Register register this pump node to Etcd
-	// create new one if nodeID not exist, or update it
+	// Register registers this pump node to Etcd
+	// creates new one if nodeID not exist, otherwise update it
 	Register(ctx context.Context) error
-	// Unregister unregister this pump node from etcd
+	// Unregister unregisters this pump node from etcd
 	Unregister(ctx context.Context) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
@@ -63,7 +63,7 @@ type NodeStatus struct {
 	LatestBinlogFile string
 }
 
-// NewPumpNode return a pumpNode obj that initialized by server config
+// NewPumpNode returns a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
 		return nil, errors.Trace(err)
@@ -130,10 +130,7 @@ func (p *pumpNode) Register(ctx context.Context) error {
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
 	err := p.UnregisterNode(ctx, nodePrefix, p.id)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 func (p *pumpNode) Notify(ctx context.Context) error {
@@ -193,7 +190,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	return errc
 }
 
-// readLocalNodeID read nodeID from a local file
+// readLocalNodeID reads nodeID from a local file
 // returns a NotFound error if the nodeID file not exist
 // in this case, the caller should invoke generateLocalNodeID()
 func readLocalNodeID(dataDir string) (string, error) {
@@ -209,7 +206,6 @@ func readLocalNodeID(dataDir string) (string, error) {
 	return string(data), nil
 }
 
-// generate a new nodeID, and store it to local filesystem
 func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	if err := os.MkdirAll(dataDir, file.PrivateDirMode); err != nil {
 		return "", errors.Trace(err)
@@ -238,7 +234,7 @@ func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	return id, nil
 }
 
-// checkExclusive try to get filelock of dataDir in exclusive mode
+// checkExclusive tries to get filelock of dataDir in exclusive mode
 // if get lock fails, maybe some other pump is running
 func checkExclusive(dataDir string) error {
 	err := os.MkdirAll(dataDir, file.PrivateDirMode)
@@ -249,8 +245,5 @@ func checkExclusive(dataDir string) error {
 	// when the process exits, the lockfile will be closed by system
 	// and automatically release the lock
 	_, err = file.TryLockFile(lockPath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
