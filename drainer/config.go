@@ -203,9 +203,5 @@ func (cfg *Config) validate() error {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
 	}
-	// check dest-db-* configures.
-	if cfg.SyncerCfg.To == nil {
-		return errors.Errorf("bad destination database, please specify `syncer.to` in the configuration file")
-	}
 	return nil
 }
