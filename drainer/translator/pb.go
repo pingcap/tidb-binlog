@@ -8,6 +8,7 @@ import (
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
@@ -52,15 +53,19 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		var (
-			vals = make([]types.Datum, 0, len(columns))
-			cols = make([]string, 0, len(columns))
-			tps  = make([]byte, 0, len(columns))
+			vals       = make([]types.Datum, 0, len(columns))
+			cols       = make([]string, 0, len(columns))
+			tps        = make([]byte, 0, len(columns))
+			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
 			if isPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 			}
 
+			cols = append(cols, col.Name.L)
+			tps = append(tps, col.Tp)
+			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			val, ok := columnValues[col.ID]
 			if ok {
 				value, err := formatData(val, col.FieldType)
@@ -68,12 +73,16 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 					return nil, nil, nil, errors.Trace(err)
 				}
 				vals = append(vals, value)
-				cols = append(cols, col.Name.L)
-				tps = append(tps, col.Tp)
+			} else if col.DefaultValue == nil {
+				val, err := getColDefaultValueFromNil(col)
+				if err != nil {
+					return nil, nil, nil, errors.Trace(err)
+				}
+				vals = append(vals, val)
 			}
 		}
 
-		rowData, err := encodeRow(vals, cols, tps)
+		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -114,10 +123,11 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		var (
-			oldVals = make([]types.Datum, 0, len(columns))
-			newVals = make([]types.Datum, 0, len(columns))
-			cols    = make([]string, 0, len(columns))
-			tps     = make([]byte, 0, len(columns))
+			oldVals    = make([]types.Datum, 0, len(columns))
+			newVals    = make([]types.Datum, 0, len(columns))
+			cols       = make([]string, 0, len(columns))
+			tps        = make([]byte, 0, len(columns))
+			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
 			val, ok := newColumnVlaues[col.ID]
@@ -134,10 +144,11 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 				newVals = append(newVals, newValue)
 				cols = append(cols, col.Name.L)
 				tps = append(tps, col.Tp)
+				mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			}
 		}
 
-		rowData, err := encodeUpdateRow(oldVals, newVals, cols, tps)
+		rowData, err := encodeUpdateRow(oldVals, newVals, cols, tps, mysqlTypes)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -172,9 +183,10 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		var (
-			vals = make([]types.Datum, 0, len(columns))
-			cols = make([]string, 0, len(columns))
-			tps  = make([]byte, 0, len(columns))
+			vals       = make([]types.Datum, 0, len(columns))
+			cols       = make([]string, 0, len(columns))
+			tps        = make([]byte, 0, len(columns))
+			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
 			val, ok := columnValues[col.ID]
@@ -186,10 +198,11 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 				vals = append(vals, value)
 				cols = append(cols, col.Name.L)
 				tps = append(tps, col.Tp)
+				mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			}
 		}
 
-		rowData, err := encodeRow(vals, cols, tps)
+		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -217,47 +230,58 @@ func (p *pbTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 	return fmt.Sprintf("use %s; %s;", schema, sql), nil
 }
 
-// encodeRow encode insert/delete column name, file tp and row data into a slice of byte.
-// Row layout: colName1, tp1, value1, colName2, tp2, value2, .....
-func encodeRow(row []types.Datum, colName []string, tp []byte) ([]byte, error) {
-	if len(row) != len(colName) || len(row) != len(tp) {
-		return nil, errors.Errorf("EncodeRow error: data, columnName and tp count not match %d vs %d vs %d", len(row), len(colName), len(tp))
-	}
-	values := make([]types.Datum, 3*len(row))
+func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
+	var cols [][]byte
+	var err error
 	for i, c := range row {
-		values[3*i] = types.NewStringDatum(colName[i])
-		values[3*i+1] = types.NewBytesDatum([]byte{tp[i]})
-		values[3*i+2] = c
+		col := &pb.Column{}
+		col.Name = colName[i]
+		col.Tp = []byte{tp[i]}
+		col.MysqlType = mysqlType[i]
+		col.Value, err = codec.EncodeValue(nil, []types.Datum{c}...)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		colVal, err := col.Marshal()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		cols = append(cols, colVal)
 	}
-	if len(values) == 0 {
-		// We could not set nil value into kv.
-		return []byte{codec.NilFlag}, nil
-	}
-	return codec.EncodeValue(nil, values...)
+
+	return cols, nil
 }
 
-// encodeUpdateRow encode insert/delete column name, file tp and old/new row data into a slice of byte.
-// Row layout: colName1, tp1, oldValue1, newValue1, colName2, tp2, oldValue2, newValue2, .....
-func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []string, tp []byte) ([]byte, error) {
-	if len(oldRow) != len(colName) || len(oldRow) != len(newRow) || len(oldRow) != len(tp) {
-		return nil, errors.Errorf("EncodeRow error: oldData, newData, columnName and tp count not match %d vs %d vs %d vs %d", len(oldRow), len(newRow), len(colName), len(tp))
-	}
-	values := make([]types.Datum, 4*len(oldRow))
+func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
+	var cols [][]byte
+	var err error
 	for i, c := range oldRow {
-		values[4*i] = types.NewStringDatum(colName[i])
-		values[4*i+1] = types.NewBytesDatum([]byte{tp[i]})
-		values[4*i+2] = c
-		values[4*i+3] = newRow[i]
+		col := &pb.Column{}
+		col.Name = colName[i]
+		col.Tp = []byte{tp[i]}
+		col.MysqlType = mysqlType[i]
+		col.Value, err = codec.EncodeValue(nil, []types.Datum{c}...)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
+		col.ChangedValue, err = codec.EncodeValue(nil, []types.Datum{newRow[i]}...)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		colVal, err := col.Marshal()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		cols = append(cols, colVal)
 	}
-	if len(values) == 0 {
-		// We could not set nil value into kv.
-		return []byte{codec.NilFlag}, nil
-	}
-	return codec.EncodeValue(nil, values...)
+
+	return cols, nil
 }
 
-func packEvent(schemaName, tableName string, tp pb.EventType, rowData []byte) []interface{} {
+func packEvent(schemaName, tableName string, tp pb.EventType, rowData [][]byte) []interface{} {
 	event := &pb.Event{
 		SchemaName: proto.String(schemaName),
 		TableName:  proto.String(tableName),
@@ -266,4 +290,21 @@ func packEvent(schemaName, tableName string, tp pb.EventType, rowData []byte) []
 	}
 
 	return []interface{}{event}
+}
+
+func getColDefaultValueFromNil(col *model.ColumnInfo) (types.Datum, error) {
+	if !mysql.HasNotNullFlag(col.Flag) {
+		return types.Datum{}, nil
+	}
+	if col.Tp == mysql.TypeEnum {
+		// For enum type, if no default value and not null is set,
+		// the default value is the first element of the enum list
+		return types.NewDatum(col.FieldType.Elems[0]), nil
+	}
+	if mysql.HasAutoIncrementFlag(col.Flag) {
+		// Auto increment column doesn't has default value and we should not return error.
+		return types.Datum{}, nil
+	}
+
+	return types.Datum{}, errors.Errorf("Field '%s' doesn't have a default value", col.Name)
 }
