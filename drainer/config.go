@@ -12,6 +12,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 )
@@ -84,7 +85,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql, postgresql")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or pb; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	return cfg
 }
@@ -130,6 +131,22 @@ func (cfg *Config) Parse(args []string) error {
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
 	cfg.SyncerCfg.adjustWorkCount()
 	cfg.SyncerCfg.adjustDoDBAndTable()
+
+	// add default syncer.to configuration if need
+	if cfg.SyncerCfg.To == nil {
+		cfg.SyncerCfg.To = new(executor.DBConfig)
+		if cfg.SyncerCfg.DestDBType == "mysql" {
+			cfg.SyncerCfg.To.Host = "localhost"
+			cfg.SyncerCfg.To.Port = 3306
+			cfg.SyncerCfg.To.User = "root"
+			cfg.SyncerCfg.To.Password = ""
+			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
+		} else {
+			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
+			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	}
+
 	return cfg.validate()
 }
 
