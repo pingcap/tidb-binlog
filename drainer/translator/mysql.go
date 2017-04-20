@@ -394,6 +394,9 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
+	if value.GetValue() == nil {
+		return value, nil
+	}
 
 	switch ft.Tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
