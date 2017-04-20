@@ -26,12 +26,20 @@ worker-count = 1
 
 disable-dispatch = true
 
+# downstream storage, equal to --dest-db-type
+# valid values are "mysql", "pb"
+db-type = "mysql"
+
 # the downstream mysql protocol database
 [syncer.to]
 host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
+
+# uncomment this if you want to use pb as db-type
+# [syncer.to]
+# dir = "data.drainer"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regex expression , start with '~' declare use regex expression.
