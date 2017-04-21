@@ -8,6 +8,19 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.sizer_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+message column {
+    optional string  name       = 1 [(gogoproto.nullable) = false];
+
+    // tp[0] is the column field type in binlog, used for decode column value
+    optional bytes    tp         = 2;
+    // column field type in mysql
+    optional string  mysql_type = 3 [(gogoproto.nullable) = false];
+
+    optional bytes value = 4;
+    // changed_value is the changed value in update
+    optional bytes changed_value = 5;
+}
+
 enum EventType {
     Insert = 0;
     Update = 1;
@@ -20,10 +33,7 @@ message Event {
     optional string table_name      = 2;
     optional EventType tp           = 3 [(gogoproto.nullable) = false];
 
-    // For inserted rows, we save all column values of the row[column_name, column_type, column_value, ...].
-    // For updated  rows, we save all old and new column values of the row[column_name, column_type, column_old_value, column_new_value, ...].
-    // For Deleted  rows, we save all column values of the row[column_name, column_type, column_value, ...].
-    optional bytes row = 4;
+    repeated bytes row = 4;
 }
 
 message DMLData {
