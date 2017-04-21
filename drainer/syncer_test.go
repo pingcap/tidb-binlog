@@ -58,7 +58,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 
-	s.ignoreSchemaNames[ingnoreDBInfo.Name.O] = struct{}{}
+	s.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
 
 	testCases := []struct {
 		name        string

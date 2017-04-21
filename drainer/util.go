@@ -220,6 +220,6 @@ func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 }
 
 func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
-	_, ok := ignoreSchemaNames[schema.Name.O]
+	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
 }

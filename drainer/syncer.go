@@ -43,6 +43,7 @@ type Syncer struct {
 	positions    map[string]pb.Pos
 	initCommitTS int64
 
+	// because TiDB is case-insensitive, only lower-case here.
 	ignoreSchemaNames map[string]struct{}
 
 	ctx    context.Context

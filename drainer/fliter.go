@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"regexp"
+	"strings"
 )
 
 func (s *Syncer) genRegexMap() {
@@ -72,7 +73,7 @@ func (s *Syncer) matchString(pattern string, t string) bool {
 
 func (s *Syncer) matchDB(patternDBS []string, a string) bool {
 	for _, b := range patternDBS {
-		if s.matchString(b, a) {
+		if s.matchString(b, strings.ToLower(a)) {
 			return true
 		}
 	}
@@ -80,14 +81,16 @@ func (s *Syncer) matchDB(patternDBS []string, a string) bool {
 }
 
 func (s *Syncer) matchTable(patternTBS []TableName, tb TableName) bool {
+	lowerCaseTable := strings.ToLower(tb.Table)
+	lowerCaseSchema := strings.ToLower(tb.Schema)
 	for _, ptb := range patternTBS {
-		if s.matchString(ptb.Table, tb.Table) && s.matchString(ptb.Schema, tb.Schema) {
+		if s.matchString(ptb.Table, lowerCaseTable) && s.matchString(ptb.Schema, lowerCaseSchema) {
 			return true
 		}
 
 		//create database or drop database
-		if tb.Table == "" {
-			if s.matchString(tb.Schema, ptb.Schema) {
+		if lowerCaseTable == "" {
+			if s.matchString(lowerCaseSchema, ptb.Schema) {
 				return true
 			}
 		}

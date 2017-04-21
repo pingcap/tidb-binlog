@@ -43,7 +43,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	jobs = mustAppendJob(c, jobs, &model.Job{ID: 5, State: model.JobCancelled})
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
-	ignoreNames[ignoreDBName.O] = struct{}{}
+	ignoreNames[ignoreDBName.L] = struct{}{}
 	// reconstruct the local schema
 	schema, err := NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)
