@@ -260,9 +260,9 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 	}
 
 	delete(s.schemas, id)
-	delete(s.schemaNameToID, schema.Name.L)
+	delete(s.schemaNameToID, schema.Name.O)
 
-	return schema.Name.L, nil
+	return schema.Name.O, nil
 }
 
 // CreateSchema adds new DBInfo
@@ -272,7 +272,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	}
 
 	s.schemas[db.ID] = db
-	s.schemaNameToID[db.Name.L] = db.ID
+	s.schemaNameToID[db.Name.O] = db.ID
 
 	return nil
 }
@@ -290,7 +290,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 
 	delete(s.tables, id)
 	delete(s.tableIDToName, id)
-	return table.Name.L, nil
+	return table.Name.O, nil
 }
 
 // CreateTable creates new TableInfo
@@ -302,7 +302,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
-	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.L, Table: table.Name.L}
+	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 
 	return nil
 }

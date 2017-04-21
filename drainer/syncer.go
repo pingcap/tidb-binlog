@@ -180,7 +180,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, "", sql, nil
+		return schema.Name.O, "", sql, nil
 
 	case model.ActionDropSchema:
 		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
@@ -223,7 +223,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, table.Name.L, sql, nil
+		return schema.Name.O, table.Name.O, sql, nil
 
 	case model.ActionCreateTable:
 		table := job.BinlogInfo.TableInfo
@@ -246,7 +246,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, table.Name.L, sql, nil
+		return schema.Name.O, table.Name.O, sql, nil
 
 	case model.ActionDropTable:
 		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
@@ -264,7 +264,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, tableName, sql, nil
+		return schema.Name.O, tableName, sql, nil
 
 	case model.ActionTruncateTable:
 		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
@@ -292,7 +292,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, table.Name.L, sql, nil
+		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
 		tbInfo := job.BinlogInfo.TableInfo
@@ -315,7 +315,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schema.Name.L, tbInfo.Name.L, sql, nil
+		return schema.Name.O, tbInfo.Name.O, sql, nil
 	}
 }
 
