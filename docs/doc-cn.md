@@ -71,7 +71,12 @@ cd binlog-latest-linux-amd64
 
 ## TiDB-Binlog 部署建议
 
-TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
+*   搭建全新的 TiDB Cluster，推荐部署顺序 pd-server -> tikv-server -> pump -> tidb-server -> drainer
+
+*   对已有的 TiDB Cluster 部署 binlog，需要对每台 tidb 实例滚动进行以下操作
+    * stop tidb-server
+    * 部署 pump
+    * 改动 tidb-server 的 binlog-socket，然后重启 tidb-server
 
 ### 注意
 
@@ -82,6 +87,26 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
     ![TiDB pump 模块部署结构](./tidb_pump_deployment.jpeg)
 
 *   drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
+
+*   在已有的 TiDB 集群中启动 drainer，一般需要全量备份 并且获取 savepoint，然后导入全量备份，最后启动 drainer 从 savepoint 开始同步；
+
+    为了保证数据的完整性，在 pump 运行 10 分钟左右后按顺序进行下面的操作
+
+    *  以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，`bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}`
+    *  全量备份，例如 mydumper 备份 tidb
+    *  全量导入备份到目标系统
+    *  设置 savepoint 文件路径，然后启动 drainer， `bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}`
+
+*   drainer 输出的 pb, 需要在配置文件设置下面的参数
+    ```
+    [syncer]
+    db-type = "pb"
+    disable-dispatch = true
+
+    [syncer.to]
+    dir = "/path/pb-dir"
+    ```
+
 
 ### 示例及参数解释
 
@@ -163,6 +188,8 @@ TiDB-Binlog 推荐部署启动顺序  PD -> TiKV -> Pump -> TiDB -> Drainer
         向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
     -disable-dispatch
         是否禁用拆分单个 binlog 的 sqls 的功能，如果设置为 true，则按照每个 binlog 顺序依次还原成单个事务进行同步
+    -gen-savepoint
+        如果设置为 true, 则只生成 drainer 的 savepoint meta 文件, 可以配合 mydumper 使用
     -ignore-schemas string
         db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),   
         不支持对 ignore schemas 的 table 进行 rename DDL 操作

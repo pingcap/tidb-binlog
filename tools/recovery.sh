@@ -6,10 +6,9 @@ HOST="127.0.0.1"
 PORT=3306
 USERNAME="root"
 PASSWORD="''"
-DATADIR="."
+DUMPDIR="."
+DRAINERDIR="data.drainer"
 THREADS=8
-CISTERN_ADDR="127.0.0.1:8249"
-ISRECOVERY=1
 
 # echo function
 echo_info () {
@@ -27,10 +26,9 @@ print_args () {
     echo_info  "db-port:  ${PORT}"
     echo_info  "db-user:  ${USERNAME}"
     echo_info  "db-password: ${PASSWORD}"
-    echo_info  "directory: ${DATADIR}"
+    echo_info  "dump-files-dir: ${DUMPDIR}"
+    echo_info  "drainer-savepoint: ${DRAINERDIR}"
     echo_info  "threads: ${THREADS}"
-    echo_info  "cistern-addr: ${CISTERN_ADDR}"
-    echo_info  "is-recovery: ${ISRECOVERY}"
     echo_info  "##################################"
 }
 
@@ -49,10 +47,6 @@ while [[ $# -gt 1 ]]; do
         echo "$arg should be follow with it's argument value, not $2" && exit 1
     fi
     case $arg in
-    -c|--cistern-addr)
-        CISTERN_ADDR="$2"
-        shift # past argument
-        ;;
     -h|--host)
         HOST="$2"
         shift # past argument
@@ -69,16 +63,16 @@ while [[ $# -gt 1 ]]; do
         PASSWORD="$2"
         shift # past argument
         ;;
-    -d|--directory)
-        DATADIR="$2"
+    -d|--dump-dir)
+        DUMPDIR="$2"
+        shift # past argument
+        ;;
+    -m|--drainer-meta)
+        DRAINERDIR="$2"
         shift # past argument
         ;;
     -t|--threads)
         THREADS="$2"
-        shift # past argument
-        ;;
-    -r|--is-recovery)
-        ISRECOVERY="$2"
         shift # past argument
         ;;
     *)
@@ -93,7 +87,7 @@ done
 print_args
 
 # mydumper files
-DUMP_DIR="${DATADIR}/dump_files"
+DUMP_DIR="${DUMPDIR}/dump_files"
 
 # backup tidb
 rc=0
@@ -102,23 +96,5 @@ if [[ "${rc}" -ne 0 ]]; then
         exit
 fi
 
-# get init-commit-ts
-INIT_TS=`cat ${DATADIR}/latest_commit_ts`
-
-if [[ "${ISRECOVERY}" -eq 1 ]]; then
-    rc=0
-    curl -s "http://${CISTERN_ADDR}/status" > ${DATADIR}/.cistern_status || rc=$?
-    if [[ "${rc}" -ne 0 ]]; then
-        exit
-    fi
-
-    RECOVRERY_TS=`cat ${DATADIR}/.cistern_status | grep -Po '"Upper":\d+'| grep -Po '\d+'`
-    if [[ "${RECOVRERY_TS}" -gt "${INIT_TS}" ]]; then
-        ${CP_ROOT}/bin/drainer --config=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} --end-commit-ts=${RECOVRERY_TS}
-    fi
-    echo_info "recovery complete!"
-    exit
-fi
-
 echo_info "start synchronization!"
-nohup ${CP_ROOT}/bin/drainer --config=${CP_ROOT}/conf/drainer.toml --init-commit-ts=${INIT_TS} >/dev/null 2>&1 &
+nohup ${CP_ROOT}/bin/drainer --config=${CP_ROOT}/conf/drainer.toml --data-dir=${DRAINERDIR} >/dev/null 2>&1 &

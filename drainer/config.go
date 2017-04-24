@@ -56,6 +56,7 @@ type Config struct {
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
+	GenSavepoint    bool
 }
 
 // NewConfig return an instance of configuration
@@ -78,6 +79,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
+	fs.BoolVar(&cfg.GenSavepoint, "gen-savepoint", false, "generate savepoint from cluster")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
@@ -109,6 +111,7 @@ func (cfg *Config) Parse(args []string) error {
 		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
 	}
+
 	// load config file if specified
 	if cfg.configFile != "" {
 		if err := cfg.configFromFile(cfg.configFile); err != nil {

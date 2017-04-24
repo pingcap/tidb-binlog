@@ -56,8 +56,9 @@ cd binlog-latest-linux-amd64
 | -p, --port     | TiDB 的 PORT   |
 | -u, --user     | TiDB 的用户名  |
 | -p, --password | TiDB 的密码    |
-| -c, --cistern-addr| TiDB-Binlog 的 cistern 接口地址|
-| -o, --outputdir| dump files 的输出目录 |
+| -pd, --pd-addr| TiDB 集群的 pd 地址|
+| -d, --dump-dir| dump files 的输出目录 |
+| -m, --drainer-meta| drainer meta 目录 |
 | -F, --chunk-filesize|  把 table 分割成指定大小文件分别储存，单位为 MB (建议大小 64)|
 
 ## 数据恢复
