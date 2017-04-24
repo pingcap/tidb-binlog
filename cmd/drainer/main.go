@@ -27,8 +27,8 @@ func main() {
 	drainer.PrintVersionInfo()
 
 	if cfg.GenSavepoint {
-		if err := drainer.GenMetaInfo(cfg); err != nil {
-			log.Fatalf("fail to generate meta error %v", err)
+		if err := drainer.GenSavepointInfo(cfg); err != nil {
+			log.Fatalf("fail to generate savepoint error %v", err)
 		}
 		os.Exit(0)
 	}

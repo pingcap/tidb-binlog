@@ -16,8 +16,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-// GenMetaInfo generates drainer meta from pd
-func GenMetaInfo(cfg *Config) error {
+// GenSavepointInfo generates drainer meta from pd
+func GenSavepointInfo(cfg *Config) error {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return errors.Trace(err)
 	}
