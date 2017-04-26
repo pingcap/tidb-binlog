@@ -524,7 +524,7 @@ func (s *Syncer) run(b *binlogItem) error {
 				return errors.Trace(err)
 			}
 
-			if s.skipDDL(schema, table) {
+			if s.skipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema)
@@ -560,7 +560,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			continue
 		}
 
-		if s.skipDML(schemaName, tableName) {
+		if s.skipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}

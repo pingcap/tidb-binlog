@@ -15,8 +15,8 @@ func (t *testDrainerSuite) TestFilter(c *C) {
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.genRegexMap()
 
-	c.Assert(syncer.skipDDL("Fulldb", "t1"), IsFalse)
-	c.Assert(syncer.skipDDL("fulldb_re_x", ""), IsFalse)
-	c.Assert(syncer.skipDML("db", "table_skip"), IsTrue)
-	c.Assert(syncer.skipDML("db2", "table"), IsFalse)
+	c.Assert(syncer.skipSchemaAndTable("Fulldb", "t1"), IsFalse)
+	c.Assert(syncer.skipSchemaAndTable("fulldb_re_x", ""), IsFalse)
+	c.Assert(syncer.skipSchemaAndTable("db", "table_skip"), IsTrue)
+	c.Assert(syncer.skipSchemaAndTable("db2", "table"), IsFalse)
 }

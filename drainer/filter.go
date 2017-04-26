@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"regexp"
 )
 
@@ -8,9 +9,9 @@ func (s *Syncer) addOneRegex(originStr string) {
 	if _, ok := s.reMap[originStr]; !ok {
 		var re *regexp.Regexp
 		if originStr[0] != '~' {
-			re = regexp.MustCompile("(?i)" + "^" + originStr + "$")
+			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
 		} else {
-			re = regexp.MustCompile("(?i)" + originStr[1:])
+			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
 		}
 		s.reMap[originStr] = re
 	}
@@ -46,16 +47,7 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-func (s *Syncer) skipDML(schema string, table string) bool {
-	tbs := []TableName{{Schema: schema, Table: table}}
-	tbs = s.whiteFilter(tbs)
-	if len(tbs) == 0 {
-		return true
-	}
-	return false
-}
-
-func (s *Syncer) skipDDL(schema, table string) bool {
+func (s *Syncer) skipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = s.whiteFilter(tbs)
 	if len(tbs) == 0 {
