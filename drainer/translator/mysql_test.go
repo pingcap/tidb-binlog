@@ -9,7 +9,7 @@ import (
 func (t *testTranslatorSuite) TestGenColumnList(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
-	c.Assert(m.genColumnList(table.Columns), Equals, "`id`,`name`,`sex`")
+	c.Assert(m.genColumnList(table.Columns), Equals, "`ID`,`NAME`,`SEX`")
 }
 
 func (t *testTranslatorSuite) TestGenColumnPlaceholders(c *C) {

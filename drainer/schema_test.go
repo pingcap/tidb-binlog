@@ -155,7 +155,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
-	ignoreNames[ignoreDBName.L] = struct{}{}
+	ignoreNames[ignoreDBName.O] = struct{}{}
 	// reconstruct the local schema
 	schema, err := NewSchema(jobs, ignoreNames)
 	c.Assert(err, IsNil)

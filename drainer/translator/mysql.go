@@ -157,7 +157,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 		value = append(value, oldValues...)
-		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name.L, kvs, where)
+		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
 		// generate dispatching key
@@ -281,7 +281,7 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for i, column := range columns {
-		name := fmt.Sprintf("`%s`", column.Name.L)
+		name := fmt.Sprintf("`%s`", column.Name)
 		columnList = append(columnList, []byte(name)...)
 
 		if i != len(columns)-1 {
@@ -335,11 +335,11 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 			columns := make(map[string]*model.ColumnInfo)
 
 			for _, col := range table.Columns {
-				columns[col.Name.L] = col
+				columns[col.Name.O] = col
 			}
 
 			for _, col := range idx.Columns {
-				if column, ok := columns[col.Name.L]; ok {
+				if column, ok := columns[col.Name.O]; ok {
 					cols = append(cols, column)
 				}
 			}
