@@ -63,7 +63,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 				columnValues[col.ID] = pk
 			}
 
-			cols = append(cols, col.Name.L)
+			cols = append(cols, col.Name.O)
 			tps = append(tps, col.Tp)
 			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			val, ok := columnValues[col.ID]
@@ -88,7 +88,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		sqls = append(sqls, "")
-		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Insert, rowData))
+		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Insert, rowData))
 		keys = append(keys, "")
 	}
 
@@ -142,7 +142,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 				}
 				oldVals = append(oldVals, oldValue)
 				newVals = append(newVals, newValue)
-				cols = append(cols, col.Name.L)
+				cols = append(cols, col.Name.O)
 				tps = append(tps, col.Tp)
 				mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			}
@@ -154,7 +154,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		sqls = append(sqls, "")
-		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Update, rowData))
+		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Update, rowData))
 		keys = append(keys, "")
 	}
 
@@ -196,7 +196,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 					return nil, nil, nil, errors.Trace(err)
 				}
 				vals = append(vals, value)
-				cols = append(cols, col.Name.L)
+				cols = append(cols, col.Name.O)
 				tps = append(tps, col.Tp)
 				mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			}
@@ -208,7 +208,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 		}
 
 		sqls = append(sqls, "")
-		values = append(values, packEvent(schema, table.Name.L, pb.EventType_Delete, rowData))
+		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Delete, rowData))
 		keys = append(keys, "")
 	}
 

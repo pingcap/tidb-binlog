@@ -1,30 +1,30 @@
 package drainer
 
 import (
+	"fmt"
 	"regexp"
 )
 
+func (s *Syncer) addOneRegex(originStr string) {
+	if _, ok := s.reMap[originStr]; !ok {
+		var re *regexp.Regexp
+		if originStr[0] != '~' {
+			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
+		} else {
+			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
+		}
+		s.reMap[originStr] = re
+	}
+}
+
 func (s *Syncer) genRegexMap() {
 	for _, db := range s.cfg.DoDBs {
-		if db[0] != '~' {
-			continue
-		}
-		if _, ok := s.reMap[db]; !ok {
-			s.reMap[db] = regexp.MustCompile(db[1:])
-		}
+		s.addOneRegex(db)
 	}
 
 	for _, tb := range s.cfg.DoTables {
-		if tb.Table[0] == '~' {
-			if _, ok := s.reMap[tb.Table]; !ok {
-				s.reMap[tb.Table] = regexp.MustCompile(tb.Table[1:])
-			}
-		}
-		if tb.Schema[0] == '~' {
-			if _, ok := s.reMap[tb.Schema]; !ok {
-				s.reMap[tb.Schema] = regexp.MustCompile(tb.Schema[1:])
-			}
-		}
+		s.addOneRegex(tb.Schema)
+		s.addOneRegex(tb.Table)
 	}
 }
 
@@ -35,6 +35,8 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 		return stbs
 	}
 	for _, tb := range stbs {
+		// if the white list contains "schema_s.table_t" and "schema_s",
+		// all tables in that schema_s will pass the filter.
 		if s.matchTable(s.cfg.DoTables, tb) {
 			tbs = append(tbs, tb)
 		}
@@ -45,16 +47,7 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-func (s *Syncer) skipDML(schema string, table string) bool {
-	tbs := []TableName{{Schema: schema, Table: table}}
-	tbs = s.whiteFilter(tbs)
-	if len(tbs) == 0 {
-		return true
-	}
-	return false
-}
-
-func (s *Syncer) skipDDL(schema, table string) bool {
+func (s *Syncer) skipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = s.whiteFilter(tbs)
 	if len(tbs) == 0 {
@@ -81,17 +74,12 @@ func (s *Syncer) matchDB(patternDBS []string, a string) bool {
 
 func (s *Syncer) matchTable(patternTBS []TableName, tb TableName) bool {
 	for _, ptb := range patternTBS {
-		if s.matchString(ptb.Table, tb.Table) && s.matchString(ptb.Schema, tb.Schema) {
-			return true
-		}
-
-		//create database or drop database
-		if tb.Table == "" {
-			if s.matchString(tb.Schema, ptb.Schema) {
+		if s.matchString(ptb.Schema, tb.Schema) {
+			// tb.Table == "" means create or drop database
+			if tb.Table == "" || s.matchString(ptb.Table, tb.Table) {
 				return true
 			}
 		}
 	}
-
 	return false
 }

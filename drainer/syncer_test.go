@@ -72,13 +72,13 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		schemaName  string
 		tableName   string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.L, ""},
+		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.O, ""},
 		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil}, "create database ignoreTest", "", "", ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.L, tblInfo.Name.L},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table t add a varchar(45);", "alter table t add a varchar(45);", dbInfo.Name.L, tblInfo.Name.L},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table t;", "truncate table t;", dbInfo.Name.L, tblInfo.Name.L},
-		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table t;", "drop table t;", dbInfo.Name.L, "t"},
-		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.L, ""},
+		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.O, tblInfo.Name.O},
+		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table T add a varchar(45);", "alter table T add a varchar(45);", dbInfo.Name.O, tblInfo.Name.O},
+		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table T;", "truncate table T;", dbInfo.Name.O, tblInfo.Name.O},
+		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table T;", "drop table T;", dbInfo.Name.O, tblInfo.Name.O},
+		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.O, ""},
 	}
 
 	for _, testCase := range testCases {
