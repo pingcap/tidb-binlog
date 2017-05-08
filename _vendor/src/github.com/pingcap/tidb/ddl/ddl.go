@@ -67,9 +67,6 @@ var (
 	errUnknownFractionLength = terror.ClassDDL.New(codeUnknownFractionLength, "Unknown Length for type tp %d and fraction %d")
 	errFileNotFound          = terror.ClassDDL.New(codeFileNotFound, "Can't find file: './%s/%s.frm'")
 	errErrorOnRename         = terror.ClassDDL.New(codeErrorOnRename, "Error on rename of './%s/%s' to './%s/%s'")
-	errBadField              = terror.ClassDDL.New(codeBadField, "Unknown column '%s' in '%s'")
-	errInvalidDefault        = terror.ClassDDL.New(codeInvalidDefault, "Invalid default value for '%s'")
-	errInvalidUseOfNull      = terror.ClassDDL.New(codeInvalidUseOfNull, "Invalid use of NULL value")
 
 	// ErrInvalidDBState returns for invalid database state.
 	ErrInvalidDBState = terror.ClassDDL.New(codeInvalidDBState, "invalid database state")
@@ -100,7 +97,6 @@ type DDL interface {
 	DropSchema(ctx context.Context, schema model.CIStr) error
 	CreateTable(ctx context.Context, ident ast.Ident, cols []*ast.ColumnDef,
 		constrs []*ast.Constraint, options []*ast.TableOption) error
-	CreateTableWithLike(ctx context.Context, ident, referIdent ast.Ident) error
 	DropTable(ctx context.Context, tableIdent ast.Ident) (err error)
 	CreateIndex(ctx context.Context, tableIdent ast.Ident, unique bool, indexName model.CIStr,
 		columnNames []*ast.IndexColName) error
@@ -143,8 +139,6 @@ type ddl struct {
 	// TODO: Now we use goroutine to simulate reorganization jobs, later we may
 	// use a persistent job list.
 	reorgDoneCh chan error
-	// reorgRowCount is for reorganization, it uses to simulate a job's row count.
-	reorgRowCount int64
 
 	quitCh chan struct{}
 	wait   sync.WaitGroup
@@ -174,7 +168,6 @@ func newDDL(store kv.Storage, infoHandle *infoschema.Handle, hook Callback, leas
 	d.start()
 
 	variable.RegisterStatistics(d)
-	log.Infof("start DDL:%s", d.uuid)
 
 	return d
 }
@@ -215,7 +208,6 @@ func (d *ddl) Stop() error {
 		// Background job's owner is me, clean it so other servers can complete it quickly.
 		return t.SetBgJobOwner(&model.Owner{})
 	})
-	log.Infof("stop DDL:%s", d.uuid)
 
 	return errors.Trace(err)
 }
@@ -252,7 +244,6 @@ func (d *ddl) close() {
 	close(d.quitCh)
 
 	d.wait.Wait()
-	log.Infof("close DDL:%s", d.uuid)
 }
 
 func (d *ddl) isClosed() bool {
@@ -322,7 +313,7 @@ func (d *ddl) doDDLJob(ctx context.Context, job *model.Job) error {
 
 	// Notice worker that we push a new job and wait the job done.
 	asyncNotify(d.ddlJobCh)
-	log.Infof("[ddl] start DDL job %s, Query:\n%s", job, job.Query)
+	log.Infof("[ddl] start DDL job %s", job)
 
 	var historyJob *model.Job
 	jobID := job.ID
@@ -415,10 +406,8 @@ const (
 	codeFileNotFound          = 1017
 	codeErrorOnRename         = 1025
 	codeBadNull               = 1048
-	codeBadField              = 1054
 	codeTooLongIdent          = 1059
 	codeDupKeyName            = 1061
-	codeInvalidDefault        = 1067
 	codeTooLongKey            = 1071
 	codeKeyColumnDoesNotExits = 1072
 	codeIncorrectPrefixKey    = 1089
@@ -426,7 +415,6 @@ const (
 	codeCantDropFieldOrKey    = 1091
 	codeWrongDBName           = 1102
 	codeWrongTableName        = 1103
-	codeInvalidUseOfNull      = 1138
 	codeBlobKeyWithoutLength  = 1170
 	codeInvalidOnUpdate       = 1294
 )
@@ -447,9 +435,6 @@ func init() {
 		codeWrongTableName:        mysql.ErrWrongTableName,
 		codeFileNotFound:          mysql.ErrFileNotFound,
 		codeErrorOnRename:         mysql.ErrErrorOnRename,
-		codeBadField:              mysql.ErrBadField,
-		codeInvalidDefault:        mysql.ErrInvalidDefault,
-		codeInvalidUseOfNull:      mysql.ErrInvalidUseOfNull,
 	}
 	terror.ErrClassToMySQLCodes[terror.ClassDDL] = ddlMySQLErrCodes
 }

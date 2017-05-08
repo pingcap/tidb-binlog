@@ -30,11 +30,6 @@ type TableRange struct {
 	HighVal int64
 }
 
-// IsPoint returns if the table range is a point.
-func (tr *TableRange) IsPoint() bool {
-	return tr.HighVal == tr.LowVal
-}
-
 // ShowDDL is for showing DDL information.
 type ShowDDL struct {
 	basePlan
@@ -53,16 +48,6 @@ type IndexRange struct {
 	LowExclude  bool
 	HighVal     []types.Datum
 	HighExclude bool
-}
-
-func datumToString(d types.Datum) string {
-	if d.Kind() == types.KindMinNotNull {
-		return "-inf"
-	}
-	if d.Kind() == types.KindMaxValue {
-		return "+inf"
-	}
-	return fmt.Sprintf("%v", d.GetValue())
 }
 
 // IsPoint returns if the index range is a point.
@@ -90,11 +75,19 @@ func (ir *IndexRange) IsPoint(sc *variable.StatementContext) bool {
 func (ir *IndexRange) String() string {
 	lowStrs := make([]string, 0, len(ir.LowVal))
 	for _, d := range ir.LowVal {
-		lowStrs = append(lowStrs, datumToString(d))
+		if d.Kind() == types.KindMinNotNull {
+			lowStrs = append(lowStrs, "-inf")
+		} else {
+			lowStrs = append(lowStrs, fmt.Sprintf("%v", d.GetValue()))
+		}
 	}
 	highStrs := make([]string, 0, len(ir.LowVal))
 	for _, d := range ir.HighVal {
-		highStrs = append(highStrs, datumToString(d))
+		if d.Kind() == types.KindMaxValue {
+			highStrs = append(highStrs, "+inf")
+		} else {
+			highStrs = append(highStrs, fmt.Sprintf("%v", d.GetValue()))
+		}
 	}
 	l, r := "[", "]"
 	if ir.LowExclude {
@@ -121,6 +114,11 @@ type Limit struct {
 	Count  uint64
 }
 
+// Distinct represents Distinct plan.
+type Distinct struct {
+	baseLogicalPlan
+}
+
 // Prepare represents prepare plan.
 type Prepare struct {
 	basePlan
@@ -135,7 +133,7 @@ type Execute struct {
 
 	Name      string
 	UsingVars []expression.Expression
-	ExecID    uint32
+	ID        uint32
 }
 
 // Deallocate represents deallocate plan.
@@ -180,7 +178,7 @@ type Insert struct {
 	baseLogicalPlan
 
 	Table       table.Table
-	tableSchema *expression.Schema
+	tableSchema expression.Schema
 	Columns     []*ast.ColumnName
 	Lists       [][]expression.Expression
 	Setlist     []*expression.Assignment
@@ -189,16 +187,6 @@ type Insert struct {
 	IsReplace bool
 	Priority  int
 	Ignore    bool
-}
-
-// Analyze represents an analyze plan
-type Analyze struct {
-	baseLogicalPlan
-
-	Table      *ast.TableName
-	IdxOffsets []int
-	ColOffsets []int
-	PkOffset   int // Used only when pk is handle.
 }
 
 // LoadData represents a loaddata plan.

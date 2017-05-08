@@ -64,5 +64,4 @@ func init() {
 	prometheus.MustRegister(sessionExecuteCompileDuration)
 	prometheus.MustRegister(sessionExecuteRunDuration)
 	prometheus.MustRegister(schemaLeaseErrorCounter)
-	prometheus.MustRegister(sessionRetry)
 }

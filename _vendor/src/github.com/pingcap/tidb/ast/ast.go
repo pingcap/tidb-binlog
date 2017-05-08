@@ -164,6 +164,9 @@ type Statement interface {
 	// OriginText gets the origin SQL text.
 	OriginText() string
 
+	// SetText sets the executive SQL text.
+	SetText(text string)
+
 	// Exec executes SQL and gets a Recordset.
 	Exec(ctx context.Context) (RecordSet, error)
 }

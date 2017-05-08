@@ -74,7 +74,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	clusterID = pdCli.GetClusterID(ctx)
+	clusterID = pdCli.GetClusterID()
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 

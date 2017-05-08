@@ -16,8 +16,6 @@
 package kv
 
 import (
-	"sync/atomic"
-
 	"github.com/juju/errors"
 	"github.com/pingcap/goleveldb/leveldb"
 	"github.com/pingcap/goleveldb/leveldb/comparer"
@@ -27,10 +25,20 @@ import (
 	"github.com/pingcap/tidb/terror"
 )
 
+// Those limits is enforced to make sure the transaction can be well handled by TiKV.
+const (
+	// The limit of single entry size (len(key) + len(value)).
+	EntrySizeLimit = 6 * 1024 * 1024
+	// The limit of number of entries in the MemBuffer.
+	BufferLenLimit = 100 * 1000
+	// The limit of the sum of all entry size.
+	BufferSizeLimit = 100 * 1024 * 1024
+)
+
 type memDbBuffer struct {
 	db              *memdb.DB
 	entrySizeLimit  int
-	bufferLenLimit  uint64
+	bufferLenLimit  int
 	bufferSizeLimit int
 }
 
@@ -43,9 +51,9 @@ type memDbIter struct {
 func NewMemDbBuffer() MemBuffer {
 	return &memDbBuffer{
 		db:              memdb.New(comparer.DefaultComparer, 4*1024),
-		entrySizeLimit:  TxnEntrySizeLimit,
-		bufferLenLimit:  atomic.LoadUint64(&TxnEntryCountLimit),
-		bufferSizeLimit: TxnTotalSizeLimit,
+		entrySizeLimit:  EntrySizeLimit,
+		bufferLenLimit:  BufferLenLimit,
+		bufferSizeLimit: BufferSizeLimit,
 	}
 }
 
@@ -94,7 +102,7 @@ func (m *memDbBuffer) Set(k Key, v []byte) error {
 	if m.Size() > m.bufferSizeLimit {
 		return ErrTxnTooLarge.Gen("transaction too large, size:%d", m.Size())
 	}
-	if m.Len() > int(m.bufferLenLimit) {
+	if m.Len() > m.bufferLenLimit {
 		return ErrTxnTooLarge.Gen("transaction too large, len:%d", m.Len())
 	}
 	return errors.Trace(err)

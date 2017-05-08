@@ -16,22 +16,13 @@ package plan
 import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
 )
 
-type columnPruner struct {
-}
-
-func (s *columnPruner) optimize(lp LogicalPlan, _ context.Context, _ *idAllocator) (LogicalPlan, error) {
-	lp.PruneColumns(lp.Schema().Columns)
-	return lp, nil
-}
-
-func getUsedList(usedCols []*expression.Column, schema *expression.Schema) []bool {
+func getUsedList(usedCols []*expression.Column, schema expression.Schema) []bool {
 	used := make([]bool, schema.Len())
 	for _, col := range usedCols {
-		idx := schema.ColumnIndex(col)
+		idx := schema.GetColumnIndex(col)
 		if idx == -1 {
 			log.Errorf("Can't find column %s from schema %s.", col, schema)
 		}
@@ -59,7 +50,7 @@ func exprHasSetVar(expr expression.Expression) bool {
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Projection) PruneColumns(parentUsedCols []*expression.Column) {
-	child := p.children[0].(LogicalPlan)
+	child := p.GetChildByIndex(0).(LogicalPlan)
 	var selfUsedCols []*expression.Column
 	used := getUsedList(parentUsedCols, p.schema)
 	for i := len(used) - 1; i >= 0; i-- {
@@ -76,17 +67,17 @@ func (p *Projection) PruneColumns(parentUsedCols []*expression.Column) {
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Selection) PruneColumns(parentUsedCols []*expression.Column) {
-	child := p.children[0].(LogicalPlan)
+	child := p.GetChildByIndex(0).(LogicalPlan)
 	for _, cond := range p.Conditions {
 		parentUsedCols = append(parentUsedCols, expression.ExtractColumns(cond)...)
 	}
 	child.PruneColumns(parentUsedCols)
-	p.SetSchema(child.Schema())
+	p.SetSchema(child.GetSchema())
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Aggregation) PruneColumns(parentUsedCols []*expression.Column) {
-	child := p.children[0].(LogicalPlan)
+	child := p.GetChildByIndex(0).(LogicalPlan)
 	used := getUsedList(parentUsedCols, p.schema)
 	for i := len(used) - 1; i >= 0; i-- {
 		if !used[i] {
@@ -100,50 +91,33 @@ func (p *Aggregation) PruneColumns(parentUsedCols []*expression.Column) {
 			selfUsedCols = append(selfUsedCols, expression.ExtractColumns(arg)...)
 		}
 	}
-	if len(p.GroupByItems) > 0 {
-		for i := len(p.GroupByItems) - 1; i >= 0; i-- {
-			cols := expression.ExtractColumns(p.GroupByItems[i])
-			if len(cols) == 0 {
-				p.GroupByItems = append(p.GroupByItems[:i], p.GroupByItems[i+1:]...)
-			} else {
-				selfUsedCols = append(selfUsedCols, cols...)
-			}
-		}
-		// If all the group by items are pruned, we should add a constant 1 to keep the correctness.
-		// Because `select count(*) from t` is different from `select count(*) from t group by 1`.
-		if len(p.GroupByItems) == 0 {
-			p.GroupByItems = []expression.Expression{expression.One}
-		}
+	for _, expr := range p.GroupByItems {
+		selfUsedCols = append(selfUsedCols, expression.ExtractColumns(expr)...)
 	}
 	child.PruneColumns(selfUsedCols)
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Sort) PruneColumns(parentUsedCols []*expression.Column) {
-	child := p.children[0].(LogicalPlan)
-	for i := len(p.ByItems) - 1; i >= 0; i-- {
-		cols := expression.ExtractColumns(p.ByItems[i].Expr)
-		if len(cols) == 0 {
-			p.ByItems = append(p.ByItems[:i], p.ByItems[i+1:]...)
-		} else {
-			parentUsedCols = append(parentUsedCols, expression.ExtractColumns(p.ByItems[i].Expr)...)
-		}
+	child := p.GetChildByIndex(0).(LogicalPlan)
+	for _, item := range p.ByItems {
+		parentUsedCols = append(parentUsedCols, expression.ExtractColumns(item.Expr)...)
 	}
 	child.PruneColumns(parentUsedCols)
-	p.SetSchema(p.children[0].Schema())
+	p.SetSchema(p.GetChildByIndex(0).GetSchema())
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Union) PruneColumns(parentUsedCols []*expression.Column) {
-	used := getUsedList(parentUsedCols, p.Schema())
+	used := getUsedList(parentUsedCols, p.GetSchema())
 	for i := len(used) - 1; i >= 0; i-- {
 		if !used[i] {
 			p.schema.Columns = append(p.schema.Columns[:i], p.schema.Columns[i+1:]...)
 		}
 	}
-	for _, c := range p.Children() {
+	for _, c := range p.GetChildren() {
 		child := c.(LogicalPlan)
-		schema := child.Schema()
+		schema := child.GetSchema()
 		var newCols []*expression.Column
 		for i, use := range used {
 			if use {
@@ -170,20 +144,32 @@ func (p *TableDual) PruneColumns(_ []*expression.Column) {
 }
 
 // PruneColumns implements LogicalPlan interface.
+func (p *Trim) PruneColumns(parentUsedCols []*expression.Column) {
+	used := getUsedList(parentUsedCols, p.schema)
+	for i := len(used) - 1; i >= 0; i-- {
+		if !used[i] {
+			p.schema.Columns = append(p.schema.Columns[:i], p.schema.Columns[i+1:]...)
+		}
+	}
+	p.GetChildByIndex(0).(LogicalPlan).PruneColumns(parentUsedCols)
+}
+
+// PruneColumns implements LogicalPlan interface.
 func (p *Exists) PruneColumns(parentUsedCols []*expression.Column) {
-	p.children[0].(LogicalPlan).PruneColumns(nil)
+	p.GetChildByIndex(0).(LogicalPlan).PruneColumns(nil)
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Insert) PruneColumns(_ []*expression.Column) {
-	if len(p.Children()) == 0 {
+	if len(p.GetChildren()) == 0 {
 		return
 	}
-	child := p.children[0].(LogicalPlan)
-	child.PruneColumns(child.Schema().Columns)
+	child := p.GetChildByIndex(0).(LogicalPlan)
+	child.PruneColumns(child.GetSchema().Columns)
 }
 
-func (p *Join) extractUsedCols(parentUsedCols []*expression.Column) (leftCols []*expression.Column, rightCols []*expression.Column) {
+// PruneColumns implements LogicalPlan interface.
+func (p *Join) PruneColumns(parentUsedCols []*expression.Column) {
 	for _, eqCond := range p.EqualConditions {
 		parentUsedCols = append(parentUsedCols, expression.ExtractColumns(eqCond)...)
 	}
@@ -196,27 +182,24 @@ func (p *Join) extractUsedCols(parentUsedCols []*expression.Column) (leftCols []
 	for _, otherCond := range p.OtherConditions {
 		parentUsedCols = append(parentUsedCols, expression.ExtractColumns(otherCond)...)
 	}
-	lChild := p.children[0].(LogicalPlan)
-	rChild := p.children[1].(LogicalPlan)
+	lChild := p.GetChildByIndex(0).(LogicalPlan)
+	rChild := p.GetChildByIndex(1).(LogicalPlan)
+	var leftCols, rightCols []*expression.Column
 	for _, col := range parentUsedCols {
-		if lChild.Schema().Contains(col) {
+		if lChild.GetSchema().GetColumnIndex(col) != -1 {
 			leftCols = append(leftCols, col)
-		} else if rChild.Schema().Contains(col) {
+		} else if rChild.GetSchema().GetColumnIndex(col) != -1 {
 			rightCols = append(rightCols, col)
 		}
 	}
-	return leftCols, rightCols
-}
-
-func (p *Join) mergeSchema() {
-	lChild := p.children[0].(LogicalPlan)
-	rChild := p.children[1].(LogicalPlan)
-	composedSchema := expression.MergeSchema(lChild.Schema(), rChild.Schema())
+	lChild.PruneColumns(leftCols)
+	rChild.PruneColumns(rightCols)
+	composedSchema := expression.MergeSchema(lChild.GetSchema(), rChild.GetSchema())
 	if p.JoinType == SemiJoin {
-		p.schema = lChild.Schema().Clone()
-	} else if p.JoinType == LeftOuterSemiJoin {
+		p.schema = lChild.GetSchema().Clone()
+	} else if p.JoinType == SemiJoinWithAux {
 		joinCol := p.schema.Columns[len(p.schema.Columns)-1]
-		p.schema = lChild.Schema().Clone()
+		p.schema = lChild.GetSchema().Clone()
 		p.schema.Append(joinCol)
 	} else {
 		p.schema = composedSchema
@@ -224,41 +207,48 @@ func (p *Join) mergeSchema() {
 }
 
 // PruneColumns implements LogicalPlan interface.
-func (p *Join) PruneColumns(parentUsedCols []*expression.Column) {
-	leftCols, rightCols := p.extractUsedCols(parentUsedCols)
-	lChild := p.children[0].(LogicalPlan)
-	rChild := p.children[1].(LogicalPlan)
-	lChild.PruneColumns(leftCols)
-	rChild.PruneColumns(rightCols)
-	p.mergeSchema()
-}
-
-// PruneColumns implements LogicalPlan interface.
+// e.g. For query select b.c, (select count(*) from a where a.id = b.id) from b. Its plan is Projection->Apply->TableScan.
+// The schema of b is (a,b,c,id). When Pruning Apply, the parentUsedCols is (c, extra), outerSchema is (a,b,c,id).
+// Then after pruning inner plan, the childOuterUsedCols schema in apply becomes (id).
+// Now there're two columns in parentUsedCols, c is the column from Apply's child ---- TableScan, but extra isn't.
+// So only c in parentUsedCols and id in outerSchema can be passed to TableScan.
 func (p *Apply) PruneColumns(parentUsedCols []*expression.Column) {
-	lChild := p.children[0].(LogicalPlan)
-	rChild := p.children[1].(LogicalPlan)
-	leftCols, rightCols := p.extractUsedCols(parentUsedCols)
-	rChild.PruneColumns(rightCols)
-	p.extractCorColumnsBySchema()
-	for _, col := range p.corCols {
-		leftCols = append(leftCols, &col.Column)
+	child := p.GetChildByIndex(0).(LogicalPlan)
+	innerPlan := p.GetChildByIndex(1).(LogicalPlan)
+	var usedCols []*expression.Column
+	if p.Checker != nil {
+		parentUsedCols = append(parentUsedCols, expression.ExtractColumns(p.Checker.Condition)...)
 	}
-	lChild.PruneColumns(leftCols)
-	p.mergeSchema()
+	for _, col := range parentUsedCols {
+		if child.GetSchema().GetColumnIndex(col) != -1 {
+			usedCols = append(usedCols, col)
+		}
+	}
+	innerPlan.PruneColumns(innerPlan.GetSchema().Columns)
+	corCols := innerPlan.extractCorrelatedCols()
+	for _, corCol := range corCols {
+		idx := child.GetSchema().GetColumnIndex(&corCol.Column)
+		if idx != -1 {
+			usedCols = append(usedCols, &corCol.Column)
+		}
+	}
+	child.PruneColumns(usedCols)
+	combinedSchema := expression.MergeSchema(child.GetSchema(), innerPlan.GetSchema())
+	if p.Checker == nil {
+		p.schema = combinedSchema
+	} else {
+		existsCol := p.schema.Columns[len(p.schema.Columns)-1]
+		p.schema = child.GetSchema().Clone()
+		p.schema.Columns = append(p.schema.Columns, existsCol)
+	}
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Update) PruneColumns(parentUsedCols []*expression.Column) {
-	p.baseLogicalPlan.PruneColumns(p.children[0].Schema().Columns)
+	p.baseLogicalPlan.PruneColumns(p.GetChildByIndex(0).GetSchema().Columns)
 }
 
 // PruneColumns implements LogicalPlan interface.
 func (p *Delete) PruneColumns(parentUsedCols []*expression.Column) {
-	p.baseLogicalPlan.PruneColumns(p.children[0].Schema().Columns)
-}
-
-// PruneColumns implements LogicalPlan interface.
-// We should not prune columns for Analyze.
-func (p *Analyze) PruneColumns(parentUsedCols []*expression.Column) {
-
+	p.baseLogicalPlan.PruneColumns(p.GetChildByIndex(0).GetSchema().Columns)
 }

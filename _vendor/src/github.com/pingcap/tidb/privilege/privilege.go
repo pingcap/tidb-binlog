@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/util/types"
 )
 
 type keyType int
@@ -26,37 +25,26 @@ func (k keyType) String() string {
 	return "privilege-key"
 }
 
-// Manager is the interface for providing privilege related operations.
-type Manager interface {
+// Checker is the interface for check privileges.
+type Checker interface {
 	// Check checks privilege.
 	// If tbl is nil, only check global/db scope privileges.
 	// If tbl is not nil, check global/db/table scope privileges.
 	Check(ctx context.Context, db *model.DBInfo, tbl *model.TableInfo, privilege mysql.PrivilegeType) (bool, error)
 	// Show granted privileges for user.
 	ShowGrants(ctx context.Context, user string) ([]string, error)
-
-	// RequestVerification verifies user privilege for the request.
-	RequestVerification(db, table, column string, priv mysql.PrivilegeType) bool
-	// ConnectionVerification verifies user privilege for connection.
-	ConnectionVerification(host, user string, auth, salt []byte) bool
-
-	// DBIsVisible returns true is the database is visible to current user.
-	DBIsVisible(db string) bool
-
-	// UserPrivilegesTable provide data for INFORMATION_SCHEMA.USERS_PRIVILEGE table.
-	UserPrivilegesTable() [][]types.Datum
 }
 
 const key keyType = 0
 
-// BindPrivilegeManager binds Manager to context.
-func BindPrivilegeManager(ctx context.Context, pc Manager) {
+// BindPrivilegeChecker binds Checker to context.
+func BindPrivilegeChecker(ctx context.Context, pc Checker) {
 	ctx.SetValue(key, pc)
 }
 
-// GetPrivilegeManager gets Checker from context.
-func GetPrivilegeManager(ctx context.Context) Manager {
-	if v, ok := ctx.Value(key).(Manager); ok {
+// GetPrivilegeChecker gets Checker from context.
+func GetPrivilegeChecker(ctx context.Context) Checker {
+	if v, ok := ctx.Value(key).(Checker); ok {
 		return v
 	}
 	return nil

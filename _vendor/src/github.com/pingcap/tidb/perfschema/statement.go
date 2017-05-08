@@ -71,7 +71,7 @@ type StatementState struct {
 	rowsExamined uint64
 	// Metric, temporary tables created on disk
 	createdTmpDiskTables uint32
-	// Metric, temporary tables created
+	// Metric, temproray tables created
 	createdTmpTables uint32
 	// Metric, number of select full join
 	selectFullJoin uint32

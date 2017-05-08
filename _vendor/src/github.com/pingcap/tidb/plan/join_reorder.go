@@ -23,15 +23,11 @@ import (
 
 // tryToGetJoinGroup tries to fetch a whole join group, which all joins is cartesian join.
 func tryToGetJoinGroup(j *Join) ([]LogicalPlan, bool) {
-	// Ignore reorder if:
-	// 1. already reordered
-	// 2. not inner join
-	// 3. forced merge join
-	if j.reordered || !j.cartesianJoin || j.preferMergeJoin {
+	if j.reordered || !j.cartesianJoin {
 		return nil, false
 	}
-	lChild := j.children[0].(LogicalPlan)
-	rChild := j.children[1].(LogicalPlan)
+	lChild := j.GetChildByIndex(0).(LogicalPlan)
+	rChild := j.GetChildByIndex(1).(LogicalPlan)
 	if nj, ok := lChild.(*Join); ok {
 		plans, valid := tryToGetJoinGroup(nj)
 		return append(plans, rChild), valid
@@ -41,7 +37,8 @@ func tryToGetJoinGroup(j *Join) ([]LogicalPlan, bool) {
 
 func findColumnIndexByGroup(groups []LogicalPlan, col *expression.Column) int {
 	for i, plan := range groups {
-		if plan.Schema().Contains(col) {
+		idx := plan.GetSchema().GetColumnIndex(col)
+		if idx != -1 {
 			return i
 		}
 	}
@@ -186,12 +183,12 @@ func (e *joinReOrderSolver) newJoin(lChild, rChild LogicalPlan) *Join {
 	join := &Join{
 		JoinType:        InnerJoin,
 		reordered:       true,
-		baseLogicalPlan: newBaseLogicalPlan(TypeJoin, e.allocator),
+		baseLogicalPlan: newBaseLogicalPlan(Jn, e.allocator),
 	}
 	join.self = join
 	join.initIDAndContext(lChild.context())
 	join.SetChildren(lChild, rChild)
-	join.SetSchema(expression.MergeSchema(lChild.Schema(), rChild.Schema()))
+	join.SetSchema(expression.MergeSchema(lChild.GetSchema(), rChild.GetSchema()))
 	lChild.SetParents(join)
 	rChild.SetParents(join)
 	return join

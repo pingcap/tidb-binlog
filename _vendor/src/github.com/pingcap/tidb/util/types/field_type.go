@@ -26,18 +26,6 @@ const (
 	UnspecifiedLength int = -1
 )
 
-// TypeClass classifies types, used for type inference.
-type TypeClass byte
-
-// TypeClass values.
-const (
-	ClassString  TypeClass = 0
-	ClassReal    TypeClass = 1
-	ClassInt     TypeClass = 2
-	ClassRow     TypeClass = 3
-	ClassDecimal TypeClass = 4
-)
-
 // FieldType records field type information.
 type FieldType struct {
 	Tp      byte
@@ -57,37 +45,6 @@ func NewFieldType(tp byte) *FieldType {
 		Tp:      tp,
 		Flen:    UnspecifiedLength,
 		Decimal: UnspecifiedLength,
-	}
-}
-
-// ToClass maps the field type to a type class.
-func (ft *FieldType) ToClass() TypeClass {
-	switch ft.Tp {
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
-		mysql.TypeBit, mysql.TypeYear:
-		return ClassInt
-	case mysql.TypeNewDecimal:
-		return ClassDecimal
-	case mysql.TypeFloat, mysql.TypeDouble:
-		return ClassReal
-	default:
-		return ClassString
-	}
-}
-
-// ToType maps the type class to a type.
-func (tc TypeClass) ToType() byte {
-	switch tc {
-	case ClassString:
-		return mysql.TypeVarString
-	case ClassReal:
-		return mysql.TypeDouble
-	case ClassInt:
-		return mysql.TypeLonglong
-	case ClassDecimal:
-		return mysql.TypeNewDecimal
-	default:
-		return mysql.TypeUnspecified
 	}
 }
 
@@ -177,7 +134,7 @@ func DefaultTypeForValue(value interface{}, tp *FieldType) {
 		tp.Charset = mysql.DefaultCharset
 		tp.Collate = mysql.DefaultCollationName
 	case float64:
-		tp.Tp = mysql.TypeDouble
+		tp.Tp = mysql.TypeNewDecimal
 		tp.Charset = charset.CharsetBin
 		tp.Collate = charset.CharsetBin
 	case []byte:
@@ -213,7 +170,7 @@ func DefaultTypeForValue(value interface{}, tp *FieldType) {
 		tp.Charset = charset.CharsetBin
 		tp.Collate = charset.CharsetBin
 	default:
-		tp.Tp = mysql.TypeUnspecified
+		tp.Tp = mysql.TypeDecimal
 	}
 	tp.Flen = UnspecifiedLength
 	tp.Decimal = UnspecifiedLength

@@ -13,15 +13,11 @@
 
 package oracle
 
-import (
-	"time"
-
-	"golang.org/x/net/context"
-)
+import "time"
 
 // Oracle is the interface that provides strictly ascending timestamps.
 type Oracle interface {
-	GetTimestamp(ctx context.Context) (uint64, error)
+	GetTimestamp() (uint64, error)
 	IsExpired(lockTimestamp uint64, TTL uint64) bool
 	Close()
 }

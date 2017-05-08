@@ -120,7 +120,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	clusterID := pdCli.GetClusterID(ctx)
+	clusterID := pdCli.GetClusterID()
 	log.Infof("clusterID of pump server is %v", clusterID)
 	pdCli.Close()
 

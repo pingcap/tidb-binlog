@@ -14,14 +14,13 @@
 package oracles
 
 import (
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"golang.org/x/net/context"
 )
 
 var _ oracle.Oracle = &pdOracle{}
@@ -30,9 +29,13 @@ const slowDist = 30 * time.Millisecond
 
 // pdOracle is an Oracle that uses a placement driver client as source.
 type pdOracle struct {
-	c      pd.Client
-	lastTS uint64
-	quit   chan struct{}
+	c  pd.Client
+	mu struct {
+		sync.RWMutex
+		lastTS uint64
+	}
+	quit    chan struct{}
+	updated chan struct{}
 }
 
 // NewPdOracle create an Oracle that uses a pd client source.
@@ -42,13 +45,13 @@ type pdOracle struct {
 // itself to keep up with the timestamp on PD server.
 func NewPdOracle(pdClient pd.Client, updateInterval time.Duration) (oracle.Oracle, error) {
 	o := &pdOracle{
-		c:    pdClient,
-		quit: make(chan struct{}),
+		c:       pdClient,
+		quit:    make(chan struct{}),
+		updated: make(chan struct{}),
 	}
-	ctx := context.TODO()
-	go o.updateTS(ctx, updateInterval)
+	go o.updateTS(updateInterval)
 	// Initialize lastTS by Get.
-	_, err := o.GetTimestamp(ctx)
+	_, err := o.GetTimestamp()
 	if err != nil {
 		o.Close()
 		return nil, errors.Trace(err)
@@ -59,23 +62,26 @@ func NewPdOracle(pdClient pd.Client, updateInterval time.Duration) (oracle.Oracl
 // IsExpired returns whether lockTS+TTL is expired, both are ms. It uses `lastTS`
 // to compare, may return false negative result temporarily.
 func (o *pdOracle) IsExpired(lockTS, TTL uint64) bool {
-	lastTS := atomic.LoadUint64(&o.lastTS)
-	return oracle.ExtractPhysical(lastTS) >= oracle.ExtractPhysical(lockTS)+int64(TTL)
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	return oracle.ExtractPhysical(o.mu.lastTS) >= oracle.ExtractPhysical(lockTS)+int64(TTL)
 }
 
 // GetTimestamp gets a new increasing time.
-func (o *pdOracle) GetTimestamp(ctx context.Context) (uint64, error) {
-	ts, err := o.getTimestamp(ctx)
+func (o *pdOracle) GetTimestamp() (uint64, error) {
+	ts, err := o.getTimestamp()
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 	o.setLastTS(ts)
+	o.updated <- struct{}{}
 	return ts, nil
 }
 
-func (o *pdOracle) getTimestamp(ctx context.Context) (uint64, error) {
+func (o *pdOracle) getTimestamp() (uint64, error) {
 	now := time.Now()
-	physical, logical, err := o.c.GetTS(ctx)
+	physical, logical, err := o.c.GetTS()
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -87,25 +93,26 @@ func (o *pdOracle) getTimestamp(ctx context.Context) (uint64, error) {
 }
 
 func (o *pdOracle) setLastTS(ts uint64) {
-	lastTS := atomic.LoadUint64(&o.lastTS)
-	if ts > lastTS {
-		atomic.CompareAndSwapUint64(&o.lastTS, lastTS, ts)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if ts >= o.mu.lastTS {
+		o.mu.lastTS = ts
 	}
 }
 
-func (o *pdOracle) updateTS(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
+func (o *pdOracle) updateTS(interval time.Duration) {
 	for {
 		select {
-		case <-ticker.C:
-			ts, err := o.getTimestamp(ctx)
+		case <-time.After(interval):
+			ts, err := o.getTimestamp()
 			if err != nil {
 				log.Errorf("updateTS error: %v", err)
 				break
 			}
 			o.setLastTS(ts)
+		case <-o.updated:
 		case <-o.quit:
-			ticker.Stop()
 			return
 		}
 	}

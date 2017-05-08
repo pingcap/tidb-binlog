@@ -47,7 +47,6 @@ const (
 	KindInterface     byte = 15
 	KindMinNotNull    byte = 16
 	KindMaxValue      byte = 17
-	KindRaw           byte = 18
 )
 
 // Datum is a data box holds different kind of data.
@@ -59,7 +58,7 @@ type Datum struct {
 	length    uint32      // length can hold uint32 values.
 	i         int64       // i can hold int64 uint64 float64 values.
 	b         []byte      // b can hold string or []byte values.
-	x         interface{} // x hold all other types.
+	x         interface{} // f hold all other types.
 }
 
 // Kind gets the kind of the datum.
@@ -290,17 +289,6 @@ func (d *Datum) GetMysqlTime() Time {
 func (d *Datum) SetMysqlTime(b Time) {
 	d.k = KindMysqlTime
 	d.x = b
-}
-
-// SetRaw sets raw value.
-func (d *Datum) SetRaw(b []byte) {
-	d.k = KindRaw
-	d.b = b
-}
-
-// GetRaw gets raw value.
-func (d *Datum) GetRaw() []byte {
-	return d.b
 }
 
 // GetValue gets the value of the datum of any kind.
@@ -669,13 +657,13 @@ func (d *Datum) ConvertTo(sc *variable.StatementContext, target *FieldType) (Dat
 	case mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob,
 		mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString:
 		return d.convertToString(sc, target)
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeNewDate:
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate:
 		return d.convertToMysqlTime(sc, target)
 	case mysql.TypeDuration:
 		return d.convertToMysqlDuration(sc, target)
 	case mysql.TypeBit:
 		return d.convertToMysqlBit(sc, target)
-	case mysql.TypeNewDecimal:
+	case mysql.TypeDecimal, mysql.TypeNewDecimal:
 		return d.convertToMysqlDecimal(sc, target)
 	case mysql.TypeYear:
 		return d.convertToMysqlYear(sc, target)
@@ -789,20 +777,16 @@ func (d *Datum) convertToString(sc *variable.StatementContext, target *FieldType
 			for i := range s {
 				runeCount++
 				if runeCount == target.Flen+1 {
-					// We don't break here because we need to iterate to the end to get runeCount.
+					// We do break here because we need to iterate to the end to get runeCount.
 					truncateLen = i
 				}
 			}
 			if truncateLen > 0 {
-				if !sc.IgnoreTruncate {
-					err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, runeCount)
-				}
+				err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, runeCount)
 				s = truncateStr(s, truncateLen)
 			}
 		} else if len(s) > target.Flen {
-			if !sc.IgnoreTruncate {
-				err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, len(s))
-			}
+			err = ErrDataTooLong.Gen("Data Too Long, field len %d, data len %d", target.Flen, len(s))
 			s = truncateStr(s, target.Flen)
 		}
 	}
@@ -889,40 +873,44 @@ func (d *Datum) convertToMysqlTime(sc *variable.StatementContext, target *FieldT
 	if target.Decimal != UnspecifiedLength {
 		fsp = target.Decimal
 	}
-	var (
-		ret Datum
-		t   Time
-		err error
-	)
+	var ret Datum
 	switch d.k {
 	case KindMysqlTime:
-		t, err = d.GetMysqlTime().Convert(tp)
+		t, err := d.GetMysqlTime().Convert(tp)
 		if err != nil {
 			ret.SetValue(t)
 			return ret, errors.Trace(err)
 		}
 		t, err = t.roundFrac(fsp)
+		ret.SetValue(t)
+		if err != nil {
+			return ret, errors.Trace(err)
+		}
 	case KindMysqlDuration:
-		t, err = d.GetMysqlDuration().ConvertToTime(tp)
+		t, err := d.GetMysqlDuration().ConvertToTime(tp)
 		if err != nil {
 			ret.SetValue(t)
 			return ret, errors.Trace(err)
 		}
 		t, err = t.roundFrac(fsp)
+		ret.SetValue(t)
+		if err != nil {
+			return ret, errors.Trace(err)
+		}
 	case KindString, KindBytes:
-		t, err = ParseTime(d.GetString(), tp, fsp)
+		t, err := ParseTime(d.GetString(), tp, fsp)
+		ret.SetValue(t)
+		if err != nil {
+			return ret, errors.Trace(err)
+		}
 	case KindInt64:
-		t, err = ParseTimeFromNum(d.GetInt64(), tp, fsp)
+		t, err := ParseTimeFromNum(d.GetInt64(), tp, fsp)
+		ret.SetValue(t)
+		if err != nil {
+			return ret, errors.Trace(err)
+		}
 	default:
 		return invalidConv(d, tp)
-	}
-	if tp == mysql.TypeDate {
-		// Truncate hh:mm:ss part if the type is Date.
-		t.Time = FromDate(t.Time.Year(), t.Time.Month(), t.Time.Day(), 0, 0, 0, 0)
-	}
-	ret.SetValue(t)
-	if err != nil {
-		return ret, errors.Trace(err)
 	}
 	return ret, nil
 }
@@ -1341,20 +1329,6 @@ func (d *Datum) ToString() (string, error) {
 	}
 }
 
-// ToBytes gets the bytes representation of the datum.
-func (d *Datum) ToBytes() ([]byte, error) {
-	switch d.k {
-	case KindString, KindBytes:
-		return d.GetBytes(), nil
-	default:
-		str, err := d.ToString()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return []byte(str), nil
-	}
-}
-
 func invalidConv(d *Datum, tp byte) (Datum, error) {
 	return Datum{}, errors.Errorf("cannot convert %v to type %s", d, TypeStr(tp))
 }
@@ -1504,13 +1478,6 @@ func NewDurationDatum(dur Duration) (d Datum) {
 // NewDecimalDatum creates a new Datum form a MyDecimal value.
 func NewDecimalDatum(dec *MyDecimal) (d Datum) {
 	d.SetMysqlDecimal(dec)
-	return d
-}
-
-// NewRawDatum create a new Datum that is not decoded.
-func NewRawDatum(b []byte) (d Datum) {
-	d.k = KindRaw
-	d.b = b
 	return d
 }
 

@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/pd/pd-client"
-	goctx "golang.org/x/net/context"
 )
 
 // RegionCache caches Regions loaded from PD.
@@ -53,8 +52,6 @@ func NewRegionCache(pdClient pd.Client) *RegionCache {
 
 // RPCContext contains data that is needed to send RPC to a region.
 type RPCContext struct {
-	goctx.Context
-
 	Region RegionVerID
 	KVCtx  *kvrpcpb.Context
 	Addr   string
@@ -90,10 +87,9 @@ func (c *RegionCache) GetRPCContext(bo *Backoffer, id RegionVerID) (*RPCContext,
 		return nil, nil
 	}
 	return &RPCContext{
-		Context: bo.ctx,
-		Region:  id,
-		KVCtx:   kvCtx,
-		Addr:    addr,
+		Region: id,
+		KVCtx:  kvCtx,
+		Addr:   addr,
 	}, nil
 }
 
@@ -139,35 +135,6 @@ func (c *RegionCache) LocateKey(bo *Backoffer, key []byte) (*KeyLocation, error)
 	}, nil
 }
 
-// LocateRegionByID searches for the region with ID
-func (c *RegionCache) LocateRegionByID(bo *Backoffer, regionID uint64) (*KeyLocation, error) {
-	c.mu.RLock()
-	if r := c.getRegionByIDFromCache(regionID); r != nil {
-		loc := &KeyLocation{
-			Region:   r.VerID(),
-			StartKey: r.StartKey(),
-			EndKey:   r.EndKey(),
-		}
-		c.mu.RUnlock()
-		return loc, nil
-	}
-	c.mu.RUnlock()
-
-	r, err := c.loadRegionByID(bo, regionID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	r = c.insertRegionToCache(r)
-	return &KeyLocation{
-		Region:   r.VerID(),
-		StartKey: r.StartKey(),
-		EndKey:   r.EndKey(),
-	}, nil
-}
-
 // GroupKeysByRegion separates keys into groups by their belonging Regions.
 // Specially it also returns the first key's region which may be used as the
 // 'PrimaryLockKey' and should be committed ahead of others.
@@ -190,22 +157,6 @@ func (c *RegionCache) GroupKeysByRegion(bo *Backoffer, keys [][]byte) (map[Regio
 		groups[id] = append(groups[id], k)
 	}
 	return groups, first, nil
-}
-
-// ListRegionIDsInKeyRange lists ids of regions in [start_key,end_key].
-func (c *RegionCache) ListRegionIDsInKeyRange(bo *Backoffer, startKey, endKey []byte) (regionIDs []uint64, err error) {
-	for {
-		curRegion, err := c.LocateKey(bo, startKey)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		regionIDs = append(regionIDs, curRegion.Region.id)
-		if curRegion.Contains(endKey) {
-			break
-		}
-		startKey = curRegion.EndKey
-	}
-	return regionIDs, nil
 }
 
 // DropRegion removes a cached Region.
@@ -259,16 +210,6 @@ func (c *RegionCache) insertRegionToCache(r *Region) *Region {
 	return r
 }
 
-// getRegionByIDFromCache tries to get region by regionID from cache
-func (c *RegionCache) getRegionByIDFromCache(regionID uint64) *Region {
-	for v, r := range c.mu.regions {
-		if v.id == regionID {
-			return r
-		}
-	}
-	return nil
-}
-
 func (c *RegionCache) dropRegionFromCache(verID RegionVerID) {
 	r, ok := c.mu.regions[verID]
 	if !ok {
@@ -289,47 +230,13 @@ func (c *RegionCache) loadRegion(bo *Backoffer, key []byte) (*Region, error) {
 			}
 		}
 
-		meta, leader, err := c.pdClient.GetRegion(bo.ctx, key)
+		meta, leader, err := c.pdClient.GetRegion(key)
 		if err != nil {
 			backoffErr = errors.Errorf("loadRegion from PD failed, key: %q, err: %v", key, err)
 			continue
 		}
 		if meta == nil {
 			backoffErr = errors.Errorf("region not found for key %q", key)
-			continue
-		}
-		if len(meta.Peers) == 0 {
-			return nil, errors.New("receive Region with no peer")
-		}
-		region := &Region{
-			meta: meta,
-			peer: meta.Peers[0],
-		}
-		if leader != nil {
-			region.SwitchPeer(leader.GetStoreId())
-		}
-		return region, nil
-	}
-}
-
-// loadRegionByID loads region from pd client, and picks the first peer as leader.
-func (c *RegionCache) loadRegionByID(bo *Backoffer, regionID uint64) (*Region, error) {
-	var backoffErr error
-	for {
-		if backoffErr != nil {
-			err := bo.Backoff(boPDRPC, backoffErr)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
-
-		meta, leader, err := c.pdClient.GetRegionByID(bo.ctx, regionID)
-		if err != nil {
-			backoffErr = errors.Errorf("loadRegion from PD failed, regionID: %v, err: %v", regionID, err)
-			continue
-		}
-		if meta == nil {
-			backoffErr = errors.Errorf("region not found for regionID %q", regionID)
 			continue
 		}
 		if len(meta.Peers) == 0 {
@@ -383,7 +290,7 @@ func (c *RegionCache) ClearStoreByID(id uint64) {
 
 func (c *RegionCache) loadStoreAddr(bo *Backoffer, id uint64) (string, error) {
 	for {
-		store, err := c.pdClient.GetStore(bo.ctx, id)
+		store, err := c.pdClient.GetStore(id)
 		if err != nil {
 			err = errors.Errorf("loadStore from PD failed, id: %d, err: %v", id, err)
 			if err = bo.Backoff(boPDRPC, err); err != nil {
@@ -415,14 +322,6 @@ func (c *RegionCache) OnRequestFail(ctx *RPCContext) {
 	c.storeMu.Lock()
 	delete(c.storeMu.stores, storeID)
 	c.storeMu.Unlock()
-
-	c.mu.Lock()
-	for id, r := range c.mu.regions {
-		if r.peer.GetStoreId() == storeID {
-			c.dropRegionFromCache(id)
-		}
-	}
-	c.mu.Unlock()
 }
 
 // OnRegionStale removes the old region and inserts new regions into the cache.

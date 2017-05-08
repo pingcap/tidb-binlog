@@ -19,7 +19,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
 )
 
@@ -38,10 +37,10 @@ func ExtractColumns(expr Expression) (cols []*Column) {
 
 // ColumnSubstitute substitutes the columns in filter to expressions in select fields.
 // e.g. select * from (select b as a from t) k where a < 10 => select * from (select b as a from t where b < 10) k.
-func ColumnSubstitute(expr Expression, schema *Schema, newExprs []Expression) Expression {
+func ColumnSubstitute(expr Expression, schema Schema, newExprs []Expression) Expression {
 	switch v := expr.(type) {
 	case *Column:
-		id := schema.ColumnIndex(v)
+		id := schema.GetColumnIndex(v)
 		if id == -1 {
 			return v
 		}
@@ -56,18 +55,10 @@ func ColumnSubstitute(expr Expression, schema *Schema, newExprs []Expression) Ex
 		for _, arg := range v.GetArgs() {
 			newArgs = append(newArgs, ColumnSubstitute(arg, schema, newExprs))
 		}
-		fun, _ := NewFunction(v.GetCtx(), v.FuncName.L, v.RetType, newArgs...)
+		fun, _ := NewFunction(v.FuncName.L, v.RetType, newArgs...)
 		return fun
 	}
 	return expr
-}
-
-func datumsToConstants(datums []types.Datum) []Expression {
-	constants := make([]Expression, 0, len(datums))
-	for _, d := range datums {
-		constants = append(constants, &Constant{Value: d})
-	}
-	return constants
 }
 
 // calculateSum adds v to sum.
@@ -110,7 +101,7 @@ func calculateSum(sc *variable.StatementContext, sum, v types.Datum) (data types
 	}
 }
 
-// getValidPrefix gets a prefix of string which can parsed to a number with base. the minimum base is 2 and the maximum is 36.
+// getValidPrefix gets a prefix of string which can parsed to a number with base. the minimun base is 2 and the maximum is 36.
 func getValidPrefix(s string, base int64) string {
 	var (
 		validLen int
@@ -147,68 +138,4 @@ Loop:
 		return s[1:validLen]
 	}
 	return s[:validLen]
-}
-
-// createDistinctChecker creates a new distinct checker.
-func createDistinctChecker() *distinctChecker {
-	return &distinctChecker{
-		existingKeys: make(map[string]bool),
-	}
-}
-
-// Checker stores existing keys and checks if given data is distinct.
-type distinctChecker struct {
-	existingKeys map[string]bool
-}
-
-// Check checks if values is distinct.
-func (d *distinctChecker) Check(values []interface{}) (bool, error) {
-	bs, err := codec.EncodeValue([]byte{}, types.MakeDatums(values...)...)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	key := string(bs)
-	_, ok := d.existingKeys[key]
-	if ok {
-		return false, nil
-	}
-	d.existingKeys[key] = true
-	return true, nil
-}
-
-// SubstituteCorCol2Constant will substitute correlated column to constant value which it contains.
-// If the args of one scalar function are all constant, we will substitute it to constant.
-func SubstituteCorCol2Constant(expr Expression) (Expression, error) {
-	switch x := expr.(type) {
-	case *ScalarFunction:
-		allConstant := true
-		newArgs := make([]Expression, 0, len(x.GetArgs()))
-		for _, arg := range x.GetArgs() {
-			newArg, err := SubstituteCorCol2Constant(arg)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			_, ok := newArg.(*Constant)
-			newArgs = append(newArgs, newArg)
-			allConstant = allConstant && ok
-		}
-		if allConstant {
-			val, err := x.Eval(nil)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return &Constant{Value: val}, nil
-		}
-		var newSf Expression
-		if x.FuncName.L == ast.Cast {
-			newSf = NewCastFunc(x.RetType, newArgs[0], x.GetCtx())
-		} else {
-			newSf, _ = NewFunction(x.GetCtx(), x.FuncName.L, x.GetType(), newArgs...)
-		}
-		return newSf, nil
-	case *CorrelatedColumn:
-		return &Constant{Value: *x.Data, RetType: x.GetType()}, nil
-	default:
-		return x.Clone(), nil
-	}
 }

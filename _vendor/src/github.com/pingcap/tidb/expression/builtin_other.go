@@ -15,6 +15,7 @@ package expression
 
 import (
 	"strings"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/context"
@@ -46,6 +47,63 @@ var (
 	_ builtinFunc = &builtinValuesSig{}
 )
 
+type sleepFunctionClass struct {
+	baseFunctionClass
+}
+
+func (c *sleepFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
+	return &builtinSleepSig{newBaseBuiltinFunc(args, ctx)}, errors.Trace(c.verifyArgs(args))
+}
+
+type builtinSleepSig struct {
+	baseBuiltinFunc
+}
+
+func (b *builtinSleepSig) eval(row []types.Datum) (types.Datum, error) {
+	args, err := b.evalArgs(row)
+	if err != nil {
+		return types.Datum{}, errors.Trace(err)
+	}
+	return builtinSleep(args, b.ctx)
+}
+
+func (b *builtinSleepSig) isDeterministic() bool {
+	return false
+}
+
+// See http://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_sleep
+func builtinSleep(args []types.Datum, ctx context.Context) (d types.Datum, err error) {
+	sessVars := ctx.GetSessionVars()
+	if args[0].IsNull() {
+		if sessVars.StrictSQLMode {
+			return d, errors.New("incorrect arguments to sleep")
+		}
+		d.SetInt64(0)
+		return
+	}
+	// processing argument is negative
+	zero := types.NewIntDatum(0)
+	sc := sessVars.StmtCtx
+	ret, err := args[0].CompareDatum(sc, zero)
+	if err != nil {
+		return d, errors.Trace(err)
+	}
+	if ret == -1 {
+		if sessVars.StrictSQLMode {
+			return d, errors.New("incorrect arguments to sleep")
+		}
+		d.SetInt64(0)
+		return
+	}
+
+	// TODO: consider it's interrupted using KILL QUERY from other session, or
+	// interrupted by time out.
+	duration := time.Duration(args[0].GetFloat64() * float64(time.Second.Nanoseconds()))
+	time.Sleep(duration)
+	d.SetInt64(0)
+	return
+}
+
 type inFunctionClass struct {
 	baseFunctionClass
 }
@@ -58,16 +116,20 @@ type builtinInSig struct {
 	baseBuiltinFunc
 }
 
-// See http://dev.mysql.com/doc/refman/5.7/en/any-in-some-subqueries.html
-func (b *builtinInSig) eval(row []types.Datum) (d types.Datum, err error) {
+func (b *builtinInSig) eval(row []types.Datum) (types.Datum, error) {
 	args, err := b.evalArgs(row)
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
+	return builtinIn(args, b.ctx)
+}
+
+// See http://dev.mysql.com/doc/refman/5.7/en/any-in-some-subqueries.html
+func builtinIn(args []types.Datum, ctx context.Context) (d types.Datum, err error) {
 	if args[0].IsNull() {
 		return
 	}
-	sc := b.ctx.GetSessionVars().StmtCtx
+	sc := ctx.GetSessionVars().StmtCtx
 	var hasNull bool
 	for _, v := range args[1:] {
 		if v.IsNull() {
@@ -110,12 +172,16 @@ type builtinRowSig struct {
 	baseBuiltinFunc
 }
 
-func (b *builtinRowSig) eval(row []types.Datum) (d types.Datum, err error) {
+func (b *builtinRowSig) eval(row []types.Datum) (types.Datum, error) {
 	args, err := b.evalArgs(row)
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
-	d.SetRow(args)
+	return builtinRow(args, b.ctx)
+}
+
+func builtinRow(row []types.Datum, _ context.Context) (d types.Datum, err error) {
+	d.SetRow(row)
 	return
 }
 
@@ -135,25 +201,34 @@ type builtinCastSig struct {
 	tp *types.FieldType
 }
 
-// CastFuncFactory produces builtin function according to field types.
-// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html
-func (b *builtinCastSig) eval(row []types.Datum) (d types.Datum, err error) {
+func (b *builtinCastSig) eval(row []types.Datum) (types.Datum, error) {
 	args, err := b.evalArgs(row)
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
-	switch b.tp.Tp {
-	// Parser has restricted this.
-	// TypeDouble is used during plan optimization.
-	case mysql.TypeString, mysql.TypeDuration, mysql.TypeDatetime,
-		mysql.TypeDate, mysql.TypeLonglong, mysql.TypeNewDecimal, mysql.TypeDouble:
-		d = args[0]
-		if d.IsNull() {
-			return
-		}
-		return d.ConvertTo(b.ctx.GetSessionVars().StmtCtx, b.tp)
+	f, err := CastFuncFactory(b.tp)
+	if err != nil {
+		return types.Datum{}, errors.Trace(err)
 	}
-	return d, errors.Errorf("unknown cast type - %v", b.tp)
+	return f(args, b.ctx)
+}
+
+// CastFuncFactory produces builtin function according to field types.
+// See https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html
+func CastFuncFactory(tp *types.FieldType) (BuiltinFunc, error) {
+	switch tp.Tp {
+	// Parser has restricted this.
+	case mysql.TypeString, mysql.TypeDuration, mysql.TypeDatetime,
+		mysql.TypeDate, mysql.TypeLonglong, mysql.TypeNewDecimal:
+		return func(args []types.Datum, ctx context.Context) (d types.Datum, err error) {
+			d = args[0]
+			if d.IsNull() {
+				return
+			}
+			return d.ConvertTo(ctx.GetSessionVars().StmtCtx, tp)
+		}, nil
+	}
+	return nil, errors.Errorf("unknown cast type - %v", tp)
 }
 
 type setVarFunctionClass struct {
@@ -161,10 +236,7 @@ type setVarFunctionClass struct {
 }
 
 func (c *setVarFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
-	err := errors.Trace(c.verifyArgs(args))
-	bt := &builtinSetVarSig{newBaseBuiltinFunc(args, ctx)}
-	bt.deterministic = false
-	return bt, errors.Trace(err)
+	return &builtinSetVarSig{newBaseBuiltinFunc(args, ctx)}, errors.Trace(c.verifyArgs(args))
 }
 
 type builtinSetVarSig struct {
@@ -176,7 +248,15 @@ func (b *builtinSetVarSig) eval(row []types.Datum) (types.Datum, error) {
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
-	sessionVars := b.ctx.GetSessionVars()
+	return builtinSetVar(args, b.ctx)
+}
+
+func (b *builtinSetVarSig) isDeterministic() bool {
+	return false
+}
+
+func builtinSetVar(args []types.Datum, ctx context.Context) (types.Datum, error) {
+	sessionVars := ctx.GetSessionVars()
 	varName, _ := args[0].ToString()
 	if !args[1].IsNull() {
 		strVal, err := args[1].ToString()
@@ -193,10 +273,7 @@ type getVarFunctionClass struct {
 }
 
 func (c *getVarFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
-	err := errors.Trace(c.verifyArgs(args))
-	bt := &builtinGetVarSig{newBaseBuiltinFunc(args, ctx)}
-	bt.deterministic = false
-	return bt, errors.Trace(err)
+	return &builtinGetVarSig{newBaseBuiltinFunc(args, ctx)}, errors.Trace(c.verifyArgs(args))
 }
 
 type builtinGetVarSig struct {
@@ -208,12 +285,74 @@ func (b *builtinGetVarSig) eval(row []types.Datum) (types.Datum, error) {
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
-	sessionVars := b.ctx.GetSessionVars()
+	return builtinGetVar(args, b.ctx)
+}
+
+func (b *builtinGetVarSig) isDeterministic() bool {
+	return false
+}
+
+func builtinGetVar(args []types.Datum, ctx context.Context) (types.Datum, error) {
+	sessionVars := ctx.GetSessionVars()
 	varName, _ := args[0].ToString()
 	if v, ok := sessionVars.Users[varName]; ok {
 		return types.NewDatum(v), nil
 	}
 	return types.Datum{}, nil
+}
+
+type lockFunctionClass struct {
+	baseFunctionClass
+}
+
+func (c *lockFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
+	return &builtinLockSig{newBaseBuiltinFunc(args, ctx)}, errors.Trace(c.verifyArgs(args))
+}
+
+type builtinLockSig struct {
+	baseBuiltinFunc
+}
+
+func (b *builtinLockSig) eval(row []types.Datum) (types.Datum, error) {
+	args, err := b.evalArgs(row)
+	if err != nil {
+		return types.Datum{}, errors.Trace(err)
+	}
+	return builtinLock(args, b.ctx)
+}
+
+// The lock function will do nothing.
+// Warning: get_lock() function is parsed but ignored.
+func builtinLock(args []types.Datum, _ context.Context) (d types.Datum, err error) {
+	d.SetInt64(1)
+	return d, nil
+}
+
+type releaseLockFunctionClass struct {
+	baseFunctionClass
+}
+
+func (c *releaseLockFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
+	return &builtinReleaseLockSig{newBaseBuiltinFunc(args, ctx)}, errors.Trace(c.verifyArgs(args))
+}
+
+type builtinReleaseLockSig struct {
+	baseBuiltinFunc
+}
+
+func (b *builtinReleaseLockSig) eval(row []types.Datum) (types.Datum, error) {
+	args, err := b.evalArgs(row)
+	if err != nil {
+		return types.Datum{}, errors.Trace(err)
+	}
+	return builtinReleaseLock(args, b.ctx)
+}
+
+// The release lock function will do nothing.
+// Warning: release_lock() function is parsed but ignored.
+func builtinReleaseLock(args []types.Datum, _ context.Context) (d types.Datum, err error) {
+	d.SetInt64(1)
+	return d, nil
 }
 
 type valuesFunctionClass struct {
@@ -223,10 +362,7 @@ type valuesFunctionClass struct {
 }
 
 func (c *valuesFunctionClass) getFunction(args []Expression, ctx context.Context) (builtinFunc, error) {
-	err := errors.Trace(c.verifyArgs(args))
-	bt := &builtinValuesSig{newBaseBuiltinFunc(args, ctx), c.offset}
-	bt.deterministic = false
-	return bt, errors.Trace(err)
+	return &builtinValuesSig{newBaseBuiltinFunc(args, ctx), c.offset}, errors.Trace(c.verifyArgs(args))
 }
 
 type builtinValuesSig struct {
@@ -235,14 +371,31 @@ type builtinValuesSig struct {
 	offset int
 }
 
-func (b *builtinValuesSig) eval(_ []types.Datum) (types.Datum, error) {
-	values := b.ctx.GetSessionVars().CurrInsertValues
-	if values == nil {
-		return types.Datum{}, errors.New("Session current insert values is nil")
+func (b *builtinValuesSig) eval(row []types.Datum) (types.Datum, error) {
+	args, err := b.evalArgs(row)
+	if err != nil {
+		return types.Datum{}, errors.Trace(err)
 	}
-	row := values.([]types.Datum)
-	if len(row) > b.offset {
-		return row[b.offset], nil
+	return BuiltinValuesFactory(b.offset)(args, b.ctx)
+}
+
+func (b *builtinValuesSig) isDeterministic() bool {
+	return false
+}
+
+// BuiltinValuesFactory generates values builtin function.
+func BuiltinValuesFactory(offset int) BuiltinFunc {
+	return func(_ []types.Datum, ctx context.Context) (d types.Datum, err error) {
+		values := ctx.GetSessionVars().CurrInsertValues
+		if values == nil {
+			err = errors.New("Session current insert values is nil")
+			return
+		}
+		row := values.([]types.Datum)
+		if len(row) > offset {
+			return row[offset], nil
+		}
+		err = errors.Errorf("Session current insert values len %d and column's offset %v don't match", len(row), offset)
+		return
 	}
-	return types.Datum{}, errors.Errorf("Session current insert values len %d and column's offset %v don't match", len(row), b.offset)
 }

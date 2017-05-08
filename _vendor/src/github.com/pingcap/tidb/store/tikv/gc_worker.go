@@ -23,9 +23,8 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb"
+	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/privilege"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/sqlexec"
 	goctx "golang.org/x/net/context"
@@ -45,6 +44,10 @@ type GCWorker struct {
 
 // NewGCWorker creates a GCWorker instance.
 func NewGCWorker(store kv.Storage) (*GCWorker, error) {
+	session, err := tidb.CreateSession(store)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ver, err := store.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -57,6 +60,7 @@ func NewGCWorker(store kv.Storage) (*GCWorker, error) {
 		uuid:        strconv.FormatUint(ver.Ver, 16),
 		desc:        fmt.Sprintf("host:%s, pid:%d, start at %s", hostName, os.Getpid(), time.Now()),
 		store:       store.(*tikvStore),
+		session:     session,
 		gcIsRunning: false,
 		lastFinish:  time.Now(),
 		quit:        make(chan struct{}),
@@ -106,20 +110,6 @@ func (w *GCWorker) start() {
 	for {
 		select {
 		case <-ticker.C:
-			if w.session == nil {
-				if !w.storeIsBootstrapped() {
-					break
-				}
-				var err error
-				w.session, err = tidb.CreateSession(w.store)
-				if err != nil {
-					log.Warnf("[gc worker] create session err: %v", err)
-					break
-				}
-				// Disable privilege check for gc worker session.
-				privilege.BindPrivilegeManager(w.session, nil)
-			}
-
 			isLeader, err := w.checkLeader()
 			if err != nil {
 				log.Warnf("[gc worker] check leader err: %v", err)
@@ -130,10 +120,6 @@ func (w *GCWorker) start() {
 				if err != nil {
 					log.Warnf("[gc worker] leader tick err: %v", err)
 				}
-			} else {
-				// Config metrics should always be updated by leader.
-				gcConfigGauge.WithLabelValues(gcRunIntervalKey).Set(0)
-				gcConfigGauge.WithLabelValues(gcLifeTimeKey).Set(0)
 			}
 		case err := <-w.done:
 			w.gcIsRunning = false
@@ -147,23 +133,6 @@ func (w *GCWorker) start() {
 			return
 		}
 	}
-}
-
-const notBootstrappedVer = 0
-
-func (w *GCWorker) storeIsBootstrapped() bool {
-	var ver int64
-	err := kv.RunInNewTxn(w.store, false, func(txn kv.Transaction) error {
-		var err error
-		t := meta.NewMeta(txn)
-		ver, err = t.GetBootstrapVersion()
-		return errors.Trace(err)
-	})
-	if err != nil {
-		log.Errorf("[gc worker] check bootstrapped error %v", err)
-		return false
-	}
-	return ver > notBootstrappedVer
 }
 
 // Leader of GC worker checks if it should start a GC job every tick.
@@ -518,11 +487,13 @@ func (w *GCWorker) loadDurationWithDefault(key string, def time.Duration) (*time
 
 func (w *GCWorker) loadValueFromSysTable(key string) (string, error) {
 	stmt := fmt.Sprintf(`SELECT (variable_value) FROM mysql.tidb WHERE variable_name='%s' FOR UPDATE`, key)
-	rs, err := w.session.(sqlexec.SQLExecutor).Execute(stmt)
+	restrictExecutor := w.session.(sqlexec.RestrictedSQLExecutor)
+	ctx := w.session.(context.Context)
+	rs, err := restrictExecutor.ExecRestrictedSQL(ctx, stmt)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	row, err := rs[0].Next()
+	row, err := rs.Next()
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -540,7 +511,9 @@ func (w *GCWorker) saveValueToSysTable(key, value string) error {
 			       ON DUPLICATE KEY
 			       UPDATE variable_value = '%[2]s', comment = '%[3]s'`,
 		key, value, gcVariableComments[key])
-	_, err := w.session.(sqlexec.SQLExecutor).Execute(stmt)
+	restrictExecutor := w.session.(sqlexec.RestrictedSQLExecutor)
+	ctx := w.session.(context.Context)
+	_, err := restrictExecutor.ExecRestrictedSQL(ctx, stmt)
 	log.Debugf("[gc worker] save kv, %s:%s %v", key, value, err)
 	return errors.Trace(err)
 }

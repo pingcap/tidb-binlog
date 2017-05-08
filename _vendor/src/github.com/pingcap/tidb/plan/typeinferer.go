@@ -172,7 +172,7 @@ func (v *typeInferrer) binaryOperation(x *ast.BinaryOperationExpr) {
 		x.Type.Init(mysql.TypeLonglong)
 	case opcode.Plus, opcode.Minus, opcode.Mul, opcode.Mod:
 		if x.L.GetType() != nil && x.R.GetType() != nil {
-			xTp := mergeArithType(x.L.GetType(), x.R.GetType())
+			xTp := mergeArithType(x.L.GetType().Tp, x.R.GetType().Tp)
 			x.Type.Init(xTp)
 			leftUnsigned := x.L.GetType().Flag & mysql.UnsignedFlag
 			rightUnsigned := x.R.GetType().Flag & mysql.UnsignedFlag
@@ -181,7 +181,7 @@ func (v *typeInferrer) binaryOperation(x *ast.BinaryOperationExpr) {
 		}
 	case opcode.Div:
 		if x.L.GetType() != nil && x.R.GetType() != nil {
-			xTp := mergeArithType(x.L.GetType(), x.R.GetType())
+			xTp := mergeArithType(x.L.GetType().Tp, x.R.GetType().Tp)
 			if xTp == mysql.TypeLonglong {
 				xTp = mysql.TypeNewDecimal
 			}
@@ -192,21 +192,7 @@ func (v *typeInferrer) binaryOperation(x *ast.BinaryOperationExpr) {
 	x.Type.Collate = charset.CollationBin
 }
 
-// toArithType converts DateTime, Duration and Timestamp types to NewDecimal type if Decimal > 0.
-func toArithType(ft *types.FieldType) (tp byte) {
-	tp = ft.Tp
-	if types.IsTypeFractionable(tp) {
-		if ft.Decimal > 0 {
-			tp = mysql.TypeNewDecimal
-		} else {
-			tp = mysql.TypeLonglong
-		}
-	}
-	return
-}
-
-func mergeArithType(fta, ftb *types.FieldType) byte {
-	a, b := toArithType(fta), toArithType(ftb)
+func mergeArithType(a, b byte) byte {
 	switch a {
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeDouble, mysql.TypeFloat:
 		return mysql.TypeDouble
@@ -219,41 +205,6 @@ func mergeArithType(fta, ftb *types.FieldType) byte {
 		return mysql.TypeNewDecimal
 	}
 	return mysql.TypeLonglong
-}
-
-func mergeCmpType(fta, ftb *types.FieldType) (ft *types.FieldType) {
-	ft = &types.FieldType{}
-	if fta.Charset == charset.CharsetUTF8 && ftb.Charset == charset.CharsetUTF8 {
-		ft.Charset = charset.CharsetUTF8
-		ft.Collate = mysql.UTF8DefaultCollation
-	} else {
-		ft.Flag |= mysql.BinaryFlag
-	}
-	isFtaTime, isFtbTime := types.IsTypeFractionable(fta.Tp), types.IsTypeFractionable(ftb.Tp)
-	if types.IsTypeBlob(fta.Tp) || types.IsTypeBlob(ftb.Tp) {
-		ft.Tp = mysql.TypeBlob
-	} else if types.IsTypeVarchar(fta.Tp) || types.IsTypeVarchar(ftb.Tp) {
-		ft.Tp = mysql.TypeVarString
-	} else if types.IsTypeChar(fta.Tp) || types.IsTypeChar(ftb.Tp) {
-		ft.Tp = mysql.TypeString
-	} else if isFtaTime && isFtbTime {
-		ft.Tp = mysql.TypeDatetime
-	} else if isFtaTime || isFtbTime {
-		ft.Tp = mysql.TypeVarString
-	} else if fta.Tp == mysql.TypeEnum || ftb.Tp == mysql.TypeEnum || fta.Tp == mysql.TypeSet || ftb.Tp == mysql.TypeSet {
-		ft.Tp = mysql.TypeString
-	} else if fta.Tp == mysql.TypeDouble || ftb.Tp == mysql.TypeDouble {
-		ft.Tp = mysql.TypeDouble
-	} else if fta.Tp == mysql.TypeFloat || ftb.Tp == mysql.TypeFloat {
-		ft.Tp = mysql.TypeFloat
-	} else if fta.Tp == mysql.TypeNewDecimal || ftb.Tp == mysql.TypeNewDecimal {
-		ft.Tp = mysql.TypeNewDecimal
-	} else if fta.Tp == mysql.TypeLonglong || ftb.Tp == mysql.TypeLonglong {
-		ft.Tp = mysql.TypeLonglong
-	} else {
-		ft.Tp = mysql.TypeLong
-	}
-	return ft
 }
 
 func (v *typeInferrer) unaryOperation(x *ast.UnaryOperationExpr) {
@@ -269,7 +220,7 @@ func (v *typeInferrer) unaryOperation(x *ast.UnaryOperationExpr) {
 		x.Type.Init(mysql.TypeLonglong)
 		if x.V.GetType() != nil {
 			switch x.V.GetType().Tp {
-			case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeDouble, mysql.TypeFloat, mysql.TypeDatetime, mysql.TypeDuration, mysql.TypeTimestamp:
+			case mysql.TypeString, mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeDouble, mysql.TypeFloat:
 				x.Type.Tp = mysql.TypeDouble
 			case mysql.TypeNewDecimal:
 				x.Type.Tp = mysql.TypeNewDecimal
@@ -311,16 +262,6 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		if x.FnName.L == "abs" && tp.Tp == mysql.TypeDatetime {
 			tp = types.NewFieldType(mysql.TypeDouble)
 		}
-	case "round":
-		t := x.Args[0].GetType().Tp
-		switch t {
-		case mysql.TypeBit, mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLonglong:
-			tp = types.NewFieldType(mysql.TypeLonglong)
-		case mysql.TypeNewDecimal:
-			tp = types.NewFieldType(mysql.TypeNewDecimal)
-		default:
-			tp = types.NewFieldType(mysql.TypeDouble)
-		}
 	case "greatest", "least":
 		for _, arg := range x.Args {
 			InferType(v.sc, arg)
@@ -328,12 +269,12 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		if len(x.Args) > 0 {
 			tp = x.Args[0].GetType()
 			for i := 1; i < len(x.Args); i++ {
-				tp = mergeCmpType(tp, x.Args[i].GetType())
+				mergeArithType(tp.Tp, x.Args[i].GetType().Tp)
 			}
 		}
 	case "interval":
 		tp = types.NewFieldType(mysql.TypeLonglong)
-	case "ceil", "ceiling", "floor":
+	case "ceil", "ceiling":
 		t := x.Args[0].GetType().Tp
 		if t == mysql.TypeNull || t == mysql.TypeFloat || t == mysql.TypeDouble || t == mysql.TypeVarchar ||
 			t == mysql.TypeTinyBlob || t == mysql.TypeMediumBlob || t == mysql.TypeLongBlob ||
@@ -342,28 +283,22 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		} else {
 			tp = types.NewFieldType(mysql.TypeLonglong)
 		}
-	case "ln", "log", "log2", "log10", "sqrt", "pi", "exp", "degrees":
-		tp = types.NewFieldType(mysql.TypeDouble)
-	case "sin":
-		tp = types.NewFieldType(mysql.TypeDouble)
-	case "acos", "asin", "atan":
+	case "ln", "log", "log2", "log10":
 		tp = types.NewFieldType(mysql.TypeDouble)
 	case "pow", "power", "rand":
 		tp = types.NewFieldType(mysql.TypeDouble)
-	case "radians":
-		tp = types.NewFieldType(mysql.TypeDouble)
 	case "curdate", "current_date", "date", "from_days":
 		tp = types.NewFieldType(mysql.TypeDate)
-	case "curtime", "current_time", "timediff", "maketime":
+	case "curtime", "current_time", "timediff":
 		tp = types.NewFieldType(mysql.TypeDuration)
 		tp.Decimal = v.getFsp(x)
-	case "date_add", "date_sub", "adddate", "subdate", "timestamp":
+	case "current_timestamp", "date_add", "date_sub", "adddate", "subdate":
 		tp = types.NewFieldType(mysql.TypeDatetime)
 	case "microsecond", "second", "minute", "hour", "day", "week", "month", "year",
 		"dayofweek", "dayofmonth", "dayofyear", "weekday", "weekofyear", "yearweek", "datediff",
-		"found_rows", "length", "extract", "locate", "unix_timestamp", "quarter", "is_ipv4":
+		"found_rows", "length", "extract", "locate", "unix_timestamp":
 		tp = types.NewFieldType(mysql.TypeLonglong)
-	case "now", "sysdate", "current_timestamp", "utc_timestamp":
+	case "now", "sysdate":
 		tp = types.NewFieldType(mysql.TypeDatetime)
 		tp.Decimal = v.getFsp(x)
 	case "from_unixtime":
@@ -377,14 +312,11 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		tp = types.NewFieldType(mysql.TypeDatetime)
 	case "dayname", "version", "database", "user", "current_user", "schema",
 		"concat", "concat_ws", "left", "lcase", "lower", "repeat",
-		"replace", "ucase", "upper", "convert", "substring", "elt",
-		"substring_index", "trim", "ltrim", "rtrim", "reverse", "hex", "unhex",
-		"date_format", "rpad", "lpad", "char_func", "conv", "make_set", "oct", "uuid",
-		"insert_func", "bin", "quote", "format":
+		"replace", "ucase", "upper", "convert", "substring",
+		"substring_index", "trim", "ltrim", "rtrim", "reverse", "hex", "unhex", "date_format", "rpad", "char_func", "conv":
 		tp = types.NewFieldType(mysql.TypeVarString)
 		chs = v.defaultCharset
-	case "strcmp", "isnull", "bit_length", "char_length", "character_length", "crc32", "timestampdiff",
-		"sign", "is_ipv6", "ord", "instr":
+	case "strcmp", "isnull", "bit_length", "char_length", "character_length", "crc32", "timestampdiff", "sign":
 		tp = types.NewFieldType(mysql.TypeLonglong)
 	case "connection_id":
 		tp = types.NewFieldType(mysql.TypeLonglong)
@@ -402,32 +334,6 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 		tp = x.Args[1].GetType()
 	case "get_lock", "release_lock":
 		tp = types.NewFieldType(mysql.TypeLonglong)
-	case ast.AesEncrypt, ast.AesDecrypt, ast.SHA2, ast.InetNtoa:
-		tp = types.NewFieldType(mysql.TypeVarString)
-		chs = v.defaultCharset
-	case ast.MD5:
-		tp = types.NewFieldType(mysql.TypeVarString)
-		chs = v.defaultCharset
-		tp.Flen = 32
-	case ast.Compress:
-		tp = types.NewFieldType(mysql.TypeBlob)
-	case ast.SHA, ast.SHA1:
-		tp = types.NewFieldType(mysql.TypeVarString)
-		chs = v.defaultCharset
-		tp.Flen = 40
-	case ast.RandomBytes:
-		tp = types.NewFieldType(mysql.TypeVarString)
-	case ast.Coalesce:
-		tp = aggFieldType(x.Args)
-		if tp.Tp == mysql.TypeVarchar {
-			tp.Tp = mysql.TypeVarString
-		}
-		classType := aggTypeClass(x.Args, &tp.Flag)
-		if classType == types.ClassString && !mysql.HasBinaryFlag(tp.Flag) {
-			tp.Charset, tp.Collate = types.DefaultCharsetForType(tp.Tp)
-		}
-	case ast.AnyValue:
-		tp = x.Args[0].GetType()
 	default:
 		tp = types.NewFieldType(mysql.TypeUnspecified)
 	}
@@ -452,25 +358,37 @@ func (v *typeInferrer) handleFuncCallExpr(x *ast.FuncCallExpr) {
 // If used in a string context, the result is returned as a string.
 // If used in a numeric context, the result is returned as a decimal, real, or integer value.
 func (v *typeInferrer) handleCaseExpr(x *ast.CaseExpr) {
-	exprs := make([]ast.ExprNode, 0, len(x.WhenClauses)+1)
+	var currType types.FieldType
 	for _, w := range x.WhenClauses {
-		exprs = append(exprs, w.Result)
+		t := w.Result.GetType()
+		if currType.Tp == mysql.TypeUnspecified {
+			currType = *t
+			continue
+		}
+		mtp := types.MergeFieldType(currType.Tp, t.Tp)
+		if mtp == t.Tp && mtp != currType.Tp {
+			currType.Charset = t.Charset
+			currType.Collate = t.Collate
+		}
+		currType.Tp = mtp
+
 	}
 	if x.ElseClause != nil {
-		exprs = append(exprs, x.ElseClause)
+		t := x.ElseClause.GetType()
+		if currType.Tp == mysql.TypeUnspecified {
+			currType = *t
+		} else {
+			mtp := types.MergeFieldType(currType.Tp, t.Tp)
+			if mtp == t.Tp && mtp != currType.Tp {
+				currType.Charset = t.Charset
+				currType.Collate = t.Collate
+			}
+			currType.Tp = mtp
+		}
 	}
-	tp := aggFieldType(exprs)
-	if tp.Tp == mysql.TypeVarchar {
-		tp.Tp = mysql.TypeVarString
-	}
-	classType := aggTypeClass(exprs, &tp.Flag)
-	if classType == types.ClassString && !mysql.HasBinaryFlag(tp.Flag) {
-		tp.Charset, tp.Collate = types.DefaultCharsetForType(tp.Tp)
-	} else {
-		tp.Charset = charset.CharsetBin
-		tp.Collate = charset.CollationBin
-	}
-	x.SetType(tp)
+	x.SetType(&currType)
+	// TODO: We need a better way to set charset/collation
+	x.Type.Charset, x.Type.Collate = types.DefaultCharsetForType(x.Type.Tp)
 }
 
 // like expression expects the target expression and pattern to be a string, if it's not, we add a cast function.
@@ -543,67 +461,4 @@ func (v *typeInferrer) convertValueToColumnTypeIfNeeded(x *ast.PatternInExpr) {
 			v.err = nil
 		}
 	}
-}
-
-func aggFieldType(args []ast.ExprNode) *types.FieldType {
-	var currType types.FieldType
-	for _, arg := range args {
-		t := arg.GetType()
-		if currType.Tp == mysql.TypeUnspecified {
-			currType = *t
-			continue
-		}
-		mtp := types.MergeFieldType(currType.Tp, t.Tp)
-		currType.Tp = mtp
-	}
-	return &currType
-}
-
-func aggTypeClass(args []ast.ExprNode, flag *uint) types.TypeClass {
-	var (
-		tpClass      = types.ClassString
-		unsigned     bool
-		gotFirst     bool
-		gotBinString bool
-	)
-	for _, arg := range args {
-		argFieldType := arg.GetType()
-		if argFieldType.Tp == mysql.TypeNull {
-			continue
-		}
-		argTypeClass := argFieldType.ToClass()
-		if argTypeClass == types.ClassString && mysql.HasBinaryFlag(argFieldType.Flag) {
-			gotBinString = true
-		}
-		if !gotFirst {
-			gotFirst = true
-			tpClass = argTypeClass
-			unsigned = mysql.HasUnsignedFlag(argFieldType.Flag)
-		} else {
-			tpClass = mergeTypeClass(tpClass, argTypeClass, unsigned, mysql.HasUnsignedFlag(argFieldType.Flag))
-			unsigned = unsigned && mysql.HasUnsignedFlag(argFieldType.Flag)
-		}
-	}
-	setTypeFlag(flag, uint(mysql.UnsignedFlag), unsigned)
-	setTypeFlag(flag, uint(mysql.BinaryFlag), tpClass != types.ClassString || gotBinString)
-	return tpClass
-}
-
-func setTypeFlag(flag *uint, flagItem uint, on bool) {
-	if on {
-		*flag |= flagItem
-	} else {
-		*flag &= ^flagItem
-	}
-}
-
-func mergeTypeClass(a, b types.TypeClass, aUnsigned, bUnsigned bool) types.TypeClass {
-	if a == types.ClassString || b == types.ClassString {
-		return types.ClassString
-	} else if a == types.ClassReal || b == types.ClassReal {
-		return types.ClassReal
-	} else if a == types.ClassDecimal || b == types.ClassDecimal || aUnsigned != bUnsigned {
-		return types.ClassDecimal
-	}
-	return types.ClassInt
 }

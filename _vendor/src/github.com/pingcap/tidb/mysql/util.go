@@ -30,7 +30,7 @@ func GetDefaultFieldLength(tp byte) int {
 		return 11
 	case TypeLonglong:
 		return 21
-	case TypeNewDecimal:
+	case TypeDecimal, TypeNewDecimal:
 		// See https://dev.mysql.com/doc/refman/5.7/en/fixed-point-types.html
 		return 10
 	case TypeBit, TypeBlob:
@@ -44,10 +44,8 @@ func GetDefaultFieldLength(tp byte) int {
 // GetDefaultDecimal returns the default decimal length for column.
 func GetDefaultDecimal(tp byte) int {
 	switch tp {
-	case TypeNewDecimal:
+	case TypeDecimal, TypeNewDecimal:
 		// See https://dev.mysql.com/doc/refman/5.7/en/fixed-point-types.html
-		return 0
-	case TypeDatetime:
 		return 0
 	default:
 		//TODO: Add more types.

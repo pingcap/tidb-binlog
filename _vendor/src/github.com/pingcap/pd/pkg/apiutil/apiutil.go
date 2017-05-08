@@ -43,20 +43,14 @@ func ReadJSON(r io.ReadCloser, data interface{}) error {
 
 // NewHTTPClient returns a HTTP client according to the scheme.
 func NewHTTPClient(scheme string, timeout time.Duration) *http.Client {
-	tr := NewHTTPTransport(scheme)
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: tr,
-	}
-}
-
-// NewHTTPTransport returns a proper http.RoundTripper.
-func NewHTTPTransport(scheme string) *http.Transport {
 	tr := &http.Transport{}
 	if scheme == "unix" || scheme == "unixs" {
 		tr.Dial = unixDial
 	}
-	return tr
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: tr,
+	}
 }
 
 func unixDial(_, addr string) (net.Conn, error) {

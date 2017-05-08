@@ -14,7 +14,6 @@
 package ddl
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -38,15 +37,7 @@ func (d *ddl) newContext() context.Context {
 
 const waitReorgTimeout = 10 * time.Second
 
-func (d *ddl) setReorgRowCount(count int64) {
-	atomic.StoreInt64(&d.reorgRowCount, count)
-}
-
-func (d *ddl) getReorgRowCount() int64 {
-	return atomic.LoadInt64(&d.reorgRowCount)
-}
-
-func (d *ddl) runReorgJob(job *model.Job, f func() error) error {
+func (d *ddl) runReorgJob(f func() error) error {
 	if d.reorgDoneCh == nil {
 		// start a reorganization job
 		d.wait.Add(1)
@@ -72,20 +63,14 @@ func (d *ddl) runReorgJob(job *model.Job, f func() error) error {
 	case err := <-d.reorgDoneCh:
 		log.Info("[ddl] run reorg job done")
 		d.reorgDoneCh = nil
-		// Update a job's RowCount.
-		job.SetRowCount(d.getReorgRowCount())
-		d.setReorgRowCount(0)
 		return errors.Trace(err)
 	case <-d.quitCh:
 		log.Info("[ddl] run reorg job ddl quit")
-		d.setReorgRowCount(0)
-		// We return errWaitReorgTimeout here too, so that outer loop will break.
+		// we return errWaitReorgTimeout here too, so that outer loop will break.
 		return errWaitReorgTimeout
 	case <-time.After(waitTimeout):
-		log.Infof("[ddl] run reorg job wait timeout %v", waitTimeout)
-		// Update a job's RowCount.
-		job.SetRowCount(d.getReorgRowCount())
-		// If timeout, we will return, check the owner and retry to wait job done again.
+		log.Infof("[ddl] run reorg job wait timeout :%v", waitTimeout)
+		// if timeout, we will return, check the owner and retry to wait job done again.
 		return errWaitReorgTimeout
 	}
 }
@@ -93,7 +78,7 @@ func (d *ddl) runReorgJob(job *model.Job, f func() error) error {
 func (d *ddl) isReorgRunnable(txn kv.Transaction, flag JobType) error {
 	if d.isClosed() {
 		// worker is closed, can't run reorganization.
-		return errInvalidWorker.Gen("worker is closed")
+		return errors.Trace(errInvalidWorker.Gen("worker is closed"))
 	}
 
 	t := meta.NewMeta(txn)
@@ -170,9 +155,7 @@ func (d *ddl) delKeysWithStartKey(prefix, startKey kv.Key, jobType JobType, job 
 			return 0, startKey, errors.Trace(err)
 		}
 
-		// Update the background job's RowCount.
 		job.SetRowCount(total)
-		d.setReorgRowCount(total)
 		batchHandleDataHistogram.WithLabelValues(batchDelData).Observe(sub)
 		log.Infof("[ddl] deleted %d keys take time %v, deleted %d keys in total", len(keys), sub, total)
 

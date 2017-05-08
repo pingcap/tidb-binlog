@@ -19,7 +19,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/pd/pd-client"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 // RawKVClient is a client of TiKV server which is used as a key-value storage,
@@ -37,7 +37,7 @@ func NewRawKVClient(pdAddrs []string) (*RawKVClient, error) {
 		return nil, errors.Trace(err)
 	}
 	return &RawKVClient{
-		clusterID:   pdCli.GetClusterID(goctx.TODO()),
+		clusterID:   pdCli.GetClusterID(),
 		regionCache: NewRegionCache(pdCli),
 		rpcClient:   newRPCClient(),
 	}, nil
@@ -128,7 +128,7 @@ func (c *RawKVClient) Delete(key []byte) error {
 }
 
 func (c *RawKVClient) sendKVReq(key []byte, req *kvrpcpb.Request) (*kvrpcpb.Response, error) {
-	bo := NewBackoffer(rawkvMaxBackoff, goctx.Background())
+	bo := NewBackoffer(rawkvMaxBackoff, context.Background())
 	sender := NewRegionRequestSender(bo, c.regionCache, c.rpcClient)
 	for {
 		loc, err := c.regionCache.LocateKey(bo, key)

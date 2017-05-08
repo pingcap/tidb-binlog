@@ -14,7 +14,7 @@
 package kv
 
 import (
-	goctx "golang.org/x/net/context"
+	"io"
 )
 
 // Transaction options
@@ -33,16 +33,6 @@ const (
 	SkipCheckForWrite
 	// SchemaLeaseChecker is used for schema lease check.
 	SchemaLeaseChecker
-)
-
-// Those limits is enforced to make sure the transaction can be well handled by TiKV.
-var (
-	// The limit of single entry size (len(key) + len(value)).
-	TxnEntrySizeLimit = 6 * 1024 * 1024
-	// The limit of number of entries in the MemBuffer.
-	TxnEntryCountLimit uint64 = 300 * 1000
-	// The limit of the sum of all entry size.
-	TxnTotalSizeLimit = 100 * 1024 * 1024
 )
 
 // Retriever is the interface wraps the basic Get and Seek methods.
@@ -114,7 +104,7 @@ type Transaction interface {
 // Client is used to send request to KV layer.
 type Client interface {
 	// Send sends request to KV layer, returns a Response.
-	Send(ctx goctx.Context, req *Request) Response
+	Send(req *Request) Response
 
 	// SupportRequestType checks if reqType and subType is supported.
 	SupportRequestType(reqType, subType int64) bool
@@ -124,7 +114,6 @@ type Client interface {
 const (
 	ReqTypeSelect = 101
 	ReqTypeIndex  = 102
-	ReqTypeDAG    = 103
 
 	ReqSubTypeBasic   = 0
 	ReqSubTypeDesc    = 10000
@@ -153,8 +142,7 @@ type Request struct {
 type Response interface {
 	// Next returns a resultSubset from a single storage unit.
 	// When full result set is returned, nil is returned.
-	// TODO: Find a better interface for resultSubset that can avoid allocation and reuse bytes.
-	Next() (resultSubset []byte, err error)
+	Next() (resultSubset io.ReadCloser, err error)
 	// Close response.
 	Close() error
 }
@@ -178,8 +166,6 @@ type Driver interface {
 type Storage interface {
 	// Begin transaction
 	Begin() (Transaction, error)
-	// BeginWithStartTS begins transaction with startTS.
-	BeginWithStartTS(startTS uint64) (Transaction, error)
 	// GetSnapshot gets a snapshot that is able to read any data which data is <= ver.
 	// if ver is MaxVersion or > current max committed version, we will use current version for this snapshot.
 	GetSnapshot(ver Version) (Snapshot, error)

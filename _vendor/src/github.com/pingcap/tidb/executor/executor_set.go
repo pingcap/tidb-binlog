@@ -69,7 +69,7 @@ func (e *SetExecutor) executeSet() error {
 		name := strings.ToLower(v.Name)
 		if !v.IsSystem {
 			// Set user variable.
-			value, err := v.Expr.Eval(nil)
+			value, err := v.Expr.Eval(nil, e.ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -128,16 +128,15 @@ func (e *SetExecutor) executeSet() error {
 				return errors.Trace(err)
 			}
 			e.loadSnapshotInfoSchemaIfNeeded(name)
-			valStr, _ := value.ToString()
-			log.Infof("[%d] set system variable %s = %s", sessionVars.ConnectionID, name, valStr)
+			log.Infof("[%d] set system variable %s = %s", sessionVars.ConnectionID, name, value.GetString())
 		}
 	}
 	return nil
 }
 
 // Schema implements the Executor Schema interface.
-func (e *SetExecutor) Schema() *expression.Schema {
-	return expression.NewSchema()
+func (e *SetExecutor) Schema() expression.Schema {
+	return expression.NewSchema(nil)
 }
 
 // Close implements the Executor Close interface.
@@ -177,7 +176,7 @@ func (e *SetExecutor) getVarValue(v *expression.VarAssignment, sysVar *variable.
 		}
 		return
 	}
-	value, err = v.Expr.Eval(nil)
+	value, err = v.Expr.Eval(nil, e.ctx)
 	return value, errors.Trace(err)
 }
 

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/kvproto/pkg/pdpb"
 )
 
@@ -54,7 +53,7 @@ func NewClient(addr string, timeout time.Duration) (*Client, error) {
 }
 
 // GetLeader returns the PD leader info.
-func (c *Client) GetLeader() (*pdpb.Member, error) {
+func (c *Client) GetLeader() (*pdpb.Leader, error) {
 	leaderURL := c.url + "/leader"
 	resp, err := c.hc.Get(leaderURL)
 	if err != nil {
@@ -63,26 +62,9 @@ func (c *Client) GetLeader() (*pdpb.Member, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Errorf("GET %s: %s", leaderURL, resp.Status)
 	}
-	leader := &pdpb.Member{}
+	leader := &pdpb.Leader{}
 	if err := ReadJSON(resp.Body, leader); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return leader, nil
-}
-
-// GetClusterID returns the Cluster ID.
-func (c *Client) GetClusterID() (uint64, error) {
-	clusterURL := c.url + "/cluster"
-	resp, err := c.hc.Get(clusterURL)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return 0, errors.Errorf("GET %s: %s", clusterURL, resp.Status)
-	}
-	cluster := &metapb.Cluster{}
-	if err := ReadJSON(resp.Body, cluster); err != nil {
-		return 0, errors.Trace(err)
-	}
-	return cluster.GetId(), nil
 }

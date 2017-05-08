@@ -18,24 +18,24 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/plan/statistics"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/types"
 )
 
-func (is *PhysicalIndexScan) getRowCountByIndexRanges(sc *variable.StatementContext, statsTbl *statistics.Table) (uint64, error) {
+func getRowCountByIndexRanges(sc *variable.StatementContext, statsTbl *statistics.Table, indexRanges []*IndexRange, indexInfo *model.IndexInfo, tableInfo *model.TableInfo) (uint64, error) {
 	var offset int
-	for i := range is.Table.Indices {
-		if is.Table.Indices[i].Name.L == is.Index.Name.L {
+	for i := range tableInfo.Indices {
+		if tableInfo.Indices[i].Name.L == indexInfo.Name.L {
 			offset = i
 			break
 		}
 	}
 	if len(statsTbl.Indices[offset].Numbers) == 0 {
-		return getPseudoRowCountByIndexRanges(sc, statsTbl, is.Ranges, is.Index, is.accessInAndEqCount)
+		return getPseudoRowCountByIndexRanges(sc, statsTbl, indexRanges, indexInfo)
 	}
-	return getRealRowCountByIndexRanges(sc, statsTbl, is.Ranges, is.Index, offset)
+	return getRealRowCountByIndexRanges(sc, statsTbl, indexRanges, indexInfo, offset)
 }
 
 func getRowCountByRange(sc *variable.StatementContext, statsTblCount int64, statsCol *statistics.Column, l, r types.Datum) (int64, error) {
@@ -105,14 +105,11 @@ func getRealRowCountByIndexRanges(sc *variable.StatementContext, statsTbl *stati
 	return uint64(totalCount), nil
 }
 
-func getPseudoRowCountByIndexRanges(sc *variable.StatementContext, statsTbl *statistics.Table, indexRanges []*IndexRange, indexInfo *model.IndexInfo, inAndEQCnt int) (uint64, error) {
+func getPseudoRowCountByIndexRanges(sc *variable.StatementContext, statsTbl *statistics.Table, indexRanges []*IndexRange, indexInfo *model.IndexInfo) (uint64, error) {
 	totalCount := float64(0)
 	for _, indexRange := range indexRanges {
 		count := float64(statsTbl.Count)
 		i := len(indexRange.LowVal) - 1
-		if i > inAndEQCnt {
-			i = inAndEQCnt
-		}
 		l := indexRange.LowVal[i]
 		r := indexRange.HighVal[i]
 		offset := indexInfo.Columns[i].Offset

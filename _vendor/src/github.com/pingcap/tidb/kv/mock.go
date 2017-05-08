@@ -103,13 +103,8 @@ func (s *mockStorage) Begin() (Transaction, error) {
 		valid: true,
 	}
 	return tx, nil
-}
 
-// BeginWithStartTS begins a transaction with startTS.
-func (s *mockStorage) BeginWithStartTS(startTS uint64) (Transaction, error) {
-	return s.Begin()
 }
-
 func (s *mockStorage) GetSnapshot(ver Version) (Snapshot, error) {
 	return &mockSnapshot{
 		store: NewMemDbBuffer(),

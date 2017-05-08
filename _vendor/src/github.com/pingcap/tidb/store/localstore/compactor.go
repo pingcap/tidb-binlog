@@ -176,11 +176,7 @@ func (gc *localstoreCompactor) Compact(k kv.Key) error {
 	filteredKeys := gc.filterExpiredKeys(keys)
 
 	for _, key := range filteredKeys {
-		select {
-		case <-gc.stopCh:
-			return nil
-		case gc.delCh <- key:
-		}
+		gc.delCh <- key
 	}
 	return nil
 }

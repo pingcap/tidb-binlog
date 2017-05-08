@@ -42,6 +42,7 @@ func NewPool(addr string, capability int, f createConnFunc) *Pool {
 		}
 		return r, errors.Trace(err)
 	}
+
 	p := new(Pool)
 	p.p = pools.NewResourcePool(poolFunc, capability, capability, poolIdleTimeoutSeconds*time.Second)
 	return p
@@ -77,7 +78,6 @@ func (p *Pool) Close() {
 type Pools struct {
 	m struct {
 		sync.Mutex
-		isClosed   bool
 		capability int
 		mpools     map[string]*Pool
 	}
@@ -97,10 +97,6 @@ func NewPools(capability int, f createConnFunc) *Pools {
 // GetConn takes a connection out of the pool by addr.
 func (p *Pools) GetConn(addr string) (*Conn, error) {
 	p.m.Lock()
-	if p.m.isClosed {
-		p.m.Unlock()
-		return nil, errors.Errorf("pools is closed")
-	}
 	pool, ok := p.m.mpools[addr]
 	if !ok {
 		pool = NewPool(addr, p.m.capability, p.f)
@@ -129,20 +125,12 @@ func (p *Pools) PutConn(c *Conn) {
 
 // Close closes the pool.
 func (p *Pools) Close() {
-	var pools []*Pool
-
 	p.m.Lock()
+	defer p.m.Unlock()
+
 	for _, pool := range p.m.mpools {
-		pools = append(pools, pool)
-	}
-	p.m.isClosed = true
-	p.m.Unlock()
-
-	for _, p := range pools {
-		p.Close()
+		pool.Close()
 	}
 
-	p.m.Lock()
 	p.m.mpools = map[string]*Pool{}
-	p.m.Unlock()
 }

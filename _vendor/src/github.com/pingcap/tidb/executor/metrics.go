@@ -14,13 +14,9 @@
 package executor
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/plan"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -33,23 +29,15 @@ var (
 			Name:      "statement_node_total",
 			Help:      "Counter of StmtNode.",
 		}, []string{"type"})
-	expensiveQueryCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "tidb",
-			Subsystem: "executor",
-			Name:      "expensive_query_total",
-			Help:      "Counter of expensive query.",
-		}, []string{"type"})
 )
 
 func init() {
 	prometheus.MustRegister(stmtNodeCounter)
-	prometheus.MustRegister(expensiveQueryCounter)
 }
 
 func stmtCount(node ast.StmtNode, p plan.Plan) {
-	if stmtLabel := StatementLabel(node, p); stmtLabel != IGNORE {
-		stmtNodeCounter.WithLabelValues(stmtLabel).Inc()
+	if stmtLable := StatementLabel(node, p); stmtLable != IGNORE {
+		stmtNodeCounter.WithLabelValues(stmtLable).Inc()
 	}
 }
 
@@ -100,10 +88,6 @@ const (
 	TruncateTable = "TruncateTable"
 	// Update represents update statements.
 	Update = "Update"
-	// Grant represents grant statements.
-	Grant = "Grant"
-	// Revoke represents revoke statements.
-	Revoke = "Revoke"
 )
 
 // StatementLabel generates a label for a statement.
@@ -154,10 +138,6 @@ func StatementLabel(node ast.StmtNode, p plan.Plan) string {
 		return TruncateTable
 	case *ast.UpdateStmt:
 		return getUpdateStmtLabel(x, p)
-	case *ast.GrantStmt:
-		return Grant
-	case *ast.RevokeStmt:
-		return Revoke
 	case *ast.DeallocateStmt, *ast.ExecuteStmt, *ast.PrepareStmt, *ast.UseStmt:
 		return IGNORE
 	}
@@ -168,27 +148,21 @@ func getSelectStmtLabel(stmt *ast.SelectStmt, p plan.Plan) string {
 	var attributes stmtAttributes
 	attributes.fromSelectStmt(stmt)
 	attributes.fromPlan(p)
-	stmtLabel := Select + attributes.toLabel()
-	attributes.logExpensiveStmt(stmtLabel, stmt.Text())
-	return stmtLabel
+	return Select + attributes.toLabel()
 }
 
 func getDeleteStmtLabel(stmt *ast.DeleteStmt, p plan.Plan) string {
 	var attributes stmtAttributes
 	attributes.fromDeleteStmt(stmt)
 	attributes.fromPlan(p)
-	stmtLabel := Delete + attributes.toLabel()
-	attributes.logExpensiveStmt(stmtLabel, stmt.Text())
-	return stmtLabel
+	return Delete + attributes.toLabel()
 }
 
 func getUpdateStmtLabel(stmt *ast.UpdateStmt, p plan.Plan) string {
 	var attributes stmtAttributes
 	attributes.fromUpdateStmt(stmt)
 	attributes.fromPlan(p)
-	stmtLabel := Update + attributes.toLabel()
-	attributes.logExpensiveStmt(stmtLabel, stmt.Text())
-	return stmtLabel
+	return Update + attributes.toLabel()
 }
 
 type stmtAttributes struct {
@@ -201,7 +175,6 @@ type stmtAttributes struct {
 	hasRange       bool
 	hasOrder       bool
 	hasLimit       bool
-	isSystemTable  bool
 }
 
 func (pa *stmtAttributes) fromSelectStmt(stmt *ast.SelectStmt) {
@@ -244,7 +217,6 @@ func (pa *stmtAttributes) fromPlan(p plan.Plan) {
 		if len(x.AccessCondition) > 0 {
 			pa.hasRange = true
 		}
-		pa.setIsSystemTable(x.DBName)
 	case *plan.PhysicalIndexScan:
 		pa.hasIndexScan = true
 		if len(x.AccessCondition) > 0 {
@@ -253,19 +225,12 @@ func (pa *stmtAttributes) fromPlan(p plan.Plan) {
 		if x.DoubleRead {
 			pa.hasIndexDouble = true
 		}
-		pa.setIsSystemTable(x.DBName)
 	case *plan.PhysicalHashSemiJoin:
 		pa.hasJoin = true
 	}
-	children := p.Children()
+	children := p.GetChildren()
 	for _, child := range children {
 		pa.fromPlan(child)
-	}
-}
-
-func (pa *stmtAttributes) setIsSystemTable(dbName model.CIStr) {
-	if dbName.L == mysql.SystemDB {
-		pa.isSystemTable = true
 	}
 }
 
@@ -317,25 +282,4 @@ func (pa *stmtAttributes) toLabel() string {
 		attrs = append(attrs, attrLimit)
 	}
 	return strings.Join(attrs, "")
-}
-
-func (pa *stmtAttributes) isExpensiveStmt() bool {
-	if pa.hasRange || pa.hasLimit || pa.isSystemTable {
-		return false
-	}
-	if !pa.hasIndexScan && !pa.hasTableScan && !pa.hasIndexDouble {
-		return false
-	}
-	return true
-}
-
-func (pa *stmtAttributes) logExpensiveStmt(stmtLabel string, sql string) {
-	if pa.isExpensiveStmt() {
-		const logSQLLen = 1024
-		if len(sql) > logSQLLen {
-			sql = sql[:logSQLLen] + fmt.Sprintf("len(%d)", len(sql))
-		}
-		log.Warnf("[EXPENSIVE_QUERY] %s", sql)
-		expensiveQueryCounter.WithLabelValues(stmtLabel).Inc()
-	}
 }

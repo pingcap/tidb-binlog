@@ -210,25 +210,32 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		tblInfo.Indices = append(tblInfo.Indices, indexInfo)
 	}
 
-	originalState := indexInfo.State
+	ver, err := updateSchemaVersion(t, job)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	switch indexInfo.State {
 	case model.StateNone:
 		// none -> delete only
 		job.SchemaState = model.StateDeleteOnly
 		indexInfo.State = model.StateDeleteOnly
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateDeleteOnly:
 		// delete only -> write only
 		job.SchemaState = model.StateWriteOnly
 		indexInfo.State = model.StateWriteOnly
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateWriteOnly:
 		// write only -> reorganization
 		job.SchemaState = model.StateWriteReorganization
 		indexInfo.State = model.StateWriteReorganization
 		// Initialize SnapshotVer to 0 for later reorganization check.
 		job.SnapshotVer = 0
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
+		return errors.Trace(err)
 	case model.StateWriteReorganization:
 		// reorganization -> public
 		reorgInfo, err := d.getReorgInfo(t, job)
@@ -244,7 +251,7 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 			return errors.Trace(err)
 		}
 
-		err = d.runReorgJob(job, func() error {
+		err = d.runReorgJob(func() error {
 			return d.addTableIndex(tbl, indexInfo, reorgInfo, job)
 		})
 		if err != nil {
@@ -262,21 +269,18 @@ func (d *ddl) onCreateIndex(t *meta.Meta, job *model.Job) error {
 		indexInfo.State = model.StatePublic
 		// Set column index flag.
 		addIndexColumnFlag(tblInfo, indexInfo)
-
-		job.SchemaState = model.StatePublic
-		ver, err := updateTableInfo(t, job, tblInfo, originalState)
-		if err != nil {
+		if err = t.UpdateTable(schemaID, tblInfo); err != nil {
 			return errors.Trace(err)
 		}
 
 		// Finish this job.
+		job.SchemaState = model.StatePublic
 		job.State = model.JobDone
 		job.BinlogInfo.AddTableInfo(ver, tblInfo)
+		return nil
 	default:
-		err = ErrInvalidIndexState.Gen("invalid index state %v", tblInfo.State)
+		return ErrInvalidIndexState.Gen("invalid index state %v", tblInfo.State)
 	}
-
-	return errors.Trace(err)
 }
 
 func (d *ddl) convert2RollbackJob(t *meta.Meta, job *model.Job, tblInfo *model.TableInfo, indexInfo *model.IndexInfo) error {
@@ -287,9 +291,8 @@ func (d *ddl) convert2RollbackJob(t *meta.Meta, job *model.Job, tblInfo *model.T
 	// The write reorganization state in add index job that likes write only state in drop index job.
 	// So the next state is delete only state.
 	indexInfo.State = model.StateDeleteOnly
-	originalState := indexInfo.State
 	job.SchemaState = model.StateDeleteOnly
-	_, err := updateTableInfo(t, job, tblInfo, originalState)
+	err := t.UpdateTable(job.SchemaID, tblInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -315,26 +318,30 @@ func (d *ddl) onDropIndex(t *meta.Meta, job *model.Job) error {
 		return ErrCantDropFieldOrKey.Gen("index %s doesn't exist", indexName)
 	}
 
-	originalState := indexInfo.State
+	ver, err := updateSchemaVersion(t, job)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	switch indexInfo.State {
 	case model.StatePublic:
 		// public -> write only
 		job.SchemaState = model.StateWriteOnly
 		indexInfo.State = model.StateWriteOnly
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
 	case model.StateWriteOnly:
 		// write only -> delete only
 		job.SchemaState = model.StateDeleteOnly
 		indexInfo.State = model.StateDeleteOnly
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
 	case model.StateDeleteOnly:
 		// delete only -> reorganization
 		job.SchemaState = model.StateDeleteReorganization
 		indexInfo.State = model.StateDeleteReorganization
-		_, err = updateTableInfo(t, job, tblInfo, originalState)
+		err = t.UpdateTable(schemaID, tblInfo)
 	case model.StateDeleteReorganization:
 		// reorganization -> absent
-		err = d.runReorgJob(job, func() error {
+		err = d.runReorgJob(func() error {
 			return d.dropTableIndex(indexInfo, job)
 		})
 		if err != nil {
@@ -353,14 +360,12 @@ func (d *ddl) onDropIndex(t *meta.Meta, job *model.Job) error {
 		tblInfo.Indices = newIndices
 		// Set column index flag.
 		dropIndexColumnFlag(tblInfo, indexInfo)
-
-		job.SchemaState = model.StateNone
-		ver, err := updateTableInfo(t, job, tblInfo, originalState)
-		if err != nil {
+		if err = t.UpdateTable(schemaID, tblInfo); err != nil {
 			return errors.Trace(err)
 		}
 
 		// Finish this job.
+		job.SchemaState = model.StateNone
 		if job.State == model.JobRollback {
 			job.State = model.JobRollbackDone
 		} else {
@@ -537,7 +542,7 @@ func (d *ddl) addTableIndex(t table.Table, indexInfo *model.IndexInfo, reorgInfo
 				addedCount, taskAddedCount, sub)
 			return errors.Trace(err)
 		}
-		d.setReorgRowCount(addedCount)
+		job.SetRowCount(addedCount)
 		batchHandleDataHistogram.WithLabelValues(batchAddIdx).Observe(sub)
 		log.Infof("[ddl] total added index for %d rows, this task added index for %d rows, take time %v",
 			addedCount, taskAddedCount, sub)

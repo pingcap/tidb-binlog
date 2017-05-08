@@ -41,7 +41,6 @@ const (
 	ActionTruncateTable
 	ActionModifyColumn
 	ActionRenameTable
-	ActionSetDefaultValue
 )
 
 func (action ActionType) String() string {
@@ -72,8 +71,6 @@ func (action ActionType) String() string {
 		return "modify column"
 	case ActionRenameTable:
 		return "rename table"
-	case ActionSetDefaultValue:
-		return "set default value"
 	default:
 		return "none"
 	}
@@ -176,8 +173,8 @@ func (job *Job) DecodeArgs(args ...interface{}) error {
 // String implements fmt.Stringer interface.
 func (job *Job) String() string {
 	rowCount := job.GetRowCount()
-	return fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, ArgLen:%d",
-		job.ID, job.Type, job.State, job.SchemaState, job.SchemaID, job.TableID, rowCount, len(job.Args))
+	return fmt.Sprintf("ID:%d, Type:%s, State:%s, SchemaState:%s, SchemaID:%d, TableID:%d, RowCount:%d, ArgLen:%d, Query:\n%s",
+		job.ID, job.Type, job.State, job.SchemaState, job.SchemaID, job.TableID, rowCount, len(job.Args), job.Query)
 }
 
 // IsFinished returns whether job is finished or not.
@@ -203,7 +200,7 @@ type JobState byte
 const (
 	JobNone JobState = iota
 	JobRunning
-	// When DDL encountered an unrecoverable error at reorganization state,
+	// When DDL encouterred an unrecoverable error at reorganization state,
 	// some keys has been added already, we need to remove them.
 	// JobRollback is the state to do rollback work.
 	JobRollback
