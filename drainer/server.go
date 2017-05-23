@@ -150,7 +150,10 @@ func calculateForwardAShortTime(current int64) int64 {
 func (s *Server) StartCollect() {
 	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
+		defer func() {
+			log.Info("collect goroutine exited")
+			s.wg.Done()
+		}()
 		s.collector.Start(s.ctx)
 	}()
 }
@@ -162,7 +165,10 @@ func (s *Server) StartMetrics() {
 	}
 	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
+		defer func() {
+			log.Info("metrics goroutine exited")
+			s.wg.Done()
+		}()
 		s.metrics.Start(s.ctx)
 	}()
 }
@@ -171,12 +177,15 @@ func (s *Server) StartMetrics() {
 func (s *Server) StartSyncer(jobs []*model.Job) {
 	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
+		defer func() {
+			log.Info("syncer goroutine exited")
+			s.wg.Done()
+			s.Close()
+		}()
 		err := s.syncer.Start(jobs)
 		if err != nil {
 			log.Errorf("syncer exited, error %v", err)
 		}
-		s.Close()
 	}()
 }
 
@@ -186,11 +195,12 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
 		errc <- errors.Trace(err)
 	}
+	s.wg.Add(1)
 	go func() {
 		defer func() {
-			s.Close()
 			close(errc)
 			log.Info("Heartbeat goroutine exited")
+			s.wg.Done()
 		}()
 
 		for {
@@ -266,17 +276,16 @@ func (s *Server) Start() error {
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
-	//  stop gRPC server
-	s.gs.Stop()
+	// unregister drainer
+	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
 	// stop syncer
 	s.syncer.Close()
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-
-	// unregister drainer
-	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
-		log.Error(errors.ErrorStack(err))
-	}
+	//  stop gRPC server
+	s.gs.Stop()
 }
