@@ -77,6 +77,12 @@ func newJobChans(count int) []chan *job {
 	return jobCh
 }
 
+func closeJobChans(jobChs []chan *job) {
+	for _, ch := range jobChs {
+		close(ch)
+	}
+}
+
 // Start starts to sync.
 func (s *Syncer) Start(jobs []*model.Job) error {
 	// prepare schema for work
@@ -480,6 +486,12 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 }
 
 func (s *Syncer) run(b *binlogItem) error {
+	s.wg.Add(1)
+	defer func() {
+		closeJobChans(s.jobCh)
+		s.wg.Done()
+	}()
+
 	var err error
 
 	s.genRegexMap()

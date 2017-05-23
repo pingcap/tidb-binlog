@@ -99,7 +99,6 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.tiStore.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		log.Info("Collector goroutine exited")
 	}()
 
 	for {
