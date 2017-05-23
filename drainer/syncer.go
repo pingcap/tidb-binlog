@@ -168,6 +168,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return "", "", "", nil
 	}
 
+	log.Infof("ddl query %s", job.Query)
 	sql := job.Query
 	if sql == "" {
 		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
