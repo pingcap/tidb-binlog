@@ -15,7 +15,7 @@ const (
 	DefaultRootPath = "tidb-binlog"
 )
 
-// Node organize the ectd query result as a Trie tree
+// Node organizes the ectd query result as a Trie tree
 type Node struct {
 	Value  []byte
 	Childs map[string]*Node
@@ -27,7 +27,7 @@ type Client struct {
 	rootPath string
 }
 
-// NewClient return a wrapped etcd client
+// NewClient returns a wrapped etcd client
 func NewClient(cli *clientv3.Client, root string) *Client {
 	return &Client{
 		client:   cli,
@@ -35,7 +35,7 @@ func NewClient(cli *clientv3.Client, root string) *Client {
 	}
 }
 
-// NewClientFromCfg return a wrapped etcd client
+// NewClientFromCfg returns a wrapped etcd client
 func NewClientFromCfg(endpoints []string, dialTimeout time.Duration, root string) (*Client, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
@@ -78,7 +78,7 @@ func (e *Client) Create(ctx context.Context, key string, val string, opts []clie
 	return nil
 }
 
-// Get return a key/value matchs the given key
+// Get returns a key/value matchs the given key
 func (e *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	key = keyWithPrefix(e.rootPath, key)
 	resp, err := e.client.KV.Get(ctx, key)
@@ -145,7 +145,7 @@ func (e *Client) UpdateOrCreate(ctx context.Context, key string, val string, ttl
 	return nil
 }
 
-// List return the trie struct that constructed by the key/value with same prefix
+// List returns the trie struct that constructed by the key/value with same prefix
 func (e *Client) List(ctx context.Context, key string) (*Node, error) {
 	key = keyWithPrefix(e.rootPath, key)
 	if !strings.HasSuffix(key, "/") {
