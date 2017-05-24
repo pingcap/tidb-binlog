@@ -640,8 +640,13 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 }
 
 // Add adds binlogItem to the syncer's input channel
-func (s *Syncer) Add(b *binlogItem) {
-	s.input <- b
+func (s *Syncer) Add(b *binlogItem) error {
+	select {
+	case <-s.ctx.Done():
+		return errors.Trace(s.ctx.Err())
+	case s.input <- b:
+		return nil
+	}
 }
 
 // Close closes syncer.
