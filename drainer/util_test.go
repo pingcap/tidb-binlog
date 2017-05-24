@@ -6,7 +6,35 @@ import (
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tipb/go-binlog"
 )
+
+func (t *testDrainerSuite) TestComparePos(c *C) {
+	c.Assert(ComparePos(binlog.Pos{Suffix: 2, Offset: 3}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, -1)
+	c.Assert(ComparePos(binlog.Pos{Suffix: 4, Offset: 3}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 1)
+	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 2}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, -1)
+	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 5}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 1)
+	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 4}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 0)
+}
+
+func (t *testDrainerSuite) TestCalculateNextPos(c *C) {
+	entry := binlog.Entity{
+		Payload: []byte("test"),
+		Pos:     binlog.Pos{Suffix: 1, Offset: 3},
+	}
+
+	p := CalculateNextPos(entry)
+	c.Assert(p.Offset, Equals, int64(23))
+}
+
+func (t *testDrainerSuite) TestPosToFloat(c *C) {
+	pos := binlog.Pos{
+		Suffix: 4,
+		Offset: 3721,
+	}
+	f := posToFloat(&pos)
+	c.Assert(f, Equals, 3721.4)
+}
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 	// test non-mysqltype error
@@ -31,10 +59,10 @@ func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 }
 
 func (t *testDrainerSuite) TestFormatIgnoreSchemas(c *C) {
-	ignoreDBs := formatIgnoreSchemas("test,test1")
+	ignoreDBs := formatIgnoreSchemas("test1,test2")
 	ignoreList := make(map[string]struct{})
-	ignoreList["test"] = struct{}{}
 	ignoreList["test1"] = struct{}{}
+	ignoreList["test2"] = struct{}{}
 	c.Assert(ignoreDBs, DeepEquals, ignoreList)
 }
 
