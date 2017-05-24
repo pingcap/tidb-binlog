@@ -16,8 +16,10 @@ var (
 	errBadBinlogName = errors.New("bad file name")
 )
 
+// AtomicBool wraps an atomic bool
 type AtomicBool int32
 
+// Set sets the value
 func (b *AtomicBool) Set(v bool) {
 	if v {
 		atomic.StoreInt32((*int32)(b), 1)
@@ -26,6 +28,7 @@ func (b *AtomicBool) Set(v bool) {
 	}
 }
 
+// Get returns the value
 func (b *AtomicBool) Get() bool {
 	return atomic.LoadInt32((*int32)(b)) == 1
 }
