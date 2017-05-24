@@ -71,9 +71,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenInsertBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]})
-	if err == nil {
-		c.Fatal("it's should panic")
-	}
+	c.Assert(err, NotNil)
 }
 
 func testGenUpdateSQLs(c *C, s SQLTranslator) {
@@ -107,9 +105,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
 	_, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]})
-	if err == nil {
-		c.Fatal("it's should panic")
-	}
+	c.Assert(err, NotNil)
 }
 
 func testGenDeleteSQLs(c *C, s SQLTranslator) {
@@ -137,9 +133,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 	rowDatas, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenDeleteBinlog(c, tables[0], rowDatas)
 	_, _, _, err := s.GenDeleteSQLs(schema, tables[0], [][]byte{binlog[6:]})
-	if err == nil {
-		c.Fatal("it's should panic")
-	}
+	c.Assert(err, NotNil)
 }
 
 func testGenDDLSQL(c *C, s SQLTranslator) {

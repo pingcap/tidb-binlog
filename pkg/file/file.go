@@ -33,7 +33,7 @@ func ReadDir(dirpath string) ([]string, error) {
 	return names, nil
 }
 
-// CreateDirAll guarantee to create a new and empty dir
+// CreateDirAll guarantees to create a new and empty dir
 func CreateDirAll(dir string) error {
 	if err := os.MkdirAll(dir, PrivateDirMode); err != nil {
 		return errors.Trace(err)

@@ -19,7 +19,7 @@ var _ = Suite(&testFileSuite{})
 
 type testFileSuite struct{}
 
-func (s *testFileSuite) TestCreate(c *C) {
+func (t *testFileSuite) TestCreate(c *C) {
 	tmpdir, err := ioutil.TempDir("", "")
 	defer os.RemoveAll(tmpdir)
 	c.Assert(err, IsNil)
@@ -37,12 +37,15 @@ func (s *testFileSuite) TestCreate(c *C) {
 	c.Assert(err, IsNil)
 
 	wfs := []string{"k8s", "pd", "tidb", "tikv"}
-	if !reflect.DeepEqual(fs, wfs) {
-		c.Fatalf("ReadDir: got %v, want %v", fs, wfs)
-	}
+	c.Assert(reflect.DeepEqual(fs, wfs), IsTrue)
 }
 
-func (s *testFileSuite) TestCreateDirAll(c *C) {
+func (t *testFileSuite) TestReadNorExistDir(c *C) {
+	_, err := ReadDir("testNoExistDir")
+	c.Assert(err, NotNil)
+}
+
+func (t *testFileSuite) TestCreateDirAll(c *C) {
 	tmpdir, err := ioutil.TempDir(os.TempDir(), "foo")
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(tmpdir)
@@ -54,22 +57,18 @@ func (s *testFileSuite) TestCreateDirAll(c *C) {
 	err = ioutil.WriteFile(path.Join(tmpdir2, "text.txt"), []byte("test text"), PrivateFileMode)
 	c.Assert(err, IsNil)
 
-	if err = CreateDirAll(tmpdir2); err == nil || !strings.Contains(err.Error(), "to be empty, got") {
-		c.Fatalf("unexpected error %v", err)
-	}
+	err = CreateDirAll(tmpdir2)
+	c.Assert(err, NotNil)
+	c.Assert(strings.Contains(err.Error(), "to be empty, got"), IsTrue)
 }
 
-func (s *testFileSuite) TestExist(c *C) {
+func (t *testFileSuite) TestExist(c *C) {
 	f, err := ioutil.TempFile(os.TempDir(), "fileutil")
 	c.Assert(err, IsNil)
 	f.Close()
 
-	if g := Exist(f.Name()); !g {
-		c.Errorf("exist = %v, want true", g)
-	}
+	c.Assert(Exist(f.Name()), IsTrue)
 
 	os.Remove(f.Name())
-	if g := Exist(f.Name()); g {
-		c.Errorf("exist = %v, want false", g)
-	}
+	c.Assert(Exist(f.Name()), IsFalse)
 }

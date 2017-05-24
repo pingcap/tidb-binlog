@@ -5,7 +5,6 @@ import (
 	"github.com/pingcap/tidb/util/types"
 )
 
-// test the already implemented translator, register and unregister function
 func (t *testTranslatorSuite) TestGenColumnList(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
