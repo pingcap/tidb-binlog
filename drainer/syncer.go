@@ -117,28 +117,22 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 		if commitTS <= s.initCommitTS {
-			if jobID > 0 {
-				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion
-			}
 			continue
 		}
 
-		// if don't meet ddl, we need to set lasteSchemaVersion to
 		// 1. the current DML's schemaVerion
 		// 2. the version that less than current DDL's version
-		if latestSchemaVersion == 0 {
-			if jobID == 0 {
-				preWriteValue := binlog.GetPrewriteValue()
-				preWrite := &pb.PrewriteValue{}
-				err = preWrite.Unmarshal(preWriteValue)
-				if err != nil {
-					return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-				}
-				latestSchemaVersion = preWrite.GetSchemaVersion()
-			} else {
-				// make the latestSchemaVersion less than the current ddl
-				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
+		if jobID == 0 {
+			preWriteValue := binlog.GetPrewriteValue()
+			preWrite := &pb.PrewriteValue{}
+			err = preWrite.Unmarshal(preWriteValue)
+			if err != nil {
+				return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
+			latestSchemaVersion = preWrite.GetSchemaVersion()
+		} else {
+			// make the latestSchemaVersion less than the current ddl
+			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
 		}
 
 		// find all ddl job that need to reconstruct local schemas
