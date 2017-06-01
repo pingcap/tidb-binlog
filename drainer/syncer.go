@@ -21,7 +21,7 @@ var (
 
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
-	maxChannelSize       = 1024 * 1024
+	maxChannelSize       = 16 << 16
 )
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
