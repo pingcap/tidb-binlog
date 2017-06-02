@@ -21,6 +21,7 @@ var (
 
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
+	maxChannelSize       = 1024 * 1024
 )
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
@@ -58,7 +59,7 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.meta = meta
-	syncer.input = make(chan *binlogItem, 1024*cfg.WorkerCount)
+	syncer.input = make(chan *binlogItem, maxChannelSize)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
@@ -70,8 +71,9 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 
 func newJobChans(count int) []chan *job {
 	jobCh := make([]chan *job, 0, count)
+	size := maxChannelSize / count
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, 1024))
+		jobCh = append(jobCh, make(chan *job, size))
 	}
 
 	return jobCh
@@ -337,10 +339,10 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL || job.isCompleteBinlog {
+	if job.binlogTp == translator.DDL {
 		return true
 	}
-	if !s.cfg.DisableDispatch && s.meta.Check() {
+	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.meta.Check() {
 		return true
 	}
 	return false
