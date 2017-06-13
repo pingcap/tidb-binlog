@@ -124,8 +124,9 @@ func (dbcf *dbConf) fromString(url string) error {
 }
 
 func (dbcf *dbConf) fullPath(dbName string) string {
-	return fmt.Sprintf("%s@tcp(%s:%d)/%s?timeout=30s&strict=true",
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=30s&strict=true",
 		dbcf.user,
+		dbcf.password,
 		dbcf.host,
 		dbcf.port,
 		dbName)
@@ -143,6 +144,13 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 		return false, errors.Trace(err)
 	}
 	defer db2.Close()
+
+	if err := db1.Ping(); err != nil {
+		return false, errors.Trace(err)
+	}
+	if err := db2.Ping(); err != nil {
+		return false, errors.Trace(err)
+	}
 
 	df := diff.New(db1, db2)
 	eq, err := df.Equal()
