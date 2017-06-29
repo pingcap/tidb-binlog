@@ -144,14 +144,9 @@ import:
 - package: github.com/pingcap/kvproto
   version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
 - package: github.com/pingcap/pd
-  version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
-  subpackages:
-  - pd-client
-  - pkg/apiutil
-  - pkg/metrics
-  - pkg/rpcutil
+  version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
 - package: github.com/pingcap/tidb
-  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
+  version: bffbc00302f72d0b643c9dce6244cfbcbb958df4
   subpackages:
   - ast
   - context
@@ -205,7 +200,7 @@ import:
   - util/stringutil
   - util/types
 - package: github.com/pingcap/tipb
-  version: 9cc6927f2246516ce8a2e9517e3ebdf81554a2d2
+  version: 5e4b9cf7c32d2b09ba71aa9ab6675ec135f9fbd
   subpackages:
   - go-binlog
   - go-tipb

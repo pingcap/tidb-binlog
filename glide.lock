@@ -1,5 +1,5 @@
-hash: 79c34e3bb15e221929ce7a2f1ea9d933ae9814dcb1df4beaf7b9bbfafea90588
-updated: 2017-06-29T20:16:12.993429172+08:00
+hash: fc21c30a957904d6160a69cce34621cf45da7df5c315941633963ce5d7a4df59
+updated: 2017-06-29T20:28:32.336456004+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -163,14 +163,11 @@ imports:
   - pkg/raft_serverpb
   - pkg/tikvpb
 - name: github.com/pingcap/pd
-  version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
+  version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
   subpackages:
   - pd-client
-  - pkg/apiutil
-  - pkg/metrics
-  - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
+  version: bffbc00302f72d0b643c9dce6244cfbcbb958df4
   subpackages:
   - ast
   - context
@@ -233,7 +230,7 @@ imports:
   - util/types
   - util/types/json
 - name: github.com/pingcap/tipb
-  version: 9cc6927f2246516ce8a2e9517e3ebdf81554a2d2
+  version: 5e4b9cf7c32d2b09ba71aa9ab6675ec135f9fbda
   subpackages:
   - go-binlog
   - go-tipb
@@ -259,6 +256,8 @@ imports:
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
   - ioutil2
+- name: github.com/Sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/twinj/uuid
