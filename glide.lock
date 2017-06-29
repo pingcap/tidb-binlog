@@ -1,5 +1,5 @@
-hash: e289836ae487c44988fc485e595d9ea355b53c7b8be8406faa391380309fe3af
-updated: 2017-04-01T13:32:04.550865316+08:00
+hash: e06a4e9c940dc075c6b6fd856e12c89c755842f0d14f874777fd3da0ff62428b
+updated: 2017-06-29T18:26:32.272786164+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -12,13 +12,16 @@ imports:
 - name: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - name: github.com/coreos/etcd
-  version: 6bef2bddcaced4fc6ed136e7434c4ee72c9e6782
+  version: ea5f6dab6b1d07e22cf46bf5f5088d567548c124
   subpackages:
   - alarm
   - auth
   - auth/authpb
   - client
   - clientv3
+  - clientv3/concurrency
+  - clientv3/namespace
+  - clientv3/naming
   - compactor
   - discovery
   - error
@@ -26,6 +29,11 @@ imports:
   - etcdserver/api
   - etcdserver/api/v2http
   - etcdserver/api/v2http/httptypes
+  - etcdserver/api/v3client
+  - etcdserver/api/v3election
+  - etcdserver/api/v3election/v3electionpb
+  - etcdserver/api/v3lock
+  - etcdserver/api/v3lock/v3lockpb
   - etcdserver/api/v3rpc
   - etcdserver/api/v3rpc/rpctypes
   - etcdserver/auth
@@ -60,6 +68,7 @@ imports:
   - pkg/types
   - pkg/wait
   - proxy/grpcproxy
+  - proxy/grpcproxy/adapter
   - proxy/grpcproxy/cache
   - raft
   - raft/raftpb
@@ -84,6 +93,8 @@ imports:
   version: fa29b1d70f0beaddd4c7021607cc3c3be8ce94b8
   subpackages:
   - capnslog
+- name: github.com/dgrijalva/jwt-go
+  version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - name: github.com/go-sql-driver/mysql
@@ -101,6 +112,7 @@ imports:
   subpackages:
   - jsonpb
   - proto
+  - ptypes/any
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
@@ -108,7 +120,7 @@ imports:
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
   version: 6b7015e65d366bf3f19b2b2a000a831940f0f7e0
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: 84398b94e188ee336f307779b57b3aa91af7063c
   subpackages:
   - runtime
   - runtime/internal
@@ -117,8 +129,6 @@ imports:
   version: 2eee05ed794112d45db504eb05aa693efd2b8b09
 - name: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
-- name: github.com/karlseguin/ccache
-  version: a2d62155777b39595c825ed3824279e642a5db3c
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -151,27 +161,26 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 1ce19dac18a11abf6a04a11034bf42f2fbf57f1b
+  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
   - pkg/errorpb
   - pkg/kvrpcpb
   - pkg/metapb
-  - pkg/msgpb
   - pkg/pdpb
   - pkg/raft_cmdpb
   - pkg/raft_serverpb
-  - pkg/util
+  - pkg/tikvpb
 - name: github.com/pingcap/pd
-  version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
+  version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: 172381f892deed5a8e964f1ae61354c79d6cb6fe
+  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
   subpackages:
   - ast
   - context
@@ -211,6 +220,7 @@ imports:
   - store/tikv/mock-tikv
   - store/tikv/oracle
   - store/tikv/oracle/oracles
+  - store/tikv/tikvrpc
   - structure
   - table
   - table/tables
@@ -225,10 +235,13 @@ imports:
   - util/hack
   - util/mock
   - util/mvmap
+  - util/parser
+  - util/ranger
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
   - util/types
+  - util/types/json
 - name: github.com/pingcap/tipb
   version: 9cc6927f2246516ce8a2e9517e3ebdf81554a2d2
   subpackages:
@@ -256,6 +269,8 @@ imports:
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
   - ioutil2
+- name: github.com/Sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/twinj/uuid
@@ -298,20 +313,29 @@ imports:
   - encoding/unicode
   - transform
 - name: golang.org/x/time
-  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
+- name: google.golang.org/genproto
+  version: aa2eb687b4d3e17154372564ad8d6bf11c3cf21f
+  subpackages:
+  - googleapis/rpc/status
 - name: google.golang.org/grpc
-  version: 777daa17ff9b5daef1cfdf915088a2ada3332bf0
+  version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
   - codes
   - credentials
+  - grpclb/grpc_lb_v1
   - grpclog
   - internal
+  - keepalive
   - metadata
   - naming
   - peer
+  - stats
+  - status
+  - tap
   - transport
 testImports:
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
