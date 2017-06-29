@@ -1,5 +1,5 @@
-hash: 498a61d36adf554a58a14774e0c69422d358de0244395ad453a049d4b7f258aa
-updated: 2017-06-29T21:59:59.870675792+08:00
+hash: 647b80e67262416e85df626c1cfbf9f6c148bf43bfd37d73cee93d9bf4cfc48e
+updated: 2017-06-29T22:57:51.906981795+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -283,11 +283,13 @@ imports:
   - bcrypt
   - blowfish
 - name: golang.org/x/net
-  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  version: d1e1b351919c6738fdeb9893d5c998b161464f0c
+  repo: https://github.com/golang/net.git
   subpackages:
   - context
   - http2
   - http2/hpack
+  - idna
   - internal/timeseries
   - lex/httplex
   - trace
@@ -296,7 +298,8 @@ imports:
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: 723492b65e225eafcba054e76ba18bb9c5ac1ea2
+  version: 4ee4af566555f5fbe026368b75596286a312663a
+  repo: https://github.com/golang/text.git
   subpackages:
   - encoding
   - encoding/charmap
@@ -307,7 +310,13 @@ imports:
   - encoding/simplifiedchinese
   - encoding/traditionalchinese
   - encoding/unicode
+  - internal/utf8internal
+  - runes
+  - secure
+  - secure/bidirule
   - transform
+  - unicode/bidi
+  - unicode/norm
 - name: golang.org/x/time
   version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:

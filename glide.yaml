@@ -240,7 +240,8 @@ import:
   - bcrypt
   - blowfish
 - package: golang.org/x/net
-  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  version: d1e1b351919c6738fdeb9893d5c998b161464f0c
+  repo: https://github.com/golang/net.git
   subpackages:
   - context
   - http2
@@ -253,7 +254,8 @@ import:
   subpackages:
   - unix
 - package: golang.org/x/text
-  version: 723492b65e225eafcba054e76ba18bb9c5ac1ea2
+  version: 4ee4af566555f5fbe026368b75596286a312663a
+  repo: https://github.com/golang/text.git
   subpackages:
   - encoding
   - encoding/charmap
@@ -264,7 +266,11 @@ import:
   - encoding/simplifiedchinese
   - encoding/traditionalchinese
   - encoding/unicode
+  - secure/bidirule
+  - secure
   - transform
+  - unicode/bidi
+  - unicode/norm
 - package: google.golang.org/grpc
   version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
