@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 
+	"time"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -402,7 +404,7 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
-	value, err := tablecodec.Unflatten(data, &ft, false)
+	value, err := tablecodec.Unflatten(data, &ft, time.Local)
 	if err != nil {
 		return types.Datum{}, errors.Trace(err)
 	}
