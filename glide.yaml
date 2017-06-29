@@ -9,7 +9,7 @@ import:
 - package: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - package: github.com/coreos/etcd
-  version: 6bef2bddcaced4fc6ed136e7434c4ee72c9e6782
+  version: ea5f6dab6b1d07e22cf46bf5f5088d567548c124
   subpackages:
   - alarm
   - auth
@@ -101,7 +101,7 @@ import:
 - package: github.com/google/btree
   version: 7d79101e329e5a3adf994758c578dab82b90c017
 - package: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: 84398b94e188ee336f307779b57b3aa91af7063c
   subpackages:
   - runtime
   - runtime/internal
@@ -142,27 +142,25 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 1ce19dac18a11abf6a04a11034bf42f2fbf57f1b
+  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
   - pkg/errorpb
   - pkg/kvrpcpb
   - pkg/metapb
-  - pkg/msgpb
   - pkg/pdpb
   - pkg/raft_cmdpb
   - pkg/raft_serverpb
-  - pkg/util
 - package: github.com/pingcap/pd
-  version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
+  version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
   subpackages:
   - pd-client
   - pkg/apiutil
   - pkg/metrics
   - pkg/rpcutil
 - package: github.com/pingcap/tidb
-  version: 172381f892deed5a8e964f1ae61354c79d6cb6fe
+  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
   subpackages:
   - ast
   - context
@@ -281,7 +279,7 @@ import:
   - encoding/unicode
   - transform
 - package: google.golang.org/grpc
-  version: v1.0.4
+  version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
   - codes
   - credentials
