@@ -1,5 +1,5 @@
-hash: e289836ae487c44988fc485e595d9ea355b53c7b8be8406faa391380309fe3af
-updated: 2017-04-01T13:32:04.550865316+08:00
+hash: 79c34e3bb15e221929ce7a2f1ea9d933ae9814dcb1df4beaf7b9bbfafea90588
+updated: 2017-06-29T20:16:12.993429172+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -19,6 +19,7 @@ imports:
   - auth/authpb
   - client
   - clientv3
+  - clientv3/concurrency
   - compactor
   - discovery
   - error
@@ -151,18 +152,16 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 1ce19dac18a11abf6a04a11034bf42f2fbf57f1b
+  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
   - pkg/errorpb
   - pkg/kvrpcpb
   - pkg/metapb
-  - pkg/msgpb
   - pkg/pdpb
-  - pkg/raft_cmdpb
   - pkg/raft_serverpb
-  - pkg/util
+  - pkg/tikvpb
 - name: github.com/pingcap/pd
   version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
   subpackages:
@@ -171,7 +170,7 @@ imports:
   - pkg/metrics
   - pkg/rpcutil
 - name: github.com/pingcap/tidb
-  version: 172381f892deed5a8e964f1ae61354c79d6cb6fe
+  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
   subpackages:
   - ast
   - context
@@ -211,6 +210,7 @@ imports:
   - store/tikv/mock-tikv
   - store/tikv/oracle
   - store/tikv/oracle/oracles
+  - store/tikv/tikvrpc
   - structure
   - table
   - table/tables
@@ -225,10 +225,13 @@ imports:
   - util/hack
   - util/mock
   - util/mvmap
+  - util/parser
+  - util/ranger
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
   - util/types
+  - util/types/json
 - name: github.com/pingcap/tipb
   version: 9cc6927f2246516ce8a2e9517e3ebdf81554a2d2
   subpackages:
@@ -298,7 +301,7 @@ imports:
   - encoding/unicode
   - transform
 - name: golang.org/x/time
-  version: a4bde12657593d5e90d0533a3e4fd95e635124cb
+  version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
 - name: google.golang.org/grpc
@@ -314,4 +317,4 @@ imports:
   - transport
 testImports:
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689

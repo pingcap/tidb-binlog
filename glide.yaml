@@ -142,18 +142,7 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 1ce19dac18a11abf6a04a11034bf42f2fbf57f1b
-  subpackages:
-  - pkg/coprocessor
-  - pkg/eraftpb
-  - pkg/errorpb
-  - pkg/kvrpcpb
-  - pkg/metapb
-  - pkg/msgpb
-  - pkg/pdpb
-  - pkg/raft_cmdpb
-  - pkg/raft_serverpb
-  - pkg/util
+  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
 - package: github.com/pingcap/pd
   version: d6e6b4099e9552d7014c4838aecc1417e65a10bd
   subpackages:
@@ -162,7 +151,7 @@ import:
   - pkg/metrics
   - pkg/rpcutil
 - package: github.com/pingcap/tidb
-  version: 172381f892deed5a8e964f1ae61354c79d6cb6fe
+  version: f2653574767bdb81d7dc8ca8d58dbd41d442dba3
   subpackages:
   - ast
   - context
