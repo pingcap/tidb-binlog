@@ -16,7 +16,7 @@ var (
 	errBadBinlogName = errors.New("bad file name")
 )
 
-// AtomicBool wraps an atomic bool
+// AtomicBool is bool type that support atomic operator
 type AtomicBool int32
 
 // Set sets the value

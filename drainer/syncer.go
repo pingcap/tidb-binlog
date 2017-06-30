@@ -21,6 +21,7 @@ var (
 
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
+	maxChannelSize       = 16 << 16
 )
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
@@ -58,7 +59,7 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.meta = meta
-	syncer.input = make(chan *binlogItem, 1024*cfg.WorkerCount)
+	syncer.input = make(chan *binlogItem, maxChannelSize)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
@@ -70,11 +71,18 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 
 func newJobChans(count int) []chan *job {
 	jobCh := make([]chan *job, 0, count)
+	size := maxChannelSize / count
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, 1024))
+		jobCh = append(jobCh, make(chan *job, size))
 	}
 
 	return jobCh
+}
+
+func closeJobChans(jobChs []chan *job) {
+	for _, ch := range jobChs {
+		close(ch)
+	}
 }
 
 // Start starts to sync.
@@ -97,6 +105,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
 func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
+	var schemaVersion int64
 	var b *binlogItem
 	var err error
 
@@ -110,31 +119,29 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		if commitTS <= s.initCommitTS {
-			if jobID > 0 {
-				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion
+
+		if jobID == 0 {
+			preWriteValue := binlog.GetPrewriteValue()
+			preWrite := &pb.PrewriteValue{}
+			err = preWrite.Unmarshal(preWriteValue)
+			if err != nil {
+				return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
+			schemaVersion = preWrite.GetSchemaVersion()
+		} else {
+			schemaVersion = b.job.BinlogInfo.SchemaVersion
+		}
+		if schemaVersion > latestSchemaVersion {
+			latestSchemaVersion = schemaVersion
+		}
+
+		if commitTS <= s.initCommitTS {
 			continue
 		}
 
-		// if don't meet ddl, we need to set lasteSchemaVersion to
-		// 1. the current DML's schemaVerion
-		// 2. the version that less than current DDL's version
-		if latestSchemaVersion == 0 {
-			if jobID == 0 {
-				preWriteValue := binlog.GetPrewriteValue()
-				preWrite := &pb.PrewriteValue{}
-				err = preWrite.Unmarshal(preWriteValue)
-				if err != nil {
-					return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-				}
-				latestSchemaVersion = preWrite.GetSchemaVersion()
-			} else {
-				// make the latestSchemaVersion less than the current ddl
-				latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
-			}
+		if jobID > 0 {
+			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
 		}
-
 		// find all ddl job that need to reconstruct local schemas
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
@@ -162,6 +169,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return "", "", "", nil
 	}
 
+	log.Infof("ddl query %s", job.Query)
 	sql := job.Query
 	if sql == "" {
 		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
@@ -336,10 +344,10 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL || job.isCompleteBinlog {
+	if job.binlogTp == translator.DDL {
 		return true
 	}
-	if !s.cfg.DisableDispatch && s.meta.Check() {
+	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.meta.Check() {
 		return true
 	}
 	return false
@@ -480,6 +488,12 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 }
 
 func (s *Syncer) run(b *binlogItem) error {
+	s.wg.Add(1)
+	defer func() {
+		closeJobChans(s.jobCh)
+		s.wg.Done()
+	}()
+
 	var err error
 
 	s.genRegexMap()
@@ -628,7 +642,10 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
-	s.input <- b
+	select {
+	case <-s.ctx.Done():
+	case s.input <- b:
+	}
 }
 
 // Close closes syncer.

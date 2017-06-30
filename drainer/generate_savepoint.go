@@ -49,6 +49,9 @@ func GenSavepointInfo(cfg *Config) error {
 	// get all pumps' latest binlog position
 	binlogPos := make(map[string]binlog.Pos)
 	for _, st := range status {
+		if !st.IsAlive {
+			return errors.Errorf("pump %+v is offline", st)
+		}
 		seq, err := parseBinlogName(path.Base(st.LatestBinlogFile))
 		if err != nil {
 			return errors.Trace(err)
