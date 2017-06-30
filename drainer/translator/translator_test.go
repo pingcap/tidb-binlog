@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"time"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -165,7 +167,7 @@ func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 		row = append(row, r[col.Offset])
 	}
 
-	value, err := tablecodec.EncodeRow(row, colIDs)
+	value, err := tablecodec.EncodeRow(row, colIDs, time.Local)
 	c.Assert(err, IsNil)
 
 	handleVal, _ := codec.EncodeValue(nil, types.NewIntDatum(recordID))
@@ -180,9 +182,9 @@ func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newDat
 	}
 
 	var bin []byte
-	value, err := tablecodec.EncodeRow(newData, colIDs)
+	value, err := tablecodec.EncodeRow(newData, colIDs, time.Local)
 	c.Assert(err, IsNil)
-	oldValue, err := tablecodec.EncodeRow(oldData, colIDs)
+	oldValue, err := tablecodec.EncodeRow(oldData, colIDs, time.Local)
 	c.Assert(err, IsNil)
 	bin = append(oldValue, value...)
 	return bin
@@ -195,7 +197,7 @@ func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	for i, col := range t.Columns {
 		colIDs[i] = col.ID
 	}
-	data, err = tablecodec.EncodeRow(r, colIDs)
+	data, err = tablecodec.EncodeRow(r, colIDs, time.Local)
 	c.Assert(err, IsNil)
 	return data
 }

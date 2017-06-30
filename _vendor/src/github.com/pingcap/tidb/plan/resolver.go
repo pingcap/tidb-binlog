@@ -106,6 +106,8 @@ type resolverContext struct {
 	inCreateOrDropTable bool
 	// When visiting show statement.
 	inShow bool
+	// When visiting create/alter table statement.
+	inColumnOption bool
 }
 
 // currentContext gets the current resolverContext.
@@ -180,6 +182,8 @@ func (nr *nameResolver) Enter(inNode ast.Node) (outNode ast.Node, skipChildren b
 	case *ast.CreateTableStmt:
 		nr.pushContext()
 		nr.currentContext().inCreateOrDropTable = true
+	case *ast.ColumnOption:
+		nr.currentContext().inColumnOption = true
 	case *ast.DeleteStmt:
 		nr.pushContext()
 	case *ast.DeleteTableList:
@@ -258,6 +262,8 @@ func (nr *nameResolver) Leave(inNode ast.Node) (node ast.Node, ok bool) {
 		nr.popContext()
 	case *ast.CreateTableStmt:
 		nr.popContext()
+	case *ast.ColumnOption:
+		nr.currentContext().inColumnOption = false
 	case *ast.DeleteTableList:
 		nr.currentContext().inDeleteTableList = false
 	case *ast.DoStmt:
@@ -341,6 +347,11 @@ func (nr *nameResolver) Leave(inNode ast.Node) (node ast.Node, ok bool) {
 // handleTableName looks up and sets the schema information and result fields for table name.
 func (nr *nameResolver) handleTableName(tn *ast.TableName) {
 	if tn.Schema.L == "" {
+		sessionVars := nr.Ctx.GetSessionVars()
+		if sessionVars.CurrentDB == "" {
+			nr.Err = errors.Trace(ErrNoDB)
+			return
+		}
 		tn.Schema = nr.DefaultSchema
 	}
 	ctx := nr.currentContext()
@@ -480,7 +491,13 @@ func (nr *nameResolver) handleColumnName(cn *ast.ColumnNameExpr) {
 		return
 	}
 
-	// Try to resolve the column name form top to bottom in the context stack.
+	if ctx.inColumnOption {
+		// In column option, only columns in current create table statement
+		// is available. But we check it in ddl/ddl_api.go.
+		return
+	}
+
+	// Try to resolve the column name from top to bottom in the context stack.
 	for i := len(nr.contextStack) - 1; i >= 0; i-- {
 		if nr.resolveColumnNameInContext(nr.contextStack[i], cn) {
 			// Column is already resolved or encountered an error.
@@ -540,8 +557,7 @@ func (nr *nameResolver) resolveColumnNameInContext(ctx *resolverContext, cn *ast
 				// It is not ambiguous and already resolved from table source.
 				// We should restore its Refer.
 				cn.Refer = r
-			}
-			if _, ok := cn.Refer.Expr.(*ast.AggregateFuncExpr); ok {
+			} else if _, ok := cn.Refer.Expr.(*ast.AggregateFuncExpr); ok {
 				nr.Err = ErrIllegalReference.Gen("Reference '%s' not supported (reference to group function)", cn.Name.Name.O)
 			}
 			return true
