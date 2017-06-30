@@ -17,7 +17,7 @@ GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) $(GO) test
 ARCH      := "`uname -s`"
 LINUX     := "Linux"
 MAC       := "Darwin"
-PACKAGES  := $$(go list ./...| grep -vE 'vendor|cmd|test|proto')
+PACKAGES  := $$(go list ./...| grep -vE 'vendor|cmd|test|proto|diff')
 FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"

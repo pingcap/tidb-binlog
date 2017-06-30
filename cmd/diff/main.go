@@ -11,6 +11,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/diff"
 )
 
@@ -19,6 +20,7 @@ var (
 	all       bool
 	url1      string
 	url2      string
+	logLevel  string
 )
 
 func init() {
@@ -30,11 +32,14 @@ func init() {
 
 	flag.StringVar(&url1, "url1", "root@127.0.0.1:4000", "input format user[:password]@host:port")
 	flag.StringVar(&url2, "url2", "", "input format user[:password]@host:port")
+	flag.StringVar(&logLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 }
 
 func main() {
 	var db1, db2 dbConf
 	dbs := parseConfig(&db1, &db2)
+
+	log.SetLevelByString(logLevel)
 
 	for _, dbName := range dbs {
 		eq, err := compareOneDB(&db1, &db2, dbName)
@@ -124,8 +129,9 @@ func (dbcf *dbConf) fromString(url string) error {
 }
 
 func (dbcf *dbConf) fullPath(dbName string) string {
-	return fmt.Sprintf("%s@tcp(%s:%d)/%s?timeout=30s&strict=true",
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=30s&strict=true",
 		dbcf.user,
+		dbcf.password,
 		dbcf.host,
 		dbcf.port,
 		dbName)
@@ -143,6 +149,13 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 		return false, errors.Trace(err)
 	}
 	defer db2.Close()
+
+	if err := db1.Ping(); err != nil {
+		return false, errors.Trace(err)
+	}
+	if err := db2.Ping(); err != nil {
+		return false, errors.Trace(err)
+	}
 
 	df := diff.New(db1, db2)
 	eq, err := df.Equal()
