@@ -27,7 +27,7 @@ import (
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
-const maxMsgSizeForGRPC = 1024 * 1024 * 16
+const maxMsgSizeForGRPC = 1024 * 1024 * 128
 
 // use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
