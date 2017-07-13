@@ -39,34 +39,21 @@ Drainer 从各个 Pump 节点收集 Binlog，并按照在 TiDB 中事务的提�
 
 ## TiDB-Binlog 安装
 
-### 从源码编译
-
-```
-git clone https://github.com/pingcap/tidb-binlog.git  # git 下载源代码
-make build   # 编译所有组件
-```
-
-也可以分开编译
-
-```
-make pump    # 编译 pump
-make drainer # 编译 drainer
-```
-
 ### 下载官方 Binary
 
 - (CentOS 7+, Ubuntu 14.04+)
 
 ```bash
 # 下载压缩包
-wget http://download.pingcap.org/binlog-latest-linux-amd64.tar.gz
+wget http://download.pingcap.org/tidb-binlog-latest-linux-amd64.tar.gz
+wget http://download.pingcap.org/tidb-binlog-latest-linux-amd64.sha256
 
 # 检查文件完整性，返回 ok 则正确
-sha256sum -c binlog-latest-linux-amd64.sha256
+sha256sum -c tidb-binlog-latest-linux-amd64.sha256
 
 # 解开压缩包
-tar -xzf binlog-latest-linux-amd64.tar.gz
-cd binlog-latest-linux-amd64
+tar -xzf tidb-binlog-latest-linux-amd64.tar.gz
+cd tidb-binlog-latest-linux-amd64
 ```
 
 ## TiDB-Binlog 部署建议
@@ -115,9 +102,7 @@ cd binlog-latest-linux-amd64
     示例
 
     ```bash
-    ./bin/pump -socket unix:///tmp/pump.sock \
-               -pd-urls http://127.0.0.1:2379 \
-               -data-dir ./data.pump
+    ./bin/pump -config pump.toml
     ```
     
     参数解释
@@ -153,18 +138,40 @@ cd binlog-latest-linux-amd64
        prometheus pushgataway 地址，不设置则禁止上报监控信息
     -metrics-interval int
        监控信息上报频率 (默认 15，单位 秒)
-    -version
+    -V
         打印版本信息
     ```
+
+    配置文件
+    ```
+    # pump Configuration.
+
+    # pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    addr = "127.0.0.1:8250"
+
+    # binlog 最大保留天数 (默认 7)， 设置为 0 可永久保存
+    gc = 7
+
+    #  pump 数据存储位置路径
+    data-dir = "data.pump"
+
+    # pump 向 pd 发送心跳间隔 (单位 秒)
+    heartbeat-interval = 3
+
+    # pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    pd-urls = "http://127.0.0.1:2379"
+
+    # unix socket 模式服务监听地址 (默认 unix:///tmp/pump.sock)
+    socket = "unix:///tmp/pump.sock"
+    ```
+
 
 2.  Drainer
 
     示例
 
     ```bash
-    ./bin/drainer -dest-db-type mysql \
-                  -ignore-schemas INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql \
-                  -data-dir ./data.drainer 
+    ./bin/drainer -config drainer.toml
     ```
     
     参数解释
@@ -174,7 +181,7 @@ cd binlog-latest-linux-amd64
     -L string
         日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
     -addr string
-        drainer 提供服务的 rpc 地址(默认 "127.0.0.1:8249")
+        drainer 提供服务的地址(默认 "127.0.0.1:8249")
     -c int
         同步下游的并发数，该值设置越高同步的吞吐性能越好 (default 1)
     -config string
@@ -205,4 +212,63 @@ cd binlog-latest-linux-amd64
        pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
     -txn-batch int
        输出到下游数据库一个事务的 sql 数量 (default 1)
+    ```
+
+    配置文件
+    ```
+    # drainer Configuration.
+
+    # drainer 提供服务的地址(默认 "127.0.0.1:8249")
+    addr = "127.0.0.1:8249"
+
+    # 向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
+    detect-interval = 10
+
+    # drainer 数据存储位置路径 (默认 "data.drainer")
+    data-dir = "data.drainer"
+
+    # pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    pd-urls = "http://127.0.0.1:2379"
+
+    # syncer Configuration.
+    [syncer]
+
+    # db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),   
+    # 不支持对 ignore schemas 的 table 进行 rename DDL 操作
+    ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
+    # 输出到下游数据库一个事务的 sql 数量 (default 1)
+    txn-batch = 1
+
+    # 同步下游的并发数，该值设置越高同步的吞吐性能越好 (default 1)
+    worker-count = 1
+
+    disable-dispatch = true
+
+    # drainer 下游服务类型 (默认为 mysql)
+    # valid values are "mysql", "pb"
+    db-type = "mysql"
+
+    ##replicate-do-db priority over replicate-do-table if have same db name
+    ##and we support regex expression , start with '~' declare use regex expression.
+    #
+    #replicate-do-db = ["~^b.*","s1"]
+    #[[replicate-do-table]]
+    #db-name ="test"
+    #tbl-name = "log"
+
+    #[[replicate-do-table]]
+    #db-name ="test"
+    #tbl-name = "~^a.*"
+
+    # the downstream mysql protocol database
+    [syncer.to]
+    host = "127.0.0.1"
+    user = "root"
+    password = ""
+    port = 3306
+
+    # uncomment this if you want to use pb as db-type
+    # [syncer.to]
+    # dir = "data.drainer"
     ```

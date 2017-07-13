@@ -71,7 +71,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
-	fs.BoolVar(&cfg.printVersion, "version", false, "print pump version info")
+	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 

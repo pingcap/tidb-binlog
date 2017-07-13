@@ -150,11 +150,11 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 	}
 	defer db2.Close()
 
-	if err := db1.Ping(); err != nil {
-		return false, errors.Trace(err)
+	if err1 := db1.Ping(); err1 != nil {
+		return false, errors.Trace(err1)
 	}
-	if err := db2.Ping(); err != nil {
-		return false, errors.Trace(err)
+	if err1 := db2.Ping(); err1 != nil {
+		return false, errors.Trace(err1)
 	}
 
 	df := diff.New(db1, db2)

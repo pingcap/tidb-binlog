@@ -78,7 +78,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
-	fs.BoolVar(&cfg.printVersion, "version", false, "print version info")
+	fs.BoolVar(&cfg.printVersion, "V", false, "print version info")
 	fs.BoolVar(&cfg.GenSavepoint, "gen-savepoint", false, "generate savepoint from cluster")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
