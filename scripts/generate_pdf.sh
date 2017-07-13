@@ -24,4 +24,4 @@ cd docs && pandoc -N --toc --smart --latex-engine=xelatex \
     -V monofont="${MONOFONT}" \
     -V geometry:margin=1in \
     -V include-after="\\input{templates/copyright.tex}" \
-    doc-cn.md -o output.pdf
+    doc-cn.md -o tidb-binlog-document.pdf
