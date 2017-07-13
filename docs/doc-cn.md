@@ -16,7 +16,7 @@
 
 TiDB-Binlog 用于收集 TiDB 的 Binlog，并提供实时备份和同步功能的商业工具。
 
-TiDB-Binlog 支持以下功能场景:
+TiDB-Binlog 支持以下功能场景：
 
 * *数据同步*:       同步 TiDB 集群数据到其他数据库
 * *实时备份和恢复*:  备份 TiDB 集群数据，同时可以用于 TiDB 集群故障时恢复
@@ -25,7 +25,7 @@ TiDB-Binlog 支持以下功能场景:
 
 首先介绍 TiDB-Binlog 的整体架构。
 
-![TiDB-Binlog 架构](./architecture.jpeg)
+![TiDB-Binlog 架构](./media/architecture.jpeg)
 
 TiDB-Binlog 集群主要分为两个组件：
 
@@ -71,7 +71,7 @@ cd tidb-binlog-latest-linux-amd64
 
     我们设置 TiDB 启动参数 binlog-socket 为对应的 pump 的参数 socket 所指定的 unix socket 文件路径，最终部署结构如下图所示：
 
-    ![TiDB pump 模块部署结构](./tidb_pump_deployment.jpeg)
+    ![TiDB pump 模块部署结构](./media/tidb_pump_deployment.jpeg)
 
 *   drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
 
@@ -79,10 +79,16 @@ cd tidb-binlog-latest-linux-amd64
 
     为了保证数据的完整性，在 pump 运行 10 分钟左右后按顺序进行下面的操作
 
-    *  以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，`bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}`
+    *  以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，
+        ```
+        bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}
+        ```
     *  全量备份，例如 mydumper 备份 tidb
     *  全量导入备份到目标系统
-    *  设置 savepoint 文件路径，然后启动 drainer， `bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}`
+    *  设置 savepoint 文件路径，然后启动 drainer， 
+        ```
+        bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}
+        ```
 
 *   drainer 输出的 pb, 需要在配置文件设置下面的参数
     ```

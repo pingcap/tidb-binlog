@@ -1,0 +1,22 @@
+machine:
+  python:
+    version: 3.5.2
+
+dependencies:
+  override:
+    - wget https://github.com/jgm/pandoc/releases/download/1.19.1/pandoc-1.19.1-1-amd64.deb -O pandoc.deb
+    - sudo dpkg -i pandoc.deb
+    - sudo apt-get -y install texlive-xetex texlive-latex-extra texlive-lang-cjk texlive-fonts-recommended etoolbox
+    - sudo apt-get -y install ttf-wqy-microhei
+
+test:
+  override:
+    - ./scripts/generate_pdf.sh
+
+deployment:
+  development:
+    branch: master
+    commands:
+      - pip3 install qiniu
+      - python3 scripts/upload.py tidb-binlog-document.pdf tidb-binlog-document.pdf
+
