@@ -16,7 +16,7 @@
 
 TiDB-Binlog 用于收集 TiDB 的 Binlog，并提供实时备份和同步功能的商业工具。
 
-TiDB-Binlog 支持以下功能场景:
+TiDB-Binlog 支持以下功能场景：
 
 * *数据同步*:       同步 TiDB 集群数据到其他数据库
 * *实时备份和恢复*:  备份 TiDB 集群数据，同时可以用于 TiDB 集群故障时恢复
@@ -79,10 +79,16 @@ cd tidb-binlog-latest-linux-amd64
 
     为了保证数据的完整性，在 pump 运行 10 分钟左右后按顺序进行下面的操作
 
-    *  以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，`bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}`
+    *  以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，
+        ```
+        bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}
+        ```
     *  全量备份，例如 mydumper 备份 tidb
     *  全量导入备份到目标系统
-    *  设置 savepoint 文件路径，然后启动 drainer， `bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}`
+    *  设置 savepoint 文件路径，然后启动 drainer， 
+        ```
+        bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}
+        ```
 
 *   drainer 输出的 pb, 需要在配置文件设置下面的参数
     ```
