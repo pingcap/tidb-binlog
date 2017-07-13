@@ -18,5 +18,5 @@ deployment:
     branch: master
     commands:
       - pip3 install qiniu
-      - python3 scripts/upload.py output.pdf tidb-manual-cn.pdf
+      - python3 scripts/upload.py tidb-binlog-document.pdf tidb-binlog-document.pdf
 
