@@ -13,11 +13,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
@@ -28,6 +25,7 @@ var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
 const maxMsgSizeForGRPC = 1024 * 1024 * 1024
+const slowDist = 30 * time.Millisecond
 
 // use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
@@ -81,7 +79,7 @@ type Server struct {
 	metrics  *metricClient
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
-	tiStore       kv.Storage
+	pdCli         pd.Client
 }
 
 func init() {
@@ -110,12 +108,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tidb.RegisterStore("tikv", tikv.Driver{})
-	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := tidb.NewStore(tiPath)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+
 	// get cluster ID
 	pdCli, err := pd.NewClient(urlv.StringSlice())
 	if err != nil {
@@ -124,7 +117,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
-	pdCli.Close()
 
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
@@ -138,7 +130,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:     cancel,
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
-		tiStore:    tiStore,
+		pdCli:      pdCli,
 	}, nil
 }
 
@@ -336,14 +328,14 @@ func (s *Server) Start() error {
 
 // gennerate rollback binlog can forward the drainer's latestCommitTs, and just be discarded without any side effects
 func (s *Server) genFakeBinlog() ([]byte, error) {
-	version, err := s.tiStore.CurrentVersion()
+	ts, err := s.getTSO()
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	bl := &binlog.Binlog{
 		Tp:       binlog.BinlogType_Rollback,
-		CommitTs: int64(version.Ver),
+		CommitTs: ts,
 	}
 	payload, err := bl.Marshal()
 	if err != nil {
@@ -440,19 +432,32 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 	// get ts from pd
-	version, err := s.tiStore.CurrentVersion()
+	commitTS, err := s.getTSO()
 	if err != nil {
 		log.Errorf("get ts from pd, error %v", err)
 		return &HTTPStatus{
 			ErrMsg: err.Error(),
 		}
 	}
-	commitTS := int64(version.Ver)
 
 	return &HTTPStatus{
 		BinlogPos: binlogPos,
 		CommitTS:  commitTS,
 	}
+}
+
+func (s *Server) getTSO() (int64, error) {
+	now := time.Now()
+	physical, logical, err := s.pdCli.GetTS(context.Background())
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	dist := time.Since(now)
+	if dist > slowDist {
+		log.Warnf("get timestamp too slow: %s", dist)
+	}
+
+	return int64(composeTS(physical, logical)), nil
 }
 
 // Close gracefully releases resource of pump server
@@ -462,10 +467,8 @@ func (s *Server) Close() {
 		log.Error(errors.ErrorStack(err))
 	}
 	// close tiStore
-	if s.tiStore != nil {
-		if err := s.tiStore.Close(); err != nil {
-			log.Error(err.Error())
-		}
+	if s.pdCli != nil {
+		s.pdCli.Close()
 	}
 	// notify other goroutines to exit
 	s.cancel()

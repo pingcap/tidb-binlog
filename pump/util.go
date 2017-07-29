@@ -16,6 +16,8 @@ var (
 	errBadBinlogName = errors.New("bad file name")
 )
 
+const physicalShiftBits = 18
+
 // AtomicBool is bool type that support atomic operator
 type AtomicBool int32
 
@@ -162,4 +164,8 @@ func parseBinlogName(str string) (index uint64, err error) {
 // the file name format is like binlog-0000000000000001
 func fileName(index uint64) string {
 	return fmt.Sprintf("binlog-%016d", index)
+}
+
+func composeTS(physical, logical int64) uint64 {
+	return uint64((physical << physicalShiftBits) + logical)
 }
