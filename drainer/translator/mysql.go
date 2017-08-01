@@ -421,10 +421,15 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 		value = types.NewDatum(value.GetMysqlBit().Value)
 	case mysql.TypeLonglong:
 		u64 := value.GetValue()
-		if u64.(uint64) >= uint64(1<<63) {
+		if isUint64(u64) && u64.(uint64) >= uint64(1<<63) {
 			value = types.NewDatum(fmt.Sprintf("%v", u64))
 		}
 	}
 
 	return value, nil
+}
+
+func isUint64(u64 interface{}) bool {
+	rv := reflect.ValueOf(u64)
+	return rv.Kind() == reflect.Uint64
 }
