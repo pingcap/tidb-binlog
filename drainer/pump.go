@@ -2,15 +2,17 @@ package drainer
 
 import (
 	"io"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -32,8 +34,7 @@ type binlogEntity struct {
 type Pump struct {
 	nodeID    string
 	clusterID uint64
-	conn      *grpc.ClientConn
-	client    pb.PumpClient
+	consumer  sarama.Consumer
 	current   pb.Pos
 	// store binlogs in a heap
 	bh      *binlogHeap
@@ -53,23 +54,26 @@ type Pump struct {
 		binlogs       map[int64]*binlogItem
 	}
 
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isFinished int64
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
+func NewPump(nodeID string, clusterID uint64, kafkaURLs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Consumer.Return.Errors = true
+	consumer, err := sarama.NewConsumer(kafkaURLs, kafkaCfg)
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to connect to pump node(%s) at host(%s)", nodeID, host)
+		return nil, errors.Trace(err)
 	}
+
 	return &Pump{
 		nodeID:     nodeID,
 		clusterID:  clusterID,
-		conn:       conn,
+		consumer:   consumer,
 		current:    pos,
-		client:     pb.NewPumpClient(conn),
 		bh:         newBinlogHeap(maxHeapSize),
 		tiStore:    tiStore,
 		window:     w,
@@ -81,6 +85,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
 	p.cancel()
+	p.consumer.Close()
 	p.wg.Wait()
 }
 
@@ -359,12 +364,20 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	return bs
 }
 
+func (p *Pump) hadFinished(pos pb.Pos) bool {
+	if ComparePos(p.current, pos) >= 0 {
+		return true
+	}
+	return false
+}
+
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	var err error
-	var stream pb.Pump_PullBinlogsClient
+	var client sarama.PartitionConsumer
+	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
 	pos := p.current
 
 	for {
@@ -372,15 +385,14 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
-			req := &pb.PullBinlogReq{StartFrom: pos, ClusterID: p.clusterID}
-			stream, err = p.client.PullBinlogs(p.ctx, req)
+			client, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
-				log.Warningf("[Get pull binlogs stream %s] %v", p.nodeID, err)
+				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
 				time.Sleep(waitTime)
 				continue
 			}
 
-			pos, err = p.receiveBinlog(stream, pos)
+			pos, err = p.receiveBinlog(client, pos)
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
@@ -392,18 +404,26 @@ func (p *Pump) pullBinlogs() {
 	}
 }
 
-func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.Pos, error) {
-	var err error
-	var resp *pb.PullBinlogResp
+func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
+	defer stream.Close()
 
 	for {
-		resp, err = stream.Recv()
-		if err != nil {
-			return pos, errors.Trace(err)
+		var payload []byte
+		select {
+		case <-p.ctx.Done():
+			return pos, p.ctx.Err()
+		case msg := <-stream.Messages():
+			pos.Offset = msg.Offset
+			payload = msg.Value
+		case consumerErr := <-stream.Errors():
+			return pos, errors.Errorf("consumer %v", consumerErr)
 		}
 
-		pos = CalculateNextPos(resp.Entity)
-		b := p.match(resp.Entity)
+		entity := pb.Entity{
+			Pos:     pos,
+			Payload: payload,
+		}
+		b := p.match(entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,

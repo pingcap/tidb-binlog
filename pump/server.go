@@ -5,15 +5,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/soheilhy/cmux"
@@ -27,8 +24,8 @@ var pullBinlogInterval = 50 * time.Millisecond
 const maxMsgSizeForGRPC = 1024 * 1024 * 1024
 const slowDist = 30 * time.Millisecond
 
-// use latestBinlogFile to record the latest binlog file the pump works on
-var latestBinlogFile = fileName(0)
+// use latestPos to record the latest binlog file the pump works on
+var latestPos binlog.Pos
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -80,6 +77,8 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
+
+	cfg *Config
 }
 
 func init() {
@@ -131,34 +130,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
+		cfg:        cfg,
 	}, nil
 }
 
 // inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
 // then adds them to dispathcer map
 func (s *Server) init() error {
-	clusterDir := path.Join(s.dataDir, "clusters")
-	if !file.Exist(clusterDir) {
-		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	names, err := file.ReadDir(clusterDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	for _, n := range names {
-		binlogDir := path.Join(clusterDir, n)
-		binlogger, err := OpenBinlogger(binlogDir)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		s.dispatcher[n] = binlogger
-	}
-
 	// init cluster data dir if not exist
+	var err error
 	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
@@ -174,12 +154,19 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if ok {
 		return blr, nil
 	}
-	newblr, err := CreateBinlogger(path.Join(s.dataDir, "clusters", cid))
+
+	// use tiStore's currentVersion method to get the ts from tso
+	urlv, err := flags.NewURLsValue(s.cfg.KafkaURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s.dispatcher[cid] = newblr
-	return newblr, nil
+
+	kb, err := createKafkaBinlogger(cid, s.node.ID(), urlv.StringSlice())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s.dispatcher[cid] = kb
+	return kb, nil
 }
 
 func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
@@ -420,16 +407,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	// get all pumps' latest binlog position
 	binlogPos := make(map[string]binlog.Pos)
 	for _, st := range status {
-		seq, err := parseBinlogName(path.Base(st.LatestBinlogFile))
-		if err != nil {
-			log.Errorf("parse file name, error %v", err)
-			return &HTTPStatus{
-				ErrMsg: err.Error(),
-			}
-		}
-		binlogPos[st.NodeID] = binlog.Pos{
-			Suffix: seq,
-		}
+		binlogPos[st.NodeID] = st.LatestPos
 	}
 	// get ts from pd
 	commitTS, err := s.getTSO()
@@ -462,6 +440,12 @@ func (s *Server) getTSO() (int64, error) {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
+	for _, bl := range s.dispatcher {
+		if err := bl.Close(); err != nil {
+			log.Errorf("close binlogger error %v", err)
+		}
+	}
+
 	// unregister this node
 	if err := s.node.Unregister(s.ctx); err != nil {
 		log.Error(errors.ErrorStack(err))

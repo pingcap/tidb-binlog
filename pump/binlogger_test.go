@@ -60,7 +60,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	curFile := b.file
 	c.Assert(ok, IsTrue)
 	c.Assert(path.Base(curFile.Name()), Equals, fileName(1))
-	c.Assert(latestBinlogFile, Equals, fileName(1))
+	c.Assert(latestPos.Suffix, Equals, uint64(1))
 
 	curOffset, err := curFile.Seek(0, os.SEEK_CUR)
 	c.Assert(err, IsNil)

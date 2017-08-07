@@ -7,6 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -83,6 +84,38 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host s
 
 }
 
+// MarkOfflineSign marks pump offline sign
+func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, prefix, nodeID string) error {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	offlineKey := r.prefixed(prefix, "offline", nodeID)
+	latestPosBytes, err := latestPos.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// try to touch offline sign of node
+	err = r.client.UpdateOrCreate(ctx, offlineKey, string(latestPosBytes), 0)
+	return errors.Trace(err)
+}
+
+// GetOfflineSign queries pump offline sign
+func (r *EtcdRegistry) GetOfflineSign(pctx context.Context, prefix, nodeID string) (pb.Pos, error) {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	offlineKey := r.prefixed(prefix, "offline", nodeID)
+	pos := pb.Pos{}
+
+	posBytes, err := r.client.Get(ctx, offlineKey)
+	if err != nil {
+		return pos, errors.Trace(err)
+	}
+	err = pos.Unmarshal(posBytes)
+	return pos, errors.Trace(err)
+}
+
 // UnregisterNode unregisters the node in the etcd
 func (r *EtcdRegistry) UnregisterNode(pctx context.Context, prefix, nodeID string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
@@ -146,14 +179,19 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 	defer cancel()
 
 	aliveKey := r.prefixed(prefix, nodeID, "alive")
+	latestPosBytes, err := latestPos.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	// try to touch alive state of node, update ttl
-	err := r.client.UpdateOrCreate(ctx, aliveKey, latestBinlogFile, ttl)
+	err = r.client.UpdateOrCreate(ctx, aliveKey, string(latestPosBytes), ttl)
 	return errors.Trace(err)
 }
 
 func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	status := &NodeStatus{}
-	latestFileName := fileName(0)
+	latestPos := pb.Pos{}
 	var isAlive bool
 	for key, n := range node.Childs {
 		switch key {
@@ -163,11 +201,13 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 			}
 		case "alive":
 			isAlive = true
-			latestFileName = string(n.Value)
+			if err := latestPos.Unmarshal(n.Value); err != nil {
+				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
+			}
 		}
 	}
 	status.IsAlive = isAlive
-	status.LatestBinlogFile = latestFileName
+	status.LatestPos = latestPos
 	return status, nil
 }
 

@@ -169,3 +169,13 @@ func fileName(index uint64) string {
 func composeTS(physical, logical int64) uint64 {
 	return uint64((physical << physicalShiftBits) + logical)
 }
+
+// TopicName returns topic name
+func TopicName(clusterID string, nodeID string) string {
+	return fmt.Sprintf("%s_%s", clusterID, nodeID)
+}
+
+// DefaultTopicPartition returns Deault topic partition
+func DefaultTopicPartition() int32 {
+	return defualtPartition
+}

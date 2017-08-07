@@ -18,6 +18,7 @@ import (
 const (
 	defaultEtcdDialTimeout   = 5 * time.Second
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
+	defaultKafkaUrls         = "127.0.0.1:9092"
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultSocket            = "unix:///tmp/pump.sock"
 	defaultHeartbeatInterval = 2
@@ -34,6 +35,7 @@ type Config struct {
 	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+	KafkaURLs         string `toml:"kafka-urls" json:"kafka-urls"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
@@ -64,6 +66,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
+	fs.StringVar(&cfg.KafkaURLs, "kafka-urls", defaultKafkaUrls, "a comma separated list of the kafka broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
