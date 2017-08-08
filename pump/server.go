@@ -156,12 +156,12 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	}
 
 	// use tiStore's currentVersion method to get the ts from tso
-	urlv, err := flags.NewURLsValue(s.cfg.KafkaURLs)
+	addrs, err := flags.ParseHostPortAddr(s.cfg.KafkaAddrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(cid, s.node.ID(), urlv.StringSlice())
+	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

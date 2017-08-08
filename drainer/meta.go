@@ -79,10 +79,6 @@ func (lm *localMeta) Save(ts int64, poss map[string]pb.Pos) error {
 		if pos.Offset > 5000 {
 			newPos.Offset = pos.Offset - 5000
 		}
-		if pos.Suffix > 2 {
-			newPos.Suffix = pos.Suffix - 2
-			newPos.Offset = 0
-		}
 		lm.Positions[nodeID] = newPos
 	}
 

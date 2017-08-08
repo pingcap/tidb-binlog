@@ -61,10 +61,10 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaURLs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
-	consumer, err := sarama.NewConsumer(kafkaURLs, kafkaCfg)
+	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -376,7 +376,7 @@ func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	var err error
-	var client sarama.PartitionConsumer
+	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
 	pos := p.current
 
@@ -385,14 +385,14 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
-			client, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
+			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
 				time.Sleep(waitTime)
 				continue
 			}
 
-			pos, err = p.receiveBinlog(client, pos)
+			pos, err = p.receiveBinlog(stream, pos)
 			if err != nil {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
@@ -412,11 +412,11 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
+		case consumerErr := <-stream.Errors():
+			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
 			pos.Offset = msg.Offset
 			payload = msg.Value
-		case consumerErr := <-stream.Errors():
-			return pos, errors.Errorf("consumer %v", consumerErr)
 		}
 
 		entity := pb.Entity{

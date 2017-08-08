@@ -53,8 +53,8 @@ func GenSavepointInfo(cfg *Config) error {
 			return errors.Errorf("pump %+v is offline", st)
 		}
 
-		if st.LatestPos.Suffix > 2 {
-			st.LatestPos.Suffix = st.LatestPos.Suffix - 2
+		if st.LatestPos.Offset > 5000 {
+			st.LatestPos.Offset = st.LatestPos.Offset - 5000
 		}
 		binlogPos[st.NodeID] = st.LatestPos
 	}
