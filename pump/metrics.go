@@ -39,7 +39,7 @@ type metricClient struct {
 }
 
 // Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(ctx context.Context) {
+func (mc *metricClient) Start(ctx context.Context, pumpID string) {
 	log.Debugf("start prometheus metrics client, addr=%s, internal=%ds", mc.addr, mc.interval)
 	for {
 		select {
@@ -48,7 +48,7 @@ func (mc *metricClient) Start(ctx context.Context) {
 		case <-time.After(time.Duration(mc.interval) * time.Second):
 			err := push.AddFromGatherer(
 				"binlog",
-				push.HostnameGroupingKey(),
+				map[string]string{"instance": pumpID},
 				mc.addr,
 				prometheus.DefaultGatherer,
 			)

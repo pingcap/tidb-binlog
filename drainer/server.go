@@ -169,7 +169,7 @@ func (s *Server) StartMetrics() {
 			log.Info("metrics goroutine exited")
 			s.wg.Done()
 		}()
-		s.metrics.Start(s.ctx)
+		s.metrics.Start(s.ctx, s.ID)
 	}()
 }
 

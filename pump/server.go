@@ -399,7 +399,7 @@ func (s *Server) startMetrics() {
 	if s.metrics == nil {
 		return
 	}
-	s.metrics.Start(s.ctx)
+	s.metrics.Start(s.ctx, s.node.ID())
 }
 
 // Status exposes pumps' status to HTTP handler.
