@@ -284,6 +284,8 @@ import:
   - transport
 - package: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
+- package: github.com/Shopify/sarama
+  version: v1.12.0
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
