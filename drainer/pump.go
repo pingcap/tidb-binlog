@@ -60,7 +60,7 @@ type Pump struct {
 	isFinished int64
 }
 
-// NewPump returns an instance of Pump with opened gRPC connection
+// NewPump returns an instance of Pump with kafka connection
 func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
