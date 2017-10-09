@@ -1,0 +1,24 @@
+version: build-{build}.{branch}
+
+clone_folder: C:\gopath\src\github.com\sgotti\glide-vc
+shallow_clone: true
+
+environment:
+  GOPATH: C:\gopath
+
+platform:
+- x64
+
+install:
+- go version
+- go env
+- go get github.com/Masterminds/glide
+
+build_script:
+- go build
+
+test_script:
+- set PATH=%PATH%;%GOPATH%\bin
+- go test .
+
+deploy: off

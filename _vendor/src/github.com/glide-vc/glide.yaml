@@ -1,0 +1,17 @@
+package: github.com/sgotti/glide-vc
+description: glide vendor cleaner
+homepage: https://github.com/sgotti/glide-vc
+license: MIT
+owners:
+- name: Simone Gotti
+  email: simone.gotti@gmail.com
+  homepage: https://sgotti.me/
+import:
+- package: github.com/Masterminds/glide
+  version: v0.12.2
+  subpackages:
+  - cfg
+  - path
+- package: github.com/spf13/cobra
+- package: github.com/bmatcuk/doublestar
+  version: v1.0.9
