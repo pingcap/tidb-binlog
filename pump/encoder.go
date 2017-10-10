@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-
+	"github.com/ngaut/log"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 )
@@ -49,6 +49,7 @@ func (k *kafkaEncoder) encode(payload []byte) (int64, error) {
 	msg := &sarama.ProducerMessage{Topic: k.topic, Partition: k.partition, Value: sarama.ByteEncoder(payload)}
 	partition, offset, err := k.producer.SendMessage(msg)
 	if err != nil {
+		log.Infof("send message error: %s, msg: %s, partition: %s, offset: %s, topic: %s", err, msg, partition, offset, topic)
 		return 0, errors.Trace(err)
 	}
 
