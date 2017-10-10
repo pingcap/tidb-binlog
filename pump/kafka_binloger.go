@@ -28,7 +28,7 @@ type kafkaBinloger struct {
 func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogger, error) {
 	producer, err := sarama.NewSyncProducer(addr, nil)
 	if err != nil {
-		log.Errorf("create kafka producer error: %v", err)
+		log.Errorf("create kafka producer error: %v, kafka addr: %s", err, addr)
 		return nil, errors.Trace(err)
 	}
 
