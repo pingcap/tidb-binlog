@@ -359,7 +359,7 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= maxTS {
-		log.Infof("collectBinlogs")
+		//log.Infof("collectBinlogs")
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
 		if item.binlog.CommitTs > minTS {
 			bs = append(bs, item)
@@ -396,6 +396,7 @@ func (p *Pump) pullBinlogs() {
 	for {
 		select {
 		case <-p.ctx.Done():
+			log.Infof("finish pull binlogs")
 			return
 		default:
 			log.Infof("begin pull binlogs, topic: %s, offset: %d", topic, pos.Offset)
@@ -412,6 +413,7 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
 				}
+				log.Infof("p.receiveBinlog err: %s", err)
 				time.Sleep(waitTime)
 				continue
 			}
@@ -424,14 +426,17 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
-		log.Infof("receiveBinlog")
+		// log.Infof("receiveBinlog")
 		var payload []byte
 		select {
 		case <-p.ctx.Done():
+			log.Infof("finish receive binlog")
 			return pos, p.ctx.Err()
 		case consumerErr := <-stream.Errors():
+			log.Infof("receive binlog error")
 			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
+			log.Infof("receiveBinlog")
 			pos.Offset = msg.Offset
 			payload = msg.Value
 		}
