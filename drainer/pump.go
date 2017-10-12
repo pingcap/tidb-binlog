@@ -69,6 +69,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		return nil, errors.Trace(err)
 	}
 
+	log.Infof("create pump success, consumer: %s",  consumer)
 	return &Pump{
 		nodeID:     nodeID,
 		clusterID:  clusterID,
@@ -84,6 +85,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
+	log.Infof("pump close")
 	p.cancel()
 	p.consumer.Close()
 	p.wg.Wait()
@@ -93,6 +95,7 @@ func (p *Pump) Close() {
 // 1. pullBinlogs pulls binlogs from pump, match p+c binlog by using prewriteItems map
 // 2. publish query the non-match pre binlog and forwards the lower boundary, push them into a heap
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
+	log.Infof("start collect")
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
@@ -134,6 +137,7 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 
 // UpdateLatestTS updates the latest ts that query from pd
 func (p *Pump) UpdateLatestTS(ts int64) {
+	log.Infof("update latest TS :%d", ts)
 	latestTS := atomic.LoadInt64(&p.latestTS)
 	if ts > latestTS {
 		atomic.StoreInt64(&p.latestTS, ts)
@@ -190,6 +194,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
 			time.Sleep(waitTime)
+			log.Infof("p.getPrewriteBinlogEntity")
 			// check again after sleep a moment
 			b, ok = p.getPrewriteBinlogEntity(startTS)
 			if ok {
@@ -204,6 +209,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 
 // query binlog's commit status from tikv client, return true if it already commit or rollback
 func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
+	log.Infof("query binlog's commit status from tikv client")
 	binlog := b.binlog
 	latestTs := atomic.LoadInt64(&p.latestTS)
 	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
@@ -238,6 +244,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 
 // get all binlogs that don't store in boltdb
 func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
+	log.Infof("getBinlogs")
 	var tmpBinlogs map[int64]*binlogItem
 	p.mu.Lock()
 	tmpBinlogs = p.mu.binlogs
@@ -253,6 +260,7 @@ func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 }
 
 func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int64) error {
+	log.Infof("publishBinlogs")
 	err := p.publishItems(items)
 	if err != nil {
 		return errors.Trace(err)
@@ -268,6 +276,7 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
+	log.Infof("publishItems")
 	err := p.grabDDLJobs(items)
 	if err != nil {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
@@ -280,6 +289,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
+	log.Infof("putIntoHeap")
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -295,6 +305,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 }
 
 func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
+	log.Infof("grabDDLJobs")
 	var count int
 	for ts, item := range items {
 		b := item.binlog
@@ -327,6 +338,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
+	log.Infof("getDDLJob")
 	version, err := p.tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -347,6 +359,7 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= maxTS {
+		log.Infof("collectBinlogs")
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
 		if item.binlog.CommitTs > minTS {
 			bs = append(bs, item)
@@ -411,6 +424,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
+		log.Infof("receiveBinlog")
 		var payload []byte
 		select {
 		case <-p.ctx.Done():
