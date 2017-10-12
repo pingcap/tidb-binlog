@@ -244,7 +244,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 
 // get all binlogs that don't store in boltdb
 func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
-	log.Infof("getBinlogs")
+	//log.Infof("getBinlogs")
 	var tmpBinlogs map[int64]*binlogItem
 	p.mu.Lock()
 	tmpBinlogs = p.mu.binlogs
@@ -260,7 +260,7 @@ func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 }
 
 func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int64) error {
-	log.Infof("publishBinlogs")
+	// log.Infof("publishBinlogs")
 	err := p.publishItems(items)
 	if err != nil {
 		return errors.Trace(err)
@@ -276,7 +276,7 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
-	log.Infof("publishItems")
+	//log.Infof("publishItems")
 	err := p.grabDDLJobs(items)
 	if err != nil {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
@@ -289,7 +289,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
-	log.Infof("putIntoHeap")
+	// log.Infof("putIntoHeap")
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -305,7 +305,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 }
 
 func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
-	log.Infof("grabDDLJobs")
+	//log.Infof("grabDDLJobs")
 	var count int
 	for ts, item := range items {
 		b := item.binlog
@@ -338,7 +338,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
-	log.Infof("getDDLJob")
+	//log.Infof("getDDLJob")
 	version, err := p.tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -439,6 +439,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			log.Infof("receiveBinlog")
 			pos.Offset = msg.Offset
 			payload = msg.Value
+			log.Infof("msg: %s, offset: %d", payload, pos.Offset)
 		}
 
 		entity := pb.Entity{
