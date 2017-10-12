@@ -385,6 +385,8 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
+			log.Infof("begin pull binlogs, topic: %s, offset: %d", topic, pos.Offset)
+
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
@@ -400,6 +402,7 @@ func (p *Pump) pullBinlogs() {
 				time.Sleep(waitTime)
 				continue
 			}
+			log.Infof("end pull binlogs, topic: %s, offset: %d", topic, pos.Offset)
 		}
 	}
 }
