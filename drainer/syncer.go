@@ -151,7 +151,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 				log.Infof("job.BinlogInfo.SchemaVersion <= latestSchemaVersion")
 				exceptedJobs = append(exceptedJobs, job)
 			} else {
-				log.Infof("job.BinlogInfo.SchemaVersion <= latestSchemaVersion")
+				log.Infof("job.BinlogInfo.SchemaVersion > latestSchemaVersion")
 			}
 		}
 		log.Infof("exceptedJobs len: %d", len(exceptedJobs))
@@ -546,7 +546,7 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
-				log.Infof("send binlog boundary job for dml binlog, disdispatch also disables batch error: %s", err)
+				log.Infof("translatesqls error: %s", err)
 				return errors.Trace(err)
 			}
 			// send binlog boundary job for dml binlog, disdispatch also disables batch

@@ -57,9 +57,11 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 
 		switch job.Type {
 		case model.ActionCreateSchema:
+			log.Infof("job type: ActionCreateSchema")
 			schema := job.BinlogInfo.DBInfo
 			if filterIgnoreSchema(schema, ignoreSchemaNames) {
 				s.AddIgnoreSchema(schema)
+				log.Infof("AddIgnoreSchema: %s", schema)
 				continue
 			}
 
@@ -69,6 +71,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionDropSchema:
+			log.Infof("job type: ActionDropSchema")
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
 				s.DropIgnoreSchema(job.SchemaID)
@@ -81,6 +84,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionRenameTable:
+			log.Infof("job type: ActionRenameTable")
 			_, ok := s.SchemaByTableID(job.TableID)
 			if !ok {
 				return errors.NotFoundf("table(%d) or it's schema", job.TableID)
@@ -107,6 +111,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionCreateTable:
+			log.Infof("job type: ActionCreateTable")
 			table := job.BinlogInfo.TableInfo
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
@@ -124,6 +129,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionDropTable:
+			log.Infof("job type: ActionDropTable")
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
 				continue
@@ -140,6 +146,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionTruncateTable:
+			log.Infof("job type: ActionTruncateTable")
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
 				continue
@@ -166,6 +173,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		default:
+			log.Infof("job type: default")
 			tbInfo := job.BinlogInfo.TableInfo
 			if tbInfo == nil {
 				return errors.NotFoundf("table %d", job.TableID)
@@ -173,6 +181,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
+				log.Infof("IgnoreSchemaByID: %d", job.SchemaID)
 				continue
 			}
 
@@ -283,10 +292,11 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
+
 	if _, ok := s.schemas[db.ID]; ok {
 		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
-
+	log.Infof("add new db info, name: %s, id: %d", db.Name, db.ID)
 	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
 
