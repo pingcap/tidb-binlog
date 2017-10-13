@@ -69,7 +69,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		return nil, errors.Trace(err)
 	}
 
-	log.Infof("create pump success, consumer: %s",  consumer)
+	log.Infof("create pump success, consumer: %s", consumer)
 	return &Pump{
 		nodeID:     nodeID,
 		clusterID:  clusterID,
@@ -117,9 +117,11 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
+		log.Infof("is prewrite binlog")
 		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
 		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
+		log.Infof("pb.BinlogType_Commit, pb.BinlogType_Rollback")
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
 				co.binlog.CommitTs = b.CommitTs
@@ -460,6 +462,9 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- binlogEnt:
 			}
+		} else {
+			log.Infof("unmatch binlog")
+
 		}
 	}
 }

@@ -442,6 +442,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	for {
 		select {
 		case job, ok := <-jobChan:
+			log.Infof("job sql: %s", job.sql)
 			if !ok {
 				return
 			}
@@ -460,6 +461,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				s.addDDLCount()
 				clearF()
 			} else if !job.isCompleteBinlog {
+				log.Infof("job is not complete binlog, sql: %s", job.sql)
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
