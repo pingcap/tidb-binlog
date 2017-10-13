@@ -113,18 +113,22 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 		case model.ActionCreateTable:
 			log.Infof("job type: ActionCreateTable")
 			table := job.BinlogInfo.TableInfo
+			log.Infof("table: %s", table)
 			_, ok := s.IgnoreSchemaByID(job.SchemaID)
 			if ok {
+				log.Infof("ignore schema by id")
 				continue
 			}
 
 			schema, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
+				log.Infof("schema not found")
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
 			err := s.CreateTable(schema, table)
 			if err != nil {
+				log.Infof("create table error %s %s", schema, table)
 				return errors.Trace(err)
 			}
 
