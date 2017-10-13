@@ -436,10 +436,10 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			log.Infof("receive binlog error")
 			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
-			log.Infof("receiveBinlog")
+			// log.Infof("receiveBinlog")
 			pos.Offset = msg.Offset
 			payload = msg.Value
-			log.Infof("msg: %s, offset: %d", payload, pos.Offset)
+			log.Infof("receive binlog, msg: %s, offset: %d", payload, pos.Offset)
 		}
 
 		entity := pb.Entity{

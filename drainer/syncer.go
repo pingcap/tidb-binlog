@@ -366,10 +366,12 @@ type job struct {
 }
 
 func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	log.Infof("new dml job, sql: %s", sql)
 	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
 func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	log.Infof("new ddl job, sql: %s", sql)
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
