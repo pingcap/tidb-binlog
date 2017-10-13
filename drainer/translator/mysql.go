@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -26,6 +27,7 @@ func init() {
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+	log.Infof("gen insert sqls, schema: %s, table: %s", schema, table)
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([]string, 0, len(rows))
@@ -98,6 +100,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 }
 
 func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+	log.Infof("gen update sqls, schema: %s, table: %s", schema, table)
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([]string, 0, len(rows))
@@ -176,6 +179,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 }
 
 func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+	log.Infof("gen delete sqls, schema: %s, table: %s", schema, table)
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([]string, 0, len(rows))
@@ -224,7 +228,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
-
+	log.Infof("gen ddl sql, sql: %s, schema: %s", sql, schema)
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)

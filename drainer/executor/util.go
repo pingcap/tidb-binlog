@@ -27,7 +27,10 @@ type DBConfig struct {
 }
 
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
+	log.Infof("execute SQL: %s, idDDL: %s", sqls, isDDL)
 	if len(sqls) == 0 {
+		//return errors.New("sql is nil")
+		log.Infof("sql is nil")
 		return nil
 	}
 
@@ -86,8 +89,10 @@ func openDB(proto string, host string, port int, username string, password strin
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&multiStatements=true", username, password, host, port)
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
+		log.Infof("open db error")
 		return nil, errors.Trace(err)
 	}
+	log.Infof("open db success")
 
 	return db, nil
 }

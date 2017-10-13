@@ -3,7 +3,7 @@
 log-level = "info"
 
 worker-count = 10
-job-count = 1000
+job-count = 10
 batch = 10
 
 [source-db]

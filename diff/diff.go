@@ -454,5 +454,6 @@ func ShowDatabases(db *sql.DB) ([]string, error) {
 		}
 		ret = append(ret, dbName)
 	}
+	log.Infof("show dbs, result: %s", ret)
 	return ret, nil
 }

@@ -22,6 +22,7 @@ const (
 	defaultDataDir        = "data.drainer"
 	defaultDetectInterval = 10
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
+	defaultKafkaAddrs     = "127.0.0.1:9092"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout = 5 * time.Second
 	defaultPumpTimeout = 5 * time.Second
@@ -47,6 +48,7 @@ type Config struct {
 	DataDir         string        `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int           `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string        `toml:"pd-urls" json:"pd-urls"`
+	KafkaAddrs      string        `toml:"kafka-addrs" json:"kafka-addrs"`
 	LogFile         string        `toml:"log-file" json:"log-file"`
 	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
 	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
@@ -76,6 +78,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
+	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print version info")

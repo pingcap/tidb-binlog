@@ -134,10 +134,12 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if schemaVersion > latestSchemaVersion {
 			latestSchemaVersion = schemaVersion
 		}
-
+		log.Infof("commitTS: %d, initCommitTS: %d", commitTS, s.initCommitTS)
 		if commitTS <= s.initCommitTS {
+			log.Infof("commitTS < s.initCommitTS")
 			continue
 		}
+		log.Infof("commitTS > s.initCommitTS")
 
 		if jobID > 0 {
 			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
@@ -146,11 +148,16 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
+				log.Infof("job.BinlogInfo.SchemaVersion <= latestSchemaVersion")
 				exceptedJobs = append(exceptedJobs, job)
+			} else {
+				log.Infof("job.BinlogInfo.SchemaVersion > latestSchemaVersion")
 			}
 		}
+		log.Infof("exceptedJobs len: %d", len(exceptedJobs))
 
 		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
+		log.Infof("s.schema: %s", s.schema)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -366,10 +373,12 @@ type job struct {
 }
 
 func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	log.Infof("new dml job, sql: %s", sql)
 	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
 func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
+	log.Infof("new ddl job, sql: %s", sql)
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
 }
 
@@ -381,11 +390,15 @@ func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
 func (s *Syncer) addJob(job *job) {
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
+		log.Infof("add job, is DDL")
 		s.jobWg.Wait()
+	} else {
+		log.Infof("add job, is DML")
 	}
 
 	s.jobWg.Add(1)
 	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+	log.Infof("add job to jobCh, job sql: %s", job.sql)
 	s.jobCh[idx] <- job
 
 	if pos, ok := s.positions[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
@@ -440,12 +453,15 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	for {
 		select {
 		case job, ok := <-jobChan:
+			log.Infof("job sql: %s", job.sql)
 			if !ok {
+				log.Infof("get job not ok")
 				return
 			}
 			idx++
 
 			if job.binlogTp == translator.DDL {
+				log.Infof("job binlog type is ddl")
 				// compute txn duration
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
@@ -458,6 +474,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				s.addDDLCount()
 				clearF()
 			} else if !job.isCompleteBinlog {
+				log.Infof("job is not complete binlog, sql: %s", job.sql)
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
@@ -497,13 +514,16 @@ func (s *Syncer) run(b *binlogItem) error {
 	var err error
 
 	s.genRegexMap()
+	log.Infof("s.ignoreSchemaNames: %s", s.ignoreSchemaNames)
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
+		log.Infof("create executor error")
 		return errors.Trace(err)
 	}
 
 	s.translator, err = translator.New(s.cfg.DestDBType)
 	if err != nil {
+		log.Infof("new translator error")
 		return errors.Trace(err)
 	}
 
@@ -515,32 +535,37 @@ func (s *Syncer) run(b *binlogItem) error {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-
+		log.Infof("jobID: %d", jobID)
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {
+				log.Infof("prewrite %s unmarshal error %v", preWriteValue, err)
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
+				log.Infof("translatesqls error: %s", err)
 				return errors.Trace(err)
 			}
 			// send binlog boundary job for dml binlog, disdispatch also disables batch
 			if s.cfg.DisableDispatch {
+				log.Infof("send binlog boundary job for dml binlog, disdispatch also disables batch")
 				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
 			}
 
 		} else if jobID > 0 {
 			schema, table, sql, err := s.handleDDL(b.job)
 			if err != nil {
+				log.Infof("handleddl error: %s", err)
 				return errors.Trace(err)
 			}
 
 			if s.skipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
+				log.Infof("sql is not nil, begin gen ddl sql")
 				sql, err = s.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)
@@ -550,7 +575,11 @@ func (s *Syncer) run(b *binlogItem) error {
 				job := newDDLJob(sql, nil, "", commitTS, b.pos, b.nodeID)
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+			} else {
+				log.Infof("sql is nil")
 			}
+		} else {
+			log.Infof("job id < 0")
 		}
 
 		select {
@@ -566,15 +595,18 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
+			log.Infof("TableByID not ok")
 			continue
 		}
 
 		schemaName, tableName, ok := s.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
+			log.Infof("SchemaAndTableName not ok")
 			continue
 		}
 
 		if s.skipSchemaAndTable(schemaName, tableName) {
+			log.Infof("[skip dml]db:%s table:%s", schemaName, tableName)
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}

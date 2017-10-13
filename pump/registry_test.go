@@ -21,9 +21,9 @@ func (t *testRegistrySuite) TestUpdateNodeInfo(c *C) {
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
 	ns := &NodeStatus{
-		NodeID:           "test",
-		Host:             "test",
-		LatestBinlogFile: latestBinlogFile,
+		NodeID:    "test",
+		Host:      "test",
+		LatestPos: latestPos,
 	}
 
 	err := r.RegisterNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
@@ -84,8 +84,8 @@ func (t *testRegistrySuite) TestRefreshNode(c *C) {
 
 func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *NodeStatus) {
 	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
-	// ignore the LatestBinlogFile and alive
-	status.LatestBinlogFile = ns.LatestBinlogFile
+	// ignore the latestBinlogPos and alive
+	status.LatestPos = ns.LatestPos
 	c.Assert(err, IsNil)
 	c.Assert(ns, DeepEquals, status)
 }

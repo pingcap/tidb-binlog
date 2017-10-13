@@ -2,15 +2,17 @@ package drainer
 
 import (
 	"io"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -32,8 +34,7 @@ type binlogEntity struct {
 type Pump struct {
 	nodeID    string
 	clusterID uint64
-	conn      *grpc.ClientConn
-	client    pb.PumpClient
+	consumer  sarama.Consumer
 	current   pb.Pos
 	// store binlogs in a heap
 	bh      *binlogHeap
@@ -53,23 +54,27 @@ type Pump struct {
 		binlogs       map[int64]*binlogItem
 	}
 
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isFinished int64
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	conn, err := grpc.Dial(host, grpc.WithInsecure(), grpc.WithTimeout(timeout))
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Consumer.Return.Errors = true
+	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 	if err != nil {
-		return nil, errors.Annotatef(err, "failed to connect to pump node(%s) at host(%s)", nodeID, host)
+		return nil, errors.Trace(err)
 	}
+
+	log.Infof("create pump success, consumer: %s", consumer)
 	return &Pump{
 		nodeID:     nodeID,
 		clusterID:  clusterID,
-		conn:       conn,
+		consumer:   consumer,
 		current:    pos,
-		client:     pb.NewPumpClient(conn),
 		bh:         newBinlogHeap(maxHeapSize),
 		tiStore:    tiStore,
 		window:     w,
@@ -80,7 +85,9 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
+	log.Infof("pump close")
 	p.cancel()
+	p.consumer.Close()
 	p.wg.Wait()
 }
 
@@ -88,6 +95,7 @@ func (p *Pump) Close() {
 // 1. pullBinlogs pulls binlogs from pump, match p+c binlog by using prewriteItems map
 // 2. publish query the non-match pre binlog and forwards the lower boundary, push them into a heap
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
+	log.Infof("start collect")
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
@@ -109,9 +117,11 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
+		log.Infof("is prewrite binlog")
 		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
 		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
+		log.Infof("pb.BinlogType_Commit, pb.BinlogType_Rollback")
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
 				co.binlog.CommitTs = b.CommitTs
@@ -129,6 +139,7 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 
 // UpdateLatestTS updates the latest ts that query from pd
 func (p *Pump) UpdateLatestTS(ts int64) {
+	log.Infof("update latest TS :%d", ts)
 	latestTS := atomic.LoadInt64(&p.latestTS)
 	if ts > latestTS {
 		atomic.StoreInt64(&p.latestTS, ts)
@@ -185,6 +196,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
 			time.Sleep(waitTime)
+			log.Infof("p.getPrewriteBinlogEntity")
 			// check again after sleep a moment
 			b, ok = p.getPrewriteBinlogEntity(startTS)
 			if ok {
@@ -199,6 +211,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 
 // query binlog's commit status from tikv client, return true if it already commit or rollback
 func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
+	log.Infof("query binlog's commit status from tikv client")
 	binlog := b.binlog
 	latestTs := atomic.LoadInt64(&p.latestTS)
 	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
@@ -233,6 +246,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 
 // get all binlogs that don't store in boltdb
 func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
+	//log.Infof("getBinlogs")
 	var tmpBinlogs map[int64]*binlogItem
 	p.mu.Lock()
 	tmpBinlogs = p.mu.binlogs
@@ -248,6 +262,7 @@ func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 }
 
 func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int64) error {
+	// log.Infof("publishBinlogs")
 	err := p.publishItems(items)
 	if err != nil {
 		return errors.Trace(err)
@@ -263,6 +278,7 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
+	//log.Infof("publishItems")
 	err := p.grabDDLJobs(items)
 	if err != nil {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
@@ -275,6 +291,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
+	// log.Infof("putIntoHeap")
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -290,6 +307,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 }
 
 func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
+	//log.Infof("grabDDLJobs")
 	var count int
 	for ts, item := range items {
 		b := item.binlog
@@ -322,6 +340,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
+	//log.Infof("getDDLJob")
 	version, err := p.tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -342,6 +361,7 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= maxTS {
+		//log.Infof("collectBinlogs")
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
 		if item.binlog.CommitTs > minTS {
 			bs = append(bs, item)
@@ -359,23 +379,33 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	return bs
 }
 
+func (p *Pump) hadFinished(pos pb.Pos) bool {
+	if ComparePos(p.current, pos) >= 0 {
+		return true
+	}
+	return false
+}
+
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
 	defer p.wg.Done()
 	var err error
-	var stream pb.Pump_PullBinlogsClient
+	var stream sarama.PartitionConsumer
+	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
 	pos := p.current
 
 	for {
 		select {
 		case <-p.ctx.Done():
+			log.Infof("finish pull binlogs")
 			return
 		default:
-			req := &pb.PullBinlogReq{StartFrom: pos, ClusterID: p.clusterID}
-			stream, err = p.client.PullBinlogs(p.ctx, req)
+			log.Infof("begin pull binlogs, topic: %s, offset: %d", topic, pos.Offset)
+
+			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
-				log.Warningf("[Get pull binlogs stream %s] %v", p.nodeID, err)
+				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
 				time.Sleep(waitTime)
 				continue
 			}
@@ -385,25 +415,40 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != io.EOF {
 					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
 				}
+				log.Infof("p.receiveBinlog err: %s", err)
 				time.Sleep(waitTime)
 				continue
 			}
+			log.Infof("end pull binlogs, topic: %s, offset: %d", topic, pos.Offset)
 		}
 	}
 }
 
-func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.Pos, error) {
-	var err error
-	var resp *pb.PullBinlogResp
+func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
+	defer stream.Close()
 
 	for {
-		resp, err = stream.Recv()
-		if err != nil {
-			return pos, errors.Trace(err)
+		// log.Infof("receiveBinlog")
+		var payload []byte
+		select {
+		case <-p.ctx.Done():
+			log.Infof("finish receive binlog")
+			return pos, p.ctx.Err()
+		case consumerErr := <-stream.Errors():
+			log.Infof("receive binlog error")
+			return pos, errors.Errorf("consumer %v", consumerErr)
+		case msg := <-stream.Messages():
+			// log.Infof("receiveBinlog")
+			pos.Offset = msg.Offset
+			payload = msg.Value
+			log.Infof("receive binlog, msg: %s, offset: %d", payload, pos.Offset)
 		}
 
-		pos = CalculateNextPos(resp.Entity)
-		b := p.match(resp.Entity)
+		entity := pb.Entity{
+			Pos:     pos,
+			Payload: payload,
+		}
+		b := p.match(entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
@@ -417,6 +462,9 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.P
 				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- binlogEnt:
 			}
+		} else {
+			log.Infof("unmatch binlog")
+
 		}
 	}
 }
