@@ -27,6 +27,7 @@ type DBConfig struct {
 }
 
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
+	log.Infof("execute SQL: %s", sqls)
 	if len(sqls) == 0 {
 		return nil
 	}
@@ -89,6 +90,7 @@ func openDB(proto string, host string, port int, username string, password strin
 		log.Infof("open db error")
 		return nil, errors.Trace(err)
 	}
+	log.Infof("open db success")
 
 	return db, nil
 }
