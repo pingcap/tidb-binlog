@@ -388,6 +388,7 @@ func (s *Syncer) addJob(job *job) {
 
 	s.jobWg.Add(1)
 	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+	log.Infof("add job to jobCh, job sql: %s", job.sql)
 	s.jobCh[idx] <- job
 
 	if pos, ok := s.positions[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
@@ -503,6 +504,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	s.genRegexMap()
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
+		log.Infof("create executor error")
 		return errors.Trace(err)
 	}
 
@@ -545,6 +547,7 @@ func (s *Syncer) run(b *binlogItem) error {
 			if s.skipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
+				log.Infof("sql is not nil, begin gen ddl sql")
 				sql, err = s.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)
@@ -554,6 +557,8 @@ func (s *Syncer) run(b *binlogItem) error {
 				job := newDDLJob(sql, nil, "", commitTS, b.pos, b.nodeID)
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+			} else {
+				log.Infof("sql is nil")
 			}
 		}
 
