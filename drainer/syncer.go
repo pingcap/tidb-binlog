@@ -383,7 +383,10 @@ func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
 func (s *Syncer) addJob(job *job) {
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
+		log.Infof("add job, is DDL")
 		s.jobWg.Wait()
+	} else {
+		log.Infof("add job, is DML")
 	}
 
 	s.jobWg.Add(1)
@@ -445,11 +448,13 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		case job, ok := <-jobChan:
 			log.Infof("job sql: %s", job.sql)
 			if !ok {
+				log.Infof("get job not ok")
 				return
 			}
 			idx++
 
 			if job.binlogTp == translator.DDL {
+				log.Infof("job binlog type is ddl")
 				// compute txn duration
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
@@ -583,15 +588,18 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
+			log.Infof("TableByID not ok")
 			continue
 		}
 
 		schemaName, tableName, ok := s.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
+			log.Infof("SchemaAndTableName not ok")
 			continue
 		}
 
 		if s.skipSchemaAndTable(schemaName, tableName) {
+			log.Infof("[skip dml]db:%s table:%s", schemaName, tableName)
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}
