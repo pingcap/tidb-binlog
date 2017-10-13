@@ -502,6 +502,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	var err error
 
 	s.genRegexMap()
+	log.Infof("s.ignoreSchemaNames: %s", s.ignoreSchemaNames)
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		log.Infof("create executor error")
@@ -510,6 +511,7 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	s.translator, err = translator.New(s.cfg.DestDBType)
 	if err != nil {
+		log.Infof("new translator error")
 		return errors.Trace(err)
 	}
 
@@ -527,20 +529,24 @@ func (s *Syncer) run(b *binlogItem) error {
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {
+				log.Infof("prewrite %s unmarshal error %v", preWriteValue, err)
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
+				log.Infof("send binlog boundary job for dml binlog, disdispatch also disables batch error: %s", err)
 				return errors.Trace(err)
 			}
 			// send binlog boundary job for dml binlog, disdispatch also disables batch
 			if s.cfg.DisableDispatch {
+				log.Infof("send binlog boundary job for dml binlog, disdispatch also disables batch")
 				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
 			}
 
 		} else if jobID > 0 {
 			schema, table, sql, err := s.handleDDL(b.job)
 			if err != nil {
+				log.Infof("handleddl error: %s", err)
 				return errors.Trace(err)
 			}
 
@@ -560,6 +566,8 @@ func (s *Syncer) run(b *binlogItem) error {
 			} else {
 				log.Infof("sql is nil")
 			}
+		} else {
+			log.Infof("job id < 0")
 		}
 
 		select {
