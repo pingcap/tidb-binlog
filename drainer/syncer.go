@@ -148,11 +148,16 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
+				log.Infof("job.BinlogInfo.SchemaVersion <= latestSchemaVersion")
 				exceptedJobs = append(exceptedJobs, job)
+			} else {
+				log.Infof("job.BinlogInfo.SchemaVersion <= latestSchemaVersion")
 			}
 		}
+		log.Infof("exceptedJobs len: %d", len(exceptedJobs))
 
 		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
+		log.Infof("s.schema: %s", s.schema)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
