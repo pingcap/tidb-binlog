@@ -29,8 +29,9 @@ type DBConfig struct {
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
 	log.Infof("execute SQL: %s, idDDL: %s", sqls, isDDL)
 	if len(sqls) == 0 {
-		return errors.New("sql is nil")
-		//return nil
+		//return errors.New("sql is nil")
+		log.Infof("sql is nil")
+		return nil
 	}
 
 	retryCount := maxDMLRetryCount
