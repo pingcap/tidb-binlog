@@ -86,6 +86,7 @@ func openDB(proto string, host string, port int, username string, password strin
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&multiStatements=true", username, password, host, port)
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
+		log.Infof("open db error")
 		return nil, errors.Trace(err)
 	}
 

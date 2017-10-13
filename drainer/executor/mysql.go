@@ -12,6 +12,7 @@ type mysqlExecutor struct {
 
 func newMysql(cfg *DBConfig) (Executor, error) {
 	db, err := openDB("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password)
+	
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
