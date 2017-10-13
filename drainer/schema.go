@@ -187,6 +187,9 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 		}
 	}
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
 
 	return nil
 }
@@ -198,6 +201,9 @@ func (s *Schema) SchemaMetaVersion() int64 {
 
 // SchemaAndTableName returns the tableName by table id
 func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
 	tn, ok := s.tableIDToName[id]
 	if !ok {
 		return "", "", false
@@ -208,12 +214,19 @@ func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
 
 // SchemaByID returns the DBInfo by schema id
 func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
+	log.Infof("s.schema: %s", s.schemas)
 	val, ok = s.schemas[id]
 	return
 }
 
 // SchemaByTableID returns the schema ID by table ID
 func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
 	tn, ok := s.tableIDToName[tableID]
 	if !ok {
 		return nil, false
@@ -233,6 +246,9 @@ func (s *Schema) IgnoreSchemaByID(id int64) (val struct{}, ok bool) {
 
 // TableByID returns the TableInfo by table id
 func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
+	log.Infof("[local schema/table] %v", s.tableIDToName)
+	log.Infof("[local schema] %v", s.schemas)
+	log.Infof("[ignore schema] %v", s.ignoreSchema)
 	val, ok = s.tables[id]
 	return
 }
@@ -299,7 +315,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
 	}
-
+	log.Infof("add new table: %s, %s", schema.Name, table.Name)
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
