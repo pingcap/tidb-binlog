@@ -609,6 +609,18 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
+			//for i, sql := range sqls[pb.MutationType_Update] {
+			//	var tp pb.MutationType
+			//	if i%2 == 0 {
+			//		tp = pb.MutationType_DeleteRow
+			//	} else {
+			//		tp = pb.MutationType_Insert
+			//	}
+			//	sqls[tp] = append(sqls[tp], sql)
+			//	keys[tp] = append(keys[tp], keys[pb.MutationType_Update][i])
+			//	args[tp] = append(args[tp], args[pb.MutationType_Update][i])
+			//}
+			// sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update] = nil, nil, nil
 			offsets[pb.MutationType_Update] = 0
 		}
 
@@ -619,18 +631,48 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			}
 			offsets[pb.MutationType_DeleteRow] = 0
 		}
-
+		
+		// updateCount := 0
 		for _, dmlType := range sequences {
+			log.Infof("start for, dmlType: %s", dmlType)
 			if offsets[dmlType] >= len(sqls[dmlType]) {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
-
-			job := newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
-			s.addJob(job)
-			offsets[dmlType] = offsets[dmlType] + 1
+			var job *job 
+			if dmlType.String()== "Update" {
+				//var fakeType  pb.MutationType
+				// updateCount = updateCount + 1
+				//if updateCount%2 == 0 {
+				//	fakeType = pb.MutationType_Insert
+				//} else {
+				//	fakeType = pb.MutationType_DeleteRow
+				//
+				//}
+				//log.Infof("fake type: %s", fakeType)
+				job = newDMLJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				s.addJob(job)
+				job = newDMLJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
+				s.addJob(job)
+			} else {
+			
+				job = newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				s.addJob(job)
+			}
+			log.Infof("dml type: %s", dmlType)
+			// offsets[dmlType] = offsets[dmlType] + 1
+			if dmlType.String() == "Update" {
+				log.Infof("dml type: %s", dmlType)
+				offsets[dmlType] = offsets[dmlType] + 2
+				//offsets[pb.MutationType_DeleteRow] = offsets[pb.MutationType_DeleteRow] + 1
+				//offsets[pb.MutationType_Insert] = offsets[pb.MutationType_Insert] + 1
+			} else {
+				offsets[dmlType] = offsets[dmlType] + 1
+			}
 		}
+		
 
 		for tp := range sqls {
+			log.Infof("tp: %s, offsets[tp]: %d, len(sqls[tp]): %d", tp, offsets[tp], len(sqls[tp]))
 			if offsets[tp] != len(sqls[tp]) {
 				return errors.Errorf("binlog is corruption, item %v", mutations)
 			}

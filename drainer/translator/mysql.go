@@ -3,11 +3,11 @@ package translator
 import (
 	"bytes"
 	"fmt"
-	"reflect"
+	// "reflect"
 	"strings"
 
 	"time"
-
+	"github.com/ngaut/log"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -132,11 +132,11 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		newColumnValues := make(map[int64]types.Datum)
 		for ; i < len(r); i += 2 {
 			cid := r[i].GetInt64()
-			if val, ok := oldColumnValues[cid]; ok {
-				if reflect.DeepEqual(val.GetValue(), r[i+1].GetValue()) {
-					continue
-				}
-			}
+			// if val, ok := oldColumnValues[cid]; ok {
+			// 	if reflect.DeepEqual(val.GetValue(), r[i+1].GetValue()) {
+			//		continue
+			//	}
+			// }
 			newColumnValues[cid] = r[i+1]
 		}
 
@@ -149,9 +149,9 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		var value []interface{}
+		// var value []interface{}
 		// kvs := m.genKVs(updateColumns)
-		value = append(value, newValues...)
+		// value = append(value, newValues...)
 
 		// var where string
 		_, oldValues, err = m.genWhere(table, whereColumns, oldValues)
@@ -162,6 +162,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		// generate delete sql first
 		deleteSQL, deleteValue, deleteKey, err := m.genDeleteSQL(schema, table, oldColumnValues)
+		log.Infof("delete sql: %s, delete value: %v, delete key: %v", deleteSQL, deleteValue, deleteKey)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -170,22 +171,23 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		keys = append(keys, deleteKey)
 
 		// generate replace sql later
-		value = append(value, newValues...)
+		// value = append(value, newValues...)
 		columnList := m.genColumnList(columns)
 		columnPlaceholders := m.genColumnPlaceholders(len(columns))
 
-		sql := fmt.Sprintf("REPLACE INTO `%s`.`%s` (%s) VALUES (%s);", schema, table.Name, columnList, columnPlaceholders)
+		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 		//sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
 		sqls = append(sqls, sql)
-		values = append(values, value)
+		values = append(values, newValues)
 		// values = append(values, value)
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, oldColumnValues)
+		key, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 		keys = append(keys, key)
+		log.Infof("replace sql: %s, value: %v, key: %v", sql, newValues, key)
 		//keys = append(keys, updateColumns)
 
 	}
