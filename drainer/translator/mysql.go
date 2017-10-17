@@ -150,18 +150,35 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		}
 
 		var value []interface{}
-		kvs := m.genKVs(updateColumns)
+		// kvs := m.genKVs(updateColumns)
 		value = append(value, newValues...)
 
-		var where string
-		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
+		// var where string
+		_, oldValues, err = m.genWhere(table, whereColumns, oldValues)
+		// where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
-		value = append(value, oldValues...)
-		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
+
+		// generate delete sql first
+		deleteSQL, deleteValue, deleteKey, err := m.genDeleteSQL(schema, table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		sqls = append(sqls, deleteSQL)
+		values = append(values, deleteValue)
+		keys = append(keys, deleteKey)
+
+		// generate replace sql later
+		value = append(value, newValues...)
+		columnList := m.genColumnList(columns)
+		columnPlaceholders := m.genColumnPlaceholders(len(columns))
+
+		sql := fmt.Sprintf("REPLACE INTO `%s`.`%s` (%s) VALUES (%s);", schema, table.Name, columnList, columnPlaceholders)
+		//sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
+		// values = append(values, value)
 		// generate dispatching key
 		// find primary keys
 		key, err := m.generateDispatchKey(table, oldColumnValues)
@@ -169,6 +186,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 		keys = append(keys, key)
+		//keys = append(keys, updateColumns)
 
 	}
 
@@ -182,7 +200,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
-		var whereColumns []*model.ColumnInfo
+		// var whereColumns []*model.ColumnInfo
 		var value []interface{}
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
@@ -197,30 +215,61 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		for i := 0; i < len(r); i += 2 {
 			columnValues[r[i].GetInt64()] = r[i+1]
 		}
-
-		whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
+		
+		// var sql string
+		sql, value, key, err := m.genDeleteSQL(schema, table, columnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+		
 
-		var where string
-		where, value, err = m.genWhere(table, whereColumns, value)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
+		// whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
+		// if err != nil {
+		//	return nil, nil, nil, errors.Trace(err)
+		// }
+
+
+		// var where string
+		// where, value, err = m.genWhere(table, whereColumns, value)
+		//  if err != nil {
+		//	return nil, nil, nil, errors.Trace(err)
+		// }
 		values = append(values, value)
-		sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
+		// sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
 		sqls = append(sqls, sql)
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, columnValues)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
+		// key, err := m.generateDispatchKey(table, columnValues)
+		// if err != nil {
+		// 	return nil, nil, nil, errors.Trace(err)
+		// }
 		keys = append(keys, key)
 	}
 
 	return sqls, keys, values, nil
+}
+
+func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum ) (string, []interface{}, string, error) {
+	columns := table.Columns
+	whereColumns, value, err := m.generateColumnAndValue(columns, columnValues)
+	if err != nil {
+		return "", nil, "", errors.Trace(err)
+	}
+
+	var where string
+	where, value, err = m.genWhere(table, whereColumns, value)
+	if err != nil {
+		return "", nil, "", errors.Trace(err)
+	}
+
+	key, err := m.generateDispatchKey(table, columnValues)
+	if err != nil {
+		return "", nil, "", errors.Trace(err)
+	}
+
+	sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
+
+	return sql, value, key, nil
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
@@ -425,3 +474,4 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 
 	return value, nil
 }
+
