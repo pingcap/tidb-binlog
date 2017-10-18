@@ -26,6 +26,9 @@ worker-count = 1
 
 disable-dispatch = true
 
+# safe mode will split update to delete and insert
+safe-mode = true
+
 # downstream storage, equal to --dest-db-type
 # valid values are "mysql", "pb"
 db-type = "mysql"
