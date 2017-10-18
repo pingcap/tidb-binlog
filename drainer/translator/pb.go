@@ -161,6 +161,10 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
+func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+	return nil, nil, nil, nil
+}
+
 func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))

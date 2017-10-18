@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"reflect"
 
 	"time"
 	"github.com/juju/errors"
@@ -95,6 +96,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
+
 func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
@@ -129,7 +131,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		newColumnValues := make(map[int64]types.Datum)
 		for ; i < len(r); i += 2 {
-			newColumnValues[r[i].GetInt64()] = r[i+1]
+			cid := r[i].GetInt64()
+			if val, ok := oldColumnValues[cid]; ok {
+				if reflect.DeepEqual(val.GetValue(), r[i+1].GetValue()) {
+					continue
+				}
+			}
+			newColumnValues[cid] = r[i+1]
 		}
 
 		if len(newColumnValues) == 0 {
@@ -141,7 +149,70 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		_, oldValues, err = m.genWhere(table, whereColumns, oldValues)
+		var value []interface{}
+		kvs := m.genKVs(updateColumns)
+		value = append(value, newValues...)
+
+		var where string
+		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		value = append(value, oldValues...)
+		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+		// generate dispatching key
+		// find primary keys
+		key, err := m.generateDispatchKey(table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		keys = append(keys, key)
+
+	}
+
+	return sqls, keys, values, nil
+}
+
+
+func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+	columns := table.Columns
+	sqls := make([]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
+	values := make([][]interface{}, 0, len(rows))
+
+	columnList := m.genColumnList(columns)
+	columnPlaceholders := m.genColumnPlaceholders(len(columns))
+
+	for _, row := range rows {
+		var newValues []interface{}
+
+		r, err := codec.Decode(row, 2*len(columns))
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+
+		if len(r)%2 != 0 {
+			return nil, nil, nil, errors.Errorf("table `%s`.`%s` update row data is corruption %v", schema, table.Name, r)
+		}
+
+		var i int
+		oldColumnValues := make(map[int64]types.Datum)
+		for ; i < len(r)/2; i += 2 {
+			oldColumnValues[r[i].GetInt64()] = r[i+1]
+		}
+
+		newColumnValues := make(map[int64]types.Datum)
+		for ; i < len(r); i += 2 {
+			newColumnValues[r[i].GetInt64()] = r[i+1]
+		}
+
+		if len(newColumnValues) == 0 {
+			continue
+		}
+
+		_, newValues, err = m.generateColumnAndValue(columns, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -156,8 +227,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		keys = append(keys, deleteKey)
 
 		// generate replace sql
-		columnList := m.genColumnList(columns)
-		columnPlaceholders := m.genColumnPlaceholders(len(columns))
 		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 		sqls = append(sqls, sql)
 		values = append(values, newValues)
