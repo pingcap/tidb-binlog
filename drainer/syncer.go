@@ -44,8 +44,6 @@ type Syncer struct {
 	positions    map[string]pb.Pos
 	initCommitTS int64
 
-	safeMode bool
-
 	// because TiDB is case-insensitive, only lower-case here.
 	ignoreSchemaNames map[string]struct{}
 
@@ -67,7 +65,6 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = meta.Pos()
 	syncer.positions = make(map[string]pb.Pos)
-	syncer.safeMode = cfg.SafeMode
 
 	return syncer, nil
 }
@@ -608,7 +605,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			if s.safeMode {
+			// safemode is only work for mysql
+			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
 				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows())
 			} else {
 				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
@@ -635,7 +633,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 			// update is split to delete and insert
 			var job *job
-			if dmlType == pb.MutationType_Update {
+			if dmlType == pb.MutationType_Update && s.cfg.SafeMode {
 				job = newDMLJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
 				s.addJob(job)
 				job = newDMLJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)

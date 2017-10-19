@@ -162,7 +162,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 }
 
 func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
-	return nil, nil, nil, nil
+	return p.GenUpdateSQLs(schema, table, rows)
 }
 
 func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
