@@ -605,7 +605,13 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			// safemode is only work for mysql
+			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
+				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows())
+			} else {
+				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
+			}
+
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -625,9 +631,19 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			job := newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
-			s.addJob(job)
-			offsets[dmlType] = offsets[dmlType] + 1
+			// update is split to delete and insert
+			var job *job
+			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
+				job = newDMLJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				s.addJob(job)
+				job = newDMLJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
+				s.addJob(job)
+				offsets[dmlType] = offsets[dmlType] + 2
+			} else {
+				job = newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				s.addJob(job)
+				offsets[dmlType] = offsets[dmlType] + 1
+			}
 		}
 
 		for tp := range sqls {
