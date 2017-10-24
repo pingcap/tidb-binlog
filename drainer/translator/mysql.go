@@ -24,10 +24,10 @@ func init() {
 	Register("mysql", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	columnList := m.genColumnList(columns)
@@ -97,10 +97,10 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 }
 
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
@@ -176,10 +176,10 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 }
 
 
-func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	columnList := m.genColumnList(columns)
@@ -241,10 +241,10 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
+	keys := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
@@ -276,22 +276,22 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum ) (string, []interface{}, []string, error) {
+func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum ) (string, []interface{}, string, error) {
 	columns := table.Columns
 	whereColumns, value, err := m.generateColumnAndValue(columns, columnValues)
 	if err != nil {
-		return "", nil, nil, errors.Trace(err)
+		return "", nil, "", errors.Trace(err)
 	}
 
 	var where string
 	where, value, err = m.genWhere(table, whereColumns, value)
 	if err != nil {
-		return "", nil, nil, errors.Trace(err)
+		return "", nil, "", errors.Trace(err)
 	}
 
 	key, err := m.generateDispatchKey(table, columnValues)
 	if err != nil {
-		return "", nil, nil, errors.Trace(err)
+		return "", nil, "", errors.Trace(err)
 	}
 
 	sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
@@ -457,26 +457,26 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 	return newColumn, newColumnsValues, nil
 }
 
-func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
-	var columnsValues []string
+func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) (string, error) {
+	var columnsValues []interface{}
 	columns, err := m.pkIndexColumns(table)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if ok {
 			value, err := formatData(val, col.FieldType)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return "", errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", value.GetValue()))
+			columnsValues = append(columnsValues, value.GetValue())
 		} else {
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", col.DefaultValue))
+			columnsValues = append(columnsValues, col.DefaultValue)
 		}
 	}
-	return columnsValues, nil
-	//return fmt.Sprintf("%v", columnsValues), nil
+
+	return fmt.Sprintf("%v", columnsValues), nil
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {

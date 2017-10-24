@@ -14,8 +14,6 @@ const (
 	DML = iota + 1
 	// DDL is the constant OpType for ddl operation
 	DDL
-	// FLUSH is for wait all operation executed
-	FLUSH
 )
 
 var providers = make(map[string]SQLTranslator)
@@ -23,16 +21,16 @@ var providers = make(map[string]SQLTranslator)
 // SQLTranslator is the interface for translating TiDB binlog to target sqls
 type SQLTranslator interface {
 	// GenInsertSQLs generates the insert sqls
-	GenInsertSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenInsertSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
 	// GenUpdateSQLs generates the update sqls
-	GenUpdateSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenUpdateSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
 	// GenUpdateSQLsSafeMode generate delete and insert sqls from update sqls
-	GenUpdateSQLsSafeMode(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenUpdateSQLsSafeMode(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
 	// GenDeleteSQLs generates the delete sqls by cols values
-	GenDeleteSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenDeleteSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
 	// GenDDLSQL generates the ddl sql by query string
 	GenDDLSQL(string, string) (string, error)
