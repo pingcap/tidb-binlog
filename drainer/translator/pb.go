@@ -21,10 +21,10 @@ func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([]string, 0, len(rows))
+	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
 		//decode the pk value
@@ -89,16 +89,16 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 
 		sqls = append(sqls, "")
 		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Insert, rowData))
-		keys = append(keys, "")
+		keys = append(keys, nil)
 	}
 
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([]string, 0, len(rows))
+	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
 		r, err := codec.Decode(row, 2*len(columns))
@@ -155,20 +155,20 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 
 		sqls = append(sqls, "")
 		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Update, rowData))
-		keys = append(keys, "")
+		keys = append(keys, nil)
 	}
 
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	return p.GenUpdateSQLs(schema, table, rows)
 }
 
-func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, []string, [][]interface{}, error) {
+func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
-	keys := make([]string, 0, len(rows))
+	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
@@ -213,7 +213,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 
 		sqls = append(sqls, "")
 		values = append(values, packEvent(schema, table.Name.O, pb.EventType_Delete, rowData))
-		keys = append(keys, "")
+		keys = append(keys, nil)
 	}
 
 	return sqls, keys, values, nil

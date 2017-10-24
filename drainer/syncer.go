@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"sync"
 	"time"
+	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -51,6 +52,8 @@ type Syncer struct {
 	cancel context.CancelFunc
 
 	reMap map[string]*regexp.Regexp
+
+	c    *causality
 }
 
 // NewSyncer returns a Drainer instance
@@ -65,6 +68,7 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = meta.Pos()
 	syncer.positions = make(map[string]pb.Pos)
+	syncer.c = newCausality()
 
 	return syncer, nil
 }
@@ -344,7 +348,7 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL {
+	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
 		return true
 	}
 	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.meta.Check() {
@@ -382,10 +386,13 @@ func (s *Syncer) addJob(job *job) {
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
+	} else if job.binlogTp == translator.FLUSH {
+		s.jobWg.Wait()
+		return
 	}
 
 	s.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+	idx := int(genHashKey(fmt.Sprintf("%v", job.key))) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
 
 	if pos, ok := s.positions[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
@@ -397,6 +404,48 @@ func (s *Syncer) addJob(job *job) {
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
 	}
+}
+
+// job = newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string) error {
+	key, err := s.resolveCasuality(keys)
+	if err != nil {
+		return errors.Errorf("resolve karam error %v", err)
+	}
+	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
+	s.addJob(job)
+	return nil
+}
+
+
+func (s *Syncer) resolveCasuality(keys []string) (string, error) {
+	if s.cfg.DisableCausality {
+		if len(keys) > 0 {
+			return keys[0], nil
+		}
+		return "", nil
+	}
+	if s.c.detectConflict(keys) {
+		if err := s.flushJobs(); err != nil {
+			return "", errors.Trace(err)
+		}
+		s.c.reset()
+	}
+	if err := s.c.add(keys); err != nil {
+		return "", errors.Trace(err)
+	}
+	var key string
+	if len(keys) > 0 {
+		key = keys[0]
+	}
+	return s.c.get(key), nil
+}
+
+func (s *Syncer) flushJobs() error {
+	log.Infof("flush all jobs meta = %v", s.meta)
+	job := &job{binlogTp: translator.FLUSH}
+	s.addJob(job)
+	return nil
 }
 
 func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
@@ -457,7 +506,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				s.addDDLCount()
 				clearF()
-			} else if !job.isCompleteBinlog {
+			}else if !job.isCompleteBinlog {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
@@ -584,7 +633,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			sqls = make(map[pb.MutationType][]string)
 
 			// the dispatch keys
-			keys = make(map[pb.MutationType][]string)
+			keys = make(map[pb.MutationType][][]string)
 
 			// the restored sqls's args, ditto
 			args = make(map[pb.MutationType][][]interface{})
@@ -620,6 +669,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 		if len(mutation.GetDeletedRows()) > 0 {
 			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
+			log.Infof("sql: %s, keys: %s, args: %s", sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow])
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -632,16 +682,23 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			}
 
 			// update is split to delete and insert
-			var job *job
+			// var job *job
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
-				job = newDMLJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
-				s.addJob(job)
-				job = newDMLJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
-				s.addJob(job)
+				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
+				if err != nil {
+					return errors.Trace(err)
+				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				job = newDMLJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
-				s.addJob(job)
+				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				if err != nil {
+					return errors.Trace(err)
+				}
 				offsets[dmlType] = offsets[dmlType] + 1
 			}
 		}
