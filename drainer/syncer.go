@@ -681,7 +681,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			}
 
 			// update is split to delete and insert
-			// var job *job
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
 				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
 				if err != nil {

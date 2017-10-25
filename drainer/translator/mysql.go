@@ -248,7 +248,6 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	values := make([][]interface{}, 0, len(rows))
 
 	for _, row := range rows {
-		// var whereColumns []*model.ColumnInfo
 		var value []interface{}
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
@@ -476,7 +475,6 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 		}
 	}
 	return columnsValues, nil
-	//return fmt.Sprintf("%v", columnsValues), nil
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
