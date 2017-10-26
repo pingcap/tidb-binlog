@@ -17,7 +17,7 @@ import (
 	. "github.com/pingcap/check"
 )
 
-func (s *testSyncerSuite) TestCausality(c *C) {
+func (s *testDrainerSuite) TestCausality(c *C) {
 	ca := newCausality()
 	caseData := []string{"test_1", "test_2", "test_3"}
 	excepted := map[string]string{
