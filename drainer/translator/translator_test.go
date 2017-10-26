@@ -61,7 +61,6 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		rowDatas, expected := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
-		//c.Assert(keys[0], Equals, fmt.Sprintf("%v", expected[:exceptedKeys[i]]))
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(expected[:exceptedKeys[i]])))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
