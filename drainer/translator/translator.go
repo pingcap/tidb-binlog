@@ -26,6 +26,9 @@ type SQLTranslator interface {
 	// GenUpdateSQLs generates the update sqls
 	GenUpdateSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
+	// GenUpdateSQLsSafeMode generate delete and insert sqls from update sqls
+	GenUpdateSQLsSafeMode(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
+
 	// GenDeleteSQLs generates the delete sqls by cols values
 	GenDeleteSQLs(string, *model.TableInfo, [][]byte) ([]string, []string, [][]interface{}, error)
 
