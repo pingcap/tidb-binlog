@@ -383,6 +383,11 @@ func CutRow(data []byte, cols map[int64]*types.FieldType) (map[int64][]byte, err
 	return row, nil
 }
 
+// Unflatten wraps unflatten
+func Unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
+	return unflatten(datum, ft, loc)
+}
+
 // unflatten converts a raw datum to a column datum.
 func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
 	if datum.IsNull() {
