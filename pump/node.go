@@ -57,10 +57,10 @@ type pumpNode struct {
 
 // NodeStatus describes the status information of a node in etcd
 type NodeStatus struct {
-	NodeID           string
-	Host             string
-	IsAlive          bool
-	LatestBinlogFile string
+	NodeID    string
+	Host      string
+	IsAlive   bool
+	LatestPos pb.Pos
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
@@ -129,7 +129,12 @@ func (p *pumpNode) Register(ctx context.Context) error {
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.UnregisterNode(ctx, nodePrefix, p.id)
+	err := p.MarkOfflineSign(ctx, nodePrefix, p.id)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = p.UnregisterNode(ctx, nodePrefix, p.id)
 	return errors.Trace(err)
 }
 

@@ -95,7 +95,11 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	}
 
 	lastFileName := names[len(names)-1]
-	latestBinlogFile = lastFileName
+	lastFileSuffix, err := parseBinlogName(lastFileName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	latestPos.Suffix = lastFileSuffix
 
 	p := path.Join(dirpath, lastFileName)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
@@ -268,7 +272,7 @@ func (b *binlogger) Close() error {
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
 	filename := fileName(b.seq() + 1)
-	latestBinlogFile = filename
+	latestPos.Suffix = b.seq() + 1
 	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
