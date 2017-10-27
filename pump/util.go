@@ -172,7 +172,9 @@ func composeTS(physical, logical int64) uint64 {
 
 // TopicName returns topic name
 func TopicName(clusterID string, nodeID string) string {
-	return fmt.Sprintf("%s_%s", clusterID, nodeID)
+	// ":" is not valide in kafka topic name
+	topicName := fmt.Sprintf("%s_%s", clusterID, strings.Replace(nodeID, ":", "_", -1))
+	return topicName
 }
 
 // DefaultTopicPartition returns Deault topic partition
