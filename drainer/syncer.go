@@ -668,7 +668,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 		if len(mutation.GetDeletedRows()) > 0 {
 			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
-			log.Infof("sql: %s, keys: %s, args: %s", sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow])
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
