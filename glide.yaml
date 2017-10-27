@@ -272,6 +272,8 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
+  vcs: git
+  repo: https://github.com/grpc/grpc-go
   version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
   - codes

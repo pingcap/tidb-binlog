@@ -1,5 +1,5 @@
-hash: 647b80e67262416e85df626c1cfbf9f6c148bf43bfd37d73cee93d9bf4cfc48e
-updated: 2017-06-29T22:57:51.906981795+08:00
+hash: 7a887e108361f1260813cb232bf176f50e299b47f56ca0fa5b2ff7541febf3c5
+updated: 2017-10-27T15:14:51.360638349+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -93,14 +93,26 @@ imports:
   version: fa29b1d70f0beaddd4c7021607cc3c3be8ce94b8
   subpackages:
   - capnslog
+- name: github.com/davecgh/go-spew
+  version: ecdeabc65495df2dec95d7c4a4c3e021903035e5
+  subpackages:
+  - spew
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
+- name: github.com/eapache/go-resiliency
+  version: b1fe83b5b03f624450823b751b662259ffc6af70
+  subpackages:
+  - breaker
+- name: github.com/eapache/go-xerial-snappy
+  version: bb955e01b9346ac19dc29eb16586c90ded99a98c
+- name: github.com/eapache/queue
+  version: 44cc805cf13205b55f69e14bcb69867d1ae92f98
 - name: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - name: github.com/go-sql-driver/mysql
   version: dbc3fe23a4aced10a53834106e288b155d17e2ee
 - name: github.com/gogo/protobuf
-  version: 100ba4e885062801d56799d78530b73b178a78f3
+  version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
   - proto
 - name: github.com/golang/groupcache
@@ -112,7 +124,6 @@ imports:
   subpackages:
   - jsonpb
   - proto
-  - ptypes/any
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
@@ -145,6 +156,12 @@ imports:
   version: 53be0d36a84c2a886ca057d34b6aa4468df9ccb4
   subpackages:
   - llrb
+- name: github.com/pierrec/lz4
+  version: 08c27939df1bd95e881e2c2367a749964ad1fceb
+- name: github.com/pierrec/xxHash
+  version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
+  subpackages:
+  - xxHash32
 - name: github.com/pingcap/goleveldb
   version: 158edde5a354460121af007d02a00b01c8d03443
   subpackages:
@@ -261,6 +278,10 @@ imports:
   - model
 - name: github.com/prometheus/procfs
   version: abf152e5f3e97f2fafac028d2cc06c1feb87ffa5
+- name: github.com/rcrowley/go-metrics
+  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
+- name: github.com/Shopify/sarama
+  version: c01858abb625b73a3af51d0798e4ad42c8147093
 - name: github.com/siddontang/go
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
@@ -321,12 +342,12 @@ imports:
   version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
-- name: google.golang.org/genproto
-  version: aa2eb687b4d3e17154372564ad8d6bf11c3cf21f
-  subpackages:
-  - googleapis/rpc/status
+- name: google.golang.org/genproto/googleapis/rpc/status
+  version: f676e0f3ac6395ff1a529ae59a6670878a8371a6
 - name: google.golang.org/grpc
   version: 3419b42955675df23457629c75f58eb8dcd56954
+  repo: https://github.com/grpc/grpc-go
+  vcs: git
   subpackages:
   - codes
   - credentials
@@ -343,4 +364,4 @@ imports:
   - transport
 testImports:
 - name: github.com/pingcap/check
-  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
+  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
