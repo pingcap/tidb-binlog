@@ -43,12 +43,12 @@ type localMeta struct {
 
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 	// drainer only stores the binlog file suffix
-	Suffixs map[string]uint64 `toml:"suffixs" json:"suffixs"`
+	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
 }
 
 // NewLocalMeta creates a new LocalMeta.
 func NewLocalMeta(name string) Meta {
-	return &localMeta{name: name, Suffixs: make(map[string]uint64)}
+	return &localMeta{name: name, Positions: make(map[string]pb.Pos)}
 }
 
 // Load implements Meta.Load interface.
@@ -75,10 +75,11 @@ func (lm *localMeta) Save(ts int64, poss map[string]pb.Pos) error {
 		// for safe restart, we should forward two binlog files
 		// make sure drainer can get binlogs larger than commitTS
 		// this is a simple way , if meet problem we would replace by an accurate algorithm
-		lm.Suffixs[nodeID] = 0
-		if pos.Suffix > 2 {
-			lm.Suffixs[nodeID] = pos.Suffix - 2
+		newPos := pb.Pos{}
+		if pos.Offset > 5000 {
+			newPos.Offset = pos.Offset - 5000
 		}
+		lm.Positions[nodeID] = newPos
 	}
 
 	lm.CommitTS = ts
@@ -119,10 +120,10 @@ func (lm *localMeta) Pos() (int64, map[string]pb.Pos) {
 	defer lm.RUnlock()
 
 	poss := make(map[string]pb.Pos)
-	for nodeID, suffix := range lm.Suffixs {
+	for nodeID, pos := range lm.Positions {
 		poss[nodeID] = pb.Pos{
-			Suffix: suffix,
-			Offset: 0,
+			Suffix: pos.Suffix,
+			Offset: pos.Offset,
 		}
 	}
 	return lm.CommitTS, poss

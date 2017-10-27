@@ -28,19 +28,20 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	clusterID uint64
-	batch     int32
-	interval  time.Duration
-	reg       *pump.EtcdRegistry
-	timeout   time.Duration
-	window    *DepositWindow
-	tiClient  *tikv.LockResolver
-	tiStore   kv.Storage
-	pumps     map[string]*Pump
-	bh        *binlogHeap
-	syncer    *Syncer
-	latestTS  int64
-	meta      Meta
+	clusterID  uint64
+	batch      int32
+	kafkaAddrs []string
+	interval   time.Duration
+	reg        *pump.EtcdRegistry
+	timeout    time.Duration
+	window     *DepositWindow
+	tiClient   *tikv.LockResolver
+	tiStore    kv.Storage
+	pumps      map[string]*Pump
+	bh         *binlogHeap
+	syncer     *Syncer
+	latestTS   int64
+	meta       Meta
 
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -57,6 +58,11 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, m 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	kafkaAddrs, err := flags.ParseHostPortAddr(cfg.KafkaAddrs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -74,6 +80,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, m 
 	return &Collector{
 		clusterID:  clusterID,
 		interval:   time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs: kafkaAddrs,
 		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:    cfg.PumpTimeout,
 		pumps:      make(map[string]*Pump),
@@ -164,7 +171,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, n.Host, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -178,6 +185,16 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	c.latestTS = c.queryLatestTsFromPD()
 	for id, p := range c.pumps {
 		if !exists[id] {
+			latestPos, err := c.reg.GetOfflineSign(ctx, "pumps", id)
+			if err != nil {
+				log.Errorf("query offline pump error %v", err)
+				continue
+			}
+			if !p.hadFinished(latestPos) {
+				log.Errorf("pump %s has messages that is not consumed", id)
+				continue
+			}
+
 			// release invalid connection
 			p.Close()
 			delete(c.pumps, id)
