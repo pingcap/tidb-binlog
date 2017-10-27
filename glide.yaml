@@ -289,3 +289,16 @@ import:
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
+- package: github.com/davecgh/go-spew
+  version: v1.1.0
+- package: github.com/eapache/go-resiliency
+  version: v1.0.0
+- package: github.com/eapache/go-xerial-snappy
+  version: bb955e01b9346ac19dc29eb16586c90ded99a98c  
+- package: github.com/eapache/queue
+  version: v1.0.2
+- package: github.com/pierrec/lz4
+  version: v1.0.1
+- package: github.com/rcrowley/go-metrics
+  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c 
+
