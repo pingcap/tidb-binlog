@@ -52,16 +52,11 @@ func GenSavepointInfo(cfg *Config) error {
 		if !st.IsAlive {
 			return errors.Errorf("pump %+v is offline", st)
 		}
-		seq, err := parseBinlogName(path.Base(st.LatestBinlogFile))
-		if err != nil {
-			return errors.Trace(err)
-		}
 
-		pos := binlog.Pos{}
-		if seq > 2 {
-			pos.Suffix = seq - 2
+		if st.LatestPos.Offset > 5000 {
+			st.LatestPos.Offset = st.LatestPos.Offset - 5000
 		}
-		binlogPos[st.NodeID] = pos
+		binlogPos[st.NodeID] = st.LatestPos
 	}
 	// get newest ts from pd
 	version, err := tiStore.CurrentVersion()

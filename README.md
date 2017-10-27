@@ -40,3 +40,4 @@ drainer collects binlog from each pump in cluster, transforms binlog to various 
 ## Deployment
 
 The recommended startup sequence: PD -> TiKV -> [pump](./cmd/pump) -> TiDB -> [drainer](./cmd/drainer)
+

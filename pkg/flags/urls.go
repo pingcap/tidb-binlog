@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"net"
 	"net/url"
 	"strings"
 
@@ -61,4 +62,19 @@ func NewURLsValue(init string) (*URLsValue, error) {
 	v := &URLsValue{}
 	err := v.Set(init)
 	return v, err
+}
+
+// ParseHostPortAddr returns a host:port list
+func ParseHostPortAddr(s string) ([]string, error) {
+	strs := strings.Split(s, ",")
+	addrs := make([]string, 0, len(strs))
+	for _, str := range strs {
+		str = strings.TrimSpace(str)
+		_, _, err := net.SplitHostPort(str)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		addrs = append(addrs, str)
+	}
+	return addrs, nil
 }

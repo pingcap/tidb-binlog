@@ -16,8 +16,8 @@ func (t *testDrainerSuite) TestMeta(c *C) {
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
 	testPos["test"] = pb.Pos{
-		Suffix: 11,
-		Offset: 2,
+		Suffix: 0,
+		Offset: 10000,
 	}
 	// save ts
 	err := meta.Save(testTs, testPos)
@@ -27,8 +27,8 @@ func (t *testDrainerSuite) TestMeta(c *C) {
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
 	c.Assert(poss["test"], DeepEquals, pb.Pos{
-		Suffix: 9,
-		Offset: 0,
+		Suffix: 0,
+		Offset: 5000,
 	})
 	// check load ts
 	meta2 := NewLocalMeta(fileName)
@@ -38,8 +38,8 @@ func (t *testDrainerSuite) TestMeta(c *C) {
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
 	c.Assert(poss["test"], DeepEquals, pb.Pos{
-		Suffix: 9,
-		Offset: 0,
+		Suffix: 0,
+		Offset: 5000,
 	})
 	// check not exist meta file
 	meta3 := NewLocalMeta(notExistFileName)
