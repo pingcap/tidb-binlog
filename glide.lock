@@ -1,6 +1,10 @@
-hash: 7a887e108361f1260813cb232bf176f50e299b47f56ca0fa5b2ff7541febf3c5
-updated: 2017-10-27T15:14:51.360638349+08:00
+hash: ee38f71359186874101753c4218d31ee8387da5f854fe2e102ec43e4dc21901f
+updated: 2017-10-30T18:44:43.566189027+08:00
 imports:
+- name: github.com/apache/thrift
+  version: b2a4d4ae21c789b689dd162deb819665567f481c
+  subpackages:
+  - lib/go/thrift
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
@@ -11,6 +15,8 @@ imports:
   version: 99064174e013895bbd9b025c31100bd1d9b590ca
 - name: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
+- name: github.com/codahale/hdrhistogram
+  version: f8ad88b59a584afeee9d334eff879b104439117b
 - name: github.com/coreos/etcd
   version: ea5f6dab6b1d07e22cf46bf5f5088d567548c124
   subpackages:
@@ -93,8 +99,10 @@ imports:
   version: fa29b1d70f0beaddd4c7021607cc3c3be8ce94b8
   subpackages:
   - capnslog
+- name: github.com/cznic/mathutil
+  version: 78ad7f262603437f0ecfebc835d80094f89c8f54
 - name: github.com/davecgh/go-spew
-  version: ecdeabc65495df2dec95d7c4a4c3e021903035e5
+  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -124,10 +132,17 @@ imports:
   subpackages:
   - jsonpb
   - proto
+  - ptypes/any
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
   version: 7d79101e329e5a3adf994758c578dab82b90c017
+- name: github.com/grpc-ecosystem/go-grpc-middleware
+  version: 82921fcf811d228d2fa202bc31238b356bf9f8d5
+  subpackages:
+  - tags
+  - tracing/opentracing
+  - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
   version: 6b7015e65d366bf3f19b2b2a000a831940f0f7e0
 - name: github.com/grpc-ecosystem/grpc-gateway
@@ -152,6 +167,11 @@ imports:
   version: 6352e005618615ffaf1cb1c6622b8e91435751fe
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
+- name: github.com/opentracing/opentracing-go
+  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  subpackages:
+  - ext
+  - log
 - name: github.com/petar/GoLLRB
   version: 53be0d36a84c2a886ca057d34b6aa4468df9ccb4
   subpackages:
@@ -178,7 +198,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
+  version: 3c5b40fb2000acb6b3441d5695cb470a23e8f1b5
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -193,17 +213,20 @@ imports:
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: bffbc00302f72d0b643c9dce6244cfbcbb958df4
+  version: 67bddaa1ee2395df11b98b309c90357e07c3432a
   subpackages:
   - ast
+  - config
   - context
   - ddl
+  - ddl/util
   - distsql
   - distsql/xeval
   - domain
   - evaluator
   - executor
   - expression
+  - expression/aggregation
   - infoschema
   - inspectkv
   - kv
@@ -211,6 +234,7 @@ imports:
   - meta/autoid
   - model
   - mysql
+  - owner
   - parser
   - parser/opcode
   - perfschema
@@ -240,15 +264,21 @@ imports:
   - tablecodec
   - terror
   - util
+  - util/admin
+  - util/auth
   - util/bytes
   - util/charset
   - util/codec
   - util/distinct
   - util/encrypt
+  - util/format
+  - util/goroutine_pool
   - util/hack
+  - util/kvcache
+  - util/logutil
   - util/mock
   - util/mvmap
-  - util/parser
+  - util/printer
   - util/ranger
   - util/segmentmap
   - util/sqlexec
@@ -256,7 +286,7 @@ imports:
   - util/types
   - util/types/json
 - name: github.com/pingcap/tipb
-  version: 5e4b9cf7c32d2b09ba71aa9ab6675ec135f9fbda
+  version: eccd39c3992538c382a6351430a77233f42b1344
   subpackages:
   - go-binlog
   - go-tipb
@@ -290,8 +320,26 @@ imports:
   version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
+- name: github.com/spaolacci/murmur3
+  version: 0d12bf811670bf6a1a63828dfbd003eded177fce
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
+- name: github.com/uber/jaeger-client-go
+  version: d021e646f5187d77b55592c3efee1a2810e895d7
+  subpackages:
+  - config
+  - internal/spanlog
+  - log
+  - rpcmetrics
+  - thrift-gen/agent
+  - thrift-gen/jaeger
+  - thrift-gen/sampling
+  - thrift-gen/zipkincore
+  - utils
+- name: github.com/uber/jaeger-lib
+  version: 3b2a9ad2a045881ab7a0f81d465be54c8292ee4f
+  subpackages:
+  - metrics
 - name: github.com/ugorji/go
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
@@ -342,12 +390,12 @@ imports:
   version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
-- name: google.golang.org/genproto/googleapis/rpc/status
-  version: f676e0f3ac6395ff1a529ae59a6670878a8371a6
+- name: google.golang.org/genproto
+  version: 6b7d9516179cd47f4714cfeb0103ad1dede756c4
+  subpackages:
+  - googleapis/rpc/status
 - name: google.golang.org/grpc
   version: 3419b42955675df23457629c75f58eb8dcd56954
-  repo: https://github.com/grpc/grpc-go
-  vcs: git
   subpackages:
   - codes
   - credentials
@@ -362,6 +410,8 @@ imports:
   - status
   - tap
   - transport
+- name: gopkg.in/natefinch/lumberjack.v2
+  version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481

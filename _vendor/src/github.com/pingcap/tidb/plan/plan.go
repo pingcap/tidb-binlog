@@ -54,13 +54,17 @@ type Plan interface {
 	// Get the schema.
 	Schema() *expression.Schema
 	// Get the ID.
-	ID() string
+	ID() int
+	// Get the ID in explain statement
+	ExplainID() string
 	// Get id allocator
 	Allocator() *idAllocator
 	// SetParents sets the parents for the plan.
 	SetParents(...Plan)
 	// SetChildren sets the children for the plan.
 	SetChildren(...Plan)
+	// replaceExprColumns replace all the column reference in the plan's expression node.
+	replaceExprColumns(replace map[string]*expression.Column)
 
 	context() context.Context
 
@@ -105,7 +109,7 @@ func (t taskType) String() string {
 	return "UnknownTaskType"
 }
 
-// requriedProp stands for the required physical property by parents.
+// requiredProp stands for the required physical property by parents.
 // It contains the orders, if the order is desc and the task types.
 type requiredProp struct {
 	cols []*expression.Column
@@ -116,10 +120,14 @@ type requiredProp struct {
 	// must be finished and increase its cost in sometime, but we can't make sure the finishing time. So the best way
 	// to let the comparison fair is to add taskType to required property.
 	taskTp taskType
+	// expectedCnt means this operator may be closed after fetching expectedCnt records.
+	expectedCnt float64
+	// hashcode stores the hash code of a requiredProp, will be lazily calculated when function "hashCode()" being called.
+	hashcode []byte
 }
 
-func (p *requiredProp) equal(prop *requiredProp) bool {
-	if len(p.cols) != len(prop.cols) || p.desc != prop.desc {
+func (p *requiredProp) isPrefix(prop *requiredProp) bool {
+	if len(p.cols) > len(prop.cols) || p.desc != prop.desc {
 		return false
 	}
 	if p.taskTp != prop.taskTp {
@@ -137,21 +145,29 @@ func (p *requiredProp) isEmpty() bool {
 	return len(p.cols) == 0
 }
 
-// getHashKey encodes prop to a unique key. The key will be stored in the memory table.
-func (p *requiredProp) getHashKey() ([]byte, error) {
-	datums := make([]types.Datum, 0, len(p.cols)*2+2)
-	datums = append(datums, types.NewDatum(p.desc))
-	for _, c := range p.cols {
-		datums = append(datums, types.NewDatum(c.FromID), types.NewDatum(c.Position))
+// hashCode calculates hash code for a requiredProp object.
+func (p *requiredProp) hashCode() []byte {
+	if p.hashcode != nil {
+		return p.hashcode
 	}
-	datums = append(datums, types.NewDatum(int(p.taskTp)))
-	bytes, err := codec.EncodeValue(nil, datums...)
-	return bytes, errors.Trace(err)
+	hashcodeSize := 8 + 8 + 8 + 16*len(p.cols)
+	p.hashcode = make([]byte, 0, hashcodeSize)
+	if p.desc {
+		p.hashcode = codec.EncodeInt(p.hashcode, 1)
+	} else {
+		p.hashcode = codec.EncodeInt(p.hashcode, 0)
+	}
+	p.hashcode = codec.EncodeInt(p.hashcode, int64(p.taskTp))
+	p.hashcode = codec.EncodeFloat(p.hashcode, p.expectedCnt)
+	for i, length := 0, len(p.cols); i < length; i++ {
+		p.hashcode = append(p.hashcode, p.cols[i].HashCode()...)
+	}
+	return p.hashcode
 }
 
 // String implements fmt.Stringer interface. Just for test.
 func (p *requiredProp) String() string {
-	return fmt.Sprintf("Prop{cols: %s, desc: %v, taskTp: %s}", p.cols, p.desc, p.taskTp)
+	return fmt.Sprintf("Prop{cols: %s, desc: %v, taskTp: %s, expectedCount: %v}", p.cols, p.desc, p.taskTp, p.expectedCnt)
 }
 
 type requiredProperty struct {
@@ -225,12 +241,15 @@ type LogicalPlan interface {
 	// pushDownTopN will push down the topN or limit operator during logical optimization.
 	pushDownTopN(topN *TopN) LogicalPlan
 
-	// statsProfile will return the stats for this plan.
-	statsProfile() *statsProfile
+	// prepareStatsProfile will prepare the stats for this plan.
+	prepareStatsProfile() *statsProfile
 
 	// preparePossibleProperties is only used for join and aggregation. Like group by a,b,c, all permutation of (a,b,c) is
 	// valid, but the ordered indices in leaf plan is limited. So we can get all possible order properties by a pre-walking.
 	preparePossibleProperties() [][]*expression.Column
+
+	// generatePhysicalPlans generates all possible plans.
+	generatePhysicalPlans() []PhysicalPlan
 }
 
 // PhysicalPlan is a tree of the physical operators.
@@ -258,25 +277,35 @@ type PhysicalPlan interface {
 
 	// ToPB converts physical plan to tipb executor.
 	ToPB(ctx context.Context) (*tipb.Executor, error)
+
+	// ExplainInfo returns operator information to be explained.
+	ExplainInfo() string
+
+	// getChildrenPossibleProps tries to push the required properties to its children and return all the possible properties.
+	getChildrenPossibleProps(prop *requiredProp) [][]*requiredProp
+
+	// statsProfile will return the stats for this plan.
+	statsProfile() *statsProfile
 }
 
 type baseLogicalPlan struct {
 	basePlan *basePlan
 	planMap  map[string]*physicalPlanInfo
 	taskMap  map[string]task
-	profile  *statsProfile
 }
 
 type basePhysicalPlan struct {
 	basePlan *basePlan
 }
 
-func (p *baseLogicalPlan) getTask(prop *requiredProp) (task, error) {
-	key, err := prop.getHashKey()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return p.taskMap[string(key)], nil
+// ExplainInfo implements PhysicalPlan interface.
+func (bp *basePhysicalPlan) ExplainInfo() string {
+	return ""
+}
+
+func (p *baseLogicalPlan) getTask(prop *requiredProp) task {
+	key := prop.hashCode()
+	return p.taskMap[string(key)]
 }
 
 func (p *baseLogicalPlan) getPlanInfo(prop *requiredProperty) (*physicalPlanInfo, error) {
@@ -307,13 +336,9 @@ func (p *baseLogicalPlan) convert2PhysicalPlan(prop *requiredProperty) (*physica
 	return info, p.storePlanInfo(prop, info)
 }
 
-func (p *baseLogicalPlan) storeTask(prop *requiredProp, task task) error {
-	key, err := prop.getHashKey()
-	if err != nil {
-		return errors.Trace(err)
-	}
+func (p *baseLogicalPlan) storeTask(prop *requiredProp, task task) {
+	key := prop.hashCode()
 	p.taskMap[string(key)] = task
-	return nil
 }
 
 func (p *baseLogicalPlan) storePlanInfo(prop *requiredProperty, info *physicalPlanInfo) error {
@@ -348,7 +373,7 @@ func newBasePlan(tp string, allocator *idAllocator, ctx context.Context, p Plan)
 	return &basePlan{
 		tp:        tp,
 		allocator: allocator,
-		id:        tp + allocator.allocID(),
+		id:        allocator.allocID(),
 		ctx:       ctx,
 		self:      p,
 	}
@@ -368,7 +393,7 @@ func newBasePhysicalPlan(basePlan *basePlan) basePhysicalPlan {
 	}
 }
 
-func (p *basePhysicalPlan) matchProperty(prop *requiredProperty, childPlanInfo ...*physicalPlanInfo) *physicalPlanInfo {
+func (bp *basePhysicalPlan) matchProperty(prop *requiredProperty, childPlanInfo ...*physicalPlanInfo) *physicalPlanInfo {
 	panic("You can't call this function!")
 }
 
@@ -421,10 +446,13 @@ type basePlan struct {
 
 	schema    *expression.Schema
 	tp        string
-	id        string
+	id        int
 	allocator *idAllocator
 	ctx       context.Context
 	self      Plan
+	profile   *statsProfile
+	// expectedCnt means this operator may be closed after fetching expectedCnt records.
+	expectedCnt float64
 }
 
 func (p *basePlan) copy() *basePlan {
@@ -432,9 +460,12 @@ func (p *basePlan) copy() *basePlan {
 	return &np
 }
 
+func (p *basePlan) replaceExprColumns(replace map[string]*expression.Column) {
+}
+
 // MarshalJSON implements json.Marshaler interface.
 func (p *basePlan) MarshalJSON() ([]byte, error) {
-	children := make([]string, 0, len(p.children))
+	children := make([]int, 0, len(p.children))
 	for _, child := range p.children {
 		children = append(children, child.ID())
 	}
@@ -449,8 +480,12 @@ func (p *basePlan) MarshalJSON() ([]byte, error) {
 }
 
 // ID implements Plan ID interface.
-func (p *basePlan) ID() string {
+func (p *basePlan) ID() int {
 	return p.id
+}
+
+func (p *basePlan) ExplainID() string {
+	return fmt.Sprintf("%s_%d", p.tp, p.id)
 }
 
 // SetSchema implements Plan SetSchema interface.
@@ -481,7 +516,7 @@ func (p *basePlan) ReplaceParent(parent, newPar Plan) error {
 			return nil
 		}
 	}
-	return SystemInternalErrorType.Gen("ReplaceParent Failed!")
+	return SystemInternalErrorType.Gen("ReplaceParent Failed: parent \"%s\" not found", parent.ExplainID())
 }
 
 // ReplaceChild means replace a child with another one.
@@ -492,7 +527,7 @@ func (p *basePlan) ReplaceChild(child, newChild Plan) error {
 			return nil
 		}
 	}
-	return SystemInternalErrorType.Gen("ReplaceChildren Failed!")
+	return SystemInternalErrorType.Gen("ReplaceChildren Failed: child \"%s\" not found", child.ExplainID())
 }
 
 // Parents implements Plan Parents interface.

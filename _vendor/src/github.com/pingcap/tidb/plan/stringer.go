@@ -69,13 +69,37 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 		} else {
 			str = "SemiJoin{" + strings.Join(children, "->") + "}"
 		}
+		if UseDAGPlanBuilder(x.ctx) {
+			for _, eq := range x.EqualConditions {
+				l := eq.GetArgs()[0].String()
+				r := eq.GetArgs()[1].String()
+				str += fmt.Sprintf("(%s,%s)", l, r)
+			}
+		}
 	case *PhysicalMergeJoin:
 		last := len(idxs) - 1
 		idx := idxs[last]
 		children := strs[idx:]
 		strs = strs[:idx]
 		idxs = idxs[:last]
-		str = "MergeJoin{" + strings.Join(children, "->") + "}"
+		id := "MergeJoin"
+		switch x.JoinType {
+		case SemiJoin:
+			id = "MergeSemiJoin"
+		case AntiSemiJoin:
+			id = "MergeAntiSemiJoin"
+		case LeftOuterSemiJoin:
+			id = "MergeLeftOuterSemiJoin"
+		case AntiLeftOuterSemiJoin:
+			id = "MergeAntiLeftOuterSemiJoin"
+		case LeftOuterJoin:
+			id = "MergeLeftOuterJoin"
+		case RightOuterJoin:
+			id = "MergeRightOuterJoin"
+		case InnerJoin:
+			id = "MergeInnerJoin"
+		}
+		str = id + "{" + strings.Join(children, "->") + "}"
 		for _, eq := range x.EqualConditions {
 			l := eq.GetArgs()[0].String()
 			r := eq.GetArgs()[1].String()
@@ -177,6 +201,23 @@ func toString(in Plan, strs []string, idxs []int) ([]string, []int) {
 			r := x.InnerJoinKeys[i]
 			str += fmt.Sprintf("(%s,%s)", l, r)
 		}
+	case *Analyze:
+		str = "Analyze{"
+		var children []string
+		for _, idx := range x.IdxTasks {
+			children = append(children, fmt.Sprintf("Index(%t, %s.%s)", idx.PushDown, idx.TableInfo.Name.O, idx.IndexInfo.Name.O))
+		}
+		for _, col := range x.ColTasks {
+			var colNames []string
+			if col.PKInfo != nil {
+				colNames = append(colNames, fmt.Sprintf("%s.%s", col.TableInfo.Name.O, col.PKInfo.Name.O))
+			}
+			for _, c := range col.ColsInfo {
+				colNames = append(colNames, fmt.Sprintf("%s.%s", col.TableInfo.Name.O, c.Name.O))
+			}
+			children = append(children, fmt.Sprintf("Table(%t, %s)", col.PushDown, strings.Join(colNames, ", ")))
+		}
+		str = str + strings.Join(children, ",") + "}"
 	default:
 		str = fmt.Sprintf("%T", in)
 	}

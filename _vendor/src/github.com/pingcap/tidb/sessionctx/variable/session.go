@@ -14,12 +14,14 @@
 package variable
 
 import (
+	"crypto/tls"
 	"math"
 	"sync"
 	"time"
 
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/util/auth"
 )
 
 const (
@@ -100,6 +102,8 @@ func (tc *TransactionContext) UpdateDeltaForTable(tableID int64, delta int64, co
 
 // SessionVars is to handle user-defined or global variables in the current session.
 type SessionVars struct {
+	// UsersLock is a lock for user defined variables.
+	UsersLock sync.RWMutex
 	// Users are user defined variables.
 	Users map[string]string
 	// Systems are system variables.
@@ -109,6 +113,8 @@ type SessionVars struct {
 	PreparedStmtNameToID map[string]uint32
 	// preparedStmtID is id of prepared statement.
 	preparedStmtID uint32
+	// params for prepared statements
+	PreparedParams []interface{}
 
 	// retry information
 	RetryInfo *RetryInfo
@@ -121,15 +127,20 @@ type SessionVars struct {
 	PrevLastInsertID uint64 // PrevLastInsertID is the last insert ID of previous statement.
 	LastInsertID     uint64 // LastInsertID is the auto-generated ID in the current statement.
 	InsertID         uint64 // InsertID is the given insert ID of an auto_increment column.
+	// PrevAffectedRows is the affected-rows value(DDL is 0, DML is the number of affected rows).
+	PrevAffectedRows int64
 
 	// ClientCapability is client's capability.
 	ClientCapability uint32
 
+	// TLSConnectionState is the TLS connection state (nil if not using TLS).
+	TLSConnectionState *tls.ConnectionState
+
 	// ConnectionID is the connection id of the current session.
 	ConnectionID uint64
 
-	// User is the username with which the session login.
-	User string
+	// User is the user identity with which the session login.
+	User *auth.UserIdentity
 
 	// CurrentDB is the default database of this session.
 	CurrentDB string
@@ -189,6 +200,9 @@ type SessionVars struct {
 	// BuildStatsConcurrencyVar is used to control statistics building concurrency.
 	BuildStatsConcurrencyVar int
 
+	// IndexJoinBatchSize is the batch size of a index lookup join.
+	IndexJoinBatchSize int
+
 	// IndexLookupSize is the number of handles for an index lookup task in index double read executor.
 	IndexLookupSize int
 
@@ -204,6 +218,9 @@ type SessionVars struct {
 	// BatchInsert indicates if we should split insert data into multiple batches.
 	BatchInsert bool
 
+	// BatchDelete indicates if we should split delete data into multiple batches.
+	BatchDelete bool
+
 	// MaxRowCountForINLJ defines max row count that the outer table of index nested loop join could be without force hint.
 	MaxRowCountForINLJ int
 }
@@ -215,13 +232,15 @@ func NewSessionVars() *SessionVars {
 		Systems:                    make(map[string]string),
 		PreparedStmts:              make(map[uint32]interface{}),
 		PreparedStmtNameToID:       make(map[string]uint32),
+		PreparedParams:             make([]interface{}, 10),
 		TxnCtx:                     &TransactionContext{},
 		RetryInfo:                  &RetryInfo{},
 		StrictSQLMode:              true,
 		Status:                     mysql.ServerStatusAutocommit,
 		StmtCtx:                    new(StatementContext),
-		AllowAggPushDown:           true,
+		AllowAggPushDown:           false,
 		BuildStatsConcurrencyVar:   DefBuildStatsConcurrency,
+		IndexJoinBatchSize:         DefIndexJoinBatchSize,
 		IndexLookupSize:            DefIndexLookupSize,
 		IndexLookupConcurrency:     DefIndexLookupConcurrency,
 		IndexSerialScanConcurrency: DefIndexSerialScanConcurrency,
@@ -229,11 +248,6 @@ func NewSessionVars() *SessionVars {
 		MaxRowCountForINLJ:         DefMaxRowCountForINLJ,
 	}
 }
-
-const (
-	characterSetConnection = "character_set_connection"
-	collationConnection    = "collation_connection"
-)
 
 // GetCharsetInfo gets charset and collation for current context.
 // What character set should the server translate a statement to after receiving it?
@@ -245,8 +259,8 @@ const (
 // have their own collation, which has a higher collation precedence.
 // See https://dev.mysql.com/doc/refman/5.7/en/charset-connection.html
 func (s *SessionVars) GetCharsetInfo() (charset, collation string) {
-	charset = s.Systems[characterSetConnection]
-	collation = s.Systems[collationConnection]
+	charset = s.Systems[CharacterSetConnection]
+	collation = s.Systems[CollationConnection]
 	return
 }
 
@@ -297,6 +311,18 @@ func (s *SessionVars) GetTimeZone() *time.Location {
 	return loc
 }
 
+// ResetPrevAffectedRows reset the prev-affected-rows variable.
+func (s *SessionVars) ResetPrevAffectedRows() {
+	s.PrevAffectedRows = 0
+	if s.StmtCtx != nil {
+		if s.StmtCtx.InUpdateOrDeleteStmt || s.StmtCtx.InInsertStmt {
+			s.PrevAffectedRows = int64(s.StmtCtx.AffectedRows())
+		} else if s.StmtCtx.InSelectStmt {
+			s.PrevAffectedRows = -1
+		}
+	}
+}
+
 // special session variables.
 const (
 	SQLModeVar          = "sql_mode"
@@ -304,6 +330,7 @@ const (
 	CharacterSetResults = "character_set_results"
 	MaxAllowedPacket    = "max_allowed_packet"
 	TimeZone            = "time_zone"
+	TxnIsolation        = "tx_isolation"
 )
 
 // TableDelta stands for the changed count for one table.
@@ -317,21 +344,30 @@ type TableDelta struct {
 type StatementContext struct {
 	// Set the following variables before execution
 
-	InUpdateOrDeleteStmt bool
-	IgnoreTruncate       bool
-	TruncateAsWarning    bool
-	InShowWarning        bool
+	InInsertStmt           bool
+	InUpdateOrDeleteStmt   bool
+	InSelectStmt           bool
+	IgnoreTruncate         bool
+	IgnoreZeroInDate       bool
+	DividedByZeroAsWarning bool
+	TruncateAsWarning      bool
+	OverflowAsWarning      bool
+	InShowWarning          bool
+	UseCache               bool
 
 	// mu struct holds variables that change during execution.
 	mu struct {
 		sync.Mutex
-		affectedRows uint64
-		foundRows    uint64
-		warnings     []error
+		affectedRows      uint64
+		foundRows         uint64
+		warnings          []error
+		histogramsNotLoad bool
 	}
 
 	// Copied from SessionVars.TimeZone.
-	TimeZone *time.Location
+	TimeZone     *time.Location
+	Priority     mysql.PriorityEnum
+	NotFillCache bool
 }
 
 // AddAffectedRows adds affected rows.
@@ -400,8 +436,25 @@ func (sc *StatementContext) AppendWarning(warn error) {
 	sc.mu.Unlock()
 }
 
+// SetHistogramsNotLoad sets histogramsNotLoad.
+func (sc *StatementContext) SetHistogramsNotLoad() {
+	sc.mu.Lock()
+	sc.mu.histogramsNotLoad = true
+	sc.mu.Unlock()
+}
+
+// HistogramsNotLoad gets histogramsNotLoad.
+func (sc *StatementContext) HistogramsNotLoad() bool {
+	sc.mu.Lock()
+	notLoad := sc.mu.histogramsNotLoad
+	sc.mu.Unlock()
+	return notLoad
+}
+
 // HandleTruncate ignores or returns the error based on the StatementContext state.
 func (sc *StatementContext) HandleTruncate(err error) error {
+	// TODO: At present we have not checked whether the error can be ignored or treated as warning.
+	// We will do that later, and then append WarnDataTruncated instead of the error itself.
 	if err == nil {
 		return nil
 	}
@@ -415,6 +468,19 @@ func (sc *StatementContext) HandleTruncate(err error) error {
 	return err
 }
 
+// HandleOverflow treats ErrOverflow as warnings or returns the error based on the StmtCtx.OverflowAsWarning state.
+func (sc *StatementContext) HandleOverflow(err error, warnErr error) error {
+	if err == nil {
+		return nil
+	}
+
+	if sc.OverflowAsWarning {
+		sc.AppendWarning(warnErr)
+		return nil
+	}
+	return err
+}
+
 // ResetForRetry resets the changed states during execution.
 func (sc *StatementContext) ResetForRetry() {
 	sc.mu.Lock()
@@ -422,4 +488,14 @@ func (sc *StatementContext) ResetForRetry() {
 	sc.mu.foundRows = 0
 	sc.mu.warnings = nil
 	sc.mu.Unlock()
+}
+
+// MostRestrictStateContext gets a most restrict StatementContext.
+func MostRestrictStateContext() *StatementContext {
+	return &StatementContext{
+		IgnoreTruncate:    false,
+		OverflowAsWarning: false,
+		TruncateAsWarning: false,
+		TimeZone:          time.UTC,
+	}
 }

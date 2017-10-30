@@ -314,7 +314,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 					}
 				}
 			}
-			if job.State == model.JobCancelled {
+			if job.State == model.JobStateCancelled {
 				delete(items, ts)
 			} else {
 				item.SetJob(job)
