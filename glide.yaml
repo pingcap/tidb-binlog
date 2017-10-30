@@ -143,11 +143,11 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
+  version: 3c5b40fb2000acb6b3441d5695cb470a23e8f1b5
 - package: github.com/pingcap/pd
   version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
 - package: github.com/pingcap/tidb
-  version: bffbc00302f72d0b643c9dce6244cfbcbb958df4
+  version: d122f5826c21c47c0be8e07f7e6336253fe3e41a
   subpackages:
   - ast
   - context
@@ -201,7 +201,7 @@ import:
   - util/stringutil
   - util/types
 - package: github.com/pingcap/tipb
-  version: 5e4b9cf7c32d2b09ba71aa9ab6675ec135f9fbd
+  version: eccd39c3992538c382a6351430a77233f42b1344
   subpackages:
   - go-binlog
   - go-tipb
