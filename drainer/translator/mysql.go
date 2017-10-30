@@ -493,7 +493,7 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	case mysql.TypeSet:
 		value = types.NewDatum(value.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		value = types.NewDatum(value.GetMysqlBit().Value)
+		value = types.NewDatum(value.GetMysqlBit())
 	}
 
 	return value, nil
