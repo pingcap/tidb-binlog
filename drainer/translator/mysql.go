@@ -491,7 +491,7 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	switch ft.Tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
 		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
 	case mysql.TypeEnum:
 		value = types.NewDatum(value.GetMysqlEnum().Value)

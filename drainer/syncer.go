@@ -1,10 +1,10 @@
 package drainer
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
-	"fmt"
 
 	"golang.org/x/net/context"
 
@@ -53,7 +53,7 @@ type Syncer struct {
 
 	reMap map[string]*regexp.Regexp
 
-	c    *causality
+	c *causality
 }
 
 // NewSyncer returns a Drainer instance
@@ -169,7 +169,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
 func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
-	if job.State == model.JobCancelled {
+	if job.State == model.JobStateCancelled {
 		return "", "", "", nil
 	}
 
@@ -416,7 +416,6 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	return nil
 }
 
-
 func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 	if s.cfg.DisableCausality {
 		if len(keys) > 0 {
@@ -505,7 +504,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				s.addDDLCount()
 				clearF()
-			}else if !job.isCompleteBinlog {
+			} else if !job.isCompleteBinlog {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
