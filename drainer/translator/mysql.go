@@ -3,10 +3,11 @@ package translator
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"reflect"
+	"strings"
 
 	"time"
+
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -96,7 +97,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-
 func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
@@ -174,7 +174,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 	return sqls, keys, values, nil
 }
-
 
 func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
@@ -275,7 +274,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum ) (string, []interface{}, []string, error) {
+func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum) (string, []interface{}, []string, error) {
 	columns := table.Columns
 	whereColumns, value, err := m.generateColumnAndValue(columns, columnValues)
 	if err != nil {
@@ -487,16 +486,15 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	switch ft.Tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
 		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
 	case mysql.TypeEnum:
 		value = types.NewDatum(value.GetMysqlEnum().Value)
 	case mysql.TypeSet:
 		value = types.NewDatum(value.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		value = types.NewDatum(value.GetMysqlBit().Value)
+		value = types.NewDatum(value.GetMysqlBit())
 	}
 
 	return value, nil
 }
-

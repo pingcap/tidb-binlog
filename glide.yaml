@@ -143,11 +143,11 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 1f7ed87f47f601fc2c3c08c0698f33f0896bb43e
+  version: 3c5b40fb2000acb6b3441d5695cb470a23e8f1b5
 - package: github.com/pingcap/pd
   version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
 - package: github.com/pingcap/tidb
-  version: bffbc00302f72d0b643c9dce6244cfbcbb958df4
+  version: 67bddaa1ee2395df11b98b309c90357e07c3432a
   subpackages:
   - ast
   - context
@@ -201,7 +201,7 @@ import:
   - util/stringutil
   - util/types
 - package: github.com/pingcap/tipb
-  version: 5e4b9cf7c32d2b09ba71aa9ab6675ec135f9fbd
+  version: eccd39c3992538c382a6351430a77233f42b1344
   subpackages:
   - go-binlog
   - go-tipb
@@ -272,8 +272,6 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
-  vcs: git
-  repo: https://github.com/grpc/grpc-go
   version: 3419b42955675df23457629c75f58eb8dcd56954
   subpackages:
   - codes
@@ -291,16 +289,3 @@ import:
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
-- package: github.com/davecgh/go-spew
-  version: v1.1.0
-- package: github.com/eapache/go-resiliency
-  version: v1.0.0
-- package: github.com/eapache/go-xerial-snappy
-  version: bb955e01b9346ac19dc29eb16586c90ded99a98c  
-- package: github.com/eapache/queue
-  version: v1.0.2
-- package: github.com/pierrec/lz4
-  version: v1.0.1
-- package: github.com/rcrowley/go-metrics
-  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c 
-

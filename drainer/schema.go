@@ -51,7 +51,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 	s.ignoreSchema = make(map[int64]struct{})
 
 	for _, job := range jobs {
-		if job.State == model.JobCancelled {
+		if job.State == model.JobStateCancelled {
 			continue
 		}
 

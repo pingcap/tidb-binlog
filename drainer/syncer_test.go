@@ -19,13 +19,13 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	tbName := model.NewCIStr("T")
 
 	// check cancelled job
-	job := &model.Job{ID: 1, State: model.JobCancelled}
+	job := &model.Job{ID: 1, State: model.JobStateCancelled}
 	_, _, sql, err := s.handleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
-	job = &model.Job{ID: 1, State: model.JobDone}
+	job = &model.Job{ID: 1, State: model.JobStateDone}
 	_, _, sql, err = s.handleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
