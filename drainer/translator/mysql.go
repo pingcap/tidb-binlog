@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"time"
+	"github.com/ngaut/log"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -47,6 +48,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		if remain[0] != codec.NilFlag {
 			r, err = codec.Decode(remain, 2*(len(columns)-1))
 			if err != nil {
+				log.Debugf("row: %q", row)
 				return nil, nil, nil, errors.Trace(err)
 			}
 		}
@@ -110,6 +112,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
+			log.Debugf("row: %q", row)
 			return nil, nil, nil, errors.Trace(err)
 		}
 
@@ -190,6 +193,7 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
+			log.Debugf("row: %q", row)
 			return nil, nil, nil, errors.Trace(err)
 		}
 
@@ -251,6 +255,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		var value []interface{}
 		r, err := codec.Decode(row, 2*len(columns))
 		if err != nil {
+			log.Debugf("row: %q", row)
 			return nil, nil, nil, errors.Trace(err)
 		}
 
