@@ -13,6 +13,9 @@ gc = 7
 # path to the data directory of pump's data
 data-dir = "data.pump"
 
+# kafka urls
+kafka-addrs = "127.0.0.1:9092"
+
 # number of seconds between heartbeat ticks (in 2 seconds)
 heartbeat-interval = 2
 

@@ -9,6 +9,9 @@ detect-interval = 10
 # drainer meta data directory path
 data-dir = "data.drainer"
 
+# kafka urls
+kafka-addrs = "127.0.0.1:9092"
+
 # a comma separated list of PD endpoints
 pd-urls = "http://127.0.0.1:2379"
 
