@@ -14,6 +14,7 @@
 package statistics
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"sort"
@@ -25,9 +26,9 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/sqlexec"
-	"github.com/pingcap/tidb/util/types"
 	"github.com/pingcap/tipb/go-tipb"
 )
 
@@ -564,12 +565,22 @@ func (idx *Index) getRowCount(sc *variable.StatementContext, indexRanges []*type
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		if indexRange.LowExclude {
-			lb = append(lb, 0)
-		}
 		rb, err := codec.EncodeKey(nil, indexRange.HighVal...)
 		if err != nil {
 			return 0, errors.Trace(err)
+		}
+		if bytes.Equal(lb, rb) {
+			if !indexRange.LowExclude && !indexRange.HighExclude {
+				rowCount, err1 := idx.equalRowCount(sc, types.NewBytesDatum(lb))
+				if err1 != nil {
+					return 0, errors.Trace(err1)
+				}
+				totalCount += rowCount
+			}
+			continue
+		}
+		if indexRange.LowExclude {
+			lb = append(lb, 0)
 		}
 		if !indexRange.HighExclude {
 			rb = append(rb, 0)

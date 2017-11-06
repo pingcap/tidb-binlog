@@ -2,7 +2,7 @@ package translator
 
 import (
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/util/types"
+	"github.com/pingcap/tidb/types"
 )
 
 func (t *testTranslatorSuite) TestGenColumnList(c *C) {
