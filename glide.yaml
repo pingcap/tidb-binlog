@@ -147,7 +147,7 @@ import:
 - package: github.com/pingcap/pd
   version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
 - package: github.com/pingcap/tidb
-  version: 67bddaa1ee2395df11b98b309c90357e07c3432a
+  version: 32d0fc9e762d906888a52a122c7bc0f85605ffcd
   subpackages:
   - ast
   - context
@@ -190,6 +190,7 @@ import:
   - table/tables
   - tablecodec
   - terror
+  - types
   - util
   - util/bytes
   - util/charset
@@ -199,7 +200,6 @@ import:
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
-  - util/types
 - package: github.com/pingcap/tipb
   version: eccd39c3992538c382a6351430a77233f42b1344
   subpackages:
@@ -251,6 +251,8 @@ import:
   - trace
 - package: golang.org/x/sys
   version: 8d1157a435470616f975ff9bb013bea8d0962067
+  repo: https://github.com/golang/sys.git
+  vcs: git
   subpackages:
   - unix
 - package: golang.org/x/text

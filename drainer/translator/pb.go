@@ -10,8 +10,8 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"github.com/pingcap/tidb/util/types"
 )
 
 // pbTranslator translates TiDB binlog to self-description protobuf

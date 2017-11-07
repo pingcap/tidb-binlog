@@ -36,4 +36,3 @@ func (s *testDrainerSuite) TestCausality(c *C) {
 	ca.reset()
 	c.Assert(ca.relations, HasLen, 0)
 }
-

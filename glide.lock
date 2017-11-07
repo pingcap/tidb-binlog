@@ -1,5 +1,5 @@
-hash: ee38f71359186874101753c4218d31ee8387da5f854fe2e102ec43e4dc21901f
-updated: 2017-10-30T18:44:43.566189027+08:00
+hash: ff9c7b6adfc57928b94ba2224782d10b8ad4a6a16d82459e9624f87a8395a5ba
+updated: 2017-11-06T22:04:24.859567208+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -101,6 +101,8 @@ imports:
   - capnslog
 - name: github.com/cznic/mathutil
   version: 78ad7f262603437f0ecfebc835d80094f89c8f54
+- name: github.com/cznic/sortutil
+  version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
   subpackages:
@@ -213,7 +215,7 @@ imports:
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: 67bddaa1ee2395df11b98b309c90357e07c3432a
+  version: 32d0fc9e762d906888a52a122c7bc0f85605ffcd
   subpackages:
   - ast
   - config
@@ -263,6 +265,8 @@ imports:
   - table/tables
   - tablecodec
   - terror
+  - types
+  - types/json
   - util
   - util/admin
   - util/auth
@@ -283,8 +287,6 @@ imports:
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
-  - util/types
-  - util/types/json
 - name: github.com/pingcap/tipb
   version: eccd39c3992538c382a6351430a77233f42b1344
   subpackages:
@@ -364,6 +366,8 @@ imports:
   - trace
 - name: golang.org/x/sys
   version: 8d1157a435470616f975ff9bb013bea8d0962067
+  repo: https://github.com/golang/sys.git
+  vcs: git
   subpackages:
   - unix
 - name: golang.org/x/text
