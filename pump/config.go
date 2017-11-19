@@ -12,7 +12,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
 const (
@@ -36,6 +38,7 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
+	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
@@ -67,6 +70,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
+	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
@@ -197,6 +201,23 @@ func (cfg *Config) validate() error {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
+	}
+
+	// check zookeeper
+	if cfg.ZkAddrs != "" {
+		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		kafkaUrls, err := zkClient.KafkaUrls()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// use kafka address get from zookeeper to reset the config
+		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		cfg.KafkaAddrs = kafkaUrls
 	}
 
 	return nil

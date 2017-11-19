@@ -15,6 +15,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
 const (
@@ -51,6 +52,7 @@ type Config struct {
 	DetectInterval  int           `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string        `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs      string        `toml:"kafka-addrs" json:"kafka-addrs"`
+	ZkAddrs         string        `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	LogFile         string        `toml:"log-file" json:"log-file"`
 	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
 	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
@@ -81,6 +83,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
+	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print version info")
@@ -213,5 +216,23 @@ func (cfg *Config) validate() error {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
 	}
+
+	// check zookeeper
+	if cfg.ZkAddrs != "" {
+		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		kafkaUrls, err := zkClient.KafkaUrls()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// use kafka address get from zookeeper to reset the config
+		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		cfg.KafkaAddrs = kafkaUrls
+	}
+
 	return nil
 }
