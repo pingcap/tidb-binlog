@@ -16,6 +16,8 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
         path to the pump configuration file
   -data-dir string
         the path to store binlog data
+  -kafka-addrs string 
+	kafka where pump push binlog to (default "127.0.0.1:9092")
   -gc int
         recycle binlog files older than gc days, zero means never recycle (default 7)
   -heartbeat-interval int
