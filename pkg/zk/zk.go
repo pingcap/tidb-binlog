@@ -81,17 +81,6 @@ func (c *Client) Close() {
 	c.conn.Close()
 }
 
-// WatchTopics returns a list of all registered Kafka topics, and watches that list for changes.
-func (c *Client) WatchTopics() ([]string, <-chan zk.Event, error) {
-	root := fmt.Sprintf("%s/brokers/topics", c.conf.Chroot)
-	topics, _, event, err := c.conn.ChildrenW(root)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	return topics, event, nil
-}
-
 // Topics returns a list of all registered Kafka topics.
 func (c *Client) Topics() ([]string, error) {
 	root := fmt.Sprintf("%s/brokers/topics", c.conf.Chroot)

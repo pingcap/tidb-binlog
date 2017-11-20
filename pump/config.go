@@ -206,6 +206,7 @@ func (cfg *Config) validate() error {
 	// check zookeeper
 	if cfg.ZkAddrs != "" {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
+		defer zkClient.Close()
 		if err != nil {
 			return errors.Trace(err)
 		}
