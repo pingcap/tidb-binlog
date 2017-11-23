@@ -1,177 +1,144 @@
 package checkpoint
-import (
-    "fmt"
-    "sync"
-    "time"
-    "database/sql"
-    pb "github.com/pingcap/tipb/go-binlog"
-    "github.com/juju/errors"
-    "github.com/ngaut/log"
 
-    "encoding/json"
-    _ "github.com/go-sql-driver/mysql"
+import (
+	"database/sql"
+	"encoding/json"
+	"sync"
+	"time"
+
+	"github.com/juju/errors"
+	"github.com/ngaut/log"
+	// mysql driver
+	_ "github.com/go-sql-driver/mysql"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-type mysqlSavePoint struct {
-    db             *sql.DB
-    classId        string
-    schema         string
-    table          string
-    commitTs       int64
-    positions      map[string]pb.Pos
-    saveTime       time.Time
-    sync.RWMutex
+// MysqlSavePoint is a local savepoint for mysql
+type MysqlSavePoint struct {
+	db       *sql.DB
+	schema   string
+	table    string
+	saveTime time.Time
+	sync.RWMutex
+	clusterID string
+	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
+	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
 }
 
-func ExecSQL(db *sql.DB, sql string) error {
-    stmt, err := db.Prepare(sql)
-    if err != nil {
-        log.Errorf("prepare sql error")
-        return errors.Trace(err)
-    }
+// Save checkpoint into mysql
+func (sp *MysqlSavePoint) Save(ts int64, poss map[string]pb.Pos) error {
+	sp.RLock()
+	defer sp.RUnlock()
 
-    _, err = stmt.Exec()
-    if err != nil {
-        log.Errorf("Exec sql error")
-        return errors.Trace(err)
-    }
+	for nodeID, pos := range poss {
+		newPos := pb.Pos{}
+		if pos.Offset > 5000 {
+			newPos.Suffix = pos.Suffix
+			newPos.Offset = pos.Offset - 5000
+		}
+		sp.Positions[nodeID] = newPos
+	}
 
-    return nil
+	sp.CommitTS = ts
+	sp.saveTime = time.Now()
+
+	b, err := json.Marshal(sp)
+	if err != nil {
+		log.Errorf("Json Marshal error %v", err)
+		return errors.Trace(err)
+	}
+
+	sql := genInsertSQL(sp, string(b))
+	_, err = execSQL(sp.db, sql)
+
+	return err
 }
 
+// Check we should save checkpoint
+func (sp *MysqlSavePoint) Check() bool {
+	sp.RLock()
+	defer sp.RUnlock()
 
-func (sp *mysqlSavePoint) Save(ts int64, poss map[string]pb.Pos) error{
-    sp.RLock()
-    defer sp.RUnlock()
-    savePoint := make(map[int64]map[string]pb.Pos)
-    for nodeID, pos := range poss {
-        newPos := pb.Pos{}
-        if pos.Offset > 5000 {
-            newPos.Suffix = pos.Suffix
-            newPos.Offset = pos.Offset - 5000
-        }
-        sp.positions[nodeID] = newPos
-    }
-    
-    sp.commitTs = ts
-    sp.saveTime = time.Now()
-    savePoint[ts] = sp.positions
-    b, _ := json.Marshal(savePoint)
-    str := string(b)
-    sql := fmt.Sprintf("insert into %s.%s values(%s, '%s')", sp.schema, sp.table, sp.classId, str)
-    return  ExecSQL(sp.db, sql)
+	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-func (sp *mysqlSavePoint) Check() bool {
-    sp.RLock()
-    defer sp.RUnlock()
+// Pos return Meta information
+func (sp *MysqlSavePoint) Pos() (int64, map[string]pb.Pos) {
+	sp.RLock()
+	defer sp.RUnlock()
 
-    if time.Since(sp.saveTime) >= maxSaveTime {
-        return true
-    }
+	poss := make(map[string]pb.Pos)
+	for nodeID, pos := range sp.Positions {
+		poss[nodeID] = pb.Pos{
+			Suffix: pos.Suffix,
+			Offset: pos.Offset,
+		}
+	}
 
-    return false
-}
-
-func (sp *mysqlSavePoint) Pos() (int64, map[string]pb.Pos) {
-
-    sp.RLock()
-    defer sp.RUnlock()
-
-    poss := make(map[string]pb.Pos)
-    for nodeID, pos := range sp.positions {
-        poss[nodeID] = pb.Pos{
-            Suffix: pos.Suffix,
-            Offset: pos.Offset,
-        }
-    }
-    return sp.commitTs, poss
+	return sp.CommitTS, poss
 }
 
 func newMysqlSavePoint(cfg *DBConfig) (SaveCheckPoint, error) {
-    db, err := openDB("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password)
-    if err != nil {
-    log.Errorf("open database error %v", err)
-        return &mysqlSavePoint{}, errors.Trace(err)
-    }
+	db, err := openDB("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password)
+	if err != nil {
+		log.Errorf("open database error %v", err)
+		return &MysqlSavePoint{}, errors.Trace(err)
+	}
 
+	sp := &MysqlSavePoint{
+		db:        db,
+		clusterID: cfg.ClusterID,
+		schema:    cfg.Schema,
+		table:     cfg.Table,
+		CommitTS:  0,
+		Positions: make(map[string]pb.Pos),
+	}
 
-    sql := fmt.Sprintf("create schema if not exists %s", cfg.Schema)
-    rows, ero := db.Query(sql)
-    if ero != nil {
-        log.Errorf("create schema error")
-        return &mysqlSavePoint{}, errors.Trace(ero)
+	sql := genCreateSchema(sp)
+	_, err = execSQL(db, sql)
+	if err != nil {
+		log.Errorf("Create schema error")
+		return &MysqlSavePoint{}, errors.Trace(err)
 
-    }
-    var ts int64
-    poss := make(map[string]pb.Pos)
-    if !rows.Next() {
-	    sql := fmt.Sprintf("select savePoint from %s.%s where classId = %s", cfg.Schema, cfg.Table, cfg.ClassId)
-            rows, err = db.Query(sql)
-            if err != nil {
-        	    sql = fmt.Sprintf("create table %s.%s(classId varchar(255) primary key, savePoint varchar(255))", cfg.Schema, cfg.Table)
-        	    rows, err = db.Query(sql)
-        	    if err != nil {
-            		log.Errorf("Exec error %v;", err)
-                	return &mysqlSavePoint{}, errors.Trace(err)
-		        }
-	        }
-            if rows.Next(){
-                var str string
-                savePoint := make(map[int64]map[string]pb.Pos)
-                err = rows.Scan(&str)
-                if err != nil {
-                    log.Errorf("Scan error %v;", err)
-                    return &mysqlSavePoint{}, errors.Trace(err)
-                }
-                if err := json.Unmarshal([]byte(str), &savePoint); err != nil{
-                    log.Errorf("Json Unmarshal error %v;", err)
-                    return &mysqlSavePoint{}, errors.Trace(err)
-                }
-                for k, v := range savePoint{
-                    ts = k
-                    poss = v
-                }
-            }
-   }
+	}
 
-    return &mysqlSavePoint{
-        db: db,
-        classId: cfg.ClassId,
-        schema: cfg.Schema,
-        table:  cfg.Table,
-        commitTs: ts,
-        positions: poss,
-    }, nil
+	sql = genCreateTable(sp)
+	_, err = execSQL(db, sql)
+	if err != nil {
+		log.Errorf("Create table error")
+		return &MysqlSavePoint{}, errors.Trace(err)
+
+	}
+
+	err = sp.Load()
+	return sp, err
 }
 
+// Load implements checkpoint.Load interface
+func (sp *MysqlSavePoint) Load() error {
+	sp.RLock()
+	defer sp.RUnlock()
 
-func (sp *mysqlSavePoint) Load() error {
-    sp.RLock()
-    defer sp.RUnlock()
-    sql := fmt.Sprintf("select savePoint from %s.%s where classId = %s", sp.schema, sp.table, sp.classId)
-    rows, err := sp.db.Query(sql)
-    if err != nil {
-	log.Errorf("select savePoint error %v", err)
-	return errors.Trace(err)
-    }
-    var str string
-    for rows.Next() {
-	err = rows.Scan(&str)
+	sql := genSelectSQL(sp)
+	rows, err := querySQL(sp.db, sql)
 	if err != nil {
-	    log.Errorf("rows Scan error %v", err)
-	    return errors.Trace(err)
+		log.Errorf("select savePoint error %v", err)
+		return errors.Trace(err)
 	}
-    }
-    tmp := make(map[int64] map[string]pb.Pos)
-    if err = json.Unmarshal([]byte(str), &tmp); err != nil{
-	    log.Errorf("json Unmarshal error %v", err)
-	    return errors.Trace(err)
-    }
-    
-    for k, v := range tmp {
-	sp.commitTs = k
-	sp.positions = v
-    }
-    return nil
+
+	var str string
+
+	for rows.Next() {
+		err = rows.Scan(&str)
+		if err != nil {
+			log.Errorf("rows Scan error %v", err)
+			return errors.Trace(err)
+		}
+	}
+
+	if len(str) == 0 {
+		return nil
+	}
+
+	return json.Unmarshal([]byte(str), sp)
 }
