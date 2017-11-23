@@ -17,10 +17,25 @@ type testExecutorSuite struct{}
 
 func (*testExecutorSuite) TestnewMysqlSavePoint(c *C) {
 	cfg := new(DBConfig)
-	cfg.Host = "127.0.0.1"
-	cfg.Port = 3306
-	cfg.User = "root"
-	cfg.Password = ""
+
+	host := os.Getenv("MYSQL_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := strconv.Atoi(os.Getenv("MYSQL_PORT"))
+	if port == 0 {
+		port = 3306
+	}
+	user := os.Getenv("MYSQL_USER")
+	if user == "" {
+		user = "root"
+	}
+	pass := os.Getenv("MYSQL_PSWD")
+
+	cfg.Host = host
+	cfg.Port = port
+	cfg.User = user
+	cfg.Password = pass
 	cfg.ClusterID = "123"
 	cfg.Schema = "test"
 	cfg.Table = "t1"
