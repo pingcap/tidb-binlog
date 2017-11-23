@@ -1,6 +1,8 @@
 package checkpoint
 
 import (
+	"os"
+	"strconv"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -22,7 +24,7 @@ func (*testExecutorSuite) TestnewMysqlSavePoint(c *C) {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	port := strconv.Atoi(os.Getenv("MYSQL_PORT"))
+	port, _ := strconv.Atoi(os.Getenv("MYSQL_PORT"))
 	if port == 0 {
 		port = 3306
 	}
