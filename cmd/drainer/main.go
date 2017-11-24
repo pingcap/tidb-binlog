@@ -26,13 +26,6 @@ func main() {
 	drainer.InitLogger(cfg)
 	drainer.PrintVersionInfo()
 
-	if cfg.GenSavepoint {
-		if err := drainer.GenSavepointInfo(cfg); err != nil {
-			log.Fatalf("fail to generate savepoint error %v", err)
-		}
-		os.Exit(0)
-	}
-
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {
 		log.Fatalf("create drainer server error, %s", errors.ErrorStack(err))

@@ -19,7 +19,7 @@ type testCheckPointSuite struct{}
 
 func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg := new(Config)
-	cfg.db = new(DBConfig)
+	cfg.Db = new(DBConfig)
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -33,10 +33,10 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 		user = "root"
 	}
 	pass := os.Getenv("MYSQL_PSWD")
-	cfg.db.Host = host
-	cfg.db.Port = port
-	cfg.db.User = user
-	cfg.db.Password = pass
+	cfg.Db.Host = host
+	cfg.Db.Port = port
+	cfg.Db.User = user
+	cfg.Db.Password = pass
 	cfg.ClusterID = "checkpoint"
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"

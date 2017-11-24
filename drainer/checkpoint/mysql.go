@@ -33,7 +33,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		return &MysqlCheckPoint{}, errors.Trace(res)
 	}
 
-	db, err := openDB("mysql", cfg.db.Host, cfg.db.Port, cfg.db.User, cfg.db.Password)
+	db, err := openDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
 		log.Errorf("open database error %v", err)
 		return &MysqlCheckPoint{}, errors.Trace(err)

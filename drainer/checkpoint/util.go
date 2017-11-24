@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -20,7 +19,7 @@ type DBConfig struct {
 
 // Config is the savepoint configuration
 type Config struct {
-	db     *DBConfig
+	Db     *DBConfig
 	Schema string
 	Table  string
 
@@ -40,21 +39,19 @@ func openDB(proto string, host string, port int, username string, password strin
 
 func checkConfig(cfg *Config) error {
 	if cfg == nil {
-		log.Errorf("cfg is nil error")
-		return errors.New("cfg is nil error")
+		cfg = new(Config)
 	}
-	if cfg.db == nil {
-		log.Errorf("cfg.db is nil error")
-		return errors.New("cfg.db is nil error")
+	if cfg.Db == nil {
+		cfg.Db = new(DBConfig)
 	}
-	if cfg.db.Host == "" {
-		cfg.db.Host = "127.0.0.1"
+	if cfg.Db.Host == "" {
+		cfg.Db.Host = "127.0.0.1"
 	}
-	if cfg.db.Port == 0 {
-		cfg.db.Port = 3306
+	if cfg.Db.Port == 0 {
+		cfg.Db.Port = 3306
 	}
-	if cfg.db.User == "" {
-		cfg.db.User = "root"
+	if cfg.Db.User == "" {
+		cfg.Db.User = "root"
 	}
 	if cfg.ClusterID == "" {
 		cfg.ClusterID = "checkpoint"
