@@ -10,9 +10,9 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
