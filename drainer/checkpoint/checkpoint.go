@@ -19,6 +19,9 @@ type CheckPoint interface {
 
 	// Check checks whether we should save checkpoint.
 	Check() bool
+
+	// String returns CommitTS and Offset
+	String() string
 }
 
 // NewCheckPoint returns a CheckPoint instance by giving name

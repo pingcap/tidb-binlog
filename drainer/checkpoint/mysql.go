@@ -3,6 +3,7 @@ package checkpoint
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -145,4 +146,10 @@ func (sp *MysqlCheckPoint) Load() error {
 	}
 
 	return json.Unmarshal([]byte(str), sp)
+}
+
+// String inplements checkpoint.String interface
+func (sp *MysqlCheckPoint) String() string {
+	ts, poss := sp.Pos()
+	return fmt.Sprintf("binlog %s commitTS = %d and positions = %+v", sp.clusterID, ts, poss)
 }
