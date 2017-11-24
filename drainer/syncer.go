@@ -12,6 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -28,7 +29,7 @@ var (
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
 type Syncer struct {
 	schema *Schema
-	meta   Meta
+	cp     checkpoint.CheckPoint
 
 	cfg *SyncerConfig
 
@@ -57,16 +58,16 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
-	syncer.meta = meta
+	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxChannelSize)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS, _ = meta.Pos()
+	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
 
@@ -351,7 +352,7 @@ func (s *Syncer) checkWait(job *job) bool {
 	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
 		return true
 	}
-	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.meta.Check() {
+	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.cp.Check() {
 		return true
 	}
 	return false
@@ -440,14 +441,14 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 }
 
 func (s *Syncer) flushJobs() error {
-	log.Infof("flush all jobs meta = %v", s.meta)
+	log.Infof("flush all jobs checkpoint = %v", s.cp)
 	job := &job{binlogTp: translator.FLUSH}
 	s.addJob(job)
 	return nil
 }
 
 func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
-	err := s.meta.Save(ts, positions)
+	err := s.cp.Save(ts, positions)
 	if err != nil {
 		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
 	}

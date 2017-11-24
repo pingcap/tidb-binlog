@@ -21,7 +21,7 @@ type CheckPoint interface {
 	Check() bool
 }
 
-// NewCheckPoint return a CheckPoint instance by giving name
+// NewCheckPoint returns a CheckPoint instance by giving name
 func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	switch name {
 	case "mysql":

@@ -61,6 +61,7 @@ func (sp *PbCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	for nodeID, pos := range poss {
 		newPos := pb.Pos{}
 		if pos.Offset > 5000 {
+			newPos.Suffix = pos.Suffix
 			newPos.Offset = pos.Offset - 5000
 		}
 		sp.Positions[nodeID] = newPos

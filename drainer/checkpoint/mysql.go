@@ -28,6 +28,11 @@ type MysqlCheckPoint struct {
 }
 
 func newMysql(cfg *Config) (CheckPoint, error) {
+	if res := checkConfig(cfg); res != nil {
+		log.Errorf("Argument cfg is Invaild %v", res)
+		return &MysqlCheckPoint{}, errors.Trace(res)
+	}
+
 	db, err := openDB("mysql", cfg.db.Host, cfg.db.Port, cfg.db.User, cfg.db.Password)
 	if err != nil {
 		log.Errorf("open database error %v", err)
@@ -39,16 +44,14 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		clusterID: cfg.ClusterID,
 		schema:    cfg.Schema,
 		table:     cfg.Table,
-		CommitTS:  0,
 		Positions: make(map[string]pb.Pos),
 	}
 
 	sql := genCreateSchema(sp)
 	_, err = execSQL(db, sql)
 	if err != nil {
-		log.Errorf("Create schema error")
+		log.Errorf("Create schema error %v", err)
 		return sp, errors.Trace(err)
-
 	}
 
 	sql = genCreateTable(sp)
@@ -60,7 +63,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	}
 
 	err = sp.Load()
-	return sp, err
+	return sp, errors.Trace(err)
 }
 
 // Save saves checkpoint into mysql
@@ -89,10 +92,10 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sql := genInsertSQL(sp, string(b))
 	_, err = execSQL(sp.db, sql)
 
-	return err
+	return errors.Trace(err)
 }
 
-// Check we should save checkpoint
+// Check implements CheckPoint interface
 func (sp *MysqlCheckPoint) Check() bool {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -100,7 +103,7 @@ func (sp *MysqlCheckPoint) Check() bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos return Meta information
+// Pos returns Meta information
 func (sp *MysqlCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -121,14 +124,8 @@ func (sp *MysqlCheckPoint) Load() error {
 	sp.Lock()
 	defer sp.Unlock()
 
-	sql := genSelectCountSQL(sp)
+	sql := genSelectSQL(sp)
 	rows, err := querySQL(sp.db, sql)
-	if !rows.Next() {
-		return nil
-	}
-
-	sql = genSelectSQL(sp)
-	rows, err = querySQL(sp.db, sql)
 	if err != nil {
 		log.Errorf("select checkPoint error %v", err)
 		return errors.Trace(err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -37,6 +38,37 @@ func openDB(proto string, host string, port int, username string, password strin
 	return db, nil
 }
 
+func checkConfig(cfg *Config) error {
+	if cfg == nil {
+		log.Errorf("cfg is nil error")
+		return errors.New("cfg is nil error")
+	}
+	if cfg.db == nil {
+		log.Errorf("cfg.db is nil error")
+		return errors.New("cfg.db is nil error")
+	}
+	if cfg.db.Host == "" {
+		cfg.db.Host = "127.0.0.1"
+	}
+	if cfg.db.Port == 0 {
+		cfg.db.Port = 3306
+	}
+	if cfg.db.User == "" {
+		cfg.db.User = "root"
+	}
+	if cfg.ClusterID == "" {
+		cfg.ClusterID = "checkpoint"
+	}
+	if cfg.Schema == "" {
+		cfg.Schema = "tidb_binlog"
+	}
+	if cfg.Table == "" {
+		cfg.Table = "checkpoint"
+	}
+
+	return nil
+}
+
 func execSQL(db *sql.DB, sql string) (sql.Result, error) {
 	return db.Exec(sql)
 }
@@ -59,8 +91,4 @@ func genInsertSQL(sp *MysqlCheckPoint, str string) string {
 
 func genSelectSQL(sp *MysqlCheckPoint) string {
 	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = '%s'", sp.schema, sp.table, sp.clusterID)
-}
-
-func genSelectCountSQL(sp *MysqlCheckPoint) string {
-	return fmt.Sprintf("select * from %s.%s", sp.schema, sp.table)
 }
