@@ -39,8 +39,8 @@ func (*testExecutorSuite) TestnewMysqlSavePoint(c *C) {
 	cfg.User = user
 	cfg.Password = pass
 	cfg.ClusterID = "123"
-	cfg.Schema = "test"
-	cfg.Table = "t1"
+	cfg.Schema = "tidb_binlog"
+	cfg.Table = "checkpoint"
 	sp, err := newMysqlSavePoint(cfg)
 	c.Assert(err, IsNil)
 
