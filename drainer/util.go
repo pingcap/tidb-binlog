@@ -66,7 +66,7 @@ func CalculateNextPos(item binlog.Entity) binlog.Pos {
 }
 
 // GenCheckPointCfg returns an CheckPoint config instance
-func GenCheckPointCfg(cfg *Config, id string) *checkpoint.Config {
+func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	dbCfg := checkpoint.DBConfig{
 		Host:     cfg.SyncerCfg.To.Host,
 		User:     cfg.SyncerCfg.To.User,

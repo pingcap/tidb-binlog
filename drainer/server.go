@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -82,9 +81,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	win := NewDepositWindow()
 
-	var tmp []byte
-	tmp = strconv.AppendUint(tmp, clusterID, 10)
-	cpCfg := GenCheckPointCfg(cfg, string(tmp))
+	cpCfg := GenCheckPointCfg(cfg, clusterID)
 	cp, _ := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	err = cp.Load()
 	if err != nil {

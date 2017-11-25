@@ -17,7 +17,7 @@ import (
 // MysqlCheckPoint is a local savepoint struct for mysql
 type MysqlCheckPoint struct {
 	sync.RWMutex
-	clusterID string
+	clusterID uint64
 
 	db       *sql.DB
 	schema   string
@@ -67,7 +67,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	return sp, errors.Trace(err)
 }
 
-// Save saves checkpoint into mysql
+// Save implements checkpoint.Save interface
 func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
@@ -96,7 +96,7 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	return errors.Trace(err)
 }
 
-// Check implements CheckPoint interface
+// Check implements CheckPoint.Check interface
 func (sp *MysqlCheckPoint) Check() bool {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -104,7 +104,7 @@ func (sp *MysqlCheckPoint) Check() bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos returns Meta information
+// Pos implements CheckPoint.Pos interface
 func (sp *MysqlCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -120,7 +120,7 @@ func (sp *MysqlCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	return sp.CommitTS, poss
 }
 
-// Load implements checkpoint.Load interface
+// Load implements CheckPoint.Load interface
 func (sp *MysqlCheckPoint) Load() error {
 	sp.Lock()
 	defer sp.Unlock()
@@ -148,7 +148,7 @@ func (sp *MysqlCheckPoint) Load() error {
 	return json.Unmarshal([]byte(str), sp)
 }
 
-// String inplements checkpoint.String interface
+// String inplements CheckPoint.String interface
 func (sp *MysqlCheckPoint) String() string {
 	ts, poss := sp.Pos()
 	return fmt.Sprintf("binlog %s commitTS = %d and positions = %+v", sp.clusterID, ts, poss)

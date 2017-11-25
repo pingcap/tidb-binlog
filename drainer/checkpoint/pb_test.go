@@ -11,14 +11,15 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	fileName := "test"
 	notExistFileName := "test_not_exist"
 	cfg := new(Config)
-	cfg.ClusterID = fileName
+	cfg.Name = fileName
+	nodeID := fileName
 	meta, err := newPb(cfg)
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(fileName)
 
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
-	testPos[cfg.ClusterID] = pb.Pos{
+	testPos[nodeID] = pb.Pos{
 		Suffix: 0,
 		Offset: 10000,
 	}
@@ -29,7 +30,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	ts, poss := meta.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss[cfg.ClusterID], DeepEquals, pb.Pos{
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{
 		Suffix: 0,
 		Offset: 5000,
 	})
@@ -40,13 +41,13 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	ts, poss = meta.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss["test"], DeepEquals, pb.Pos{
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{
 		Suffix: 0,
 		Offset: 5000,
 	})
 
 	// check not exist meta file
-	cfg.ClusterID = notExistFileName
+	cfg.Name = notExistFileName
 	err = meta.Load()
 	c.Assert(err, IsNil)
 }

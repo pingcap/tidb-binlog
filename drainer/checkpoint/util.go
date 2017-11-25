@@ -22,8 +22,9 @@ type Config struct {
 	Db     *DBConfig
 	Schema string
 	Table  string
+	Name   string
 
-	ClusterID     string
+	ClusterID     uint64
 	BinlogFileDir string `toml:"dir" json:"dir"`
 }
 
@@ -53,8 +54,8 @@ func checkConfig(cfg *Config) error {
 	if cfg.Db.User == "" {
 		cfg.Db.User = "root"
 	}
-	if cfg.ClusterID == "" {
-		cfg.ClusterID = "checkpoint"
+	if cfg.Name == "" {
+		cfg.Name = "checkpoint"
 	}
 	if cfg.Schema == "" {
 		cfg.Schema = "tidb_binlog"
@@ -79,13 +80,13 @@ func genCreateSchema(sp *MysqlCheckPoint) string {
 }
 
 func genCreateTable(sp *MysqlCheckPoint) string {
-	return fmt.Sprintf("create table if not exists %s.%s(clusterID varchar(255) primary key, checkPoint varchar(255))", sp.schema, sp.table)
+	return fmt.Sprintf("create table if not exists %s.%s(clusterID bigint unsigned primary key, checkPoint varchar(255))", sp.schema, sp.table)
 }
 
 func genInsertSQL(sp *MysqlCheckPoint, str string) string {
-	return fmt.Sprintf("insert into %s.%s values('%s', '%s')", sp.schema, sp.table, sp.clusterID, str)
+	return fmt.Sprintf("insert into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
 }
 
 func genSelectSQL(sp *MysqlCheckPoint) string {
-	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = '%s'", sp.schema, sp.table, sp.clusterID)
+	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
 }

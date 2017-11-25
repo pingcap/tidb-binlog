@@ -37,15 +37,17 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.Db.Port = port
 	cfg.Db.User = user
 	cfg.Db.Password = pass
-	cfg.ClusterID = "checkpoint"
+	cfg.ClusterID = 123
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
+	cfg.Name = "checkpoint"
+	nodeID := cfg.Name
 	sp, err := newMysql(cfg)
 	c.Assert(err, IsNil)
 
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
-	testPos[cfg.ClusterID] = pb.Pos{
+	testPos[nodeID] = pb.Pos{
 		Suffix: 0,
 		Offset: 5000,
 	}
@@ -55,7 +57,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	ts, poss := sp.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss[cfg.ClusterID], DeepEquals, pb.Pos{Suffix: 0, Offset: 0})
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{Suffix: 0, Offset: 0})
 
 	err = sp.Load()
 	c.Assert(err, IsNil)

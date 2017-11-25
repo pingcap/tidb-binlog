@@ -32,7 +32,7 @@ type PbCheckPoint struct {
 
 // NewPb creates a new Pb.
 func newPb(cfg *Config) (CheckPoint, error) {
-	return &PbCheckPoint{name: cfg.ClusterID, Positions: make(map[string]pb.Pos)}, nil
+	return &PbCheckPoint{name: cfg.Name, Positions: make(map[string]pb.Pos)}, nil
 }
 
 // Load implements CheckPointor.Load interface.
