@@ -81,12 +81,15 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	win := NewDepositWindow()
 
-	cpCfg := GenCheckPointCfg(cfg, clusterID)
+	cpCfg = GenCheckPointCfg(cfg, clusterID)
+        log.Infof("CheckPoint config is %+v", cpCfg)
 	cp, _ := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
-	err = cp.Load()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+        log.Infof("DestDBTyep is %v, NewCheckPoint is %+v", cfg.SyncerCfg, cp)
+        
+        err = cp.Load()
+        if err != nil {
+            return nil, errors.Trace(err)
+        }
 
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {

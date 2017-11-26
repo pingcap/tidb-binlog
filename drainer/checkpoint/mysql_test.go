@@ -61,7 +61,4 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 
 	err = sp.Load()
 	c.Assert(err, IsNil)
-
-	_, err = genDropSchema(sp)
-	c.Assert(err, IsNil)
 }
