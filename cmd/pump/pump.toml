@@ -6,6 +6,12 @@ addr = "127.0.0.1:8250"
 # addr(i.e. 'host:port') to advertise to the public
 advertise-addr = ""
 
+# kafka addrs where pump push binlog to
+kafka-addrs = "127.0.0.1:9092"
+
+# zookeeper addrs, get kafka-addrs from zookeeper if uncomment this
+# zookeeper-addrs = "127.0.0.1:2181"
+ 
 # a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. 
 # (default value is 0, means binlog data would never be removed)
 gc = 7
