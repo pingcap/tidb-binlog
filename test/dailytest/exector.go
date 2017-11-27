@@ -28,7 +28,8 @@ func RunDailyTest(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobC
 				log.Fatal(err)
 			}
 			defer closeDBs(dbs)
-
+                        fmt.Printf("dbs is %v\n",dbs)
+			fmt.Printf("tables is %v\n",tableSQLs)
 			err = execSQL(dbs[0], tableSQLs[i])
 			if err != nil {
 				log.Fatal(err)
