@@ -48,8 +48,8 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
 	testPos[nodeID] = pb.Pos{
-		Suffix: 0,
-		Offset: 5000,
+		Suffix: 10,
+		Offset: 10000,
 	}
 	err = sp.Save(testTs, testPos)
 	c.Assert(err, IsNil)
@@ -57,8 +57,13 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	ts, poss := sp.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss[nodeID], DeepEquals, pb.Pos{Suffix: 0, Offset: 0})
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 
-	err = sp.Load()
+	sp1, ero := newMysql(cfg)
+	c.Assert(ero, IsNil)
+	err = sp1.Load()
 	c.Assert(err, IsNil)
+	sp2 := sp1.(*MysqlCheckPoint)
+	c.Assert(sp2.CommitTS, Equals, ts)
+	c.Assert(sp2.Positions[nodeID], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 }

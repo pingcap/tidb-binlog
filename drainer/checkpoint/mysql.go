@@ -90,7 +90,7 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 		return errors.Trace(err)
 	}
 
-	sql := genInsertSQL(sp, string(b))
+	sql := genReplaceSQL(sp, string(b))
 	_, err = execSQL(sp.db, sql)
 
 	return errors.Trace(err)

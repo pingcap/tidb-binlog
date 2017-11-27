@@ -7,14 +7,14 @@ job-count = 1000
 batch = 10
 
 [source-db]
-host = "127.0.0.1"
+host = "1ocalhost"
 user = "root"
 password = ""
 name = "test"
 port = 4000
 
 [target-db]
-host = "127.0.0.1"
+host = "localhost"
 user = "root"
 password = ""
 name = "test"

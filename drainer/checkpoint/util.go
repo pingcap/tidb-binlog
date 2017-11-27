@@ -83,10 +83,16 @@ func genCreateTable(sp *MysqlCheckPoint) string {
 	return fmt.Sprintf("create table if not exists %s.%s(clusterID bigint unsigned primary key, checkPoint varchar(255))", sp.schema, sp.table)
 }
 
-func genInsertSQL(sp *MysqlCheckPoint, str string) string {
-	return fmt.Sprintf("insert into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
+func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
+	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
 }
 
 func genSelectSQL(sp *MysqlCheckPoint) string {
 	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
+}
+
+func genDropSchema(cp CheckPoint) (sql.Result, error) {
+	sp := cp.(*MysqlCheckPoint)
+	sql := fmt.Sprintf("drop schema if exists %s", sp.schema)
+	return sp.db.Exec(sql)
 }

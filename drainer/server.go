@@ -79,18 +79,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
-        log.Infof("CheckPoint config is CheckPoint.config")
 	win := NewDepositWindow()
-
-	cpCfg = GenCheckPointCfg(cfg, clusterID)
-        log.Infof("CheckPoint config is %+v", cpCfg)
+	cpCfg := GenCheckPointCfg(cfg, clusterID)
+	log.Infof("CheckPointCfg is %+v", cpCfg)
 	cp, _ := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
-        log.Infof("DestDBTyep is %v, NewCheckPoint is %+v", cfg.SyncerCfg, cp)
-        
-        err = cp.Load()
-        if err != nil {
-            return nil, errors.Trace(err)
-        }
+	log.Infof("cfg.SyncerCfg.DestDBType is %+v", cfg.SyncerCfg.DestDBType)
+	err = cp.Load()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
