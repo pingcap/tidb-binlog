@@ -10,6 +10,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -41,7 +42,7 @@ type Collector struct {
 	bh         *binlogHeap
 	syncer     *Syncer
 	latestTS   int64
-	meta       Meta
+	cp         checkpoint.CheckPoint
 
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -53,7 +54,7 @@ type Collector struct {
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, m Meta) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -87,7 +88,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, m 
 		bh:         newBinlogHeap(maxHeapSize),
 		window:     w,
 		syncer:     s,
-		meta:       m,
+		cp:         cpt,
 		tiClient:   tiClient,
 		tiStore:    tiStore,
 		notifyChan: make(chan *notifyResult),
@@ -302,7 +303,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
-	_, poss := c.meta.Pos()
+	_, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
 	if !ok {
 		return binlog.Pos{}, nil

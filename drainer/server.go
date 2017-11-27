@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -80,18 +80,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	pdCli.Close()
 
 	win := NewDepositWindow()
-	meta := NewLocalMeta(path.Join(cfg.DataDir, "savePoint"))
-	err = meta.Load()
+
+	cpCfg := GenCheckPointCfg(cfg, clusterID)
+	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err := NewSyncer(ctx, meta, cfg.SyncerCfg)
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, meta)
+	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

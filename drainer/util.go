@@ -7,12 +7,14 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -61,6 +63,21 @@ func CalculateNextPos(item binlog.Entity) binlog.Pos {
 	// 4 bytes(magic) + 8 bytes(size) + length of payload + 4 bytes(CRC)
 	pos.Offset += int64(len(item.Payload) + 16)
 	return pos
+}
+
+// GenCheckPointCfg returns an CheckPoint config instance
+func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
+	dbCfg := checkpoint.DBConfig{
+		Host:     cfg.SyncerCfg.To.Host,
+		User:     cfg.SyncerCfg.To.User,
+		Password: cfg.SyncerCfg.To.Password,
+		Port:     cfg.SyncerCfg.To.Port,
+	}
+	return &checkpoint.Config{
+		Db:            &dbCfg,
+		ClusterID:     id,
+		BinlogFileDir: path.Join(cfg.DataDir, "savepoint"),
+	}
 }
 
 // combine suffix offset in one float, the format would be suffix.offset

@@ -1,4 +1,4 @@
-package drainer
+package checkpoint
 
 import (
 	"os"
@@ -7,42 +7,47 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-func (t *testDrainerSuite) TestMeta(c *C) {
+func (t *testCheckPointSuite) TestPb(c *C) {
 	fileName := "test"
 	notExistFileName := "test_not_exist"
-	meta := NewLocalMeta(fileName)
+	cfg := new(Config)
+	cfg.Name = fileName
+	nodeID := fileName
+	meta, err := newPb(cfg)
+	c.Assert(err, IsNil)
 	defer os.RemoveAll(fileName)
 
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
-	testPos["test"] = pb.Pos{
+	testPos[nodeID] = pb.Pos{
 		Suffix: 0,
 		Offset: 10000,
 	}
 	// save ts
-	err := meta.Save(testTs, testPos)
+	err = meta.Save(testTs, testPos)
 	c.Assert(err, IsNil)
 	// check ts
 	ts, poss := meta.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss["test"], DeepEquals, pb.Pos{
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{
 		Suffix: 0,
 		Offset: 5000,
 	})
+
 	// check load ts
-	meta2 := NewLocalMeta(fileName)
-	err = meta2.Load()
+	err = meta.Load()
 	c.Assert(err, IsNil)
-	ts, poss = meta2.Pos()
+	ts, poss = meta.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss["test"], DeepEquals, pb.Pos{
+	c.Assert(poss[nodeID], DeepEquals, pb.Pos{
 		Suffix: 0,
 		Offset: 5000,
 	})
+
 	// check not exist meta file
-	meta3 := NewLocalMeta(notExistFileName)
-	err = meta3.Load()
+	cfg.Name = notExistFileName
+	err = meta.Load()
 	c.Assert(err, IsNil)
 }
