@@ -79,6 +79,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
+        log.Infof("CheckPoint config is CheckPoint.config")
 	win := NewDepositWindow()
 
 	cpCfg = GenCheckPointCfg(cfg, clusterID)
