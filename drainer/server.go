@@ -80,11 +80,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	pdCli.Close()
 
 	win := NewDepositWindow()
+
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
-	log.Infof("CheckPointCfg is %+v", cpCfg)
-	cp, _ := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
-	log.Infof("cfg.SyncerCfg.DestDBType is %+v", cfg.SyncerCfg.DestDBType)
-	err = cp.Load()
+	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
