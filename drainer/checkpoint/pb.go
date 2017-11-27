@@ -119,5 +119,5 @@ func (sp *PbCheckPoint) Pos() (int64, map[string]pb.Pos) {
 // String implements CheckPoint.String interface
 func (sp *PbCheckPoint) String() string {
 	ts, poss := sp.Pos()
-	return fmt.Sprintf("binlog commitTS = %d positions = %+v", ts, poss)
+	return fmt.Sprintf("binlog commitTS = %d and positions = %+v", ts, poss)
 }
