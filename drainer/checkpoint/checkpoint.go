@@ -14,11 +14,11 @@ type CheckPoint interface {
 	// Save saves checkpoint information.
 	Save(int64, map[string]pb.Pos) error
 
-	// Pos gets position information.
-	Pos() (int64, map[string]pb.Pos)
-
 	// Check checks whether we should save checkpoint.
 	Check() bool
+
+	// Pos gets position information.
+	Pos() (int64, map[string]pb.Pos)
 
 	// String returns CommitTS and Offset
 	String() string

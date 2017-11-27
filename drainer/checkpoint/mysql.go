@@ -67,6 +67,34 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	return sp, errors.Trace(err)
 }
 
+// Load implements CheckPoint.Load interface
+func (sp *MysqlCheckPoint) Load() error {
+	sp.Lock()
+	defer sp.Unlock()
+
+	sql := genSelectSQL(sp)
+	rows, err := querySQL(sp.db, sql)
+	if err != nil {
+		log.Errorf("select checkPoint error %v", err)
+		return errors.Trace(err)
+	}
+
+	var str string
+	for rows.Next() {
+		err = rows.Scan(&str)
+		if err != nil {
+			log.Errorf("rows Scan error %v", err)
+			return errors.Trace(err)
+		}
+	}
+
+	if len(str) == 0 {
+		return nil
+	}
+
+	return json.Unmarshal([]byte(str), sp)
+}
+
 // Save implements checkpoint.Save interface
 func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
@@ -120,36 +148,8 @@ func (sp *MysqlCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	return sp.CommitTS, poss
 }
 
-// Load implements CheckPoint.Load interface
-func (sp *MysqlCheckPoint) Load() error {
-	sp.Lock()
-	defer sp.Unlock()
-
-	sql := genSelectSQL(sp)
-	rows, err := querySQL(sp.db, sql)
-	if err != nil {
-		log.Errorf("select checkPoint error %v", err)
-		return errors.Trace(err)
-	}
-
-	var str string
-	for rows.Next() {
-		err = rows.Scan(&str)
-		if err != nil {
-			log.Errorf("rows Scan error %v", err)
-			return errors.Trace(err)
-		}
-	}
-
-	if len(str) == 0 {
-		return nil
-	}
-
-	return json.Unmarshal([]byte(str), sp)
-}
-
 // String inplements CheckPoint.String interface
 func (sp *MysqlCheckPoint) String() string {
 	ts, poss := sp.Pos()
-	return fmt.Sprintf("binlog %s commitTS = %d and positions = %+v", sp.clusterID, ts, poss)
+	return fmt.Sprintf("binlog commitTS = %d and positions = %+v", ts, poss)
 }

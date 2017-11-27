@@ -59,7 +59,7 @@ func (sp *PbCheckPoint) Load() error {
 	return errors.Trace(err)
 }
 
-// Save saves checkpoint into file
+// Save implements CheckPoint.Save interface
 func (sp *PbCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
@@ -93,7 +93,7 @@ func (sp *PbCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	return nil
 }
 
-// Check we should save checkpoint
+// Check implements CheckPoint.Check interface
 func (sp *PbCheckPoint) Check() bool {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -101,7 +101,7 @@ func (sp *PbCheckPoint) Check() bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos return checkpoint information
+// Pos implements CheckPoint.Pos interface
 func (sp *PbCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	sp.RLock()
 	defer sp.RUnlock()
@@ -116,8 +116,8 @@ func (sp *PbCheckPoint) Pos() (int64, map[string]pb.Pos) {
 	return sp.CommitTS, poss
 }
 
-// return string Pos
+// String implements CheckPoint.String interface
 func (sp *PbCheckPoint) String() string {
 	ts, poss := sp.Pos()
-	return fmt.Sprintf("binlog %s commitTS = %d positions = %+v", sp.name, ts, poss)
+	return fmt.Sprintf("binlog commitTS = %d positions = %+v", ts, poss)
 }
