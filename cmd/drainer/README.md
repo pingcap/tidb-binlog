@@ -16,6 +16,10 @@ Usage of drainer:
         path to the configuration file
   -data-dir string
         drainer data directory path (default data.drainer) (default "data.drainer")
+  -kafka-addrs string 
+	kafka addrs where drainer pull binlog from (default "127.0.0.1:9092")
+  -zookeeper-addrs string
+	zookeeper addrs where get kafka addrs
   -dest-db-type string
         target db type: mysql, postgresql (default "mysql")
   -detect-interval int

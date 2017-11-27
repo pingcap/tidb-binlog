@@ -12,6 +12,12 @@ data-dir = "data.drainer"
 # a comma separated list of PD endpoints
 pd-urls = "http://127.0.0.1:2379"
 
+# kafka addrs where drainer pull binlog from
+kafka-addrs = "127.0.0.1:9092"
+
+# zookeeper addrs, get kafka-addrs from zookeeper if uncomment this
+# zookeeper-addrs = "127.0.0.1:2181"
+
 # syncer Configuration.
 [syncer]
 
