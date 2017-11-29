@@ -1,4 +1,4 @@
-package drainer
+package offset
 
 import (
 	"testing"
