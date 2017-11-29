@@ -269,10 +269,11 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 		d.SetMysqlTime(t)
 		e = t.String()
 	case mysql.TypeBit:
-		bit, err := types.ParseBit("0b01", 8)
-		c.Assert(err, IsNil)
+		bit := types.NewBinaryLiteralFromUint(11, 8)
 		d.SetMysqlBit(bit)
-		e = bit.Value
+		var err error
+		e, err = bit.ToInt()
+		c.Assert(err, IsNil)
 	case mysql.TypeSet:
 		elems := []string{"a", "b", "c", "d"}
 		set, err := types.ParseSetName(elems, elems[base-1])

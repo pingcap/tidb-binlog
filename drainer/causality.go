@@ -80,4 +80,3 @@ func (c *causality) detectConflict(keys []string) bool {
 
 	return false
 }
-

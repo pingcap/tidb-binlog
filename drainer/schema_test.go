@@ -40,7 +40,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	}
 	jobs = append(jobs, job1)
 	// construct a cancelled job
-	jobs = append(jobs, &model.Job{ID: 5, State: model.JobCancelled})
+	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateCancelled})
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
