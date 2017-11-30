@@ -10,28 +10,27 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-type binlog struct {
+type OffsetSeeker struct {
 	topic     string
 	partition int32
 	addr      []string
 	cfg       *sarama.Config
-	bg        pb.Binlog
 	consumer  sarama.Consumer
 }
 
-func (bg *binlog) findOffsetByTS(ts int64) ([]int64, error) {
-	commitTs := getCommitTs(ts)
+func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
+	commitTs := GetCommitTs(ts)
 
-	partitions, err := bg.getPartitions(bg.topic, bg.addr, bg.cfg)
+	partitions, err := sk.GetPartitions(sk.topic, sk.addr, sk.cfg)
 	if err != nil {
 		log.Errorf("get partitions error %v", err)
 		return make([]int64, 0), errors.Trace(err)
 	}
 
-	return bg.getAllOffset(partitions, commitTs)
+	return sk.GetAllOffset(partitions, commitTs)
 }
 
-func getCommitTs(ts int64) int64 {
+func GetCommitTs(ts int64) int64 {
 	tm := time.Unix(ts, 0)
 	minute := tm.Minute()
 	hour := tm.Hour()
@@ -47,8 +46,12 @@ func getCommitTs(ts int64) int64 {
 	return tm.Unix()
 }
 
-func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config) ([]int32, error) {
-	checkArg(topic, addr)
+func (sk *OffsetSeeker) GetPartitions(topic string, addr []string, cfg *sarama.Config) ([]int32, error) {
+	err := checkArg(topic, addr)
+        if err != nil {
+                log.Errorf("argument is invaild")
+                return make([]int32, 0), err
+        }
 
 	consumer, err := sarama.NewConsumer(addr, cfg)
 	if err != nil {
@@ -56,9 +59,9 @@ func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config)
 		return make([]int32, 0), errors.Trace(err)
 	}
 
-	bg.consumer = consumer
+	sk.consumer = consumer
 
-	partitionList, err := bg.consumer.Partitions(topic)
+	partitionList, err := sk.consumer.Partitions(topic)
 	if err != nil {
 		log.Errorf("get partitionList error %v", err)
 		return make([]int32, 0), errors.Trace(err)
@@ -67,11 +70,11 @@ func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config)
 	return partitionList, nil
 }
 
-func (bg *binlog) getAllOffset(partitionList []int32, ts int64) ([]int64, error) {
+func (sk *OffsetSeeker) GetAllOffset(partitionList []int32, ts int64) ([]int64, error) {
 	var offsets []int64
 
 	for partition := range partitionList {
-		pc, err := bg.consumer.ConsumePartition(bg.topic, int32(partition), sarama.OffsetOldest)
+		pc, err := sk.consumer.ConsumePartition(sk.topic, int32(partition), sarama.OffsetOldest)
 		if err != nil {
 			log.Errorf("ConsumePartition error %v", err)
 			return offsets, errors.Trace(err)
@@ -80,7 +83,7 @@ func (bg *binlog) getAllOffset(partitionList []int32, ts int64) ([]int64, error)
 		defer pc.AsyncClose()
 		var offset int64
 
-		if offset, err = getOneOffset(pc, ts); err != nil {
+		if offset, err = GetOneOffset(pc, ts); err != nil {
 			log.Errorf("getOffset error %v", err)
 			return offsets, errors.Trace(err)
 		}
@@ -90,16 +93,18 @@ func (bg *binlog) getAllOffset(partitionList []int32, ts int64) ([]int64, error)
 	return offsets, nil
 }
 
-func checkArg(topic string, addr []string) {
+func checkArg(topic string, addr []string) error{
 	if topic == "" {
-		topic = "Offset"
+		log.Errorf("Topic is nil")
+                return error.New("Kafka topic is error")
 	}
 	if len(addr) == 0 {
-		addr = []string{"localhost:9092"}
+		log.Errorf("Addr is nil")
+                return error.New("Kafka addr is nil")
 	}
 }
 
-func getOneOffset(pc sarama.PartitionConsumer, ts int64) (int64, error) {
+func GetOneOffset(pc sarama.PartitionConsumer, ts int64) (int64, error) {
 	bg := new(pb.Binlog)
 
 	for msg := range pc.Messages() {
