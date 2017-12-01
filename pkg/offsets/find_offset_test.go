@@ -46,7 +46,7 @@ func (*testOffsetSuite) TestOffset(c *C) {
 
 	getOffset, err := sk.FindOffsetByTS(int64(1 << 18))
 	c.Assert(err, IsNil)
-	
+
 	log.Errorf("getOffset is %v", getOffset)
 	for i := range getOffset {
 		if getOffset[i] > offset {
