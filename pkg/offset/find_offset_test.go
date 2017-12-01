@@ -22,7 +22,7 @@ type testOffsetSuite struct{}
 func (*testOffsetSuite) TestOffset(c *C) {
 	var sk OffsetSeeker
 	var bg pb.Binlog
-	sk.topic = "hello"
+	sk.topic = "hello1"
 	sk.addr = []string{"localhost:9092"}
 	sk.cfg = nil
 

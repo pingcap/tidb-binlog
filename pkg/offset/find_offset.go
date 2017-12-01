@@ -19,6 +19,7 @@ type OffsetSeeker struct {
 const shiftBits = 18
 const subTime = 20 * 60 * 1000
 
+// FindOffsetByTS implements offset.FindOffsetByTs
 func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
 	commitTs := GetSafeTs(ts)
 
