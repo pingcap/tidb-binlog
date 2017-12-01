@@ -2,10 +2,6 @@ package offset
 
 import (
 	"encoding/json"
-<<<<<<< HEAD
-	"time"
-=======
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -15,26 +11,16 @@ import (
 
 type OffsetSeeker struct {
 	topic     string
-<<<<<<< HEAD
-	partition int32
-=======
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 	addr      []string
 	cfg       *sarama.Config
 	consumer  sarama.Consumer
 }
 
-<<<<<<< HEAD
-func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
-	commitTs := GetCommitTs(ts)
-=======
 const shiftBits = 18
 const subTime = 20 * 60 * 1000
 
-// FindOffsetByTS implements offset.FindOffsetByTs
 func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
 	commitTs := GetSafeTs(ts)
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 
 	partitions, err := sk.GetPartitions(sk.topic, sk.addr, sk.cfg)
 	if err != nil {
@@ -45,26 +31,9 @@ func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
 	return sk.GetAllOffset(partitions, commitTs)
 }
 
-<<<<<<< HEAD
-func GetCommitTs(ts int64) int64 {
-	tm := time.Unix(ts, 0)
-	minute := tm.Minute()
-	hour := tm.Hour()
-
-	if minute > 20 {
-		minute -= 20
-	} else {
-		hour--
-		minute += 40
-	}
-
-	tm = time.Date(tm.Year(), tm.Month(), tm.Day(), hour, minute, tm.Second(), tm.Nanosecond(), time.UTC)
-	return tm.Unix()
-=======
 func GetSafeTs(ts int64) int64 {
 	ts = ts >> shiftBits
 	return ts 
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 }
 
 func (sk *OffsetSeeker) GetPartitions(topic string, addr []string, cfg *sarama.Config) ([]int32, error) {
@@ -91,26 +60,11 @@ func (sk *OffsetSeeker) GetPartitions(topic string, addr []string, cfg *sarama.C
 	return partitionList, nil
 }
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 func (sk *OffsetSeeker) GetAllOffset(partitionList []int32, ts int64) ([]int64, error) {
 	var offsets []int64
 
 	for partition := range partitionList {
-<<<<<<< HEAD
-		pc, err := sk.consumer.ConsumePartition(sk.topic, int32(partition), sarama.OffsetOldest)
-		if err != nil {
-			log.Errorf("ConsumePartition error %v", err)
-			return offsets, errors.Trace(err)
-		}
-
-		defer pc.AsyncClose()
-		var offset int64
-
-		if offset, err = GetOneOffset(pc, ts); err != nil {
-=======
 		var offset int64
 
 		startOffset, err := sk.GetFirstOffset(int32(partition))
@@ -126,7 +80,6 @@ func (sk *OffsetSeeker) GetAllOffset(partitionList []int32, ts int64) ([]int64, 
 		}
 
 		if offset, err = sk.GetPosOffset(int32(partition), startOffset, endOffset, ts); err != nil {
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 			log.Errorf("getOffset error %v", err)
 			return offsets, errors.Trace(err)
 		}
@@ -139,20 +92,6 @@ func (sk *OffsetSeeker) GetAllOffset(partitionList []int32, ts int64) ([]int64, 
 func checkArg(topic string, addr []string) error{
 	if topic == "" {
 		log.Errorf("Topic is nil")
-<<<<<<< HEAD
-                return error.New("Kafka topic is error")
-	}
-	if len(addr) == 0 {
-		log.Errorf("Addr is nil")
-                return error.New("Kafka addr is nil")
-	}
-}
-
-func GetOneOffset(pc sarama.PartitionConsumer, ts int64) (int64, error) {
-	bg := new(pb.Binlog)
-
-	for msg := range pc.Messages() {
-=======
                 return errors.New("Kafka topic is error")
 	}
 	if len(addr) == 0 {
@@ -197,21 +136,12 @@ func (sk *OffsetSeeker)GetOneOffset(partition int32, offset int64, ts int64) (in
 	defer pc.AsyncClose()
 
 	for msg := range pc.Messages(){
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 		err := json.Unmarshal(msg.Value, bg)
 		if err != nil {
 			log.Errorf("unmarshal binlog error(%v)", err)
 			return -1, errors.Trace(err)
 		}
 
-<<<<<<< HEAD
-		if bg.CommitTs <= ts {
-			return msg.Offset, nil
-		}
-	}
-
-	return -1, nil
-=======
 		log.Errorf("bg.CommitTs %v %v %v", bg.CommitTs, ts, offset)
 		if bg.CommitTs < ts{
 			return msg.Offset, nil
@@ -247,5 +177,4 @@ func (sk *OffsetSeeker)GetFirstOffset(partition int32) (int64,error){
 
 func (sk *OffsetSeeker)GetLastOffset(partition int32) (int64,error){
 	return sk.GetOffset(partition, sarama.OffsetNewest)
->>>>>>> 54da05e580cb1f0b25c1591341c332a3ca5dfc09
 }
