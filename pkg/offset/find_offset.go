@@ -2,7 +2,6 @@ package offset
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -10,45 +9,39 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-type binlog struct {
+type OffsetSeeker struct {
 	topic     string
-	partition int32
 	addr      []string
 	cfg       *sarama.Config
-	bg        pb.Binlog
 	consumer  sarama.Consumer
 }
 
-func (bg *binlog) findOffsetByTS(ts int64) ([]int64, error) {
-	commitTs := getCommitTs(ts)
+const shiftBits = 18
+const subTime = 20 * 60 * 1000
 
-	partitions, err := bg.getPartitions(bg.topic, bg.addr, bg.cfg)
+func (sk *OffsetSeeker) FindOffsetByTS(ts int64) ([]int64, error) {
+	commitTs := GetSafeTs(ts)
+
+	partitions, err := sk.GetPartitions(sk.topic, sk.addr, sk.cfg)
 	if err != nil {
 		log.Errorf("get partitions error %v", err)
 		return make([]int64, 0), errors.Trace(err)
 	}
 
-	return bg.getAllOffset(partitions, commitTs)
+	return sk.GetAllOffset(partitions, commitTs)
 }
 
-func getCommitTs(ts int64) int64 {
-	tm := time.Unix(ts, 0)
-	minute := tm.Minute()
-	hour := tm.Hour()
-
-	if minute > 20 {
-		minute -= 20
-	} else {
-		hour--
-		minute += 40
-	}
-
-	tm = time.Date(tm.Year(), tm.Month(), tm.Day(), hour, minute, tm.Second(), tm.Nanosecond(), time.UTC)
-	return tm.Unix()
+func GetSafeTs(ts int64) int64 {
+	ts = ts >> shiftBits
+	return ts 
 }
 
-func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config) ([]int32, error) {
-	checkArg(topic, addr)
+func (sk *OffsetSeeker) GetPartitions(topic string, addr []string, cfg *sarama.Config) ([]int32, error) {
+	err := checkArg(topic, addr)
+        if err != nil {
+                log.Errorf("argument is invaild")
+                return make([]int32, 0), err
+        }
 
 	consumer, err := sarama.NewConsumer(addr, cfg)
 	if err != nil {
@@ -56,9 +49,9 @@ func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config)
 		return make([]int32, 0), errors.Trace(err)
 	}
 
-	bg.consumer = consumer
+	sk.consumer = consumer
 
-	partitionList, err := bg.consumer.Partitions(topic)
+	partitionList, err := sk.consumer.Partitions(topic)
 	if err != nil {
 		log.Errorf("get partitionList error %v", err)
 		return make([]int32, 0), errors.Trace(err)
@@ -67,20 +60,26 @@ func (bg *binlog) getPartitions(topic string, addr []string, cfg *sarama.Config)
 	return partitionList, nil
 }
 
-func (bg *binlog) getAllOffset(partitionList []int32, ts int64) ([]int64, error) {
+
+func (sk *OffsetSeeker) GetAllOffset(partitionList []int32, ts int64) ([]int64, error) {
 	var offsets []int64
 
 	for partition := range partitionList {
-		pc, err := bg.consumer.ConsumePartition(bg.topic, int32(partition), sarama.OffsetOldest)
+		var offset int64
+
+		startOffset, err := sk.GetFirstOffset(int32(partition))
 		if err != nil {
-			log.Errorf("ConsumePartition error %v", err)
+			log.Errorf("getFirstOffset error %v", err)
 			return offsets, errors.Trace(err)
 		}
 
-		defer pc.AsyncClose()
-		var offset int64
+		endOffset, err:= sk.GetLastOffset(int32(partition))
+		if err != nil {
+			log.Errorf("getFirstOffset error %v", err)
+			return offsets, errors.Trace(err)
+		}
 
-		if offset, err = getOneOffset(pc, ts); err != nil {
+		if offset, err = sk.GetPosOffset(int32(partition), startOffset, endOffset, ts); err != nil {
 			log.Errorf("getOffset error %v", err)
 			return offsets, errors.Trace(err)
 		}
@@ -90,29 +89,92 @@ func (bg *binlog) getAllOffset(partitionList []int32, ts int64) ([]int64, error)
 	return offsets, nil
 }
 
-func checkArg(topic string, addr []string) {
+func checkArg(topic string, addr []string) error{
 	if topic == "" {
-		topic = "Offset"
+		log.Errorf("Topic is nil")
+                return errors.New("Kafka topic is error")
 	}
 	if len(addr) == 0 {
-		addr = []string{"localhost:9092"}
+		log.Errorf("Addr is nil")
+                return errors.New("Kafka addr is nil")
 	}
+
+	return nil
 }
 
-func getOneOffset(pc sarama.PartitionConsumer, ts int64) (int64, error) {
+func (sk *OffsetSeeker)GetPosOffset(partition int32, start int64, end int64, ts int64) (int64, error) {
+	for {
+		if(start > end){
+			break
+		}
+
+		mid := (end - start) / 2 + start
+		offset, err := sk.GetOneOffset(partition, mid, ts)
+		if err != nil {
+			log.Errorf("get offset error %v", err)
+			return -1, errors.Trace(err)
+		}
+		if offset != int64(-1) {
+			return offset, nil
+		}
+
+		end = mid - 1
+	}
+
+	return -1, errors.New("cannot get invalid offset")
+}
+
+func (sk *OffsetSeeker)GetOneOffset(partition int32, offset int64, ts int64) (int64,error) {
 	bg := new(pb.Binlog)
 
-	for msg := range pc.Messages() {
+	pc, err := sk.consumer.ConsumePartition(sk.topic, partition, offset)
+	if err != nil {
+		log.Errorf("ConsumePartition error %v", err)
+		return -1, errors.Trace(err)
+	}
+
+	defer pc.AsyncClose()
+
+	for msg := range pc.Messages(){
 		err := json.Unmarshal(msg.Value, bg)
 		if err != nil {
 			log.Errorf("unmarshal binlog error(%v)", err)
 			return -1, errors.Trace(err)
 		}
 
-		if bg.CommitTs <= ts {
+		log.Errorf("bg.CommitTs %v %v %v", bg.CommitTs, ts, offset)
+		if bg.CommitTs < ts{
 			return msg.Offset, nil
+
 		}
+
+		return -1, nil
 	}
 
-	return -1, nil
+	return -1, errors.New("cannot find a valid offset")
+}
+
+func (sk *OffsetSeeker)GetOffset(partition int32, ts int64) (int64,error){
+	client, err := sarama.NewClient(sk.addr, sk.cfg)
+	if err != nil {
+		log.Errorf("create client error(%v)", err)
+		return -1, errors.Trace(err)
+	}
+	
+	offset, err := client.GetOffset(sk.topic, partition, ts)
+	if err != nil {
+		log.Errorf("get offset error(%v)", err)
+		return -1, errors.Trace(err)
+	}
+
+	return offset, nil
+}
+
+
+func (sk *OffsetSeeker)GetFirstOffset(partition int32) (int64,error){
+	return sk.GetOffset(partition, sarama.OffsetOldest)
+}
+
+func (sk *OffsetSeeker)GetLastOffset(partition int32) (int64,error){
+	return sk.GetOffset(partition, sarama.OffsetNewest)
 }

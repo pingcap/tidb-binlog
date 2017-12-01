@@ -2,12 +2,13 @@ package offset
 
 import (
 	"testing"
-	"time"
+//	"time"
 
 	"encoding/json"
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -19,26 +20,23 @@ var _ = Suite(&testOffsetSuite{})
 type testOffsetSuite struct{}
 
 func (*testOffsetSuite) TestOffset(c *C) {
-	var b binlog
-	b.topic = "hello1"
-	b.addr = []string{"localhost:9092"}
-	b.cfg = nil
+	var sk OffsetSeeker
+	var bg pb.Binlog
+	sk.topic = "hello"
+	sk.addr = []string{"localhost:9092"}
+	sk.cfg = nil
 
-	producer, err := sarama.NewSyncProducer(b.addr, b.cfg)
+	producer, err := sarama.NewSyncProducer(sk.addr, sk.cfg)
 	c.Assert(err, IsNil)
 
 	defer producer.Close()
 
-	b.bg.StartTs = int64(1)
-	b.bg.CommitTs = int64(1)
-	b.bg.PrewriteKey = []byte("key")
-	b.bg.PrewriteValue = []byte("value")
-	b.bg.DdlQuery = []byte("XXX")
-	b.bg.DdlJobId = int64(1)
+	bg.PrewriteKey = []byte("key")
+	bg.PrewriteValue = []byte("value")
 
-	res, err := json.Marshal(b.bg)
+	res, err := json.Marshal(bg)
 	msg := &sarama.ProducerMessage{
-		Topic:     b.topic,
+		Topic:     sk.topic,
 		Partition: int32(0),
 		Key:       sarama.StringEncoder("key"),
 		Value:     sarama.ByteEncoder(res),
@@ -47,9 +45,10 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	_, offset, err := producer.SendMessage(msg)
 	c.Assert(err, IsNil)
 
-	getOffset, err := b.findOffsetByTS(time.Now().Unix())
+	getOffset, err := sk.FindOffsetByTS(int64(1 << 18))
 	c.Assert(err, IsNil)
-
+	
+	log.Errorf("getOffset is %v", getOffset)
 	for i := range getOffset {
 		if getOffset[i] > offset {
 			log.Errorf("getOffset is large offset")
