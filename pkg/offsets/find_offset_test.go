@@ -1,4 +1,4 @@
-package offset
+package offsets
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -19,13 +20,12 @@ var _ = Suite(&testOffsetSuite{})
 type testOffsetSuite struct{}
 
 func (*testOffsetSuite) TestOffset(c *C) {
-	var sk OffsetSeeker
-	var bg pb.Binlog
-	sk.topic = "hello"
-	sk.addr = []string{"localhost:9092"}
-	sk.cfg = nil
+	sk, err := NewKafkaSeeker("wangkai", []string{"localhost:9092"}, nil, Int64(0))
+	c.Assert(err, IsNil)
 
-	producer, err := sarama.NewSyncProducer(sk.addr, sk.cfg)
+	var bg pb.Binlog
+
+	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
 	c.Assert(err, IsNil)
 
 	defer producer.Close()
@@ -35,7 +35,7 @@ func (*testOffsetSuite) TestOffset(c *C) {
 
 	res, err := json.Marshal(bg)
 	msg := &sarama.ProducerMessage{
-		Topic:     sk.topic,
+		Topic:     "wangkai",
 		Partition: int32(0),
 		Key:       sarama.StringEncoder("key"),
 		Value:     sarama.ByteEncoder(res),
@@ -44,13 +44,59 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	_, offset, err := producer.SendMessage(msg)
 	c.Assert(err, IsNil)
 
-	getOffset, err := sk.FindOffsetByTS(int64(1 << 18))
+/*	tsInt := int64(1 << 18)
+	getOffset, err := sk.FindOffset(Int64{ts: tsInt}) */
+	getOffset, err := sk.FindOffset(int64(1))
 	c.Assert(err, IsNil)
 
-	log.Errorf("getOffset is %v", getOffset)
+	log.Infof("getOffset is %v", getOffset)
 	for i := range getOffset {
 		if getOffset[i] > offset {
 			log.Errorf("getOffset is large offset")
 		}
 	}
+}
+
+/*
+type Int64 struct {
+	ts int64
+}
+*/
+
+type Int64 int64
+// int64 implements Operator.Compare interface
+func (Int64)Compare(exceptedPos interface{}, currentPos interface{})(int, error){
+	b, ok := currentPos.(int64)
+	if !ok{
+		log.Errorf("convert to Int64 error",b)
+		return 0, errors.New("connot conver to Int64")
+	}
+
+	a, ok := exceptedPos.(int64)
+	if !ok {
+		log.Errorf("convert to Int64 error",a)
+		return 0, errors.New("connot conver to Int64")
+	}
+
+	if a > b {
+		return 1,nil
+	}
+	if a == b {
+		return 0,nil
+	}
+
+	return -1, nil
+}
+
+// int64 implements Operator.Decode interface
+func (Int64)Decode(message *sarama.ConsumerMessage) (interface{}, error) {
+	bg := new(pb.Binlog)
+
+	err := json.Unmarshal(message.Value, bg)
+	if err != nil {
+		log.Errorf("json umarshal error %v", err)
+		return nil, errors.Trace(err)
+	}
+
+	return bg, nil
 }
