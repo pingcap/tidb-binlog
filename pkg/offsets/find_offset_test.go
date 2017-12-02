@@ -5,8 +5,8 @@ import (
 
 	"encoding/json"
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -19,13 +19,17 @@ var _ = Suite(&testOffsetSuite{})
 
 type testOffsetSuite struct{}
 
+const shiftBits = 18
+const subTime = 20 * 60 * 1000
+
 func (*testOffsetSuite) TestOffset(c *C) {
-	sk, err := NewKafkaSeeker("wangkai", []string{"localhost:9092"}, nil, Int64(0))
+	addr := os.Getenv("HOSTIP")
+	sk, err := NewKafkaSeeker("wangkai", []string{addr}, nil, Int64(0))
 	c.Assert(err, IsNil)
 
 	var bg pb.Binlog
 
-	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
+	producer, err := sarama.NewSyncProducer([]string{addr}, nil)
 	c.Assert(err, IsNil)
 
 	defer producer.Close()
@@ -44,8 +48,6 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	_, offset, err := producer.SendMessage(msg)
 	c.Assert(err, IsNil)
 
-/*	tsInt := int64(1 << 18)
-	getOffset, err := sk.FindOffset(Int64{ts: tsInt}) */
 	getOffset, err := sk.FindOffset(int64(1))
 	c.Assert(err, IsNil)
 
@@ -57,39 +59,34 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	}
 }
 
-/*
-type Int64 struct {
-	ts int64
-}
-*/
-
 type Int64 int64
+
 // int64 implements Operator.Compare interface
-func (Int64)Compare(exceptedPos interface{}, currentPos interface{})(int, error){
+func (Int64) Compare(exceptedPos interface{}, currentPos interface{}) (int, error) {
 	b, ok := currentPos.(int64)
-	if !ok{
-		log.Errorf("convert to Int64 error",b)
+	if !ok {
+		log.Errorf("convert to Int64 error", b)
 		return 0, errors.New("connot conver to Int64")
 	}
 
 	a, ok := exceptedPos.(int64)
 	if !ok {
-		log.Errorf("convert to Int64 error",a)
+		log.Errorf("convert to Int64 error", a)
 		return 0, errors.New("connot conver to Int64")
 	}
 
 	if a > b {
-		return 1,nil
+		return 1, nil
 	}
 	if a == b {
-		return 0,nil
+		return 0, nil
 	}
 
 	return -1, nil
 }
 
 // int64 implements Operator.Decode interface
-func (Int64)Decode(message *sarama.ConsumerMessage) (interface{}, error) {
+func (Int64) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
 	bg := new(pb.Binlog)
 
 	err := json.Unmarshal(message.Value, bg)
@@ -99,4 +96,14 @@ func (Int64)Decode(message *sarama.ConsumerMessage) (interface{}, error) {
 	}
 
 	return bg, nil
+}
+
+func GetSafeTS(ts int64) int64 {
+	ts >> shiftBits
+	ts -= subTime
+	if ts < int64(0) {
+		ts = int64(0)
+	}
+
+	return ts
 }
