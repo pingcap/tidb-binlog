@@ -1,9 +1,10 @@
 package offsets
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 
-	"encoding/json"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -24,7 +25,8 @@ const subTime = 20 * 60 * 1000
 
 func (*testOffsetSuite) TestOffset(c *C) {
 	addr := os.Getenv("HOSTIP")
-	sk, err := NewKafkaSeeker("wangkai", []string{addr}, nil, Int64(0))
+	topic := "test"
+	sk, err := NewKafkaSeeker(topic, []string{addr}, nil, Int64(0))
 	c.Assert(err, IsNil)
 
 	var bg pb.Binlog
@@ -39,7 +41,7 @@ func (*testOffsetSuite) TestOffset(c *C) {
 
 	res, err := json.Marshal(bg)
 	msg := &sarama.ProducerMessage{
-		Topic:     "wangkai",
+		Topic:     topic,
 		Partition: int32(0),
 		Key:       sarama.StringEncoder("key"),
 		Value:     sarama.ByteEncoder(res),
@@ -48,7 +50,7 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	_, offset, err := producer.SendMessage(msg)
 	c.Assert(err, IsNil)
 
-	getOffset, err := sk.FindOffset(int64(1))
+	getOffset, err := sk.Do(topic, GetSafeTS(int64(1)), 0, 0)
 	c.Assert(err, IsNil)
 
 	log.Infof("getOffset is %v", getOffset)
@@ -99,7 +101,7 @@ func (Int64) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
 }
 
 func GetSafeTS(ts int64) int64 {
-	ts >> shiftBits
+	ts = ts >> shiftBits
 	ts -= subTime
 	if ts < int64(0) {
 		ts = int64(0)

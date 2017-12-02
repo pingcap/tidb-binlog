@@ -7,12 +7,9 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const shiftBits = 18
-const subTime = 20 * 60 * 1000
-
 // Seeker is a struct for finding offsets in kafka/rocketmq
 type Seeker interface {
-	Do(topic string, pos interface{}) ([]int64, error)
+	Do(topic string, pos interface{}, startTime int64, endTime int64) ([]int64, error)
 }
 
 // Operator is an interface for seeker operation
@@ -49,10 +46,10 @@ func NewKafkaSeeker(tp string, address []string, config *sarama.Config, operator
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(ks.addr, ks.cfg)
+	client, err := sarama.NewClient(address, config)
 	if err != nil {
 		log.Errorf("create client error(%v)", err)
-		return -1, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	return &KafkaSeeker{
@@ -65,8 +62,8 @@ func NewKafkaSeeker(tp string, address []string, config *sarama.Config, operator
 }
 
 // Do gets offsets by given pos
-func (ks *KafkaSeeker) Do(topic string, pos interface{}) ([]int64, error) {
-	partitions, err := ks.getPartitions(ks.addr, ks.cfg)
+func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTime int64) ([]int64, error) {
+	partitions, err := ks.getPartitions(topic, ks.addr, ks.cfg)
 	if err != nil {
 		log.Errorf("get partitions error %v", err)
 		return make([]int64, 0), errors.Trace(err)
@@ -119,15 +116,28 @@ func (ks *KafkaSeeker) getAllOffset(topic string, partitionList []int32, pos int
 func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, end int64, pos interface{}) (int64, error) {
 	res, err := ks.operator.Compare(pos, end)
 	if err != nil {
+		log.Errorf("compare pos end error %v", err)
 		return -1, errors.Trace(err)
 	}
 
-	if ks.operator.Compare(res, int(0)) == 1 {
+	res, err = ks.operator.Compare(res, int(0))
+	if err != nil {
+		log.Errorf("compare res error %v", err)
+		return -1, errors.Trace(err)
+	}
+
+	if res > 0 {
 		return -1, errors.New("cannot get invalid offset")
 	}
 
 	for {
-		if ks.operator.Compare(start, end) == 1 {
+		res, err = ks.operator.Compare(start, end)
+		if err != nil {
+			log.Errorf("compare start end error %v", err)
+			return -1, errors.Trace(err)
+		}
+
+		if res == 1 {
 			break
 		}
 
@@ -137,8 +147,16 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 			log.Errorf("get offset error %v", err)
 			return -1, errors.Trace(err)
 		}
-		if ks.operator.Compare(offset, int64(-1)) != 0 {
+
+		res, err := ks.operator.Compare(offset, int64(-1))
+		if err != nil {
+			log.Errorf("compare offset error %v", err)
+			return -1, errors.Trace(err)
+		}
+
+		if res != 0 {
 			return offset, nil
+
 		}
 
 		end = mid - 1
@@ -165,7 +183,7 @@ func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64,
 		}
 
 		bg := result.(*pb.Binlog)
-		log.Infof("bg.CommitTs %v %v %v", bg.CommitTs, pos, offset)
+		log.Infof("bg.CommitTs is %v position is %v  offset is %v", bg.CommitTs, pos, offset)
 		res, err := ks.operator.Compare(pos, bg.CommitTs)
 		if err != nil {
 			log.Errorf("Compare error %v", err)
@@ -184,8 +202,8 @@ func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64,
 }
 
 // getOffset return offset by given pos
-func (ks *KafkaSeeker) getOffset(partition int32, pos int64) (int64, error) {
-	offset, err := ks.client.getOffset(ks.topic, partition, pos)
+func (ks *KafkaSeeker) getOffset(topic string, partition int32, pos int64) (int64, error) {
+	offset, err := ks.client.GetOffset(topic, partition, pos)
 	if err != nil {
 		log.Errorf("get offset error(%v)", err)
 		return -1, errors.Trace(err)
@@ -209,11 +227,11 @@ func checkArgs(topic string, addr []string) error {
 }
 
 // getFirstOffset returns first offset in a partition
-func (ks *KafkaSeeker) getFirstOffset(partition int32) (int64, error) {
-	return ks.getOffset(partition, sarama.OffsetOldest)
+func (ks *KafkaSeeker) getFirstOffset(topic string, partition int32) (int64, error) {
+	return ks.getOffset(topic, partition, sarama.OffsetOldest)
 }
 
 // getLastOffset returns last offset in a partition
-func (ks *KafkaSeeker) getLastOffset(partition int32) (int64, error) {
-	return ks.getOffset(partition, sarama.OffsetNewest)
+func (ks *KafkaSeeker) getLastOffset(topic string, partition int32) (int64, error) {
+	return ks.getOffset(topic, partition, sarama.OffsetNewest)
 }
