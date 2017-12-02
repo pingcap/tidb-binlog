@@ -27,14 +27,12 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	addr := os.Getenv("HOSTIP")
 	topic := "wangkai"
 
-	log.Infof("kafka address is %v", addr)
-
-	sk, err := NewKafkaSeeker(topic, []string{addr}, nil, Int64(0))
+	sk, err := NewKafkaSeeker([]string{addr + ":9092"}, nil, Int64(0))
 	c.Assert(err, IsNil)
 
 	var bg pb.Binlog
 
-	producer, err := sarama.NewSyncProducer([]string{addr}, nil)
+	producer, err := sarama.NewSyncProducer([]string{addr + ":9092"}, nil)
 	c.Assert(err, IsNil)
 
 	defer producer.Close()

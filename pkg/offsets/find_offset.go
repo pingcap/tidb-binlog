@@ -34,10 +34,9 @@ type KafkaSeeker struct {
 }
 
 // NewKafkaSeeker returns Seeker instance
-func NewKafkaSeeker(tp string, address []string, config *sarama.Config, operator Operator) (Seeker, error) {
-	err := checkArgs(tp, address)
-	if err != nil {
-		return nil, errors.Trace(err)
+func NewKafkaSeeker(address []string, config *sarama.Config, operator Operator) (Seeker, error) {
+	if address == nil {
+		return nil, errors.New("address is nil")
 	}
 
 	consumer, err := sarama.NewConsumer(address, config)
@@ -120,24 +119,12 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 		return -1, errors.Trace(err)
 	}
 
-	res, err = ks.operator.Compare(int64(res), int64(0))
-	if err != nil {
-		log.Errorf("compare res error %v", err)
-		return -1, errors.Trace(err)
-	}
-
 	if res > 0 {
-		return -1, errors.New("cannot get invalid offset")
+		return -1, errors.New("pos is large end cannot get invalid offset")
 	}
 
 	for {
-		res, err = ks.operator.Compare(start, end)
-		if err != nil {
-			log.Errorf("compare start end error %v", err)
-			return -1, errors.Trace(err)
-		}
-
-		if res == 1 {
+		if start > end {
 			break
 		}
 
@@ -148,15 +135,8 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 			return -1, errors.Trace(err)
 		}
 
-		res, err := ks.operator.Compare(offset, int64(-1))
-		if err != nil {
-			log.Errorf("compare offset error %v", err)
-			return -1, errors.Trace(err)
-		}
-
-		if res != 0 {
+		if offset != int64(-1) {
 			return offset, nil
-
 		}
 
 		end = mid - 1
@@ -183,7 +163,6 @@ func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64,
 		}
 
 		bg := result.(*pb.Binlog)
-		log.Infof("bg.CommitTs is %v position is %v  offset is %v", bg.CommitTs, pos, offset)
 		res, err := ks.operator.Compare(pos, bg.CommitTs)
 		if err != nil {
 			log.Errorf("Compare error %v", err)
@@ -212,26 +191,12 @@ func (ks *KafkaSeeker) getOffset(topic string, partition int32, pos int64) (int6
 	return offset, nil
 }
 
-// checkArgs check argument
-func checkArgs(topic string, addr []string) error {
-	if topic == "" {
-		log.Errorf("Topic is nil")
-		return errors.New("Kafka topic is error")
-	}
-	if len(addr) == 0 {
-		log.Errorf("Addr is nil")
-		return errors.New("Kafka addr is nil")
-	}
-
-	return nil
-}
-
-// getFirstOffset returns first offset in a partition
+// getFirstOffset returns kafka first offset
 func (ks *KafkaSeeker) getFirstOffset(topic string, partition int32) (int64, error) {
 	return ks.getOffset(topic, partition, sarama.OffsetOldest)
 }
 
-// getLastOffset returns last offset in a partition
+// getLastOffset returns kafka last offset
 func (ks *KafkaSeeker) getLastOffset(topic string, partition int32) (int64, error) {
 	return ks.getOffset(topic, partition, sarama.OffsetNewest)
 }
