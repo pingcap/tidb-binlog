@@ -26,9 +26,9 @@ const subTime = 20 * 60 * 1000
 func (*testOffsetSuite) TestOffset(c *C) {
 	addr := os.Getenv("HOSTIP")
 	topic := "wangkai"
-	
+
 	log.Infof("kafka address is %v", addr)
-	
+
 	sk, err := NewKafkaSeeker(topic, []string{addr}, nil, Int64(0))
 	c.Assert(err, IsNil)
 
