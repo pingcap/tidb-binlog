@@ -120,7 +120,7 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 		return -1, errors.Trace(err)
 	}
 
-	res, err = ks.operator.Compare(res, int(0))
+	res, err = ks.operator.Compare(int64(res), int64(0))
 	if err != nil {
 		log.Errorf("compare res error %v", err)
 		return -1, errors.Trace(err)
@@ -190,7 +190,7 @@ func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64,
 			return -1, errors.Trace(err)
 		}
 
-		if res > 0 {
+		if res >= 0 {
 			return msg.Offset, nil
 
 		}
