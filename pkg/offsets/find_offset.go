@@ -101,7 +101,7 @@ func (ks *KafkaSeeker) getAllOffset(topic string, partitionList []int32, pos int
 			return offsets, errors.Trace(err)
 		}
 
-		if offset, err = ks.getPosOffset(topic, int32(partition), startOffset, endOffset - 1, pos); err != nil {
+		if offset, err = ks.getPosOffset(topic, int32(partition), startOffset, endOffset-1, pos); err != nil {
 			log.Errorf("getOffset error %v", err)
 			return offsets, errors.Trace(err)
 		}
@@ -118,11 +118,15 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 			break
 		}
 
-		if end <= pos.(int64){
+		tag, err := ks.tsLessPos(topic, partition, end, pos)
+		if err != nil {
+			return -1, errors.Trace(err)
+		}
+		if tag {
 			return end, nil
 		}
 
-		mid := (end - start) / 2 + start
+		mid := (end-start)/2 + start
 		offset, err := ks.getOneOffset(topic, partition, mid, pos)
 		if err != nil {
 			log.Errorf("get offset error %v", err)
@@ -131,23 +135,35 @@ func (ks *KafkaSeeker) getPosOffset(topic string, partition int32, start int64, 
 
 		if offset != int64(-1) {
 			start = mid + 1
-		}else{
+		} else {
 			end = mid - 1
 		}
 	}
 
-	if start <= pos.(int64){
+	tag, err := ks.tsLessPos(topic, partition, start, pos)
+	if err == nil && tag {
 		return start, nil
 	}
-	
+
 	return -1, errors.New("cannot get a valid offset")
 }
 
-// getOneOffset returns one offset
-func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64, end int64, pos interface{}) (int64, error) {
-	var res int64
-	var err error
+// tsLessPos returns ture if binlog.ts <= pos otherwise returns false
+func (ks *KafkaSeeker) tsLessPos(topic string, partition int32, offset int64, pos interface{}) (bool, error) {
+	res, err := ks.getOneOffset(topic, partition, offset, pos)
+	if err != nil {
+		return false, errors.New("get end offset error")
+	}
 
+	if res != int64(-1) {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// getOneOffset returns one offset
+func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64, pos interface{}) (int64, error) {
 	pc, err := ks.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
@@ -164,10 +180,7 @@ func (ks *KafkaSeeker) getOneOffset(topic string, partition int32, offset int64,
 		}
 
 		bg := result.(*pb.Binlog)
-		
-		
 		res, err := ks.operator.Compare(pos, bg.CommitTs)
-
 		if err != nil {
 			log.Errorf("Compare error %v", err)
 			return -1, errors.Trace(err)
