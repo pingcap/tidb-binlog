@@ -68,13 +68,13 @@ type Int64 int64
 func (Int64) Compare(exceptedPos interface{}, currentPos interface{}) (int, error) {
 	b, ok := currentPos.(int64)
 	if !ok {
-		log.Errorf("convert to Int64 error", b)
+		log.Errorf("convert %d to Int64 error", b)
 		return 0, errors.New("connot conver to Int64")
 	}
 
 	a, ok := exceptedPos.(int64)
 	if !ok {
-		log.Errorf("convert to Int64 error", a)
+		log.Errorf("convert %d to Int64 error", a)
 		return 0, errors.New("connot conver to Int64")
 	}
 
@@ -98,7 +98,7 @@ func (Int64) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return bg, nil
+	return bg.CommitTs, nil
 }
 
 func GetSafeTS(ts int64) int64 {
