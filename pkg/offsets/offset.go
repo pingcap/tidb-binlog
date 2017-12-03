@@ -136,7 +136,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
-	if cmp == large {
+	if cmp >= large {
 		return start, nil
 	}
 
