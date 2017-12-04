@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/pkg/offsets"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -44,6 +47,9 @@ type Collector struct {
 	latestTS   int64
 	cp         checkpoint.CheckPoint
 
+	offsetSeeker    offsets.Seeker
+	initialCommitTs int64
+
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -64,6 +70,11 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
+	offsetSeeker, err := createOffsetSeeker(kafkaAddrs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -79,19 +90,21 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:  clusterID,
-		interval:   time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs: kafkaAddrs,
-		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:    cfg.PumpTimeout,
-		pumps:      make(map[string]*Pump),
-		bh:         newBinlogHeap(maxHeapSize),
-		window:     w,
-		syncer:     s,
-		cp:         cpt,
-		tiClient:   tiClient,
-		tiStore:    tiStore,
-		notifyChan: make(chan *notifyResult),
+		clusterID:       clusterID,
+		interval:        time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:      kafkaAddrs,
+		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:         cfg.PumpTimeout,
+		pumps:           make(map[string]*Pump),
+		bh:              newBinlogHeap(maxHeapSize),
+		window:          w,
+		syncer:          s,
+		cp:              cpt,
+		tiClient:        tiClient,
+		tiStore:         tiStore,
+		notifyChan:      make(chan *notifyResult),
+		offsetSeeker:    offsetSeeker,
+		initialCommitTs: cfg.InitialCommitTS,
 	}, nil
 }
 
@@ -305,10 +318,19 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	_, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
-	if !ok {
-		return binlog.Pos{}, nil
+	if ok {
+		return pos, nil
 	}
-	return pos, nil
+
+	if c.initialCommitTs > 0 {
+		topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
+		offsets, err := c.offsetSeeker.Do(topic, c.initialCommitTs, 0, 0, []int32{pump.DefaultTopicPartition()})
+		if err == nil {
+			return binlog.Pos{Offset: offsets[0]}, nil
+		}
+	}
+
+	return binlog.Pos{}, nil
 }
 
 // Notify notifies to detcet pumps

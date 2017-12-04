@@ -51,7 +51,7 @@ func (*testOffsetSuite) TestOffset(c *C) {
 	_, offset, err := producer.SendMessage(msg)
 	c.Assert(err, IsNil)
 
-	getOffset, err := sk.Do(topic, GetSafeTS(int64(1)), 0, 0)
+	getOffset, err := sk.Do(topic, GetSafeTS(int64(1)), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 
 	log.Infof("getOffset is %v", getOffset)
