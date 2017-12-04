@@ -146,7 +146,7 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	// adjust initial commit ts
-	cfg.initialCommitTs = getSafeTS(cfg.initialCommitTs)
+	cfg.InitialCommitTS = getSafeTS(cfg.InitialCommitTS)
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
