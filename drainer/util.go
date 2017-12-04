@@ -24,7 +24,11 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 )
 
-const lengthOfBinaryTime = 15
+const (
+	lengthOfBinaryTime = 15
+	shiftBits          = 18
+	subTime            = 20 * 60 * 1000
+)
 
 // InitLogger initalizes Pump's logger.
 func InitLogger(cfg *Config) {
@@ -88,6 +92,16 @@ func posToFloat(pos *binlog.Pos) float64 {
 		decimal = decimal / 10
 	}
 	return float64(pos.Offset) + decimal
+}
+
+func getSafeTS(ts int64) int64 {
+	ts = ts >> shiftBits
+	ts -= subTime
+	if ts < int64(0) {
+		ts = int64(0)
+	}
+
+	return ts
 }
 
 func genDrainerID(listenAddr string) (string, error) {
