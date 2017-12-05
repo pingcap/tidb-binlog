@@ -1,8 +1,6 @@
 package drainer
 
 import (
-	"encoding/json"
-
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -40,7 +38,7 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 func (s *seekOperator) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
 	bg := new(pb.Binlog)
 
-	err := json.Unmarshal(message.Value, bg)
+	err := bg.Unmarshal(message.Value)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
 		return nil, errors.Trace(err)
