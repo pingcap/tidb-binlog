@@ -2,6 +2,7 @@ package pump
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -67,7 +68,7 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 
 	offset, err := k.encoder.encode(payload)
 	if offset > latestPos.Offset {
-		latestPos.Offset = offset
+		atomic.StoreInt64(&latestPos.Offset, offset)
 	}
 	return errors.Trace(err)
 }

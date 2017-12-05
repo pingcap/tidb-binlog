@@ -61,6 +61,7 @@ type NodeStatus struct {
 	Host      string
 	IsAlive   bool
 	LatestPos pb.Pos
+	OfflineTS int64
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
@@ -129,7 +130,7 @@ func (p *pumpNode) Register(ctx context.Context) error {
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.MarkOfflineSign(ctx, p.id)
+	err := p.MarkOfflineNode(ctx, p.id, p.host)
 	if err != nil {
 		return errors.Trace(err)
 	}

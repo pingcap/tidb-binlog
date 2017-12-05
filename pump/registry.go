@@ -84,36 +84,64 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host s
 
 }
 
-// MarkOfflineSign marks pump offline sign
-func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, nodeID string) error {
+// MarkOfflineNode marks offline pump
+func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, nodeID string, host string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
 	offlineKey := r.prefixed("offline", nodeID)
-	latestPosBytes, err := latestPos.Marshal()
+	offlineInfo := &NodeStatus{
+		NodeID:    nodeID,
+		Host:      host,
+		LatestPos: latestPos,
+		OfflineTS: latestTS,
+	}
+
+	offlineBytes, err := json.Marshal(offlineInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	// try to touch offline sign of node
-	err = r.client.UpdateOrCreate(ctx, offlineKey, string(latestPosBytes), 0)
+	err = r.client.UpdateOrCreate(ctx, offlineKey, string(offlineBytes), 0)
 	return errors.Trace(err)
 }
 
-// GetOfflineSign queries pump offline sign
-func (r *EtcdRegistry) GetOfflineSign(pctx context.Context, nodeID string) (pb.Pos, error) {
+// GetOfflineNode queries pump offline sign
+func (r *EtcdRegistry) GetOfflineNode(pctx context.Context, nodeID string) (*NodeStatus, error) {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
 	offlineKey := r.prefixed("offline", nodeID)
-	pos := pb.Pos{}
-
-	posBytes, err := r.client.Get(ctx, offlineKey)
+	infoBytes, err := r.client.Get(ctx, offlineKey)
 	if err != nil {
-		return pos, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	err = pos.Unmarshal(posBytes)
-	return pos, errors.Trace(err)
+
+	offlineInfo := &NodeStatus{}
+	err = json.Unmarshal(infoBytes, offlineInfo)
+	return offlineInfo, errors.Trace(err)
+}
+
+// ListOfflineNodes retruns all the offline nodes in the etcd
+func (r *EtcdRegistry) ListOfflineNodes(pctx context.Context) (map[string]*NodeStatus, error) {
+	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
+	defer cancel()
+
+	rootSign, err := r.client.List(ctx, r.prefixed("offline"))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	offlineNodes := make(map[string]*NodeStatus)
+	for id, n := range rootSign.Childs {
+		offlineNodes[id] = &NodeStatus{}
+		err = json.Unmarshal(n.Value, offlineNodes[id])
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return offlineNodes, nil
 }
 
 // UnregisterNode unregisters the node in the etcd
