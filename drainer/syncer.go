@@ -58,7 +58,7 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, initialCommitTS int64, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
@@ -70,9 +70,6 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, initialCommitTS in
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
-	if syncer.initCommitTS == 0 {
-		syncer.initCommitTS = initialCommitTS
-	}
 
 	return syncer, nil
 }

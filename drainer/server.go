@@ -82,7 +82,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	win := NewDepositWindow()
 
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
-	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cfg.InitialCommitTS, cpCfg)
+	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
