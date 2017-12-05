@@ -198,7 +198,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	c.latestTS = c.queryLatestTsFromPD()
 	for id, p := range c.pumps {
 		if !exists[id] {
-			latestPos, err := c.reg.GetOfflineSign(ctx, "pumps", id)
+			latestPos, err := c.reg.GetOfflineSign(ctx, id)
 			if err != nil {
 				log.Errorf("query offline pump error %v", err)
 				continue

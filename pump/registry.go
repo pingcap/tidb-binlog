@@ -85,11 +85,11 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host s
 }
 
 // MarkOfflineSign marks pump offline sign
-func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, prefix, nodeID string) error {
+func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, nodeID string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	offlineKey := r.prefixed(prefix, "offline", nodeID)
+	offlineKey := r.prefixed("offline", nodeID)
 	latestPosBytes, err := latestPos.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -101,11 +101,11 @@ func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, prefix, nodeID stri
 }
 
 // GetOfflineSign queries pump offline sign
-func (r *EtcdRegistry) GetOfflineSign(pctx context.Context, prefix, nodeID string) (pb.Pos, error) {
+func (r *EtcdRegistry) GetOfflineSign(pctx context.Context, nodeID string) (pb.Pos, error) {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	offlineKey := r.prefixed(prefix, "offline", nodeID)
+	offlineKey := r.prefixed("offline", nodeID)
 	pos := pb.Pos{}
 
 	posBytes, err := r.client.Get(ctx, offlineKey)

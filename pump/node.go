@@ -129,7 +129,7 @@ func (p *pumpNode) Register(ctx context.Context) error {
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.MarkOfflineSign(ctx, nodePrefix, p.id)
+	err := p.MarkOfflineSign(ctx, p.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
