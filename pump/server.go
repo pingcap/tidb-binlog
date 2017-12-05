@@ -26,10 +26,13 @@ const maxMsgSizeForGRPC = 1024 * 1024 * 1024
 const slowDist = 30 * time.Millisecond
 
 // use latestPos to record the latest binlog file the pump works on
-var latestPos binlog.Pos
+var (
+	latestPos binlog.Pos
+	latestTS  int64
+)
 
 // Server implements the gRPC interface,
-// and maintains pump's status at run time.
+// and maintains pump's status at run time
 type Server struct {
 	// RWMutex protects dispatcher
 	sync.RWMutex
@@ -321,6 +324,7 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	latestTS = ts
 
 	bl := &binlog.Binlog{
 		Tp:       binlog.BinlogType_Rollback,
@@ -355,6 +359,12 @@ func (s *Server) writeFakeBinlog() {
 			}
 			log.Info("generate fake binlog successfully")
 		}
+	} else {
+		ts, err := s.getTSO()
+		if err != nil {
+			log.Infof("get tso error %v", err)
+		}
+		latestTS = ts
 	}
 	s.needGenBinlog.Set(true)
 }

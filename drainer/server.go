@@ -155,6 +155,7 @@ func (s *Server) StartCollect() {
 		defer func() {
 			log.Info("collect goroutine exited")
 			s.wg.Done()
+			s.Close()
 		}()
 		s.collector.Start(s.ctx)
 	}()
