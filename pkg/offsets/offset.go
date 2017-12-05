@@ -114,7 +114,10 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 		return -1, errors.Trace(err)
 	}
 	if cmp == -1 {
-		return -1, errors.Errorf("give position %v is smaller than oldest message, some binlogs may lose", pos)
+		log.Warningf("give position %v is smaller than oldest message, some binlogs may lose", pos)
+	}
+	if cmp <= 0 {
+		return start, nil
 	}
 
 	for start < end {
