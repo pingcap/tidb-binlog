@@ -68,7 +68,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		conn:       conn,
 		current:    pos,
 		client:     pb.NewPumpClient(conn),
-		bh:         newBinlogHeap(maxHeapSize),
+		bh:         newBinlogHeap(maxBinlogItemCount),
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
