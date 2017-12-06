@@ -12,7 +12,7 @@ import (
 
 const (
 	// DefaultRootPath is the root path of the keys stored in etcd
-	DefaultRootPath = "tidb-binlog"
+	DefaultRootPath = "/tidb-binlog"
 )
 
 // Node organizes the ectd query result as a Trie tree

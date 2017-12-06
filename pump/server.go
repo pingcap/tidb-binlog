@@ -25,8 +25,11 @@ var pullBinlogInterval = 50 * time.Millisecond
 const maxMsgSizeForGRPC = 1024 * 1024 * 1024
 const slowDist = 30 * time.Millisecond
 
-// use latestPos to record the latest binlog file the pump works on
-var latestPos binlog.Pos
+// use latestPos and latestTS to record the latest binlog position and ts the pump works on
+var (
+	latestPos binlog.Pos
+	latestTS  int64
+)
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -437,7 +440,10 @@ func (s *Server) getTSO() (int64, error) {
 		log.Warnf("get timestamp too slow: %s", dist)
 	}
 
-	return int64(composeTS(physical, logical)), nil
+	ts := int64(composeTS(physical, logical))
+	latestTS = ts
+
+	return ts, nil
 }
 
 // Close gracefully releases resource of pump server
@@ -446,6 +452,10 @@ func (s *Server) Close() {
 		if err := bl.Close(); err != nil {
 			log.Errorf("close binlogger error %v", err)
 		}
+	}
+
+	if _, err := s.getTSO(); err != nil {
+		log.Error(errors.ErrorStack(err))
 	}
 
 	// unregister this node

@@ -81,39 +81,29 @@ func (r *EtcdRegistry) RegisterNode(pctx context.Context, prefix, nodeID, host s
 		// found it, update host infomation of the node
 		return r.updateNode(ctx, prefix, nodeID, host)
 	}
-
 }
 
-// MarkOfflineSign marks pump offline sign
-func (r *EtcdRegistry) MarkOfflineSign(pctx context.Context, prefix, nodeID string) error {
+// MarkOfflineNode marks offline node in the etcd
+func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, host string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	offlineKey := r.prefixed(prefix, "offline", nodeID)
-	latestPosBytes, err := latestPos.Marshal()
-	if err != nil {
-		return errors.Trace(err)
+	obj := &NodeStatus{
+		NodeID:    nodeID,
+		Host:      host,
+		IsOffline: true,
+		LatestPos: latestPos,
+		OfflineTS: latestTS,
 	}
 
-	// try to touch offline sign of node
-	err = r.client.UpdateOrCreate(ctx, offlineKey, string(latestPosBytes), 0)
+	objstr, err := json.Marshal(obj)
+	if err != nil {
+		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
+	}
+
+	key := r.prefixed(prefix, nodeID, "object")
+	err = r.client.Update(ctx, key, string(objstr), 0)
 	return errors.Trace(err)
-}
-
-// GetOfflineSign queries pump offline sign
-func (r *EtcdRegistry) GetOfflineSign(pctx context.Context, prefix, nodeID string) (pb.Pos, error) {
-	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
-	defer cancel()
-
-	offlineKey := r.prefixed(prefix, "offline", nodeID)
-	pos := pb.Pos{}
-
-	posBytes, err := r.client.Get(ctx, offlineKey)
-	if err != nil {
-		return pos, errors.Trace(err)
-	}
-	err = pos.Unmarshal(posBytes)
-	return pos, errors.Trace(err)
 }
 
 // UnregisterNode unregisters the node in the etcd
