@@ -180,9 +180,11 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 }
 
 func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
-	status := &NodeStatus{}
-	latestPos := pb.Pos{}
-	var isAlive bool
+	var (
+		isAlive bool
+		status  = &NodeStatus{}
+		pos     = pb.Pos{}
+	)
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
@@ -191,13 +193,16 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 			}
 		case "alive":
 			isAlive = true
-			if err := latestPos.Unmarshal(n.Value); err != nil {
+			if err := pos.Unmarshal(n.Value); err != nil {
 				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
 			}
 		}
 	}
+
 	status.IsAlive = isAlive
-	status.LatestPos = latestPos
+	if isAlive {
+		status.LatestPos = pos
+	}
 	return status, nil
 }
 
