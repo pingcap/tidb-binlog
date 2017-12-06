@@ -441,6 +441,7 @@ func (s *Server) getTSO() (int64, error) {
 	}
 
 	ts := int64(composeTS(physical, logical))
+	// update latestTS by the way
 	latestTS = ts
 
 	return ts, nil
@@ -454,7 +455,7 @@ func (s *Server) Close() {
 		}
 	}
 
-	// update latest to for offline ts
+	// update latest for offline ts in unregister process
 	if _, err := s.getTSO(); err != nil {
 		log.Error(errors.ErrorStack(err))
 	}
