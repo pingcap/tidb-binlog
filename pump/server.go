@@ -454,6 +454,7 @@ func (s *Server) Close() {
 		}
 	}
 
+	// update latest to for offline ts
 	if _, err := s.getTSO(); err != nil {
 		log.Error(errors.ErrorStack(err))
 	}

@@ -29,7 +29,10 @@ const (
 	defaultPumpTimeout = 5 * time.Second
 )
 
-var maxBinlogItemCount = 16 << 12
+var (
+	maxBinlogItemCount     int
+	defaultBinlogItemCount = 16 << 12
+)
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
@@ -99,7 +102,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
-	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", 16<<12, "blurry count of binlogs in cache, limit cache size")
+	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	return cfg
 }
 
