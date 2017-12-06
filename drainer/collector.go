@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -44,6 +45,7 @@ type Collector struct {
 	latestTS   int64
 	cp         checkpoint.CheckPoint
 
+	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -64,6 +66,11 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
+	offsetSeeker, err := createOffsetSeeker(kafkaAddrs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -79,19 +86,20 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:  clusterID,
-		interval:   time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs: kafkaAddrs,
-		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:    cfg.PumpTimeout,
-		pumps:      make(map[string]*Pump),
-		bh:         newBinlogHeap(maxHeapSize),
-		window:     w,
-		syncer:     s,
-		cp:         cpt,
-		tiClient:   tiClient,
-		tiStore:    tiStore,
-		notifyChan: make(chan *notifyResult),
+		clusterID:    clusterID,
+		interval:     time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:   kafkaAddrs,
+		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:      cfg.PumpTimeout,
+		pumps:        make(map[string]*Pump),
+		bh:           newBinlogHeap(maxHeapSize),
+		window:       w,
+		syncer:       s,
+		cp:           cpt,
+		tiClient:     tiClient,
+		tiStore:      tiStore,
+		notifyChan:   make(chan *notifyResult),
+		offsetSeeker: offsetSeeker,
 	}, nil
 }
 
