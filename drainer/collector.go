@@ -93,7 +93,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:      cfg.PumpTimeout,
 		pumps:        make(map[string]*Pump),
-		bh:           newBinlogHeap(maxHeapSize),
+		bh:           newBinlogHeap(maxBinlogItemCount),
 		window:       w,
 		syncer:       s,
 		cp:           cpt,
