@@ -21,8 +21,6 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanLength int64 = 16 << 12
-
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -74,11 +72,11 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		clusterID:  clusterID,
 		consumer:   consumer,
 		current:    pos,
-		bh:         newBinlogHeap(maxHeapSize),
+		bh:         newBinlogHeap(maxBinlogItemCount),
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, defaultBinlogChanLength),
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 	}, nil
 }
 
