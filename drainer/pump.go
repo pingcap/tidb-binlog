@@ -19,8 +19,6 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanLength int64 = 16 << 12
-
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -74,7 +72,7 @@ func NewPump(nodeID string, clusterID uint64, host string, timeout time.Duration
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, defaultBinlogChanLength),
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 	}, nil
 }
 
