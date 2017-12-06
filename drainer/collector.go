@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -311,12 +312,21 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
-	_, poss := c.cp.Pos()
+	commitTS, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
-	if !ok {
-		return binlog.Pos{}, nil
+	if ok {
+		return pos, nil
 	}
-	return pos, nil
+
+	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
+	safeComitTS := getSafeTS(commitTS)
+	offsets, err := c.offsetSeeker.Do(topic, safeComitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
+	if err == nil {
+		return binlog.Pos{Offset: offsets[0]}, nil
+	}
+
+	log.Errorf("seek offset %s error %v", nodeID, err)
+	return binlog.Pos{}, nil
 }
 
 // Notify notifies to detcet pumps
