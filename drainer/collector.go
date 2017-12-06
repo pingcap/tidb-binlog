@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/sarama"
+
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
@@ -326,7 +328,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	}
 
 	log.Errorf("seek offset %s error %v", nodeID, err)
-	return binlog.Pos{}, nil
+	return binlog.Pos{Offset: sarama.OffsetOldest}, nil
 }
 
 // Notify notifies to detcet pumps

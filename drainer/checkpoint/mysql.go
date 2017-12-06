@@ -91,6 +91,7 @@ func (sp *MysqlCheckPoint) Load() error {
 	}
 
 	if len(str) == 0 {
+		sp.CommitTS = sp.initialCommitTS
 		return nil
 	}
 
