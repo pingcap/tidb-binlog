@@ -171,10 +171,22 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	exists := make(map[string]bool)
+
+	// get current binlog's commit ts which in process
+	currentCommitTS, _ := c.cp.Pos()
+	safeTS := getSafeTS(currentCommitTS)
+	// query lastest ts from pd
+	c.latestTS = c.queryLatestTsFromPD()
+
 	for _, n := range nodes {
-		_, ok := c.pumps[n.NodeID]
+		p, ok := c.pumps[n.NodeID]
 		if !ok {
+			// if pump is offline and last binlog ts <= safeTS, ignore it
+			if n.IsOffline && n.OfflineTS <= safeTS {
+				continue
+			}
+
+			// initial pump
 			pos, err := c.getSavePoints(n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -187,35 +199,23 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 			p.StartCollect(ctx, c.tiClient)
-		}
-		exists[n.NodeID] = true
-	}
+		} else {
+			// update pumps' latestTS
+			p.UpdateLatestTS(c.latestTS)
+			if n.IsOffline {
+				if !p.hadFinished(n.LatestPos) {
+					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
+					continue
+				}
 
-	// query lastest ts from pd
-	c.latestTS = c.queryLatestTsFromPD()
-	for id, p := range c.pumps {
-		if !exists[id] {
-			latestPos, err := c.reg.GetOfflineSign(ctx, "pumps", id)
-			if err != nil {
-				log.Errorf("query offline pump error %v", err)
-				continue
+				// release invalid connection
+				p.Close()
+				delete(c.pumps, n.NodeID)
+				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+					p.nodeID, p.clusterID)
 			}
-			if !p.hadFinished(latestPos) {
-				log.Errorf("pump %s has messages that is not consumed", id)
-				continue
-			}
-
-			// release invalid connection
-			p.Close()
-			delete(c.pumps, id)
-			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
-				id, p.clusterID)
-			continue
 		}
-		// update pumps' latestTS
-		p.UpdateLatestTS(c.latestTS)
 	}
-
 	return nil
 }
 
