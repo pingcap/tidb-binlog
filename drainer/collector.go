@@ -130,8 +130,8 @@ func (c *Collector) updateCollectStatus(synced bool) {
 	}
 
 	for nodeID, pump := range c.pumps {
-		status.PumpPos[nodeID] = pump.current
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.current))
+		status.PumpPos[nodeID] = pump.currentPos
+		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -194,7 +194,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
 			if n.IsOffline {
-				if !p.hadFinished(n.LatestPos) {
+				if !p.hadFinished(n.LatestPos, c.window.LoadLower()) {
 					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
 					continue
 				}
