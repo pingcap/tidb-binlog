@@ -24,8 +24,9 @@ type Config struct {
 	Table  string
 	Name   string
 
-	ClusterID     uint64
-	BinlogFileDir string `toml:"dir" json:"dir"`
+	ClusterID       uint64
+	InitialCommitTS int64
+	BinlogFileDir   string `toml:"dir" json:"dir"`
 }
 
 func openDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {

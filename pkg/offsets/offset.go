@@ -14,7 +14,7 @@ const (
 
 // Seeker is a struct for finding offsets in kafka/rocketmq
 type Seeker interface {
-	Do(topic string, pos interface{}, startTime int64, endTime int64) ([]int64, error)
+	Do(topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error)
 }
 
 // Operator is an interface for seeker operation
@@ -67,11 +67,14 @@ func NewKafkaSeeker(address []string, config *sarama.Config, operator Operator) 
 }
 
 // Do returns offsets by given pos
-func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTime int64) ([]int64, error) {
-	partitions, err := ks.consumer.Partitions(topic)
-	if err != nil {
-		log.Errorf("get partitions from topic %s error %v", topic, err)
-		return nil, errors.Annotatef(err, "get partitions from topic %s", topic)
+func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error) {
+	var err error
+	if len(partitions) == 0 {
+		partitions, err = ks.consumer.Partitions(topic)
+		if err != nil {
+			log.Errorf("get partitions from topic %s error %v", topic, err)
+			return nil, errors.Annotatef(err, "get partitions from topic %s", topic)
+		}
 	}
 
 	offsets, err := ks.seekOffsets(topic, partitions, pos)
@@ -111,7 +114,10 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 		return -1, errors.Trace(err)
 	}
 	if cmp == -1 {
-		return -1, errors.Errorf("give position %v is smaller than oldest message, some binlogs may lose", pos)
+		log.Errorf("given position %v is smaller than oldest message, some binlogs may lose", pos)
+	}
+	if cmp <= 0 {
+		return start, nil
 	}
 
 	for start < end {
