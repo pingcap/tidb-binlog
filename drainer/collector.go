@@ -324,7 +324,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	safeComitTS := getSafeTS(commitTS)
 	offsets, err := c.offsetSeeker.Do(topic, safeComitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
-		return binlog.Pos{Offset: offsets[0]}, nil
+		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
 	}
 
 	log.Errorf("seek offset %s error %v", nodeID, err)
