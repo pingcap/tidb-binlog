@@ -120,7 +120,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 		return start, nil
 	}
 
-	for start < end {
+	for start < end-1 {
 		mid := (end-start)/2 + start
 		cmp, err = ks.getAndCompare(topic, partition, mid, pos)
 		if err != nil {
@@ -138,15 +138,15 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 	}
 
-	cmp, err = ks.getAndCompare(topic, partition, start, pos)
+	cmp, err = ks.getAndCompare(topic, partition, end, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
 	if cmp >= equal {
-		return start, nil
+		return end, nil
 	}
 
-	return -1, errors.New("cannot get a valid offset")
+	return start, nil
 }
 
 // getAndCompare queries message at give offset and compare pos with it's position

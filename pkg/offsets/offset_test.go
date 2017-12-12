@@ -1,15 +1,13 @@
 package offsets
 
 import (
-	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -18,64 +16,87 @@ func TestClient(t *testing.T) {
 
 var _ = Suite(&testOffsetSuite{})
 
-type testOffsetSuite struct{}
+type testOffsetSuite struct {
+	producer sarama.SyncProducer
+}
 
-const shiftBits = 18
-const subTime = 20 * 60 * 1000
+func (to *testOffsetSuite) TestOffset(c *C) {
+	kafkaAddr := "127.0.0.1"
+	if os.Getenv("HOSTIP") != "" {
+		kafkaAddr = os.Getenv("HOSTIP")
+	}
+	topic := "test"
 
-func (*testOffsetSuite) TestOffset(c *C) {
-	addr := os.Getenv("HOSTIP")
-	topic := "wangkai"
-
-	sk, err := NewKafkaSeeker([]string{addr + ":9092"}, nil, Int64(0))
+	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, nil, PositionOperator{})
 	c.Assert(err, IsNil)
 
-	var bg pb.Binlog
-
-	producer, err := sarama.NewSyncProducer([]string{addr + ":9092"}, nil)
+	config := sarama.NewConfig()
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.Return.Successes = true
+	to.producer, err = sarama.NewSyncProducer([]string{kafkaAddr + ":9092"}, config)
 	c.Assert(err, IsNil)
+	defer to.producer.Close()
 
-	defer producer.Close()
-
-	bg.PrewriteKey = []byte("key")
-	bg.PrewriteValue = []byte("value")
-
-	res, err := json.Marshal(bg)
-	msg := &sarama.ProducerMessage{
-		Topic:     topic,
-		Partition: int32(0),
-		Key:       sarama.StringEncoder("key"),
-		Value:     sarama.ByteEncoder(res),
+	var testDatas = []string{"b", "d", "e"}
+	var testPoss = map[string]int64{
+		"b": 0,
+		"d": 0,
+		"e": 0,
+	}
+	for _, m := range testDatas {
+		testPoss[m], err = to.procudeMessage([]byte(m), topic)
+		c.Assert(err, IsNil)
 	}
 
-	_, offset, err := producer.SendMessage(msg)
-	c.Assert(err, IsNil)
-
-	getOffset, err := sk.Do(topic, GetSafeTS(int64(1)), 0, 0, nil)
-	c.Assert(err, IsNil)
-
-	log.Infof("getOffset is %v", getOffset)
-	for i := range getOffset {
-		if getOffset[i] > offset {
-			log.Errorf("getOffset is large offset")
-		}
+	var testCases = map[string]int64{
+		"a": testPoss["b"],
+		"c": testPoss["b"],
+		"b": testPoss["b"],
+		"h": testPoss["e"],
+	}
+	for m, res := range testCases {
+		offsetFounds, err := sk.Do(topic, m, 0, 0, []int32{0})
+		c.Assert(err, IsNil)
+		c.Assert(offsetFounds, HasLen, 1)
+		c.Assert(offsetFounds[0], Equals, res)
 	}
 }
 
-type Int64 int64
+func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, error) {
+	var (
+		offset int64
+		err    error
+	)
+	for i := 0; i < 5; i++ {
+		msg := &sarama.ProducerMessage{
+			Topic:     topic,
+			Partition: int32(0),
+			Key:       sarama.StringEncoder("key"),
+			Value:     sarama.ByteEncoder(message),
+		}
+		_, offset, err = to.producer.SendMessage(msg)
+		if err == nil {
+			return offset, errors.Trace(err)
+		}
 
-// int64 implements Operator.Compare interface
-func (Int64) Compare(exceptedPos interface{}, currentPos interface{}) (int, error) {
-	b, ok := currentPos.(int64)
-	if !ok {
-		log.Errorf("convert %d to Int64 error", b)
-		return 0, errors.New("connot conver to Int64")
+		time.Sleep(time.Second)
 	}
 
-	a, ok := exceptedPos.(int64)
+	return offset, err
+}
+
+type PositionOperator struct{}
+
+// Compare implements Operator.Compare interface
+func (p PositionOperator) Compare(exceptedPos interface{}, currentPos interface{}) (int, error) {
+	b, ok := currentPos.(string)
 	if !ok {
-		log.Errorf("convert %d to Int64 error", a)
-		return 0, errors.New("connot conver to Int64")
+		return 0, errors.Errorf("fail to convert %v type to string", currentPos)
+	}
+
+	a, ok := exceptedPos.(string)
+	if !ok {
+		return 0, errors.Errorf("fail to convert %v type to string", exceptedPos)
 	}
 
 	if a > b {
@@ -88,25 +109,7 @@ func (Int64) Compare(exceptedPos interface{}, currentPos interface{}) (int, erro
 	return -1, nil
 }
 
-// int64 implements Operator.Decode interface
-func (Int64) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
-	bg := new(pb.Binlog)
-
-	err := json.Unmarshal(message.Value, bg)
-	if err != nil {
-		log.Errorf("json umarshal error %v", err)
-		return nil, errors.Trace(err)
-	}
-
-	return bg.CommitTs, nil
-}
-
-func GetSafeTS(ts int64) int64 {
-	ts = ts >> shiftBits
-	ts -= subTime
-	if ts < int64(0) {
-		ts = int64(0)
-	}
-
-	return ts
+// Decode implements Operator.Decode interface
+func (p PositionOperator) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
+	return string(message.Value), nil
 }
