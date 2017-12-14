@@ -1,6 +1,7 @@
 package checkpoint
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -40,13 +41,13 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.ClusterID = 123
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
-	nodeID := host + strconv.Itoa(port)
+	node := fmt.Sprintf("%s:%d", host, port)
 	sp, err := newMysql(cfg)
 	c.Assert(err, IsNil)
 
 	testTs := int64(1)
 	testPos := make(map[string]pb.Pos)
-	testPos[nodeID] = pb.Pos{
+	testPos[node] = pb.Pos{
 		Suffix: 10,
 		Offset: 10000,
 	}
@@ -56,7 +57,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	ts, poss := sp.Pos()
 	c.Assert(ts, Equals, testTs)
 	c.Assert(poss, HasLen, 1)
-	c.Assert(poss[nodeID], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
+	c.Assert(poss[node], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 
 	sp1, ero := newMysql(cfg)
 	c.Assert(ero, IsNil)
@@ -64,5 +65,5 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	c.Assert(err, IsNil)
 	sp2 := sp1.(*MysqlCheckPoint)
 	c.Assert(sp2.CommitTS, Equals, ts)
-	c.Assert(sp2.Positions[nodeID], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
+	c.Assert(sp2.Positions[node], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 }
