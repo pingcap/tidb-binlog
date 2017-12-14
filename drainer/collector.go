@@ -208,6 +208,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
+			delete(c.offlines, n.NodeID)
 			p.StartCollect(ctx, c.tiClient)
 		} else {
 			// update pumps' latestTS
