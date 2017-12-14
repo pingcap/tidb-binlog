@@ -40,8 +40,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.ClusterID = 123
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
-	cfg.Name = "checkpoint"
-	nodeID := cfg.Name
+	nodeID := cfg.Table
 	sp, err := newMysql(cfg)
 	c.Assert(err, IsNil)
 
