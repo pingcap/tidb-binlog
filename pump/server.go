@@ -326,6 +326,7 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 	}
 
 	bl := &binlog.Binlog{
+		StartTs:  ts,
 		Tp:       binlog.BinlogType_Rollback,
 		CommitTs: ts,
 	}

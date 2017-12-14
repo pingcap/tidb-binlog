@@ -395,7 +395,7 @@ func (s *Syncer) addJob(job *job) {
 	idx := int(genHashKey(fmt.Sprintf("%v", job.key))) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
 
-	if pos, ok := s.positions[job.nodeID]; !ok || pos.Suffix < job.pos.Suffix {
+	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
 		s.positions[job.nodeID] = job.pos
 	}
 
