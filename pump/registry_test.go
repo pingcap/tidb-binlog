@@ -53,6 +53,12 @@ func (t *testRegistrySuite) TestRegisterNode(c *C) {
 	c.Assert(err, IsNil)
 	mustEqualStatus(c, r, ns.NodeID, ns)
 
+	err = r.MarkOfflineNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
+	c.Assert(err, IsNil)
+	ns.OfflineTS = latestTS
+	ns.IsOffline = true
+	mustEqualStatus(c, r, ns.NodeID, ns)
+
 	err = r.UnregisterNode(context.Background(), nodePrefix, ns.NodeID)
 	c.Assert(err, IsNil)
 	exist, err := r.checkNodeExists(context.Background(), nodePrefix, ns.NodeID)

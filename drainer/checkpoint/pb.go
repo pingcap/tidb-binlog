@@ -21,6 +21,7 @@ var (
 // PbCheckPoint is local CheckPoint struct.
 type PbCheckPoint struct {
 	sync.RWMutex
+	initialCommitTS int64
 
 	name     string
 	saveTime time.Time
@@ -32,7 +33,7 @@ type PbCheckPoint struct {
 
 // NewPb creates a new Pb.
 func newPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{name: cfg.Name, Positions: make(map[string]pb.Pos)}
+	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.Name, Positions: make(map[string]pb.Pos)}
 	err := pb.Load()
 	if err != nil {
 		return pb, errors.Trace(err)
@@ -56,7 +57,14 @@ func (sp *PbCheckPoint) Load() error {
 	defer file.Close()
 
 	_, err = toml.DecodeReader(file, sp)
-	return errors.Trace(err)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if sp.CommitTS == 0 {
+		sp.CommitTS = sp.initialCommitTS
+	}
+	return nil
 }
 
 // Save implements CheckPoint.Save interface

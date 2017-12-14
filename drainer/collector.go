@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/Shopify/sarama"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -13,6 +16,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -44,6 +48,7 @@ type Collector struct {
 	latestTS   int64
 	cp         checkpoint.CheckPoint
 
+	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -64,6 +69,11 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
+	offsetSeeker, err := createOffsetSeeker(kafkaAddrs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -79,19 +89,20 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:  clusterID,
-		interval:   time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs: kafkaAddrs,
-		reg:        pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:    cfg.PumpTimeout,
-		pumps:      make(map[string]*Pump),
-		bh:         newBinlogHeap(maxHeapSize),
-		window:     w,
-		syncer:     s,
-		cp:         cpt,
-		tiClient:   tiClient,
-		tiStore:    tiStore,
-		notifyChan: make(chan *notifyResult),
+		clusterID:    clusterID,
+		interval:     time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:   kafkaAddrs,
+		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:      cfg.PumpTimeout,
+		pumps:        make(map[string]*Pump),
+		bh:           newBinlogHeap(maxBinlogItemCount),
+		window:       w,
+		syncer:       s,
+		cp:           cpt,
+		tiClient:     tiClient,
+		tiStore:      tiStore,
+		notifyChan:   make(chan *notifyResult),
+		offsetSeeker: offsetSeeker,
 	}, nil
 }
 
@@ -130,8 +141,8 @@ func (c *Collector) updateCollectStatus(synced bool) {
 	}
 
 	for nodeID, pump := range c.pumps {
-		status.PumpPos[nodeID] = pump.current
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.current))
+		status.PumpPos[nodeID] = pump.currentPos
+		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -162,10 +173,22 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	exists := make(map[string]bool)
+
+	// get current binlog's commit ts which in process
+	currentCommitTS, _ := c.cp.Pos()
+	safeTS := getSafeTS(currentCommitTS)
+	// query lastest ts from pd
+	c.latestTS = c.queryLatestTsFromPD()
+
 	for _, n := range nodes {
-		_, ok := c.pumps[n.NodeID]
+		p, ok := c.pumps[n.NodeID]
 		if !ok {
+			// if pump is offline and last binlog ts <= safeTS, ignore it
+			if n.IsOffline && n.OfflineTS <= safeTS {
+				continue
+			}
+
+			// initial pump
 			pos, err := c.getSavePoints(n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -178,35 +201,23 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 			p.StartCollect(ctx, c.tiClient)
-		}
-		exists[n.NodeID] = true
-	}
+		} else {
+			// update pumps' latestTS
+			p.UpdateLatestTS(c.latestTS)
+			if n.IsOffline {
+				if !p.hadFinished(n.LatestPos, c.window.LoadLower()) {
+					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
+					continue
+				}
 
-	// query lastest ts from pd
-	c.latestTS = c.queryLatestTsFromPD()
-	for id, p := range c.pumps {
-		if !exists[id] {
-			latestPos, err := c.reg.GetOfflineSign(ctx, "pumps", id)
-			if err != nil {
-				log.Errorf("query offline pump error %v", err)
-				continue
+				// release invalid connection
+				p.Close()
+				delete(c.pumps, n.NodeID)
+				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+					p.nodeID, p.clusterID)
 			}
-			if !p.hadFinished(latestPos) {
-				log.Errorf("pump %s has messages that is not consumed", id)
-				continue
-			}
-
-			// release invalid connection
-			p.Close()
-			delete(c.pumps, id)
-			log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
-				id, p.clusterID)
-			continue
 		}
-		// update pumps' latestTS
-		p.UpdateLatestTS(c.latestTS)
 	}
-
 	return nil
 }
 
@@ -303,12 +314,21 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
-	_, poss := c.cp.Pos()
+	commitTS, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
-	if !ok {
-		return binlog.Pos{}, nil
+	if ok {
+		return pos, nil
 	}
-	return pos, nil
+
+	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
+	safeComitTS := getSafeTS(commitTS)
+	offsets, err := c.offsetSeeker.Do(topic, safeComitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
+	if err == nil {
+		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
+	}
+
+	log.Errorf("seek offset %s error %v", nodeID, err)
+	return binlog.Pos{Offset: sarama.OffsetOldest}, nil
 }
 
 // Notify notifies to detcet pumps

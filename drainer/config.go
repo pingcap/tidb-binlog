@@ -29,6 +29,11 @@ const (
 	defaultPumpTimeout = 5 * time.Second
 )
 
+var (
+	maxBinlogItemCount     int
+	defaultBinlogItemCount = 16 << 12
+)
+
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
 	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
@@ -55,6 +60,7 @@ type Config struct {
 	ZkAddrs         string        `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	LogFile         string        `toml:"log-file" json:"log-file"`
 	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
+	InitialCommitTS int64         `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
@@ -90,6 +96,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
+	fs.Int64Var(&cfg.InitialCommitTS, "initial-commit-ts", 0, "if drainer donesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
@@ -97,6 +104,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
+	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	return cfg
 }
 

@@ -21,8 +21,6 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-const defaultBinlogChanLength int64 = 16 << 12
-
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -35,7 +33,10 @@ type Pump struct {
 	nodeID    string
 	clusterID uint64
 	consumer  sarama.Consumer
-	current   pb.Pos
+	// the current position that collector is working on
+	currentPos pb.Pos
+	// the latest binlog position that pump had handled
+	latestPos pb.Pos
 	// store binlogs in a heap
 	bh      *binlogHeap
 	tiStore kv.Storage
@@ -73,12 +74,13 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		nodeID:     nodeID,
 		clusterID:  clusterID,
 		consumer:   consumer,
-		current:    pos,
-		bh:         newBinlogHeap(maxHeapSize),
+		currentPos: pos,
+		latestPos:  pos,
+		bh:         newBinlogHeap(maxBinlogItemCount),
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, defaultBinlogChanLength),
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 	}, nil
 }
 
@@ -175,6 +177,11 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 					binlogs = make(map[int64]*binlogItem)
 				}
 			}
+		}
+
+		// update latestPos
+		if ComparePos(entity.pos, p.latestPos) > 0 {
+			p.latestPos = entity.pos
 		}
 	}
 }
@@ -343,17 +350,17 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 	return job, nil
 }
 
-func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
+func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
-	for item != nil && item.binlog.CommitTs <= maxTS {
+	for item != nil && item.binlog.CommitTs <= windowUpper {
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
-		if item.binlog.CommitTs > minTS {
+		if item.binlog.CommitTs > windowLower {
 			bs = append(bs, item)
 		}
 		// update pump's current position
-		if ComparePos(p.current, item.pos) == -1 {
-			p.current = item.pos
+		if ComparePos(p.currentPos, item.pos) == -1 {
+			p.currentPos = item.pos
 		}
 		item = p.bh.pop()
 	}
@@ -364,8 +371,8 @@ func (p *Pump) collectBinlogs(minTS, maxTS int64) binlogItems {
 	return bs
 }
 
-func (p *Pump) hadFinished(pos pb.Pos) bool {
-	if ComparePos(p.current, pos) >= 0 {
+func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
+	if ComparePos(p.latestPos, pos) >= 0 && p.latestValidCommitTS <= windowLower {
 		return true
 	}
 	return false
@@ -378,7 +385,7 @@ func (p *Pump) pullBinlogs() {
 	var err error
 	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
-	pos := p.current
+	pos := p.currentPos
 
 	for {
 		select {

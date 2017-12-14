@@ -10,9 +10,9 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
-GO        := GO15VENDOREXPERIMENT="1" go
-GOBUILD   := GOPATH=$(CURDIR)/_vendor:$(GOPATH) $(GO) build
-GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) $(GO) test
+GO        := go
+GOBUILD   := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=1 $(GO) test -p 3
 
 ARCH      := "`uname -s`"
 LINUX     := "Linux"

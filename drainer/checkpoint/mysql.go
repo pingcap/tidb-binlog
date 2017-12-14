@@ -17,7 +17,8 @@ import (
 // MysqlCheckPoint is a local savepoint struct for mysql
 type MysqlCheckPoint struct {
 	sync.RWMutex
-	clusterID uint64
+	clusterID       uint64
+	initialCommitTS int64
 
 	db       *sql.DB
 	schema   string
@@ -41,11 +42,12 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	}
 
 	sp := &MysqlCheckPoint{
-		db:        db,
-		clusterID: cfg.ClusterID,
-		schema:    cfg.Schema,
-		table:     cfg.Table,
-		Positions: make(map[string]pb.Pos),
+		db:              db,
+		clusterID:       cfg.ClusterID,
+		initialCommitTS: cfg.InitialCommitTS,
+		schema:          cfg.Schema,
+		table:           cfg.Table,
+		Positions:       make(map[string]pb.Pos),
 	}
 
 	sql := genCreateSchema(sp)
@@ -89,10 +91,19 @@ func (sp *MysqlCheckPoint) Load() error {
 	}
 
 	if len(str) == 0 {
+		sp.CommitTS = sp.initialCommitTS
 		return nil
 	}
 
-	return json.Unmarshal([]byte(str), sp)
+	err = json.Unmarshal([]byte(str), sp)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if sp.CommitTS == 0 {
+		sp.CommitTS = sp.initialCommitTS
+	}
+	return nil
 }
 
 // Save implements checkpoint.Save interface
