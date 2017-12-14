@@ -11,7 +11,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	fileName := "test"
 	notExistFileName := "test_not_exist"
 	cfg := new(Config)
-	cfg.BinlogFileDir = fileName
+	cfg.Name = fileName
 	nodeID := fileName
 	meta, err := newPb(cfg)
 	c.Assert(err, IsNil)
@@ -47,7 +47,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	})
 
 	// check not exist meta file
-	cfg.BinlogFileDir = notExistFileName
+	cfg.Name = notExistFileName
 	err = meta.Load()
 	c.Assert(err, IsNil)
 }

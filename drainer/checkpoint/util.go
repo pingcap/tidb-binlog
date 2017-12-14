@@ -22,6 +22,7 @@ type Config struct {
 	Db     *DBConfig
 	Schema string
 	Table  string
+	Name   string
 
 	ClusterID       uint64
 	InitialCommitTS int64
@@ -53,6 +54,9 @@ func checkConfig(cfg *Config) error {
 	}
 	if cfg.Db.User == "" {
 		cfg.Db.User = "root"
+	}
+	if cfg.Name == "" {
+		cfg.Name = "checkpoint"
 	}
 	if cfg.Schema == "" {
 		cfg.Schema = "tidb_binlog"
