@@ -43,6 +43,7 @@ type Collector struct {
 	tiClient   *tikv.LockResolver
 	tiStore    kv.Storage
 	pumps      map[string]*Pump
+	offlines   map[string]struct{}
 	bh         *binlogHeap
 	syncer     *Syncer
 	latestTS   int64
@@ -95,6 +96,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:      cfg.PumpTimeout,
 		pumps:        make(map[string]*Pump),
+		offlines:     make(map[string]struct{}),
 		bh:           newBinlogHeap(maxBinlogItemCount),
 		window:       w,
 		syncer:       s,
@@ -184,8 +186,14 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
-			if n.IsOffline && n.OfflineTS <= safeTS {
-				continue
+			if n.IsOffline {
+				if n.OfflineTS <= safeTS {
+					continue
+				}
+
+				if _, exist := c.offlines[n.NodeID]; exist {
+					continue
+				}
 			}
 
 			// initial pump
@@ -200,6 +208,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
+			delete(c.offlines, n.NodeID)
 			p.StartCollect(ctx, c.tiClient)
 		} else {
 			// update pumps' latestTS
@@ -213,6 +222,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				// release invalid connection
 				p.Close()
 				delete(c.pumps, n.NodeID)
+				c.offlines[n.NodeID] = struct{}{}
 				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
 			}

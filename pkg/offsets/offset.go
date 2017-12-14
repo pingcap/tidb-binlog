@@ -157,7 +157,7 @@ func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64
 		log.Errorf("ConsumePartition error %v", err)
 		return 0, errors.Trace(err)
 	}
-	defer pc.AsyncClose()
+	defer pc.Close()
 
 	for msg := range pc.Messages() {
 		bp, err := ks.operator.Decode(msg)

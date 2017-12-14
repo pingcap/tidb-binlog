@@ -44,7 +44,12 @@ func (s *seekOperator) Decode(message *sarama.ConsumerMessage) (interface{}, err
 		return nil, errors.Trace(err)
 	}
 
-	return bg.CommitTs, nil
+	ts := bg.GetCommitTs()
+	if ts == 0 {
+		ts = bg.GetStartTs()
+	}
+
+	return ts, nil
 }
 
 func createOffsetSeeker(addrs []string) (offsets.Seeker, error) {

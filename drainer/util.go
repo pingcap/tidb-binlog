@@ -26,8 +26,7 @@ import (
 
 const (
 	lengthOfBinaryTime = 15
-	shiftBits          = 18
-	subTime            = 20 * 60 * 1000
+	subTime            = (20 * 60 * 1000) << 18
 )
 
 // InitLogger initalizes Pump's logger.
@@ -86,7 +85,6 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 }
 
 func getSafeTS(ts int64) int64 {
-	ts = ts >> shiftBits
 	ts -= subTime
 	if ts < int64(0) {
 		ts = int64(0)
