@@ -33,7 +33,7 @@ type PbCheckPoint struct {
 
 // NewPb creates a new Pb.
 func newPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.Name, Positions: make(map[string]pb.Pos)}
+	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, Positions: make(map[string]pb.Pos)}
 	err := pb.Load()
 	if err != nil {
 		return pb, errors.Trace(err)

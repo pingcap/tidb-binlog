@@ -80,7 +80,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 		Db:              &dbCfg,
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
-		BinlogFileDir:   path.Join(cfg.DataDir, "savepoint"),
+		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),
 	}
 }
 
