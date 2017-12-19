@@ -26,11 +26,21 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"method", "label"})
+
+	binlogSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "binlog_size",
+			Help:      "binlog size",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+		}, []string{"nodeID"})
 )
 
 func init() {
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
+	prometheus.MustRegister(binlogSizeHistogram)
 }
 
 type metricClient struct {

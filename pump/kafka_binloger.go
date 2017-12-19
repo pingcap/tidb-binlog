@@ -29,6 +29,7 @@ func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogg
 	// initial kafka client to use manual partitioner
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.MaxMessageBytes = maxMsgSize
 	config.Producer.Return.Successes = true
 
 	producer, err := sarama.NewSyncProducer(addr, config)
