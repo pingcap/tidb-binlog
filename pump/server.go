@@ -22,7 +22,7 @@ import (
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
-const maxMsgSizeForGRPC = 1024 * 1024 * 1024
+const maxMsgSize = 1024 * 1024 * 1024
 const slowDist = 30 * time.Millisecond
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
@@ -128,7 +128,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSizeForGRPC)),
+		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
@@ -196,6 +196,11 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		}
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
+
+		if len(in.Payload) > 100*1024*1024 {
+			log.Warningf("binlog message is too large %d M", len(in.Payload)/(1024*1024))
+			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
+		}
 	}()
 
 	s.needGenBinlog.Set(false)
