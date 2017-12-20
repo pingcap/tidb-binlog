@@ -260,7 +260,7 @@ func (s *Server) Start() error {
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, unregister this node
 		if err := s.node.Unregister(s.ctx); err != nil {
-			log.Error(errors.ErrorStack(err))
+			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
@@ -269,7 +269,7 @@ func (s *Server) Start() error {
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
-			log.Error(err)
+			log.Errorf("send heartbeat error %v", err)
 		}
 	}()
 
@@ -463,12 +463,12 @@ func (s *Server) Close() {
 
 	// update latest for offline ts in unregister process
 	if _, err := s.getTSO(); err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
 	}
 
 	// unregister this node
 	if err := s.node.Unregister(s.ctx); err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	// close tiStore
 	if s.pdCli != nil {

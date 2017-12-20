@@ -235,7 +235,7 @@ func (s *Server) Start() error {
 	errc := s.heartbeat(s.ctx, s.ID)
 	go func() {
 		for err := range errc {
-			log.Error(err)
+			log.Errorf("send heart error %v", err)
 		}
 	}()
 
@@ -281,7 +281,7 @@ func (s *Server) Start() error {
 func (s *Server) Close() {
 	// unregister drainer
 	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
 	}
 	// stop syncer
 	s.syncer.Close()
