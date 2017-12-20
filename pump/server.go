@@ -198,6 +198,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
 		if len(in.Payload) > 100*1024*1024 {
+			log.Warningf("binlog message is too large %d M", len(in.Payload)/(1024*1024))
 			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
 		}
 	}()
