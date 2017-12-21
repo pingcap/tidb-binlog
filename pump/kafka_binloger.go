@@ -5,15 +5,19 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	queue "github.com/golang-collections/collections/queue"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
-	defualtPartition = int32(0)
+	defaultOpen      = true
+	defaultPartition = int32(0)
 	errorClosed      = errors.New("binlogger is closed")
 )
+
+const defaultMaxBinlogItem = 1024 * 1024
 
 type kafkaBinloger struct {
 	topic string
@@ -21,7 +25,13 @@ type kafkaBinloger struct {
 	producer sarama.SyncProducer
 	encoder  *kafkaEncoder
 
-	closed bool
+	qu            *queue.Queue
+	maxBinlogItem int
+
+	closed      bool
+	isAvailable bool
+	isOpen      bool
+
 	sync.RWMutex
 }
 
@@ -29,7 +39,6 @@ func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogg
 	// initial kafka client to use manual partitioner
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = maxMsgSize
 	config.Producer.Return.Successes = true
 
 	producer, err := sarama.NewSyncProducer(addr, config)
@@ -40,9 +49,13 @@ func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogg
 
 	topic := TopicName(clusterID, node)
 	binlogger := &kafkaBinloger{
-		topic:    topic,
-		producer: producer,
-		encoder:  newKafkaEncoder(producer, topic, DefaultTopicPartition()),
+		topic:         topic,
+		producer:      producer,
+		encoder:       newKafkaEncoder(producer, topic, DefaultTopicPartition()),
+		maxBinlogItem: defaultMaxBinlogItem,
+		qu:            queue.New(),
+		isOpen:        defaultOpen,
+		isAvailable:   true,
 	}
 	return binlogger, nil
 }
@@ -66,10 +79,22 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 		return nil
 	}
 
+	if !k.isAvailable {
+		return k.handleFail(payload)
+	}
+
 	offset, err := k.encoder.encode(payload)
 	if offset > latestPos.Offset {
 		latestPos.Offset = offset
 	}
+
+	if err != nil && k.isOpen {
+		k.isAvailable = false
+		log.Warningf("kafka is not available now")
+		kafkaFailCounter.Add(float64(1))
+		return k.handleFail(payload)
+	}
+
 	return errors.Trace(err)
 }
 
@@ -87,4 +112,39 @@ func (k *kafkaBinloger) GC(days time.Duration) {}
 
 func (k *kafkaBinloger) isClosed() bool {
 	return k.closed == true
+}
+
+func (k *kafkaBinloger) handleFail(payload []byte) error {
+
+	binlogCounter.Add(float64(1))
+	k.qu.Enqueue(payload)
+	if k.qu.Len() == k.maxBinlogItem {
+		log.Warningf("binlog number %d is too large in memory", k.qu.Len())
+		k.qu.Dequeue()
+	}
+
+	select {
+	case <-time.After(genBinlogInterval):
+		k.writeTailSeq()
+	}
+
+	return nil
+}
+
+func (k *kafkaBinloger) writeTailSeq() {
+	if k.qu.Len() == 0 {
+		return
+	}
+	payload := k.qu.Peek()
+
+	_, err := k.encoder.encode(payload.([]byte))
+	if err == nil {
+		k.qu.Dequeue()
+
+		for k.qu.Len() > 0 {
+			payload = k.qu.Dequeue()
+			k.encoder.encode(payload.([]byte))
+		}
+		k.isAvailable = true
+	}
 }

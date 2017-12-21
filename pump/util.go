@@ -179,5 +179,5 @@ func TopicName(clusterID string, nodeID string) string {
 
 // DefaultTopicPartition returns Deault topic partition
 func DefaultTopicPartition() int32 {
-	return defualtPartition
+	return defaultPartition
 }

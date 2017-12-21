@@ -35,12 +35,30 @@ var (
 			Help:      "binlog size",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"nodeID"})
+
+	binlogCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "binlog_count",
+			Help:      "Total binlog count in memory",
+		})
+
+	kafkaFailCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "kafka_count",
+			Help:      "Total write kafka fail count",
+		})
 )
 
 func init() {
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogSizeHistogram)
+	prometheus.MustRegister(binlogCounter)
+	prometheus.MustRegister(kafkaFailCounter)
 }
 
 type metricClient struct {
