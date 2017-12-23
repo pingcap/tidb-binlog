@@ -173,6 +173,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 }
 
 func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
+	num := 0
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -187,6 +188,8 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 			b, ok = p.getPrewriteBinlogEntity(startTS)
 			if ok {
 				if ok := p.query(t, b); !ok {
+					num ++
+					log.Debugf("the %d time getPrewriteBinlogEntity", num)
 					continue
 				}
 			}
