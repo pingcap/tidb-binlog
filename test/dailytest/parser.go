@@ -97,8 +97,6 @@ func (col *column) parseColumnOptions(ops []*ast.ColumnOption) {
 		switch op.Tp {
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionAutoIncrement, ast.ColumnOptionUniqKey:
 			col.table.uniqIndices[col.name] = col
-		case ast.ColumnOptionIndex:
-			col.table.indices[col.name] = col
 		case ast.ColumnOptionComment:
 			col.comment = op.Expr.GetDatum().GetString()
 		}
