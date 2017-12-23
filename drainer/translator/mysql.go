@@ -478,6 +478,10 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 			columnsValues = append(columnsValues, fmt.Sprintf("%s", col.DefaultValue))
 		}
 	}
+
+	if len(columnsValues) == 0 {
+		columnsValues = append(columnsValues, fmt.Sprintf("%s_%s", table.Name))
+	}
 	return columnsValues, nil
 }
 
