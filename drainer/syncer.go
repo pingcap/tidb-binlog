@@ -406,10 +406,13 @@ func (s *Syncer) addJob(job *job) {
 }
 
 func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string) error {
+	start := time.Now()
 	key, err := s.resolveCasuality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+	cost := time.Now().Sub(start)
+	log.Debugf("resolveCasuality, keys len: %d, cost time: %v", len(keys), cost)
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
 	s.addJob(job)
 	return nil
@@ -527,7 +530,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				clearF()
 			}
-
+			log.Debug("execution Wait Time")
 			time.Sleep(executionWaitTime)
 		}
 	}
@@ -608,6 +611,11 @@ func (s *Syncer) run(b *binlogItem) error {
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
+	start := time.Now()
+	defer func() {
+		cost := time.Now().Sub(start)
+		log.Debugf("translateSqls, len: %d, cost: %v", len(mutations), cost)
+	}()
 	for _, mutation := range mutations {
 
 		table, ok := s.schema.TableByID(mutation.GetTableId())

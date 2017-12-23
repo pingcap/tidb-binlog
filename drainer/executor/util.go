@@ -27,6 +27,11 @@ type DBConfig struct {
 }
 
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
+	start := time.Now()
+	defer func() {
+		cost := time.Now().Sub(start)
+		log.Debugf("execute sqls count: %d, isDDL: %v, cost time: %v", len(sqls), isDDL, cost)
+	}()
 	if len(sqls) == 0 {
 		return nil
 	}
