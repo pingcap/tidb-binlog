@@ -480,7 +480,7 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	}
 
 	if len(columnsValues) == 0 {
-		columnsValues = append(columnsValues, fmt.Sprintf("%s_%s", table.Name))
+		columnsValues = append(columnsValues, table.Name)
 	}
 	return columnsValues, nil
 }
