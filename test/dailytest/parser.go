@@ -95,8 +95,7 @@ func (col *column) parseColumn(cd *ast.ColumnDef) {
 func (col *column) parseColumnOptions(ops []*ast.ColumnOption) {
 	for _, op := range ops {
 		switch op.Tp {
-		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionUniq, ast.ColumnOptionAutoIncrement,
-			ast.ColumnOptionUniqIndex, ast.ColumnOptionKey, ast.ColumnOptionUniqKey:
+		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionAutoIncrement, ast.ColumnOptionUniqKey:
 			col.table.uniqIndices[col.name] = col
 		case ast.ColumnOptionIndex:
 			col.table.indices[col.name] = col
