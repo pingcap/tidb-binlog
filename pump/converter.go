@@ -1,65 +1,64 @@
 package pump
 
 import (
-    "time"
+	"time"
 
-    "github.com/juju/errors"
+	"github.com/juju/errors"
 )
 
-
 type kafkaToCache struct {
-    kMaster  Binlogger
-    cSlave   Binlogger
+	master Binlogger
+	slave  Binlogger
 }
 
-func newKafkaToCache()*kafkaToCache {
-    return &kafkaToCache{}
+func newKafkaToCache() *kafkaToCache {
+	return &kafkaToCache{}
 }
 
-func (kc *kafkaToCache)init(cid string, node string, addrs []string) error {
-    var err error
-    kc.kMaster, err = createKafkaBinlogger(cid, node, addrs)
-    if err != nil {
-        return errors.Trace(err)
-    }
-    
-    kc.cSlave, err = createCacheBinlogger()
-    if err != nil {
-        return errors.Trace(err)
-    }
+func (kc *kafkaToCache) init(cid string, node string, addrs []string) error {
+	var err error
+	kc.master, err = createKafkaBinlogger(cid, node, addrs)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
-    return nil
+	kc.slave, err = createCacheBinlogger()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 func (kc *kafkaToCache) switchSlave(payload []byte) error {
-    if err := kc.cSlave.WriteTail(payload); err != nil {
-        return errors.Trace(err)
-    }
-    
-    select {
-    case <-time.After(genBinlogInterval):
-        go kc.writeTailSeq()
-    }
+	if err := kc.slave.WriteTail(payload); err != nil {
+		return errors.Trace(err)
+	}
 
-    return nil
+	select {
+	case <-time.After(genBinlogInterval):
+		go kc.writeTailSeq()
+	}
+
+	return nil
 }
 
 func (kc *kafkaToCache) writeTailSeq() {
-    slave := kc.cSlave.(*cacheBinloger)
-    if slave.getLen() == 0 {
-        return
-    }
+	slave := kc.slave.(*cacheBinloger)
+	if slave.getLen() == 0 {
+		return
+	}
 
-    payload := slave.getPeek()
+	payload := slave.getPeek()
 
-    err := kc.kMaster.WriteTail(payload.([]byte))
-    if err == nil {
-        slave.deQueue()
+	err := kc.master.WriteTail(payload.([]byte))
+	if err == nil {
+		slave.deQueue()
 
-        for slave.getLen() > 0 {
-            payload = slave.deQueue()
-            kc.kMaster.WriteTail(payload.([]byte))
-        }
-        kc.kMaster.(*kafkaBinloger).closed = false
-    }
+		for slave.getLen() > 0 {
+			payload = slave.deQueue()
+			kc.master.WriteTail(payload.([]byte))
+		}
+		kc.master.(*kafkaBinloger).closed = false
+	}
 }
