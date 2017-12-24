@@ -290,6 +290,10 @@ import:
   version: v1.12.0
 - package: github.com/samuel/go-zookeeper
   version: e6b59f6144beb8570562539c1898a0b1fea34b41
+- package: github.com/golang-collections/collections
+  version: 604e922904d35e97f98a774db7881f049cd8d970
+  subpackages:
+  - queue
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689

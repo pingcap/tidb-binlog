@@ -14,6 +14,7 @@ import (
 
 var (
 	errBadBinlogName = errors.New("bad file name")
+    isOpenConvert    = true
 )
 
 const physicalShiftBits = 18
@@ -179,5 +180,5 @@ func TopicName(clusterID string, nodeID string) string {
 
 // DefaultTopicPartition returns Deault topic partition
 func DefaultTopicPartition() int32 {
-	return defualtPartition
+	return defaultPartition
 }
