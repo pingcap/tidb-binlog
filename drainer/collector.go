@@ -222,6 +222,7 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 	var latest int64 = math.MaxInt64
 	for _, p := range c.pumps {
 		latestCommitTS := p.GetLatestValidCommitTS()
+		log.Infof("%s last CommitTS %d", p.nodeID, latestCommitTS)
 		if latestCommitTS < latest {
 			latest = latestCommitTS
 		}

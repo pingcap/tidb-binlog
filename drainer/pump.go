@@ -201,6 +201,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	latestTs := atomic.LoadInt64(&p.latestTS)
 	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
+	log.Infof("query tikv %d", binlog.StartTs)
 	if (maxTS - startTS) > maxTxnTimeout {
 		if binlog.GetDdlJobId() == 0 {
 			//log.Infof("binlog (%d) need to query tikv", binlog.StartTs)
@@ -409,6 +410,7 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.P
 				commitTS: b.CommitTs,
 				pos:      pos,
 			}
+
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():

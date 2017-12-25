@@ -61,7 +61,9 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		rowDatas, expected := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog})
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(expected[:exceptedKeys[i]])))
+		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(expected[:exceptedKeys[i]])))
+		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
@@ -91,7 +93,9 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		newRowDatas, changeExpected := testGenRowData(c, t.Columns, 2)
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(whereExpected[:exceptedKeys[index]])))
+		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", t.Name.O) {
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(whereExpected[:exceptedKeys[index]])))
+		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
@@ -123,7 +127,9 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		rowDatas, expected := testGenRowData(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog})
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(expected[:exceptedKeys[index]])))
+		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", t.Name.O) {
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(expected[:exceptedKeys[index]])))
+		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
