@@ -223,15 +223,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if !binlogger.WriteAvailable() {
-		return ret, s.converter[cid].switchSlave(in.Payload)
-	}
-
-	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		if isOpenConvert {
-			return ret, s.converter[cid].switchSlave(in.Payload)
-		}
-
+	if err1 := s.converter[cid].writeTail(binlogger, in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
@@ -377,28 +369,16 @@ func (s *Server) writeFakeBinlog() {
 				log.Errorf("generate forward binlog, generate binlog err %v", err)
 				return
 			}
-			if !binlogger.WriteAvailable() {
-				if err = s.converter[cid].switchSlave(payload); err != nil {
-					log.Errorf("cache write binlog err %v", err)
-					return
-				}
-			}
-			err = binlogger.WriteTail(payload)
-			if err != nil {
-				if isOpenConvert {
-					err = s.converter[cid].switchSlave(payload)
-					if err != nil {
-						log.Errorf("cache write binlog err %v", err)
-					}
-					return
-				}
 
+			if err := s.converter[cid].writeTail(binlogger, payload); err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
+
 			log.Info("generate fake binlog successfully")
 		}
 	}
+
 	s.needGenBinlog.Set(true)
 }
 

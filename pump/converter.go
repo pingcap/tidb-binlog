@@ -30,6 +30,20 @@ func (kc *kafkaToCache) init(cid string, node string, addrs []string) error {
 	return nil
 }
 
+func (kc *kafkaToCache) writeTail(binlogger Binlogger, payload []byte) error {
+	if !binlogger.WriteAvailable() {
+		return kc.switchSlave(payload)
+	}
+
+	if err := binlogger.WriteTail(payload); err != nil {
+		if isOpenConvert {
+			return kc.switchSlave(payload)
+		}
+	}
+
+	return errors.Trace(err)
+}
+
 func (kc *kafkaToCache) switchSlave(payload []byte) error {
 	if err := kc.slave.WriteTail(payload); err != nil {
 		return errors.Trace(err)
