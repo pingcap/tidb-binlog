@@ -35,7 +35,8 @@ func (kc *kafkaToCache) writeTail(binlogger Binlogger, payload []byte) error {
 		return kc.switchSlave(payload)
 	}
 
-	if err := binlogger.WriteTail(payload); err != nil {
+	var err error
+	if err = binlogger.WriteTail(payload); err != nil {
 		if isOpenConvert {
 			return kc.switchSlave(payload)
 		}

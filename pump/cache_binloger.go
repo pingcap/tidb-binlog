@@ -9,7 +9,7 @@ import (
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
-const maxCacheBinlogSize = 1024 * 1024
+const maxCacheBinlogSize = 4 * 1024 * 1024 * 1024
 
 type cacheBinloger struct {
 	qu *queue.Queue
