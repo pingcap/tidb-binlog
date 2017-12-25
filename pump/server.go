@@ -142,11 +142,12 @@ func NewServer(cfg *Config) (*Server, error) {
 // then adds them to dispathcer map
 func (s *Server) init() error {
 	// init cluster data dir if not exist
-	binlogger, err := s.getBinloggerToWrite(s.clusterID)
+	var err error
+	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.dispatcher[s.clusterID] = binlogger
+
 	return nil
 }
 
@@ -168,11 +169,10 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	cb := createCacheBinlogger()
-
 	s.dispatcher[cid] = newProxy(kb, cb, true)
-	return kb, nil
+
+	return s.dispatcher[cid], nil
 }
 
 func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
@@ -263,7 +263,7 @@ func (s *Server) Start() error {
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, unregister this node
 		if err := s.node.Unregister(s.ctx); err != nil {
-			log.Error(errors.ErrorStack(err))
+			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
@@ -272,7 +272,7 @@ func (s *Server) Start() error {
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
-			log.Error(err)
+			log.Errorf("send heartbeat error %v", err)
 		}
 	}()
 
@@ -361,7 +361,8 @@ func (s *Server) writeFakeBinlog() {
 				return
 			}
 
-			if err := binlogger.WriteTail(payload); err != nil {
+			err = binlogger.WriteTail(payload)
+			if err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
@@ -468,12 +469,12 @@ func (s *Server) Close() {
 
 	// update latest for offline ts in unregister process
 	if _, err := s.getTSO(); err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
 	}
 
 	// unregister this node
 	if err := s.node.Unregister(s.ctx); err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	// close tiStore
 	if s.pdCli != nil {

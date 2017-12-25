@@ -14,7 +14,6 @@ import (
 
 var (
 	errBadBinlogName = errors.New("bad file name")
-	isOpenConvert    = true
 )
 
 const physicalShiftBits = 18
