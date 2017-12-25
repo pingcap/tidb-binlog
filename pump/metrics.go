@@ -41,7 +41,7 @@ var (
 			Subsystem: "pump",
 			Name:      "binlog_count",
 			Help:      "Total binlog count in memory",
-		}, []string{"method", "label"})
+		}, []string{"method"})
 )
 
 func init() {

@@ -24,7 +24,8 @@ type kafkaBinloger struct {
 	producer sarama.SyncProducer
 	encoder  *kafkaEncoder
 
-	closed bool
+	closed      bool
+	isAvailable bool
 
 	sync.RWMutex
 }
@@ -77,12 +78,20 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	return nil
 }
 
-// WriteAvailable implements Binlogger WriteAvailable interface
-func (k *kafkaBinloger) WriteAvailable() bool {
+// IsAvailable implements Binlogger IsAvailable interface
+func (k *kafkaBinloger) IsAvailable() bool {
+	k.RLock()
+	defer k.RUnlock()
+
+	return !k.closed
+}
+
+// MarkAvailable mplements Binlogger MarkAvailable interface
+func (k *kafkaBinloger) MarkAvailable() {
 	k.Lock()
 	defer k.Unlock()
 
-	return !k.closed
+	k.closed = false
 }
 
 // Close implements Binlogger Close interface
@@ -90,13 +99,8 @@ func (k *kafkaBinloger) Close() error {
 	k.Lock()
 	defer k.Unlock()
 
-	k.closed = true
 	return k.producer.Close()
 }
 
 // GC implements Binlogger GC interface
 func (k *kafkaBinloger) GC(days time.Duration) {}
-
-func (k *kafkaBinloger) isClosed() bool {
-	return k.closed == true
-}

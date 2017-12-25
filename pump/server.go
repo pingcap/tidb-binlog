@@ -39,7 +39,6 @@ type Server struct {
 
 	// dispatcher keeps all opened binloggers which is indexed by clusterID.
 	dispatcher map[string]Binlogger
-	converter  map[string]*kafkaToCache
 
 	// dataDir is the root directory of all pump data
 	// |
@@ -124,7 +123,6 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
-		converter:  make(map[string]*kafkaToCache),
 		dataDir:    cfg.DataDir,
 		clusterID:  fmt.Sprintf("%d", clusterID),
 		node:       n,
@@ -144,21 +142,11 @@ func NewServer(cfg *Config) (*Server, error) {
 // then adds them to dispathcer map
 func (s *Server) init() error {
 	// init cluster data dir if not exist
-	kb, err := s.getBinloggerToWrite(s.clusterID)
+	binlogger, err := s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	s.dispatcher[s.clusterID] = kb
-
-	s.converter[s.clusterID] = newKafkaToCache()
-
-	addrs, err := flags.ParseHostPortAddr(s.cfg.KafkaAddrs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.converter[s.clusterID].init(s.clusterID, s.node.ID(), addrs)
-
+	s.dispatcher[s.clusterID] = binlogger
 	return nil
 }
 
@@ -180,7 +168,10 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s.dispatcher[cid] = kb
+
+	cb := createCacheBinlogger()
+
+	s.dispatcher[cid] = newProxy(kb, cb, true)
 	return kb, nil
 }
 
@@ -223,7 +214,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if err1 := s.converter[cid].writeTail(binlogger, in.Payload); err1 != nil {
+	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
@@ -370,7 +361,7 @@ func (s *Server) writeFakeBinlog() {
 				return
 			}
 
-			if err := s.converter[cid].writeTail(binlogger, payload); err != nil {
+			if err := binlogger.WriteTail(payload); err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}

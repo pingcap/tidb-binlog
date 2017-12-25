@@ -39,7 +39,10 @@ type Binlogger interface {
 	WriteTail(payload []byte) error
 
 	// check write binlog is avaliable
-	WriteAvailable() bool
+	IsAvailable() bool
+
+	// mark write binlog is avaliable
+	MarkAvailable()
 
 	// close the binlogger
 	Close() error
@@ -201,9 +204,12 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // check write binlog is avaliable
-func (b *binlogger) WriteAvailable() bool {
+func (b *binlogger) IsAvailable() bool {
 	return true
 }
+
+// MarkAvailable mplements Binlogger MarkAvailable interface
+func (b *binlogger) MarkAvailable() {}
 
 // GC recycles the old binlog file
 func (b *binlogger) GC(days time.Duration) {

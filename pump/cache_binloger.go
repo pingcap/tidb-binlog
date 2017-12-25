@@ -14,22 +14,31 @@ const maxCacheBinlogSize = 4 * 1024 * 1024 * 1024
 type cacheBinloger struct {
 	qu *queue.Queue
 
-	curSize int
+	currentSize int
 	sync.RWMutex
 }
 
-func createCacheBinlogger() (Binlogger, error) {
-	binlogger := &cacheBinloger{
-		qu:      queue.New(),
-		curSize: 0,
+func createCacheBinlogger() Binlogger {
+	return &cacheBinloger{
+		qu:          queue.New(),
+		currentSize: 0,
 	}
-
-	return binlogger, nil
 }
 
 // ReadFrom implements ReadFrom WriteTail interface
 func (c *cacheBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
-	return nil, nil
+	if c.currentSize == 0 {
+		return nil, nil
+	}
+
+	entity := binlog.Entity{
+		Payload: c.peek(),
+	}
+	if nums > 0 {
+		c.deQueue()
+	}
+
+	return []binlog.Entity{entity}, nil
 }
 
 // WriteTail implements Binlogger WriteTail interface
@@ -38,35 +47,29 @@ func (c *cacheBinloger) WriteTail(payload []byte) error {
 	c.Lock()
 	defer c.Unlock()
 
-	var err error
 	defer func() {
-		var label string
-		if err != nil {
-			label = "fail"
-		} else {
-			label = "succ"
-		}
-		binlogCacheCounter.WithLabelValues("WriteBinlog", label).Add(1)
-
-		if c.curSize >= maxCacheBinlogSize {
-			log.Warningf("cache binlogger total size %d M is too large", c.curSize/1024*1024)
+		binlogCacheCounter.WithLabelValues("WriteCacheBinlog").Add(1)
+		if c.currentSize >= maxCacheBinlogSize {
+			log.Warningf("cache binlogger total size %d M is too large", c.currentSize/1024*1024)
 			c.qu.Dequeue()
 		}
-
 	}()
 
 	if len(payload) != 0 {
 		c.qu.Enqueue(payload)
-		c.curSize += len(payload)
+		c.currentSize += len(payload)
 	}
 
 	return nil
 }
 
-// WriteAvailable implements Binlogger WriteAvailable interface
-func (c *cacheBinloger) WriteAvailable() bool {
+// IsAvailable implements Binlogger IsAvailable interface
+func (c *cacheBinloger) IsAvailable() bool {
 	return true
 }
+
+// MarkAvailable implements binlogger MarkAvailable interface
+func (c *cacheBinloger) MarkAvailable() {}
 
 // Close implements Binlogger Close interface
 func (c *cacheBinloger) Close() error {
@@ -76,18 +79,17 @@ func (c *cacheBinloger) Close() error {
 // GC implements Binlogger GC interface
 func (c *cacheBinloger) GC(days time.Duration) {}
 
-func (c *cacheBinloger) getPeek() (payload interface{}) {
-	return c.qu.Peek()
+func (c *cacheBinloger) peek() []byte {
+	return c.qu.Peek().([]byte)
 }
 
-func (c *cacheBinloger) enQueue(payload interface{}) {
+func (c *cacheBinloger) enQueue(payload []byte) {
 	c.qu.Enqueue(payload)
 }
 
-func (c *cacheBinloger) deQueue() (payload interface{}) {
-	return c.qu.Dequeue()
-}
+func (c *cacheBinloger) deQueue() []byte {
+	payload := c.qu.Dequeue().([]byte)
+	c.currentSize -= len(payload)
 
-func (c *cacheBinloger) getLen() int {
-	return c.qu.Len()
+	return payload
 }
