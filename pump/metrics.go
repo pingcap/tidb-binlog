@@ -35,6 +35,7 @@ var (
 			Help:      "binlog size",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"nodeID"})
+
 	binlogCacheCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",

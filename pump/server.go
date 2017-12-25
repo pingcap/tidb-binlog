@@ -367,7 +367,7 @@ func (s *Server) writeFakeBinlog() {
 				return
 			}
 
-			log.Info("generate fake binlog successfully")
+			log.Infof("generate fake binlog successfully")
 		}
 	}
 

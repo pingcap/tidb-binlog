@@ -54,13 +54,12 @@ func (c *cacheBinloger) WriteTail(payload []byte) error {
 		binlogCacheCounter.WithLabelValues("WriteCacheBinlog").Add(1)
 		if c.currentSize >= maxCacheBinlogSize {
 			log.Warningf("cache binlogger total size %d M is too large", c.currentSize/1024*1024)
-			c.qu.Dequeue()
+			c.deQueue()
 		}
 	}()
 
 	if len(payload) != 0 {
-		c.qu.Enqueue(payload)
-		c.currentSize += len(payload)
+		c.enQueue(payload)
 	}
 
 	return nil
@@ -88,6 +87,7 @@ func (c *cacheBinloger) peek() []byte {
 
 func (c *cacheBinloger) enQueue(payload []byte) {
 	c.qu.Enqueue(payload)
+	c.currentSize += len(payload)
 }
 
 func (c *cacheBinloger) deQueue() []byte {
