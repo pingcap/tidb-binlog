@@ -27,6 +27,9 @@ func createCacheBinlogger() Binlogger {
 
 // ReadFrom implements ReadFrom WriteTail interface
 func (c *cacheBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
+	c.RLock()
+	defer c.RUnlock()
+
 	if c.currentSize == 0 {
 		return nil, nil
 	}

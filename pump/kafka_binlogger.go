@@ -59,8 +59,8 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 // WriteTail implements Binlogger WriteTail interface
 func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	// for concurrency write
-	k.RLock()
-	defer k.RUnlock()
+	k.Lock()
+	defer k.Unlock()
 
 	if len(payload) == 0 {
 		return nil

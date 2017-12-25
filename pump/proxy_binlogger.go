@@ -15,6 +15,7 @@ const switchDetectInterval = 10 * time.Second
 // Proxy is a proxy binlogger
 type Proxy struct {
 	sync.RWMutex
+	wg sync.WaitGroup
 
 	master Binlogger
 	slave  Binlogger
@@ -32,6 +33,8 @@ func newProxy(master, slave Binlogger, enableProxySwitch bool) Binlogger {
 
 		enableSwitch: enableProxySwitch,
 	}
+
+	go p.switchMS()
 
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 	return p
@@ -72,6 +75,9 @@ func (p *Proxy) MarkAvailable() {}
 
 // Close closes the binlogger
 func (p *Proxy) Close() error {
+	p.Lock()
+	defer p.Unlock()
+
 	var err error
 	if p.master != nil {
 		err = p.master.Close()
@@ -88,6 +94,8 @@ func (p *Proxy) Close() error {
 	}
 
 	p.cancel()
+	p.wg.Wait()
+
 	return nil
 }
 
@@ -98,7 +106,11 @@ func (p *Proxy) GC(days time.Duration) {
 
 func (p *Proxy) switchMS() {
 	ticker := time.NewTicker(switchDetectInterval)
-	defer ticker.Stop()
+	p.wg.Add(1)
+	defer func() {
+		ticker.Stop()
+		p.wg.Done()
+	}()
 
 	for {
 		select {
