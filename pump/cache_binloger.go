@@ -47,7 +47,6 @@ func (c *cacheBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 func (c *cacheBinloger) WriteTail(payload []byte) error {
 	// for concurrency write
 	c.Lock()
-	defer c.Unlock()
 
 	defer func() {
 		binlogCacheCounter.WithLabelValues("WriteCacheBinlog").Add(1)
@@ -55,6 +54,7 @@ func (c *cacheBinloger) WriteTail(payload []byte) error {
 			log.Warningf("cache binlogger total size %v M is too large", c.currentSize/1024/1024)
 			c.deQueue()
 		}
+		c.Unlock()
 	}()
 
 	if len(payload) != 0 {

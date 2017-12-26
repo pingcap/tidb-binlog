@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	errBadBinlogName = errors.New("bad file name")
+	errBadBinlogName  = errors.New("bad file name")
+	enableProxySwitch = true
 )
 
 const physicalShiftBits = 18

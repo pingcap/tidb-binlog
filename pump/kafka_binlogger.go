@@ -86,7 +86,7 @@ func (k *kafkaBinloger) IsAvailable() bool {
 	return !k.closed
 }
 
-// MarkAvailable mplements Binlogger MarkAvailable interface
+// MarkAvailable implements Binlogger MarkAvailable interface
 func (k *kafkaBinloger) MarkAvailable() {
 	k.Lock()
 	defer k.Unlock()

@@ -59,7 +59,7 @@ func (p *Proxy) WriteTail(payload []byte) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	if !p.enableSwitch {
 		return errors.Trace(err)
 	}

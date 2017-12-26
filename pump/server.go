@@ -170,7 +170,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 	cb := createCacheBinlogger()
-	s.dispatcher[cid] = newProxy(kb, cb, true)
+	s.dispatcher[cid] = newProxy(kb, cb, enableProxySwitch)
 
 	return s.dispatcher[cid], nil
 }
