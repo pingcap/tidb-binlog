@@ -20,8 +20,7 @@ type cacheBinloger struct {
 
 func createCacheBinlogger() Binlogger {
 	return &cacheBinloger{
-		qu:          queue.New(),
-		currentSize: 0,
+		qu: queue.New(),
 	}
 }
 
