@@ -53,15 +53,15 @@ func (p *Proxy) WriteTail(payload []byte) error {
 	var err error
 	if p.master.IsAvailable() {
 		err = p.master.WriteTail(payload)
-	} else {
+	}else{
 		err = errors.New("binlogger is not avaliable")
 	}
 
-	if !p.enableSwitch {
-		return errors.Trace(err)
+
+	if !p.master.IsAvailable() && p.enableSwitch{
+		err = p.slave.WriteTail(payload)
 	}
 
-	err = p.slave.WriteTail(payload)
 	return errors.Trace(err)
 }
 

@@ -53,7 +53,7 @@ func (c *cacheBinloger) WriteTail(payload []byte) error {
 	defer func() {
 		binlogCacheCounter.WithLabelValues("WriteCacheBinlog").Add(1)
 		if c.currentSize >= maxCacheBinlogSize {
-			log.Warningf("cache binlogger total size %d M is too large", c.currentSize/1024*1024)
+			log.Warningf("cache binlogger total size %v M is too large", c.currentSize/1024/1024)
 			c.deQueue()
 		}
 	}()
