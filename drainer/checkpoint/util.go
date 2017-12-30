@@ -77,7 +77,7 @@ func genCreateSchema(sp *MysqlCheckPoint) string {
 }
 
 func genCreateTable(sp *MysqlCheckPoint) string {
-	return fmt.Sprintf("create table if not exists %s.%s(clusterID bigint unsigned primary key, checkPoint varchar(255))", sp.schema, sp.table)
+	return fmt.Sprintf("create table if not exists %s.%s(clusterID bigint unsigned primary key, checkPoint MEDIUMTEXT)", sp.schema, sp.table)
 }
 
 func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
