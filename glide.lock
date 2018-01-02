@@ -1,5 +1,5 @@
-hash: ff9c7b6adfc57928b94ba2224782d10b8ad4a6a16d82459e9624f87a8395a5ba
-updated: 2017-11-06T22:04:24.859567208+08:00
+hash: fb362d1504056f568e32cfada016c642ab0c14af8027dd8acdf09e4b15dc9101
+updated: 2017-12-24T20:07:03.643802627+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -104,7 +104,7 @@ imports:
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
-  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
+  version: ecdeabc65495df2dec95d7c4a4c3e021903035e5
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -125,6 +125,10 @@ imports:
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
   - proto
+- name: github.com/golang-collections/collections
+  version: 604e922904d35e97f98a774db7881f049cd8d970
+  subpackages:
+  - queue
 - name: github.com/golang/groupcache
   version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
   subpackages:
@@ -179,7 +183,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: 08c27939df1bd95e881e2c2367a749964ad1fceb
+  version: 2fcda4cb7018ce05a25959d2fe08c83e3329f169
 - name: github.com/pierrec/xxHash
   version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
   subpackages:
@@ -294,7 +298,7 @@ imports:
   - go-tipb
   - sharedbytes
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: 967789050ba94deca04a5e84cce8ad472ce313c1
   subpackages:
   - prometheus
   - prometheus/push
@@ -311,7 +315,11 @@ imports:
 - name: github.com/prometheus/procfs
   version: abf152e5f3e97f2fafac028d2cc06c1feb87ffa5
 - name: github.com/rcrowley/go-metrics
-  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
+  version: e181e095bae94582363434144c61a9653aff6e50
+- name: github.com/samuel/go-zookeeper
+  version: e6b59f6144beb8570562539c1898a0b1fea34b41
+  subpackages:
+  - zk
 - name: github.com/Shopify/sarama
   version: c01858abb625b73a3af51d0798e4ad42c8147093
 - name: github.com/siddontang/go
@@ -339,7 +347,7 @@ imports:
   - thrift-gen/zipkincore
   - utils
 - name: github.com/uber/jaeger-lib
-  version: 3b2a9ad2a045881ab7a0f81d465be54c8292ee4f
+  version: c48167d9cae5887393dd5e61efd06a4a48b7fbb3
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -418,4 +426,4 @@ imports:
   version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
 testImports:
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1

@@ -49,6 +49,7 @@ type Config struct {
 	MetricsInterval   int
 	configFile        string
 	printVersion      bool
+	enableProxySwitch bool
 }
 
 // NewConfig return an instance of configuration
@@ -79,6 +80,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
+	fs.BoolVar(&cfg.enableProxySwitch, "enable-proxy", true, "enable proxy binlog switch to slave while master is not available")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
