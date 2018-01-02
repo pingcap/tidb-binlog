@@ -133,7 +133,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 			schemaVersion = preWrite.GetSchemaVersion()
 		} else {
-			schemaVersion = b.job.BinlogInfo.SchemaVersion-1
+			schemaVersion = b.job.BinlogInfo.SchemaVersion - 1
 		}
 		if schemaVersion > latestSchemaVersion {
 			latestSchemaVersion = schemaVersion
