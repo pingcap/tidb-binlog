@@ -133,7 +133,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 			schemaVersion = preWrite.GetSchemaVersion()
 		} else {
-			schemaVersion = b.job.BinlogInfo.SchemaVersion - 1
+			schemaVersion = b.job.BinlogInfo.SchemaVersion
 		}
 		if schemaVersion > latestSchemaVersion {
 			latestSchemaVersion = schemaVersion
@@ -142,13 +142,15 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if commitTS <= s.initCommitTS {
 			continue
 		}
+		
+		if jobID > 0 {
+			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
+		}
 
 		// find all ddl job that need to reconstruct local schemas
 		var exceptedJobs []*model.Job
-		log.Infof("latest schema version %d", latestSchemaVersion)
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
-				log.Infof("job %+v", job)
 				exceptedJobs = append(exceptedJobs, job)
 			}
 		}
@@ -561,6 +563,8 @@ func (s *Syncer) run(b *binlogItem) error {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+		
+		log.Infof("binlog %+v", binlog)
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
