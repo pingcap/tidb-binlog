@@ -1,5 +1,5 @@
-hash: ff9c7b6adfc57928b94ba2224782d10b8ad4a6a16d82459e9624f87a8395a5ba
-updated: 2017-11-06T22:04:24.859567208+08:00
+hash: fb362d1504056f568e32cfada016c642ab0c14af8027dd8acdf09e4b15dc9101
+updated: 2018-01-02T15:50:48.159815+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -110,7 +110,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/eapache/go-resiliency
-  version: b1fe83b5b03f624450823b751b662259ffc6af70
+  version: ef9aaa7ea8bd2448429af1a77cf41b2b3b34bdd6
   subpackages:
   - breaker
 - name: github.com/eapache/go-xerial-snappy
@@ -125,6 +125,10 @@ imports:
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
   - proto
+- name: github.com/golang-collections/collections
+  version: 604e922904d35e97f98a774db7881f049cd8d970
+  subpackages:
+  - queue
 - name: github.com/golang/groupcache
   version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
   subpackages:
@@ -179,7 +183,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: 08c27939df1bd95e881e2c2367a749964ad1fceb
+  version: 2fcda4cb7018ce05a25959d2fe08c83e3329f169
 - name: github.com/pierrec/xxHash
   version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
   subpackages:
@@ -311,7 +315,11 @@ imports:
 - name: github.com/prometheus/procfs
   version: abf152e5f3e97f2fafac028d2cc06c1feb87ffa5
 - name: github.com/rcrowley/go-metrics
-  version: 1f30fe9094a513ce4c700b9a54458bbb0c96996c
+  version: e181e095bae94582363434144c61a9653aff6e50
+- name: github.com/samuel/go-zookeeper
+  version: e6b59f6144beb8570562539c1898a0b1fea34b41
+  subpackages:
+  - zk
 - name: github.com/Shopify/sarama
   version: c01858abb625b73a3af51d0798e4ad42c8147093
 - name: github.com/siddontang/go
@@ -339,7 +347,7 @@ imports:
   - thrift-gen/zipkincore
   - utils
 - name: github.com/uber/jaeger-lib
-  version: 3b2a9ad2a045881ab7a0f81d465be54c8292ee4f
+  version: c48167d9cae5887393dd5e61efd06a4a48b7fbb3
   subpackages:
   - metrics
 - name: github.com/ugorji/go
