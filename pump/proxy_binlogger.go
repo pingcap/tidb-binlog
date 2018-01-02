@@ -132,16 +132,15 @@ func (p *Proxy) switchMS() {
 func (p *Proxy) migrateBinlog() error {
 	for {
 		p.RLock()
+		defer p.RUnlock()
 		entities, err := p.slave.ReadFrom(binlog.Pos{}, 0)
 		if err != nil {
-			p.RUnlock()
 			return errors.Trace(err)
 		}
 		if len(entities) == 0 {
 			p.master.MarkAvailable()
 			return nil
 		}
-		p.RUnlock()
 
 		for _, entity := range entities {
 			err = p.master.WriteTail(entity.Payload)
