@@ -86,9 +86,6 @@ func (c *checkPoint) save(pos pb.Pos) error {
 }
 
 func (c *checkPoint) check() bool {
-	c.RLock()
-	defer c.RUnlock()
-
 	return time.Since(c.saveTime) >= maxSaveTime
 }
 
