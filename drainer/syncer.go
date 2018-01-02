@@ -142,7 +142,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if commitTS <= s.initCommitTS {
 			continue
 		}
-		
+
 		if jobID > 0 {
 			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
 		}
@@ -563,7 +563,7 @@ func (s *Syncer) run(b *binlogItem) error {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		
+
 		log.Infof("binlog %+v", binlog)
 
 		if jobID == 0 {
