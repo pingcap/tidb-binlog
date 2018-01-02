@@ -1,5 +1,5 @@
 hash: fb362d1504056f568e32cfada016c642ab0c14af8027dd8acdf09e4b15dc9101
-updated: 2017-12-24T20:07:03.643802627+08:00
+updated: 2018-01-02T15:50:48.159815+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -110,7 +110,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/eapache/go-resiliency
-  version: b1fe83b5b03f624450823b751b662259ffc6af70
+  version: ef9aaa7ea8bd2448429af1a77cf41b2b3b34bdd6
   subpackages:
   - breaker
 - name: github.com/eapache/go-xerial-snappy
