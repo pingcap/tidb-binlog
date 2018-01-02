@@ -138,6 +138,8 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if schemaVersion > latestSchemaVersion {
 			latestSchemaVersion = schemaVersion
 		}
+		
+		log.Infof("committs %v vs %v", commitTS, s.initCommitTS)
 
 		if commitTS <= s.initCommitTS {
 			continue
