@@ -5,12 +5,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -143,6 +146,13 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) init() error {
 	// init cluster data dir if not exist
 	var err error
+	clusterDir := path.Join(s.dataDir, "clusters")
+	if !file.Exist(clusterDir) {
+		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
@@ -170,8 +180,39 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 	cb := createCacheBinlogger()
-	s.dispatcher[cid] = newProxy(kb, cb, s.cfg.enableProxySwitch)
 
+	find := false
+	clusterDir := path.Join(s.dataDir, "clusters")
+	names, err := file.ReadDir(clusterDir)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, n := range names {
+		if cid == n {
+			find = true
+			break
+		}
+	}
+
+	var (
+		fb        Binlogger
+		binlogDir = path.Join(clusterDir, cid)
+	)
+	if find {
+		fb, err = OpenBinlogger(binlogDir)
+	} else {
+		fb, err = CreateBinlogger(binlogDir)
+	}
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	s.dispatcher[cid] = newProxy(fb, cb, kb, cp, s.cfg.enableProxySwitch)
 	return s.dispatcher[cid], nil
 }
 

@@ -13,12 +13,16 @@ import (
 const switchDetectInterval = 10 * time.Second
 
 // Proxy is a proxy binlogger
+// sync binlog from master and replicate
+// if master has error,  switch master and slave
 type Proxy struct {
 	sync.RWMutex
 	wg sync.WaitGroup
 
-	master Binlogger
-	slave  Binlogger
+	master    Binlogger
+	replicate Binlogger
+	slave     Binlogger
+	cp        *checkPoint
 
 	enableSwitch bool
 
@@ -26,10 +30,12 @@ type Proxy struct {
 	cancel context.CancelFunc
 }
 
-func newProxy(master, slave Binlogger, enableProxySwitch bool) Binlogger {
+func newProxy(master, slave, replicate Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
 	p := &Proxy{
-		master: master,
-		slave:  slave,
+		master:    master,
+		slave:     slave,
+		replicate: replicate,
+		cp:        cp,
 
 		enableSwitch: enableProxySwitch,
 	}
@@ -117,7 +123,7 @@ func (p *Proxy) switchMS() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			log.Info("context cancel in proxy")
+			log.Info("context cancel - switch manager exists")
 			return
 		case <-ticker.C:
 			if !p.master.IsAvailable() {
@@ -133,14 +139,14 @@ func (p *Proxy) migrateBinlog() error {
 	for {
 		p.RLock()
 		entities, err := p.slave.ReadFrom(binlog.Pos{}, 0)
+		p.RUnlock()
 		if err != nil {
-			p.RUnlock()
 			return errors.Trace(err)
 		}
 		if len(entities) == 0 {
 			p.master.MarkAvailable()
+			return nil
 		}
-		p.RUnlock()
 
 		for _, entity := range entities {
 			err = p.master.WriteTail(entity.Payload)
@@ -152,6 +158,46 @@ func (p *Proxy) migrateBinlog() error {
 		_, err = p.slave.ReadFrom(binlog.Pos{}, 1)
 		if err != nil {
 			return errors.Trace(err)
+		}
+	}
+}
+
+func (p *Proxy) sync() error {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
+	pos := p.cp.pos()
+	for {
+		select {
+		case <-p.ctx.Done():
+			log.Info("context cancel - switch manager exists")
+			return nil
+		default:
+		}
+
+		entities, err := p.master.ReadFrom(pos, 1000)
+		if err != nil {
+			log.Errorf("read binlogs from master error %v", err)
+		}
+
+		for _, ent := range entities {
+			err = p.replicate.WriteTail(ent.Payload)
+			if err != nil {
+				log.Errorf("write binlog to replicate error %v", err)
+			}
+
+			if ComparePos(ent.Pos, pos) > 1 {
+				pos.Suffix = ent.Pos.Suffix
+				pos.Offset = ent.Pos.Offset
+				if err1 := p.cp.save(pos); err1 != nil {
+					log.Errorf("save position %+v error %v", pos, err1)
+				}
+			}
+		}
+
+		if err != nil || len(entities) == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
 	}
 }
