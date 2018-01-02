@@ -104,7 +104,7 @@ imports:
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
-  version: ecdeabc65495df2dec95d7c4a4c3e021903035e5
+  version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -298,7 +298,7 @@ imports:
   - go-tipb
   - sharedbytes
 - name: github.com/prometheus/client_golang
-  version: 967789050ba94deca04a5e84cce8ad472ce313c1
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/push
@@ -426,4 +426,4 @@ imports:
   version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481

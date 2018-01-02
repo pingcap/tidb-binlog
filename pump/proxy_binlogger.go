@@ -41,6 +41,7 @@ func newProxy(master, slave, replicate Binlogger, cp *checkPoint, enableProxySwi
 	}
 
 	go p.switchMS()
+	go p.sync()
 
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 	return p
