@@ -564,8 +564,6 @@ func (s *Syncer) run(b *binlogItem) error {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		log.Infof("binlog %+v", binlog)
-
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}

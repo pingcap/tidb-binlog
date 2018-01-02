@@ -187,7 +187,7 @@ func (p *Proxy) sync() error {
 				log.Errorf("write binlog to replicate error %v", err)
 			}
 
-			if ComparePos(ent.Pos, pos) > 1 {
+			if ComparePos(ent.Pos, pos) > 0 {
 				pos.Suffix = ent.Pos.Suffix
 				pos.Offset = ent.Pos.Offset
 				if err1 := p.cp.save(pos); err1 != nil {
