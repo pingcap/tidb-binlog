@@ -139,6 +139,7 @@ func (p *Proxy) migrateBinlog() error {
 		}
 		if len(entities) == 0 {
 			p.master.MarkAvailable()
+			return nil
 		}
 		p.RUnlock()
 
