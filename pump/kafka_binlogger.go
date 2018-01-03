@@ -11,9 +11,12 @@ import (
 )
 
 var (
-	defualtPartition = int32(0)
+	defaultOpen      = true
+	defaultPartition = int32(0)
 	errorClosed      = errors.New("binlogger is closed")
 )
+
+const defaultMaxBinlogItem = 1024 * 1024
 
 type kafkaBinloger struct {
 	topic string
@@ -21,7 +24,9 @@ type kafkaBinloger struct {
 	producer sarama.SyncProducer
 	encoder  *kafkaEncoder
 
-	closed bool
+	closed      bool
+	isAvailable bool
+
 	sync.RWMutex
 }
 
@@ -29,7 +34,6 @@ func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogg
 	// initial kafka client to use manual partitioner
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = maxMsgSize
 	config.Producer.Return.Successes = true
 
 	producer, err := sarama.NewSyncProducer(addr, config)
@@ -55,12 +59,8 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 // WriteTail implements Binlogger WriteTail interface
 func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	// for concurrency write
-	k.RLock()
-	defer k.RUnlock()
-
-	if k.isClosed() {
-		return errorClosed
-	}
+	k.Lock()
+	defer k.Unlock()
 
 	if len(payload) == 0 {
 		return nil
@@ -70,7 +70,28 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	if offset > latestPos.Offset {
 		latestPos.Offset = offset
 	}
-	return errors.Trace(err)
+	if err != nil {
+		k.closed = true
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// IsAvailable implements Binlogger IsAvailable interface
+func (k *kafkaBinloger) IsAvailable() bool {
+	k.RLock()
+	defer k.RUnlock()
+
+	return !k.closed
+}
+
+// MarkAvailable implements Binlogger MarkAvailable interface
+func (k *kafkaBinloger) MarkAvailable() {
+	k.Lock()
+	defer k.Unlock()
+
+	k.closed = false
 }
 
 // Close implements Binlogger Close interface
@@ -78,13 +99,8 @@ func (k *kafkaBinloger) Close() error {
 	k.Lock()
 	defer k.Unlock()
 
-	k.closed = true
 	return k.producer.Close()
 }
 
 // GC implements Binlogger GC interface
 func (k *kafkaBinloger) GC(days time.Duration) {}
-
-func (k *kafkaBinloger) isClosed() bool {
-	return k.closed == true
-}

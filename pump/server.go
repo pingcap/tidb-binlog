@@ -5,12 +5,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -143,6 +146,13 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) init() error {
 	// init cluster data dir if not exist
 	var err error
+	clusterDir := path.Join(s.dataDir, "clusters")
+	if !file.Exist(clusterDir) {
+		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
@@ -169,8 +179,41 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s.dispatcher[cid] = kb
-	return kb, nil
+	cb := createCacheBinlogger()
+
+	find := false
+	clusterDir := path.Join(s.dataDir, "clusters")
+	names, err := file.ReadDir(clusterDir)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, n := range names {
+		if cid == n {
+			find = true
+			break
+		}
+	}
+
+	var (
+		fb        Binlogger
+		binlogDir = path.Join(clusterDir, cid)
+	)
+	if find {
+		fb, err = OpenBinlogger(binlogDir)
+	} else {
+		fb, err = CreateBinlogger(binlogDir)
+	}
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	s.dispatcher[cid] = newProxy(fb, cb, kb, cp, s.cfg.enableProxySwitch)
+	return s.dispatcher[cid], nil
 }
 
 func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
@@ -198,7 +241,6 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
 		if len(in.Payload) > 100*1024*1024 {
-			log.Warningf("binlog message is too large %d M", len(in.Payload)/(1024*1024))
 			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
 		}
 	}()
@@ -212,11 +254,13 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		err = errors.Trace(err1)
 		return ret, err
 	}
+
 	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
+
 	return ret, nil
 }
 
@@ -344,7 +388,7 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 
 func (s *Server) writeFakeBinlog() {
 	// there are only one binlogger for the specified cluster
-	// so we can use only one needGrenBinlog flag
+	// so we can use only one needGenBinlog flag
 	if s.needGenBinlog.Get() {
 		for cid := range s.dispatcher {
 			binlogger, err := s.getBinloggerToWrite(cid)
@@ -357,14 +401,17 @@ func (s *Server) writeFakeBinlog() {
 				log.Errorf("generate forward binlog, generate binlog err %v", err)
 				return
 			}
+
 			err = binlogger.WriteTail(payload)
 			if err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
-			log.Info("generate fake binlog successfully")
+
+			log.Infof("generate fake binlog successfully")
 		}
 	}
+
 	s.needGenBinlog.Set(true)
 }
 
