@@ -139,8 +139,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			latestSchemaVersion = schemaVersion
 		}
 
-		log.Infof("committs %v vs %v", commitTS, s.initCommitTS)
-
 		if commitTS <= s.initCommitTS {
 			continue
 		}
@@ -148,7 +146,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if jobID > 0 {
 			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
 		}
-
 		// find all ddl job that need to reconstruct local schemas
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
