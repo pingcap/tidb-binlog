@@ -185,6 +185,14 @@ func (p *Proxy) sync() error {
 			err = p.replicate.WriteTail(ent.Payload)
 			if err != nil {
 				log.Errorf("write binlog to replicate error %v", err)
+
+				select {
+				case <-p.ctx.Done():
+					log.Info("context cancel - switch manager exists")
+					return nil
+				case <-time.After(10 * time.Second):
+				}
+				break
 			}
 
 			if ComparePos(ent.Pos, pos) > 0 {
