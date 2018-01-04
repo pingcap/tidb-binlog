@@ -86,8 +86,7 @@ func (p *Proxy) MarkAvailable() {}
 func (p *Proxy) Close() error {
 	p.Lock()
 	defer p.Unlock()
-	
-	log.Warningf("start close pump")
+
 	pos := p.cp.pos()
 	entities, err := p.master.ReadFrom(pos, 1000)
 	if err != nil {
@@ -95,12 +94,11 @@ func (p *Proxy) Close() error {
 	}
 
 	for len(entities) != 0 {
-		log.Warningf("len(entities) is %v", len(entities))
 		err = p.sync()
 		if err != nil {
 			log.Errorf("sync error %v", err)
 		}
-		
+
 		pos = p.cp.pos()
 		entities, err = p.master.ReadFrom(pos, 1000)
 	}
