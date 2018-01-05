@@ -92,11 +92,11 @@ func (p *Proxy) Close() error {
 	for {
 		pos := p.cp.pos()
 		entities, err := p.master.ReadFrom(pos, 1000)
-		if err != nil {
-			log.Errorf("read binlogs from master error %v", err)
-		}
-		if len(entities) == 0 {
+		if err == nil && len(entities) == 0 {
 			break
+		}
+		if err != nil {
+			log.Errorf("read binlogs from master in close error %v", err)
 		}
 
 		time.Sleep(time.Second)
