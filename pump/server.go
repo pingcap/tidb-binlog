@@ -84,8 +84,8 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
-
-	cfg *Config
+	maxKafkaSize  int
+	cfg           *Config
 }
 
 func init() {
@@ -125,19 +125,20 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of pump server is %v", clusterID)
 
 	return &Server{
-		dispatcher: make(map[string]Binlogger),
-		dataDir:    cfg.DataDir,
-		clusterID:  fmt.Sprintf("%d", clusterID),
-		node:       n,
-		tcpAddr:    cfg.ListenAddr,
-		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
-		ctx:        ctx,
-		cancel:     cancel,
-		metrics:    metrics,
-		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:      pdCli,
-		cfg:        cfg,
+		dispatcher:   make(map[string]Binlogger),
+		dataDir:      cfg.DataDir,
+		clusterID:    fmt.Sprintf("%d", clusterID),
+		node:         n,
+		tcpAddr:      cfg.ListenAddr,
+		unixAddr:     cfg.Socket,
+		gs:           grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
+		ctx:          ctx,
+		cancel:       cancel,
+		metrics:      metrics,
+		gc:           time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:        pdCli,
+		maxKafkaSize: cfg.MaxKafkaSize,
+		cfg:          cfg,
 	}, nil
 }
 
@@ -175,7 +176,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs)
+	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs, s.maxKafkaSize)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

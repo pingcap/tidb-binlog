@@ -23,6 +23,7 @@ const (
 	defaultKafkaAddrs        = "127.0.0.1:9092"
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultSocket            = "unix:///tmp/pump.sock"
+	defautMaxKafkaSize       = 1000000
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
@@ -47,6 +48,7 @@ type Config struct {
 	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
 	MetricsAddr       string
 	MetricsInterval   int
+	MaxKafkaSize      int
 	configFile        string
 	printVersion      bool
 	enableProxySwitch bool
@@ -78,6 +80,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
+	fs.IntVar(&cfg.MaxKafkaSize, "max-kafka-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
 	fs.BoolVar(&cfg.enableProxySwitch, "enable-proxy", true, "enable proxy binlog switch to slave while master is not available")
