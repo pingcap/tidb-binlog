@@ -10,6 +10,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
@@ -140,6 +141,10 @@ func readBinlogNames(dirpath string) ([]string, error) {
 func checkBinlogNames(names []string) []string {
 	var fnames []string
 	for _, name := range names {
+		if strings.HasSuffix(name, "checkpoint") {
+			continue
+		}
+
 		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
 				log.Warningf("ignored file %v in wal", name)
@@ -179,5 +184,21 @@ func TopicName(clusterID string, nodeID string) string {
 
 // DefaultTopicPartition returns Deault topic partition
 func DefaultTopicPartition() int32 {
-	return defualtPartition
+	return defaultPartition
+}
+
+// ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
+// return -1 if the left is ahead of the right, oppositely return 1.
+func ComparePos(left, right binlog.Pos) int {
+	if left.Suffix < right.Suffix {
+		return -1
+	} else if left.Suffix > right.Suffix {
+		return 1
+	} else if left.Offset < right.Offset {
+		return -1
+	} else if left.Offset > right.Offset {
+		return 1
+	} else {
+		return 0
+	}
 }
