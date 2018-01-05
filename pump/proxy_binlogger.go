@@ -87,20 +87,19 @@ func (p *Proxy) Close() error {
 	p.Lock()
 	defer p.Unlock()
 
-	pos := p.cp.pos()
-	entities, err := p.master.ReadFrom(pos, 1000)
-	if err != nil {
-		log.Errorf("read binlogs from master error %v", err)
-	}
+	var err error
 
-	for len(entities) != 0 {
-		err = p.sync()
+	for {
+		pos := p.cp.pos()
+		entities, err := p.master.ReadFrom(pos, 1000)
 		if err != nil {
-			log.Errorf("sync error %v", err)
+			log.Errorf("read binlogs from master error %v", err)
+		}
+		if len(entities) == 0 {
+			break
 		}
 
-		pos = p.cp.pos()
-		entities, err = p.master.ReadFrom(pos, 1000)
+		time.Sleep(time.Second)
 	}
 
 	if p.master != nil {
