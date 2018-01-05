@@ -30,7 +30,7 @@ type kafkaBinloger struct {
 	sync.RWMutex
 }
 
-func createKafkaBinlogger(clusterID string, node string, addr []string, maxMsgSize int) (Binlogger, error) {
+func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogger, error) {
 	// initial kafka client to use manual partitioner
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewManualPartitioner

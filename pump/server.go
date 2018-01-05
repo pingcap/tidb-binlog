@@ -25,7 +25,8 @@ import (
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
-const maxMsgSize = 1024 * 1024 * 1024
+var maxMsgSize = 1024 * 1024 * 1024
+
 const slowDist = 30 * time.Millisecond
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
@@ -84,7 +85,6 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
-	maxKafkaSize  int
 	cfg           *Config
 }
 
@@ -125,20 +125,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of pump server is %v", clusterID)
 
 	return &Server{
-		dispatcher:   make(map[string]Binlogger),
-		dataDir:      cfg.DataDir,
-		clusterID:    fmt.Sprintf("%d", clusterID),
-		node:         n,
-		tcpAddr:      cfg.ListenAddr,
-		unixAddr:     cfg.Socket,
-		gs:           grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
-		ctx:          ctx,
-		cancel:       cancel,
-		metrics:      metrics,
-		gc:           time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:        pdCli,
-		maxKafkaSize: cfg.MaxKafkaSize,
-		cfg:          cfg,
+		dispatcher: make(map[string]Binlogger),
+		dataDir:    cfg.DataDir,
+		clusterID:  fmt.Sprintf("%d", clusterID),
+		node:       n,
+		tcpAddr:    cfg.ListenAddr,
+		unixAddr:   cfg.Socket,
+		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
+		ctx:        ctx,
+		cancel:     cancel,
+		metrics:    metrics,
+		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:      pdCli,
+		cfg:        cfg,
 	}, nil
 }
 
@@ -176,7 +175,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs, s.maxKafkaSize)
+	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
