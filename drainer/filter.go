@@ -26,6 +26,15 @@ func (s *Syncer) genRegexMap() {
 		s.addOneRegex(tb.Schema)
 		s.addOneRegex(tb.Table)
 	}
+
+	for _, db := range s.cfg.IgnoreDBs {
+                s.addOneRegex(db)
+        }
+
+        for _, tb := range s.cfg.IgnoreTables {
+                s.addOneRegex(tb.Schema)
+                s.addOneRegex(tb.Table)
+        }
 }
 
 // whiteFilter whitelist filtering
@@ -47,9 +56,25 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
+// blackFilter blacklist filtering
+func (s *Syncer) blackFilter(stbs []TableName) []TableName {
+	var tbs []TableName
+	for _, tb := range stbs {
+		if s.matchTable(s.cfg.IgnoreTables, tb) {
+			continue
+		}
+		if s.matchDB(s.cfg.IgnoreDBs, tb.Schema) {
+			continue
+		}
+		tbs = append(tbs, tb)
+	}
+	return tbs
+}
+
 func (s *Syncer) skipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = s.whiteFilter(tbs)
+	tbs = s.blackFilter(tbs)
 	if len(tbs) == 0 {
 		return true
 	}

@@ -23,21 +23,21 @@ func newDecoder(pos binlog.Pos, r io.Reader) *decoder {
 	}
 }
 
-func (d *decoder) decode(ent *binlog.Entity) error {
+func (d *decoder) decode(ent *binlog.Entity) ([]byte,  error) {
 	if d.br == nil {
-		return io.EOF
+		return nil, io.EOF
 	}
 
 	// read and chekc magic number
 	magicNum, err := readInt32(d.br)
 	if err == io.EOF {
 		d.br = nil
-		return io.EOF
+		return nil, io.EOF
 	}
 
 	err = checkMagic(magicNum)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// read payload+crc  length
@@ -46,16 +46,22 @@ func (d *decoder) decode(ent *binlog.Entity) error {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return err
+		return nil, err
 	}
-	data := make([]byte, size+4)
+	//data := make([]byte, size+4)
+
+	b := bufPool.Get().([]byte)
+	if len(b) < int(size+4) {
+		b = make([]byte, size+4)
+	}
+	data := b[0:size+4]
 
 	// read payload+crc
 	if _, err = io.ReadFull(d.br, data); err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return err
+		return nil, err
 	}
 
 	// decode bytes to ent struct and validate crc
@@ -63,7 +69,7 @@ func (d *decoder) decode(ent *binlog.Entity) error {
 	ent.Payload = data[:size]
 	crc := crc32.Checksum(ent.Payload, crcTable)
 	if crc != entryCrc {
-		return ErrCRCMismatch
+		return nil, ErrCRCMismatch
 	}
 
 	ent.Pos = binlog.Pos{
@@ -74,7 +80,7 @@ func (d *decoder) decode(ent *binlog.Entity) error {
 	// 12 is size + magic length
 	d.pos.Offset += size + 16
 
-	return nil
+	return b, nil
 }
 
 func checkMagic(mgicNum uint32) error {

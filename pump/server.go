@@ -22,6 +22,15 @@ import (
 	"google.golang.org/grpc"
 )
 
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		// The Pool's New function should generally only return pointer
+		// types, since a pointer can be put into the return interface
+		// value without an allocation:
+		return make([]byte, 1024*1024)
+	},
+}
+
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
@@ -235,12 +244,12 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	pos := in.StartFrom
 
 	for {
-		binlogs, err := binlogger.ReadFrom(pos, 1000)
+		binlogs, cache, err := binlogger.ReadFrom(pos, 100)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		for _, bl := range binlogs {
+		for i, bl := range binlogs {
 			pos = bl.Pos
 			pos.Offset += int64(len(bl.Payload) + 16)
 			resp := &binlog.PullBinlogResp{Entity: bl}
@@ -248,6 +257,8 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
 				return errors.Trace(err)
 			}
+			bufPool.Put(cache[i])
+			
 		}
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)

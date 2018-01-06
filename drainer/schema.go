@@ -1,10 +1,16 @@
 package drainer
 
 import (
+	"encoding/json"
+	"os"
+
+	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
 )
+
+var schemaInfoFile string
 
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
@@ -29,8 +35,21 @@ type TableName struct {
 // NewSchema returns the Schema object
 func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
+	s.tableIDToName = make(map[int64]TableName)
+        s.schemas = make(map[int64]*model.DBInfo)
+        s.schemaNameToID = make(map[string]int64)
+        s.tables = make(map[int64]*model.TableInfo)
+        s.ignoreSchema = make(map[int64]struct{})
 
-	err := s.reconstructSchema(jobs, ignoreSchemaNames)
+	var err error
+	if len(schemaInfoFile) > 0 {
+		err = s.reconstructSchemaFromFile(ignoreSchemaNames)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	err = s.reconstructSchema(jobs, ignoreSchemaNames)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -44,12 +63,6 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 
 // reconstructSchema reconstruct the schema infomations by history jobs
 func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
-	s.tableIDToName = make(map[int64]TableName)
-	s.schemas = make(map[int64]*model.DBInfo)
-	s.schemaNameToID = make(map[string]int64)
-	s.tables = make(map[int64]*model.TableInfo)
-	s.ignoreSchema = make(map[int64]struct{})
-
 	for _, job := range jobs {
 		if job.State == model.JobStateCancelled {
 			continue
@@ -334,3 +347,81 @@ func (s *Schema) removeTable(tableID int64) error {
 	}
 	return nil
 }
+
+// ###################### reconstruct schema from file ############################
+
+// SchemaInfo is schema info
+type SchemaInfo struct {
+	Schemas    map[int64][]int64          `json:"schemas"`
+	DBsInfo    map[int64]*model.DBInfo    `json:"databases"`
+	TablesInfo map[int64]*model.TableInfo `json:"tables"`
+}
+
+// RawSchemaInfo is raw schema info
+type RawSchemaInfo struct {
+	Data []byte `json:"data"`
+}
+
+// reconstructSchemaFromFile reconstruct the schema infomations from file
+func (s *Schema) reconstructSchemaFromFile(ignoreSchemaNames map[string]struct{}) error {
+	si, err := loadSchemaInfo()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for schemaID, tables := range si.Schemas {
+		schema, ok := si.DBsInfo[schemaID]
+		if !ok {
+			return errors.NotFoundf("schema %d", schemaID)
+		}
+
+		if filterIgnoreSchema(schema, ignoreSchemaNames) {
+			s.AddIgnoreSchema(schema)
+			continue
+		}
+
+                if errS := s.CreateSchema(schema); errS != nil {
+                	return errors.Trace(errS)
+                }
+
+		for _, tableID := range tables {
+			table, ok := si.TablesInfo[tableID]
+			if !ok {
+				return errors.NotFoundf("schema %s table %d", schema.Name, tableID)
+			}
+			err := s.CreateTable(schema, table)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func loadSchemaInfo() (*SchemaInfo, error) {
+	file, err := os.Open(schemaInfoFile)
+	if err != nil && !os.IsNotExist(errors.Cause(err)) {
+		return nil, errors.Trace(err)
+	}
+	if os.IsNotExist(errors.Cause(err)) {
+		return nil, nil
+	}
+	defer file.Close()
+
+	s := &RawSchemaInfo{}
+	_, err = toml.DecodeReader(file, s)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	rawData := s.Data
+	schemaInfo := &SchemaInfo{}
+	err = json.Unmarshal(rawData, schemaInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return schemaInfo, nil
+}
+
