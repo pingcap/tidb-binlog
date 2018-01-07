@@ -209,7 +209,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	b.rotate()
 
 	time.Sleep(10 * time.Millisecond)
-	b.GC(time.Millisecond)
+	b.GC(time.Millisecond, binlog.Pos{})
 
 	names, err := readBinlogNames(b.dir)
 	c.Assert(err, IsNil)
