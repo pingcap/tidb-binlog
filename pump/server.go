@@ -434,7 +434,7 @@ func (s *Server) gcBinlogFile() {
 	}
 	for {
 		for _, b := range s.dispatcher {
-			b.GC(s.gc)
+			b.GC(s.gc, binlog.Pos{})
 		}
 		time.Sleep(time.Hour)
 	}

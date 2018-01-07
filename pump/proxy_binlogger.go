@@ -123,8 +123,8 @@ func (p *Proxy) Close() error {
 }
 
 // GC recycles the old binlog file
-func (p *Proxy) GC(days time.Duration) {
-	p.master.GC(days)
+func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
+	p.master.GC(days, p.cp.pos())
 }
 
 func (p *Proxy) switchMS() {

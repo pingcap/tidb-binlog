@@ -78,7 +78,7 @@ func (c *cacheBinloger) Close() error {
 }
 
 // GC implements Binlogger GC interface
-func (c *cacheBinloger) GC(days time.Duration) {}
+func (c *cacheBinloger) GC(days time.Duration, pos binlog.Pos) {}
 
 func (c *cacheBinloger) peek() []byte {
 	return c.qu.Peek().([]byte)

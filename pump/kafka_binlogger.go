@@ -104,4 +104,4 @@ func (k *kafkaBinloger) Close() error {
 }
 
 // GC implements Binlogger GC interface
-func (k *kafkaBinloger) GC(days time.Duration) {}
+func (k *kafkaBinloger) GC(days time.Duration, pos binlog.Pos) {}

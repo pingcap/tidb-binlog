@@ -48,7 +48,7 @@ type Binlogger interface {
 	Close() error
 
 	// GC recycles the old binlog file
-	GC(days time.Duration)
+	GC(days time.Duration, pos binlog.Pos)
 }
 
 // binlogger is a logical representation of the log storage
@@ -212,7 +212,7 @@ func (b *binlogger) IsAvailable() bool {
 func (b *binlogger) MarkAvailable() {}
 
 // GC recycles the old binlog file
-func (b *binlogger) GC(days time.Duration) {
+func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files error:", names)
@@ -232,7 +232,12 @@ func (b *binlogger) GC(days time.Duration) {
 			continue
 		}
 
-		if time.Now().Sub(fi.ModTime()) > days {
+		curSuffix, err := parseBinlogName(name)
+		if err != nil {
+			log.Errorf("parse binlog error %v", err)
+		}
+
+		if curSuffix < pos.Suffix || time.Now().Sub(fi.ModTime()) > days {
 			err := os.Remove(fileName)
 			if err != nil {
 				log.Error("remove old binlog file err")
