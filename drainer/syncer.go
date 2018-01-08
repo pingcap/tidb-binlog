@@ -19,7 +19,6 @@ import (
 var (
 	maxDMLRetryCount = 100
 	maxDDLRetryCount = 5
-	initSchemaVersion int64
 
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
@@ -41,7 +40,7 @@ type Syncer struct {
 	jobCh []chan *job
 
 	executors []executor.Executor
-	stat map[string]map[string]int64
+	stat      map[string]map[string]int64
 	sync.RWMutex
 
 	positions    map[string]pb.Pos
@@ -136,9 +135,10 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 			schemaVersion = preWrite.GetSchemaVersion()
 		} else {
-			if job.BinlogInfo != nil {
-				schemaVersion = b.job.BinlogInfo.SchemaVersion
+			if b.job == nil || b.job.BinlogInfo == nil {
+				continue
 			}
+			schemaVersion = b.job.BinlogInfo.SchemaVersion
 		}
 		if schemaVersion > latestSchemaVersion {
 			latestSchemaVersion = schemaVersion
@@ -157,9 +157,9 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		var exceptedJobs []*model.Job
 		for _, job := range jobs {
 			if job.BinlogInfo == nil {
-                               continue
-                       }
-		       if initSchemaVersion < job.BinlogInfo.SchemaVersion && job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
+				continue
+			}
+			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
 				exceptedJobs = append(exceptedJobs, job)
 			}
 		}
@@ -548,9 +548,8 @@ func (s *Syncer) printStatus(ctx context.Context) {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
-	timer := time.NewTicker(30*time.Second)
+	timer := time.NewTicker(30 * time.Second)
 	defer timer.Stop()
-
 
 	for {
 		select {
@@ -692,7 +691,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 		if len(mutation.GetInsertedRows()) > 0 {
 			s.Lock()
-			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] +int64(len(mutation.GetInsertedRows()))
+			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] + int64(len(mutation.GetInsertedRows()))
 			s.Unlock()
 			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
@@ -702,8 +701,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			 s.Lock()
-			 s.stat[schemaName][tableName] = s.stat[schemaName][tableName] + int64(len(mutation.GetUpdatedRows()))
+			s.Lock()
+			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] + int64(len(mutation.GetUpdatedRows()))
 			s.Unlock()
 			// safemode is only work for mysql
 			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
@@ -721,7 +720,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		if len(mutation.GetDeletedRows()) > 0 {
 			s.Lock()
 			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] +
-int64(len(mutation.GetDeletedRows()))
+				int64(len(mutation.GetDeletedRows()))
 			s.Unlock()
 			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
 			if err != nil {

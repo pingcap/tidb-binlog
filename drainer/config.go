@@ -31,19 +31,19 @@ var maxBinlogItemCount = 16 << 12
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
-	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
-	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
-	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *executor.DBConfig `toml:"to" json:"to"`
-	DoTables         []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
-	IgnoreTables []TableName `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
-	IgnoreDBs    []string     `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
+	IgnoreSchemas string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	TxnBatch      int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount   int                `toml:"worker-count" json:"worker-count"`
+	To            *executor.DBConfig `toml:"to" json:"to"`
+	DoTables      []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs         []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	IgnoreTables  []TableName        `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
+	IgnoreDBs     []string           `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
 
-	DestDBType       string             `toml:"db-type" json:"db-type"`
-	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
-	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
+	DestDBType       string `toml:"db-type" json:"db-type"`
+	DisableDispatch  bool   `toml:"disable-dispatch" json:"disable-dispatch"`
+	SafeMode         bool   `toml:"safe-mode" json:"safe-mode"`
+	DisableCausality bool   `toml:"disable-detect" json:"disable-detect"`
 }
 
 // Config holds the configuration of drainer
@@ -100,7 +100,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", 16<<12, "blurry count of binlogs in cache, limit cache size")
 	fs.StringVar(&schemaInfoFile, "schemainfo", "", "schema information file")
-	fs.Int64Var(&initSchemaVersion, "initial-schema-version", -1, "initialization schema version")
 	return cfg
 }
 

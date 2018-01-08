@@ -258,7 +258,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				return errors.Trace(err)
 			}
 			bufPool.Put(cache[i])
-			
+
 		}
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)

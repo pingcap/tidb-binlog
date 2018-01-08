@@ -28,13 +28,13 @@ func (s *Syncer) genRegexMap() {
 	}
 
 	for _, db := range s.cfg.IgnoreDBs {
-                s.addOneRegex(db)
-        }
+		s.addOneRegex(db)
+	}
 
-        for _, tb := range s.cfg.IgnoreTables {
-                s.addOneRegex(tb.Schema)
-                s.addOneRegex(tb.Table)
-        }
+	for _, tb := range s.cfg.IgnoreTables {
+		s.addOneRegex(tb.Schema)
+		s.addOneRegex(tb.Table)
+	}
 }
 
 // whiteFilter whitelist filtering

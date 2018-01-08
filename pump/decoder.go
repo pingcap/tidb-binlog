@@ -23,7 +23,7 @@ func newDecoder(pos binlog.Pos, r io.Reader) *decoder {
 	}
 }
 
-func (d *decoder) decode(ent *binlog.Entity) ([]byte,  error) {
+func (d *decoder) decode(ent *binlog.Entity) ([]byte, error) {
 	if d.br == nil {
 		return nil, io.EOF
 	}
@@ -54,7 +54,7 @@ func (d *decoder) decode(ent *binlog.Entity) ([]byte,  error) {
 	if len(b) < int(size+4) {
 		b = make([]byte, size+4)
 	}
-	data := b[0:size+4]
+	data := b[0 : size+4]
 
 	// read payload+crc
 	if _, err = io.ReadFull(d.br, data); err != nil {
