@@ -204,6 +204,7 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			close(errc)
 			log.Info("heartbeat goroutine exited")
 			s.wg.Done()
+			s.Close()
 		}()
 
 		for {
