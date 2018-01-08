@@ -290,7 +290,7 @@ func (s *Server) AllPumps(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pumps)
 }
 
-// Status exposes drainers' status to HTTP handler.
+// AllDrainers exposes drainers' status to HTTP handler.
 func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 	pumps, err := s.collector.reg.Nodes(s.ctx, "cisterns")
 	if err != nil {
@@ -299,7 +299,6 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 
 	json.NewEncoder(w).Encode(pumps)
 }
-
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
@@ -316,4 +315,3 @@ func (s *Server) Close() {
 	//  stop gRPC server
 	s.gs.Stop()
 }
-
