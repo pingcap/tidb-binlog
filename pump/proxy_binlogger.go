@@ -84,6 +84,7 @@ func (p *Proxy) Close() error {
 			// compute next binlog offset
 			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
 			if ComparePos(entities[0].Pos, latestFilePos) == 0 {
+				log.Info("complete sync, read end of binlog file")
 				break
 			}
 		}
