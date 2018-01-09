@@ -5,6 +5,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -19,11 +20,11 @@ type RegisrerTestClient interface {
 func (t *testRegistrySuite) TestUpdateNodeInfo(c *C) {
 	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
-
+	latestPos := binlog.Pos{}
 	ns := &NodeStatus{
-		NodeID:    "test",
-		Host:      "test",
-		LatestPos: latestPos,
+		NodeID:        "test",
+		Host:          "test",
+		LatestFilePos: latestPos,
 	}
 
 	err := r.RegisterNode(context.Background(), nodePrefix, ns.NodeID, ns.Host)
@@ -91,7 +92,7 @@ func (t *testRegistrySuite) TestRefreshNode(c *C) {
 func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *NodeStatus) {
 	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
 	// ignore the latestBinlogPos and alive
-	status.LatestPos = ns.LatestPos
+	status.LatestFilePos = ns.LatestFilePos
 	c.Assert(err, IsNil)
 	c.Assert(ns, DeepEquals, status)
 }
