@@ -120,7 +120,7 @@ func (p *Proxy) sync() error {
 	for {
 		select {
 		case <-p.ctx.Done():
-			log.Info("context cancel - switch manager exists")
+			log.Info("context cancel - sycner exists")
 			return nil
 		default:
 		}
@@ -137,7 +137,7 @@ func (p *Proxy) sync() error {
 
 				select {
 				case <-p.ctx.Done():
-					log.Info("context cancel - switch manager exists")
+					log.Info("context cancel - sycner exists")
 					return nil
 				case <-time.After(10 * time.Second):
 				}
