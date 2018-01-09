@@ -220,7 +220,7 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	status.IsAlive = isAlive
 	if isAlive {
 		status.LatestFilePos = latestPos.FilePos
-		status.LatestFilePos = latestPos.KafkaPos
+		status.LatestKafkaPos = latestPos.KafkaPos
 	}
 	return status, nil
 }
