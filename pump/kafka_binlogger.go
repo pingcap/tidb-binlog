@@ -24,9 +24,6 @@ type kafkaBinloger struct {
 	producer sarama.SyncProducer
 	encoder  *kafkaEncoder
 
-	closed      bool
-	isAvailable bool
-
 	sync.RWMutex
 }
 
@@ -60,39 +57,19 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 // WriteTail implements Binlogger WriteTail interface
 func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	// for concurrency write
-	k.Lock()
-	defer k.Unlock()
+	k.RLock()
+	defer k.RUnlock()
 
 	if len(payload) == 0 {
 		return nil
 	}
 
 	offset, err := k.encoder.encode(payload)
-	if offset > latestPos.Offset {
-		latestPos.Offset = offset
-	}
-	if err != nil {
-		k.closed = true
-		return errors.Trace(err)
+	if offset > latestKafkaPos.Offset {
+		latestKafkaPos.Offset = offset
 	}
 
-	return nil
-}
-
-// IsAvailable implements Binlogger IsAvailable interface
-func (k *kafkaBinloger) IsAvailable() bool {
-	k.RLock()
-	defer k.RUnlock()
-
-	return !k.closed
-}
-
-// MarkAvailable implements Binlogger MarkAvailable interface
-func (k *kafkaBinloger) MarkAvailable() {
-	k.Lock()
-	defer k.Unlock()
-
-	k.closed = false
+	return errors.Trace(err)
 }
 
 // Close implements Binlogger Close interface

@@ -38,12 +38,6 @@ type Binlogger interface {
 	// batch write binlog event
 	WriteTail(payload []byte) error
 
-	// check write binlog is avaliable
-	IsAvailable() bool
-
-	// mark write binlog is avaliable
-	MarkAvailable()
-
 	// close the binlogger
 	Close() error
 
@@ -105,7 +99,6 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	latestPos.Suffix = lastFileSuffix
 
 	p := path.Join(dirpath, lastFileName)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
@@ -113,9 +106,13 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if _, err := f.Seek(0, os.SEEK_END); err != nil {
+	offset, err := f.Seek(0, os.SEEK_END)
+	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	latestFilePos.Suffix = lastFileSuffix
+	latestFilePos.Offset = offset
 
 	binlog := &binlogger{
 		dir:     dirpath,
@@ -203,14 +200,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	return ents, nil
 }
 
-// check write binlog is avaliable
-func (b *binlogger) IsAvailable() bool {
-	return true
-}
-
-// MarkAvailable mplements Binlogger MarkAvailable interface
-func (b *binlogger) MarkAvailable() {}
-
 // GC recycles the old binlog file
 func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 	names, err := readBinlogNames(b.dir)
@@ -266,6 +255,7 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	latestFilePos.Offset = curOffset
 
 	if curOffset < SegmentSizeBytes {
 		return nil
@@ -291,7 +281,8 @@ func (b *binlogger) Close() error {
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
 	filename := fileName(b.seq() + 1)
-	latestPos.Suffix = b.seq() + 1
+	latestFilePos.Suffix = b.seq() + 1
+	latestFilePos.Offset = 0
 	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)

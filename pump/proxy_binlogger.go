@@ -21,7 +21,6 @@ type Proxy struct {
 
 	master    Binlogger
 	replicate Binlogger
-	slave     Binlogger
 	cp        *checkPoint
 
 	enableSwitch bool
@@ -30,17 +29,15 @@ type Proxy struct {
 	cancel context.CancelFunc
 }
 
-func newProxy(master, slave, replicate Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
+func newProxy(master, replicate Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
 	p := &Proxy{
 		master:    master,
-		slave:     slave,
 		replicate: replicate,
 		cp:        cp,
 
 		enableSwitch: enableProxySwitch,
 	}
 
-	go p.switchMS()
 	go p.sync()
 
 	p.ctx, p.cancel = context.WithCancel(context.Background())
@@ -57,30 +54,17 @@ func (p *Proxy) WriteTail(payload []byte) error {
 	p.Lock()
 	defer p.Unlock()
 
-	var err error
-	if p.master.IsAvailable() {
-		err = p.master.WriteTail(payload)
-	} else {
-		err = errors.New("binlogger is not avaliable")
+	err := p.master.WriteTail(payload)
+	if err != nil {
+		log.Errorf("write binlog error %v", err)
 	}
-	if err == nil {
+
+	if p.enableSwitch {
 		return nil
 	}
 
-	if !p.enableSwitch {
-		return errors.Trace(err)
-	}
-
-	return errors.Trace(p.slave.WriteTail(payload))
+	return errors.Trace(err)
 }
-
-// IsAvailable implements Binlogger IsAvailable interface
-func (p *Proxy) IsAvailable() bool {
-	return true
-}
-
-// MarkAvailable implements binlogger MarkAvailable interface
-func (p *Proxy) MarkAvailable() {}
 
 // Close closes the binlogger
 func (p *Proxy) Close() error {
@@ -91,9 +75,17 @@ func (p *Proxy) Close() error {
 
 	for {
 		pos := p.cp.pos()
-		entities, err := p.master.ReadFrom(pos, 1000)
-		if err == nil && len(entities) == 0 {
-			break
+		entities, err := p.master.ReadFrom(pos, 1)
+		if err == nil {
+			if len(entities) == 0 {
+				break
+			}
+
+			// compute next binlog offset
+			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
+			if ComparePos(entities[0].Pos, latestFilePos) == 0 {
+				break
+			}
 		}
 		if err != nil {
 			log.Errorf("read binlogs from master in close error %v", err)
@@ -109,13 +101,6 @@ func (p *Proxy) Close() error {
 		}
 	}
 
-	if p.slave != nil {
-		err = p.slave.Close()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-
 	p.cancel()
 	p.wg.Wait()
 
@@ -125,56 +110,6 @@ func (p *Proxy) Close() error {
 // GC recycles the old binlog file
 func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
 	p.master.GC(days, p.cp.pos())
-}
-
-func (p *Proxy) switchMS() {
-	ticker := time.NewTicker(switchDetectInterval)
-	p.wg.Add(1)
-	defer func() {
-		ticker.Stop()
-		p.wg.Done()
-	}()
-
-	for {
-		select {
-		case <-p.ctx.Done():
-			log.Info("context cancel - switch manager exists")
-			return
-		case <-ticker.C:
-			if !p.master.IsAvailable() {
-				if err := p.migrateBinlog(); err != nil {
-					log.Errorf("migrate binlogs error %v", err)
-				}
-			}
-		}
-	}
-}
-
-func (p *Proxy) migrateBinlog() error {
-	for {
-		p.RLock()
-		entities, err := p.slave.ReadFrom(binlog.Pos{}, 0)
-		p.RUnlock()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if len(entities) == 0 {
-			p.master.MarkAvailable()
-			return nil
-		}
-
-		for _, entity := range entities {
-			err = p.master.WriteTail(entity.Payload)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
-		_, err = p.slave.ReadFrom(binlog.Pos{}, 1)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
 }
 
 func (p *Proxy) sync() error {

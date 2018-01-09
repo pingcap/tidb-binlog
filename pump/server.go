@@ -31,8 +31,9 @@ const slowDist = 30 * time.Millisecond
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
-	latestPos binlog.Pos
-	latestTS  int64
+	latestKafkaPos binlog.Pos
+	latestFilePos  binlog.Pos
+	latestTS       int64
 )
 
 // Server implements the gRPC interface,
@@ -179,7 +180,6 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cb := createCacheBinlogger()
 
 	find := false
 	clusterDir := path.Join(s.dataDir, "clusters")
@@ -212,7 +212,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	s.dispatcher[cid] = newProxy(fb, cb, kb, cp, s.cfg.enableProxySwitch)
+	s.dispatcher[cid] = newProxy(fb, kb, cp, s.cfg.enableProxySwitch)
 	return s.dispatcher[cid], nil
 }
 
@@ -463,9 +463,12 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	// get all pumps' latest binlog position
-	binlogPos := make(map[string]binlog.Pos)
+	binlogPos := make(map[string]*LatestPos)
 	for _, st := range status {
-		binlogPos[st.NodeID] = st.LatestPos
+		binlogPos[st.NodeID] = &LatestPos{
+			FilePos:  st.LatestFilePos,
+			KafkaPos: st.LatestKafkaPos,
+		}
 	}
 	// get ts from pd
 	commitTS, err := s.getTSO()

@@ -11,6 +11,12 @@ import (
 	"golang.org/x/net/context"
 )
 
+// LatestPos is the latest position in pump
+type LatestPos struct {
+	FilePos  pb.Pos `json:"file-position"`
+	KafkaPos pb.Pos `json:"kafka-position"`
+}
+
 // EtcdRegistry wraps the reactions with etcd
 type EtcdRegistry struct {
 	client     *etcd.Client
@@ -89,11 +95,12 @@ func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, hos
 	defer cancel()
 
 	obj := &NodeStatus{
-		NodeID:    nodeID,
-		Host:      host,
-		IsOffline: true,
-		LatestPos: latestPos,
-		OfflineTS: latestTS,
+		NodeID:         nodeID,
+		Host:           host,
+		IsOffline:      true,
+		LatestKafkaPos: latestKafkaPos,
+		LatestFilePos:  latestFilePos,
+		OfflineTS:      latestTS,
 	}
 
 	objstr, err := json.Marshal(obj)
@@ -169,7 +176,12 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 	defer cancel()
 
 	aliveKey := r.prefixed(prefix, nodeID, "alive")
-	latestPosBytes, err := latestPos.Marshal()
+
+	latestPos := &LatestPos{
+		FilePos:  latestFilePos,
+		KafkaPos: latestKafkaPos,
+	}
+	latestPosBytes, err := json.Marshal(latestPos)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -181,27 +193,34 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 
 func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	var (
-		isAlive bool
-		status  = &NodeStatus{}
-		pos     = pb.Pos{}
+		isAlive       bool
+		status        = &NodeStatus{}
+		latestPos     = &LatestPos{}
+		isObjectExist bool
 	)
 	for key, n := range node.Childs {
 		switch key {
 		case "object":
+			isObjectExist = true
 			if err := json.Unmarshal(n.Value, &status); err != nil {
 				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
 			}
 		case "alive":
 			isAlive = true
-			if err := pos.Unmarshal(n.Value); err != nil {
+			if err := json.Unmarshal(n.Value, &latestPos); err != nil {
 				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
 			}
 		}
 	}
 
+	if !isObjectExist {
+		return nil, nil
+	}
+
 	status.IsAlive = isAlive
 	if isAlive {
-		status.LatestPos = pos
+		status.LatestFilePos = latestPos.FilePos
+		status.LatestFilePos = latestPos.KafkaPos
 	}
 	return status, nil
 }
@@ -212,6 +231,9 @@ func nodesStatusFromEtcdNode(root *etcd.Node) ([]*NodeStatus, error) {
 		status, err := nodeStatusFromEtcdNode(id, n)
 		if err != nil {
 			return nil, err
+		}
+		if status == nil {
+			continue
 		}
 		statuses = append(statuses, status)
 	}
