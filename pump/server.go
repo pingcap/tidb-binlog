@@ -9,6 +9,7 @@ import (
 	"path"
 	"sync"
 	"time"
+	"encoding/json"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -361,6 +362,7 @@ func (s *Server) Start() error {
 	go s.gs.Serve(grpcL)
 
 	http.HandleFunc("/status", s.Status)
+	http.HandleFunc("/drainers", s.AllDrainers)
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
@@ -445,6 +447,21 @@ func (s *Server) startMetrics() {
 		return
 	}
 	s.metrics.Start(s.ctx, s.node.ID())
+}
+
+// AllDrainers exposes drainers' status to HTTP handler.
+func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
+	node, ok := s.node.(*pumpNode)
+	if !ok {
+		json.NewEncoder(w).Encode("")
+	}
+
+	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
+	if err != nil {
+		log.Errorf("get pumps error %v", err)
+	}
+
+	json.NewEncoder(w).Encode(pumps)
 }
 
 // Status exposes pumps' status to HTTP handler.

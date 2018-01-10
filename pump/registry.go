@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+	"github.com/ngaut/log"
 )
 
 // LatestPos is the latest position in pump
@@ -214,6 +215,7 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
 	}
 
 	if !isObjectExist {
+		log.Errorf("node %s doesn't exist", id)
 		return nil, nil
 	}
 

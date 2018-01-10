@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
@@ -274,31 +273,9 @@ func (s *Server) Start() error {
 
 	http.HandleFunc("/status", s.collector.Status)
 	http.Handle("/metrics", prometheus.Handler())
-	http.HandleFunc("/pumps", s.AllPumps)
-	http.HandleFunc("/drainers", s.AllDrainers)
 	go http.Serve(httpL, nil)
 
 	return m.Serve()
-}
-
-// AllPumps exposes pumps' status to HTTP handler.
-func (s *Server) AllPumps(w http.ResponseWriter, r *http.Request) {
-	pumps, err := s.collector.reg.Nodes(s.ctx, "pumps")
-	if err != nil {
-		log.Errorf("get pumps error %v", err)
-	}
-
-	json.NewEncoder(w).Encode(pumps)
-}
-
-// AllDrainers exposes drainers' status to HTTP handler.
-func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
-	pumps, err := s.collector.reg.Nodes(s.ctx, "cisterns")
-	if err != nil {
-		log.Errorf("get pumps error %v", err)
-	}
-
-	json.NewEncoder(w).Encode(pumps)
 }
 
 // Close stops all goroutines started by drainer server gracefully
