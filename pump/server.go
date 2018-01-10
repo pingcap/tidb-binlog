@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"path"
 	"sync"
 	"time"
-	"encoding/json"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"

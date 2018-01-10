@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
-	"github.com/ngaut/log"
 )
 
 // LatestPos is the latest position in pump
