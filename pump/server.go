@@ -453,7 +453,8 @@ func (s *Server) startMetrics() {
 func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 	node, ok := s.node.(*pumpNode)
 	if !ok {
-		json.NewEncoder(w).Encode("")
+		json.NewEncoder(w).Encode("can't provide service")
+		return
 	}
 
 	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
