@@ -39,7 +39,12 @@ const slowDist = 30 * time.Millisecond
 
 // use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
-
+var(
+	maxSuffix int
+	curSuffix int
+	binlogs = make([]binlog.Entity, 100)
+	caches  = make([][]byte, 100)
+)
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
@@ -244,25 +249,40 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	pos := in.StartFrom
 
 	for {
-		binlogs, cache, err := binlogger.ReadFrom(pos, 100)
+		bl, cache, err := readBinlog(binlogger, pos)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		for i, bl := range binlogs {
-			pos = bl.Pos
-			pos.Offset += int64(len(bl.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: bl}
-			if err = stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
-			}
-			bufPool.Put(cache[i])
-
+		
+		pos = bl.Pos
+		pos.Offset += int64(len(bl.Payload) + 16)
+		resp := &binlog.PullBinlogResp{Entity: bl}
+		if err = stream.Send(resp); err != nil {
+			log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
+			return errors.Trace(err)
 		}
+		bufPool.Put(cache)
+		curSuffix++
+		
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
+}
+
+func readBinlog(binlogger Binlogger, pos binlog.Pos) (binlog.Entity, []byte, error){
+	var err error
+
+	if curSuffix == maxSuffix{
+		binlogs, caches, err = binlogger.ReadFrom(pos, 100)
+		if err != nil {
+			return binlogs[0], nil, errors.Trace(err)
+		}
+
+		curSuffix = 0
+		maxSuffix = len(binlogs)
+	}
+
+	return binlogs[curSuffix], caches[curSuffix], nil
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
