@@ -39,12 +39,7 @@ const slowDist = 30 * time.Millisecond
 
 // use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
-var(
-	maxSuffix int
-	curSuffix int
-	binlogs = make([]binlog.Entity, 100)
-	caches  = make([][]byte, 100)
-)
+
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
@@ -95,6 +90,8 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
+
+	notify chan *binlog.Entity
 }
 
 func init() {
@@ -146,6 +143,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
+		notify:     make(chan *binlog.Entity),
 	}, nil
 }
 
@@ -247,42 +245,35 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		return errors.Trace(err)
 	}
 	pos := in.StartFrom
+	go s.sendBinlog(s.ctx, in, stream)
 
 	for {
-		bl, cache, err := readBinlog(binlogger, pos)
+		err := binlogger.ReadFrom(pos, 100, s.notify)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		
-		pos = bl.Pos
-		pos.Offset += int64(len(bl.Payload) + 16)
-		resp := &binlog.PullBinlogResp{Entity: bl}
-		if err = stream.Send(resp); err != nil {
-			log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-			return errors.Trace(err)
-		}
-		bufPool.Put(cache)
-		curSuffix++
-		
+
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
 }
 
-func readBinlog(binlogger Binlogger, pos binlog.Pos) (binlog.Entity, []byte, error){
-	var err error
-
-	if curSuffix == maxSuffix{
-		binlogs, caches, err = binlogger.ReadFrom(pos, 100)
-		if err != nil {
-			return binlogs[0], nil, errors.Trace(err)
+func (s *Server) sendBinlog(ctx context.Context, in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case entity := <-s.notify:
+			pos := in.StartFrom
+			pos = entity.Pos
+			pos.Offset += int64(len(entity.Payload) + 16)
+			resp := &binlog.PullBinlogResp{Entity: *entity}
+			if err := stream.Send(resp); err != nil {
+				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
+				return
+			}
 		}
-
-		curSuffix = 0
-		maxSuffix = len(binlogs)
 	}
-
-	return binlogs[curSuffix], caches[curSuffix], nil
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
