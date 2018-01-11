@@ -37,6 +37,8 @@ var pullBinlogInterval = 50 * time.Millisecond
 const maxMsgSizeForGRPC = 1024 * 1024 * 1024
 const slowDist = 30 * time.Millisecond
 
+const mib = 1024 * 1024
+
 // use latestBinlogFile to record the latest binlog file the pump works on
 var latestBinlogFile = fileName(0)
 
@@ -242,15 +244,26 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		return errors.Trace(err)
 	}
 	pos := in.StartFrom
+	var (
+		totalSize     int
+		incrementSize int
+		readBatch     int32 = 10
+		maxReadSize         = 500 * mib
+		minReadBatch  int32 = 10
+		maxReadBatch  int32 = 5000
+	)
 
 	for {
-		binlogs, cache, err := binlogger.ReadFrom(pos, 100)
+		incrementSize = 0
+		startTime := time.Now()
+		binlogs, cache, err := binlogger.ReadFrom(pos, readBatch)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		for i, bl := range binlogs {
 			pos = bl.Pos
+			incrementSize += len(bl.Payload)
 			pos.Offset += int64(len(bl.Payload) + 16)
 			resp := &binlog.PullBinlogResp{Entity: bl}
 			if err = stream.Send(resp); err != nil {
@@ -260,6 +273,19 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			bufPool.Put(cache[i])
 
 		}
+
+		totalSize += incrementSize
+		elapseTime := int(time.Since(startTime).Seconds())
+		log.Infof("total size %d M, increment size %d M, elapse time %d S, batch %d", totalSize/mib, incrementSize/mib, elapseTime, readBatch)
+		batch := int32(maxReadSize/(incrementSize/int(readBatch))) + 1
+		if batch < minReadBatch {
+			readBatch = minReadBatch
+		} else if batch > maxReadBatch {
+			readBatch = maxReadBatch
+		} else {
+			readBatch = batch
+		}
+
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
