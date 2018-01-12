@@ -55,7 +55,6 @@ func (d *decoder) decode(ent *binlog.Entity) ([]byte, error) {
 		b = make([]byte, size+4)
 	}
 	data := b[0 : size+4]
-
 	// read payload+crc
 	if _, err = io.ReadFull(d.br, data); err != nil {
 		if err == io.EOF {

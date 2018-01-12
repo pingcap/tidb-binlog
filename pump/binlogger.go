@@ -33,7 +33,7 @@ var (
 // Binlogger is the interface that for append and read binlog
 type Binlogger interface {
 	// read nums binlog events from the "from" position
-	ReadFrom(from binlog.Pos, nums int32, notify chan *binlog.Entity) error
+	ReadFrom(from binlog.Pos, nums int32, notify chan binlog.Entity) ([][]byte, error)
 
 	// batch write binlog event
 	WriteTail(payload []byte) error
@@ -123,8 +123,9 @@ func CloseBinlogger(binlogger Binlogger) error {
 
 // ReadFrom reads `nums` binlogs from the given binlog position
 // read all binlogs from one file then close it and open the following file
-func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, notify chan *binlog.Entity) error {
+func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, notify chan binlog.Entity) ([][]byte, error) {
 	var ent = &binlog.Entity{}
+	var cache [][]byte
 	var index int32
 	var decoder *decoder
 	var first = true
@@ -132,15 +133,23 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, notify chan *binlog.En
 	dirpath := b.dir
 
 	if nums < 0 {
-		return errors.Errorf("read number must be positive")
+		return nil, errors.Errorf("read number must be positive")
 	}
 
-	for {
-		name := fileName(from.Suffix)
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		return cache, errors.Trace(err)
+	}
+	nameIndex, ok := searchIndex(names, from.Suffix)
+	if !ok {
+		return cache, ErrFileNotFound
+	}
+
+	for _, name := range names[nameIndex:] {
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
-			return errors.Trace(err)
+			return cache, errors.Trace(err)
 		}
 		defer f.Close()
 
@@ -149,34 +158,39 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, notify chan *binlog.En
 
 			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
-				return errors.Trace(err)
+				return cache, errors.Trace(err)
 			}
 
 			if size < from.Offset {
-				return errors.Errorf("pos'offset is wrong")
+				return cache, errors.Errorf("pos'offset is wrong")
 			}
 		}
 
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			var buff []byte
-			buff, err = decoder.decode(ent)
+			var buf []byte
+			buf, err = decoder.decode(ent)
 			if err != nil {
 				break
 			}
-
-			notify <- ent
-			bufPool.Put(buff)
+			newEnt := binlog.Entity{
+				Pos:     ent.Pos,
+				Payload: ent.Payload,
+			}
+			notify <- newEnt
+			cache = append(cache, buf)
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
-			return err
+			return cache, err
 		}
 
 		from.Suffix++
 		from.Offset = 0
 	}
+
+	return cache, nil
 }
 
 // GC recycles the old binlog file

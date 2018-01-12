@@ -169,6 +169,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				}
 			}
 		}
+		time.Sleep(time.Second)
 	}
 }
 
@@ -247,6 +248,7 @@ func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 }
 
 func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int64) error {
+
 	err := p.publishItems(items)
 	if err != nil {
 		return errors.Trace(err)
@@ -262,6 +264,7 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
+
 	err := p.grabDDLJobs(items)
 	if err != nil {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
@@ -274,6 +277,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
+
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -397,11 +401,15 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.P
 
 	for {
 		resp, err = stream.Recv()
+
+		time.Sleep(time.Second)
 		if err != nil {
+			log.Warningf("resp.Entity is %v error is %v", resp.Entity, err)
 			return pos, errors.Trace(err)
 		}
 
 		pos = CalculateNextPos(resp.Entity)
+
 		b := p.match(resp.Entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{

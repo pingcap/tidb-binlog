@@ -40,8 +40,10 @@ type Syncer struct {
 	jobCh []chan *job
 
 	executors []executor.Executor
-	stat      map[string]map[string]int64
-	sync.RWMutex
+	statMu    struct {
+		stat map[string]map[string]int64
+		sync.RWMutex
+	}
 
 	positions    map[string]pb.Pos
 	initCommitTS int64
@@ -66,7 +68,7 @@ func NewSyncer(ctx context.Context, meta Meta, cfg *SyncerConfig) (*Syncer, erro
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
-	syncer.stat = make(map[string]map[string]int64)
+	syncer.statMu.stat = make(map[string]map[string]int64)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = meta.Pos()
 	syncer.positions = make(map[string]pb.Pos)
@@ -557,13 +559,13 @@ func (s *Syncer) printStatus(ctx context.Context) {
 			log.Infof("print status exits, err:%s", ctx.Err())
 			return
 		case <-timer.C:
-			s.RLock()
-			for schema, table := range s.stat {
+			s.statMu.RLock()
+			for schema, table := range s.statMu.stat {
 				for name, count := range table {
 					log.Infof("schema %s table %s binlog events %d", schema, name, count)
 				}
 			}
-			s.RUnlock()
+			s.statMu.RUnlock()
 		}
 	}
 }
@@ -666,12 +668,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			continue
 		}
 
-		s.Lock()
-		if _, ok := s.stat[schemaName]; !ok {
-			s.stat[schemaName] = make(map[string]int64)
-		}
-		s.Unlock()
-
 		var (
 			err  error
 			sqls = make(map[pb.MutationType][]string)
@@ -690,9 +686,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			s.Lock()
-			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] + int64(len(mutation.GetInsertedRows()))
-			s.Unlock()
+			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetInsertedRows())))
 			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
@@ -701,9 +695,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			s.Lock()
-			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] + int64(len(mutation.GetUpdatedRows()))
-			s.Unlock()
+			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetUpdatedRows())))
 			// safemode is only work for mysql
 			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
 				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows())
@@ -718,10 +710,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			s.Lock()
-			s.stat[schemaName][tableName] = s.stat[schemaName][tableName] +
-				int64(len(mutation.GetDeletedRows()))
-			s.Unlock()
+			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetDeletedRows())))
 			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
@@ -763,6 +752,16 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 	}
 
 	return nil
+}
+
+// UpdateStats update schema status
+func (s *Syncer) UpdateStats(schemaName, tableName string, count int64) {
+	s.statMu.Lock()
+	if _, ok := s.statMu.stat[schemaName]; !ok {
+		s.statMu.stat[schemaName] = make(map[string]int64)
+	}
+	s.statMu.stat[schemaName][tableName] = s.statMu.stat[schemaName][tableName] + count
+	s.statMu.Unlock()
 }
 
 // Add adds binlogItem to the syncer's input channel

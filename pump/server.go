@@ -90,8 +90,6 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
-
-	notify chan *binlog.Entity
 }
 
 func init() {
@@ -143,7 +141,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		metrics:    metrics,
 		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
-		notify:     make(chan *binlog.Entity),
 	}, nil
 }
 
@@ -244,13 +241,25 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	var i int
+	notify := make(chan binlog.Entity)
+	cacheChan := make(chan string)
 	pos := in.StartFrom
-	go s.sendBinlog(s.ctx, in, stream)
+	go s.sendBinlog(s.ctx, in, stream, notify, cacheChan)
 
 	for {
-		err := binlogger.ReadFrom(pos, 100, s.notify)
+		cache, err := binlogger.ReadFrom(pos, 100, notify)
 		if err != nil {
 			return errors.Trace(err)
+		}
+
+		for i != len(cache) {
+			select {
+			case <-cacheChan:
+				bufPool.Put(cache[i])
+				i++
+			}
 		}
 
 		// sleep 50 ms to prevent cpu occupied
@@ -258,20 +267,19 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 }
 
-func (s *Server) sendBinlog(ctx context.Context, in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) {
+func (s *Server) sendBinlog(ctx context.Context, in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer, notify chan binlog.Entity, cacheChan chan string) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case entity := <-s.notify:
-			pos := in.StartFrom
-			pos = entity.Pos
-			pos.Offset += int64(len(entity.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: *entity}
+		case entity := <-notify:
+			in.StartFrom.Offset += int64(len(entity.Payload) + 16)
+			resp := &binlog.PullBinlogResp{Entity: entity}
 			if err := stream.Send(resp); err != nil {
 				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
 				return
 			}
+			cacheChan <- ""
 		}
 	}
 }
