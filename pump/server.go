@@ -241,25 +241,12 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	var i int
-	notify := make(chan binlog.Entity)
-	cacheChan := make(chan string)
 	pos := in.StartFrom
-	go s.sendBinlog(s.ctx, in, stream, notify, cacheChan)
 
 	for {
-		cache, err := binlogger.ReadFrom(pos, 100, notify)
+		err := binlogger.ReadFrom(pos, 100, stream)
 		if err != nil {
 			return errors.Trace(err)
-		}
-
-		for i != len(cache) {
-			select {
-			case <-cacheChan:
-				bufPool.Put(cache[i])
-				i++
-			}
 		}
 
 		// sleep 50 ms to prevent cpu occupied
@@ -267,22 +254,6 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 }
 
-func (s *Server) sendBinlog(ctx context.Context, in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer, notify chan binlog.Entity, cacheChan chan string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case entity := <-notify:
-			in.StartFrom.Offset += int64(len(entity.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: entity}
-			if err := stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return
-			}
-			cacheChan <- ""
-		}
-	}
-}
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {

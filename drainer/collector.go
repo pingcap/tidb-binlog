@@ -272,7 +272,6 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 
 	item := c.bh.pop()
 	for item != nil {
-		log.Errorf("push heap")
 		c.syncer.Add(item)
 		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
 		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
