@@ -123,7 +123,7 @@ func CloseBinlogger(binlogger Binlogger) error {
 
 // ReadFrom reads `nums` binlogs from the given binlog position
 // read all binlogs from one file then close it and open the following file
-func (b *binlogger) ReadFrom(from binlog.Pos, nums int32,  stream binlog.Pump_PullBinlogsServer) error {
+func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer) error {
 	var ent = &binlog.Entity{}
 	var index int32
 	var cache []byte
@@ -199,14 +199,14 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32,  stream binlog.Pump_Pu
 	return nil
 }
 
-func sendBinlog(pos binlog.Pos, stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error{
+func sendBinlog(pos binlog.Pos, stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error {
 	pos.Offset += int64(len(entity.Payload) + 16)
 	resp := &binlog.PullBinlogResp{Entity: entity}
 	if err := stream.Send(resp); err != nil {
 		log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
 		return errors.Trace(err)
 	}
-	
+
 	return nil
 }
 
