@@ -242,7 +242,6 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		return errors.Trace(err)
 	}
 	pos := in.StartFrom
-
 	for {
 		err := binlogger.ReadFrom(pos, 100, stream)
 		if err != nil {

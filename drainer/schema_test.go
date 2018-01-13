@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -40,36 +39,23 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil},
 	}
 	jobs = append(jobs, job1)
-	// construct a cancelled job
-	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateCancelled})
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
 	// reconstruct the local schema
 
 	schema, err := NewSchema(jobs, ignoreNames)
-	log.Errorf("XXXXXXXXXXXXXx")
 	c.Assert(err, IsNil)
 	// check ignore DB
 	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)
 	c.Assert(ok, IsTrue)
-	// test drop schema and drop ignore schema
-	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema})
-	jobs = append(jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames)
-	c.Assert(err, IsNil)
+
 	// test create schema already exist error
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, job)
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
-
-	// test schema drop schema error
-	jobs = jobs[:0]
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames)
-	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
 func (*testDrainerSuite) TestTable(c *C) {
@@ -182,12 +168,6 @@ func (*testDrainerSuite) TestTable(c *C) {
 	table, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
 	table, ok = schema1.TableByID(2)
-	c.Assert(ok, IsFalse)
-	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
-	schema2, err := NewSchema(jobs, ignoreNames)
-	c.Assert(err, IsNil)
-	table, ok = schema2.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)
 	// test schemaAndTableName
 	_, _, ok = schema1.SchemaAndTableName(9)

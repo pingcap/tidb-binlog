@@ -277,7 +277,6 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
-
 	for commitTS, item := range items {
 		if commitTS < boundary {
 			errorBinlogs++

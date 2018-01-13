@@ -7,7 +7,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-//	"github.com/pingcap/tipb/go-binlog"
+	//	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ = Suite(&testBinloggerSuite{})
@@ -102,8 +102,8 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	bl, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-//	err = bl.ReadFrom(binlog.Pos{}, 1, binlog.pumpPullBinlogsServer{})
-//	c.Assert(err, IsNil)
+	//	err = bl.ReadFrom(binlog.Pos{}, 1, binlog.pumpPullBinlogsServer{})
+	//	c.Assert(err, IsNil)
 }
 
 func (s *testBinloggerSuite) TestRead(c *C) {
@@ -127,8 +127,8 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 		c.Assert(b.rotate(), IsNil)
 	}
 
-//	err = bl.ReadFrom(binlog.Pos{}, 11, binlog.pumpPullBinlogsServer{})
-//	c.Assert(err, IsNil)	
+	//	err = bl.ReadFrom(binlog.Pos{}, 11, binlog.pumpPullBinlogsServer{})
+	//	c.Assert(err, IsNil)
 }
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {

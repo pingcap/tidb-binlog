@@ -128,7 +128,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 	var index int32
 	var decoder *decoder
 	var first = true
-
 	dirpath := b.dir
 
 	if nums < 0 {
@@ -178,15 +177,13 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 				Payload: ent.Payload,
 			}
 
-			log.Errorf("sendbinlog len(payload) is %v", len(ent.Payload))
-			err = sendBinlog(from, stream, newEnt)
+			err = sendBinlog(stream, newEnt)
 			if err != nil {
 				log.Errorf("stream send error %v", err)
 				return errors.Trace(err)
 			}
-
+			from.Offset += int64(len(newEnt.Payload) + 16)
 			bufPool.Put(cache)
-			time.Sleep(time.Second)
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
@@ -196,12 +193,10 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 		from.Suffix++
 		from.Offset = 0
 	}
-
 	return nil
 }
 
-func sendBinlog(pos binlog.Pos, stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error {
-	pos.Offset += int64(len(entity.Payload) + 16)
+func sendBinlog(stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error {
 	resp := &binlog.PullBinlogResp{Entity: entity}
 	if err := stream.Send(resp); err != nil {
 		log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
