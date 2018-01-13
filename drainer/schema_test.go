@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -45,7 +46,9 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
 	// reconstruct the local schema
+
 	schema, err := NewSchema(jobs, ignoreNames)
+	log.Errorf("XXXXXXXXXXXXXx")
 	c.Assert(err, IsNil)
 	// check ignore DB
 	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)

@@ -686,7 +686,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetInsertedRows())))
+			s.updateStats(schemaName, tableName, int64(len(mutation.GetInsertedRows())))
 			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
@@ -695,7 +695,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetUpdatedRows())))
+			s.updateStats(schemaName, tableName, int64(len(mutation.GetUpdatedRows())))
 			// safemode is only work for mysql
 			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
 				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows())
@@ -710,7 +710,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			s.UpdateStats(schemaName, tableName, int64(len(mutation.GetDeletedRows())))
+			s.updateStats(schemaName, tableName, int64(len(mutation.GetDeletedRows())))
 			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
@@ -754,8 +754,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 	return nil
 }
 
-// UpdateStats update schema status
-func (s *Syncer) UpdateStats(schemaName, tableName string, count int64) {
+// updateStats update schema status
+func (s *Syncer) updateStats(schemaName, tableName string, count int64) {
 	s.statMu.Lock()
 	if _, ok := s.statMu.stat[schemaName]; !ok {
 		s.statMu.stat[schemaName] = make(map[string]int64)

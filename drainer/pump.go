@@ -103,7 +103,6 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
 	}
-
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
@@ -169,7 +168,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				}
 			}
 		}
-		time.Sleep(time.Second)
 	}
 }
 
@@ -277,7 +275,6 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 }
 
 func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
-
 	boundary := p.window.LoadLower()
 	var errorBinlogs int
 
@@ -401,15 +398,12 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.P
 
 	for {
 		resp, err = stream.Recv()
-
-		time.Sleep(time.Second)
 		if err != nil {
 			log.Warningf("resp.Entity is %v error is %v", resp.Entity, err)
 			return pos, errors.Trace(err)
 		}
 
 		pos = CalculateNextPos(resp.Entity)
-
 		b := p.match(resp.Entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{

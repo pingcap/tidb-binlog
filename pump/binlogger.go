@@ -126,7 +126,6 @@ func CloseBinlogger(binlogger Binlogger) error {
 func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer) error {
 	var ent = &binlog.Entity{}
 	var index int32
-	var cache []byte
 	var decoder *decoder
 	var first = true
 
@@ -155,7 +154,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 
 		if first {
 			first = false
-
 			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
 				return errors.Trace(err)
@@ -169,6 +167,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
+			var cache []byte
 			cache, err = decoder.decode(ent)
 			if err != nil {
 				break
@@ -179,6 +178,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 				Payload: ent.Payload,
 			}
 
+			log.Errorf("sendbinlog len(payload) is %v", len(ent.Payload))
 			err = sendBinlog(from, stream, newEnt)
 			if err != nil {
 				log.Errorf("stream send error %v", err)
@@ -186,6 +186,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 			}
 
 			bufPool.Put(cache)
+			time.Sleep(time.Second)
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
@@ -251,7 +252,7 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	if len(payload) == 0 {
 		return nil
 	}
-
+	log.Errorf("write binlog len(payload)is %v", len(payload))
 	if err := b.encoder.encode(payload); err != nil {
 		return errors.Trace(err)
 	}
