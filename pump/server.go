@@ -247,6 +247,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		if err != nil {
 			return errors.Trace(err)
 		}
+		pos = latestPos
 
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)

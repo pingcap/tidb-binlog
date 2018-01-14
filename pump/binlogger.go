@@ -28,6 +28,7 @@ var (
 	// ErrCRCMismatch is the error represents crc don't match
 	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
 	crcTable       = crc32.MakeTable(crc32.Castagnoli)
+	latestPos      binlog.Pos
 )
 
 // Binlogger is the interface that for append and read binlog
@@ -129,7 +130,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 	var decoder *decoder
 	var first = true
 	dirpath := b.dir
-
 	if nums < 0 {
 		return errors.Errorf("read number must be positive")
 	}
@@ -176,13 +176,15 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 				Pos:     ent.Pos,
 				Payload: ent.Payload,
 			}
+			latestPos = newEnt.Pos
+			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 
 			err = sendBinlog(stream, newEnt)
 			if err != nil {
 				log.Errorf("stream send error %v", err)
 				return errors.Trace(err)
 			}
-			from.Offset += int64(len(newEnt.Payload) + 16)
+
 			bufPool.Put(cache)
 		}
 
@@ -247,7 +249,6 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	if len(payload) == 0 {
 		return nil
 	}
-	log.Errorf("write binlog len(payload)is %v", len(payload))
 	if err := b.encoder.encode(payload); err != nil {
 		return errors.Trace(err)
 	}
