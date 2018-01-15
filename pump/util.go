@@ -6,17 +6,24 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
 	errBadBinlogName = errors.New("bad file name")
 )
 
-const physicalShiftBits = 18
+const (
+	physicalShiftBits = 18
+	maxRetry          = 12
+	retryInterval     = 5 * time.Second
+)
 
 // AtomicBool is bool type that support atomic operator
 type AtomicBool int32
@@ -140,6 +147,10 @@ func readBinlogNames(dirpath string) ([]string, error) {
 func checkBinlogNames(names []string) []string {
 	var fnames []string
 	for _, name := range names {
+		if strings.HasSuffix(name, "checkpoint") {
+			continue
+		}
+
 		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
 				log.Warningf("ignored file %v in wal", name)
@@ -179,5 +190,46 @@ func TopicName(clusterID string, nodeID string) string {
 
 // DefaultTopicPartition returns Deault topic partition
 func DefaultTopicPartition() int32 {
-	return defualtPartition
+	return defaultPartition
+}
+
+// ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
+// return -1 if the left is ahead of the right, oppositely return 1.
+func ComparePos(left, right binlog.Pos) int {
+	if left.Suffix < right.Suffix {
+		return -1
+	} else if left.Suffix > right.Suffix {
+		return 1
+	} else if left.Offset < right.Offset {
+		return -1
+	} else if left.Offset > right.Offset {
+		return 1
+	} else {
+		return 0
+	}
+}
+
+func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
+	var (
+		client sarama.SyncProducer
+		err    error
+	)
+
+	for i := 0; i < maxRetry; i++ {
+		// initial kafka client to use manual partitioner
+		config := sarama.NewConfig()
+		config.Producer.Partitioner = sarama.NewManualPartitioner
+		config.Producer.MaxMessageBytes = maxMsgSize
+		config.Producer.Return.Successes = true
+
+		client, err = sarama.NewSyncProducer(addr, config)
+		if err != nil {
+			log.Errorf("create kafka client error %v", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+		return client, nil
+	}
+
+	return nil, errors.Trace(err)
 }

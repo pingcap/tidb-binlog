@@ -42,7 +42,7 @@ type Binlogger interface {
 	Close() error
 
 	// GC recycles the old binlog file
-	GC(days time.Duration)
+	GC(days time.Duration, pos binlog.Pos)
 }
 
 // binlogger is a logical representation of the log storage
@@ -99,7 +99,6 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	latestPos.Suffix = lastFileSuffix
 
 	p := path.Join(dirpath, lastFileName)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
@@ -107,9 +106,13 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if _, err := f.Seek(0, os.SEEK_END); err != nil {
+	offset, err := f.Seek(0, os.SEEK_END)
+	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	latestFilePos.Suffix = lastFileSuffix
+	latestFilePos.Offset = offset
 
 	binlog := &binlogger{
 		dir:     dirpath,
@@ -198,7 +201,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // GC recycles the old binlog file
-func (b *binlogger) GC(days time.Duration) {
+func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files error:", names)
@@ -218,7 +221,12 @@ func (b *binlogger) GC(days time.Duration) {
 			continue
 		}
 
-		if time.Now().Sub(fi.ModTime()) > days {
+		curSuffix, err := parseBinlogName(name)
+		if err != nil {
+			log.Errorf("parse binlog error %v", err)
+		}
+
+		if curSuffix < pos.Suffix || time.Now().Sub(fi.ModTime()) > days {
 			err := os.Remove(fileName)
 			if err != nil {
 				log.Error("remove old binlog file err")
@@ -247,6 +255,7 @@ func (b *binlogger) WriteTail(payload []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	latestFilePos.Offset = curOffset
 
 	if curOffset < SegmentSizeBytes {
 		return nil
@@ -272,7 +281,8 @@ func (b *binlogger) Close() error {
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
 	filename := fileName(b.seq() + 1)
-	latestPos.Suffix = b.seq() + 1
+	latestFilePos.Suffix = b.seq() + 1
+	latestFilePos.Offset = 0
 	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)

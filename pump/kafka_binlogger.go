@@ -11,9 +11,12 @@ import (
 )
 
 var (
-	defualtPartition = int32(0)
+	defaultOpen      = true
+	defaultPartition = int32(0)
 	errorClosed      = errors.New("binlogger is closed")
 )
+
+const defaultMaxBinlogItem = 1024 * 1024
 
 type kafkaBinloger struct {
 	topic string
@@ -21,18 +24,11 @@ type kafkaBinloger struct {
 	producer sarama.SyncProducer
 	encoder  *kafkaEncoder
 
-	closed bool
 	sync.RWMutex
 }
 
 func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogger, error) {
-	// initial kafka client to use manual partitioner
-	config := sarama.NewConfig()
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = maxMsgSize
-	config.Producer.Return.Successes = true
-
-	producer, err := sarama.NewSyncProducer(addr, config)
+	producer, err := createKafkaClient(addr)
 	if err != nil {
 		log.Errorf("create kafka producer error: %v", err)
 		return nil, errors.Trace(err)
@@ -58,18 +54,15 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	k.RLock()
 	defer k.RUnlock()
 
-	if k.isClosed() {
-		return errorClosed
-	}
-
 	if len(payload) == 0 {
 		return nil
 	}
 
 	offset, err := k.encoder.encode(payload)
-	if offset > latestPos.Offset {
-		latestPos.Offset = offset
+	if offset > latestKafkaPos.Offset {
+		latestKafkaPos.Offset = offset
 	}
+
 	return errors.Trace(err)
 }
 
@@ -78,13 +71,8 @@ func (k *kafkaBinloger) Close() error {
 	k.Lock()
 	defer k.Unlock()
 
-	k.closed = true
 	return k.producer.Close()
 }
 
 // GC implements Binlogger GC interface
-func (k *kafkaBinloger) GC(days time.Duration) {}
-
-func (k *kafkaBinloger) isClosed() bool {
-	return k.closed == true
-}
+func (k *kafkaBinloger) GC(days time.Duration, pos binlog.Pos) {}

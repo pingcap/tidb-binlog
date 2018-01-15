@@ -214,7 +214,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
 			if n.IsOffline {
-				if !p.hadFinished(n.LatestPos, c.window.LoadLower()) {
+				if !p.hadFinished(n.LatestKafkaPos, c.window.LoadLower()) {
 					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
 					continue
 				}

@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/pingcap/tipb/go-binlog"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 // HTTPStatus exposes current status of all pumps via HTTP
 type HTTPStatus struct {
-	BinlogPos map[string]binlog.Pos `json:"LatestBinlog"`
-	CommitTS  int64                 `json:"CommitTS"`
-	ErrMsg    string                `json:"ErrMsg"`
+	BinlogPos  map[string]*LatestPos `json:"LatestBinlog"`
+	CommitTS   int64                 `json:"CommitTS"`
+	CheckPoint pb.Pos                `json:"Checkpoint"`
+	ErrMsg     string                `json:"ErrMsg"`
 }
 
 // Status implements http.ServeHTTP interface

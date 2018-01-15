@@ -57,12 +57,13 @@ type pumpNode struct {
 
 // NodeStatus describes the status information of a node in etcd
 type NodeStatus struct {
-	NodeID    string
-	Host      string
-	IsAlive   bool
-	IsOffline bool
-	LatestPos pb.Pos
-	OfflineTS int64
+	NodeID         string
+	Host           string
+	IsAlive        bool
+	IsOffline      bool
+	LatestFilePos  pb.Pos
+	LatestKafkaPos pb.Pos
+	OfflineTS      int64
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config

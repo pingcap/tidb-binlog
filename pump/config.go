@@ -23,6 +23,7 @@ const (
 	defaultKafkaAddrs        = "127.0.0.1:9092"
 	defaultListenAddr        = "127.0.0.1:8250"
 	defaultSocket            = "unix:///tmp/pump.sock"
+	defautMaxKafkaSize       = 1024 * 1024 * 1024
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
@@ -49,6 +50,7 @@ type Config struct {
 	MetricsInterval   int
 	configFile        string
 	printVersion      bool
+	enableProxySwitch bool
 }
 
 // NewConfig return an instance of configuration
@@ -77,8 +79,10 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
+	fs.IntVar(&maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
+	fs.BoolVar(&cfg.enableProxySwitch, "enable-proxy", true, "enable proxy binlog switch to slave while master is not available")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
@@ -98,7 +102,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	if cfg.printVersion {
-		fmt.Printf("pump Version: %s\n", Version)
 		fmt.Printf("Git Commit Hash: %s\n", GitHash)
 		fmt.Printf("Build TS: %s\n", BuildTS)
 		fmt.Printf("Go Version: %s\n", runtime.Version())

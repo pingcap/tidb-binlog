@@ -1,16 +1,20 @@
 package pump
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,13 +26,15 @@ import (
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
-const maxMsgSize = 1024 * 1024 * 1024
+var maxMsgSize = 1024 * 1024 * 1024
+
 const slowDist = 30 * time.Millisecond
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
-	latestPos binlog.Pos
-	latestTS  int64
+	latestKafkaPos binlog.Pos
+	latestFilePos  binlog.Pos
+	latestTS       int64
 )
 
 // Server implements the gRPC interface,
@@ -81,8 +87,7 @@ type Server struct {
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
-
-	cfg *Config
+	cfg           *Config
 }
 
 func init() {
@@ -143,6 +148,13 @@ func NewServer(cfg *Config) (*Server, error) {
 func (s *Server) init() error {
 	// init cluster data dir if not exist
 	var err error
+	clusterDir := path.Join(s.dataDir, "clusters")
+	if !file.Exist(clusterDir) {
+		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
 	if err != nil {
 		return errors.Trace(err)
@@ -169,8 +181,40 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	s.dispatcher[cid] = kb
-	return kb, nil
+
+	find := false
+	clusterDir := path.Join(s.dataDir, "clusters")
+	names, err := file.ReadDir(clusterDir)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, n := range names {
+		if cid == n {
+			find = true
+			break
+		}
+	}
+
+	var (
+		fb        Binlogger
+		binlogDir = path.Join(clusterDir, cid)
+	)
+	if find {
+		fb, err = OpenBinlogger(binlogDir)
+	} else {
+		fb, err = CreateBinlogger(binlogDir)
+	}
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	s.dispatcher[cid] = newProxy(fb, kb, cp, s.cfg.enableProxySwitch)
+	return s.dispatcher[cid], nil
 }
 
 func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
@@ -198,7 +242,6 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
 		if len(in.Payload) > 100*1024*1024 {
-			log.Warningf("binlog message is too large %d M", len(in.Payload)/(1024*1024))
 			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
 		}
 	}()
@@ -212,11 +255,13 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		err = errors.Trace(err1)
 		return ret, err
 	}
+
 	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
+
 	return ret, nil
 }
 
@@ -317,6 +362,7 @@ func (s *Server) Start() error {
 	go s.gs.Serve(grpcL)
 
 	http.HandleFunc("/status", s.Status)
+	http.HandleFunc("/drainers", s.AllDrainers)
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
@@ -344,7 +390,7 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 
 func (s *Server) writeFakeBinlog() {
 	// there are only one binlogger for the specified cluster
-	// so we can use only one needGrenBinlog flag
+	// so we can use only one needGenBinlog flag
 	if s.needGenBinlog.Get() {
 		for cid := range s.dispatcher {
 			binlogger, err := s.getBinloggerToWrite(cid)
@@ -357,14 +403,17 @@ func (s *Server) writeFakeBinlog() {
 				log.Errorf("generate forward binlog, generate binlog err %v", err)
 				return
 			}
+
 			err = binlogger.WriteTail(payload)
 			if err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return
 			}
-			log.Info("generate fake binlog successfully")
+
+			log.Infof("generate fake binlog successfully")
 		}
 	}
+
 	s.needGenBinlog.Set(true)
 }
 
@@ -387,7 +436,7 @@ func (s *Server) gcBinlogFile() {
 	}
 	for {
 		for _, b := range s.dispatcher {
-			b.GC(s.gc)
+			b.GC(s.gc, binlog.Pos{})
 		}
 		time.Sleep(time.Hour)
 	}
@@ -398,6 +447,22 @@ func (s *Server) startMetrics() {
 		return
 	}
 	s.metrics.Start(s.ctx, s.node.ID())
+}
+
+// AllDrainers exposes drainers' status to HTTP handler.
+func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
+	node, ok := s.node.(*pumpNode)
+	if !ok {
+		json.NewEncoder(w).Encode("can't provide service")
+		return
+	}
+
+	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
+	if err != nil {
+		log.Errorf("get pumps error %v", err)
+	}
+
+	json.NewEncoder(w).Encode(pumps)
 }
 
 // Status exposes pumps' status to HTTP handler.
@@ -416,9 +481,12 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	// get all pumps' latest binlog position
-	binlogPos := make(map[string]binlog.Pos)
+	binlogPos := make(map[string]*LatestPos)
 	for _, st := range status {
-		binlogPos[st.NodeID] = st.LatestPos
+		binlogPos[st.NodeID] = &LatestPos{
+			FilePos:  st.LatestFilePos,
+			KafkaPos: st.LatestKafkaPos,
+		}
 	}
 	// get ts from pd
 	commitTS, err := s.getTSO()
