@@ -242,14 +242,18 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		return errors.Trace(err)
 	}
 
-	var err error
 	pos := in.StartFrom
+	funcSend := func(entity binlog.Entity) error {
+		resp := &binlog.PullBinlogResp{Entity: entity}
+		return errors.Trace(stream.Send(resp))
+	}
+
 	for {
-		pos, err = binlogger.Walk(s.ctx, pos, stream, sendBinlog)
+
+		pos, err = binlogger.Walk(s.ctx, pos, funcSend)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}

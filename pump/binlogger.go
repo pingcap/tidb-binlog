@@ -12,6 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -39,7 +40,7 @@ type Binlogger interface {
 	WriteTail(payload []byte) error
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
-	Walk(ctx context.Context, from binlog.Pos, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos,error)
+	Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error)
 	// close the binlogger
 	Close() error
 
@@ -172,7 +173,8 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			err = decoder.decode(ent)
+			var buf []byte
+			err = decoder.decode(ent, buf)
 			if err != nil {
 				break
 			}
@@ -196,28 +198,29 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos,error){
-	select{
-	case <-ctx.Done():
-		log.Errorf("Walk Done!")
-		return binlog.Pos{},nil
-	default:
-		return walk(from, 100, stream, fSend)
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			log.Warningf("Walk Done!")
+			return binlog.Pos{}, nil
+		default:
+			from, err = b.walk(from, fSend)
+			if err != nil {
+				return from, errors.Trace(err)
+			}
+		}
 	}
 }
 
-func walk(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos, error) {
+func (b *binlogger) walk(from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
 	var ent = &binlog.Entity{}
-	var latestPos binlog.Pos
-	var index int32
 	var decoder *decoder
 	var first = true
 
 	dirpath := b.dir
-
-	if nums < 0 {
-		return latestPos, errors.Errorf("read number must be positive")
-	}
+	latestPos := from
 
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
@@ -252,7 +255,7 @@ func walk(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer, fSe
 
 		decoder = newDecoder(from, io.Reader(f))
 
-		for ; index < nums; index++ {
+		for {
 			cache := bufPool.Get().([]byte)
 			err = decoder.decode(ent, cache)
 			if err != nil {
@@ -266,7 +269,7 @@ func walk(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer, fSe
 			latestPos = newEnt.Pos
 			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 
-			err = fSend(stream, newEnt)
+			err := fSend(newEnt)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
@@ -274,7 +277,7 @@ func walk(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer, fSe
 			bufPool.Put(cache)
 		}
 
-		if (err != nil && err != io.EOF) || index == nums {
+		if err != nil && err != io.EOF {
 			return latestPos, err
 		}
 
