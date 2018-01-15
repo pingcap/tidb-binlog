@@ -7,9 +7,6 @@ import (
 )
 
 var (
-	// Version defines the version of drainer server
-	Version = "2.0.0+git"
-
 	// GitHash will be set during make
 	GitHash = "Not provided (use make build instead of go build)"
 	// BuildTS and BuildTS will be set during make
@@ -18,7 +15,6 @@ var (
 
 // PrintVersionInfo show version info to Stdout
 func PrintVersionInfo() {
-	log.Infof("drainer Version: %s", Version)
 	log.Infof("Git Commit Hash: %s", GitHash)
 	log.Infof("Build TS: %s", BuildTS)
 	log.Infof("Go Version: %s", runtime.Version())

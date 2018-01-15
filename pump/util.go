@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
@@ -17,7 +19,11 @@ var (
 	errBadBinlogName = errors.New("bad file name")
 )
 
-const physicalShiftBits = 18
+const (
+	physicalShiftBits = 18
+	maxRetry          = 12
+	retryInterval     = 5 * time.Second
+)
 
 // AtomicBool is bool type that support atomic operator
 type AtomicBool int32
@@ -201,4 +207,29 @@ func ComparePos(left, right binlog.Pos) int {
 	} else {
 		return 0
 	}
+}
+
+func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
+	var (
+		client sarama.SyncProducer
+		err    error
+	)
+
+	for i := 0; i < maxRetry; i++ {
+		// initial kafka client to use manual partitioner
+		config := sarama.NewConfig()
+		config.Producer.Partitioner = sarama.NewManualPartitioner
+		config.Producer.MaxMessageBytes = maxMsgSize
+		config.Producer.Return.Successes = true
+
+		client, err = sarama.NewSyncProducer(addr, config)
+		if err != nil {
+			log.Errorf("create kafka client error %v", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+		return client, nil
+	}
+
+	return nil, errors.Trace(err)
 }
