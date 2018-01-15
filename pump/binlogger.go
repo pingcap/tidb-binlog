@@ -287,16 +287,6 @@ func (b *binlogger) walk(from binlog.Pos, sendBinlog func(entity binlog.Entity) 
 	return latestPos, nil
 }
 
-func sendBinlog(stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error {
-	resp := &binlog.PullBinlogResp{Entity: entity}
-	if err := stream.Send(resp); err != nil {
-		log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
 // GC recycles the old binlog file
 func (b *binlogger) GC(days time.Duration) {
 	names, err := readBinlogNames(b.dir)
