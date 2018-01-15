@@ -27,7 +27,7 @@ var bufPool = sync.Pool{
 		// The Pool's New function should generally only return pointer
 		// types, since a pointer can be put into the return interface
 		// value without an allocation:
-		return make([]byte, 1024*1024)
+		return &make([]byte, 1024*1024)
 	},
 }
 
