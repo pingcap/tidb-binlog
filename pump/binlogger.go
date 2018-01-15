@@ -28,17 +28,18 @@ var (
 	// ErrCRCMismatch is the error represents crc don't match
 	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
 	crcTable       = crc32.MakeTable(crc32.Castagnoli)
-	latestPos      binlog.Pos
 )
 
 // Binlogger is the interface that for append and read binlog
 type Binlogger interface {
 	// read nums binlog events from the "from" position
-	ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer) error
+	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// batch write binlog event
 	WriteTail(payload []byte) error
 
+	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+	Walk(ctx context.Context, from binlog.Pos, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos,error)
 	// close the binlogger
 	Close() error
 
@@ -124,50 +125,136 @@ func CloseBinlogger(binlogger Binlogger) error {
 
 // ReadFrom reads `nums` binlogs from the given binlog position
 // read all binlogs from one file then close it and open the following file
-func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer) error {
+func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 	var ent = &binlog.Entity{}
+	var ents = []binlog.Entity{}
 	var index int32
 	var decoder *decoder
 	var first = true
+
 	dirpath := b.dir
+
 	if nums < 0 {
-		return errors.Errorf("read number must be positive")
+		return nil, errors.Errorf("read number must be positive")
 	}
 
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
+
 	nameIndex, ok := searchIndex(names, from.Suffix)
 	if !ok {
-		return ErrFileNotFound
+		return nil, ErrFileNotFound
 	}
 
 	for _, name := range names[nameIndex:] {
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
-			return errors.Trace(err)
+			return ents, errors.Trace(err)
 		}
 		defer f.Close()
 
 		if first {
 			first = false
+
 			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
-				return errors.Trace(err)
+				return ents, errors.Trace(err)
 			}
 
 			if size < from.Offset {
-				return errors.Errorf("pos'offset is wrong")
+				return ents, errors.Errorf("pos'offset is wrong")
 			}
 		}
 
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			var cache []byte
-			cache, err = decoder.decode(ent)
+			err = decoder.decode(ent)
+			if err != nil {
+				break
+			}
+
+			newEnt := binlog.Entity{
+				Pos:     ent.Pos,
+				Payload: ent.Payload,
+			}
+			ents = append(ents, newEnt)
+		}
+
+		if (err != nil && err != io.EOF) || index == nums {
+			return ents, err
+		}
+
+		from.Suffix++
+		from.Offset = 0
+	}
+
+	return ents, nil
+}
+
+// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos,error){
+	select{
+	case <-ctx.Done():
+		log.Errorf("Walk Done!")
+		return binlog.Pos{},nil
+	default:
+		return walk(from, 100, stream, fSend)
+	}
+}
+
+func walk(from binlog.Pos, nums int32, stream binlog.Pump_PullBinlogsServer, fSend func(stream binlog.Pump_PullBinlogsServer, b binlog.Entity) error ) (binlog.Pos, error) {
+	var ent = &binlog.Entity{}
+	var latestPos binlog.Pos
+	var index int32
+	var decoder *decoder
+	var first = true
+
+	dirpath := b.dir
+
+	if nums < 0 {
+		return latestPos, errors.Errorf("read number must be positive")
+	}
+
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		return latestPos, errors.Trace(err)
+	}
+
+	nameIndex, ok := searchIndex(names, from.Suffix)
+	if !ok {
+		return latestPos, ErrFileNotFound
+	}
+
+	for _, name := range names[nameIndex:] {
+		p := path.Join(dirpath, name)
+		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
+		if err != nil {
+			return latestPos, errors.Trace(err)
+		}
+		defer f.Close()
+
+		if first {
+			first = false
+
+			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			if err != nil {
+				return latestPos, errors.Trace(err)
+			}
+
+			if size < from.Offset {
+				return latestPos, errors.Errorf("pos'offset is wrong")
+			}
+		}
+
+		decoder = newDecoder(from, io.Reader(f))
+
+		for ; index < nums; index++ {
+			cache := bufPool.Get().([]byte)
+			err = decoder.decode(ent, cache)
 			if err != nil {
 				break
 			}
@@ -179,23 +266,23 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32, stream binlog.Pump_Pul
 			latestPos = newEnt.Pos
 			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 
-			err = sendBinlog(stream, newEnt)
+			err = fSend(stream, newEnt)
 			if err != nil {
-				log.Errorf("stream send error %v", err)
-				return errors.Trace(err)
+				return latestPos, errors.Trace(err)
 			}
 
 			bufPool.Put(cache)
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
-			return err
+			return latestPos, err
 		}
 
 		from.Suffix++
 		from.Offset = 0
 	}
-	return nil
+
+	return latestPos, nil
 }
 
 func sendBinlog(stream binlog.Pump_PullBinlogsServer, entity binlog.Entity) error {

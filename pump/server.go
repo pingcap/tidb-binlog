@@ -241,13 +241,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	var err error
 	pos := in.StartFrom
 	for {
-		err := binlogger.ReadFrom(pos, 100, stream)
+		pos, err = binlogger.Walk(s.ctx, pos, stream, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		pos = latestPos
 
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)

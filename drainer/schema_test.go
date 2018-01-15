@@ -39,6 +39,8 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil},
 	}
 	jobs = append(jobs, job1)
+	// construct a cancelled job
+	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateCancelled})
 	// construct ignore db list
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
@@ -50,12 +52,22 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)
 	c.Assert(ok, IsTrue)
 
+	// test drop schema and drop ignore schema
+	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema,BinlogInfo: &model.HistoryInfo{123, dbInfo, nil}})
+	jobs = append(jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema,BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil}})
+	_, err = NewSchema(jobs, ignoreNames)
+	c.Assert(err, IsNil)
 	// test create schema already exist error
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, job)
 	_, err = NewSchema(jobs, ignoreNames)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
+	// test schema drop schema error
+	jobs = jobs[:0]
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema,BinlogInfo: &model.HistoryInfo{123, dbInfo, nil})
+	_, err = NewSchema(jobs, ignoreNames)
+	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
 func (*testDrainerSuite) TestTable(c *C) {
@@ -169,6 +181,10 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(ok, IsTrue)
 	table, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
+	// check drop table
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable,BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
+	schema2, err := NewSchema(jobs, ignoreNames)
+	c.Assert(err, IsNil)
 	// test schemaAndTableName
 	_, _, ok = schema1.SchemaAndTableName(9)
 	c.Assert(ok, IsTrue)

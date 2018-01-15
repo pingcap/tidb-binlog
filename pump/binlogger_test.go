@@ -1,13 +1,14 @@
 package pump
 
 import (
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
 	"time"
 
 	. "github.com/pingcap/check"
-	//	"github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ = Suite(&testBinloggerSuite{})
@@ -102,8 +103,18 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	bl, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
-	//	err = bl.ReadFrom(binlog.Pos{}, 1, binlog.pumpPullBinlogsServer{})
-	//	c.Assert(err, IsNil)
+	binlogs, err := bl.ReadFrom(binlog.Pos{}, 1)
+	c.Assert(err, IsNil)
+	c.Assert(binlogs, HasLen, 1)
+	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{})
+	c.Assert(binlogs[0].Payload, BytesEquals, []byte("binlogtest"))
+
+	binlogs, err = bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 0}, 1)
+	c.Assert(err, IsNil)
+	c.Assert(binlogs, HasLen, 1)
+	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{Suffix: 1})
+	c.Assert(binlogs[0].Payload, BytesEquals, []byte("binlogtest"))
+	bl.Close()
 }
 
 func (s *testBinloggerSuite) TestRead(c *C) {
@@ -127,8 +138,25 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 		c.Assert(b.rotate(), IsNil)
 	}
 
-	//	err = bl.ReadFrom(binlog.Pos{}, 11, binlog.pumpPullBinlogsServer{})
-	//	c.Assert(err, IsNil)
+	ents, err := bl.ReadFrom(binlog.Pos{}, 11)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 11)
+	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Offset: 260})
+
+	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 0, Offset: 286}, 11)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 11)
+	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26})
+
+	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 52}, 18)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 18)
+	c.Assert(ents[17].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26 * 19})
+
+	ents, err = bl.ReadFrom(binlog.Pos{Offset: 26, Suffix: 5}, 20)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 20)
+	c.Assert(ents[19].Pos, Equals, binlog.Pos{Offset: 0, Suffix: 6})
 }
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {
@@ -161,6 +189,10 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 
 	err = f.Close()
 	c.Assert(err, IsNil)
+
+	ents, err := bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 26}, 4)
+	c.Assert(ents, HasLen, 1)
+	c.Assert(err, Equals, io.ErrUnexpectedEOF)
 }
 
 func (s *testBinloggerSuite) TestGC(c *C) {
