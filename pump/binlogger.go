@@ -173,8 +173,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			var buf []byte
-			err = decoder.decode(ent, buf)
+			err = decoder.decode(ent, &binlogBuffer{})
 			if err != nil {
 				break
 			}
@@ -214,7 +213,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, fSend func(entity
 	}
 }
 
-func (b *binlogger) walk(from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
+func (b *binlogger) walk(from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
 	var ent = &binlog.Entity{}
 	var decoder *decoder
 	var first = true
@@ -256,8 +255,8 @@ func (b *binlogger) walk(from binlog.Pos, fSend func(entity binlog.Entity) error
 		decoder = newDecoder(from, io.Reader(f))
 
 		for {
-			cache := bufPool.Get().([]byte)
-			err = decoder.decode(ent, cache)
+			buf := binlogBufferPool.Get().(*binlogBuffer)
+			err = decoder.decode(ent, buf)
 			if err != nil {
 				break
 			}
@@ -269,12 +268,12 @@ func (b *binlogger) walk(from binlog.Pos, fSend func(entity binlog.Entity) error
 			latestPos = newEnt.Pos
 			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 
-			err := fSend(newEnt)
+			err := sendBinlog(newEnt)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
 
-			bufPool.Put(cache)
+			binlogBufferPool.Put(buf)
 		}
 
 		if err != nil && err != io.EOF {
