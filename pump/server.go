@@ -272,22 +272,18 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pos := in.StartFrom
+	sendBinlog := func(entity binlog.Entity) error {
+		resp := &binlog.PullBinlogResp{Entity: entity}
+		return errors.Trace(stream.Send(resp))
+	}
 
 	for {
-		binlogs, err := binlogger.ReadFrom(pos, 1000)
+
+		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
-		}
-
-		for _, bl := range binlogs {
-			pos = bl.Pos
-			pos.Offset += int64(len(bl.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: bl}
-			if err = stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
-			}
 		}
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)

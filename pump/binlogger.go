@@ -12,6 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -37,6 +38,9 @@ type Binlogger interface {
 
 	// batch write binlog event
 	WriteTail(payload []byte) error
+
+	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+	Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error)
 
 	// close the binlogger
 	Close() error
@@ -177,7 +181,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		decoder = newDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			err = decoder.decode(ent)
+			err = decoder.decode(ent, &binlogBuffer{})
 			if err != nil {
 				break
 			}
@@ -198,6 +202,97 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	}
 
 	return ents, nil
+}
+
+// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			log.Warningf("Walk Done!")
+			return binlog.Pos{}, nil
+		default:
+			from, err = b.walk(from, fSend)
+			if err != nil {
+				return from, errors.Trace(err)
+			}
+		}
+	}
+}
+
+func (b *binlogger) walk(from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+	var ent = &binlog.Entity{}
+	var decoder *decoder
+	var first = true
+
+	dirpath := b.dir
+	latestPos := from
+
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		return latestPos, errors.Trace(err)
+	}
+
+	nameIndex, ok := searchIndex(names, from.Suffix)
+	if !ok {
+		return latestPos, ErrFileNotFound
+	}
+
+	for _, name := range names[nameIndex:] {
+		p := path.Join(dirpath, name)
+		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
+		if err != nil {
+			return latestPos, errors.Trace(err)
+		}
+		defer f.Close()
+
+		if first {
+			first = false
+
+			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			if err != nil {
+				return latestPos, errors.Trace(err)
+			}
+
+			if size < from.Offset {
+				return latestPos, errors.Errorf("pos'offset is wrong")
+			}
+		}
+
+		decoder = newDecoder(from, io.Reader(f))
+
+		for {
+			buf := binlogBufferPool.Get().(*binlogBuffer)
+			err = decoder.decode(ent, buf)
+			if err != nil {
+				break
+			}
+
+			newEnt := binlog.Entity{
+				Pos:     ent.Pos,
+				Payload: ent.Payload,
+			}
+			latestPos = newEnt.Pos
+			latestPos.Offset += int64(len(newEnt.Payload) + 16)
+
+			err := sendBinlog(newEnt)
+			if err != nil {
+				return latestPos, errors.Trace(err)
+			}
+
+			binlogBufferPool.Put(buf)
+		}
+
+		if err != nil && err != io.EOF {
+			return latestPos, err
+		}
+
+		from.Suffix++
+		from.Offset = 0
+	}
+
+	return latestPos, nil
 }
 
 // GC recycles the old binlog file
