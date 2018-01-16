@@ -257,13 +257,13 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				Payload: ent.Payload,
 			}
 			latestPos = newEnt.Pos
-			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 
 			err := sendBinlog(newEnt)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
 
+			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 			binlogBufferPool.Put(buf)
 		}
 
