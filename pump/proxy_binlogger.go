@@ -109,8 +109,8 @@ func (p *Proxy) Close() error {
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
-	return p.master.Walk(ctx, from, fSend)
+func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+	return p.master.Walk(ctx, from, sendBinlog)
 }
 
 // GC recycles the old binlog file
@@ -130,6 +130,7 @@ func (p *Proxy) sync() {
 			log.Errorf("write binlog to replicate error %v", err)
 			return errors.Trace(err)
 		}
+
 		if ComparePos(entity.Pos, pos) > 0 {
 			pos.Suffix = entity.Pos.Suffix
 			pos.Offset = entity.Pos.Offset
@@ -148,7 +149,7 @@ func (p *Proxy) sync() {
 			log.Info("context cancel - sycner exists")
 			return
 		default:
-			pos, err = p.master.Walk(p.ctx, pos, syncBinlog)
+			_, err = p.master.Walk(p.ctx, pos, syncBinlog)
 			if err != nil {
 				log.Errorf("master walk error %v", err)
 				time.Sleep(time.Second)

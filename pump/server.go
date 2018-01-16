@@ -280,7 +280,6 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 
 	for {
-
 		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)

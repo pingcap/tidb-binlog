@@ -40,7 +40,7 @@ type Binlogger interface {
 	WriteTail(payload []byte) error
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
-	Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error)
+	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error)
 
 	// close the binlogger
 	Close() error
@@ -205,29 +205,20 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, fSend func(entity binlog.Entity) error) (binlog.Pos, error) {
-	var err error
-	for {
-		select {
-		case <-ctx.Done():
-			log.Warningf("Walk Done!")
-			return binlog.Pos{}, nil
-		default:
-			from, err = b.walk(from, fSend)
-			if err != nil {
-				return from, errors.Trace(err)
-			}
-		}
-	}
-}
-
-func (b *binlogger) walk(from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
 	var ent = &binlog.Entity{}
 	var decoder *decoder
 	var first = true
 
 	dirpath := b.dir
 	latestPos := from
+
+	select {
+	case <-ctx.Done():
+		log.Warningf("Walk Done!")
+		return latestPos, nil
+	default:
+	}
 
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
@@ -274,13 +265,12 @@ func (b *binlogger) walk(from binlog.Pos, sendBinlog func(entity binlog.Entity) 
 				Payload: ent.Payload,
 			}
 			latestPos = newEnt.Pos
-			latestPos.Offset += int64(len(newEnt.Payload) + 16)
-
 			err := sendBinlog(newEnt)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
 
+			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 			binlogBufferPool.Put(buf)
 		}
 
