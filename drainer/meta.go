@@ -106,11 +106,7 @@ func (lm *localMeta) Check() bool {
 	lm.RLock()
 	defer lm.RUnlock()
 
-	if time.Since(lm.saveTime) >= maxSaveTime {
-		return true
-	}
-
-	return false
+	return time.Since(lm.saveTime) >= maxSaveTime
 }
 
 // Pos implements Meta.Pos interface.

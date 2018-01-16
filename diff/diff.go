@@ -370,7 +370,7 @@ func getTableSchema(db *sql.DB, tblName string) ([]describeTable, error) {
 	var descs []describeTable
 	for rows.Next() {
 		var desc describeTable
-		err := desc.Scan(rows)
+		err = desc.Scan(rows)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

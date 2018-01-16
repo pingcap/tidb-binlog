@@ -22,15 +22,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		// The Pool's New function should generally only return pointer
-		// types, since a pointer can be put into the return interface
-		// value without an allocation:
-		return make([]byte, 1024*1024)
-	},
-}
-
 var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
@@ -243,49 +234,18 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pos := in.StartFrom
-	var (
-		totalSize     int
-		incrementSize int
-		readBatch     int32 = 10
-		maxReadSize         = 500 * mib
-		minReadBatch  int32 = 10
-		maxReadBatch  int32 = 5000
-	)
+	sendBinlog := func(entity binlog.Entity) error {
+		resp := &binlog.PullBinlogResp{Entity: entity}
+		return errors.Trace(stream.Send(resp))
+	}
 
 	for {
-		incrementSize = 0
-		startTime := time.Now()
-		binlogs, cache, err := binlogger.ReadFrom(pos, readBatch)
+		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		for i, bl := range binlogs {
-			pos = bl.Pos
-			incrementSize += len(bl.Payload)
-			pos.Offset += int64(len(bl.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: bl}
-			if err = stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
-			}
-			bufPool.Put(cache[i])
-
-		}
-
-		totalSize += incrementSize
-		elapseTime := int(time.Since(startTime).Seconds())
-		log.Infof("total size %d M, increment size %d M, elapse time %d S, batch %d", totalSize/mib, incrementSize/mib, elapseTime, readBatch)
-		batch := int32(maxReadSize/(incrementSize/int(readBatch))) + 1
-		if batch < minReadBatch {
-			readBatch = minReadBatch
-		} else if batch > maxReadBatch {
-			readBatch = maxReadBatch
-		} else {
-			readBatch = batch
-		}
-
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}

@@ -59,6 +59,9 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 // blackFilter blacklist filtering
 func (s *Syncer) blackFilter(stbs []TableName) []TableName {
 	var tbs []TableName
+	if len(s.cfg.DoTables) == 0 && len(s.cfg.DoDBs) == 0 {
+		return stbs
+	}
 	for _, tb := range stbs {
 		if s.matchTable(s.cfg.IgnoreTables, tb) {
 			continue

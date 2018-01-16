@@ -67,18 +67,17 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 // reconstructSchema reconstruct the schema infomations by history jobs
 func (s *Schema) reconstructSchema(version int64, jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
 	for _, job := range jobs {
-		if job.BinlogInfo.SchemaVersion <= version || job.State == model.JobStateCancelled {
+		if job.State == model.JobStateCancelled || job.BinlogInfo.SchemaVersion <= version {
 			continue
 		}
-
 		switch job.Type {
 		case model.ActionCreateSchema:
 			schema := job.BinlogInfo.DBInfo
+
 			if filterIgnoreSchema(schema, ignoreSchemaNames) {
 				s.AddIgnoreSchema(schema)
 				continue
 			}
-
 			err := s.CreateSchema(schema)
 			if err != nil {
 				return errors.Trace(err)
@@ -289,7 +288,6 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 
 	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
-
 	return nil
 }
 
