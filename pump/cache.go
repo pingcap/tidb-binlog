@@ -12,7 +12,7 @@ var binlogBufferPool = sync.Pool{
 		// types, since a pointer can be put into the return interface
 		// value without an allocation:
 		return &binlogBuffer{
-			cache: make([]byte, 1024*1024),
+			cache: make([]byte, mib),
 		}
 	},
 }
