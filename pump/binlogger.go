@@ -208,7 +208,17 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		Offset: from.Offset,
 	}
 
-	for {
+	names, err := readBinlogNames(b.dir)
+	if err != nil {
+		return latestPos, errors.Trace(err)
+	}
+
+	nameIndex, ok := searchIndex(names, from.Suffix)
+	if !ok {
+		return latestPos, ErrFileNotFound
+	}
+
+	for _, name := range names[nameIndex:] {
 		select {
 		case <-ctx.Done():
 			log.Warningf("Walk Done!")
@@ -216,73 +226,69 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		default:
 		}
 
-		names, err := readBinlogNames(b.dir)
+		p := path.Join(dirpath, name)
+		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
 			return latestPos, errors.Trace(err)
 		}
+		defer f.Close()
 
-		nameIndex, ok := searchIndex(names, from.Suffix)
-		if !ok {
-			return latestPos, ErrFileNotFound
-		}
+		if first {
+			first = false
 
-		for _, name := range names[nameIndex:] {
-			p := path.Join(dirpath, name)
-			f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
+			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
-			defer f.Close()
 
-			if first {
-				first = false
-
-				size, err := f.Seek(from.Offset, os.SEEK_SET)
-				if err != nil {
-					return latestPos, errors.Trace(err)
-				}
-
-				if size < from.Offset {
-					return latestPos, errors.Errorf("pos'offset is wrong")
-				}
+			if size < from.Offset {
+				return latestPos, errors.Errorf("pos'offset is wrong")
 			}
-
-			decoder = newDecoder(from, io.Reader(f))
-
-			for {
-				buf := binlogBufferPool.Get().(*binlogBuffer)
-				err = decoder.decode(ent, buf)
-				if err != nil {
-					break
-				}
-
-				newEnt := binlog.Entity{
-					Pos:     ent.Pos,
-					Payload: ent.Payload,
-				}
-				latestPos = newEnt.Pos
-
-				err := sendBinlog(newEnt)
-				if err != nil {
-					return latestPos, errors.Trace(err)
-				}
-
-				// calculate next position read binlog
-				// 16 means magic(4 bytes) + size(8 bytes) + crc(4 bytes)
-				latestPos.Offset += int64(len(newEnt.Payload) + 16)
-				binlogBufferPool.Put(buf)
-			}
-
-			if err != nil && err != io.EOF {
-				return latestPos, err
-			}
-
-			from.Suffix++
-			from.Offset = 0
 		}
 
-		return latestPos, nil
+		decoder = newDecoder(from, io.Reader(f))
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Warningf("Walk Done!")
+				return latestPos, nil
+			default:
+			}
+			
+			buf := binlogBufferPool.Get().(*binlogBuffer)
+			err = decoder.decode(ent, buf)
+			if err != nil {
+				break
+			}
+
+			newEnt := binlog.Entity{
+				Pos:     ent.Pos,
+				Payload: ent.Payload,
+			}
+			latestPos = newEnt.Pos
+
+			err := sendBinlog(newEnt)
+			if err != nil {
+				return latestPos, errors.Trace(err)
+			}
+
+			// calculate next position read binlog
+			// 16 means magic(4 bytes) + size(8 bytes) + crc(4 bytes)
+			latestPos.Offset += int64(len(newEnt.Payload) + 16)
+			binlogBufferPool.Put(buf)
+		}
+
+		if err != nil && err != io.EOF {
+			return latestPos, err
+		}
+
+		from.Suffix++
+		from.Offset = 0
 	}
+
+	return latestPos, nil
+	
 }
 
 // GC recycles the old binlog file

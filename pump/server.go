@@ -22,16 +22,18 @@ import (
 	"google.golang.org/grpc"
 )
 
-var genBinlogInterval = 3 * time.Second
-var pullBinlogInterval = 50 * time.Millisecond
+var(
+	genBinlogInterval = 3 * time.Second
+	pullBinlogInterval = 50 * time.Millisecond
+	// use latestBinlogFile to record the latest binlog file the pump works on
+	latestBinlogFile = fileName(0)
+)
 
-const maxMsgSizeForGRPC = 1024 * 1024 * 1024
-const slowDist = 30 * time.Millisecond
-
-const mib = 1024 * 1024
-
-// use latestBinlogFile to record the latest binlog file the pump works on
-var latestBinlogFile = fileName(0)
+const(
+	maxMsgSizeForGRPC = 1024 * 1024 * 1024
+	slowDist = 30 * time.Millisecond
+	mib = 1024 * 1024
+) 
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
