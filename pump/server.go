@@ -29,6 +29,7 @@ var pullBinlogInterval = 50 * time.Millisecond
 var maxMsgSize = 1024 * 1024 * 1024
 
 const slowDist = 30 * time.Millisecond
+const mib = 1024 * 1024
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
