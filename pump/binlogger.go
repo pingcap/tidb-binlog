@@ -213,13 +213,6 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 	dirpath := b.dir
 	latestPos := from
 
-	select {
-	case <-ctx.Done():
-		log.Warningf("Walk Done!")
-		return latestPos, nil
-	default:
-	}
-
 	names, err := readBinlogNames(b.dir)
 	if err != nil {
 		return latestPos, errors.Trace(err)
@@ -231,6 +224,13 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 	}
 
 	for _, name := range names[nameIndex:] {
+		select {
+		case <-ctx.Done():
+			log.Warningf("Walk Done!")
+			return latestPos, nil
+		default:
+		}
+
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
@@ -254,6 +254,13 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		decoder = newDecoder(from, io.Reader(f))
 
 		for {
+			select {
+			case <-ctx.Done():
+				log.Warningf("Walk Done!")
+				return latestPos, nil
+			default:
+			}
+
 			buf := binlogBufferPool.Get().(*binlogBuffer)
 			err = decoder.decode(ent, buf)
 			if err != nil {
@@ -270,6 +277,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				return latestPos, errors.Trace(err)
 			}
 
+			// calculate next position to send binlog
+			// 16 means magic(4 bytes) + size(8 bytes) + crc(4 bytes)
 			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 			binlogBufferPool.Put(buf)
 		}
