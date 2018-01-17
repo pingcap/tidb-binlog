@@ -303,7 +303,6 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
-
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)

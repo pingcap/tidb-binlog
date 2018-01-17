@@ -31,16 +31,19 @@ var maxBinlogItemCount = 16 << 12
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
-	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
-	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
-	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *executor.DBConfig `toml:"to" json:"to"`
-	DoTables         []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
-	DestDBType       string             `toml:"db-type" json:"db-type"`
-	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
-	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
+	IgnoreSchemas string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	TxnBatch      int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount   int                `toml:"worker-count" json:"worker-count"`
+	To            *executor.DBConfig `toml:"to" json:"to"`
+	DoTables      []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs         []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	IgnoreTables  []TableName        `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
+	IgnoreDBs     []string           `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
+
+	DestDBType       string `toml:"db-type" json:"db-type"`
+	DisableDispatch  bool   `toml:"disable-dispatch" json:"disable-dispatch"`
+	SafeMode         bool   `toml:"safe-mode" json:"safe-mode"`
+	DisableCausality bool   `toml:"disable-detect" json:"disable-detect"`
 }
 
 // Config holds the configuration of drainer
@@ -96,6 +99,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", 16<<12, "blurry count of binlogs in cache, limit cache size")
+	fs.StringVar(&schemaInfoFile, "schemainfo", "", "schema information file")
 	return cfg
 }
 
@@ -173,6 +177,13 @@ func (c *SyncerConfig) adjustDoDBAndTable() {
 	}
 	for i := 0; i < len(c.DoDBs); i++ {
 		c.DoDBs[i] = strings.ToLower(c.DoDBs[i])
+	}
+	for i, table := range c.IgnoreTables {
+		c.IgnoreTables[i].Table = strings.ToLower(table.Table)
+		c.IgnoreTables[i].Schema = strings.ToLower(table.Schema)
+	}
+	for i, db := range c.IgnoreDBs {
+		c.IgnoreDBs[i] = strings.ToLower(db)
 	}
 }
 
