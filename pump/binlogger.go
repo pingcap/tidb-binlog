@@ -215,7 +215,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		Suffix: from.Suffix,
 		Offset: from.Offset,
 	}
-	names, err := readBinlogNames(b.dir)
+	names, err := readBinlogNames(dirpath)
 	if err != nil {
 		return latestPos, errors.Trace(err)
 	}
