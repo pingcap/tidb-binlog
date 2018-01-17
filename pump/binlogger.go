@@ -255,7 +255,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				return latestPos, nil
 			default:
 			}
-			
+
 			buf := binlogBufferPool.Get().(*binlogBuffer)
 			err = decoder.decode(ent, buf)
 			if err != nil {
@@ -288,7 +288,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 	}
 
 	return latestPos, nil
-	
+
 }
 
 // GC recycles the old binlog file
