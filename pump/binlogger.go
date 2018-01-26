@@ -293,6 +293,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		from.Offset = 0
 	}
 
+	isAvailable = true
 	return latestPos, nil
 }
 

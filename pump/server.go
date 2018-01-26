@@ -30,6 +30,7 @@ var maxMsgSize = 1024 * 1024 * 1024
 
 const slowDist = 30 * time.Millisecond
 const mib = 1024 * 1024
+const pdReconnTimes = 30
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
@@ -121,8 +122,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	// get cluster ID
 	pdCli, err := pd.NewClient(urlv.StringSlice())
 	if err != nil {
-		return nil, errors.Trace(err)
+		for i := 1; i < pdReconnTimes; {
+			pdCli, err = pd.NewClient(urlv.StringSlice())
+			if err != nil {
+				time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+			} else {
+				break
+			}
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
@@ -183,6 +195,8 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
+	cb := createCacheBinlogger()
+
 	find := false
 	clusterDir := path.Join(s.dataDir, "clusters")
 	names, err := file.ReadDir(clusterDir)
@@ -214,7 +228,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	s.dispatcher[cid] = newProxy(fb, kb, cp, s.cfg.enableProxySwitch)
+	s.dispatcher[cid] = newProxy(fb, kb, cb, cp, s.cfg.enableProxySwitch)
 	return s.dispatcher[cid], nil
 }
 
