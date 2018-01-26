@@ -11,8 +11,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-//const maxCacheBinlogSize = 4 * 1024 * 1024 * 1024
-const maxCacheBinlogSize = 56
+const maxCacheBinlogSize = 4 * 1024 * 1024 * 1024
 
 type cacheBinloger struct {
 	qu *queue.Queue
