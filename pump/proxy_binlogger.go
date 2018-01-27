@@ -176,13 +176,13 @@ func (p *Proxy) sync() {
 					time.Sleep(time.Second)
 				}
 			} else {
-				pos, err = p.master.Walk(p.ctx, p.cp.pos(), syncBinlog)
+				pos = p.cp.pos()
+				pos, err = p.master.Walk(p.ctx, pos, syncBinlog)
 				if err != nil {
 					log.Errorf("master walk error %v", err)
 					time.Sleep(time.Second)
 				}
 			}
-			time.Sleep(time.Second)
 		}
 	}
 }

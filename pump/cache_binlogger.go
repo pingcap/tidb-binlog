@@ -79,7 +79,6 @@ func (c *cacheBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog fu
 			return from, nil
 		}
 
-		log.Infof("slave send binlog pos %v len %v", ent.Pos, len(ent.Payload))
 		err := sendBinlog(ent)
 		if err != nil {
 			return from, errors.Trace(err)
