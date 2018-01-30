@@ -8,6 +8,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	binlog "github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -64,6 +65,11 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 	}
 
 	return errors.Trace(err)
+}
+
+// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+	return binlog.Pos{}, nil
 }
 
 // Close implements Binlogger Close interface

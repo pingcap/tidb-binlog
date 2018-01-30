@@ -28,7 +28,11 @@ var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
 
-const slowDist = 30 * time.Millisecond
+const (
+	slowDist      = 30 * time.Millisecond
+	mib           = 1024 * 1024
+	pdReconnTimes = 30
+)
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
@@ -111,14 +115,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// use tiStore's currentVersion method to get the ts from tso
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// get cluster ID
-	pdCli, err := pd.NewClient(urlv.StringSlice())
+	// get pd client and cluster ID
+	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -141,6 +139,26 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 	}, nil
+}
+
+func getPdClient(cfg *Config) (pd.Client, error) {
+	// use tiStore's currentVersion method to get the ts from tso
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var pdCli pd.Client
+	for i := 1; i < pdReconnTimes; i++ {
+		pdCli, err = pd.NewClient(urlv.StringSlice())
+		if err != nil {
+			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	return pdCli, errors.Trace(err)
 }
 
 // inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
@@ -272,22 +290,17 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pos := in.StartFrom
+	sendBinlog := func(entity binlog.Entity) error {
+		resp := &binlog.PullBinlogResp{Entity: entity}
+		return errors.Trace(stream.Send(resp))
+	}
 
 	for {
-		binlogs, err := binlogger.ReadFrom(pos, 1000)
+		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
-		}
-
-		for _, bl := range binlogs {
-			pos = bl.Pos
-			pos.Offset += int64(len(bl.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: bl}
-			if err = stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
-			}
 		}
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
