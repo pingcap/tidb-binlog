@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	queue "github.com/golang-collections/collections/queue"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	binlog "github.com/pingcap/tipb/go-binlog"
@@ -14,7 +13,7 @@ import (
 const maxCacheBinlogSize = 4 * 1024 * 1024 * 1024
 
 type cacheBinloger struct {
-	qu *queue.Queue
+	cache map[binlog.Pos][]byte
 
 	currentSize int
 	sync.RWMutex
@@ -22,7 +21,7 @@ type cacheBinloger struct {
 
 func createCacheBinlogger() Binlogger {
 	return &cacheBinloger{
-		qu: queue.New(),
+		cache: make(map[binlog.Pos][]byte),
 	}
 }
 
@@ -35,13 +34,15 @@ func (c *cacheBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 		return nil, nil
 	}
 
-	entity := c.peek()
-
-	if nums > 0 {
-		c.deQueue()
+	payload, ok := c.cache[from]
+	if !ok {
+		return []binlog.Entity{}, nil
 	}
 
-	return []binlog.Entity{entity}, nil
+	ent := binlog.Entity{
+		Payload: payload,
+	}
+	return []binlog.Entity{ent}, nil
 }
 
 // WriteTail implements Binlogger WriteTail interface
@@ -50,16 +51,12 @@ func (c *cacheBinloger) WriteTail(payload []byte) error {
 	c.Lock()
 	c.Unlock()
 
-	if !isAvailable || len(payload) == 0 || c.currentSize >= maxCacheBinlogSize {
+	if len(payload) == 0 || c.currentSize >= maxCacheBinlogSize {
 		return nil
 	}
 
-	entity := binlog.Entity{
-		Pos:     latestFilePos,
-		Payload: payload,
-	}
-
-	c.enQueue(entity)
+	c.cache[latestFilePos] = payload
+	c.currentSize += len(payload)
 
 	return nil
 }
@@ -74,9 +71,14 @@ func (c *cacheBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog fu
 		default:
 		}
 
-		ent := c.peek()
-		if len(ent.Payload) == 0 {
+		payload, ok := c.cache[from]
+		if !ok {
 			return from, nil
+		}
+
+		ent := binlog.Entity{
+			Pos:     from,
+			Payload: payload,
 		}
 
 		err := sendBinlog(ent)
@@ -84,7 +86,10 @@ func (c *cacheBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog fu
 			return from, errors.Trace(err)
 		}
 
-		c.deQueue()
+		delete(c.cache, from)
+		from.Offset += int64(len(payload) + 16)
+		c.currentSize -= len(payload)
+		time.Sleep(time.Second)
 	}
 }
 
@@ -95,28 +100,3 @@ func (c *cacheBinloger) Close() error {
 
 // GC implements Binlogger GC interface
 func (c *cacheBinloger) GC(days time.Duration, pos binlog.Pos) {}
-
-func (c *cacheBinloger) peek() binlog.Entity {
-	ent := c.qu.Peek()
-	if ent == nil {
-		return binlog.Entity{}
-	}
-
-	return ent.(binlog.Entity)
-}
-
-func (c *cacheBinloger) enQueue(ent binlog.Entity) {
-	c.qu.Enqueue(ent)
-	c.currentSize += len(ent.Payload)
-
-	if c.currentSize >= maxCacheBinlogSize {
-		isAvailable = false
-	}
-}
-
-func (c *cacheBinloger) deQueue() binlog.Entity {
-	ent := c.qu.Dequeue().(binlog.Entity)
-	c.currentSize -= len(ent.Payload)
-
-	return ent
-}

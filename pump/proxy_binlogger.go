@@ -12,18 +12,16 @@ import (
 
 const switchDetectInterval = 10 * time.Second
 
-var isAvailable = true
-
 // Proxy is a proxy binlogger
 // sync binlog from master and replicate
-// if master has error,  switch master and slave
+// if master has error,  switch master and cache
 type Proxy struct {
 	sync.RWMutex
 	wg sync.WaitGroup
 
 	master    Binlogger
 	replicate Binlogger
-	slave     Binlogger
+	cache     Binlogger
 	cp        *checkPoint
 
 	enableSwitch bool
@@ -32,11 +30,11 @@ type Proxy struct {
 	cancel context.CancelFunc
 }
 
-func newProxy(master, replicate, slave Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
+func newProxy(master, replicate, cache Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
 	p := &Proxy{
 		master:    master,
 		replicate: replicate,
-		slave:     slave,
+		cache:     cache,
 		cp:        cp,
 
 		enableSwitch: enableProxySwitch,
@@ -62,7 +60,7 @@ func (p *Proxy) WriteTail(payload []byte) error {
 	if err != nil {
 		log.Errorf("write binlog error %v", err)
 	} else {
-		err = p.slave.WriteTail(payload)
+		err = p.cache.WriteTail(payload)
 	}
 
 	if p.enableSwitch {
@@ -124,12 +122,10 @@ func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
 	p.master.GC(days, p.cp.pos())
 }
 
-func (p *Proxy) checkSavePos(entity binlog.Entity, pos binlog.Pos) error {
-	if ComparePos(entity.Pos, pos) > 0 {
-		pos.Suffix = entity.Pos.Suffix
-		pos.Offset = entity.Pos.Offset
-		if err := p.cp.save(pos); err != nil {
-			log.Errorf("save position %+v error %v", pos, err)
+func (p *Proxy) checkSavePos(entPos binlog.Pos, pos binlog.Pos) error {
+	if ComparePos(entPos, pos) > 0 {
+		if err := p.cp.save(entPos); err != nil {
+			log.Errorf("save position %+v error %v", entPos, err)
 			return errors.Trace(err)
 		}
 	}
@@ -150,7 +146,7 @@ func (p *Proxy) sync() {
 			return errors.Trace(err)
 		}
 
-		err = p.checkSavePos(entity, p.cp.pos())
+		err = p.checkSavePos(entity.Pos, p.cp.pos())
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -164,15 +160,15 @@ func (p *Proxy) sync() {
 			log.Info("context cancel - sycner exists")
 			return
 		default:
-			ent, err := p.slave.ReadFrom(pos, 0)
+			ent, err := p.cache.ReadFrom(pos, 0)
 			if err != nil {
-				log.Errorf("read binlog entity from slave error %v", err)
+				log.Errorf("read binlog entity from cache error %v", err)
 				continue
 			}
 			if len(ent) != 0 {
-				pos, err = p.slave.Walk(p.ctx, pos, syncBinlog)
+				pos, err = p.cache.Walk(p.ctx, pos, syncBinlog)
 				if err != nil {
-					log.Errorf("slave walk error %v", err)
+					log.Errorf("cache walk error %v", err)
 					time.Sleep(time.Second)
 				}
 			} else {
