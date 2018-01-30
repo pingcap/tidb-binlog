@@ -28,8 +28,11 @@ var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
 
-const slowDist = 30 * time.Millisecond
-const mib = 1024 * 1024
+const (
+	slowDist      = 30 * time.Millisecond
+	mib           = 1024 * 1024
+	pdReconnTimes = 30
+)
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
@@ -112,14 +115,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// use tiStore's currentVersion method to get the ts from tso
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// get cluster ID
-	pdCli, err := pd.NewClient(urlv.StringSlice())
+	// get pd client and cluster ID
+	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -142,6 +139,31 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 	}, nil
+}
+
+func getPdClient(cfg *Config) (pd.Client, error) {
+	// use tiStore's currentVersion method to get the ts from tso
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	pdCli, err := pd.NewClient(urlv.StringSlice())
+	if err != nil {
+		for i := 1; i < pdReconnTimes; {
+			pdCli, err = pd.NewClient(urlv.StringSlice())
+			if err != nil {
+				time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+			} else {
+				break
+			}
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	return pdCli, errors.Trace(err)
 }
 
 // inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
