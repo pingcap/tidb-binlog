@@ -148,16 +148,14 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 		return nil, errors.Trace(err)
 	}
 
-	for i := 1; i < pdReconnTimes; {
+	var pdCli pd.Client
+	for i := 1; i < pdReconnTimes; i++ {
 		pdCli, err = pd.NewClient(urlv.StringSlice())
 		if err != nil {
 			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
 		} else {
 			break
 		}
-	}
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	return pdCli, errors.Trace(err)
