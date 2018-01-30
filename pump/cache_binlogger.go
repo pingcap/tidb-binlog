@@ -89,7 +89,6 @@ func (c *cacheBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog fu
 		delete(c.cache, from)
 		from.Offset += int64(len(payload) + 16)
 		c.currentSize -= len(payload)
-		time.Sleep(time.Second)
 	}
 }
 
