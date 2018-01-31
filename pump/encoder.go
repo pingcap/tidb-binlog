@@ -1,34 +1,104 @@
 package pump
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 )
 
 var magic uint32 = 471532804
+
+type CompressionCodec int8
+
+const (
+	CompressionNone = iota
+	CompressionGZIP
+	CompressionSnappy // not supported yet
+	CompressionLZ4    // ditto
+)
+
+// ToCompressionCodec converts v to CompressionCodec.
+func ToCompressionCodec(v string) CompressionCodec {
+	v = strings.ToLower(v)
+	switch v {
+	case "":
+		return CompressionNone
+	case "gzip":
+		return CompressionGZIP
+	case "lz4":
+		return CompressionLZ4
+	case "snappy":
+		return CompressionSnappy
+	default:
+		log.Warnf("unknown codec %v, no compression.", v)
+		return CompressionNone
+	}
+}
 
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-type encoder struct {
-	bw io.Writer
+// Encoder contains Encode method which encodes payload and write it, and returns offset.
+type Encoder interface {
+	Encode(payload []byte) (int64, error)
 }
 
-func newEncoder(w io.Writer) *encoder {
+type encoder struct {
+	bw    io.Writer
+	codec CompressionCodec
+}
+
+func newEncoder(w io.Writer, codec CompressionCodec) Encoder {
 	return &encoder{
-		bw: w,
+		bw:    w,
+		codec: codec,
 	}
 }
 
-func (e *encoder) encode(payload []byte) error {
+func (e *encoder) Encode(payload []byte) (int64, error) {
 	data := encode(payload)
+
+	switch e.codec {
+	case CompressionNone:
+		// nothing to do
+	case CompressionGZIP:
+		var buf bytes.Buffer
+		writer := gzip.NewWriter(&buf)
+		if _, err := writer.Write(data); err != nil {
+			return 0, err
+		}
+		if err := writer.Close(); err != nil {
+			return 0, err
+		}
+		data = buf.Bytes()
+	case CompressionLZ4:
+		panic("not implemented yet")
+	case CompressionSnappy:
+		panic("not implemented yet")
+	}
 	_, err := e.bw.Write(data)
-	return errors.Trace(err)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	if file, ok := e.bw.(*os.File); ok {
+		curOffset, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		return curOffset, nil
+	}
+
+	return 0, errors.Trace(err)
 }
 
 type kafkaEncoder struct {
@@ -37,7 +107,7 @@ type kafkaEncoder struct {
 	producer  sarama.SyncProducer
 }
 
-func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) *kafkaEncoder {
+func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
 	return &kafkaEncoder{
 		producer:  producer,
 		topic:     topic,
@@ -45,7 +115,7 @@ func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32
 	}
 }
 
-func (k *kafkaEncoder) encode(payload []byte) (int64, error) {
+func (k *kafkaEncoder) Encode(payload []byte) (int64, error) {
 	msg := &sarama.ProducerMessage{Topic: k.topic, Partition: k.partition, Value: sarama.ByteEncoder(payload)}
 	partition, offset, err := k.producer.SendMessage(msg)
 	if err != nil {

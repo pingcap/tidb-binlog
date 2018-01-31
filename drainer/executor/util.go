@@ -24,6 +24,7 @@ type DBConfig struct {
 	Password      string `toml:"password" json:"password"`
 	Port          int    `toml:"port" json:"port"`
 	BinlogFileDir string `toml:"dir" json:"dir"`
+	Compression   string `toml:"compression" json:"compression"`
 }
 
 func executeSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {

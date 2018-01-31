@@ -23,7 +23,7 @@ type kafkaBinloger struct {
 	topic string
 
 	producer sarama.SyncProducer
-	encoder  *kafkaEncoder
+	encoder  Encoder
 
 	sync.RWMutex
 }
@@ -59,7 +59,7 @@ func (k *kafkaBinloger) WriteTail(payload []byte) error {
 		return nil
 	}
 
-	offset, err := k.encoder.encode(payload)
+	offset, err := k.encoder.Encode(payload)
 	if offset > latestKafkaPos.Offset {
 		latestKafkaPos.Offset = offset
 	}

@@ -55,7 +55,9 @@ type binlogger struct {
 	dir string
 
 	// encoder encodes binlog payload into bytes, and write to file
-	encoder *encoder
+	encoder Encoder
+
+	codec CompressionCodec
 
 	// file is the lastest file in the dir
 	file  *file.LockedFile
@@ -63,7 +65,7 @@ type binlogger struct {
 }
 
 // CreateBinlogger creates a binlog directory, then can append binlogs
-func CreateBinlogger(dirpath string) (Binlogger, error) {
+func CreateBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
@@ -80,7 +82,7 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 
 	binlog := &binlogger{
 		dir:     dirpath,
-		encoder: newEncoder(f),
+		encoder: newEncoder(f, codec),
 		file:    f,
 	}
 
@@ -88,7 +90,7 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 }
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string) (Binlogger, error) {
+func OpenBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) {
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
 		return nil, err
@@ -121,7 +123,8 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	binlog := &binlogger{
 		dir:     dirpath,
 		file:    f,
-		encoder: newEncoder(f),
+		encoder: newEncoder(f, codec),
+		codec:   codec,
 	}
 
 	return binlog, nil
@@ -343,14 +346,11 @@ func (b *binlogger) WriteTail(payload []byte) error {
 		return nil
 	}
 
-	if err := b.encoder.encode(payload); err != nil {
-		return errors.Trace(err)
-	}
-
-	curOffset, err := b.file.Seek(0, os.SEEK_CUR)
+	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	latestFilePos.Offset = curOffset
 
 	if curOffset < SegmentSizeBytes {
@@ -391,7 +391,7 @@ func (b *binlogger) rotate() error {
 	}
 	b.file = newTail
 
-	b.encoder = newEncoder(b.file)
+	b.encoder = newEncoder(b.file, b.codec)
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }

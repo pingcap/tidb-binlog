@@ -218,9 +218,9 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		binlogDir = path.Join(clusterDir, cid)
 	)
 	if find {
-		fb, err = OpenBinlogger(binlogDir)
+		fb, err = OpenBinlogger(binlogDir, CompressionNone) // no compression now.
 	} else {
-		fb, err = CreateBinlogger(binlogDir)
+		fb, err = CreateBinlogger(binlogDir, CompressionNone) // ditto
 	}
 	if err != nil {
 		return nil, errors.Trace(err)

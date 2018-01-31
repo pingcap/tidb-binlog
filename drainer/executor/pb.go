@@ -23,10 +23,11 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
+	codec := pump.ToCompressionCodec(cfg.Compression)
 	if len(names) > 0 {
-		binlogger, err = pump.OpenBinlogger(dirPath)
+		binlogger, err = pump.OpenBinlogger(dirPath, codec)
 	} else {
-		binlogger, err = pump.CreateBinlogger(dirPath)
+		binlogger, err = pump.CreateBinlogger(dirPath, codec)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
