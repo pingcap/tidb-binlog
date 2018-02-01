@@ -97,7 +97,7 @@ func (e *encoder) Encode(payload []byte) (int64, error) {
 		}
 		return curOffset, nil
 	}
-
+	log.Info("bw is not *os.File, unexpected!")
 	return 0, errors.Trace(err)
 }
 

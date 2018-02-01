@@ -112,7 +112,7 @@ func OpenBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	offset, err := f.Seek(0, os.SEEK_END)
+	offset, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -171,7 +171,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		if first {
 			first = false
 
-			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			size, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return ents, errors.Trace(err)
 			}
@@ -246,7 +246,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		if first {
 			first = false
 
-			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			size, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return latestPos, errors.Trace(err)
 			}
