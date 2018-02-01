@@ -12,25 +12,20 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb-binlog/restore"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	cfg := pump.NewConfig()
+	cfg := restore.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'pump --help'.", err)
+		log.Fatalf("verifying flags error, %v. See 'restore --help'.", err)
 	}
 
-	pump.InitLogger(cfg)
+	restore.InitLogger(cfg)
 	version.PrintVersionInfo()
-
-	p, err := pump.NewServer(cfg)
-	if err != nil {
-		log.Fatalf("creating pump server error, %v", err)
-	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -39,15 +34,17 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
+	r := restore.New(cfg)
+
 	go func() {
 		sig := <-sc
-		log.Infof("got signal [%d] to exit.", sig)
-		p.Close()
+		log.Infof("got signal [%v] to exit.", sig)
+		r.Close()
 		os.Exit(0)
 	}()
 
-	if err := p.Start(); err != nil {
-		log.Errorf("pump server error, %v", err)
+	if err := r.Start(); err != nil {
+		log.Errorf("restore start error, %v", err)
 		os.Exit(2)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 )
@@ -18,21 +19,31 @@ type Config struct {
 	StartTS int64  `toml:"start_ts" json:"start_ts"`
 	EndTS   int64  `toml:"end_ts" json:"end_ts"`
 
+	LogFile   string `toml:"log-file" json:"log-file"`
+	LogRotate string `toml:"log-rotate" json:"log-rotate"`
+	LogLevel  string `toml:"log-level" json:"log-level"`
+
+	Binfile string // for test
+
 	configFile   string
 	printVersion bool
 }
 
 func NewConfig() *Config {
 	c := &Config{}
-	c.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
+	c.FlagSet = flag.NewFlagSet("restore", flag.ContinueOnError)
 	fs := c.FlagSet
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage of drainer:")
+		fmt.Fprintln(os.Stderr, "Usage of restore:")
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
 	fs.Int64Var(&c.StartTS, "start-ts", 0, "restore from start-ts")
 	fs.Int64Var(&c.EndTS, "end-ts", 0, "restore end in end-ts, 0 means never end.")
+	fs.StringVar(&c.Binfile, "binfile", "", "binfile for debug")
+	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
+	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
+	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 
 	return c
 }
@@ -70,7 +81,7 @@ func (c *Config) Parse(args []string) error {
 	}
 
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("PUMP", c.FlagSet); err != nil {
+	if err := flags.SetFlagsFromEnv("RESTORE", c.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -87,4 +98,18 @@ func (c *Config) configFromFile(path string) error {
 func (c *Config) validate() error {
 	// TODO
 	return nil
+}
+
+// InitLogger initalizes Pump's logger.
+func InitLogger(c *Config) {
+	log.SetLevelByString(c.LogLevel)
+
+	if len(c.LogFile) > 0 {
+		log.SetOutputByName(c.LogFile)
+		if c.LogRotate == "hour" {
+			log.SetRotateByHour()
+		} else {
+			log.SetRotateByDay()
+		}
+	}
 }

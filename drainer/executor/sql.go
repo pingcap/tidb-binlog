@@ -22,7 +22,9 @@ var (
 	// SegmentSizeBytes is the max threshold of sql segment file size
 	// as an exported variable, you can define a different size
 	SegmentSizeBytes int64 = 512 * 1024 * 1024 // 512 MB
+)
 
+const (
 	defaultBufSize = 16 * 1024 // 16 KB
 )
 
@@ -75,17 +77,20 @@ func newSQL(cfg *DBConfig) (Executor, error) {
 
 // Execute implements the Executor interface.
 func (s *sqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
+	if len(sqls) != len(args) {
+		return errors.Errorf("mismatch length of sqls and args  %d vs %d", len(sqls), len(args))
+	}
+	if len(sqls) != len(commitTSs) {
+		return errors.Errorf("mismatch length of sqls and committs %d vs %d", len(sqls), len(commitTSs))
+	}
+	sqls, _ = formatSQL(sqls, args)
+
 	// data format
 	// ts|sql;
-	sqls, err := formatSQL(sqls, args)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	for i := range sqls {
 		// FIXME: does len(sqls) always equal to len(commitTSs ?)
 		payload := fmt.Sprintf("%d|%s;", commitTSs[i], sqls[i])
-		err = s.write([]byte(payload))
+		err := s.write([]byte(payload))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -191,10 +196,6 @@ func parseSQLFileIndex(str string) (index uint64, err error) {
 
 // select * from foo.bar where a=? and b=?   (1,2).  select * from foo.bar where a=1 and b=2
 func formatSQL(sqls []string, args [][]interface{}) ([]string, error) {
-	if len(sqls) != len(args) {
-		return nil, errors.Errorf("mismatch length of sqls and args  %d vs %d", len(sqls), len(args))
-	}
-
 	newSQLs := make([]string, 0, len(sqls))
 	for i := range sqls {
 		// TODO: enhance this format. it must have BUG now.
