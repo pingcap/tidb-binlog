@@ -15,6 +15,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
@@ -121,8 +122,8 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(2)
 	}
 	if cfg.printVersion {
-		fmt.Printf("Git Commit Hash: %s\n", GitHash)
-		fmt.Printf("Build TS: %s\n", BuildTS)
+		fmt.Printf("Git Commit Hash: %s\n", version.GitHash)
+		fmt.Printf("Build TS: %s\n", version.BuildTS)
 		fmt.Printf("Go Version: %s\n", runtime.Version())
 		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
 		os.Exit(0)
