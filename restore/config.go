@@ -15,9 +15,10 @@ import (
 
 type Config struct {
 	*flag.FlagSet
-	Dir     string `toml:"data-dir" json:"data-dir"`
-	StartTS int64  `toml:"start_ts" json:"start_ts"`
-	EndTS   int64  `toml:"end_ts" json:"end_ts"`
+	Dir         string `toml:"data-dir" json:"data-dir"`
+	Compression string `toml:"compression" json:"compression"`
+	StartTS     int64  `toml:"start_ts" json:"start_ts"`
+	EndTS       int64  `toml:"end_ts" json:"end_ts"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -112,4 +113,12 @@ func InitLogger(c *Config) {
 			log.SetRotateByDay()
 		}
 	}
+}
+
+// DBConfig is the DB configuration.
+type DBConfig struct {
+	Host     string `toml:"host" json:"host"`
+	User     string `toml:"user" json:"user"`
+	Password string `toml:"password" json:"password"`
+	Port     int    `toml:"port" json:"port"`
 }

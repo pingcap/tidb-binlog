@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/restore/translator"
 )
 
 type Restore struct {
@@ -27,8 +28,13 @@ func (r *Restore) Start() error {
 	if err != nil {
 		log.Fatalf("read binlog file name error %v", err)
 	}
+
+	trans := translator.New("print", false)
+
+	log.Debugf("names %+v, name %s", names, filepath.Base(binlogFile))
 	// find the target file's index
 	index := searchFileIndex(names, filepath.Base(binlogFile))
+	log.Debugf("index %d", index)
 	for _, name := range names[index:] {
 		p := path.Join(dir, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, 0600)
@@ -38,7 +44,6 @@ func (r *Restore) Start() error {
 		defer f.Close()
 
 		reader := bufio.NewReader(io.Reader(f))
-
 		for {
 			payload, err := readBinlog(reader)
 			if err != nil && err != io.EOF {
@@ -47,7 +52,7 @@ func (r *Restore) Start() error {
 			if err == io.EOF {
 				break
 			}
-			decode(payload)
+			translator.Translate(payload, trans)
 		}
 	}
 
