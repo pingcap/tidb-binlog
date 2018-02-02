@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	maxSaveTime = 30 * time.Second
+	maxSaveTime = 5 * time.Second
 )
 
 // checkPoint is local CheckPoint struct.

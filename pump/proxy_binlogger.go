@@ -75,6 +75,8 @@ func (p *Proxy) Close() error {
 
 	for {
 		pos := p.cp.pos()
+		log.Infof("proxy closing position %+v", pos)
+
 		entities, err := p.master.ReadFrom(pos, 1)
 		if err == nil {
 			if len(entities) == 0 {
@@ -84,6 +86,9 @@ func (p *Proxy) Close() error {
 			// compute next binlog offset
 			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
 			if ComparePos(entities[0].Pos, latestFilePos) >= 0 {
+				if err1 := p.cp.save(pos); err1 != nil {
+					log.Errorf("save position %+v error %v", pos, err1)
+				}
 				log.Info("complete sync, read end of binlog file")
 				break
 			}
