@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	maxSaveTime = 5 * time.Second
+	maxSaveTime = 30 * time.Second
 )
 
 // checkPoint is local CheckPoint struct.
@@ -56,14 +56,14 @@ func (c *checkPoint) load() error {
 	return nil
 }
 
-func (c *checkPoint) save(pos pb.Pos) error {
+func (c *checkPoint) save(pos pb.Pos, force bool) error {
 	c.Lock()
 	defer c.Unlock()
 
 	c.Position.Suffix = pos.Suffix
 	c.Position.Offset = pos.Offset
 
-	if !c.check() {
+	if !force && !c.check() {
 		return nil
 	}
 
