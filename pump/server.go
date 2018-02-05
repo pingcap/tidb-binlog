@@ -21,6 +21,7 @@ import (
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var genBinlogInterval = 3 * time.Second
@@ -124,6 +125,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
+	// Create the TLS credentials
+	tlsConfig, err := cfg.Security.ToTLSConfig()
+	if err != nil {
+		return nil, errors.Annotatef(err, "create tls config %v", cfg.Security)
+	}
+
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
@@ -131,7 +138,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
+		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize), grpc.Creds(credentials.NewTLS(tlsConfig))),
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
@@ -150,7 +157,11 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 
 	var pdCli pd.Client
 	for i := 1; i < pdReconnTimes; i++ {
-		pdCli, err = pd.NewClient(urlv.StringSlice())
+		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+			CAPath:   cfg.Security.SSLCA,
+			CertPath: cfg.Security.SSLCert,
+			KeyPath:  cfg.Security.SSLKey,
+		})
 		if err != nil {
 			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
 		} else {

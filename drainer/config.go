@@ -15,6 +15,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
@@ -51,17 +52,18 @@ type SyncerConfig struct {
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet
-	LogLevel        string        `toml:"log-level" json:"log-level"`
-	ListenAddr      string        `toml:"addr" json:"addr"`
-	DataDir         string        `toml:"data-dir" json:"data-dir"`
-	DetectInterval  int           `toml:"detect-interval" json:"detect-interval"`
-	EtcdURLs        string        `toml:"pd-urls" json:"pd-urls"`
-	KafkaAddrs      string        `toml:"kafka-addrs" json:"kafka-addrs"`
-	ZkAddrs         string        `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
-	LogFile         string        `toml:"log-file" json:"log-file"`
-	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
-	InitialCommitTS int64         `toml:"initial-commit-ts" json:"initial-commit-ts"`
-	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
+	LogLevel        string          `toml:"log-level" json:"log-level"`
+	ListenAddr      string          `toml:"addr" json:"addr"`
+	DataDir         string          `toml:"data-dir" json:"data-dir"`
+	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
+	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
+	KafkaAddrs      string          `toml:"kafka-addrs" json:"kafka-addrs"`
+	ZkAddrs         string          `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
+	LogFile         string          `toml:"log-file" json:"log-file"`
+	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
+	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
+	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
+	Security        security.Config `toml:"security" json:"security"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
