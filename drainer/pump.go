@@ -396,7 +396,11 @@ func (p *Pump) receiveBinlog(stream pb.Pump_PullBinlogsClient, pos pb.Pos) (pb.P
 	for {
 		resp, err = stream.Recv()
 		if err != nil {
-			log.Warningf("resp.Entity is %v error is %v", resp.Entity, err)
+			if resp != nil {
+				log.Warningf("resp.Entity is %v error is %v", resp.Entity, err)
+			} else {
+				log.Warningf("receive binlog failed, error %v", err)
+			}
 			return pos, errors.Trace(err)
 		}
 
