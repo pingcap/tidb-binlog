@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"database/sql"
 	"fmt"
 	"hash/crc32"
 	"net"
@@ -11,16 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
-	tddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
-	tmysql "github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tipb/go-binlog"
 )
 
@@ -130,58 +124,6 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 	}()
 
 	return executor.Execute(sqls, args, commitTSs, isDDL)
-}
-
-func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
-	txn, err := db.Begin()
-	if err != nil {
-		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
-		return errors.Trace(err)
-	}
-
-	for i := range sqls {
-		log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
-
-		_, err = txn.Exec(sqls[i], args[i]...)
-		if err != nil {
-			log.Warnf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
-			rerr := txn.Rollback()
-			if rerr != nil {
-				log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], rerr)
-			}
-			return errors.Trace(err)
-		}
-	}
-
-	err = txn.Commit()
-	if err != nil {
-		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
-func ignoreDDLError(err error) bool {
-	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
-	if !ok {
-		return false
-	}
-
-	errCode := terror.ErrCode(mysqlErr.Number)
-	// we can get error code from:
-	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
-	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
-	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
-	switch errCode {
-	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
-		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
-		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
-		tddl.ErrCantDropFieldOrKey.Code(), tmysql.ErrDupKeyName:
-		return true
-	default:
-		return false
-	}
 }
 
 func closeExecutors(executors ...executor.Executor) {

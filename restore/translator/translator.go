@@ -2,6 +2,7 @@ package translator
 
 import (
 	"github.com/juju/errors"
+	"github.com/lunny/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
@@ -27,24 +28,26 @@ func New(name string, safeMode bool) Translator {
 	switch name {
 	case "print":
 		return newPrintTranslator()
-
-	case "pb":
-		return newPBTranslator()
+	case "mysql", "tidb":
+		return newMysqlTranslator()
 	}
+	log.Infof("name %s not found, use print translator by default", name)
 	return newPrintTranslator()
 }
 
-func Translate(payload []byte, translator Translator) ([]string, [][]interface{}, error) {
+func Translate(payload []byte, translator Translator) (sqls []string, args [][]interface{}, isDDL bool, err error) {
 	binlog := &pb.Binlog{}
-	err := binlog.Unmarshal(payload)
+	err = binlog.Unmarshal(payload)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, nil, false, errors.Trace(err)
 	}
 	switch binlog.Tp {
 	case pb.BinlogType_DML:
-		return translateDML(binlog, translator)
+		sqls, args, err = translateDML(binlog, translator)
+		return sqls, args, false, errors.Trace(err)
 	case pb.BinlogType_DDL:
-		return translateDDL(binlog, translator)
+		sqls, args, err = translateDDL(binlog, translator)
+		return sqls, args, true, errors.Trace(err)
 	default:
 		panic("unreachable")
 	}

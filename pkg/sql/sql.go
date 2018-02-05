@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	// import mysql driver(don't delete me)
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	tddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/infoschema"
+	tmysql "github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/terror"
 )
 
 var (
@@ -83,4 +86,27 @@ func OpenDB(proto string, host string, port int, username string, password strin
 	}
 
 	return db, nil
+}
+
+// IngoreDDLError checks the error can be ignored or not.
+func IgnoreDDLError(err error) bool {
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return false
+	}
+
+	errCode := terror.ErrCode(mysqlErr.Number)
+	// we can get error code from:
+	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
+	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
+	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
+	switch errCode {
+	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
+		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
+		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
+		tddl.ErrCantDropFieldOrKey.Code(), tmysql.ErrDupKeyName:
+		return true
+	default:
+		return false
+	}
 }

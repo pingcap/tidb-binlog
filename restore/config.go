@@ -11,14 +11,18 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"github.com/pingcap/tidb-binlog/restore/executor"
 )
 
 type Config struct {
 	*flag.FlagSet
 	Dir         string `toml:"data-dir" json:"data-dir"`
 	Compression string `toml:"compression" json:"compression"`
-	StartTS     int64  `toml:"start_ts" json:"start_ts"`
-	EndTS       int64  `toml:"end_ts" json:"end_ts"`
+	StartTS     int64  `toml:"start-ts" json:"start-ts"`
+	EndTS       int64  `toml:"end-ts" json:"end-ts"`
+
+	DestType string             `toml:"dest-type" json:"dest-type"`
+	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -44,7 +48,9 @@ func NewConfig() *Config {
 	fs.StringVar(&c.Binfile, "binfile", "", "binfile for debug")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
+	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
+	fs.StringVar(&c.configFile, "config", "", "path to configuration file")
 
 	return c
 }
@@ -97,7 +103,9 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
-	// TODO
+	if (c.DestType == "mysql" || c.DestType == "tidb") && (c.DestDB == nil) {
+		return errors.New("dest-db config must not be emtpy")
+	}
 	return nil
 }
 
@@ -113,12 +121,4 @@ func InitLogger(c *Config) {
 			log.SetRotateByDay()
 		}
 	}
-}
-
-// DBConfig is the DB configuration.
-type DBConfig struct {
-	Host     string `toml:"host" json:"host"`
-	User     string `toml:"user" json:"user"`
-	Password string `toml:"password" json:"password"`
-	Port     int    `toml:"port" json:"port"`
 }

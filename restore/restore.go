@@ -7,16 +7,29 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/restore/executor"
 	"github.com/pingcap/tidb-binlog/restore/translator"
 )
 
 type Restore struct {
-	cfg *Config
+	cfg        *Config
+	translator translator.Translator
+	executor   executor.Executor
 }
 
-func New(cfg *Config) *Restore {
-	return &Restore{cfg: cfg}
+func New(cfg *Config) (*Restore, error) {
+	executor, err := executor.New(cfg.DestType, cfg.DestDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &Restore{
+		cfg:        cfg,
+		translator: translator.New(cfg.DestType, false),
+		executor:   executor,
+	}, nil
 }
 
 func (r *Restore) Start() error {
@@ -28,8 +41,6 @@ func (r *Restore) Start() error {
 	if err != nil {
 		log.Fatalf("read binlog file name error %v", err)
 	}
-
-	trans := translator.New("print", false)
 
 	log.Debugf("names %+v, name %s", names, filepath.Base(binlogFile))
 	// find the target file's index
@@ -52,7 +63,19 @@ func (r *Restore) Start() error {
 			if err == io.EOF {
 				break
 			}
-			translator.Translate(payload, trans)
+			sqls, args, isDDL, err := translator.Translate(payload, r.translator)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			err = r.executor.Execute(sqls, args, isDDL)
+			if err != nil {
+				if !pkgsql.IgnoreDDLError(err) {
+					log.Fatalf(errors.ErrorStack(err))
+				} else {
+					log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
+				}
+			}
 		}
 	}
 

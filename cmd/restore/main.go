@@ -10,6 +10,7 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/restore"
@@ -34,7 +35,10 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	r := restore.New(cfg)
+	r, err := restore.New(cfg)
+	if err != nil {
+		log.Fatalf("create restore err %v", err)
+	}
 
 	go func() {
 		sig := <-sc
@@ -44,7 +48,7 @@ func main() {
 	}()
 
 	if err := r.Start(); err != nil {
-		log.Errorf("restore start error, %v", err)
+		log.Errorf("restore start error, %v", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 }

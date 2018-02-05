@@ -1,0 +1,19 @@
+data-dir = ""
+#compression = ""
+
+# log-file = ""
+# log-rotate = "hour"
+log-level = "debug"
+
+# start-ts = 
+# end-ts = 
+
+# dest-type choose a destination, which value can be "mysql","tidb", "print". 
+# for print, it just print decoded value.
+dest-type = "tidb"
+
+[dest-db]
+host = "127.0.0.1"
+port = 4000
+user = "root"
+password = ""

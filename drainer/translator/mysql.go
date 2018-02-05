@@ -182,7 +182,7 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	values := make([][]interface{}, 0, len(rows))
 
 	columnList := m.genColumnList(columns)
-	columnPlaceholders := m.genColumnPlaceholders(len(columns))
+	columnPlaceholders := dml.GenColumnPlaceholders(len(columns))
 
 	for _, row := range rows {
 		var newValues []interface{}

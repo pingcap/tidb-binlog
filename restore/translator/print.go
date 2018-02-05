@@ -25,7 +25,6 @@ func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	printHeader(binlog, event)
 	printUpdateEvent(row)
 	return "", nil, nil
-
 }
 
 func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {

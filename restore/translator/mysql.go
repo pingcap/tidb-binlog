@@ -12,15 +12,14 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-type pbTranslator struct {
+type mysqlTranslator struct {
 }
 
-func newPBTranslator() Translator {
-
-	return nil
+func newMysqlTranslator() Translator {
+	return &mysqlTranslator{}
 }
 
-func (p *pbTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	cols := make([]string, 0, len(row))
 	args := make([]interface{}, 0, len(row))
 	schema := *event.SchemaName
@@ -53,17 +52,17 @@ func (p *pbTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]b
 	return sql, args, nil
 }
 
-func (p *pbTranslator) genColumnList(columns []string) string {
+func (p *mysqlTranslator) genColumnList(columns []string) string {
 	return strings.Join(columns, ",")
 }
 
-func (p *pbTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	// update
 	return "", nil, nil
 
 }
 
-func (p *pbTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	cols := make([]string, 0, len(row))
 	args := make([]interface{}, 0, len(row))
 	schema := *event.SchemaName
@@ -111,10 +110,10 @@ func genWhere(cols []string, args []interface{}) string {
 	return kvs.String()
 }
 
-func (p *pbTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	return "", nil, nil
 }
 
-func (p *pbTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
+func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
 	return string(binlog.DdlQuery), nil, nil
 }
