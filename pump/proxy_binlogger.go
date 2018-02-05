@@ -83,10 +83,11 @@ func (p *Proxy) Close() error {
 
 			// compute next binlog offset
 			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
-			if ComparePos(entities[0].Pos, latestFilePos) == 0 {
+			if ComparePos(entities[0].Pos, latestFilePos) >= 0 {
 				log.Info("complete sync, read end of binlog file")
 				break
 			}
+			log.Infof("close read pos %+v vs latest file position %+v", entities[0].Pos, latestFilePos)
 		}
 		if err != nil {
 			log.Errorf("read binlogs from master in close error %v", err)
@@ -127,7 +128,7 @@ func (p *Proxy) sync() {
 	syncBinlog := func(entity binlog.Entity) error {
 		err = p.replicate.WriteTail(entity.Payload)
 		if err != nil {
-			log.Errorf("write binlog to replicate error %v", err)
+			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
 			return errors.Trace(err)
 		}
 
