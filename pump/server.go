@@ -131,6 +131,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "create tls config %v", cfg.Security)
 	}
 
+	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(maxMsgSize)}
+	if tlsConfig != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+	}
+
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
 		dataDir:    cfg.DataDir,
@@ -138,7 +143,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize), grpc.Creds(credentials.NewTLS(tlsConfig))),
+		gs:         grpc.NewServer(grpcOpts...),
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
