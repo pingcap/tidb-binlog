@@ -3,7 +3,6 @@ package translator
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"time"
@@ -30,6 +29,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
 
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders((len(columns)))
@@ -42,23 +42,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		var r []types.Datum
-		// decode the remain values, the format is [coldID, colVal, coldID, colVal....]
-		// while the table just has primary id, filter the nil value that follows by the primary id
-		if remain[0] != codec.NilFlag {
-			r, err = codec.Decode(remain, 2*(len(columns)-1))
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
+		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
 		}
-
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table `%s`.`%s` insert row raw data is corruption %v", schema, table.Name, r)
-		}
-
-		var columnValues = make(map[int64]types.Datum)
-		for i := 0; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+		if columnValues == nil {
+			continue
 		}
 
 		var vals []interface{}
@@ -102,25 +91,20 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
 
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
 		var oldValues []interface{}
 		var newValues []interface{}
 
-		r, err := codec.Decode(row, 2*len(columns))
+		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table `%s`.`%s` update row data is corruption %v", schema, table.Name, r)
-		}
-
-		var i int
-		oldColumnValues := make(map[int64]types.Datum)
-		for ; i < len(r)/2; i += 2 {
-			oldColumnValues[r[i].GetInt64()] = r[i+1]
+		if len(newColumnValues) == 0 {
+			continue
 		}
 
 		updateColumns, oldValues, err = m.generateColumnAndValue(columns, oldColumnValues)
@@ -128,21 +112,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 		whereColumns := updateColumns
-
-		newColumnValues := make(map[int64]types.Datum)
-		for ; i < len(r); i += 2 {
-			cid := r[i].GetInt64()
-			if val, ok := oldColumnValues[cid]; ok {
-				if reflect.DeepEqual(val.GetValue(), r[i+1].GetValue()) {
-					continue
-				}
-			}
-			newColumnValues[cid] = r[i+1]
-		}
-
-		if len(newColumnValues) == 0 {
-			continue
-		}
 
 		updateColumns, newValues, err = m.generateColumnAndValue(columns, newColumnValues)
 		if err != nil {
@@ -180,37 +149,22 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
 
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders(len(columns))
 
 	for _, row := range rows {
-		var newValues []interface{}
-
-		r, err := codec.Decode(row, 2*len(columns))
+		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table `%s`.`%s` update row data is corruption %v", schema, table.Name, r)
-		}
-
-		var i int
-		oldColumnValues := make(map[int64]types.Datum)
-		for ; i < len(r)/2; i += 2 {
-			oldColumnValues[r[i].GetInt64()] = r[i+1]
-		}
-
-		newColumnValues := make(map[int64]types.Datum)
-		for ; i < len(r); i += 2 {
-			newColumnValues[r[i].GetInt64()] = r[i+1]
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
 		if len(newColumnValues) == 0 {
 			continue
 		}
 
+		var newValues []interface{}
 		_, newValues, err = m.generateColumnAndValue(columns, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
@@ -245,21 +199,15 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
 
 	for _, row := range rows {
-		var value []interface{}
-		r, err := codec.Decode(row, 2*len(columns))
+		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
-
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table `%s`.`%s` the delete row by cols binlog %v is courruption", schema, table.Name, r)
-		}
-
-		var columnValues = make(map[int64]types.Datum)
-		for i := 0; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+		if columnValues == nil {
+			continue
 		}
 
 		sql, value, key, err := m.genDeleteSQL(schema, table, columnValues)
@@ -477,24 +425,90 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
-	value, err := tablecodec.Unflatten(data, &ft, time.Local)
-	if err != nil {
-		return types.Datum{}, errors.Trace(err)
-	}
-	if value.GetValue() == nil {
-		return value, nil
+	if data.GetValue() == nil {
+		return data, nil
 	}
 
 	switch ft.Tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
-		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
+		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
-		value = types.NewDatum(value.GetMysqlEnum().Value)
+		data = types.NewDatum(data.GetMysqlEnum().Value)
 	case mysql.TypeSet:
-		value = types.NewDatum(value.GetMysqlSet().Value)
+		data = types.NewDatum(data.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		value = types.NewDatum(value.GetMysqlBit())
+		data = types.NewDatum(data.GetMysqlBit())
 	}
 
-	return value, nil
+	return data, nil
+}
+
+func toColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
+	colTypeMap := make(map[int64]*types.FieldType)
+	for _, col := range columns {
+		colTypeMap[col.ID] = &col.FieldType
+	}
+
+	return colTypeMap
+}
+
+// DecodeRowWithMap decodes a byte slice into datums with a existing row map.
+// Row layout: colID1, value1, colID2, value2, .....
+func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
+	if b == nil {
+		return nil, nil, nil
+	}
+	if b[0] == codec.NilFlag {
+		return nil, nil, nil
+	}
+
+	cnt := 0
+	var (
+		data   []byte
+		err    error
+		oldRow = make(map[int64]types.Datum, len(cols))
+		newRow = make(map[int64]types.Datum, len(cols))
+	)
+	for len(b) > 0 {
+		// Get col id.
+		data, b, err = codec.CutOne(b)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		_, cid, err := codec.DecodeOne(data)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		// Get col value.
+		data, b, err = codec.CutOne(b)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		id := cid.GetInt64()
+		ft, ok := cols[id]
+		if ok {
+			v, err := tablecodec.DecodeColumnValue(data, ft, loc)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+
+			if _, ok := oldRow[id]; ok {
+				newRow[id] = v
+			} else {
+				oldRow[id] = v
+			}
+
+			cnt++
+			if cnt == len(cols)*2 {
+				// Get enough data.
+				break
+			}
+		}
+	}
+
+	if cnt != len(cols)*2 || len(newRow) != len(oldRow) {
+		return nil, nil, errors.Errorf(" row data is corruption %v", b)
+	}
+
+	return oldRow, newRow, nil
 }
