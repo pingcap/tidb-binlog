@@ -16,7 +16,7 @@ package aggregation
 import (
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types"
 )
@@ -25,24 +25,7 @@ type avgFunction struct {
 	aggFunction
 }
 
-// Clone implements Aggregation interface.
-func (af *avgFunction) Clone() Aggregation {
-	nf := *af
-	for i, arg := range af.Args {
-		nf.Args[i] = arg.Clone()
-	}
-	return &nf
-}
-
-// GetType implements Aggregation interface.
-func (af *avgFunction) GetType() *types.FieldType {
-	ft := types.NewFieldType(mysql.TypeNewDecimal)
-	types.SetBinChsClnFlag(ft)
-	ft.Flen, ft.Decimal = mysql.MaxRealWidth, af.Args[0].GetType().Decimal
-	return ft
-}
-
-func (af *avgFunction) updateAvg(ctx *AggEvaluateContext, sc *variable.StatementContext, row types.Row) error {
+func (af *avgFunction) updateAvg(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext, row types.Row) error {
 	a := af.Args[1]
 	value, err := a.Eval(row)
 	if err != nil {
@@ -51,8 +34,8 @@ func (af *avgFunction) updateAvg(ctx *AggEvaluateContext, sc *variable.Statement
 	if value.IsNull() {
 		return nil
 	}
-	if af.Distinct {
-		d, err1 := ctx.DistinctChecker.Check([]types.Datum{value})
+	if af.HasDistinct {
+		d, err1 := evalCtx.DistinctChecker.Check([]types.Datum{value})
 		if err1 != nil {
 			return errors.Trace(err1)
 		}
@@ -60,7 +43,7 @@ func (af *avgFunction) updateAvg(ctx *AggEvaluateContext, sc *variable.Statement
 			return nil
 		}
 	}
-	ctx.Value, err = calculateSum(sc, ctx.Value, value)
+	evalCtx.Value, err = calculateSum(sc, evalCtx.Value, value)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -68,38 +51,52 @@ func (af *avgFunction) updateAvg(ctx *AggEvaluateContext, sc *variable.Statement
 	if err != nil {
 		return errors.Trace(err)
 	}
-	ctx.Count += count.GetInt64()
+	evalCtx.Count += count.GetInt64()
 	return nil
 }
 
 // Update implements Aggregation interface.
-func (af *avgFunction) Update(ctx *AggEvaluateContext, sc *variable.StatementContext, row types.Row) error {
-	if af.mode == FinalMode {
-		return af.updateAvg(ctx, sc, row)
+func (af *avgFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.StatementContext, row types.Row) error {
+	if af.Mode == FinalMode {
+		return af.updateAvg(sc, evalCtx, row)
 	}
-	return af.updateSum(ctx, sc, row)
+	return af.updateSum(sc, evalCtx, row)
 }
 
 // GetResult implements Aggregation interface.
-func (af *avgFunction) GetResult(ctx *AggEvaluateContext) (d types.Datum) {
-	switch ctx.Value.Kind() {
+func (af *avgFunction) GetResult(evalCtx *AggEvaluateContext) (d types.Datum) {
+	var x *types.MyDecimal
+	switch evalCtx.Value.Kind() {
 	case types.KindFloat64:
-		t := ctx.Value.GetFloat64() / float64(ctx.Count)
-		d.SetValue(t)
+		x = new(types.MyDecimal)
+		err := x.FromFloat64(evalCtx.Value.GetFloat64())
+		terror.Log(errors.Trace(err))
 	case types.KindMysqlDecimal:
-		x := ctx.Value.GetMysqlDecimal()
-		y := types.NewDecFromInt(ctx.Count)
-		to := new(types.MyDecimal)
-		err := types.DecimalDiv(x, y, to, types.DivFracIncr)
-		terror.Log(errors.Trace(err))
-		err = to.Round(to, ctx.Value.Frac()+types.DivFracIncr, types.ModeHalfEven)
-		terror.Log(errors.Trace(err))
-		d.SetMysqlDecimal(to)
+		x = evalCtx.Value.GetMysqlDecimal()
+	default:
+		return
 	}
+	y := types.NewDecFromInt(evalCtx.Count)
+	to := new(types.MyDecimal)
+	err := types.DecimalDiv(x, y, to, types.DivFracIncr)
+	terror.Log(errors.Trace(err))
+	frac := af.RetTp.Decimal
+	if frac == -1 {
+		frac = mysql.MaxDecimalScale
+	}
+	err = to.Round(to, frac, types.ModeHalfEven)
+	terror.Log(errors.Trace(err))
+	if evalCtx.Value.Kind() == types.KindFloat64 {
+		f, err := to.ToFloat64()
+		terror.Log(errors.Trace(err))
+		d.SetFloat64(f)
+		return
+	}
+	d.SetMysqlDecimal(to)
 	return
 }
 
 // GetPartialResult implements Aggregation interface.
-func (af *avgFunction) GetPartialResult(ctx *AggEvaluateContext) []types.Datum {
-	return []types.Datum{types.NewIntDatum(ctx.Count), ctx.Value}
+func (af *avgFunction) GetPartialResult(evalCtx *AggEvaluateContext) []types.Datum {
+	return []types.Datum{types.NewIntDatum(evalCtx.Count), evalCtx.Value}
 }

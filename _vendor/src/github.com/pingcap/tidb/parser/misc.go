@@ -25,7 +25,7 @@ func isLetter(ch rune) bool {
 }
 
 func isDigit(ch rune) bool {
-	return (ch >= '0' && ch <= '9')
+	return ch >= '0' && ch <= '9'
 }
 
 func isIdentChar(ch rune) bool {
@@ -102,8 +102,10 @@ func init() {
 	initTokenByte('\\', int('\\'))
 	initTokenByte('?', paramMarker)
 	initTokenByte('=', eq)
+	initTokenByte('{', int('{'))
+	initTokenByte('}', int('}'))
 
-	initTokenString("||", oror)
+	initTokenString("||", pipes)
 	initTokenString("&&", andand)
 	initTokenString("&^", andnot)
 	initTokenString(":=", assignmentEq)
@@ -137,6 +139,7 @@ var tokenMap = map[string]int{
 	"ADMIN":             admin,
 	"AFTER":             after,
 	"ALL":               all,
+	"ALGORITHM":         algorithm,
 	"ALTER":             alter,
 	"ALWAYS":            always,
 	"ANALYZE":           analyze,
@@ -154,6 +157,8 @@ var tokenMap = map[string]int{
 	"BINARY":            binaryType,
 	"BINLOG":            binlog,
 	"BIT":               bitType,
+	"BIT_AND":           bitAnd,
+	"BIT_OR":            bitOr,
 	"BIT_XOR":           bitXor,
 	"BLOB":              blobType,
 	"BOOL":              boolType,
@@ -164,6 +169,7 @@ var tokenMap = map[string]int{
 	"BYTE":              byteType,
 	"CANCEL":            cancel,
 	"CASCADE":           cascade,
+	"CASCADED":          cascaded,
 	"CASE":              caseKwd,
 	"CAST":              cast,
 	"CHANGE":            change,
@@ -213,6 +219,7 @@ var tokenMap = map[string]int{
 	"DEC":               decimalType,
 	"DECIMAL":           decimalType,
 	"DEFAULT":           defaultKwd,
+	"DEFINER":           definer,
 	"DELAY_KEY_WRITE":   delayKeyWrite,
 	"DELAYED":           delayed,
 	"DELETE":            deleteKwd,
@@ -237,6 +244,7 @@ var tokenMap = map[string]int{
 	"ENUM":              enum,
 	"ESCAPE":            escape,
 	"ESCAPED":           escaped,
+	"EVENT":             event,
 	"EVENTS":            events,
 	"EXCLUSIVE":         exclusive,
 	"EXECUTE":           execute,
@@ -289,6 +297,7 @@ var tokenMap = map[string]int{
 	"INTEGER":           integerType,
 	"INTERVAL":          interval,
 	"INTO":              into,
+	"INVOKER":           invoker,
 	"IS":                is,
 	"ISOLATION":         isolation,
 	"JOBS":              jobs,
@@ -323,6 +332,7 @@ var tokenMap = map[string]int{
 	"MEDIUMBLOB":               mediumblobType,
 	"MEDIUMINT":                mediumIntType,
 	"MEDIUMTEXT":               mediumtextType,
+	"MERGE":                    merge,
 	"MICROSECOND":              microsecond,
 	"MIN":                      min,
 	"MIN_ROWS":                 minRows,
@@ -351,6 +361,7 @@ var tokenMap = map[string]int{
 	"OR":                       or,
 	"ORDER":                    order,
 	"OUTER":                    outer,
+	"PACK_KEYS":                packKeys,
 	"PARTITION":                partition,
 	"PARTITIONS":               partitions,
 	"PASSWORD":                 password,
@@ -367,12 +378,14 @@ var tokenMap = map[string]int{
 	"QUARTER":                  quarter,
 	"QUERY":                    query,
 	"QUICK":                    quick,
+	"SHARD_ROW_ID_BITS":        shardRowIDBits,
 	"RANGE":                    rangeKwd,
 	"READ":                     read,
 	"REAL":                     realType,
 	"REDUNDANT":                redundant,
 	"REFERENCES":               references,
 	"REGEXP":                   regexpKwd,
+	"RELOAD":                   reload,
 	"RENAME":                   rename,
 	"REPEAT":                   repeat,
 	"REPEATABLE":               repeatable,
@@ -384,6 +397,7 @@ var tokenMap = map[string]int{
 	"RIGHT":                    right,
 	"RLIKE":                    rlike,
 	"ROLLBACK":                 rollback,
+	"ROUTINE":                  routine,
 	"ROW":                      row,
 	"ROW_COUNT":                rowCount,
 	"ROW_FORMAT":               rowFormat,
@@ -391,10 +405,12 @@ var tokenMap = map[string]int{
 	"SCHEMAS":                  databases,
 	"SECOND":                   second,
 	"SECOND_MICROSECOND":       secondMicrosecond,
+	"SECURITY":                 security,
 	"SELECT":                   selectKwd,
 	"SERIALIZABLE":             serializable,
 	"SESSION":                  session,
 	"SET":                      set,
+	"SEPARATOR":                separator,
 	"SHARE":                    share,
 	"SHARED":                   shared,
 	"SHOW":                     show,
@@ -403,6 +419,7 @@ var tokenMap = map[string]int{
 	"SMALLINT":                 smallIntType,
 	"SNAPSHOT":                 snapshot,
 	"SOME":                     some,
+	"SQL":                      sql,
 	"SQL_CACHE":                sqlCache,
 	"SQL_CALC_FOUND_ROWS":      sqlCalcFoundRows,
 	"SQL_NO_CACHE":             sqlNoCache,
@@ -423,11 +440,14 @@ var tokenMap = map[string]int{
 	"SUPER":                    super,
 	"TABLE":                    tableKwd,
 	"TABLES":                   tables,
+	"TEMPORARY":                temporary,
+	"TEMPTABLE":                temptable,
 	"TERMINATED":               terminated,
 	"TEXT":                     textType,
 	"THAN":                     than,
 	"THEN":                     then,
 	"TIDB":                     tidb,
+	"TIDB_HJ":                  tidbHJ,
 	"TIDB_INLJ":                tidbINLJ,
 	"TIDB_SMJ":                 tidbSMJ,
 	"TIME":                     timeType,
@@ -446,6 +466,7 @@ var tokenMap = map[string]int{
 	"TRUE":                     trueKwd,
 	"TRUNCATE":                 truncate,
 	"UNCOMMITTED":              uncommitted,
+	"UNDEFINED":                undefined,
 	"UNION":                    union,
 	"UNIQUE":                   unique,
 	"UNKNOWN":                  unknown,
@@ -478,6 +499,42 @@ var tokenMap = map[string]int{
 	"ZEROFILL":                 zerofill,
 }
 
+// See https://dev.mysql.com/doc/refman/5.7/en/function-resolution.html for details
+var btFuncTokenMap = map[string]int{
+	"ADDDATE":      builtinAddDate,
+	"BIT_AND":      builtinBitAnd,
+	"BIT_OR":       builtinBitOr,
+	"BIT_XOR":      builtinBitXor,
+	"CAST":         builtinCast,
+	"COUNT":        builtinCount,
+	"CURDATE":      builtinCurDate,
+	"CURTIME":      builtinCurTime,
+	"DATE_ADD":     builtinDateAdd,
+	"DATE_SUB":     builtinDateSub,
+	"EXTRACT":      builtinExtract,
+	"GROUP_CONCAT": builtinGroupConcat,
+	"MAX":          builtinMax,
+	"MID":          builtinSubstring,
+	"MIN":          builtinMin,
+	"NOW":          builtinNow,
+	"POSITION":     builtinPosition,
+	"SESSION_USER": builtinUser,
+	"STD":          builtinStddevPop,
+	"STDDEV":       builtinStddevPop,
+	"STDDEV_POP":   builtinStddevPop,
+	"STDDEV_SAMP":  builtinVarSamp,
+	"SUBDATE":      builtinSubDate,
+	"SUBSTR":       builtinSubstring,
+	"SUBSTRING":    builtinSubstring,
+	"SUM":          builtinSum,
+	"SYSDATE":      builtinSysDate,
+	"SYSTEM_USER":  builtinUser,
+	"TRIM":         builtinTrim,
+	"VARIANCE":     builtinVarPop,
+	"VAR_POP":      builtinVarPop,
+	"VAR_SAMP":     builtinVarSamp,
+}
+
 // aliases are strings directly map to another string and use the same token.
 var aliases = map[string]string{
 	"SCHEMA":  "DATABASE",
@@ -506,7 +563,22 @@ func (s *Scanner) isTokenIdentifier(lit string, offset int) int {
 			data[i] = lit[i]
 		}
 	}
-	tok := tokenMap[hack.String(data)]
+
+	checkBtFuncToken, tokenStr := false, hack.String(data)
+	if s.r.peek() == '(' {
+		checkBtFuncToken = true
+	} else if s.sqlMode.HasIgnoreSpaceMode() {
+		s.skipWhitespace()
+		if s.r.peek() == '(' {
+			checkBtFuncToken = true
+		}
+	}
+	if checkBtFuncToken {
+		if tok := btFuncTokenMap[tokenStr]; tok != 0 {
+			return tok
+		}
+	}
+	tok := tokenMap[tokenStr]
 	return tok
 }
 

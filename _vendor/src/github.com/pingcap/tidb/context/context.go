@@ -18,8 +18,10 @@ import (
 
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/kvcache"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	goctx "golang.org/x/net/context"
 )
 
@@ -32,9 +34,6 @@ type Context interface {
 
 	// Txn returns the current transaction which is created before executing a statement.
 	Txn() kv.Transaction
-
-	// GoCtx returns the standard context.Context which is bound with current transaction.
-	GoCtx() goctx.Context
 
 	// GetClient gets a kv.Client.
 	GetClient() kv.Client
@@ -55,7 +54,7 @@ type Context interface {
 	// RefreshTxnCtx commits old transaction without retry,
 	// and creates a new transaction.
 	// now just for load data and batch insert.
-	RefreshTxnCtx() error
+	RefreshTxnCtx(goctx.Context) error
 
 	// ActivePendingTxn receives the pending transaction from the transaction channel.
 	// It should be called right before we builds an executor.
@@ -70,6 +69,18 @@ type Context interface {
 
 	// PreparedPlanCache returns the cache of the physical plan
 	PreparedPlanCache() *kvcache.SimpleLRUCache
+
+	// StoreQueryFeedback stores the query feedback.
+	StoreQueryFeedback(feedback interface{})
+
+	// StmtCommit flush all changes by the statement to the underlying transaction.
+	StmtCommit() error
+	// StmtRollback provides statement level rollback.
+	StmtRollback()
+	// StmtGetMutation gets the binlog mutation for current statement.
+	StmtGetMutation(int64) *binlog.TableMutation
+	// StmtAddDirtyTableOP adds the dirty table operation for current statement.
+	StmtAddDirtyTableOP(op int, tid int64, handle int64, row []types.Datum)
 }
 
 type basicCtxType int
@@ -80,6 +91,8 @@ func (t basicCtxType) String() string {
 		return "query_string"
 	case Initing:
 		return "initing"
+	case LastExecuteDDL:
+		return "last_execute_ddl"
 	}
 	return "unknown"
 }
@@ -88,6 +101,8 @@ func (t basicCtxType) String() string {
 const (
 	// QueryString is the key for original query string.
 	QueryString basicCtxType = 1
-	// Initing is the key for indicating if the server is running bootstrap or upgrad job.
+	// Initing is the key for indicating if the server is running bootstrap or upgrade job.
 	Initing basicCtxType = 2
+	// LastExecuteDDL is the key for whether the session execute a ddl command last time.
+	LastExecuteDDL basicCtxType = 3
 )

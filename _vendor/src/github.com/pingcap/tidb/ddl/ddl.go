@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/juju/errors"
 	"github.com/ngaut/pools"
@@ -32,12 +31,14 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/owner"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/terror"
+	log "github.com/sirupsen/logrus"
 	"github.com/twinj/uuid"
 	goctx "golang.org/x/net/context"
 )
@@ -48,6 +49,8 @@ const (
 	// DDLOwnerKey is the ddl owner path that is saved to etcd, and it's exported for testing.
 	DDLOwnerKey = "/tidb/ddl/fg/owner"
 	ddlPrompt   = "ddl"
+
+	shardRowIDBitsMax = 15
 )
 
 var (
@@ -57,7 +60,7 @@ var (
 	// EnableSplitTableRegion is a flag to decide whether to split a new region for
 	// a newly created table. It takes effect only if the Storage supports split
 	// region.
-	EnableSplitTableRegion = false
+	EnableSplitTableRegion = true
 )
 
 var (
@@ -80,7 +83,7 @@ var (
 		"unsupported drop integer primary key")
 	errUnsupportedCharset = terror.ClassDDL.New(codeUnsupportedCharset, "unsupported charset %s collate %s")
 
-	errBlobKeyWithoutLength = terror.ClassDDL.New(codeBlobKeyWithoutLength, "index for BLOB/TEXT column must specificate a key length")
+	errBlobKeyWithoutLength = terror.ClassDDL.New(codeBlobKeyWithoutLength, "index for BLOB/TEXT column must specify a key length")
 	errIncorrectPrefixKey   = terror.ClassDDL.New(codeIncorrectPrefixKey, "Incorrect prefix key; the used key part isn't a string, the used length is longer than the key part, or the storage engine doesn't support unique prefix keys")
 	errTooLongKey           = terror.ClassDDL.New(codeTooLongKey,
 		fmt.Sprintf("Specified key was too long; max key length is %d bytes", maxPrefixLength))
@@ -131,8 +134,8 @@ var (
 	ErrCantDropFieldOrKey = terror.ClassDDL.New(codeCantDropFieldOrKey, "can't drop field; check that column/key exists")
 	// ErrInvalidOnUpdate returns for invalid ON UPDATE clause.
 	ErrInvalidOnUpdate = terror.ClassDDL.New(codeInvalidOnUpdate, "invalid ON UPDATE clause for the column")
-	// ErrTooLongIdent returns for too long name of database/table/column.
-	ErrTooLongIdent = terror.ClassDDL.New(codeTooLongIdent, "Identifier name too long")
+	// ErrTooLongIdent returns for too long name of database/table/column/index.
+	ErrTooLongIdent = terror.ClassDDL.New(codeTooLongIdent, mysql.MySQLErrName[mysql.ErrTooLongIdent])
 	// ErrWrongDBName returns for wrong database name.
 	ErrWrongDBName = terror.ClassDDL.New(codeWrongDBName, mysql.MySQLErrName[mysql.ErrWrongDBName])
 	// ErrWrongTableName returns for wrong table name.
@@ -199,22 +202,13 @@ type ddl struct {
 	ddlJobCh     chan struct{}
 	ddlJobDoneCh chan struct{}
 	ddlEventCh   chan<- *util.Event
-
-	// reorgDoneCh is for reorganization, if the reorganization job is done,
-	// we will use this channel to notify outer.
-	// TODO: Now we use goroutine to simulate reorganization jobs, later we may
-	// use a persistent job list.
-	reorgDoneCh chan error
-	// reorgRowCount is for reorganization, it uses to simulate a job's row count.
-	reorgRowCount int64
-	// notifyCancelReorgJob is for reorganization, it used to notify the backfilling goroutine if the DDL job is cancelled.
-	notifyCancelReorgJob chan struct{}
+	// reorgCtx is for reorganization.
+	reorgCtx *reorgCtx
 
 	quitCh chan struct{}
 	wait   sync.WaitGroup
 
-	workerVars *variable.SessionVars
-
+	workerVars      *variable.SessionVars
 	delRangeManager delRangeManager
 }
 
@@ -273,17 +267,17 @@ func newDDL(ctx goctx.Context, etcdCli *clientv3.Client, store kv.Storage,
 		syncer = NewSchemaSyncer(etcdCli, id)
 	}
 	d := &ddl{
-		infoHandle:           infoHandle,
-		hook:                 hook,
-		store:                store,
-		uuid:                 id,
-		lease:                lease,
-		ddlJobCh:             make(chan struct{}, 1),
-		ddlJobDoneCh:         make(chan struct{}, 1),
-		notifyCancelReorgJob: make(chan struct{}, 1),
-		ownerManager:         manager,
-		schemaSyncer:         syncer,
-		workerVars:           variable.NewSessionVars(),
+		infoHandle:   infoHandle,
+		hook:         hook,
+		store:        store,
+		uuid:         id,
+		lease:        lease,
+		ddlJobCh:     make(chan struct{}, 1),
+		ddlJobDoneCh: make(chan struct{}, 1),
+		reorgCtx:     &reorgCtx{notifyCancelReorgJob: make(chan struct{}, 1)},
+		ownerManager: manager,
+		schemaSyncer: syncer,
+		workerVars:   variable.NewSessionVars(),
 	}
 	d.workerVars.BinlogClient = binloginfo.GetPumpClient()
 
@@ -313,10 +307,15 @@ func (d *ddl) Stop() error {
 
 func (d *ddl) start(ctx goctx.Context) {
 	d.quitCh = make(chan struct{})
-	err := d.ownerManager.CampaignOwner(ctx)
-	terror.Log(errors.Trace(err))
-	d.wait.Add(1)
-	go d.onDDLWorker()
+
+	// If RunWorker is true, we need campaign owner and do DDL job.
+	// Otherwise, we needn't do that.
+	if RunWorker {
+		err := d.ownerManager.CampaignOwner(ctx)
+		terror.Log(errors.Trace(err))
+		d.wait.Add(1)
+		go d.onDDLWorker()
+	}
 
 	// For every start, we will send a fake job to let worker
 	// check owner firstly and try to find whether a job exists and run.
@@ -426,7 +425,7 @@ func (d *ddl) doDDLJob(ctx context.Context, job *model.Job) error {
 
 	// Notice worker that we push a new job and wait the job done.
 	asyncNotify(d.ddlJobCh)
-	log.Infof("[ddl] start DDL job %s, Query:\n%s", job, job.Query)
+	log.Infof("[ddl] start DDL job %s, Query:%s", job, job.Query)
 
 	var historyJob *model.Job
 	jobID := job.ID
@@ -435,15 +434,11 @@ func (d *ddl) doDDLJob(ctx context.Context, job *model.Job) error {
 	// But we use etcd to speed up, normally it takes less than 1s now, so we use 1s or 3s as the max value.
 	ticker := time.NewTicker(chooseLeaseTime(10*d.lease, checkJobMaxInterval(job)))
 	startTime := time.Now()
-	jobsGauge.WithLabelValues(job.Type.String()).Inc()
+	metrics.JobsGauge.WithLabelValues(job.Type.String()).Inc()
 	defer func() {
 		ticker.Stop()
-		jobsGauge.WithLabelValues(job.Type.String()).Dec()
-		retLabel := handleJobSucc
-		if err != nil {
-			retLabel = handleJobFailed
-		}
-		handleJobHistogram.WithLabelValues(job.Type.String(), retLabel).Observe(time.Since(startTime).Seconds())
+		metrics.JobsGauge.WithLabelValues(job.Type.String()).Dec()
+		metrics.HandleJobHistogram.WithLabelValues(job.Type.String(), metrics.RetLabel(err)).Observe(time.Since(startTime).Seconds())
 	}()
 	for {
 		select {
@@ -466,7 +461,10 @@ func (d *ddl) doDDLJob(ctx context.Context, job *model.Job) error {
 			return nil
 		}
 
-		return errors.Trace(historyJob.Error)
+		if historyJob.Error != nil {
+			return errors.Trace(historyJob.Error)
+		}
+		panic("When the state is JobCancel, historyJob.Error should never be nil")
 	}
 }
 

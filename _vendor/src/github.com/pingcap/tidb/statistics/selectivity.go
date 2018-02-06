@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/ranger"
 )
 
@@ -35,7 +34,7 @@ type exprSet struct {
 	// mask is a bit pattern whose ith bit will indicate whether the ith expression is covered by this index/column.
 	mask int64
 	// ranges contains all the ranges we got.
-	ranges []types.Range
+	ranges []*ranger.NewRange
 }
 
 // The type of the exprSet.
@@ -95,7 +94,9 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 	}
 	var sets []*exprSet
 	sc := ctx.GetSessionVars().StmtCtx
-	extractedCols := expression.ExtractColumns(expression.ComposeCNFCondition(ctx, exprs...))
+
+	extractedCols := make([]*expression.Column, 0, len(t.Columns))
+	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, exprs, nil)
 	for _, colInfo := range t.Columns {
 		col := expression.ColInfo2Col(extractedCols, colInfo.Info)
 		// This column should have histogram.
@@ -113,7 +114,7 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 	for _, idxInfo := range t.Indices {
 		idxCols, lengths := expression.IndexInfo2Cols(extractedCols, idxInfo.Info)
 		// This index should have histogram.
-		if len(idxCols) > 0 && len(idxInfo.Histogram.Buckets) > 0 {
+		if len(idxCols) > 0 && idxInfo.Histogram.Len() > 0 {
 			maskCovered, ranges, err := getMaskAndRanges(ctx, exprs, ranger.IndexRangeType, lengths, idxCols...)
 			if err != nil {
 				return 0, errors.Trace(err)
@@ -133,11 +134,9 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 		)
 		switch set.tp {
 		case pkType, colType:
-			ranges := ranger.Ranges2ColumnRanges(set.ranges)
-			rowCount, err = t.GetRowCountByColumnRanges(sc, set.ID, ranges)
+			rowCount, err = t.GetRowCountByColumnRanges(sc, set.ID, set.ranges)
 		case indexType:
-			ranges := ranger.Ranges2IndexRanges(set.ranges)
-			rowCount, err = t.GetRowCountByIndexRanges(sc, set.ID, ranges)
+			rowCount, err = t.GetRowCountByIndexRanges(sc, set.ID, set.ranges)
 		}
 		if err != nil {
 			return 0, errors.Trace(err)
@@ -151,18 +150,22 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 	return ret, nil
 }
 
-func getMaskAndRanges(ctx context.Context, exprs []expression.Expression, rangeType int,
-	lengths []int, cols ...*expression.Column) (int64, []types.Range, error) {
-	exprsClone := make([]expression.Expression, 0, len(exprs))
-	for _, expr := range exprs {
-		exprsClone = append(exprsClone, expr.Clone())
+func getMaskAndRanges(ctx context.Context, exprs []expression.Expression, rangeType ranger.RangeType,
+	lengths []int, cols ...*expression.Column) (mask int64, ranges []*ranger.NewRange, err error) {
+	sc := ctx.GetSessionVars().StmtCtx
+	var accessConds []expression.Expression
+	switch rangeType {
+	case ranger.ColumnRangeType:
+		accessConds = ranger.ExtractAccessConditionsForColumn(exprs, cols[0].ColName)
+		ranges, err = ranger.BuildColumnRange(accessConds, sc, cols[0].RetType)
+	case ranger.IndexRangeType:
+		ranges, accessConds, err = ranger.DetachSimpleCondAndBuildRangeForIndex(sc, exprs, cols, lengths)
+	default:
+		panic("should never be here")
 	}
-	accessConds, _ := ranger.DetachCondsForSelectivity(exprsClone, rangeType, cols, lengths)
-	ranges, err := ranger.BuildRange(ctx.GetSessionVars().StmtCtx, accessConds, rangeType, cols, lengths)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
-	mask := int64(0)
 	for i := range exprs {
 		for j := range accessConds {
 			if exprs[i].Equal(accessConds[j], ctx) {
@@ -179,8 +182,6 @@ func getUsableSetsByGreedy(sets []*exprSet) (newBlocks []*exprSet) {
 	mask := int64(math.MaxInt64)
 	for {
 		// Choose the index that covers most.
-		bestID := -1
-		bestCount := 0
 		bestID, bestCount, bestTp := -1, 0, colType
 		for i, set := range sets {
 			set.mask &= mask

@@ -191,7 +191,7 @@ var MySQLErrName = map[uint16]string{
 	ErrRequiresPrimaryKey:                       "This table type requires a primary key",
 	ErrNoRaidCompiled:                           "This version of MySQL is not compiled with RAID support",
 	ErrUpdateWithoutKeyInSafeMode:               "You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column",
-	ErrKeyDoesNotExits:                          "Key '%-.192s' doesn't exist in table '%-.192s'",
+	ErrKeyDoesNotExist:                          "Key '%-.192s' doesn't exist in table '%-.192s'",
 	ErrCheckNoSuchTable:                         "Can't open table",
 	ErrCheckNotImplemented:                      "The storage engine for the table doesn't support %s",
 	ErrCantDoThisDuringAnTransaction:            "You are not allowed to execute this command in a transaction",
@@ -440,8 +440,8 @@ var MySQLErrName = map[uint16]string{
 	ErrCommitNotAllowedInSfOrTrg:                "Explicit or implicit commit is not allowed in stored function or trigger.",
 	ErrNoDefaultForViewField:                    "Field of view '%-.192s.%-.192s' underlying table doesn't have a default value",
 	ErrSpNoRecursion:                            "Recursive stored functions and triggers are not allowed.",
-	ErrTooBigScale:                              "Too big scale %d specified for column '%-.192s'. Maximum is %lu.",
-	ErrTooBigPrecision:                          "Too big precision %d specified for column '%-.192s'. Maximum is %lu.",
+	ErrTooBigScale:                              "Too big scale %d specified for column '%-.192s'. Maximum is %d.",
+	ErrTooBigPrecision:                          "Too big precision %d specified for column '%-.192s'. Maximum is %d.",
 	ErrMBiggerThanD:                             "For float(M,D), double(M,D) or decimal(M,D), M must be >= D (column '%-.192s').",
 	ErrWrongLockOfSystemTable:                   "You can't combine write-locking of system tables with other tables or lock types",
 	ErrConnectToForeignDataSource:               "Unable to connect to foreign data source: %.64s",
@@ -887,6 +887,7 @@ var MySQLErrName = map[uint16]string{
 	ErrInvalidJSONPath:                                       "Invalid JSON path expression %s.",
 	ErrInvalidJSONData:                                       "Invalid data type for JSON data",
 	ErrJSONUsedAsKey:                                         "JSON column '%-.192s' cannot be used in key specification.",
+	ErrMemExceedThreshold:                                    "%s holds %dB memory, exceeds threshold %dB.",
 
 	// TiKV/PD errors.
 	ErrPDServerTimeout:    "PD server timeout",

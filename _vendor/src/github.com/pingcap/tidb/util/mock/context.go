@@ -22,8 +22,10 @@ import (
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/kvcache"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	goctx "golang.org/x/net/context"
 )
 
@@ -111,6 +113,7 @@ func (c *Context) NewTxn() error {
 			return errors.Trace(err)
 		}
 	}
+
 	txn, err := c.Store.Begin()
 	if err != nil {
 		return errors.Trace(err)
@@ -120,7 +123,7 @@ func (c *Context) NewTxn() error {
 }
 
 // RefreshTxnCtx implements the context.Context interface.
-func (c *Context) RefreshTxnCtx() error {
+func (c *Context) RefreshTxnCtx(goCtx goctx.Context) error {
 	return errors.Trace(c.NewTxn())
 }
 
@@ -145,10 +148,15 @@ func (c *Context) InitTxnWithStartTS(startTS uint64) error {
 		return nil
 	}
 	if c.Store != nil {
+		membufCap := kv.DefaultTxnMembufCap
+		if c.sessionVars.ImportingData {
+			membufCap = kv.ImportingTxnMembufCap
+		}
 		txn, err := c.Store.BeginWithStartTS(startTS)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		txn.SetCap(membufCap)
 		c.txn = txn
 	}
 	return nil
@@ -179,13 +187,36 @@ func (c *Context) GoCtx() goctx.Context {
 	return c.ctx
 }
 
+// StoreQueryFeedback stores the query feedback.
+func (c *Context) StoreQueryFeedback(_ interface{}) {}
+
+// StmtCommit implements the context.Context interface.
+func (c *Context) StmtCommit() error {
+	return nil
+}
+
+// StmtRollback implements the context.Context interface.
+func (c *Context) StmtRollback() {
+}
+
+// StmtGetMutation implements the context.Context interface.
+func (c *Context) StmtGetMutation(tableID int64) *binlog.TableMutation {
+	return nil
+}
+
+// StmtAddDirtyTableOP implements the context.Context interface.
+func (c *Context) StmtAddDirtyTableOP(op int, tid int64, handle int64, row []types.Datum) {
+}
+
 // NewContext creates a new mocked context.Context.
 func NewContext() *Context {
-	ctx, cancel := goctx.WithCancel(goctx.Background())
-	return &Context{
+	goCtx, cancel := goctx.WithCancel(goctx.Background())
+	ctx := &Context{
 		values:      make(map[fmt.Stringer]interface{}),
 		sessionVars: variable.NewSessionVars(),
-		ctx:         ctx,
+		ctx:         goCtx,
 		cancel:      cancel,
 	}
+	ctx.sessionVars.MaxChunkSize = 2
+	return ctx
 }
