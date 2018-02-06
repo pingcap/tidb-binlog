@@ -498,6 +498,7 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 				oldRow[id] = v
 			}
 
+			cnt++
 			if cnt == len(cols)*2 {
 				// Get enough data.
 				break

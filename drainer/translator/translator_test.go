@@ -92,8 +92,8 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		newRowDatas, changeExpected := testGenRowData(c, t.Columns, 2)
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog})
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(whereExpected[:exceptedKeys[index]])))
 		c.Assert(err, IsNil)
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", interfaceToString(whereExpected[:exceptedKeys[index]])))
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals {
