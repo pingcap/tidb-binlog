@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -70,6 +71,7 @@ type Config struct {
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
+	tls             *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -141,9 +143,16 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet); err != nil {
+	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	cfg.tls, err = cfg.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
+	}
+
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing

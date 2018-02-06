@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -53,6 +54,7 @@ type Config struct {
 	configFile        string
 	printVersion      bool
 	enableProxySwitch bool
+	tls               *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -125,8 +127,14 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
+	err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet)
+	if err != nil {
 		return errors.Trace(err)
+	}
+
+	cfg.tls, err = cfg.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
 	adjustString(&cfg.ListenAddr, defaultListenAddr)

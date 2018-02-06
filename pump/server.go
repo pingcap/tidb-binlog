@@ -125,15 +125,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
-	// Create the TLS credentials
-	tlsConfig, err := cfg.Security.ToTLSConfig()
-	if err != nil {
-		return nil, errors.Annotatef(err, "create tls config %v", cfg.Security)
-	}
-
 	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(maxMsgSize)}
-	if tlsConfig != nil {
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+	if cfg.tls != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
 
 	return &Server{
