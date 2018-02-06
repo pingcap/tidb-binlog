@@ -1,5 +1,5 @@
-hash: e063acfc52bbb786d265cfd4d0d21d748a48c558adc3a345b429ecc6baf1a487
-updated: 2018-02-06T13:17:37.782612+08:00
+hash: 3640beb2e2abbdecc1f5b8a785194800eb695495d7da5d0fa6c45e4fe711ec58
+updated: 2018-02-06T17:12:03.112177+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -166,7 +166,7 @@ imports:
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
   version: ce0256b0cfa9b64c16caf5b91dec256ad649b7d1
 - name: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
   - runtime
   - runtime/internal

@@ -102,7 +102,7 @@ import:
 - package: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - package: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
   - runtime
   - runtime/internal
