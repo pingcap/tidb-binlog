@@ -53,9 +53,12 @@ func (c *Config) ToTLSConfig() (*tls.Config, error) {
 
 // ToTiDBSecurityConfig generates tidb security config
 func (c *Config) ToTiDBSecurityConfig() config.Security {
-	return config.Security{
+	security := config.Security{
 		ClusterSSLCA:   c.SSLCA,
 		ClusterSSLCert: c.SSLCert,
 		ClusterSSLKey:  c.SSLKey,
 	}
+
+	config.GetGlobalConfig().Security = security
+	return security
 }
