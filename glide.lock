@@ -1,5 +1,5 @@
-hash: 2facf9b4f91187948877efcccf1f9f10345d5c72c9d2a89194a60861483fe863
-updated: 2018-02-06T11:49:48.762704+08:00
+hash: e063acfc52bbb786d265cfd4d0d21d748a48c558adc3a345b429ecc6baf1a487
+updated: 2018-02-06T13:17:37.782612+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -144,7 +144,7 @@ imports:
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: 874264fbbb43f4d91e999fecb4b40143ed611400
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - jsonpb
   - proto
@@ -156,7 +156,7 @@ imports:
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
-  version: 7d79101e329e5a3adf994758c578dab82b90c017
+  version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/grpc-ecosystem/go-grpc-middleware
   version: 82921fcf811d228d2fa202bc31238b356bf9f8d5
   subpackages:

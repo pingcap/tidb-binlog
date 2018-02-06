@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/config"
 )
 
 // Config is security config
@@ -48,4 +49,13 @@ func (c *Config) ToTLSConfig() (*tls.Config, error) {
 	}
 
 	return tlsConfig, nil
+}
+
+// ToTiDBSecurityConfig generates tidb security config
+func (c *Config) ToTiDBSecurityConfig() config.Security {
+	return config.Security{
+		ClusterSSLCA:   c.SSLCA,
+		ClusterSSLCert: c.SSLCert,
+		ClusterSSLKey:  c.SSLKey,
+	}
 }

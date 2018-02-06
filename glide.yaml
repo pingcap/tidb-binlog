@@ -93,14 +93,14 @@ import:
   subpackages:
   - lru
 - package: github.com/golang/protobuf
-  version: 874264fbbb43f4d91e999fecb4b40143ed611400
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - jsonpb
   - proto
 - package: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - package: github.com/google/btree
-  version: 7d79101e329e5a3adf994758c578dab82b90c017
+  version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - package: github.com/grpc-ecosystem/grpc-gateway
   version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
   subpackages:

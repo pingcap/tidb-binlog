@@ -75,7 +75,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	tiClient, err := tikv.NewLockResolver(urlv.StringSlice())
+	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

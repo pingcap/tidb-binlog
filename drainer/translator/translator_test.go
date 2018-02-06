@@ -9,6 +9,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -149,6 +150,7 @@ func testGenDDLSQL(c *C, s SQLTranslator) {
 }
 
 func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	recordID := int64(11)
 	for _, col := range t.Columns {
 		if testIsPKHandleColumn(t, col) {
@@ -167,24 +169,25 @@ func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 		row = append(row, r[col.Offset])
 	}
 
-	value, err := tablecodec.EncodeRow(row, colIDs, time.Local)
+	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
 	c.Assert(err, IsNil)
 
-	handleVal, _ := codec.EncodeValue(nil, types.NewIntDatum(recordID))
+	handleVal, _ := codec.EncodeValue(sc, nil, types.NewIntDatum(recordID))
 	bin := append(handleVal, value...)
 	return bin
 }
 
 func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	colIDs := make([]int64, 0, len(t.Columns))
 	for _, col := range t.Columns {
 		colIDs = append(colIDs, col.ID)
 	}
 
 	var bin []byte
-	value, err := tablecodec.EncodeRow(newData, colIDs, time.Local)
+	value, err := tablecodec.EncodeRow(sc, newData, colIDs, nil, nil)
 	c.Assert(err, IsNil)
-	oldValue, err := tablecodec.EncodeRow(oldData, colIDs, time.Local)
+	oldValue, err := tablecodec.EncodeRow(sc, oldData, colIDs, nil, nil)
 	c.Assert(err, IsNil)
 	bin = append(oldValue, value...)
 	return bin
@@ -193,11 +196,13 @@ func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newDat
 func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	var data []byte
 	var err error
+
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	colIDs := make([]int64, len(t.Columns))
 	for i, col := range t.Columns {
 		colIDs[i] = col.ID
 	}
-	data, err = tablecodec.EncodeRow(r, colIDs, time.Local)
+	data, err = tablecodec.EncodeRow(sc, r, colIDs, nil, nil)
 	c.Assert(err, IsNil)
 	return data
 }
