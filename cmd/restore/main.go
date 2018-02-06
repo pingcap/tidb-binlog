@@ -37,7 +37,7 @@ func main() {
 
 	r, err := restore.New(cfg)
 	if err != nil {
-		log.Fatalf("create restore err %v", err)
+		log.Fatalf("create restore err %v", errors.ErrorStack(err))
 	}
 
 	go func() {

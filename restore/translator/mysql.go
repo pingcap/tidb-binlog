@@ -3,6 +3,7 @@ package translator
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/juju/errors"
@@ -52,14 +53,62 @@ func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row []
 	return sql, args, nil
 }
 
-func (p *mysqlTranslator) genColumnList(columns []string) string {
-	return strings.Join(columns, ",")
+func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+	schema := *event.SchemaName
+	table := *event.TableName
+	allCols := make([]string, 0, len(row))
+	oldValues := make([]interface{}, 0, len(row))
+	changedValues := make([]interface{}, 0, len(row))
+
+	updatedColumns := make([]string, 0, len(row))
+	updatedValues := make([]interface{}, 0, len(row))
+	for _, c := range row {
+		col := &pb.Column{}
+		err := col.Unmarshal(c)
+		if err != nil {
+			return "", nil, errors.Trace(err)
+		}
+		allCols = append(allCols, col.Name)
+
+		_, oldValue, err := codec.DecodeOne(col.Value)
+		if err != nil {
+			return "", nil, errors.Trace(err)
+		}
+		_, changedValue, err := codec.DecodeOne(col.ChangedValue)
+		if err != nil {
+			return "", nil, errors.Trace(err)
+		}
+
+		tp := col.Tp[0]
+		oldDatum := formatValue(oldValue, tp)
+		oldValues = append(oldValues, oldDatum.GetValue())
+		changedDatum := formatValue(changedValue, tp)
+		changedValues = append(changedValues, changedDatum.GetValue())
+
+		log.Debugf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(oldDatum, tp), formatValueToString(changedDatum, tp))
+
+		if reflect.DeepEqual(oldDatum.GetValue(), changedDatum.GetValue()) {
+			continue
+		}
+		updatedColumns = append(updatedColumns, col.Name)
+		updatedValues = append(updatedValues, changedDatum.GetValue())
+		// fmt.Printf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
+	}
+
+	kvs := genKVs(updatedColumns)
+	where := genWhere(allCols, oldValues)
+
+	args := make([]interface{}, len(updatedValues)+len(oldValues))
+	args = append(args, updatedValues...)
+	args = append(args, oldValues...)
+
+	sql := fmt.Sprintf("UPDATE `%s`.`%s` SET %s WHERE %s LIMIT 1;", schema, table, kvs, where)
+	log.Debugf("update sql %s, args %+v", sql, args)
+	return sql, args, nil
 }
 
-func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	// update
+func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	return "", nil, nil
-
 }
 
 func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
@@ -93,27 +142,39 @@ func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row []
 	return sql, args, nil
 }
 
-func genWhere(cols []string, args []interface{}) string {
+func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
+	return string(binlog.DdlQuery), nil, nil
+}
+
+func (p *mysqlTranslator) genColumnList(columns []string) string {
+	return strings.Join(columns, ",")
+}
+
+func genWhere(columns []string, args []interface{}) string {
 	var kvs bytes.Buffer
-	for i := range cols {
+	for i := range columns {
 		kvSplit := "="
 		if args[i] == nil {
 			kvSplit = "IS"
 		}
-		if i == len(cols)-1 {
-			fmt.Fprintf(&kvs, "`%s` %s ?", cols[i], kvSplit)
+		if i == len(columns)-1 {
+			fmt.Fprintf(&kvs, "`%s` %s ?", columns[i], kvSplit)
 		} else {
-			fmt.Fprintf(&kvs, "`%s` %s ? AND ", cols[i], kvSplit)
+			fmt.Fprintf(&kvs, "`%s` %s ? AND ", columns[i], kvSplit)
 		}
 	}
 
 	return kvs.String()
 }
 
-func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	return "", nil, nil
-}
-
-func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
-	return string(binlog.DdlQuery), nil, nil
+func genKVs(columns []string) string {
+	var kvs bytes.Buffer
+	for i := range columns {
+		if i == len(columns)-1 {
+			fmt.Fprintf(&kvs, "`%s` = ?", columns[i])
+		} else {
+			fmt.Fprintf(&kvs, "`%s` = ?, ", columns[i])
+		}
+	}
+	return kvs.String()
 }
