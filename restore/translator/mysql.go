@@ -98,7 +98,7 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	kvs := genKVs(updatedColumns)
 	where := genWhere(allCols, oldValues)
 
-	args := make([]interface{}, len(updatedValues)+len(oldValues))
+	args := make([]interface{}, 0, len(updatedValues)+len(oldValues))
 	args = append(args, updatedValues...)
 	args = append(args, oldValues...)
 
