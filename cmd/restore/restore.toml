@@ -12,6 +12,19 @@ log-level = "debug"
 # for print, it just print decoded value.
 dest-type = "tidb"
 
+##replicate-do-db priority over replicate-do-table if have same db name
+##and we support regular expression , start with '~' declare use regular expression.
+#
+#replicate-do-db = ["~^b.*","s1"]
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "log"
+
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
+
+
 [dest-db]
 host = "127.0.0.1"
 port = 4000

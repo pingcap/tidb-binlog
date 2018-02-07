@@ -3,7 +3,6 @@ package translator
 import (
 	"fmt"
 
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 )
@@ -39,18 +38,4 @@ func formatValue(value types.Datum, tp byte) types.Datum {
 	}
 
 	return value
-}
-
-func isAcceptableBinlog(binlog *pb.Binlog, startTs, endTs int64) bool {
-	// no limit
-	if startTs == 0 && endTs == 0 {
-		return true
-	}
-	if startTs != 0 && binlog.CommitTs < startTs {
-		return false
-	}
-	if endTs != 0 && binlog.CommitTs > endTs {
-		return false
-	}
-	return true
 }

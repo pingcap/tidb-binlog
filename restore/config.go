@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -13,6 +14,12 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/restore/executor"
 )
+
+// TableName stores the table and schema name
+type TableName struct {
+	Schema string `toml:"db-name" json:"db-name"`
+	Name   string `toml:"tbl-name" json:"tbl-name"`
+}
 
 type Config struct {
 	*flag.FlagSet
@@ -23,6 +30,9 @@ type Config struct {
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
+
+	DoTables []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs    []string    `toml:"replicate-do-db" json:"replicate-do-db"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -83,6 +93,7 @@ func (c *Config) Parse(args []string) error {
 	if len(c.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", c.FlagSet.Arg(0))
 	}
+	c.adjustDoDBAndTable()
 
 	// replace with environment vars
 	if err := flags.SetFlagsFromEnv("RESTORE", c.FlagSet); err != nil {
@@ -92,6 +103,16 @@ func (c *Config) Parse(args []string) error {
 	//TODO more
 
 	return errors.Trace(c.validate())
+}
+
+func (c *Config) adjustDoDBAndTable() {
+	for i := 0; i < len(c.DoTables); i++ {
+		c.DoTables[i].Name = strings.ToLower(c.DoTables[i].Name)
+		c.DoTables[i].Schema = strings.ToLower(c.DoTables[i].Schema)
+	}
+	for i := 0; i < len(c.DoDBs); i++ {
+		c.DoDBs[i] = strings.ToLower(c.DoDBs[i])
+	}
 }
 
 func (c *Config) configFromFile(path string) error {
