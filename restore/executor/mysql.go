@@ -6,7 +6,6 @@ import (
 	"database/sql"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -32,7 +31,6 @@ func newMysqlExecutor(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, isDDL bool) error {
-	log.Debugf("sqls %+v, args %+v", sqls, args)
 	return errors.Trace(pkgsql.ExecuteSQLs(m.db, sqls, args, isDDL))
 }
 

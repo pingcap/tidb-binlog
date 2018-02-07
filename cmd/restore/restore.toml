@@ -1,4 +1,4 @@
-data-dir = ""
+data-dir = "./data"
 #compression = ""
 
 # log-file = ""

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -32,25 +31,25 @@ func New(cfg *Config) (*Restore, error) {
 	}, nil
 }
 
-func (r *Restore) Start() error {
-	binlogFile := r.cfg.Binfile
+// func (r *Restore)
 
-	dir := filepath.Dir(binlogFile)
+func (r *Restore) Start() error {
+	dir := r.cfg.Dir
+
 	// read all file names
 	names, err := readBinlogNames(dir)
 	if err != nil {
 		log.Fatalf("read binlog file name error %v", err)
 	}
 
-	log.Debugf("names %+v, name %s", names, filepath.Base(binlogFile))
 	// find the target file's index
-	index := searchFileIndex(names, filepath.Base(binlogFile))
+	index := searchFileIndex(names, "")
 	log.Debugf("index %d", index)
 	for _, name := range names[index:] {
 		p := path.Join(dir, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, 0600)
 		if err != nil {
-			log.Fatalf("open file %s error %v", name, err)
+			return errors.Errorf("open file %s error %v", name, err)
 		}
 		defer f.Close()
 
@@ -58,7 +57,7 @@ func (r *Restore) Start() error {
 		for {
 			payload, err := readBinlog(reader)
 			if err != nil && err != io.EOF {
-				log.Fatalf("decode error %v", err)
+				return errors.Errorf("decode binlog error %v", err)
 			}
 			if err == io.EOF {
 				break
@@ -71,10 +70,9 @@ func (r *Restore) Start() error {
 			err = r.executor.Execute(sqls, args, isDDL)
 			if err != nil {
 				if !pkgsql.IgnoreDDLError(err) {
-					log.Fatalf(errors.ErrorStack(err))
-				} else {
-					log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
+					return errors.Trace(err)
 				}
+				log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
 			}
 		}
 	}

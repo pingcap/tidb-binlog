@@ -41,6 +41,8 @@ func Translate(payload []byte, translator Translator) (sqls []string, args [][]i
 	if err != nil {
 		return nil, nil, false, errors.Trace(err)
 	}
+	log.Debugf("binlog type: %s; commit ts: %d", binlog.Tp, binlog.CommitTs)
+
 	switch binlog.Tp {
 	case pb.BinlogType_DML:
 		sqls, args, err = translateDML(binlog, translator)

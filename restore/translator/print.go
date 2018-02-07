@@ -41,18 +41,12 @@ func (p *printTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event
 }
 
 func (p *printTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
-	printBinlogHeader(binlog)
 	printDDL(binlog)
 	return "", nil, nil
 }
 
 func printHeader(binlog *pb.Binlog, event *pb.Event) {
-	printBinlogHeader(binlog)
 	printEventHeader(event)
-}
-
-func printBinlogHeader(binlog *pb.Binlog) {
-	fmt.Printf("\n\nbinlog type: %s; commit ts: %d\n", binlog.Tp, binlog.CommitTs)
 }
 
 func printDDL(binlog *pb.Binlog) {
