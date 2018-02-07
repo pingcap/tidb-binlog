@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
@@ -51,23 +53,25 @@ type SyncerConfig struct {
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet
-	LogLevel        string        `toml:"log-level" json:"log-level"`
-	ListenAddr      string        `toml:"addr" json:"addr"`
-	DataDir         string        `toml:"data-dir" json:"data-dir"`
-	DetectInterval  int           `toml:"detect-interval" json:"detect-interval"`
-	EtcdURLs        string        `toml:"pd-urls" json:"pd-urls"`
-	KafkaAddrs      string        `toml:"kafka-addrs" json:"kafka-addrs"`
-	ZkAddrs         string        `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
-	LogFile         string        `toml:"log-file" json:"log-file"`
-	LogRotate       string        `toml:"log-rotate" json:"log-rotate"`
-	InitialCommitTS int64         `toml:"initial-commit-ts" json:"initial-commit-ts"`
-	SyncerCfg       *SyncerConfig `toml:"syncer" json:"sycner"`
+	LogLevel        string          `toml:"log-level" json:"log-level"`
+	ListenAddr      string          `toml:"addr" json:"addr"`
+	DataDir         string          `toml:"data-dir" json:"data-dir"`
+	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
+	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
+	KafkaAddrs      string          `toml:"kafka-addrs" json:"kafka-addrs"`
+	ZkAddrs         string          `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
+	LogFile         string          `toml:"log-file" json:"log-file"`
+	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
+	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
+	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
+	Security        security.Config `toml:"security" json:"security"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
+	tls             *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -139,9 +143,16 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet); err != nil {
+	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	cfg.tls, err = cfg.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
+	}
+
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
