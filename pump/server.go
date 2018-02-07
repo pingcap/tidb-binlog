@@ -241,7 +241,7 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	s.dispatcher[cid] = newProxy(fb, kb, cp, s.cfg.enableProxySwitch)
+	s.dispatcher[cid] = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
 	return s.dispatcher[cid], nil
 }
 
@@ -415,26 +415,25 @@ func (s *Server) writeFakeBinlog() {
 	// there are only one binlogger for the specified cluster
 	// so we can use only one needGenBinlog flag
 	if s.needGenBinlog.Get() {
-		for cid := range s.dispatcher {
-			binlogger, err := s.getBinloggerToWrite(cid)
-			if err != nil {
-				log.Errorf("generate forward binlog, get binlogger err %v", err)
-				return
-			}
-			payload, err := s.genFakeBinlog()
-			if err != nil {
-				log.Errorf("generate forward binlog, generate binlog err %v", err)
-				return
-			}
-
-			err = binlogger.WriteTail(payload)
-			if err != nil {
-				log.Errorf("generate forward binlog, write binlog err %v", err)
-				return
-			}
-
-			log.Infof("generate fake binlog successfully")
+		binlogger, err := s.getBinloggerToWrite(s.clusterID)
+		if err != nil {
+			log.Errorf("generate forward binlog, get binlogger err %v", err)
+			return
 		}
+		payload, err := s.genFakeBinlog()
+		if err != nil {
+			log.Errorf("generate forward binlog, generate binlog err %v", err)
+			return
+		}
+
+		err = binlogger.WriteTail(payload)
+		if err != nil {
+			log.Errorf("generate forward binlog, write binlog err %v", err)
+			return
+		}
+
+		log.Infof("generate fake binlog successfully")
+
 	}
 
 	s.needGenBinlog.Set(true)
