@@ -55,10 +55,10 @@ func (r *Restore) Start() error {
 		reader := bufio.NewReader(io.Reader(f))
 		for {
 			payload, err := readBinlog(reader)
-			if err != nil && err != io.EOF {
+			if err != nil && errors.Cause(err) != io.EOF {
 				return errors.Annotatef(err, "decode binlog error")
 			}
-			if err == io.EOF {
+			if errors.Cause(err) == io.EOF {
 				break
 			}
 			sqls, args, isDDL, err := translator.Translate(payload, r.translator)

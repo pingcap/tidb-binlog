@@ -20,7 +20,7 @@ var (
 func readBinlog(br *bufio.Reader) ([]byte, error) {
 	// read and chekc magic number
 	magicNum, err := readInt32(br)
-	if err == io.EOF {
+	if errors.Cause(err) == io.EOF {
 		return nil, io.EOF
 	}
 	if err := checkMagic(magicNum); err != nil {
@@ -29,7 +29,7 @@ func readBinlog(br *bufio.Reader) ([]byte, error) {
 	// read payload length
 	size, err := readInt64(br)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, errors.Trace(err)
@@ -38,7 +38,7 @@ func readBinlog(br *bufio.Reader) ([]byte, error) {
 	data := make([]byte, size+4)
 	// read payload+crc
 	if _, err = io.ReadFull(br, data); err != nil {
-		if err == io.EOF {
+		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, errors.Trace(err)
