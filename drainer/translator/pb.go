@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/juju/errors"
@@ -10,6 +11,8 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -26,30 +29,21 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
+
 	for _, row := range rows {
 		//decode the pk value
 		remain, pk, err := codec.DecodeOne(row)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
-		var r []types.Datum
-		// decode the remain values, the format is [coldID, colVal, coldID, colVal....]
-		// while the table just has primary id, filter the nil value that follows by the primary id
-		if remain[0] != codec.NilFlag {
-			r, err = codec.Decode(remain, 2*(len(columns)-1))
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
+		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
+		if err != nil {
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
-
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s insert row raw data is corruption %v", schema, table.Name, r)
-		}
-
-		var columnValues = make(map[int64]types.Datum)
-		for i := 0; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+		if columnValues == nil {
+			continue
 		}
 
 		var (
@@ -100,26 +94,16 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
+
 	for _, row := range rows {
-		r, err := codec.Decode(row, 2*len(columns))
+		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s update row data is corruption %v", schema, table.Name, r)
-		}
-
-		var i int
-		// old column values
-		oldColumnValues := make(map[int64]types.Datum)
-		for ; i < len(r)/2; i += 2 {
-			oldColumnValues[r[i].GetInt64()] = r[i+1]
-		}
-		// new coulmn values
-		newColumnVlaues := make(map[int64]types.Datum)
-		for ; i < len(r); i += 2 {
-			newColumnVlaues[r[i].GetInt64()] = r[i+1]
+		if len(newColumnValues) == 0 {
+			continue
 		}
 
 		var (
@@ -130,7 +114,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
-			val, ok := newColumnVlaues[col.ID]
+			val, ok := newColumnValues[col.ID]
 			if ok {
 				oldValue, err := formatData(oldColumnValues[col.ID], col.FieldType)
 				if err != nil {
@@ -170,20 +154,15 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
+	colsTypeMap := toColumnTypeMap(columns)
 
 	for _, row := range rows {
-		r, err := codec.Decode(row, len(columns))
+		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
-
-		if len(r)%2 != 0 {
-			return nil, nil, nil, errors.Errorf("table %s.%s the delete row by cols binlog %v is courruption", schema, table.Name, r)
-		}
-
-		var columnValues = make(map[int64]types.Datum)
-		for i := 0; i < len(r); i += 2 {
-			columnValues[r[i].GetInt64()] = r[i+1]
+		if columnValues == nil {
+			continue
 		}
 
 		var (
@@ -237,12 +216,13 @@ func (p *pbTranslator) GenDDLSQL(sql string, schema string) (string, error) {
 func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
 	var cols [][]byte
 	var err error
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range row {
 		col := &pb.Column{}
 		col.Name = colName[i]
 		col.Tp = []byte{tp[i]}
 		col.MysqlType = mysqlType[i]
-		col.Value, err = codec.EncodeValue(nil, []types.Datum{c}...)
+		col.Value, err = codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -260,17 +240,18 @@ func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []strin
 func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
 	var cols [][]byte
 	var err error
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range oldRow {
 		col := &pb.Column{}
 		col.Name = colName[i]
 		col.Tp = []byte{tp[i]}
 		col.MysqlType = mysqlType[i]
-		col.Value, err = codec.EncodeValue(nil, []types.Datum{c}...)
+		col.Value, err = codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
-		col.ChangedValue, err = codec.EncodeValue(nil, []types.Datum{newRow[i]}...)
+		col.ChangedValue, err = codec.EncodeValue(sc, nil, []types.Datum{newRow[i]}...)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

@@ -27,3 +27,11 @@ pd-urls = "http://127.0.0.1:2379"
 
 # unix socket addr to listen on for client traffic
 socket = "unix:///tmp/pump.sock"
+
+#[security]
+# Path of file that contains list of trusted SSL CAs for connection with cluster components.
+# ssl-ca = "/path/to/ca.pem"
+# Path of file that contains X509 certificate in PEM format for connection with cluster components.
+# ssl-cert = "/path/to/drainer.pem"
+# Path of file that contains X509 key in PEM format for connection with cluster components.
+# ssl-key = "/path/to/drainer-key.pem"

@@ -46,7 +46,7 @@ const (
 
 // Priority value for transaction priority.
 const (
-	PriorityNormal int = iota
+	PriorityNormal = iota
 	PriorityLow
 	PriorityHigh
 )
@@ -109,6 +109,11 @@ type MemBuffer interface {
 	Size() int
 	// Len returns the number of entries in the DB.
 	Len() int
+	// Reset cleanup the MemBuffer
+	Reset()
+	// SetCap sets the MemBuffer capability, to reduce memory allocations.
+	// Please call it before you use the MemBuffer, otherwise it will not works.
+	SetCap(cap int)
 }
 
 // Transaction defines the interface for operations inside a Transaction.
@@ -135,6 +140,10 @@ type Transaction interface {
 	// Valid returns if the transaction is valid.
 	// A transaction become invalid after commit or rollback.
 	Valid() bool
+	// GetMemBuffer return the MemBuffer binding to this transaction.
+	GetMemBuffer() MemBuffer
+	// GetSnapshot returns the snapshot of this transaction.
+	GetSnapshot() Snapshot
 }
 
 // Client is used to send request to KV layer.
@@ -160,6 +169,7 @@ const (
 	ReqSubTypeSignature  = 10003
 	ReqSubTypeAnalyzeIdx = 10004
 	ReqSubTypeAnalyzeCol = 10005
+	ReqSubTypeStreamAgg  = 10006
 )
 
 // Request represents a kv request.
@@ -185,6 +195,9 @@ type Request struct {
 	NotFillCache bool
 	// SyncLog decides whether the WAL(write-ahead log) of this request should be synchronized.
 	SyncLog bool
+	// Streaming indicates using streaming API for this request, result in that one Next()
+	// call would not corresponds to a whole region result.
+	Streaming bool
 }
 
 // Response represents the response returned from KV layer.
@@ -192,7 +205,7 @@ type Response interface {
 	// Next returns a resultSubset from a single storage unit.
 	// When full result set is returned, nil is returned.
 	// TODO: Find a better interface for resultSubset that can avoid allocation and reuse bytes.
-	Next() (resultSubset []byte, err error)
+	Next(ctx goctx.Context) (resultSubset []byte, err error)
 	// Close response.
 	Close() error
 }

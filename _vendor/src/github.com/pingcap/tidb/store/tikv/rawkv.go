@@ -19,6 +19,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	goctx "golang.org/x/net/context"
 )
@@ -40,8 +42,12 @@ type RawKVClient struct {
 }
 
 // NewRawKVClient creates a client with PD cluster addrs.
-func NewRawKVClient(pdAddrs []string) (*RawKVClient, error) {
-	pdCli, err := pd.NewClient(pdAddrs)
+func NewRawKVClient(pdAddrs []string, security config.Security) (*RawKVClient, error) {
+	pdCli, err := pd.NewClient(pdAddrs, pd.SecurityOption{
+		CAPath:   security.ClusterSSLCA,
+		CertPath: security.ClusterSSLCert,
+		KeyPath:  security.ClusterSSLKey,
+	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -49,7 +55,7 @@ func NewRawKVClient(pdAddrs []string) (*RawKVClient, error) {
 		clusterID:   pdCli.GetClusterID(goctx.TODO()),
 		regionCache: NewRegionCache(pdCli),
 		pdClient:    pdCli,
-		rpcClient:   newRPCClient(),
+		rpcClient:   newRPCClient(security),
 	}, nil
 }
 
@@ -67,7 +73,7 @@ func (c *RawKVClient) ClusterID() uint64 {
 // Get queries value with the key. When the key does not exist, it returns `nil, nil`.
 func (c *RawKVClient) Get(key []byte) ([]byte, error) {
 	start := time.Now()
-	defer func() { rawkvCmdHistogram.WithLabelValues("get").Observe(time.Since(start).Seconds()) }()
+	defer func() { metrics.TiKVRawkvCmdHistogram.WithLabelValues("get").Observe(time.Since(start).Seconds()) }()
 
 	req := &tikvrpc.Request{
 		Type: tikvrpc.CmdRawGet,
@@ -95,9 +101,9 @@ func (c *RawKVClient) Get(key []byte) ([]byte, error) {
 // Put stores a key-value pair to TiKV.
 func (c *RawKVClient) Put(key, value []byte) error {
 	start := time.Now()
-	defer func() { rawkvCmdHistogram.WithLabelValues("put").Observe(time.Since(start).Seconds()) }()
-	rawkvSizeHistogram.WithLabelValues("key").Observe(float64(len(key)))
-	rawkvSizeHistogram.WithLabelValues("value").Observe(float64(len(value)))
+	defer func() { metrics.TiKVRawkvCmdHistogram.WithLabelValues("put").Observe(time.Since(start).Seconds()) }()
+	metrics.TiKVRawkvSizeHistogram.WithLabelValues("key").Observe(float64(len(key)))
+	metrics.TiKVRawkvSizeHistogram.WithLabelValues("value").Observe(float64(len(value)))
 
 	if len(value) == 0 {
 		return errors.New("empty value is not supported")
@@ -127,7 +133,7 @@ func (c *RawKVClient) Put(key, value []byte) error {
 // Delete deletes a key-value pair from TiKV.
 func (c *RawKVClient) Delete(key []byte) error {
 	start := time.Now()
-	defer func() { rawkvCmdHistogram.WithLabelValues("delete").Observe(time.Since(start).Seconds()) }()
+	defer func() { metrics.TiKVRawkvCmdHistogram.WithLabelValues("delete").Observe(time.Since(start).Seconds()) }()
 
 	req := &tikvrpc.Request{
 		Type: tikvrpc.CmdRawDelete,
@@ -153,7 +159,7 @@ func (c *RawKVClient) Delete(key []byte) error {
 // If you want to exclude the startKey, append a '\0' to the key: `Scan(append(startKey, '\0'), limit)`.
 func (c *RawKVClient) Scan(startKey []byte, limit int) (keys [][]byte, values [][]byte, err error) {
 	start := time.Now()
-	defer func() { rawkvCmdHistogram.WithLabelValues("raw_scan").Observe(time.Since(start).Seconds()) }()
+	defer func() { metrics.TiKVRawkvCmdHistogram.WithLabelValues("raw_scan").Observe(time.Since(start).Seconds()) }()
 
 	if limit > MaxRawKVScanLimit {
 		return nil, nil, errors.Trace(ErrMaxScanLimitExceeded)

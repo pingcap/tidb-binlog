@@ -15,6 +15,7 @@ package types
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -26,7 +27,7 @@ import (
 
 // UnspecifiedLength is unspecified length.
 const (
-	UnspecifiedLength int = -1
+	UnspecifiedLength = -1
 )
 
 // FieldType records field type information.
@@ -49,6 +50,25 @@ func NewFieldType(tp byte) *FieldType {
 		Flen:    UnspecifiedLength,
 		Decimal: UnspecifiedLength,
 	}
+}
+
+// Equal checks whether two FieldType objects are equal.
+func (ft *FieldType) Equal(other *FieldType) bool {
+	partialEqual := ft.Tp == other.Tp &&
+		ft.Flag == other.Flag &&
+		ft.Flen == other.Flen &&
+		ft.Decimal == other.Decimal &&
+		ft.Charset == other.Charset &&
+		ft.Collate == other.Collate
+	if !partialEqual || len(ft.Elems) != len(other.Elems) {
+		return false
+	}
+	for i := range ft.Elems {
+		if ft.Elems[i] != other.Elems[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // AggFieldType aggregates field types for a multi-argument function like `IF`, `IFNULL`, `COALESCE`
@@ -255,6 +275,54 @@ func (ft *FieldType) String() string {
 	return strings.Join(strs, " ")
 }
 
+// FormatAsCastType is used for write AST back to string.
+func (ft *FieldType) FormatAsCastType(w io.Writer) {
+	switch ft.Tp {
+	case mysql.TypeVarString:
+		if ft.Charset == charset.CharsetBin && ft.Collate == charset.CollationBin {
+			fmt.Fprint(w, "BINARY")
+		} else {
+			fmt.Fprint(w, "CHAR")
+		}
+		if ft.Flen != UnspecifiedLength {
+			fmt.Fprintf(w, "(%d)", ft.Flen)
+		}
+		if ft.Flag&mysql.BinaryFlag != 0 {
+			fmt.Fprint(w, " BINARY")
+		}
+		if ft.Charset != charset.CharsetBin && ft.Charset != charset.CharsetUTF8 {
+			fmt.Fprintf(w, " %s", ft.Charset)
+		}
+	case mysql.TypeDate:
+		fmt.Fprint(w, "DATE")
+	case mysql.TypeDatetime:
+		fmt.Fprint(w, "DATETIME")
+		if ft.Decimal > 0 {
+			fmt.Fprintf(w, "(%d)", ft.Decimal)
+		}
+	case mysql.TypeNewDecimal:
+		fmt.Fprint(w, "DECIMAL")
+		if ft.Flen > 0 && ft.Decimal > 0 {
+			fmt.Fprintf(w, "(%d, %d)", ft.Flen, ft.Decimal)
+		} else if ft.Flen > 0 {
+			fmt.Fprintf(w, "(%d)", ft.Flen)
+		}
+	case mysql.TypeDuration:
+		fmt.Fprint(w, "TIME")
+		if ft.Decimal > 0 {
+			fmt.Fprintf(w, "(%d)", ft.Decimal)
+		}
+	case mysql.TypeLonglong:
+		if ft.Flag&mysql.UnsignedFlag != 0 {
+			fmt.Fprint(w, "UNSIGNED")
+		} else {
+			fmt.Fprint(w, "SIGNED")
+		}
+	case mysql.TypeJSON:
+		fmt.Fprint(w, "JSON")
+	}
+}
+
 // DefaultParamTypeForValue returns the default FieldType for the parameterized value.
 func DefaultParamTypeForValue(value interface{}, tp *FieldType) {
 	switch value.(type) {
@@ -370,7 +438,7 @@ func DefaultTypeForValue(value interface{}, tp *FieldType) {
 		tp.Flen = len(x.Name)
 		tp.Decimal = UnspecifiedLength
 		SetBinChsClnFlag(tp)
-	case json.JSON:
+	case json.BinaryJSON:
 		tp.Tp = mysql.TypeJSON
 		tp.Flen = UnspecifiedLength
 		tp.Decimal = 0
@@ -630,7 +698,7 @@ var fieldTypeMergeRules = [fieldTypeNum][fieldTypeNum]byte{
 		//mysql.TypeLonglong     mysql.TypeInt24
 		mysql.TypeLonglong, mysql.TypeLonglong,
 		//mysql.TypeDate         mysql.TypeTime
-		mysql.TypeNewDate, mysql.TypeDuration,
+		mysql.TypeDate, mysql.TypeDuration,
 		//mysql.TypeDatetime     mysql.TypeYear
 		mysql.TypeDatetime, mysql.TypeYear,
 		//mysql.TypeNewDate      mysql.TypeVarchar
@@ -758,11 +826,11 @@ var fieldTypeMergeRules = [fieldTypeNum][fieldTypeNum]byte{
 		//mysql.TypeFloat        mysql.TypeDouble
 		mysql.TypeVarchar, mysql.TypeVarchar,
 		//mysql.TypeNull         mysql.TypeTimestamp
-		mysql.TypeNewDate, mysql.TypeDatetime,
+		mysql.TypeDate, mysql.TypeDatetime,
 		//mysql.TypeLonglong     mysql.TypeInt24
 		mysql.TypeVarchar, mysql.TypeVarchar,
 		//mysql.TypeDate         mysql.TypeTime
-		mysql.TypeNewDate, mysql.TypeDatetime,
+		mysql.TypeDate, mysql.TypeDatetime,
 		//mysql.TypeDatetime     mysql.TypeYear
 		mysql.TypeDatetime, mysql.TypeVarchar,
 		//mysql.TypeNewDate      mysql.TypeVarchar

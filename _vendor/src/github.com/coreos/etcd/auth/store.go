@@ -282,6 +282,10 @@ func (as *authStore) Authenticate(ctx context.Context, username, password string
 }
 
 func (as *authStore) CheckPassword(username, password string) (uint64, error) {
+	if !as.isAuthEnabled() {
+		return 0, ErrAuthNotEnabled
+	}
+
 	tx := as.be.BatchTx()
 	tx.Lock()
 	defer tx.Unlock()
@@ -988,7 +992,7 @@ func (as *authStore) AuthInfoFromTLS(ctx context.Context) *AuthInfo {
 }
 
 func (as *authStore) AuthInfoFromCtx(ctx context.Context) (*AuthInfo, error) {
-	md, ok := metadata.FromContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, nil
 	}

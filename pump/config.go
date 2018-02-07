@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
@@ -42,16 +44,18 @@ type Config struct {
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
 	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
-	DataDir           string `toml:"data-dir" json:"data-dir"`
-	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
-	GC                int    `toml:"gc" json:"gc"`
-	LogFile           string `toml:"log-file" json:"log-file"`
-	LogRotate         string `toml:"log-rotate" json:"log-rotate"`
+	DataDir           string          `toml:"data-dir" json:"data-dir"`
+	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	GC                int             `toml:"gc" json:"gc"`
+	LogFile           string          `toml:"log-file" json:"log-file"`
+	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
+	Security          security.Config `toml:"security" json:"security"`
 	MetricsAddr       string
 	MetricsInterval   int
 	configFile        string
 	printVersion      bool
 	enableProxySwitch bool
+	tls               *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -124,8 +128,14 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet); err != nil {
+	err := flags.SetFlagsFromEnv("PUMP", cfg.FlagSet)
+	if err != nil {
 		return errors.Trace(err)
+	}
+
+	cfg.tls, err = cfg.Security.ToTLSConfig()
+	if err != nil {
+		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
 	adjustString(&cfg.ListenAddr, defaultListenAddr)
