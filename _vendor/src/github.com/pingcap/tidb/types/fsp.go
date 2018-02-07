@@ -23,14 +23,14 @@ import (
 
 const (
 	// UnspecifiedFsp is the unspecified fractional seconds part.
-	UnspecifiedFsp int = -1
+	UnspecifiedFsp = -1
 	// MaxFsp is the maximum digit of fractional seconds part.
-	MaxFsp int = 6
+	MaxFsp = 6
 	// MinFsp is the minimum digit of fractional seconds part.
-	MinFsp int = 0
+	MinFsp = 0
 	// DefaultFsp is the default digit of fractional seconds part.
 	// MySQL use 0 as the default Fsp.
-	DefaultFsp int = 0
+	DefaultFsp = 0
 )
 
 // CheckFsp checks whether fsp is in valid range.
@@ -44,10 +44,10 @@ func CheckFsp(fsp int) (int, error) {
 	return fsp, nil
 }
 
-// parseFrac parses the input string according to fsp, returns the microsecond,
+// ParseFrac parses the input string according to fsp, returns the microsecond,
 // and also a bool value to indice overflow. eg:
 // "999" fsp=2 will overflow.
-func parseFrac(s string, fsp int) (v int, overflow bool, err error) {
+func ParseFrac(s string, fsp int) (v int, overflow bool, err error) {
 	if len(s) == 0 {
 		return 0, false, nil
 	}

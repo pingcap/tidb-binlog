@@ -17,11 +17,14 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/goroutine_pool"
 	"github.com/pingcap/tipb/go-tipb"
@@ -41,21 +44,25 @@ var (
 // SelectResult is an iterator of coprocessor partial results.
 type SelectResult interface {
 	// Next gets the next partial result.
-	Next() (PartialResult, error)
+	Next(goctx.Context) (PartialResult, error)
 	// NextRaw gets the next raw result.
-	NextRaw() ([]byte, error)
+	NextRaw(goctx.Context) ([]byte, error)
+	// NextChunk reads the data into chunk.
+	NextChunk(goctx.Context, *chunk.Chunk) error
 	// Close closes the iterator.
 	Close() error
 	// Fetch fetches partial results from client.
 	// The caller should call SetFields() before call Fetch().
-	Fetch(ctx goctx.Context)
+	Fetch(goctx.Context)
+	// ScanKeys gets the total scan row count.
+	ScanKeys() int64
 }
 
 // PartialResult is the result from a single region server.
 type PartialResult interface {
 	// Next returns the next rowData of the sub result.
 	// If no more row to return, rowData would be nil.
-	Next() (rowData []types.Datum, err error)
+	Next(goctx.Context) (rowData []types.Datum, err error)
 	// Close closes the partial result.
 	Close() error
 }
@@ -68,7 +75,15 @@ type selectResult struct {
 	results chan newResultWithErr
 	closed  chan struct{}
 
-	rowLen int
+	rowLen     int
+	fieldTypes []*types.FieldType
+	ctx        context.Context
+
+	selectResp *tipb.SelectResponse
+	respChkIdx int
+
+	scanKeys     int64 // number of keys scanned by TiKV.
+	partialCount int64 // number of partial results.
 }
 
 type newResultWithErr struct {
@@ -82,15 +97,15 @@ func (r *selectResult) Fetch(ctx goctx.Context) {
 	})
 }
 
-func (r *selectResult) fetch(ctx goctx.Context) {
+func (r *selectResult) fetch(goCtx goctx.Context) {
 	startTime := time.Now()
 	defer func() {
 		close(r.results)
 		duration := time.Since(startTime)
-		queryHistgram.WithLabelValues(r.label).Observe(duration.Seconds())
+		metrics.DistSQLQueryHistgram.WithLabelValues(r.label).Observe(duration.Seconds())
 	}()
 	for {
-		resultSubset, err := r.resp.Next()
+		resultSubset, err := r.resp.Next(goCtx)
 		if err != nil {
 			r.results <- newResultWithErr{err: errors.Trace(err)}
 			return
@@ -104,14 +119,14 @@ func (r *selectResult) fetch(ctx goctx.Context) {
 		case <-r.closed:
 			// If selectResult called Close() already, make fetch goroutine exit.
 			return
-		case <-ctx.Done():
+		case <-goCtx.Done():
 			return
 		}
 	}
 }
 
 // Next returns the next row.
-func (r *selectResult) Next() (PartialResult, error) {
+func (r *selectResult) Next(goCtx goctx.Context) (PartialResult, error) {
 	re := <-r.results
 	if re.err != nil {
 		return nil, errors.Trace(re.err)
@@ -122,18 +137,104 @@ func (r *selectResult) Next() (PartialResult, error) {
 	pr := &partialResult{}
 	pr.rowLen = r.rowLen
 	err := pr.unmarshal(re.result)
+	if len(pr.resp.OutputCounts) > 0 {
+		scanKeysPartial := pr.resp.OutputCounts[0]
+		metrics.DistSQLScanKeysPartialHistogram.Observe(float64(scanKeysPartial))
+		r.scanKeys += scanKeysPartial
+	} else {
+		r.scanKeys = -1
+	}
+	r.partialCount++
 	return pr, errors.Trace(err)
 }
 
 // NextRaw returns the next raw partial result.
-func (r *selectResult) NextRaw() ([]byte, error) {
+func (r *selectResult) NextRaw(goCtx goctx.Context) ([]byte, error) {
 	re := <-r.results
+	r.partialCount++
+	r.scanKeys = -1
 	return re.result, errors.Trace(re.err)
+}
+
+// NextChunk reads data to the chunk.
+func (r *selectResult) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
+	chk.Reset()
+	for chk.NumRows() < r.ctx.GetSessionVars().MaxChunkSize {
+		if r.selectResp == nil || r.respChkIdx == len(r.selectResp.Chunks) {
+			err := r.getSelectResp()
+			if err != nil || r.selectResp == nil {
+				return errors.Trace(err)
+			}
+		}
+		err := r.readRowsData(chk)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if len(r.selectResp.Chunks[r.respChkIdx].RowsData) == 0 {
+			r.respChkIdx++
+		}
+	}
+	return nil
+}
+
+func (r *selectResult) getSelectResp() error {
+	r.respChkIdx = 0
+	for {
+		re := <-r.results
+		if re.err != nil {
+			return errors.Trace(re.err)
+		}
+		if re.result == nil {
+			r.selectResp = nil
+			return nil
+		}
+		r.selectResp = new(tipb.SelectResponse)
+		err := r.selectResp.Unmarshal(re.result)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if len(r.selectResp.OutputCounts) > 0 {
+			scanCountPartial := r.selectResp.OutputCounts[0]
+			metrics.DistSQLScanKeysPartialHistogram.Observe(float64(scanCountPartial))
+			r.scanKeys += scanCountPartial
+		} else {
+			r.scanKeys = -1
+		}
+		r.partialCount++
+		if len(r.selectResp.Chunks) == 0 {
+			continue
+		}
+		return nil
+	}
+}
+
+func (r *selectResult) ScanKeys() int64 {
+	return r.scanKeys
+}
+
+func (r *selectResult) readRowsData(chk *chunk.Chunk) (err error) {
+	rowsData := r.selectResp.Chunks[r.respChkIdx].RowsData
+	maxChunkSize := r.ctx.GetSessionVars().MaxChunkSize
+	timeZone := r.ctx.GetSessionVars().GetTimeZone()
+	for chk.NumRows() < maxChunkSize && len(rowsData) > 0 {
+		for i := 0; i < r.rowLen; i++ {
+			rowsData, err = codec.DecodeOneToChunk(rowsData, chk, i, r.fieldTypes[i], timeZone)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	r.selectResp.Chunks[r.respChkIdx].RowsData = rowsData
+	return nil
 }
 
 // Close closes selectResult.
 func (r *selectResult) Close() error {
 	// Close this channel tell fetch goroutine to exit.
+	if r.scanKeys >= 0 {
+		metrics.DistSQLScanKeysHistogram.Observe(float64(r.scanKeys))
+	}
+	metrics.DistSQLPartialCountHistogram.Observe(float64(r.partialCount))
 	close(r.closed)
 	return r.resp.Close()
 }
@@ -160,19 +261,23 @@ func (pr *partialResult) unmarshal(resultSubset []byte) error {
 
 // Next returns the next row of the sub result.
 // If no more row to return, data would be nil.
-func (pr *partialResult) Next() (data []types.Datum, err error) {
-	chunk := pr.getChunk()
-	if chunk == nil {
+func (pr *partialResult) Next(goCtx goctx.Context) (data []types.Datum, err error) {
+	nextChunk := pr.getChunk()
+	if nextChunk == nil {
 		return nil, nil
 	}
-	data = make([]types.Datum, pr.rowLen)
-	for i := 0; i < pr.rowLen; i++ {
-		var l []byte
-		l, chunk.RowsData, err = codec.CutOne(chunk.RowsData)
+	return readRowFromChunk(nextChunk, pr.rowLen)
+}
+
+func readRowFromChunk(chunk *tipb.Chunk, numCols int) (row []types.Datum, err error) {
+	row = make([]types.Datum, numCols)
+	for i := 0; i < numCols; i++ {
+		var raw []byte
+		raw, chunk.RowsData, err = codec.CutOne(chunk.RowsData)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		data[i].SetRaw(l)
+		row[i].SetRaw(raw)
 	}
 	return
 }
@@ -182,9 +287,9 @@ func (pr *partialResult) getChunk() *tipb.Chunk {
 		if pr.chunkIdx >= len(pr.resp.Chunks) {
 			return nil
 		}
-		chunk := &pr.resp.Chunks[pr.chunkIdx]
-		if len(chunk.RowsData) > 0 {
-			return chunk
+		currentChunk := &pr.resp.Chunks[pr.chunkIdx]
+		if len(currentChunk.RowsData) > 0 {
+			return currentChunk
 		}
 		pr.chunkIdx++
 	}
@@ -197,44 +302,35 @@ func (pr *partialResult) Close() error {
 
 // SelectDAG sends a DAG request, returns SelectResult.
 // In kvReq, KeyRanges is required, Concurrency/KeepOrder/Desc/IsolationLevel/Priority are optional.
-func SelectDAG(ctx goctx.Context, client kv.Client, kvReq *kv.Request, colLen int) (SelectResult, error) {
-	var err error
-	defer func() {
-		// Add metrics.
-		if err != nil {
-			queryCounter.WithLabelValues(queryFailed).Inc()
-		} else {
-			queryCounter.WithLabelValues(querySucc).Inc()
-		}
-	}()
-
-	resp := client.Send(ctx, kvReq)
+func SelectDAG(goCtx goctx.Context, ctx context.Context, kvReq *kv.Request, fieldTypes []*types.FieldType) (SelectResult, error) {
+	resp := ctx.GetClient().Send(goCtx, kvReq)
 	if resp == nil {
-		err = errors.New("client returns nil response")
+		err := errors.New("client returns nil response")
 		return nil, errors.Trace(err)
 	}
-	result := &selectResult{
-		label:   "dag",
-		resp:    resp,
-		results: make(chan newResultWithErr, kvReq.Concurrency),
-		closed:  make(chan struct{}),
-		rowLen:  colLen,
+
+	if kvReq.Streaming {
+		return &streamResult{
+			resp:       resp,
+			rowLen:     len(fieldTypes),
+			fieldTypes: fieldTypes,
+			ctx:        ctx,
+		}, nil
 	}
-	return result, nil
+
+	return &selectResult{
+		label:      "dag",
+		resp:       resp,
+		results:    make(chan newResultWithErr, kvReq.Concurrency),
+		closed:     make(chan struct{}),
+		rowLen:     len(fieldTypes),
+		fieldTypes: fieldTypes,
+		ctx:        ctx,
+	}, nil
 }
 
 // Analyze do a analyze request.
 func Analyze(ctx goctx.Context, client kv.Client, kvReq *kv.Request) (SelectResult, error) {
-	var err error
-	defer func() {
-		// Add metrics.
-		if err != nil {
-			queryCounter.WithLabelValues(queryFailed).Inc()
-		} else {
-			queryCounter.WithLabelValues(querySucc).Inc()
-		}
-	}()
-
 	resp := client.Send(ctx, kvReq)
 	if resp == nil {
 		return nil, errors.New("client returns nil response")

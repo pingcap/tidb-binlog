@@ -16,20 +16,20 @@ package expression
 import (
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-tipb"
+	log "github.com/sirupsen/logrus"
 )
 
 // ExpressionsToPB converts expression to tipb.Expr.
-func ExpressionsToPB(sc *variable.StatementContext, exprs []Expression, client kv.Client) (pbExpr *tipb.Expr, pushed []Expression, remained []Expression) {
+func ExpressionsToPB(sc *stmtctx.StatementContext, exprs []Expression, client kv.Client) (pbExpr *tipb.Expr, pushed []Expression, remained []Expression) {
 	pc := PbConverter{client: client, sc: sc}
 	for _, expr := range exprs {
 		v := pc.ExprToPB(expr)
@@ -44,14 +44,15 @@ func ExpressionsToPB(sc *variable.StatementContext, exprs []Expression, client k
 			// Merge multiple converted pb expression into a CNF.
 			pbExpr = &tipb.Expr{
 				Tp:       tipb.ExprType_And,
-				Children: []*tipb.Expr{pbExpr, v}}
+				Children: []*tipb.Expr{pbExpr, v},
+			}
 		}
 	}
 	return
 }
 
 // ExpressionsToPBList converts expressions to tipb.Expr list for new plan.
-func ExpressionsToPBList(sc *variable.StatementContext, exprs []Expression, client kv.Client) (pbExpr []*tipb.Expr) {
+func ExpressionsToPBList(sc *stmtctx.StatementContext, exprs []Expression, client kv.Client) (pbExpr []*tipb.Expr) {
 	pc := PbConverter{client: client, sc: sc}
 	for _, expr := range exprs {
 		v := pc.ExprToPB(expr)
@@ -63,11 +64,11 @@ func ExpressionsToPBList(sc *variable.StatementContext, exprs []Expression, clie
 // PbConverter supplys methods to convert TiDB expressions to TiPB.
 type PbConverter struct {
 	client kv.Client
-	sc     *variable.StatementContext
+	sc     *stmtctx.StatementContext
 }
 
 // NewPBConverter creates a PbConverter.
-func NewPBConverter(client kv.Client, sc *variable.StatementContext) PbConverter {
+func NewPBConverter(client kv.Client, sc *stmtctx.StatementContext) PbConverter {
 	return PbConverter{client: client, sc: sc}
 }
 
@@ -105,7 +106,7 @@ func (pc PbConverter) constantToPBExpr(con *Constant) *tipb.Expr {
 	case types.KindUint64:
 		tp = tipb.ExprType_Uint64
 		val = codec.EncodeUint(nil, d.GetUint64())
-	case types.KindString:
+	case types.KindString, types.KindBinaryLiteral:
 		tp = tipb.ExprType_String
 		val = d.GetBytes()
 	case types.KindBytes:
@@ -122,7 +123,7 @@ func (pc PbConverter) constantToPBExpr(con *Constant) *tipb.Expr {
 		val = codec.EncodeInt(nil, int64(d.GetMysqlDuration().Duration))
 	case types.KindMysqlDecimal:
 		tp = tipb.ExprType_MysqlDecimal
-		val = codec.EncodeDecimal(nil, d)
+		val = codec.EncodeDecimal(nil, d.GetMysqlDecimal(), d.Length(), d.Frac())
 	case types.KindMysqlTime:
 		if pc.client.IsRequestTypeSupported(kv.ReqTypeDAG, int64(tipb.ExprType_MysqlTime)) {
 			tp = tipb.ExprType_MysqlTime
@@ -215,6 +216,8 @@ func (pc PbConverter) scalarFuncToPBExpr(expr *ScalarFunction) *tipb.Expr {
 		ast.JSONObject, ast.JSONArray, ast.JSONMerge, ast.JSONSet,
 		ast.JSONInsert, ast.JSONReplace, ast.JSONRemove, ast.JSONContains:
 		return pc.jsonFuncToPBExpr(expr)
+	case ast.DateFormat:
+		return pc.dateFuncToPBExpr(expr)
 	default:
 		return nil
 	}
@@ -306,8 +309,17 @@ func (pc PbConverter) jsonFuncToPBExpr(expr *ScalarFunction) *tipb.Expr {
 	return pc.convertToPBExpr(expr, tp)
 }
 
+func (pc PbConverter) dateFuncToPBExpr(expr *ScalarFunction) *tipb.Expr {
+	var tp tipb.ExprType
+	switch expr.FuncName.L {
+	case ast.DateFormat:
+		tp = tipb.ExprType_DateFormat
+	}
+	return pc.convertToPBExpr(expr, tp)
+}
+
 // GroupByItemToPB converts group by items to pb.
-func GroupByItemToPB(sc *variable.StatementContext, client kv.Client, expr Expression) *tipb.ByItem {
+func GroupByItemToPB(sc *stmtctx.StatementContext, client kv.Client, expr Expression) *tipb.ByItem {
 	pc := PbConverter{client: client, sc: sc}
 	e := pc.ExprToPB(expr)
 	if e == nil {
@@ -317,7 +329,7 @@ func GroupByItemToPB(sc *variable.StatementContext, client kv.Client, expr Expre
 }
 
 // SortByItemToPB converts order by items to pb.
-func SortByItemToPB(sc *variable.StatementContext, client kv.Client, expr Expression, desc bool) *tipb.ByItem {
+func SortByItemToPB(sc *stmtctx.StatementContext, client kv.Client, expr Expression, desc bool) *tipb.ByItem {
 	pc := PbConverter{client: client, sc: sc}
 	e := pc.ExprToPB(expr)
 	if e == nil {

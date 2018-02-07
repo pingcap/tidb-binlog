@@ -21,12 +21,13 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types/json"
+	"github.com/pingcap/tidb/util/hack"
 )
 
 func truncateStr(str string, flen int) string {
@@ -67,13 +68,16 @@ var SignedLowerBound = map[byte]int64{
 }
 
 // ConvertFloatToInt converts a float64 value to a int value.
-func ConvertFloatToInt(sc *variable.StatementContext, fval float64, lowerBound, upperBound int64, tp byte) (int64, error) {
+func ConvertFloatToInt(fval float64, lowerBound, upperBound int64, tp byte) (int64, error) {
 	val := RoundFloat(fval)
 	if val < float64(lowerBound) {
 		return lowerBound, overflow(val, tp)
 	}
 
-	if val > float64(upperBound) {
+	if val >= float64(upperBound) {
+		if val == float64(upperBound) {
+			return upperBound, nil
+		}
 		return upperBound, overflow(val, tp)
 	}
 	return int64(val), nil
@@ -120,7 +124,7 @@ func ConvertUintToUint(val uint64, upperBound uint64, tp byte) (uint64, error) {
 }
 
 // ConvertFloatToUint converts a float value to an uint value.
-func ConvertFloatToUint(sc *variable.StatementContext, fval float64, upperBound uint64, tp byte) (uint64, error) {
+func ConvertFloatToUint(fval float64, upperBound uint64, tp byte) (uint64, error) {
 	val := RoundFloat(fval)
 	if val < 0 {
 		return uint64(int64(val)), overflow(val, tp)
@@ -133,7 +137,7 @@ func ConvertFloatToUint(sc *variable.StatementContext, fval float64, upperBound 
 }
 
 // StrToInt converts a string to an integer at the best-effort.
-func StrToInt(sc *variable.StatementContext, str string) (int64, error) {
+func StrToInt(sc *stmtctx.StatementContext, str string) (int64, error) {
 	str = strings.TrimSpace(str)
 	validPrefix, err := getValidIntPrefix(sc, str)
 	iVal, err1 := strconv.ParseInt(validPrefix, 10, 64)
@@ -144,7 +148,7 @@ func StrToInt(sc *variable.StatementContext, str string) (int64, error) {
 }
 
 // StrToUint converts a string to an unsigned integer at the best-effortt.
-func StrToUint(sc *variable.StatementContext, str string) (uint64, error) {
+func StrToUint(sc *stmtctx.StatementContext, str string) (uint64, error) {
 	str = strings.TrimSpace(str)
 	validPrefix, err := getValidIntPrefix(sc, str)
 	if validPrefix[0] == '+' {
@@ -158,7 +162,7 @@ func StrToUint(sc *variable.StatementContext, str string) (uint64, error) {
 }
 
 // StrToDateTime converts str to MySQL DateTime.
-func StrToDateTime(sc *variable.StatementContext, str string, fsp int) (Time, error) {
+func StrToDateTime(sc *stmtctx.StatementContext, str string, fsp int) (Time, error) {
 	return ParseTime(sc, str, mysql.TypeDatetime, fsp)
 }
 
@@ -166,7 +170,7 @@ func StrToDateTime(sc *variable.StatementContext, str string, fsp int) (Time, er
 // and returns Time when str is in datetime format.
 // when isDuration is true, the d is returned, when it is false, the t is returned.
 // See https://dev.mysql.com/doc/refman/5.5/en/date-and-time-literals.html.
-func StrToDuration(sc *variable.StatementContext, str string, fsp int) (d Duration, t Time, isDuration bool, err error) {
+func StrToDuration(sc *stmtctx.StatementContext, str string, fsp int) (d Duration, t Time, isDuration bool, err error) {
 	str = strings.TrimSpace(str)
 	length := len(str)
 	if length > 0 && str[0] == '-' {
@@ -189,19 +193,23 @@ func StrToDuration(sc *variable.StatementContext, str string, fsp int) (d Durati
 }
 
 // NumberToDuration converts number to Duration.
-func NumberToDuration(number int64, fsp int) (t Time, err error) {
+func NumberToDuration(number int64, fsp int) (Duration, error) {
 	if number > TimeMaxValue {
 		// Try to parse DATETIME.
 		if number >= 10000000000 { // '2001-00-00 00-00-00'
-			if t, err = ParseDatetimeFromNum(nil, number); err == nil {
-				return t, nil
+			if t, err := ParseDatetimeFromNum(nil, number); err == nil {
+				dur, err1 := t.ConvertToDuration()
+				return dur, errors.Trace(err1)
 			}
 		}
-		t = MaxMySQLTime(false, fsp)
-		return t, ErrOverflow.GenByArgs("Duration", strconv.Itoa(int(number)))
+		dur, err1 := MaxMySQLTime(fsp).ConvertToDuration()
+		terror.Log(err1)
+		return dur, ErrOverflow.GenByArgs("Duration", strconv.Itoa(int(number)))
 	} else if number < -TimeMaxValue {
-		t = MaxMySQLTime(true, fsp)
-		return t, ErrOverflow.GenByArgs("Duration", strconv.Itoa(int(number)))
+		dur, err1 := MaxMySQLTime(fsp).ConvertToDuration()
+		terror.Log(err1)
+		dur.Duration = -dur.Duration
+		return dur, ErrOverflow.GenByArgs("Duration", strconv.Itoa(int(number)))
 	}
 	var neg bool
 	if neg = number < 0; neg {
@@ -209,15 +217,21 @@ func NumberToDuration(number int64, fsp int) (t Time, err error) {
 	}
 
 	if number/10000 > TimeMaxHour || number%100 >= 60 || (number/100)%100 >= 60 {
-		return ZeroTimestamp, ErrInvalidTimeFormat
+		return ZeroDuration, ErrInvalidTimeFormat
 	}
-	t = Time{Time: newMysqlTime(0, 0, 0, int(number/10000), int((number/100)%100), int(number%100), 0), Type: mysql.TypeDuration, Fsp: fsp, negative: neg}
-
-	return t, errors.Trace(err)
+	t := Time{Time: FromDate(0, 0, 0, int(number/10000), int((number/100)%100), int(number%100), 0), Type: mysql.TypeDuration, Fsp: fsp}
+	dur, err := t.ConvertToDuration()
+	if err != nil {
+		return ZeroDuration, errors.Trace(err)
+	}
+	if neg {
+		dur.Duration = -dur.Duration
+	}
+	return dur, nil
 }
 
 // getValidIntPrefix gets prefix of the string which can be successfully parsed as int.
-func getValidIntPrefix(sc *variable.StatementContext, str string) (string, error) {
+func getValidIntPrefix(sc *stmtctx.StatementContext, str string) (string, error) {
 	floatPrefix, err := getValidFloatPrefix(sc, str)
 	if err != nil {
 		return floatPrefix, errors.Trace(err)
@@ -286,74 +300,84 @@ func floatStrToIntStr(validFloat string) (string, error) {
 }
 
 // StrToFloat converts a string to a float64 at the best-effort.
-func StrToFloat(sc *variable.StatementContext, str string) (float64, error) {
+func StrToFloat(sc *stmtctx.StatementContext, str string) (float64, error) {
 	str = strings.TrimSpace(str)
 	validStr, err := getValidFloatPrefix(sc, str)
 	f, err1 := strconv.ParseFloat(validStr, 64)
 	if err1 != nil {
+		if err2, ok := err1.(*strconv.NumError); ok {
+			// value will truncate to MAX/MIN if out of range.
+			if err2.Err == strconv.ErrRange {
+				err1 = sc.HandleTruncate(ErrTruncatedWrongVal.GenByArgs("DOUBLE", str))
+				if math.IsInf(f, 1) {
+					f = math.MaxFloat64
+				} else if math.IsInf(f, -1) {
+					f = -math.MaxFloat64
+				}
+			}
+		}
 		return f, errors.Trace(err1)
 	}
 	return f, errors.Trace(err)
 }
 
 // ConvertJSONToInt casts JSON into int64.
-func ConvertJSONToInt(sc *variable.StatementContext, j json.JSON, unsigned bool) (int64, error) {
+func ConvertJSONToInt(sc *stmtctx.StatementContext, j json.BinaryJSON, unsigned bool) (int64, error) {
 	switch j.TypeCode {
 	case json.TypeCodeObject, json.TypeCodeArray:
 		return 0, nil
 	case json.TypeCodeLiteral:
-		switch byte(j.I64) {
+		switch j.Value[0] {
 		case json.LiteralNil, json.LiteralFalse:
 			return 0, nil
 		default:
 			return 1, nil
 		}
 	case json.TypeCodeInt64, json.TypeCodeUint64:
-		return j.I64, nil
+		return j.GetInt64(), nil
 	case json.TypeCodeFloat64:
-		f := *(*float64)(unsafe.Pointer(&j.I64))
+		f := j.GetFloat64()
 		if !unsigned {
 			lBound := SignedLowerBound[mysql.TypeLonglong]
 			uBound := SignedUpperBound[mysql.TypeLonglong]
-			return ConvertFloatToInt(sc, f, lBound, uBound, mysql.TypeDouble)
+			return ConvertFloatToInt(f, lBound, uBound, mysql.TypeDouble)
 		}
 		bound := UnsignedUpperBound[mysql.TypeLonglong]
-		u, err := ConvertFloatToUint(sc, f, bound, mysql.TypeDouble)
+		u, err := ConvertFloatToUint(f, bound, mysql.TypeDouble)
 		return int64(u), errors.Trace(err)
 	case json.TypeCodeString:
-		return StrToInt(sc, j.Str)
+		return StrToInt(sc, hack.String(j.GetString()))
 	}
 	return 0, errors.New("Unknown type code in JSON")
 }
 
 // ConvertJSONToFloat casts JSON into float64.
-func ConvertJSONToFloat(sc *variable.StatementContext, j json.JSON) (float64, error) {
+func ConvertJSONToFloat(sc *stmtctx.StatementContext, j json.BinaryJSON) (float64, error) {
 	switch j.TypeCode {
 	case json.TypeCodeObject, json.TypeCodeArray:
 		return 0, nil
 	case json.TypeCodeLiteral:
-		switch byte(j.I64) {
+		switch j.Value[0] {
 		case json.LiteralNil, json.LiteralFalse:
 			return 0, nil
 		default:
 			return 1, nil
 		}
 	case json.TypeCodeInt64:
-		return float64(j.I64), nil
+		return float64(j.GetInt64()), nil
 	case json.TypeCodeUint64:
-		u, err := ConvertIntToUint(j.I64, UnsignedUpperBound[mysql.TypeLonglong], mysql.TypeLonglong)
+		u, err := ConvertIntToUint(j.GetInt64(), UnsignedUpperBound[mysql.TypeLonglong], mysql.TypeLonglong)
 		return float64(u), errors.Trace(err)
 	case json.TypeCodeFloat64:
-		f := *(*float64)(unsafe.Pointer(&j.I64))
-		return f, nil
+		return j.GetFloat64(), nil
 	case json.TypeCodeString:
-		return StrToFloat(sc, j.Str)
+		return StrToFloat(sc, hack.String(j.GetString()))
 	}
 	return 0, errors.New("Unknown type code in JSON")
 }
 
 // getValidFloatPrefix gets prefix of string which can be successfully parsed as float.
-func getValidFloatPrefix(sc *variable.StatementContext, s string) (valid string, err error) {
+func getValidFloatPrefix(sc *stmtctx.StatementContext, s string) (valid string, err error) {
 	var (
 		sawDot   bool
 		sawDigit bool
