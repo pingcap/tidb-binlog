@@ -10,13 +10,8 @@ import (
 )
 
 func searchFileIndex(names []string, name string) int {
-	for i := len(names) - 1; i >= 0; i-- {
-		if name == names[i] {
-			return i
-		}
-	}
 
-	log.Fatalf("file %s not found", name)
+	// TODO
 	return 0
 }
 

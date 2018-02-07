@@ -39,17 +39,16 @@ func (r *Restore) Start() error {
 	// read all file names
 	names, err := readBinlogNames(dir)
 	if err != nil {
-		log.Fatalf("read binlog file name error %v", err)
+		return errors.Annotatef(err, "read binlog file name error")
 	}
 
-	// find the target file's index
-	index := searchFileIndex(names, "")
-	log.Debugf("index %d", index)
+	//FIMX: now use naive solution, search from the first file.
+	index := 0
 	for _, name := range names[index:] {
 		p := path.Join(dir, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, 0600)
 		if err != nil {
-			return errors.Errorf("open file %s error %v", name, err)
+			return errors.Annotatef(err, "open file %s error", name)
 		}
 		defer f.Close()
 
@@ -57,7 +56,7 @@ func (r *Restore) Start() error {
 		for {
 			payload, err := readBinlog(reader)
 			if err != nil && err != io.EOF {
-				return errors.Errorf("decode binlog error %v", err)
+				return errors.Annotatef(err, "decode binlog error")
 			}
 			if err == io.EOF {
 				break
