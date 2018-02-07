@@ -26,8 +26,8 @@ func formatValue(value types.Datum, tp byte) types.Datum {
 	}
 
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
-		value = types.NewDatum(fmt.Sprintf("%v", value.GetValue()))
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
+		value = types.NewDatum(fmt.Sprintf("%s", value.GetValue()))
 	case mysql.TypeEnum:
 		value = types.NewDatum(value.GetMysqlEnum().Value)
 	case mysql.TypeSet:

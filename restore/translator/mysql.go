@@ -42,7 +42,7 @@ func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row []
 
 		tp := col.Tp[0]
 		val = formatValue(val, tp)
-		log.Debugf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
+		log.Debugf("%s(%s): %v \n", col.Name, col.MysqlType, val.GetValue())
 		args = append(args, val.GetValue())
 	}
 
@@ -85,7 +85,7 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 		changedDatum := formatValue(changedValue, tp)
 		changedValues = append(changedValues, changedDatum.GetValue())
 
-		log.Debugf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(oldDatum, tp), formatValueToString(changedDatum, tp))
+		log.Debugf("%s(%s %v): %v => %v\n", col.Name, col.MysqlType, tp, oldDatum.GetValue(), changedDatum.GetValue())
 
 		if reflect.DeepEqual(oldDatum.GetValue(), changedDatum.GetValue()) {
 			continue
@@ -132,7 +132,7 @@ func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row []
 
 		tp := col.Tp[0]
 		val = formatValue(val, tp)
-		log.Debugf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
+		log.Debugf("%s(%s): %v \n", col.Name, col.MysqlType, val.GetValue())
 		args = append(args, val.GetValue())
 	}
 
