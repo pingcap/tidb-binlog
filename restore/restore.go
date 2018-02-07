@@ -61,9 +61,12 @@ func (r *Restore) Start() error {
 			if errors.Cause(err) == io.EOF {
 				break
 			}
-			sqls, args, isDDL, err := translator.Translate(payload, r.translator)
+			sqls, args, isDDL, err := translator.Translate(payload, r.translator, r.cfg.StartTS, r.cfg.EndTS)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			if len(sqls) == 0 {
+				continue
 			}
 
 			err = r.executor.Execute(sqls, args, isDDL)

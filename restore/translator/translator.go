@@ -35,13 +35,17 @@ func New(name string, safeMode bool) Translator {
 	return newPrintTranslator()
 }
 
-func Translate(payload []byte, translator Translator) (sqls []string, args [][]interface{}, isDDL bool, err error) {
+func Translate(payload []byte, translator Translator, startTs, endTs int64) (sqls []string, args [][]interface{}, isDDL bool, err error) {
 	binlog := &pb.Binlog{}
 	err = binlog.Unmarshal(payload)
 	if err != nil {
 		return nil, nil, false, errors.Trace(err)
 	}
 	log.Debugf("binlog type: %s; commit ts: %d", binlog.Tp, binlog.CommitTs)
+
+	if !isAcceptableBinlog(binlog, startTs, endTs) {
+		return
+	}
 
 	switch binlog.Tp {
 	case pb.BinlogType_DML:
