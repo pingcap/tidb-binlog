@@ -2,12 +2,51 @@ package restore
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 )
+
+type binlogFile struct {
+	fullpath string
+	offset   int64
+}
+
+// searchFiles return matched file and it's offset
+func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
+	// read all file names
+	names, err := readBinlogNames(dir)
+	if err != nil {
+		return nil, errors.Annotatef(err, "read binlog file name error")
+	}
+	// names are sorted asc.
+
+	var firstFile string
+	var firstFileOffset int64
+	pos := r.savepoint.Pos()
+	if pos.Filename != "" {
+		firstFile = pos.Filename
+		firstFileOffset = pos.Offset
+	}
+
+	binlogFiles := make([]binlogFile, 0, len(names))
+	for _, name := range names {
+		fullpath := path.Join(r.cfg.Dir, name)
+		cmp := strings.Compare(fullpath, firstFile)
+		if cmp < 0 {
+			continue
+		} else if cmp == 0 {
+			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: firstFileOffset})
+		} else {
+			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
+		}
+	}
+
+	return binlogFiles, nil
+}
 
 func searchFileIndex(names []string, name string) int {
 
@@ -38,7 +77,7 @@ func checkBinlogNames(names []string) []string {
 		}
 		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
-				log.Warningf("ignored file %v in wal", name)
+				log.Warningf("ignored file %v", name)
 			}
 			continue
 		}

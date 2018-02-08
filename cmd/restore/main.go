@@ -51,4 +51,7 @@ func main() {
 		log.Errorf("restore start error, %v", errors.ErrorStack(err))
 		os.Exit(2)
 	}
+	if err := r.Close(); err != nil {
+		log.Fatalf("close err %v", err)
+	}
 }

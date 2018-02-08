@@ -23,7 +23,7 @@ type TableName struct {
 
 type Savepoint struct {
 	Type string `toml:"type" json:"type"`
-	Path string `toml:"path" json:"path"`
+	Name string `toml:"name" json:"name"`
 }
 
 type Config struct {
@@ -65,7 +65,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "path to configuration file")
-
+	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
 	return c
 }
 

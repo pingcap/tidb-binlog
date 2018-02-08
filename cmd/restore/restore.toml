@@ -1,9 +1,10 @@
+# data-dir contains protobuf files. It's suggested to use fullpath.
 data-dir = "./data"
 #compression = ""
 
 # log-file = ""
 # log-rotate = "hour"
-log-level = "debug"
+log-level = "info"
 
 # The timestmap is in nanosecond.
 # start-ts = 
@@ -27,6 +28,7 @@ dest-type = "tidb"
 
 [savepoint]
 type = "file"
+# which would be {data-dir}/{name}
 name = "savepoint"
 
 [dest-db]
