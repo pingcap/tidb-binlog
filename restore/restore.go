@@ -13,8 +13,6 @@ import (
 	"github.com/pingcap/tidb-binlog/restore/executor"
 	"github.com/pingcap/tidb-binlog/restore/savepoint"
 	"github.com/pingcap/tidb-binlog/restore/translator"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/parser"
 )
 
 type Restore struct {
@@ -91,14 +89,14 @@ func (r *Restore) Start() error {
 
 		reader := bufio.NewReader(f)
 		for {
-			payload, err := readBinlog(reader)
+			binlog, err := Decode(reader)
 			if err != nil && errors.Cause(err) != io.EOF {
 				return errors.Annotatef(err, "decode binlog error")
 			}
 			if errors.Cause(err) == io.EOF {
 				break
 			}
-			sqls, args, isDDL, err := r.Translate(payload)
+			sqls, args, isDDL, err := r.Translate(binlog)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -131,14 +129,7 @@ func (r *Restore) Close() error {
 }
 
 // Translate translate payload to SQL.
-func (r *Restore) Translate(payload []byte) (sqls []string, args [][]interface{}, isDDL bool, err error) {
-	binlog := &pb.Binlog{}
-	err = binlog.Unmarshal(payload)
-	if err != nil {
-		return nil, nil, false, errors.Trace(err)
-	}
-	log.Debugf("binlog type: %s; commit ts: %d", binlog.Tp, binlog.CommitTs)
-
+func (r *Restore) Translate(binlog *pb.Binlog) (sqls []string, args [][]interface{}, isDDL bool, err error) {
 	if !isAcceptableBinlog(binlog, r.cfg.StartTS, r.cfg.EndTS) {
 		return
 	}
@@ -215,65 +206,4 @@ func (r *Restore) translateDDL(binlog *pb.Binlog) ([]string, [][]interface{}, er
 		return nil, nil, errors.Trace(err)
 	}
 	return []string{ddl}, [][]interface{}{args}, nil
-}
-
-func parseDDL(sql string) (node ast.Node, table TableName, err error) {
-	nodes, err := parser.New().Parse(sql, "", "")
-	if err != nil {
-		return nil, table, errors.Trace(err)
-	}
-
-	// we assume ddl in the following format:
-	// 1. use db; ddl
-	// 2. ddl  (no use statement)
-	// and we assume ddl has single schema change.
-	for _, n := range nodes {
-		if useStmt, ok := n.(*ast.UseStmt); ok {
-			table.Schema = useStmt.DBName
-			continue
-		}
-
-		node = n
-		//FIXME: doesn't it needed?
-		_, isDDL := n.(ast.DDLNode)
-		if !isDDL {
-			log.Warnf("node %+v is not ddl, unexpected!", n)
-			continue
-		}
-		switch v := n.(type) {
-		case *ast.CreateDatabaseStmt:
-			setSchemaIfExists(&table, v.Name)
-		case *ast.DropDatabaseStmt:
-			setSchemaIfExists(&table, v.Name)
-		case *ast.CreateTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
-		case *ast.DropTableStmt:
-			setSchemaIfExists(&table, v.Tables[0].Schema.O)
-			table.Name = v.Tables[0].Name.O
-		case *ast.AlterTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
-		case *ast.RenameTableStmt:
-			setSchemaIfExists(&table, v.OldTable.Schema.O)
-			table.Name = v.OldTable.Name.O
-		case *ast.TruncateTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
-		case *ast.CreateIndexStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
-		case *ast.DropIndexStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
-		}
-	}
-
-	return
-}
-
-func setSchemaIfExists(table *TableName, schema string) {
-	if schema != "" {
-		table.Schema = schema
-	}
 }

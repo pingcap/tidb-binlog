@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 var (
@@ -14,10 +16,26 @@ var (
 	crcTable           = crc32.MakeTable(crc32.Castagnoli)
 )
 
+// Decode decodes binlog from protobuf content.
+func Decode(br *bufio.Reader) (*pb.Binlog, error) {
+	payload, err := decode(br)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	binlog := &pb.Binlog{}
+	err = binlog.Unmarshal(payload)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Debugf("binlog type: %s; commit ts: %d", binlog.Tp, binlog.CommitTs)
+	return binlog, nil
+}
+
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-func readBinlog(br *bufio.Reader) ([]byte, error) {
+func decode(br *bufio.Reader) ([]byte, error) {
 	// read and chekc magic number
 	magicNum, err := readInt32(br)
 	if errors.Cause(err) == io.EOF {
