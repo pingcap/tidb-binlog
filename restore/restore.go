@@ -58,7 +58,7 @@ func (r *Restore) Start() error {
 		}
 		defer f.Close()
 
-		reader := bufio.NewReader(io.Reader(f))
+		reader := bufio.NewReader(f)
 		for {
 			payload, err := readBinlog(reader)
 			if err != nil && errors.Cause(err) != io.EOF {
