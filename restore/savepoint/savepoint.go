@@ -1,19 +1,19 @@
-package checkpoint
+package savepoint
 
 import (
 	"fmt"
 )
 
-// Position represents a checkpoint position .
+// Position represents a savepoint position .
 type Position struct {
 	Filename string `toml:"filename" json:"filename"`
 	Offset   int64  `toml:"offset" json:"offset"`
 	Ts       int64  `toml:"ts" json:"ts"`
 }
 
-// Checkpoint holds the last position.
-type Checkpoint interface {
-	// Load loads checkpoint position
+// Savepoint holds the last position.
+type Savepoint interface {
+	// Load loads savepoint position
 	Load() (*Position, error)
 	// Save
 	Save(pos *Position) error
@@ -21,15 +21,17 @@ type Checkpoint interface {
 	Check() bool
 	// Flush flushes the position to persistent storage.
 	Flush() error
-	// Close the resources the checkpoint implementations needs.
+	// Pos tells current position
+	Pos() *Position
+	// Close the resources the savepoint implementations needs.
 	Close() error
 }
 
-func Open(tp string, path string) (Checkpoint, error) {
+func Open(tp string, path string) (Savepoint, error) {
 	switch tp {
 	case "file":
-		return newFileCheckpoint(path)
+		return newFileSavepoint(path)
 	default:
-		panic(fmt.Sprintf("checkpoint %s not implemented yet"))
+		panic(fmt.Sprintf("savepoint %s not implemented yet"))
 	}
 }

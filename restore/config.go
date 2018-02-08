@@ -21,6 +21,11 @@ type TableName struct {
 	Name   string `toml:"tbl-name" json:"tbl-name"`
 }
 
+type Savepoint struct {
+	Type string `toml:"type" json:"type"`
+	Path string `toml:"path" json:"path"`
+}
+
 type Config struct {
 	*flag.FlagSet
 	Dir string `toml:"data-dir" json:"data-dir"`
@@ -30,6 +35,8 @@ type Config struct {
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
+
+	Savepoint *Savepoint `toml:"savepoint" json:"savepoint"`
 
 	DoTables []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs    []string    `toml:"replicate-do-db" json:"replicate-do-db"`

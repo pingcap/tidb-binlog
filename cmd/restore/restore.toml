@@ -5,6 +5,7 @@ data-dir = "./data"
 # log-rotate = "hour"
 log-level = "debug"
 
+# The timestmap is in nanosecond.
 # start-ts = 
 # end-ts = 
 
@@ -24,6 +25,9 @@ dest-type = "tidb"
 #db-name ="test"
 #tbl-name = "~^a.*"
 
+[savepoint]
+type = "file"
+name = "savepoint"
 
 [dest-db]
 host = "127.0.0.1"

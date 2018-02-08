@@ -1,4 +1,4 @@
-package checkpoint
+package savepoint
 
 import (
 	"io"
@@ -16,36 +16,40 @@ var (
 	maxSaveTime = 30 * time.Second
 )
 
-// implements a file checkpoint.
+// implements a file savepoint.
 
-type fileCheckpoint struct {
+type fileSavepoint struct {
 	mu           sync.RWMutex
 	fd           *file.LockedFile
 	pos          *Position
 	lastSaveTime time.Time
 }
 
-func newFileCheckpoint(filename string) (Checkpoint, error) {
+func newFileSavepoint(filename string) (Savepoint, error) {
 	fd, err := file.TryLockFile(filename, os.O_RDWR|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	return &fileCheckpoint{fd: fd}, nil
+	return &fileSavepoint{fd: fd, lastSaveTime: time.Now()}, nil
 }
 
-func (f *fileCheckpoint) Load() (pos *Position, err error) {
-	f.fd.Seek(0, io.SeekStart)
+func (f *fileSavepoint) Load() (pos *Position, err error) {
+	_, err = f.fd.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	pos = &Position{}
 	_, err = toml.DecodeReader(f.fd, pos)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	f.pos = pos
 
 	return pos, nil
 }
 
-func (f *fileCheckpoint) Save(pos *Position) (err error) {
+func (f *fileSavepoint) Save(pos *Position) (err error) {
 	f.mu.Lock()
 	f.pos = pos
 	f.mu.Unlock()
@@ -56,27 +60,36 @@ func (f *fileCheckpoint) Save(pos *Position) (err error) {
 	return errors.Trace(err)
 }
 
-func (f *fileCheckpoint) Check() bool {
+func (f *fileSavepoint) Check() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return time.Since(f.lastSaveTime) >= maxSaveTime
 }
 
-func (f *fileCheckpoint) Flush() error {
+func (f *fileSavepoint) Flush() error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	f.fd.Seek(0, io.SeekStart)
+	_, err := f.fd.Seek(0, io.SeekStart)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	encoder := toml.NewEncoder(f.fd)
-	err := encoder.Encode(f.pos)
+	err = encoder.Encode(f.pos)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	f.lastSaveTime = time.Now()
-	log.Infof("saved checkpoint position %+v to file", f.pos)
+	log.Infof("saved savepoint position %+v to file", f.pos)
 	return nil
 }
 
-func (f *fileCheckpoint) Close() error {
+func (f *fileSavepoint) Pos() *Position {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.pos
+}
+
+func (f *fileSavepoint) Close() error {
 	return errors.Trace(f.fd.Close())
 }

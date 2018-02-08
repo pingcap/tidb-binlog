@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"io"
 	"os"
-	"path"
 	"regexp"
 
 	"github.com/juju/errors"
@@ -12,15 +11,17 @@ import (
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/restore/executor"
-	tr "github.com/pingcap/tidb-binlog/restore/translator"
+	"github.com/pingcap/tidb-binlog/restore/savepoint"
+	"github.com/pingcap/tidb-binlog/restore/translator"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/parser"
 )
 
 type Restore struct {
 	cfg        *Config
-	translator tr.Translator
+	translator translator.Translator
 	executor   executor.Executor
+	savepoint  savepoint.Savepoint
 
 	reMap map[string]*regexp.Regexp
 }
@@ -30,33 +31,63 @@ func New(cfg *Config) (*Restore, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	savepoint, err := savepoint.Open(cfg.Savepoint.Type, cfg.Savepoint.Path)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &Restore{
 		cfg:        cfg,
-		translator: tr.New(cfg.DestType, false),
+		translator: translator.New(cfg.DestType, false),
 		executor:   executor,
+		savepoint:  savepoint,
 	}, nil
+}
+
+type binlogFile struct {
+	fullpath string
+	offset   int64
+}
+
+// searchFiles return matched file and it's offset
+func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
+	// read all file names
+	names, err := readBinlogNames(dir)
+	if err != nil {
+		return nil, errors.Annotatef(err, "read binlog file name error")
+	}
+
+	_ = names
+
+	// TODO
+	return nil, nil
 }
 
 // Start runs the restore procedure.
 func (r *Restore) Start() error {
 	r.GenRegexMap()
-
-	dir := r.cfg.Dir
-	// read all file names
-	names, err := readBinlogNames(dir)
+	_, err := r.savepoint.Load()
 	if err != nil {
-		return errors.Annotatef(err, "read binlog file name error")
+		return errors.Trace(err)
 	}
 
-	//FIMX: now use naive solution, search from the first file.
-	index := 0
-	for _, name := range names[index:] {
-		p := path.Join(dir, name)
-		f, err := os.OpenFile(p, os.O_RDONLY, 0600)
+	dir := r.cfg.Dir
+	files, err := r.searchFiles(dir)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, file := range files {
+		f, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
 		if err != nil {
-			return errors.Annotatef(err, "open file %s error", name)
+			return errors.Annotatef(err, "open file %s error", file.fullpath)
 		}
 		defer f.Close()
+
+		ret, err := f.Seek(file.offset, io.SeekStart)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debugf("seek to file %s offset %d got %d", file.fullpath, file.offset, ret)
 
 		reader := bufio.NewReader(f)
 		for {
@@ -90,6 +121,12 @@ func (r *Restore) Start() error {
 
 // Close closes Restore.
 func (r *Restore) Close() error {
+	if err := r.executor.Close(); err != nil {
+		log.Errorf("close executor err %v", err)
+	}
+	if err := r.savepoint.Close(); err != nil {
+		log.Errorf("close savepoint err %v", err)
+	}
 	return nil
 }
 
