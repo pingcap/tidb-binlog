@@ -154,11 +154,19 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
-		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
+		schema, err := NewSchema(exceptedJobs, s.ignoreSchemaNames)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
+		s.schema.tableIDToName = schema.tableIDToName
+		s.schema.ignoreSchema = schema.ignoreSchema
+		s.schema.schemaMetaVersion = schema.schemaMetaVersion
+		s.schema.schemas = schema.schemas
+		s.schema.tables = schema.tables
+        s.schema.schemaNameToID = schema.schemaNameToID
+        log.Infof("s.schema.ignoreSchema: %+v", s.schema.ignoreSchema)
+		
 		return b, nil
 	}
 }

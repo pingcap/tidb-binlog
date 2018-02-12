@@ -59,6 +59,7 @@ type Pump struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	isFinished int64
+	schema     *Schema
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
@@ -111,6 +112,24 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		// skip?
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
+	}
+
+	preWriteValue := b.GetPrewriteValue()
+	if preWriteValue != nil {
+		preWrite := &pb.PrewriteValue{}
+		err = preWrite.Unmarshal(preWriteValue)
+		if err != nil {
+			log.Infof("error: %v", err)
+		} else {
+			log.Infof("preWriteValue: %+v", preWrite)
+		}
+		for _, mutation := range preWrite.Mutations {
+			tableId := mutation.TableId
+			if table, ok := p.schema.ignoreSchema[tableId]; ok {
+				log.Infof("tableid %d %+v should be filter", tableId, table)
+			}
+		}
+		log.Infof("ignoreSchema: %+v", p.schema.ignoreSchema)
 	}
 
 	p.mu.Lock()

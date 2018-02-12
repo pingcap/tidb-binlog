@@ -57,6 +57,7 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+	schema  *Schema
 }
 
 // NewCollector returns an instance of Collector
@@ -204,6 +205,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
 			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p.schema = c.schema
 			if err != nil {
 				return errors.Trace(err)
 			}

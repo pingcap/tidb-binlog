@@ -86,15 +86,18 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
+	schema := &Schema{}
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	syncer.schema = schema
 
 	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	c.schema = schema
 
 	var metrics *metricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
