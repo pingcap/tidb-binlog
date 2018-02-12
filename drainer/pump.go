@@ -59,11 +59,11 @@ type Pump struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	isFinished int64
-	schema     *Schema
+	filter     *filter
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, filter *filter) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
@@ -82,6 +82,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		filter:     filter,
 	}, nil
 }
 
@@ -104,8 +105,56 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	go p.publish(t)
 }
 
-// match is responsible for match p+c binlog.
-func (p *Pump) match(ent pb.Entity) *pb.Binlog {
+func (p *Pump) needFilter(binlog *pb.Binlog) bool {
+	jobID := binlog.GetDdlJobId()
+	var err error
+
+	if jobID == 0 {
+		preWriteValue := binlog.GetPrewriteValue()
+		preWrite := &pb.PrewriteValue{}
+		err = preWrite.Unmarshal(preWriteValue)
+		if err != nil {
+			//return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
+			return false
+		}
+		for _, mutation := range preWrite.Mutations {
+			tableId := mutation.TableId
+			if table, ok := p.filter.schema.ignoreSchema[tableId]; ok {
+				log.Infof("tableid %d %+v should be filter", tableId, table)
+				return true
+			}
+			_, ok := p.filter.schema.TableByID(mutation.GetTableId())
+			if !ok {
+				return true
+			}
+
+			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(mutation.GetTableId())
+			if !ok {
+				return true
+			}
+
+			if p.filter.skipSchemaAndTable(schemaName, tableName) {
+				return true
+			}
+		}
+	} else if jobID > 0 {
+		/*
+		_, ok := p.filter.schema.SchemaByTableID(binlog.job.TableID)
+		if ok {
+			return true
+		}
+
+		schema := binlog.job.BinlogInfo.DBInfo
+		if filterIgnoreSchema(schema, p.filter.ignoreSchemaNames) {
+			return true
+		}
+		*/
+	}
+	
+	return false
+}
+// fiterAndMatch is responsible for match p+c binlog, and will ignore schema
+func (p *Pump) fiterAndMatch(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -114,22 +163,24 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		return nil
 	}
 
-	preWriteValue := b.GetPrewriteValue()
-	if preWriteValue != nil {
-		preWrite := &pb.PrewriteValue{}
-		err = preWrite.Unmarshal(preWriteValue)
-		if err != nil {
-			log.Infof("error: %v", err)
-		} else {
-			log.Infof("preWriteValue: %+v", preWrite)
-		}
-		for _, mutation := range preWrite.Mutations {
-			tableId := mutation.TableId
-			if table, ok := p.schema.ignoreSchema[tableId]; ok {
-				log.Infof("tableid %d %+v should be filter", tableId, table)
+	if p.filter.prepared {
+		preWriteValue := b.GetPrewriteValue()
+		if preWriteValue != nil {
+			preWrite := &pb.PrewriteValue{}
+			err = preWrite.Unmarshal(preWriteValue)
+			if err != nil {
+				log.Infof("error: %v", err)
+			} else {
+				log.Infof("preWriteValue: %+v", preWrite)
 			}
+			for _, mutation := range preWrite.Mutations {
+				tableId := mutation.TableId
+				if table, ok := p.filter.schema.ignoreSchema[tableId]; ok {
+					log.Infof("tableid %d %+v should be filter", tableId, table)
+				}
+			}
+			log.Infof("ignoreSchema: %+v", p.filter.schema.ignoreSchema)
 		}
-		log.Infof("ignoreSchema: %+v", p.schema.ignoreSchema)
 	}
 
 	p.mu.Lock()
@@ -449,7 +500,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Pos:     pos,
 			Payload: payload,
 		}
-		b := p.match(entity)
+		b := p.fiterAndMatch(entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,

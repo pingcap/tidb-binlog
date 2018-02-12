@@ -86,18 +86,16 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	schema := &Schema{}
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
+	filter := newFilter(cfg.SyncerCfg.DoDBs, cfg.SyncerCfg.DoTables, cfg.SyncerCfg.IgnoreSchemas)
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	syncer.schema = schema
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
+	c, err := NewCollector(cfg, clusterID, win, syncer, cp, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	c.schema = schema
 
 	var metrics *metricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
