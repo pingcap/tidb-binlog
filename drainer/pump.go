@@ -137,8 +137,10 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 				return true
 			}
 		}
-	} else if jobID > 0 {
-		/*
+	} 
+	/*
+	else if jobID > 0 {
+		
 		_, ok := p.filter.schema.SchemaByTableID(binlog.job.TableID)
 		if ok {
 			return true
@@ -148,9 +150,10 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 		if filterIgnoreSchema(schema, p.filter.ignoreSchemaNames) {
 			return true
 		}
-		*/
+		
 	}
-	
+	*/
+
 	return false
 }
 // fiterAndMatch is responsible for match p+c binlog, and will ignore schema
@@ -164,22 +167,8 @@ func (p *Pump) fiterAndMatch(ent pb.Entity) *pb.Binlog {
 	}
 
 	if p.filter.prepared {
-		preWriteValue := b.GetPrewriteValue()
-		if preWriteValue != nil {
-			preWrite := &pb.PrewriteValue{}
-			err = preWrite.Unmarshal(preWriteValue)
-			if err != nil {
-				log.Infof("error: %v", err)
-			} else {
-				log.Infof("preWriteValue: %+v", preWrite)
-			}
-			for _, mutation := range preWrite.Mutations {
-				tableId := mutation.TableId
-				if table, ok := p.filter.schema.ignoreSchema[tableId]; ok {
-					log.Infof("tableid %d %+v should be filter", tableId, table)
-				}
-			}
-			log.Infof("ignoreSchema: %+v", p.filter.schema.ignoreSchema)
+		if p.needFilter(b) {
+			return nil
 		}
 	}
 
