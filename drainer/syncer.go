@@ -28,7 +28,7 @@ var (
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
 type Syncer struct {
 	// schema *Schema
-	cp     checkpoint.CheckPoint
+	cp checkpoint.CheckPoint
 
 	cfg *SyncerConfig
 
@@ -53,7 +53,7 @@ type Syncer struct {
 
 	//reMap map[string]*regexp.Regexp
 
-	c *causality
+	c      *causality
 	filter *filter
 }
 
@@ -110,7 +110,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
-func (s *Syncer) prepare(jobs []*model.Job, ) (*binlogItem, error) {
+func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
 	var schemaVersion int64
 	var b *binlogItem
@@ -167,7 +167,7 @@ func (s *Syncer) prepare(jobs []*model.Job, ) (*binlogItem, error) {
 		s.filter.schema.schemaMetaVersion = schema.schemaMetaVersion
 		s.filter.schema.schemas = schema.schemas
 		s.filter.schema.tables = schema.tables
-        s.filter.schema.schemaNameToID = schema.schemaNameToID
+		s.filter.schema.schemaNameToID = schema.schemaNameToID
 		s.filter.prepared = true
 		log.Infof("s.filter.schema.ignoreSchema: %+v", s.filter.schema.ignoreSchema)
 
