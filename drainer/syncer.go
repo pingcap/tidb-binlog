@@ -70,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig,
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
-	filter.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
+	//filter.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.filter = filter
 
 	return syncer, nil
