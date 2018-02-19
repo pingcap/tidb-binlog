@@ -181,7 +181,6 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
-			log.Info("syncer goroutine exited")
 			s.wg.Done()
 			s.Close()
 		}()

@@ -126,7 +126,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}

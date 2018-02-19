@@ -22,6 +22,7 @@ type filter struct {
 
 func newFilter(doDBS []string, doTables []TableName, ignoreSchemas string) *filter {
 	filter := &filter{
+		schema:            &Schema{},
 		ignoreSchemaNames: formatIgnoreSchemas(ignoreSchemas),
 		reMap:             make(map[string]*regexp.Regexp),
 		doDBs:             make([]string, 0, 10),
