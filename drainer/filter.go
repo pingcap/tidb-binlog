@@ -25,8 +25,8 @@ func newFilter(doDBS []string, doTables []TableName, ignoreSchemas string) *filt
 		schema:            &Schema{},
 		ignoreSchemaNames: formatIgnoreSchemas(ignoreSchemas),
 		reMap:             make(map[string]*regexp.Regexp),
-		doDBs:             make([]string, 0, 10),
-		doTables:          make([]TableName, 0, 10),
+		doDBs:             doDBS,
+		doTables:          doTables,
 	}
 	filter.genRegexMap()
 	return filter
