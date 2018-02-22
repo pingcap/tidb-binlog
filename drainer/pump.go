@@ -120,7 +120,7 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 		}
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
-			if table, ok := p.filter.schema.ignoreSchema[tableID]; !ok {
+			if _, ok := p.filter.schema.ignoreSchema[tableID]; !ok {
 				return false
 			}
 			_, ok := p.filter.schema.TableByID(tableID)
