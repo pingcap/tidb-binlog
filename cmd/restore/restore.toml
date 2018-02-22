@@ -1,6 +1,8 @@
 # data-dir contains protobuf files. It's suggested to use fullpath.
-data-dir = "./data"
-#compression = ""
+data-dir = "./data.drainer"
+# If the protobuf files are compressed, specify compression method here.
+# Values can be "gzip", or leave it empty if no compression.
+compression = "gzip"
 
 # log-file = ""
 # log-rotate = "hour"
@@ -11,7 +13,7 @@ log-level = "info"
 # end-ts = 
 
 # dest-type choose a destination, which value can be "mysql","tidb", "print". 
-# for print, it just print decoded value.
+# for print, it just prints decoded value.
 dest-type = "tidb"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
@@ -29,7 +31,7 @@ dest-type = "tidb"
 [savepoint]
 type = "file"
 # which would be {data-dir}/{name}
-name = "savepoint"
+name = "restore.savepoint"
 
 [dest-db]
 host = "127.0.0.1"

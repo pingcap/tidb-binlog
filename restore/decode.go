@@ -1,7 +1,6 @@
 package restore
 
 import (
-	"bufio"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
@@ -17,8 +16,8 @@ var (
 )
 
 // Decode decodes binlog from protobuf content.
-func Decode(br *bufio.Reader) (*pb.Binlog, error) {
-	payload, err := decode(br)
+func Decode(r io.Reader) (*pb.Binlog, error) {
+	payload, err := decode(r)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -35,9 +34,9 @@ func Decode(br *bufio.Reader) (*pb.Binlog, error) {
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-func decode(br *bufio.Reader) ([]byte, error) {
+func decode(r io.Reader) ([]byte, error) {
 	// read and chekc magic number
-	magicNum, err := readInt32(br)
+	magicNum, err := readInt32(r)
 	if errors.Cause(err) == io.EOF {
 		return nil, io.EOF
 	}
@@ -45,7 +44,7 @@ func decode(br *bufio.Reader) ([]byte, error) {
 		return nil, errors.Trace(err)
 	}
 	// read payload length
-	size, err := readInt64(br)
+	size, err := readInt64(r)
 	if err != nil {
 		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
@@ -55,7 +54,7 @@ func decode(br *bufio.Reader) ([]byte, error) {
 	// size+4 = len(payload)+len(crc)
 	data := make([]byte, size+4)
 	// read payload+crc
-	if _, err = io.ReadFull(br, data); err != nil {
+	if _, err = io.ReadFull(r, data); err != nil {
 		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}

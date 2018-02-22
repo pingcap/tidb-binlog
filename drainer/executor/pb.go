@@ -2,6 +2,7 @@ package executor
 
 import (
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -23,7 +24,7 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
-	codec := pump.ToCompressionCodec(cfg.Compression)
+	codec := compress.ToCompressionCodec(cfg.Compression)
 	if len(names) > 0 {
 		binlogger, err = pump.OpenBinlogger(dirPath, codec)
 	} else {

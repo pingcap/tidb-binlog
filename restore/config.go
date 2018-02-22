@@ -28,10 +28,10 @@ type Savepoint struct {
 
 type Config struct {
 	*flag.FlagSet
-	Dir string `toml:"data-dir" json:"data-dir"`
-	// Compression string `toml:"compression" json:"compression"`
-	StartTS int64 `toml:"start-ts" json:"start-ts"`
-	EndTS   int64 `toml:"end-ts" json:"end-ts"`
+	Dir         string `toml:"data-dir" json:"data-dir"`
+	Compression string `toml:"compression" json:"compression"`
+	StartTS     int64  `toml:"start-ts" json:"start-ts"`
+	EndTS       int64  `toml:"end-ts" json:"end-ts"`
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`

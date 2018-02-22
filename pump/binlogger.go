@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -57,7 +58,7 @@ type binlogger struct {
 	// encoder encodes binlog payload into bytes, and write to file
 	encoder Encoder
 
-	codec CompressionCodec
+	codec compress.CompressionCodec
 
 	// file is the lastest file in the dir
 	file  *file.LockedFile
@@ -65,7 +66,7 @@ type binlogger struct {
 }
 
 // CreateBinlogger creates a binlog directory, then can append binlogs
-func CreateBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) {
+func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
@@ -90,7 +91,7 @@ func CreateBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) 
 }
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec CompressionCodec) (Binlogger, error) {
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
 		return nil, err

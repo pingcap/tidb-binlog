@@ -2,6 +2,7 @@ package restore
 
 import (
 	"bufio"
+	"compress/gzip"
 	"io"
 	"os"
 	"path"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/restore/executor"
 	"github.com/pingcap/tidb-binlog/restore/savepoint"
@@ -63,6 +65,7 @@ func (r *Restore) Start() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	codec := compress.ToCompressionCodec(r.cfg.Compression)
 
 	for _, file := range files {
 		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
@@ -77,10 +80,29 @@ func (r *Restore) Start() error {
 		}
 		log.Infof("seek to file %s offset %d got %d", file.fullpath, file.offset, ret)
 
-		reader := bufio.NewReader(fd)
+		br := bufio.NewReader(fd)
+		var rd io.Reader
+		switch codec {
+		case compress.CompressionNone:
+			rd = br
+		case compress.CompressionGZIP:
+			gzr, err := gzip.NewReader(br)
+			if err == io.EOF {
+				continue
+			}
+			if err != nil {
+				return errors.Trace(err)
+			}
+			rd = gzr
+			defer gzr.Close()
+		}
+
 		for {
-			binlog, err := Decode(reader)
+			binlog, err := Decode(rd)
 			if errors.Cause(err) == io.EOF {
+				if gzr, ok := rd.(*gzip.Reader); ok {
+					gzr.Close()
+				}
 				fd.Close()
 				log.Infof("read file %s end", file.fullpath)
 				break

@@ -14,6 +14,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
@@ -228,9 +229,9 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		binlogDir = path.Join(clusterDir, cid)
 	)
 	if find {
-		fb, err = OpenBinlogger(binlogDir, CompressionNone) // no compression now.
+		fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 	} else {
-		fb, err = CreateBinlogger(binlogDir, CompressionNone) // ditto
+		fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
 	}
 	if err != nil {
 		return nil, errors.Trace(err)

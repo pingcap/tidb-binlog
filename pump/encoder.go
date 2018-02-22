@@ -1,47 +1,18 @@
 package pump
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 var magic uint32 = 471532804
-
-type CompressionCodec int8
-
-const (
-	CompressionNone = iota
-	CompressionGZIP
-	CompressionSnappy // not supported yet
-	CompressionLZ4    // ditto
-)
-
-// ToCompressionCodec converts v to CompressionCodec.
-func ToCompressionCodec(v string) CompressionCodec {
-	v = strings.ToLower(v)
-	switch v {
-	case "":
-		return CompressionNone
-	case "gzip":
-		return CompressionGZIP
-	case "lz4":
-		return CompressionLZ4
-	case "snappy":
-		return CompressionSnappy
-	default:
-		log.Warnf("unknown codec %v, no compression.", v)
-		return CompressionNone
-	}
-}
 
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
@@ -54,10 +25,10 @@ type Encoder interface {
 
 type encoder struct {
 	bw    io.Writer
-	codec CompressionCodec
+	codec compress.CompressionCodec
 }
 
-func newEncoder(w io.Writer, codec CompressionCodec) Encoder {
+func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
 	return &encoder{
 		bw:    w,
 		codec: codec,
@@ -67,25 +38,11 @@ func newEncoder(w io.Writer, codec CompressionCodec) Encoder {
 func (e *encoder) Encode(payload []byte) (int64, error) {
 	data := encode(payload)
 
-	switch e.codec {
-	case CompressionNone:
-		// nothing to do
-	case CompressionGZIP:
-		var buf bytes.Buffer
-		writer := gzip.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return 0, err
-		}
-		if err := writer.Close(); err != nil {
-			return 0, err
-		}
-		data = buf.Bytes()
-	case CompressionLZ4:
-		panic("not implemented yet")
-	case CompressionSnappy:
-		panic("not implemented yet")
+	data, err := compress.Compress(data, e.codec)
+	if err != nil {
+		return 0, errors.Trace(err)
 	}
-	_, err := e.bw.Write(data)
+	_, err = e.bw.Write(data)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
