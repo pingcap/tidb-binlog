@@ -6,12 +6,12 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 var magic uint32 = 471532804
@@ -90,14 +90,14 @@ func (e *encoder) Encode(payload []byte) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	if file, ok := e.bw.(*os.File); ok {
+	if file, ok := e.bw.(*pkgfile.LockedFile); ok {
 		curOffset, err := file.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
 		return curOffset, nil
 	}
-	log.Info("bw is not *os.File, unexpected!")
+	log.Warn("bw is not *file.Lockedfile, unexpected!")
 	return 0, errors.Trace(err)
 }
 
