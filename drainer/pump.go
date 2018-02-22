@@ -109,19 +109,19 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 	jobID := binlog.GetDdlJobId()
 	var err error
 
+	// only filter dml
 	if jobID == 0 {
 		preWriteValue := binlog.GetPrewriteValue()
 		preWrite := &pb.PrewriteValue{}
 		err = preWrite.Unmarshal(preWriteValue)
 		if err != nil {
-			//return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
+			log.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			return false
 		}
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
-			if table, ok := p.filter.schema.ignoreSchema[tableID]; ok {
-				log.Infof("tableid %d %+v should be filter", tableID, table)
-				return true
+			if table, ok := p.filter.schema.ignoreSchema[tableID]; !ok {
+				return false
 			}
 			_, ok := p.filter.schema.TableByID(tableID)
 			if !ok {
@@ -133,10 +133,12 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 				return true
 			}
 
-			if p.filter.skipSchemaAndTable(schemaName, tableName) {
-				return true
+			if !p.filter.skipSchemaAndTable(schemaName, tableName) {
+				return false
 			}
 		}
+
+		return true
 	}
 
 	return false

@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"fmt"
-	//"regexp"
 	"sync"
 	"time"
 
@@ -27,7 +26,6 @@ var (
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
 type Syncer struct {
-	// schema *Schema
 	cp checkpoint.CheckPoint
 
 	cfg *SyncerConfig
@@ -45,13 +43,8 @@ type Syncer struct {
 	positions    map[string]pb.Pos
 	initCommitTS int64
 
-	// because TiDB is case-insensitive, only lower-case here.
-	// ignoreSchemaNames map[string]struct{}
-
 	ctx    context.Context
 	cancel context.CancelFunc
-
-	//reMap map[string]*regexp.Regexp
 
 	c      *causality
 	filter *filter
@@ -61,16 +54,13 @@ type Syncer struct {
 func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, filter *filter) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
-	//syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
-	//syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
-	//filter.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.filter = filter
 
 	return syncer, nil
@@ -168,7 +158,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		s.filter.schema.tables = schema.tables
 		s.filter.schema.schemaNameToID = schema.schemaNameToID
 		s.filter.prepared = true
-		log.Infof("s.filter.schema.ignoreSchema: %+v", s.filter.schema.ignoreSchema)
 
 		return b, nil
 	}
@@ -554,7 +543,6 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	var err error
 
-	//s.filter.genRegexMap()
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
