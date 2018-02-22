@@ -8,8 +8,6 @@ import (
 type filter struct {
 	schema *Schema
 
-	// cfg *SyncerConfig
-
 	// because TiDB is case-insensitive, only lower-case here.
 	ignoreSchemaNames map[string]struct{}
 
@@ -45,12 +43,10 @@ func (f *filter) addOneRegex(originStr string) {
 }
 
 func (f *filter) genRegexMap() {
-	//for _, db := range s.cfg.DoDBs {
 	for _, db := range f.doDBs {
 		f.addOneRegex(db)
 	}
 
-	//for _, tb := range s.cfg.DoTables {
 	for _, tb := range f.doTables {
 		f.addOneRegex(tb.Schema)
 		f.addOneRegex(tb.Table)
