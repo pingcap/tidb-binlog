@@ -424,6 +424,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case msg := <-stream.Messages():
 			pos.Offset = msg.Offset
 			payload = msg.Value
+			messageCounter.Add(1)
 		}
 
 		entity := pb.Entity{
