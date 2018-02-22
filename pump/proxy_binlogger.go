@@ -75,6 +75,7 @@ func (p *Proxy) Close() error {
 
 	for {
 		pos := p.cp.pos()
+
 		entities, err := p.master.ReadFrom(pos, 1)
 		if err == nil {
 			if len(entities) == 0 {
@@ -83,7 +84,12 @@ func (p *Proxy) Close() error {
 
 			// compute next binlog offset
 			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
-			if ComparePos(entities[0].Pos, latestFilePos) == 0 {
+			log.Infof("proxy closing read position %+v, last file position %+v", entities[0].Pos, latestFilePos)
+
+			if ComparePos(entities[0].Pos, latestFilePos) >= 0 {
+				if err1 := p.cp.save(entities[0].Pos, true); err1 != nil {
+					log.Errorf("save position %+v error %v", pos, err1)
+				}
 				log.Info("complete sync, read end of binlog file")
 				break
 			}
@@ -108,55 +114,52 @@ func (p *Proxy) Close() error {
 	return nil
 }
 
+// Walk reads binlog from the "from" position and sends binlogs in the streaming way
+func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+	return p.master.Walk(ctx, from, sendBinlog)
+}
+
 // GC recycles the old binlog file
 func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
 	p.master.GC(days, p.cp.pos())
 }
 
-func (p *Proxy) sync() error {
+func (p *Proxy) sync() {
 	p.wg.Add(1)
 	defer p.wg.Done()
 
+	var err error
 	pos := p.cp.pos()
+	syncBinlog := func(entity binlog.Entity) error {
+		err = p.replicate.WriteTail(entity.Payload)
+		if err != nil {
+			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
+			return errors.Trace(err)
+		}
+
+		if ComparePos(entity.Pos, pos) > 0 {
+			pos.Suffix = entity.Pos.Suffix
+			pos.Offset = entity.Pos.Offset
+			if err1 := p.cp.save(pos, false); err1 != nil {
+				log.Errorf("save position %+v error %v", pos, err1)
+				return errors.Trace(err)
+			}
+		}
+
+		return nil
+	}
+
 	for {
 		select {
 		case <-p.ctx.Done():
 			log.Info("context cancel - sycner exists")
-			return nil
+			return
 		default:
-		}
-
-		entities, err := p.master.ReadFrom(pos, 1000)
-		if err != nil {
-			log.Errorf("read binlogs from master error %v", err)
-		}
-
-		for _, ent := range entities {
-			err = p.replicate.WriteTail(ent.Payload)
+			_, err = p.master.Walk(p.ctx, pos, syncBinlog)
 			if err != nil {
-				log.Errorf("write binlog to replicate error %v", err)
-
-				select {
-				case <-p.ctx.Done():
-					log.Info("context cancel - sycner exists")
-					return nil
-				case <-time.After(10 * time.Second):
-				}
-				break
+				log.Errorf("master walk error %v", err)
+				time.Sleep(time.Second)
 			}
-
-			if ComparePos(ent.Pos, pos) > 0 {
-				pos.Suffix = ent.Pos.Suffix
-				pos.Offset = ent.Pos.Offset
-				if err1 := p.cp.save(pos); err1 != nil {
-					log.Errorf("save position %+v error %v", pos, err1)
-				}
-			}
-		}
-
-		if err != nil || len(entities) == 0 {
-			time.Sleep(100 * time.Millisecond)
-			continue
 		}
 	}
 }

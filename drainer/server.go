@@ -28,6 +28,7 @@ var heartbeatTTL int64 = 60
 var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
+var pdReconnTimes = 30
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -64,16 +65,12 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// lockResolver and tikvStore doesn't exposed a method to get clusterID
-	// so have to create a PD client temporarily.
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	// get pd client and cluster ID
+	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pdCli, err := pd.NewClient(urlv.StringSlice())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+
 	clusterID = pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
@@ -117,6 +114,31 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:    cancel,
 		syncer:    syncer,
 	}, nil
+}
+
+func getPdClient(cfg *Config) (pd.Client, error) {
+	// lockResolver and tikvStore doesn't exposed a method to get clusterID
+	// so have to create a PD client temporarily.
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var pdCli pd.Client
+	for i := 1; i < pdReconnTimes; i++ {
+		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+			CAPath:   cfg.Security.SSLCA,
+			CertPath: cfg.Security.SSLCert,
+			KeyPath:  cfg.Security.SSLKey,
+		})
+		if err != nil {
+			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	return pdCli, errors.Trace(err)
 }
 
 // DumpBinlog implements the gRPC interface of drainer server

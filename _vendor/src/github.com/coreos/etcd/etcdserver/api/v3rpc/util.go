@@ -21,8 +21,10 @@ import (
 	"github.com/coreos/etcd/etcdserver/membership"
 	"github.com/coreos/etcd/lease"
 	"github.com/coreos/etcd/mvcc"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func togRPCError(err error) error {
@@ -42,8 +44,6 @@ func togRPCError(err error) error {
 		return rpctypes.ErrGRPCCompacted
 	case mvcc.ErrFutureRev:
 		return rpctypes.ErrGRPCFutureRev
-	case lease.ErrLeaseNotFound:
-		return rpctypes.ErrGRPCLeaseNotFound
 	case etcdserver.ErrRequestTooLarge:
 		return rpctypes.ErrGRPCRequestTooLarge
 	case etcdserver.ErrNoSpace:
@@ -102,4 +102,17 @@ func togRPCError(err error) error {
 	default:
 		return grpc.Errorf(codes.Unknown, err.Error())
 	}
+}
+
+func isClientCtxErr(ctxErr error, err error) bool {
+	if ctxErr != nil {
+		return true
+	}
+
+	ev, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	code := ev.Code()
+	return code == codes.Canceled || code == codes.DeadlineExceeded
 }

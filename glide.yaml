@@ -9,7 +9,7 @@ import:
 - package: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - package: github.com/coreos/etcd
-  version: ea5f6dab6b1d07e22cf46bf5f5088d567548c124
+  version: fb5cd6f1c72c2b98e0c4453444cdfba306da867b
   subpackages:
   - alarm
   - auth
@@ -93,16 +93,16 @@ import:
   subpackages:
   - lru
 - package: github.com/golang/protobuf
-  version: 874264fbbb43f4d91e999fecb4b40143ed611400
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - jsonpb
   - proto
 - package: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - package: github.com/google/btree
-  version: 7d79101e329e5a3adf994758c578dab82b90c017
+  version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - package: github.com/grpc-ecosystem/grpc-gateway
-  version: c8ec92d0481dd77d9b8c1808eb6476d190aa039a
+  version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
   - runtime
   - runtime/internal
@@ -143,11 +143,11 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 3c5b40fb2000acb6b3441d5695cb470a23e8f1b5
+  version: 7b013aefd7210f4f4dbfca3330b462ddce5dd496
 - package: github.com/pingcap/pd
-  version: ce8db87a8c3f2560750232e85ad5152a0a1c69df
+  version: eed819b6999186a4bf2d25255f8d61b371a450d6
 - package: github.com/pingcap/tidb
-  version: 32d0fc9e762d906888a52a122c7bc0f85605ffcd
+  version: fc699c9b0d29f038e0a55702c9fd2e18e89373c4
   subpackages:
   - ast
   - context
@@ -201,7 +201,7 @@ import:
   - util/sqlexec
   - util/stringutil
 - package: github.com/pingcap/tipb
-  version: eccd39c3992538c382a6351430a77233f42b1344
+  version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
   subpackages:
   - go-binlog
   - go-tipb
@@ -274,7 +274,7 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
-  version: 3419b42955675df23457629c75f58eb8dcd56954
+  version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
   subpackages:
   - codes
   - credentials

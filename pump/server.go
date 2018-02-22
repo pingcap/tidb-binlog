@@ -21,6 +21,7 @@ import (
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var genBinlogInterval = 3 * time.Second
@@ -28,7 +29,11 @@ var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
 
-const slowDist = 30 * time.Millisecond
+const (
+	slowDist      = 30 * time.Millisecond
+	mib           = 1024 * 1024
+	pdReconnTimes = 30
+)
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
@@ -111,20 +116,19 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// use tiStore's currentVersion method to get the ts from tso
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// get cluster ID
-	pdCli, err := pd.NewClient(urlv.StringSlice())
+	// get pd client and cluster ID
+	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
+
+	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(maxMsgSize)}
+	if cfg.tls != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
+	}
 
 	return &Server{
 		dispatcher: make(map[string]Binlogger),
@@ -133,7 +137,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		node:       n,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpc.MaxMsgSize(maxMsgSize)),
+		gs:         grpc.NewServer(grpcOpts...),
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
@@ -141,6 +145,30 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 	}, nil
+}
+
+func getPdClient(cfg *Config) (pd.Client, error) {
+	// use tiStore's currentVersion method to get the ts from tso
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var pdCli pd.Client
+	for i := 1; i < pdReconnTimes; i++ {
+		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+			CAPath:   cfg.Security.SSLCA,
+			CertPath: cfg.Security.SSLCert,
+			KeyPath:  cfg.Security.SSLKey,
+		})
+		if err != nil {
+			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	return pdCli, errors.Trace(err)
 }
 
 // inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
@@ -272,22 +300,17 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	pos := in.StartFrom
+	sendBinlog := func(entity binlog.Entity) error {
+		resp := &binlog.PullBinlogResp{Entity: entity}
+		return errors.Trace(stream.Send(resp))
+	}
 
 	for {
-		binlogs, err := binlogger.ReadFrom(pos, 1000)
+		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
-		}
-
-		for _, bl := range binlogs {
-			pos = bl.Pos
-			pos.Offset += int64(len(bl.Payload) + 16)
-			resp := &binlog.PullBinlogResp{Entity: bl}
-			if err = stream.Send(resp); err != nil {
-				log.Errorf("gRPC: pullBinlogs send stream error, %s", errors.ErrorStack(err))
-				return errors.Trace(err)
-			}
 		}
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
