@@ -24,7 +24,7 @@ func parseDDL(sql string) (node ast.Node, table TableName, err error) {
 		}
 
 		node = n
-		//FIXME: doesn't it needed?
+		//FIXME: does it needed?
 		_, isDDL := n.(ast.DDLNode)
 		if !isDDL {
 			log.Warnf("node %+v is not ddl, unexpected!", n)

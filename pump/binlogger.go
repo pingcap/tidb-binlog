@@ -142,7 +142,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	var ent = &binlog.Entity{}
 	var ents = []binlog.Entity{}
 	var index int32
-	var decoder *decoder
+	var decoder Decoder
 	var first = true
 
 	dirpath := b.dir
@@ -182,10 +182,10 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			}
 		}
 
-		decoder = newDecoder(from, io.Reader(f))
+		decoder = NewDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			err = decoder.decode(ent, &binlogBuffer{})
+			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
 				break
 			}
@@ -211,7 +211,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
 func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
 	var ent = &binlog.Entity{}
-	var decoder *decoder
+	var decoder Decoder
 	var first = true
 
 	dirpath := b.dir
@@ -257,7 +257,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 		}
 
-		decoder = newDecoder(from, io.Reader(f))
+		decoder = NewDecoder(from, io.Reader(f))
 
 		for {
 			select {
@@ -268,7 +268,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 
 			buf := binlogBufferPool.Get().(*binlogBuffer)
-			err = decoder.decode(ent, buf)
+			err = decoder.Decode(ent, buf)
 			if err != nil {
 				break
 			}

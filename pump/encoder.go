@@ -18,7 +18,7 @@ var magic uint32 = 471532804
 //  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-// Encoder contains Encode method which encodes payload and write it, and returns offset.
+// Encoder is an interface wraps basic Encode method which encodes payload and write it, and returns offset.
 type Encoder interface {
 	Encode(payload []byte) (int64, error)
 }
