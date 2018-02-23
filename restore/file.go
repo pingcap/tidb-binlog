@@ -18,11 +18,10 @@ type binlogFile struct {
 // searchFiles return matched file and it's offset
 func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 	// read all file names
-	names, err := readBinlogNames(dir)
+	sortedNames, err := readBinlogNames(dir)
 	if err != nil {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
-	// names are sorted asc.
 
 	var firstFile string
 	var firstFileOffset int64
@@ -32,8 +31,10 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 		firstFileOffset = pos.Offset
 	}
 
-	binlogFiles := make([]binlogFile, 0, len(names))
-	for _, name := range names {
+	// TODO: search from index
+
+	binlogFiles := make([]binlogFile, 0, len(sortedNames))
+	for _, name := range sortedNames {
 		fullpath := path.Join(r.cfg.Dir, name)
 		cmp := strings.Compare(fullpath, firstFile)
 		if cmp < 0 {

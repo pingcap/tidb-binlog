@@ -33,7 +33,7 @@ type Config struct {
 	Dir         string `toml:"data-dir" json:"data-dir"`
 	Compression string `toml:"compression" json:"compression"`
 	StartTS     int64  `toml:"start-ts" json:"start-ts"`
-	EndTS       int64  `toml:"end-ts" json:"end-ts"`
+	StopTS      int64  `toml:"stop-ts" json:"stop-ts"`
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -62,7 +62,7 @@ func NewConfig() *Config {
 	}
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
 	fs.Int64Var(&c.StartTS, "start-ts", 0, "restore from start-ts")
-	fs.Int64Var(&c.EndTS, "end-ts", 0, "restore end in end-ts, 0 means never end.")
+	fs.Int64Var(&c.StopTS, "stop-ts", 0, "restore end in stop-ts, 0 means never end.")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
