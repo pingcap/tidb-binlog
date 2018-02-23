@@ -150,14 +150,8 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-
-		s.filter.schema.tableIDToName = schema.tableIDToName
-		s.filter.schema.ignoreSchema = schema.ignoreSchema
-		s.filter.schema.schemaMetaVersion = schema.schemaMetaVersion
-		s.filter.schema.schemas = schema.schemas
-		s.filter.schema.tables = schema.tables
-		s.filter.schema.schemaNameToID = schema.schemaNameToID
-		s.filter.prepared = true
+		s.filter.schema = schema
+		s.filter.SetPrepared(true)
 
 		return b, nil
 	}
@@ -584,7 +578,7 @@ func (s *Syncer) run(b *binlogItem) error {
 				return errors.Trace(err)
 			}
 
-			if s.filter.skipSchemaAndTable(schema, table) {
+			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema)
@@ -620,7 +614,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			continue
 		}
 
-		if s.filter.skipSchemaAndTable(schemaName, tableName) {
+		if s.filter.SkipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}

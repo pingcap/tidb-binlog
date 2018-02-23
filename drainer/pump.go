@@ -120,9 +120,6 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 		}
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
-			if _, ok := p.filter.schema.ignoreSchema[tableID]; !ok {
-				return false
-			}
 			_, ok := p.filter.schema.TableByID(tableID)
 			if !ok {
 				return true
@@ -133,7 +130,7 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 				return true
 			}
 
-			if !p.filter.skipSchemaAndTable(schemaName, tableName) {
+			if !p.filter.SkipSchemaAndTable(schemaName, tableName) {
 				return false
 			}
 		}
@@ -154,10 +151,8 @@ func (p *Pump) fiterAndMatch(ent pb.Entity) *pb.Binlog {
 		return nil
 	}
 
-	if p.filter.prepared {
-		if p.needFilter(b) {
-			return nil
-		}
+	if p.filter.prepared && p.needFilter(b) {
+		return nil
 	}
 
 	p.mu.Lock()

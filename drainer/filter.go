@@ -72,7 +72,8 @@ func (f *filter) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-func (f *filter) skipSchemaAndTable(schema string, table string) bool {
+// SkipSchemaAndTable return true if the schema and table should be skiped
+func (f *filter) SkipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = f.whiteFilter(tbs)
 	if len(tbs) == 0 {
@@ -107,4 +108,9 @@ func (f *filter) matchTable(patternTBS []TableName, tb TableName) bool {
 		}
 	}
 	return false
+}
+
+// SetPrepared set the filter.prepared
+func (f *filter) SetPrepared(prepare bool) {
+	f.prepared = prepare
 }
