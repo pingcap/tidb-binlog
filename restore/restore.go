@@ -54,8 +54,8 @@ func (r *Restore) prepare() error {
 	return errors.Trace(err)
 }
 
-// Start runs the main procedure.
-func (r *Restore) Start() error {
+// Process runs the main procedure.
+func (r *Restore) Process() error {
 	if err := r.prepare(); err != nil {
 		return errors.Trace(err)
 	}

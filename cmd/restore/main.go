@@ -47,8 +47,8 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if err := r.Start(); err != nil {
-		log.Errorf("restore start error, %v", errors.ErrorStack(err))
+	if err := r.Process(); err != nil {
+		log.Errorf("restore processing error, %v", errors.ErrorStack(err))
 		os.Exit(2)
 	}
 	if err := r.Close(); err != nil {
