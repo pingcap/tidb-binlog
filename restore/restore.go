@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/restore/translator"
 )
 
+// Restore is the main part of the restore tool.
 type Restore struct {
 	cfg        *Config
 	translator translator.Translator

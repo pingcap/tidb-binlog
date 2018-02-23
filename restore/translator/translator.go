@@ -23,6 +23,7 @@ type Translator interface {
 	TransDDL(binlog *pb.Binlog) (string, []interface{}, error)
 }
 
+// New creates a new Translator based on name.
 func New(name string, safeMode bool) Translator {
 	switch name {
 	case "print":

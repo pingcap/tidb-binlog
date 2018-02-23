@@ -9,10 +9,13 @@ import (
 	"github.com/ngaut/log"
 )
 
+// CompressionCodec defines type of compression.
 type CompressionCodec int8
 
 const (
+	// CompressionNone means no compression.
 	CompressionNone CompressionCodec = iota
+	// CompressionGZIP means using GZIP compression.
 	CompressionGZIP
 )
 

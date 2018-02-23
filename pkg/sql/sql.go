@@ -15,9 +15,12 @@ import (
 )
 
 var (
+	// MaxDMLRetryCount defines maximum number of times of DML retrying.
 	MaxDMLRetryCount = 100
+	// MaxDDLRetryCount defines maximum number of times of DDL retrying.
 	MaxDDLRetryCount = 5
-	RetryWaitTime    = 3 * time.Second
+	// RetryWaitTime defines wait time when retrying.
+	RetryWaitTime = 3 * time.Second
 )
 
 // ExecuteSQLs execute sqls in a transaction with retry.
@@ -88,7 +91,7 @@ func OpenDB(proto string, host string, port int, username string, password strin
 	return db, nil
 }
 
-// IngoreDDLError checks the error can be ignored or not.
+// IgnoreDDLError checks the error can be ignored or not.
 func IgnoreDDLError(err error) bool {
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 	if !ok {

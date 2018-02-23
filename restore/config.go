@@ -21,11 +21,13 @@ type TableName struct {
 	Name   string `toml:"tbl-name" json:"tbl-name"`
 }
 
+// Savepoint defines a toml config for savepoint.
 type Savepoint struct {
 	Type string `toml:"type" json:"type"`
 	Name string `toml:"name" json:"name"`
 }
 
+// Config is the main configuration for the retore tool.
 type Config struct {
 	*flag.FlagSet
 	Dir         string `toml:"data-dir" json:"data-dir"`
@@ -49,6 +51,7 @@ type Config struct {
 	printVersion bool
 }
 
+// NewConfig creates a Config object.
 func NewConfig() *Config {
 	c := &Config{}
 	c.FlagSet = flag.NewFlagSet("restore", flag.ContinueOnError)
@@ -69,6 +72,7 @@ func NewConfig() *Config {
 	return c
 }
 
+// Parse parses keys/values from command line flags and toml configuration file.
 func (c *Config) Parse(args []string) error {
 	// Parse first to get config file
 	perr := c.FlagSet.Parse(args)

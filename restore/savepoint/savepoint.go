@@ -27,11 +27,12 @@ type Savepoint interface {
 	Close() error
 }
 
+// Open opens a new Savepoint based on the type and path.
 func Open(tp string, path string) (Savepoint, error) {
 	switch tp {
 	case "file":
 		return newFileSavepoint(path)
 	default:
-		panic(fmt.Sprintf("savepoint %s not implemented yet"))
+		panic(fmt.Sprintf("savepoint %s not implemented yet", tp))
 	}
 }

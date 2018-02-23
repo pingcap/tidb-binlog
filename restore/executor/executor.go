@@ -6,6 +6,7 @@ import (
 
 // execute sql to target database.
 
+// Executor is the interface for executing binlog event to the target.
 type Executor interface {
 	// Execute executes sqls into target database.
 	Execute(sqls []string, args [][]interface{}, isDDL bool) error
@@ -13,6 +14,7 @@ type Executor interface {
 	Close() error
 }
 
+// New creates a new executor based on the name.
 func New(name string, cfg *DBConfig) (Executor, error) {
 	switch name {
 	case "mysql", "tidb":
