@@ -104,7 +104,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
 	var schemaVersion int64
 	var b *binlogItem
-	var err error
 
 	for {
 		select {
@@ -117,12 +116,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 		if jobID == 0 {
-			preWriteValue := binlog.GetPrewriteValue()
-			preWrite := &pb.PrewriteValue{}
-			err = preWrite.Unmarshal(preWriteValue)
-			if err != nil {
-				return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-			}
+			preWrite := binlog.GetPrewriteValue()
 			schemaVersion = preWrite.GetSchemaVersion()
 		} else {
 			schemaVersion = b.job.BinlogInfo.SchemaVersion
@@ -557,12 +551,7 @@ func (s *Syncer) run(b *binlogItem) error {
 		jobID := binlog.GetDdlJobId()
 
 		if jobID == 0 {
-			preWriteValue := binlog.GetPrewriteValue()
-			preWrite := &pb.PrewriteValue{}
-			err = preWrite.Unmarshal(preWriteValue)
-			if err != nil {
-				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-			}
+			preWrite := binlog.GetPrewriteValue()
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)

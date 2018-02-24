@@ -105,19 +105,12 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	go p.publish(t)
 }
 
-func (p *Pump) needFilter(binlog *pb.Binlog) bool {
+func (p *Pump) needFilter(binlog *binlogN) bool {
 	jobID := binlog.GetDdlJobId()
-	var err error
 
 	// only filter dml
 	if jobID == 0 {
-		preWriteValue := binlog.GetPrewriteValue()
-		preWrite := &pb.PrewriteValue{}
-		err = preWrite.Unmarshal(preWriteValue)
-		if err != nil {
-			log.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-			return false
-		}
+		preWrite := binlog.GetPrewriteValue()
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
 			_, ok := p.filter.schema.TableByID(tableID)
@@ -159,14 +152,14 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
-				co.binlog.CommitTs = b.CommitTs
-				co.binlog.Tp = b.Tp
-				p.mu.binlogs[co.binlog.CommitTs] = co
+				co.binlog.SetCommitTs(b.CommitTs)
+				co.binlog.SetTp(b.Tp)
+				p.mu.binlogs[co.binlog.GetCommitTs()] = co
 			}
 			delete(p.mu.prewriteItems, b.StartTs)
 		}
 	default:
-		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
+		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.GetTp(), p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
 
@@ -252,24 +245,24 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	binlog := b.binlog
 	latestTs := atomic.LoadInt64(&p.latestTS)
-	startTS := oracle.ExtractPhysical(uint64(binlog.StartTs)) / int64(time.Second/time.Millisecond)
+	startTS := oracle.ExtractPhysical(uint64(binlog.GetStartTs())) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
 	if (maxTS - startTS) > maxTxnTimeout {
 		if binlog.GetDdlJobId() == 0 {
 			//log.Infof("binlog (%d) need to query tikv", binlog.StartTs)
 			tikvQueryCount.Add(1)
 			primaryKey := binlog.GetPrewriteKey()
-			status, err := t.GetTxnStatus(uint64(binlog.StartTs), primaryKey)
+			status, err := t.GetTxnStatus(uint64(binlog.GetStartTs()), primaryKey)
 			if err != nil {
 				log.Errorf("get item's(%v) txn status error: %v", binlog, err)
 				return false
 			}
-			ts := binlog.StartTs
+			ts := binlog.GetStartTs()
 			p.mu.Lock()
 			if status.IsCommitted() {
-				binlog.CommitTs = int64(status.CommitTS())
-				binlog.Tp = pb.BinlogType_Commit
-				p.mu.binlogs[binlog.CommitTs] = b
+				binlog.SetCommitTs(int64(status.CommitTS()))
+				binlog.SetTp(pb.BinlogType_Commit)
+				p.mu.binlogs[binlog.GetCommitTs()] = b
 			}
 			delete(p.mu.prewriteItems, ts)
 			p.mu.Unlock()
@@ -348,8 +341,8 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	var count int
 	for ts, item := range items {
 		b := item.binlog
-		if b.DdlJobId > 0 {
-			job, err := p.getDDLJob(b.DdlJobId)
+		if b.GetDdlJobId() > 0 {
+			job, err := p.getDDLJob(b.GetDdlJobId())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -358,7 +351,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 				case <-p.ctx.Done():
 					return errors.Trace(p.ctx.Err())
 				case <-time.After(p.timeout):
-					job, err = p.getDDLJob(b.DdlJobId)
+					job, err = p.getDDLJob(b.GetDdlJobId())
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -396,9 +389,9 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
-	for item != nil && item.binlog.CommitTs <= windowUpper {
+	for item != nil && item.binlog.GetCommitTs() <= windowUpper {
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
-		if item.binlog.CommitTs > windowLower {
+		if item.binlog.GetCommitTs() > windowLower {
 			bs = append(bs, item)
 		}
 		// update pump's current position
@@ -457,8 +450,6 @@ func (p *Pump) pullBinlogs() {
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
 	defer stream.Close()
 
-	count := 0
-	var costCount time.Duration
 	for {
 		var payload []byte
 		select {
@@ -471,18 +462,12 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			payload = msg.Value
 			messageCounter.Add(1)
 		}
-		start := time.Now()
+		
 		entity := pb.Entity{
 			Pos:     pos,
 			Payload: payload,
 		}
 		b := p.match(entity)
-		count++
-		cost := time.Since(start)
-		costCount += cost
-		if count%10000 == 0 {
-			log.Infof("count: %d, cost: %s", count, costCount)
-		}
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
