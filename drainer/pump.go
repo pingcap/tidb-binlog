@@ -141,17 +141,13 @@ func (p *Pump) needFilter(binlog *pb.Binlog) bool {
 	return false
 }
 
-// fiterAndMatch is responsible for match p+c binlog, and will ignore schema
-func (p *Pump) fiterAndMatch(ent pb.Entity) *pb.Binlog {
+// match is responsible for match p+c binlog
+func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
 		// skip?
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
-		return nil
-	}
-
-	if p.filter.prepared && p.needFilter(b) {
 		return nil
 	}
 
@@ -173,6 +169,7 @@ func (p *Pump) fiterAndMatch(ent pb.Entity) *pb.Binlog {
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
+
 	return b
 }
 
@@ -333,6 +330,10 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	var errorBinlogs int
 
 	for commitTS, item := range items {
+		if p.filter.prepared && p.needFilter(item.binlog) {
+			continue
+		}
+
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
@@ -456,6 +457,8 @@ func (p *Pump) pullBinlogs() {
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
 	defer stream.Close()
 
+	count := 0
+	var costCount time.Duration
 	for {
 		var payload []byte
 		select {
@@ -468,12 +471,18 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			payload = msg.Value
 			messageCounter.Add(1)
 		}
-
+		start := time.Now()
 		entity := pb.Entity{
 			Pos:     pos,
 			Payload: payload,
 		}
-		b := p.fiterAndMatch(entity)
+		b := p.match(entity)
+		count++
+		cost := time.Since(start)
+		costCount += cost
+		if count%10000 == 0 {
+			log.Infof("count: %d, cost: %s", count, costCount)
+		}
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,

@@ -96,7 +96,7 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
-	
+
 	messageCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
