@@ -46,7 +46,6 @@ type SyncerConfig struct {
 	DoTables         []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType       string             `toml:"db-type" json:"db-type"`
-	Compression      string             `toml:"compression" json:"compression"`
 	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
 	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`

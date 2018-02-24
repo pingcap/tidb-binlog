@@ -37,8 +37,8 @@ type Binlogger interface {
 	// read nums binlog events from the "from" position
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
-	// batch write binlog event
-	WriteTail(payload []byte) error
+	// batch write binlog event, and returns current offset(if have).
+	WriteTail(payload []byte) (int64, error)
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
 	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error)
@@ -48,6 +48,9 @@ type Binlogger interface {
 
 	// GC recycles the old binlog file
 	GC(days time.Duration, pos binlog.Pos)
+
+	// Name tells the name of underlying file
+	Name() string
 }
 
 // binlogger is a logical representation of the log storage
@@ -76,6 +79,7 @@ func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger
 	}
 
 	p := path.Join(dirpath, fileName(0))
+	log.Infof("create and lock binlog file %s", p)
 	f, err := file.LockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -108,6 +112,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	}
 
 	p := path.Join(dirpath, lastFileName)
+	log.Infof("open and lock binlog file %s", p)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -339,26 +344,27 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(payload []byte) error {
+func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	if len(payload) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 
 	latestFilePos.Offset = curOffset
 
 	if curOffset < SegmentSizeBytes {
-		return nil
+		return curOffset, nil
 	}
 
-	return b.rotate()
+	err = b.rotate()
+	return curOffset, errors.Trace(err)
 }
 
 // Close closes the binlogger
@@ -373,6 +379,10 @@ func (b *binlogger) Close() error {
 	}
 
 	return nil
+}
+
+func (b *binlogger) Name() string {
+	return b.file.Name()
 }
 
 // rotate creates a new file for append binlog

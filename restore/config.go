@@ -32,6 +32,7 @@ type Config struct {
 	*flag.FlagSet
 	Dir         string `toml:"data-dir" json:"data-dir"`
 	Compression string `toml:"compression" json:"compression"`
+	IndexName   string `toml:"index-name" json:"index-name"`
 	StartTS     int64  `toml:"start-ts" json:"start-ts"`
 	StopTS      int64  `toml:"stop-ts" json:"stop-ts"`
 

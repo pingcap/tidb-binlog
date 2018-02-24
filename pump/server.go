@@ -285,7 +285,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
@@ -428,7 +428,7 @@ func (s *Server) writeFakeBinlog() {
 				return
 			}
 
-			err = binlogger.WriteTail(payload)
+			_, err = binlogger.WriteTail(payload)
 			if err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return

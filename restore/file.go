@@ -8,6 +8,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/index"
 )
 
 type binlogFile struct {
@@ -23,15 +24,28 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
 
-	var firstFile string
-	var firstFileOffset int64
+	var (
+		firstFile       string
+		firstFileOffset int64
+	)
 	pos := r.savepoint.Pos()
 	if pos.Filename != "" {
 		firstFile = pos.Filename
 		firstFileOffset = pos.Offset
 	}
 
-	// TODO: search from index
+	// try to find matched beginning file.
+	if r.cfg.StartTS != 0 {
+		idx, err := index.NewPbIndex(r.cfg.Dir, r.cfg.IndexName)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		firstFile, firstFileOffset, err = idx.Search(r.cfg.StartTS)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 
 	binlogFiles := make([]binlogFile, 0, len(sortedNames))
 	for _, name := range sortedNames {

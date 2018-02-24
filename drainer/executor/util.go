@@ -11,6 +11,8 @@ type DBConfig struct {
 	User          string `toml:"user" json:"user"`
 	Password      string `toml:"password" json:"password"`
 	Port          int    `toml:"port" json:"port"`
-	BinlogFileDir string `toml:"dir" json:"dir"` // TODO: rename it to a better name
+	BinlogFileDir string `toml:"dir" json:"dir"`
 	Compression   string `toml:"compression" json:"compression"`
+	IndexName     string `toml:"index-name" json:"index-name"`
+	IndexInterval int64  `toml:"index-interval" json:"index-interval"`
 }
