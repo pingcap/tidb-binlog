@@ -96,6 +96,14 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
+	
+	messageCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "message",
+			Help:      "the count of message read from kafka.",
+		})
 )
 
 func init() {
@@ -110,6 +118,7 @@ func init() {
 	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
+	prometheus.MustRegister(messageCounter)
 }
 
 type metricClient struct {
