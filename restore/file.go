@@ -90,6 +90,9 @@ func checkBinlogNames(names []string) []string {
 		if strings.HasSuffix(name, "savepoint") {
 			continue
 		}
+		if !strings.HasPrefix(name, "binlog-") {
+			continue
+		}
 		if _, err := parseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
 				log.Warningf("ignored file %v", name)
