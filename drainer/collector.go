@@ -26,6 +26,8 @@ import (
 	"golang.org/x/net/context"
 )
 
+const publishToSyncerWaitTime = time.Second
+
 type notifyResult struct {
 	err error
 	wg  sync.WaitGroup
@@ -123,6 +125,8 @@ func (c *Collector) Start(ctx context.Context) {
 		}
 	}()
 
+	go c.publishToSyncer(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -132,6 +136,30 @@ func (c *Collector) Start(ctx context.Context) {
 			nr.wg.Done()
 		case <-time.After(c.interval):
 			c.updateStatus(ctx)
+		}
+	}
+}
+
+func (c *Collector) publishToSyncer(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			item := c.bh.pop()
+			for item != nil {
+				c.syncer.Add(item)
+				// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
+				if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
+					delete(bss, item.nodeID)
+				} else {
+					// push next item into heap and increase the offset
+					c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
+					binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
+				}
+				item = c.bh.pop()
+			}
+			time.Sleep(publishToSyncerWaitTime)
 		}
 	}
 }
