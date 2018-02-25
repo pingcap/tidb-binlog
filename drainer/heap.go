@@ -92,7 +92,7 @@ func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
 		prewriteKey:   b.GetPrewriteKey(),
 		prewriteValue: preWrite,
 		ddlQuery:      b.GetDdlQuery(),
-		ddlJobId:      b.GetDdlJobID(),
+		ddlJobID:      b.GetDdlJobId(),
 	}
 
 	return &binlogItem{
