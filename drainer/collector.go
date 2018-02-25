@@ -54,6 +54,7 @@ type Collector struct {
 	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
+
 	// expose savepoints to HTTP.
 	mu struct {
 		sync.Mutex
@@ -125,8 +126,6 @@ func (c *Collector) Start(ctx context.Context) {
 		}
 	}()
 
-	go c.publishToSyncer(ctx)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,30 +135,6 @@ func (c *Collector) Start(ctx context.Context) {
 			nr.wg.Done()
 		case <-time.After(c.interval):
 			c.updateStatus(ctx)
-		}
-	}
-}
-
-func (c *Collector) publishToSyncer(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			item := c.bh.pop()
-			for item != nil {
-				c.syncer.Add(item)
-				// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
-				if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
-					delete(bss, item.nodeID)
-				} else {
-					// push next item into heap and increase the offset
-					c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
-					binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
-				}
-				item = c.bh.pop()
-			}
-			time.Sleep(publishToSyncerWaitTime)
 		}
 	}
 }
@@ -324,18 +299,26 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
-	// todo: use multiple goroutines to collect sorted binlogs
 	bss := make(map[string]binlogItems)
 	binlogOffsets := make(map[string]int)
+	var muTmp sync.Mutex
+	var wgTmp sync.WaitGroup
+	wgTmp.Add(len(c.pumps))
 	for id, p := range c.pumps {
-		bs := p.collectBinlogs(minTS, maxTS)
-		if bs.Len() > 0 {
-			bss[id] = bs
-			binlogOffsets[id] = 1
-			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0])
-		}
+		go func() {
+			bs := p.collectBinlogs(minTS, maxTS)
+			if bs.Len() > 0 {
+				muTmp.Lock()
+				bss[id] = bs
+				binlogOffsets[id] = 1
+				// first push the first item into heap every pump
+				c.bh.push(ctx, bs[0])
+				muTmp.Unlock()
+			}
+			wgTmp.Done()
+		}()
 	}
+	wgTmp.Wait()
 
 	item := c.bh.pop()
 	for item != nil {
