@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -22,43 +22,52 @@ type binlogN struct {
 	prewriteKey   []byte
 	prewriteValue *pb.PrewriteValue
 	ddlQuery      []byte
-	ddlJobId      int64
+	ddlJobID      int64
 }
 
+// GetTp returns tp
 func (b *binlogN) GetTp() pb.BinlogType {
 	return b.tp
 }
 
+// SetTp sets tp
 func (b *binlogN) SetTp(tp pb.BinlogType) {
 	b.tp = tp
 }
 
+// GetStartTs return startTs
 func (b *binlogN) GetStartTs() int64 {
 	return b.startTs
 }
 
+// GetCommitTs returns commitTs
 func (b *binlogN) GetCommitTs() int64 {
 	return b.commitTs
 }
 
+// SetCommitTs sets ts
 func (b *binlogN) SetCommitTs(ts int64) {
 	b.commitTs = ts
 }
 
+// GetPrewriteKey returns prewriteKey
 func (b *binlogN) GetPrewriteKey() []byte {
 	return b.prewriteKey
 }
 
+// GetPrewriteValue returns prewriteValue
 func (b *binlogN) GetPrewriteValue() *pb.PrewriteValue {
 	return b.prewriteValue
 }
 
+// GetDdlQuery returns ddlQuery
 func (b *binlogN) GetDdlQuery() []byte {
 	return b.ddlQuery
 }
 
-func (b *binlogN) GetDdlJobId() int64 {
-	return b.ddlJobId
+// GetDdlJobID returns ddlJobID
+func (b *binlogN) GetDdlJobID() int64 {
+	return b.ddlJobID
 }
 
 type binlogItem struct {
@@ -83,9 +92,9 @@ func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
 		prewriteKey:   b.GetPrewriteKey(),
 		prewriteValue: preWrite,
 		ddlQuery:      b.GetDdlQuery(),
-		ddlJobId:      b.GetDdlJobId(),
+		ddlJobId:      b.GetDdlJobID(),
 	}
-	
+
 	return &binlogItem{
 		binlog: newBinlog,
 		pos:    p,

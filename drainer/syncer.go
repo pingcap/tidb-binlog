@@ -114,7 +114,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
-		jobID := binlog.GetDdlJobId()
+		jobID := binlog.GetDdlJobID()
 		if jobID == 0 {
 			preWrite := binlog.GetPrewriteValue()
 			schemaVersion = preWrite.GetSchemaVersion()
@@ -548,7 +548,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	for {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
-		jobID := binlog.GetDdlJobId()
+		jobID := binlog.GetDdlJobID()
 
 		if jobID == 0 {
 			preWrite := binlog.GetPrewriteValue()

@@ -89,9 +89,9 @@ func (f *filter) matchString(pattern string, t string) bool {
 	return pattern == t
 }
 
-func (f *filter) matchDB(patternDBS []string, a string) bool {
-	for _, b := range patternDBS {
-		if f.matchString(b, a) {
+func (f *filter) matchDB(patternDBS []string, schema string) bool {
+	for _, patternDB := range patternDBS {
+		if f.matchString(patternDB, schema) {
 			return true
 		}
 	}

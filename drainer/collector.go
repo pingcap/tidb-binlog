@@ -311,7 +311,6 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 		}
 	}
 
-	// TODO: use a goroutine
 	item := c.bh.pop()
 	for item != nil {
 		c.syncer.Add(item)

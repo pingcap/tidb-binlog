@@ -106,7 +106,7 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 }
 
 func (p *Pump) needFilter(binlog *binlogN) bool {
-	jobID := binlog.GetDdlJobId()
+	jobID := binlog.GetDdlJobID()
 
 	// only filter dml
 	if jobID == 0 {
@@ -248,8 +248,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	startTS := oracle.ExtractPhysical(uint64(binlog.GetStartTs())) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
 	if (maxTS - startTS) > maxTxnTimeout {
-		if binlog.GetDdlJobId() == 0 {
-			//log.Infof("binlog (%d) need to query tikv", binlog.StartTs)
+		if binlog.GetDdlJobID() == 0 {
 			tikvQueryCount.Add(1)
 			primaryKey := binlog.GetPrewriteKey()
 			status, err := t.GetTxnStatus(uint64(binlog.GetStartTs()), primaryKey)
@@ -341,8 +340,8 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	var count int
 	for ts, item := range items {
 		b := item.binlog
-		if b.GetDdlJobId() > 0 {
-			job, err := p.getDDLJob(b.GetDdlJobId())
+		if b.GetDdlJobID() > 0 {
+			job, err := p.getDDLJob(b.GetDdlJobID())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -351,7 +350,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 				case <-p.ctx.Done():
 					return errors.Trace(p.ctx.Err())
 				case <-time.After(p.timeout):
-					job, err = p.getDDLJob(b.GetDdlJobId())
+					job, err = p.getDDLJob(b.GetDdlJobID())
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -462,7 +461,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			payload = msg.Value
 			messageCounter.Add(1)
 		}
-		
+
 		entity := pb.Entity{
 			Pos:     pos,
 			Payload: payload,
