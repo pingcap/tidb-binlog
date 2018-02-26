@@ -144,9 +144,12 @@ func (r *Restore) Process() error {
 
 // Close closes the Restore object.
 func (r *Restore) Close() error {
-	if err := r.savepoint.Flush(); err != nil {
-		return errors.Trace(err)
+	if r.cfg.DestType != "print" {
+		if err := r.savepoint.Flush(); err != nil {
+			return errors.Trace(err)
+		}
 	}
+
 	if err := r.executor.Close(); err != nil {
 		log.Errorf("close executor err %v", err)
 	}

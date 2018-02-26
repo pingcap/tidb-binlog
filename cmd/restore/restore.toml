@@ -17,7 +17,7 @@ log-level = "info"
 
 # dest-type choose a destination, which value can be "mysql","tidb", "print". 
 # for print, it just prints decoded value.
-dest-type = "tidb"
+dest-type = "mysql"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regular expression , start with '~' declare use regular expression.
@@ -38,6 +38,6 @@ name = "restore.savepoint"
 
 [dest-db]
 host = "127.0.0.1"
-port = 4000
+port = 3309
 user = "root"
 password = ""
