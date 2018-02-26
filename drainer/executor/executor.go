@@ -19,8 +19,6 @@ func New(name string, cfg *DBConfig) (Executor, error) {
 		return newMysql(cfg)
 	case "pb":
 		return newPB(cfg)
-	case "sql":
-		return newSQL(cfg)
 	default:
 		return nil, errors.Errorf("unsupport executor type %s", name)
 	}
