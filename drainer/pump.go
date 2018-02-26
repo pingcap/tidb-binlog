@@ -45,6 +45,8 @@ type Pump struct {
 
 	// pullBinlogs sends the binlogs to publish function by this channel
 	binlogChan chan *binlogEntity
+
+	entityChan chan pb.Entity
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -81,6 +83,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		entityChan: make(chan pb.Entity, maxBinlogItemCount),
 	}, nil
 }
 
@@ -430,19 +433,26 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Pos:     pos,
 			Payload: payload,
 		}
-		b := p.match(entity)
-		if b != nil {
-			binlogEnt := &binlogEntity{
-				tp:       b.Tp,
-				startTS:  b.StartTs,
-				commitTS: b.CommitTs,
-				pos:      pos,
-			}
-			// send to publish goroutinue
-			select {
-			case <-p.ctx.Done():
-				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- binlogEnt:
+		p.entityChan <- entity
+	}
+}
+
+func (p *Pump) pushBinlogChan() {
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case entity := <-p.entityChan:
+			b := p.match(entity)
+			if b != nil {
+				binlogEnt := &binlogEntity{
+					tp:       b.Tp,
+					startTS:  b.StartTs,
+					commitTS: b.CommitTs,
+					pos:      entity.Pos,
+				}
+				// send to publish goroutinue
+				p.binlogChan <- binlogEnt
 			}
 		}
 	}
