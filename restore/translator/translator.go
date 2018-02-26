@@ -1,7 +1,7 @@
 package translator
 
 import (
-	"github.com/lunny/log"
+	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 

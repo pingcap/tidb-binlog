@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/juju/errors"
-	"github.com/lunny/log"
+	"github.com/ngaut/log"
 	"github.com/siddontang/go/sync2"
 )
 
