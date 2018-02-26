@@ -14,6 +14,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
@@ -228,9 +229,9 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		binlogDir = path.Join(clusterDir, cid)
 	)
 	if find {
-		fb, err = OpenBinlogger(binlogDir)
+		fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 	} else {
-		fb, err = CreateBinlogger(binlogDir)
+		fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -284,7 +285,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
@@ -427,7 +428,7 @@ func (s *Server) writeFakeBinlog() {
 				return
 			}
 
-			err = binlogger.WriteTail(payload)
+			_, err = binlogger.WriteTail(payload)
 			if err != nil {
 				log.Errorf("generate forward binlog, write binlog err %v", err)
 				return

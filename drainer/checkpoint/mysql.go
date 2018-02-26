@@ -11,6 +11,7 @@ import (
 	"github.com/ngaut/log"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -35,7 +36,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		return &MysqlCheckPoint{}, errors.Trace(res)
 	}
 
-	db, err := openDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
+	db, err := pkgsql.OpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
 		log.Errorf("open database error %v", err)
 		return &MysqlCheckPoint{}, errors.Trace(err)

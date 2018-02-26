@@ -2,7 +2,9 @@ package executor
 
 import (
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/index"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
 )
@@ -10,6 +12,7 @@ import (
 type pbExecutor struct {
 	dir       string
 	binlogger pump.Binlogger
+	idx       *index.PbIndex
 }
 
 func newPB(cfg *DBConfig) (Executor, error) {
@@ -23,18 +26,28 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
+	codec := compress.ToCompressionCodec(cfg.Compression)
 	if len(names) > 0 {
-		binlogger, err = pump.OpenBinlogger(dirPath)
+		binlogger, err = pump.OpenBinlogger(dirPath, codec)
 	} else {
-		binlogger, err = pump.CreateBinlogger(dirPath)
+		binlogger, err = pump.CreateBinlogger(dirPath, codec)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	idx, err := index.NewPbIndex(cfg.BinlogFileDir, cfg.IndexName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	idx.SetInterval(cfg.IndexInterval)
+
+	go idx.Run()
+
 	return &pbExecutor{
 		dir:       cfg.BinlogFileDir,
 		binlogger: binlogger,
+		idx:       idx,
 	}, nil
 }
 
@@ -56,10 +69,12 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 		event := args[i][0].(*pb.Event)
 		binlog.DmlData.Events = append(binlog.DmlData.Events, *event)
 	}
-	return p.saveBinlog(binlog)
+
+	return errors.Trace(p.saveBinlog(binlog))
 }
 
 func (p *pbExecutor) Close() error {
+	p.idx.Close()
 	return p.binlogger.Close()
 }
 
@@ -69,5 +84,11 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
-	return p.binlogger.WriteTail(data)
+	offset, err := p.binlogger.WriteTail(data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	pos := index.Position{Ts: binlog.CommitTs, File: p.binlogger.Name(), Offset: offset}
+	p.idx.MarkOffset(pos)
+	return nil
 }

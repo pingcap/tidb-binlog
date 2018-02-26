@@ -66,6 +66,13 @@ user = "root"
 password = ""
 port = 3306
 
-# uncomment this if you want to use pb as db-type
-# [syncer.to]
-# dir = "data.drainer"
+# Uncomment this if you want to use pb or sql as db-type.
+# Compress compresses output file, like pb and sql file. Now it supports "gzip" algorithm only. 
+# Values can be "gzip". Leave it empty to disable compression. 
+#[syncer.to]
+#dir = "data.drainer"
+#compression = "gzip"
+## for pb output, you can set a index which helps finding restore pb files.
+#index-name = "binlog.index"
+#index-interval = 10
+

@@ -50,20 +50,20 @@ func (p *Proxy) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 }
 
 // WriteTail implements Binlogger WriteTail interface
-func (p *Proxy) WriteTail(payload []byte) error {
+func (p *Proxy) WriteTail(payload []byte) (int64, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	err := p.master.WriteTail(payload)
+	n, err := p.master.WriteTail(payload)
 	if err != nil {
 		log.Errorf("write binlog error %v", err)
 	}
 
 	if p.enableSwitch {
-		return nil
+		return n, nil
 	}
 
-	return errors.Trace(err)
+	return n, errors.Trace(err)
 }
 
 // Close closes the binlogger
@@ -124,6 +124,11 @@ func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
 	p.master.GC(days, p.cp.pos())
 }
 
+// Name implements the Binlogger interface.
+func (p *Proxy) Name() string {
+	return "proxy"
+}
+
 func (p *Proxy) sync() {
 	p.wg.Add(1)
 	defer p.wg.Done()
@@ -131,7 +136,7 @@ func (p *Proxy) sync() {
 	var err error
 	pos := p.cp.pos()
 	syncBinlog := func(entity binlog.Entity) error {
-		err = p.replicate.WriteTail(entity.Payload)
+		_, err = p.replicate.WriteTail(entity.Payload)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
 			return errors.Trace(err)
