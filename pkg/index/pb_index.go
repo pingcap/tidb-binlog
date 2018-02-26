@@ -8,10 +8,10 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/siddontang/go/sync2"
 )
 
 // index file format:  ts:file:offset
@@ -43,7 +43,7 @@ type PbIndex struct {
 	br       *bufio.Reader
 	posCh    chan Position
 	interval int64
-	curpos   sync2.AtomicInt64
+	curpos   atomicInt64
 }
 
 // NewPbIndex creates a new PbIndex object. filepath should fullpath of index file.
@@ -173,4 +173,22 @@ func (pi *PbIndex) Search(ts int64) (file string, offset int64, err error) {
 	file = contents[1]
 	offset, err = strconv.ParseInt(contents[2], 10, 64)
 	return file, offset, errors.Trace(err)
+}
+
+type atomicInt64 int64
+
+func (i *atomicInt64) Add(n int64) int64 {
+	return atomic.AddInt64((*int64)(i), n)
+}
+
+func (i *atomicInt64) Set(n int64) {
+	atomic.StoreInt64((*int64)(i), n)
+}
+
+func (i *atomicInt64) Get() int64 {
+	return atomic.LoadInt64((*int64)(i))
+}
+
+func (i *atomicInt64) CompareAndSwap(oldval, newval int64) (swapped bool) {
+	return atomic.CompareAndSwapInt64((*int64)(i), oldval, newval)
 }
