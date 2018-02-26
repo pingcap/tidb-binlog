@@ -10,7 +10,6 @@ import (
 )
 
 // DBConfig is the DB configuration.
-// TODO: should we merge this struct with others?
 type DBConfig struct {
 	Host     string `toml:"host" json:"host"`
 	User     string `toml:"user" json:"user"`

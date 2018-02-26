@@ -63,12 +63,6 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 	return binlogFiles, nil
 }
 
-func searchFileIndex(names []string, name string) int {
-
-	// TODO
-	return 0
-}
-
 // readBinlogNames returns sorted filenames in the dirpath
 func readBinlogNames(dirpath string) ([]string, error) {
 	names, err := file.ReadDir(dirpath)
