@@ -1,0 +1,43 @@
+# data-dir contains protobuf files. It's suggested to use fullpath.
+data-dir = "./data.drainer"
+# If the protobuf files are compressed, specify compression method here.
+# Values can be "gzip", or leave it empty if no compression.
+compression = "gzip"
+# Use index file to search target ts. Set this when `start-ts` is set.
+# The file path would be {data-dir}/{index-name}
+# index-name = "binlog.index"
+
+# log-file = ""
+# log-rotate = "hour"
+log-level = "info"
+
+# The timestmap is in nanosecond.
+# start-ts = 
+# stop-ts = 
+
+# dest-type choose a destination, which value can be "mysql","tidb", "print". 
+# for print, it just prints decoded value.
+dest-type = "mysql"
+
+##replicate-do-db priority over replicate-do-table if have same db name
+##and we support regular expression , start with '~' declare use regular expression.
+#
+#replicate-do-db = ["~^b.*","s1"]
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "log"
+
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
+
+[savepoint]
+type = "file"
+# which would be {data-dir}/{name}
+name = "restore.savepoint"
+
+[dest-db]
+host = "127.0.0.1"
+port = 3309
+user = "root"
+password = ""
