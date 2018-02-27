@@ -132,7 +132,7 @@ func (pi *PbIndex) Search(ts int64) (file string, offset int64, err error) {
 	tsStr := strconv.FormatInt(ts, 10)
 
 	var targetLine string
-	var lastLine string
+	// var lastLine string
 
 	for {
 		line, err := pi.br.ReadString('\n')
@@ -159,14 +159,15 @@ func (pi *PbIndex) Search(ts int64) (file string, offset int64, err error) {
 		} else if cmp == -1 {
 			continue
 		} else if cmp == 1 {
-			if lastLine != "" {
-				targetLine = lastLine
-			} else {
-				targetLine = realLine
-			}
+			targetLine = realLine
 			log.Infof("found target ts line %s", targetLine)
 			break
 		}
+	}
+
+	// happens when ts > larget ts recorded in index file
+	if targetLine == "" {
+		return
 	}
 
 	contents := strings.Split(targetLine, ":")

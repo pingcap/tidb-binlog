@@ -74,5 +74,5 @@ port = 3306
 #compression = "gzip"
 ## for pb output, you can set a index which helps finding restore pb files.
 #index-name = "binlog.index"
-#index-interval = 10
+#index-interval = 1000
 
