@@ -11,9 +11,9 @@ compression = "gzip"
 # log-rotate = "hour"
 log-level = "info"
 
-# The timestmap is in nanosecond.
-# start-ts = 
-# stop-ts = 
+# The datetime format is like '2018-02-28 12:12:12'.
+# start-datetime = ""
+# stop-datetime = ""
 
 # dest-type choose a destination, which value can be "mysql","tidb", "print". 
 # for print, it just prints decoded value.

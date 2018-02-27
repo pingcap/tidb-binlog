@@ -7,7 +7,7 @@ import (
 
 // Translate translates payload to SQL.
 func (r *Restore) Translate(binlog *pb.Binlog) (sqls []string, args [][]interface{}, isDDL bool, err error) {
-	if !isAcceptableBinlog(binlog, r.cfg.StartTS, r.cfg.StopTS) {
+	if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
 		return
 	}
 

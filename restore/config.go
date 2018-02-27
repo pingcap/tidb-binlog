@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
@@ -13,6 +14,11 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/restore/executor"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+)
+
+const (
+	timeFormat = "2006-01-02 15:04:05"
 )
 
 // TableName stores the table and schema name
@@ -30,11 +36,13 @@ type Savepoint struct {
 // Config is the main configuration for the retore tool.
 type Config struct {
 	*flag.FlagSet
-	Dir         string `toml:"data-dir" json:"data-dir"`
-	Compression string `toml:"compression" json:"compression"`
-	IndexName   string `toml:"index-name" json:"index-name"`
-	StartTS     int64  `toml:"start-ts" json:"start-ts"`
-	StopTS      int64  `toml:"stop-ts" json:"stop-ts"`
+	Dir           string `toml:"data-dir" json:"data-dir"`
+	Compression   string `toml:"compression" json:"compression"`
+	IndexName     string `toml:"index-name" json:"index-name"`
+	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
+	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
+	StartTSO      int64
+	StopTSO       int64
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -62,8 +70,8 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
-	fs.Int64Var(&c.StartTS, "start-ts", 0, "restore from start-ts")
-	fs.Int64Var(&c.StopTS, "stop-ts", 0, "restore end in stop-ts, 0 means never end.")
+	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-ts")
+	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-ts, empty string means never end.")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
@@ -113,6 +121,24 @@ func (c *Config) Parse(args []string) error {
 	}
 
 	//TODO more
+
+	if c.StartDatetime != "" {
+		startTime, err := time.ParseInLocation(timeFormat, c.StartDatetime, time.Local)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		c.StartTSO = int64(oracle.ComposeTS(startTime.Unix()*1000, 0))
+		log.Infof("start tso %d", c.StartTSO)
+	}
+	if c.StopDatetime != "" {
+		stopTime, err := time.ParseInLocation(timeFormat, c.StopDatetime, time.Local)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.StopTSO = int64(oracle.ComposeTS(stopTime.Unix()*1000, 0))
+		log.Infof("stop tso %d", c.StopTSO)
+	}
 
 	return errors.Trace(c.validate())
 }

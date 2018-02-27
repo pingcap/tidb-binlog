@@ -35,13 +35,13 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 	}
 
 	// try to find matched beginning file.
-	if r.cfg.StartTS != 0 {
+	if r.cfg.StartTSO != 0 {
 		idx, err := index.NewPbIndex(r.cfg.Dir, r.cfg.IndexName)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
-		firstFile, firstFileOffset, err = idx.Search(r.cfg.StartTS)
+		firstFile, firstFileOffset, err = idx.Search(r.cfg.StartTSO)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
