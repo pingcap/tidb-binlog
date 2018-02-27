@@ -31,7 +31,7 @@ func newFileSavepoint(filename string) (Savepoint, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &fileSavepoint{fd: fd, lastSaveTime: time.Now()}, nil
+	return &fileSavepoint{fd: fd, lastSaveTime: time.Now(), pos: &Position{}}, nil
 }
 
 func (f *fileSavepoint) Load() (pos *Position, err error) {
