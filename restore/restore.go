@@ -45,6 +45,7 @@ func New(cfg *Config) (*Restore, error) {
 		translator: translator.New(cfg.DestType, false),
 		executor:   executor,
 		savepoint:  savepoint,
+		reMap:      make(map[string]*regexp.Regexp),
 	}, nil
 }
 
