@@ -15,6 +15,7 @@ import (
 	"github.com/pingcap/tidb-binlog/restore/executor"
 	"github.com/pingcap/tidb-binlog/restore/savepoint"
 	"github.com/pingcap/tidb-binlog/restore/translator"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 // Restore is the main part of the restore tool.
@@ -45,6 +46,7 @@ func New(cfg *Config) (*Restore, error) {
 		translator: translator.New(cfg.DestType, false),
 		executor:   executor,
 		savepoint:  savepoint,
+		reMap:      make(map[string]*regexp.Regexp),
 	}, nil
 }
 
@@ -132,6 +134,8 @@ func (r *Restore) Process() error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
+			log.Infof("offset %d, ts %d, datetime %s", ret, binlog.CommitTs, dt.String())
 			err = r.savepoint.Save(&savepoint.Position{Filename: file.fullpath, Offset: ret, Ts: binlog.CommitTs})
 			if err != nil {
 				return errors.Trace(err)
@@ -144,10 +148,8 @@ func (r *Restore) Process() error {
 
 // Close closes the Restore object.
 func (r *Restore) Close() error {
-	if r.cfg.DestType != "print" {
-		if err := r.savepoint.Flush(); err != nil {
-			return errors.Trace(err)
-		}
+	if err := r.savepoint.Flush(); err != nil {
+		return errors.Trace(err)
 	}
 
 	if err := r.executor.Close(); err != nil {

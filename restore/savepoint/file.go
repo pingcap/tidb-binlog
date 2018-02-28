@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	maxSaveTime = 30 * time.Second
+	flushInterval = 30 * time.Second
 )
 
 // implements a file savepoint.
@@ -31,7 +31,7 @@ func newFileSavepoint(filename string) (Savepoint, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &fileSavepoint{fd: fd, lastSaveTime: time.Now()}, nil
+	return &fileSavepoint{fd: fd, lastSaveTime: time.Now(), pos: &Position{}}, nil
 }
 
 func (f *fileSavepoint) Load() (pos *Position, err error) {
@@ -52,24 +52,20 @@ func (f *fileSavepoint) Load() (pos *Position, err error) {
 func (f *fileSavepoint) Save(pos *Position) (err error) {
 	f.mu.Lock()
 	f.pos = pos
-	f.mu.Unlock()
-
-	if f.Check() {
-		err = f.Flush()
+	if time.Since(f.lastSaveTime) >= flushInterval {
+		err = f.flush()
 	}
+	f.mu.Unlock()
 	return errors.Trace(err)
-}
-
-func (f *fileSavepoint) Check() bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return time.Since(f.lastSaveTime) >= maxSaveTime
 }
 
 func (f *fileSavepoint) Flush() error {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	return f.flush()
+}
 
+func (f *fileSavepoint) flush() error {
 	_, err := f.fd.Seek(0, io.SeekStart)
 	if err != nil {
 		return errors.Trace(err)

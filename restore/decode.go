@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
@@ -27,7 +26,6 @@ func Decode(r io.Reader) (*pb.Binlog, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debugf("binlog type: %s; commit ts: %d", binlog.Tp, binlog.CommitTs)
 	return binlog, nil
 }
 

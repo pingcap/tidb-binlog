@@ -17,8 +17,6 @@ type Savepoint interface {
 	Load() (*Position, error)
 	// Save
 	Save(pos *Position) error
-	// Check checks whether the position needed to be flushed.
-	Check() bool
 	// Flush flushes the position to persistent storage.
 	Flush() error
 	// Pos tells current position
