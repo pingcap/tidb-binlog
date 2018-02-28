@@ -70,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
-	syncer.c = NewCausality()
+	syncer.c = causality.NewCausality()
 
 	return syncer, nil
 }
