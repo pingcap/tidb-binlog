@@ -11,13 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package drainer
+package causality
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 )
 
-func (s *testDrainerSuite) TestCausality(c *C) {
+func TestClient(t *testing.T) {
+	TestingT(t)
+}
+
+var _ = Suite(&testCausalitySuite{})
+
+type testCausalitySuite struct{}
+
+func (s *testCausalitySuite) TestCausality(c *C) {
 	ca := newCausality()
 	caseData := []string{"test_1", "test_2", "test_3"}
 	excepted := map[string]string{

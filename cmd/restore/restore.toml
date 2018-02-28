@@ -15,6 +15,9 @@ log-level = "info"
 # start-datetime = ""
 # stop-datetime = ""
 
+# work count to execute binlogs
+worker-count = 1
+
 # dest-type choose a destination, which value can be "mysql","tidb", "print". 
 # for print, it just prints decoded value.
 dest-type = "mysql"
