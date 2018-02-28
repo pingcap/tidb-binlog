@@ -19,25 +19,12 @@ import (
 
 const (
 	timeFormat = "2006-01-02 15:04:05"
-
-	savepointFile = "restore.savepoint"
 )
 
 // TableName stores the table and schema name
 type TableName struct {
 	Schema string `toml:"db-name" json:"db-name"`
 	Name   string `toml:"tbl-name" json:"tbl-name"`
-}
-
-// Savepoint defines a toml config for savepoint.
-type Savepoint struct {
-	Type string `toml:"type" json:"type"`
-	Name string `toml:"name" json:"name"`
-}
-
-// String implements the Stringer interface.
-func (s *Savepoint) String() string {
-	return fmt.Sprintf("type:%s name:%s", s.Type, s.Name)
 }
 
 // Config is the main configuration for the retore tool.
@@ -53,8 +40,6 @@ type Config struct {
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
-
-	Savepoint *Savepoint `toml:"savepoint" json:"savepoint"`
 
 	DoTables []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs    []string    `toml:"replicate-do-db" json:"replicate-do-db"`
@@ -147,13 +132,6 @@ func (c *Config) Parse(args []string) error {
 		}
 		c.StopTSO = int64(oracle.ComposeTS(stopTime.Unix()*1000, 0))
 		log.Infof("stop tso %d", c.StopTSO)
-	}
-
-	if c.Savepoint == nil {
-		c.Savepoint = &Savepoint{
-			Type: "file",
-			Name: savepointFile,
-		}
 	}
 
 	return errors.Trace(c.validate())

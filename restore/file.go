@@ -40,12 +40,7 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 			return nil, errors.Trace(err)
 		}
 	}
-	// savepoint has high priority than StartTSO.
-	pos := r.savepoint.Pos()
-	if pos.Filename != "" {
-		firstFile = pos.Filename
-		firstFileOffset = pos.Offset
-	}
+	log.Infof("firstfile %s %d", firstFile, firstFileOffset)
 
 	binlogFiles := make([]binlogFile, 0, len(sortedNames))
 	for _, name := range sortedNames {
@@ -59,6 +54,8 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 		}
 	}
+
+	log.Infof("binlog files %+v", binlogFiles)
 
 	return binlogFiles, nil
 }

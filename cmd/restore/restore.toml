@@ -31,11 +31,6 @@ dest-type = "mysql"
 #db-name ="test"
 #tbl-name = "~^a.*"
 
-[savepoint]
-type = "file"
-# which would be {data-dir}/{name}
-name = "restore.savepoint"
-
 [dest-db]
 host = "127.0.0.1"
 port = 3309
