@@ -28,12 +28,6 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 		firstFile       string
 		firstFileOffset int64
 	)
-	pos := r.savepoint.Pos()
-	if pos.Filename != "" {
-		firstFile = pos.Filename
-		firstFileOffset = pos.Offset
-	}
-
 	// try to find matched beginning file.
 	if r.cfg.StartTSO != 0 {
 		idx, err := index.NewPbIndex(r.cfg.Dir, r.cfg.IndexName)
@@ -45,6 +39,12 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+	}
+	// savepoint has high priority than StartTSO.
+	pos := r.savepoint.Pos()
+	if pos.Filename != "" {
+		firstFile = pos.Filename
+		firstFileOffset = pos.Offset
 	}
 
 	binlogFiles := make([]binlogFile, 0, len(sortedNames))

@@ -19,6 +19,8 @@ import (
 
 const (
 	timeFormat = "2006-01-02 15:04:05"
+
+	savepointFile = "restore.savepoint"
 )
 
 // TableName stores the table and schema name
@@ -31,6 +33,11 @@ type TableName struct {
 type Savepoint struct {
 	Type string `toml:"type" json:"type"`
 	Name string `toml:"name" json:"name"`
+}
+
+// String implements the Stringer interface.
+func (s *Savepoint) String() string {
+	return fmt.Sprintf("type:%s name:%s", s.Type, s.Name)
 }
 
 // Config is the main configuration for the retore tool.
@@ -76,7 +83,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&c.configFile, "config", "", "path to configuration file")
+	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
 	return c
 }
@@ -101,11 +108,13 @@ func (c *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
+	if c.configFile == "" {
+		return errors.Errorf("please specify config file")
+	}
+
 	// Load config file if specified
-	if c.configFile != "" {
-		if err := c.configFromFile(c.configFile); err != nil {
-			return errors.Trace(err)
-		}
+	if err := c.configFromFile(c.configFile); err != nil {
+		return errors.Trace(err)
 	}
 
 	// Parse again to replace with command line options
@@ -138,6 +147,13 @@ func (c *Config) Parse(args []string) error {
 		}
 		c.StopTSO = int64(oracle.ComposeTS(stopTime.Unix()*1000, 0))
 		log.Infof("stop tso %d", c.StopTSO)
+	}
+
+	if c.Savepoint == nil {
+		c.Savepoint = &Savepoint{
+			Type: "file",
+			Name: savepointFile,
+		}
 	}
 
 	return errors.Trace(c.validate())
