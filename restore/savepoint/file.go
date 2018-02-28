@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	saveInterval = 30 * time.Second
+	flushInterval = 30 * time.Second
 )
 
 // implements a file savepoint.
@@ -52,7 +52,7 @@ func (f *fileSavepoint) Load() (pos *Position, err error) {
 func (f *fileSavepoint) Save(pos *Position) (err error) {
 	f.mu.Lock()
 	f.pos = pos
-	if time.Since(f.lastSaveTime) >= saveInterval {
+	if time.Since(f.lastSaveTime) >= flushInterval {
 		err = f.flush()
 	}
 	f.mu.Unlock()
