@@ -15,6 +15,9 @@ log-level = "info"
 # start-datetime = ""
 # stop-datetime = ""
 
+# number of binlog events in a transaction batch
+txn-batch = 1
+
 # work count to execute binlogs
 worker-count = 1
 

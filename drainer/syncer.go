@@ -409,7 +409,7 @@ func (s *Syncer) addJob(job *job) {
 }
 
 func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string) error {
-	key, err := s.resolveCasuality(keys)
+	key, err := s.resolveCausality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
@@ -418,7 +418,7 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	return nil
 }
 
-func (s *Syncer) resolveCasuality(keys []string) (string, error) {
+func (s *Syncer) resolveCausality(keys []string) (string, error) {
 	if s.cfg.DisableCausality {
 		if len(keys) > 0 {
 			return keys[0], nil
@@ -522,8 +522,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			}
 
 		default:
-			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+			if time.Since(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))

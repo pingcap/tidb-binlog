@@ -22,14 +22,14 @@ func (r *Restore) GenRegexMap() {
 }
 
 func (r *Restore) addOneRegex(originStr string) {
-	if _, ok := r.reMap[originStr]; !ok {
+	if _, ok := r.regexMap[originStr]; !ok {
 		var re *regexp.Regexp
 		if originStr[0] != '~' {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
 		} else {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
 		}
-		r.reMap[originStr] = re
+		r.regexMap[originStr] = re
 	}
 }
 
@@ -84,7 +84,7 @@ func (r *Restore) matchDB(patternDBS []string, a string) bool {
 }
 
 func (r *Restore) matchString(pattern string, t string) bool {
-	if re, ok := r.reMap[pattern]; ok {
+	if re, ok := r.regexMap[pattern]; ok {
 		return re.MatchString(t)
 	}
 	return pattern == t

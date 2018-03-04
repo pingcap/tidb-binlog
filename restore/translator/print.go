@@ -5,6 +5,7 @@ import (
 
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	tbl "github.com/pingcap/tidb-binlog/restore/table"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -15,34 +16,34 @@ func newPrintTranslator() Translator {
 	return &printTranslator{}
 }
 
-func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printInsertAndDeleteEvent(row)
-	return "", nil, nil
+	return nil, nil
 }
 
-func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printUpdateEvent(row)
-	return "", nil, nil
+	return nil, nil
 }
 
-func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printInsertAndDeleteEvent(row)
-	return "", nil, nil
+	return nil, nil
 
 }
 
-func (p *printTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
+func (p *printTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printUpdateEvent(row)
-	return "", nil, nil
+	return nil, nil
 }
 
-func (p *printTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
+func (p *printTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
 	printDDL(binlog)
-	return "", nil, nil
+	return nil, nil
 }
 
 func printHeader(binlog *pb.Binlog, event *pb.Event) {

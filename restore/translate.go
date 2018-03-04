@@ -3,41 +3,37 @@ package restore
 import (
 	"github.com/juju/errors"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/restore/translator"
 )
 
 // Translate translates payload to SQL.
-func (r *Restore) Translate(binlog *pb.Binlog) (sqls []string, args [][]interface{}, isDDL bool, err error) {
+func (r *Restore) Translate(binlog *pb.Binlog) (results []*translator.TranslateResult, isDDL bool, err error) {
 	if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
 		return
 	}
 
 	switch binlog.Tp {
 	case pb.BinlogType_DML:
-		sqls, args, err = r.translateDML(binlog)
-		return sqls, args, false, errors.Trace(err)
+		results, err = r.translateDML(binlog)
+		return results, false, errors.Trace(err)
 	case pb.BinlogType_DDL:
-		sqls, args, err = r.translateDDL(binlog)
-		return sqls, args, true, errors.Trace(err)
+		results, err = r.translateDDL(binlog)
+		return results, true, errors.Trace(err)
 	default:
 		panic("unreachable")
 	}
 }
 
-func (r *Restore) translateDML(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
-	// skip
-
+func (r *Restore) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
 	dml := binlog.DmlData
 	if dml == nil {
-		return nil, nil, errors.New("dml binlog's data can't be empty")
+		return nil, errors.New("dml binlog's data can't be empty")
 	}
-
-	sqls := make([]string, 0, len(dml.Events))
-	args := make([][]interface{}, 0, len(dml.Events))
+	results := make([]*translator.TranslateResult, 0, len(dml.Events))
 
 	var (
-		sql string
-		arg []interface{}
-		err error
+		result *translator.TranslateResult
+		err    error
 	)
 
 	for _, event := range dml.Events {
@@ -45,42 +41,47 @@ func (r *Restore) translateDML(binlog *pb.Binlog) ([]string, [][]interface{}, er
 			continue
 		}
 
+		table, err := r.getTable(event.GetSchemaName(), event.GetTableName())
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
 		e := &event
 		tp := e.GetTp()
 		row := e.GetRow()
 		switch tp {
 		case pb.EventType_Insert:
-			sql, arg, err = r.translator.TransInsert(binlog, e, row)
+			result, err = r.translator.TransInsert(binlog, e, row, table)
 		case pb.EventType_Update:
-			sql, arg, err = r.translator.TransUpdate(binlog, e, row)
+			result, err = r.translator.TransUpdate(binlog, e, row, table)
 		case pb.EventType_Delete:
-			sql, arg, err = r.translator.TransDelete(binlog, e, row)
+			result, err = r.translator.TransDelete(binlog, e, row, table)
 		default:
 			panic("unreachable")
 		}
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
-		sqls = append(sqls, sql)
-		args = append(args, arg)
+		results = append(results, result)
 	}
 
-	return sqls, args, nil
+	return results, nil
 }
 
-func (r *Restore) translateDDL(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
+func (r *Restore) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
 	_, table, err := parseDDL(string(binlog.GetDdlQuery()))
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	if r.SkipBySchemaAndTable(table.Schema, table.Name) {
-		return nil, nil, nil
+		return nil, nil
 	}
 
-	ddl, args, err := r.translator.TransDDL(binlog)
+	result, err := r.translator.TransDDL(binlog)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	return []string{ddl}, [][]interface{}{args}, nil
+	r.clearTables()
+	return []*translator.TranslateResult{result}, nil
 }

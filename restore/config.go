@@ -38,6 +38,10 @@ type Config struct {
 	StartTSO      int64
 	StopTSO       int64
 
+	TxnBatch         int  `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount      int  `toml:"worker-count" json:"worker-count"`
+	DisableCausality bool `toml:"disable-detect" json:"disable-detect"`
+
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
 
@@ -70,6 +74,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
+	fs.BoolVar(&c.DisableCausality, "disable-detect", false, "disbale detect causality")
 	return c
 }
 

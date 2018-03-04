@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	tbl "github.com/pingcap/tidb-binlog/restore/table"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -19,26 +21,33 @@ func newMysqlTranslator() Translator {
 	return &mysqlTranslator{}
 }
 
-func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	schema := *event.SchemaName
-	table := *event.TableName
+func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+	schemaName := *event.SchemaName
+	tableName := *event.TableName
 	placeholders := dml.GenColumnPlaceholders(len(row))
 
 	cols, args, err := genColsAndArgs(row)
 	if err != nil {
-		return "", nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	columnList := p.genColumnList(cols)
-	sql := fmt.Sprintf("REPLACE INTO `%s`.`%s` (%s) VALUES (%s);", schema, table, columnList, placeholders)
+	keys := genMultipleKeys(table.Columns, args, table.IndexColumns)
 
-	log.Debugf("insert sql %s, args %+v", sql, args)
-	return sql, args, nil
+	columnList := p.genColumnList(cols)
+	sql := fmt.Sprintf("REPLACE INTO `%s`.`%s` (%s) VALUES (%s);", schemaName, tableName, columnList, placeholders)
+
+	log.Debugf("insert sql %s, args %+v, keys %+v", sql, args, keys)
+	result := &TranslateResult{
+		SQL:  sql,
+		Keys: keys,
+		Args: args,
+	}
+	return result, nil
 }
 
-func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	schema := *event.SchemaName
-	table := *event.TableName
+func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+	schemaName := *event.SchemaName
+	tableName := *event.TableName
 	allCols := make([]string, 0, len(row))
 	oldValues := make([]interface{}, 0, len(row))
 	changedValues := make([]interface{}, 0, len(row))
@@ -49,17 +58,17 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 		col := &pb.Column{}
 		err := col.Unmarshal(c)
 		if err != nil {
-			return "", nil, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		allCols = append(allCols, col.Name)
 
 		_, oldValue, err := codec.DecodeOne(col.Value)
 		if err != nil {
-			return "", nil, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		_, changedValue, err := codec.DecodeOne(col.ChangedValue)
 		if err != nil {
-			return "", nil, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 
 		tp := col.Tp[0]
@@ -85,28 +94,43 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	args = append(args, updatedValues...)
 	args = append(args, oldValues...)
 
-	sql := fmt.Sprintf("UPDATE `%s`.`%s` SET %s WHERE %s LIMIT 1;", schema, table, kvs, where)
+	//TODO
+	var keys []string
+	sql := fmt.Sprintf("UPDATE `%s`.`%s` SET %s WHERE %s LIMIT 1;", schemaName, tableName, kvs, where)
 	log.Debugf("update sql %s, args %+v", sql, args)
-	return sql, args, nil
+	result := &TranslateResult{
+		SQL:  sql,
+		Keys: keys,
+		Args: args,
+	}
+	return result, nil
 }
 
-func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	return "", nil, nil
+func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+	return nil, nil
 }
 
-func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	schema := *event.SchemaName
-	table := *event.TableName
+func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+	schemaName := *event.SchemaName
+	tableName := *event.TableName
 
 	cols, args, err := genColsAndArgs(row)
 	if err != nil {
-		return "", nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	where := genWhere(cols, args)
-	sql := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s limit 1", schema, table, where)
+
+	//TODO
+	var keys []string
+	sql := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s limit 1", schemaName, tableName, where)
 	log.Debugf("delete sql %s, args %+v", sql, args)
-	return sql, args, nil
+	result := &TranslateResult{
+		SQL:  sql,
+		Keys: keys,
+		Args: args,
+	}
+	return result, nil
 }
 
 func genColsAndArgs(row [][]byte) ([]string, []interface{}, error) {
@@ -133,8 +157,8 @@ func genColsAndArgs(row [][]byte) ([]string, []interface{}, error) {
 	return cols, args, nil
 }
 
-func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
-	return string(binlog.DdlQuery), nil, nil
+func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
+	return &TranslateResult{SQL: string(binlog.DdlQuery)}, nil
 }
 
 func (p *mysqlTranslator) genColumnList(columns []string) string {
@@ -165,4 +189,148 @@ func genKVs(columns []string) string {
 		}
 	}
 	return kvs.String()
+}
+
+func genMultipleKeys(columns []*tbl.Column, value []interface{}, indexColumns map[string][]*tbl.Column) []string {
+	var multipleKeys []string
+	for _, indexCols := range indexColumns {
+		cols, vals := getColumnData(columns, indexCols, value)
+		multipleKeys = append(multipleKeys, genKeyList(cols, vals))
+	}
+	return multipleKeys
+}
+
+func genKeyList(columns []*tbl.Column, dataSeq []interface{}) string {
+	values := make([]string, 0, len(dataSeq))
+	for i, data := range dataSeq {
+		values = append(values, columnValue(data, columns[i].Unsigned))
+	}
+
+	return strings.Join(values, ",")
+}
+
+func getColumnData(columns []*tbl.Column, indexColumns []*tbl.Column, data []interface{}) ([]*tbl.Column, []interface{}) {
+	cols := make([]*tbl.Column, 0, len(columns))
+	values := make([]interface{}, 0, len(columns))
+	for _, column := range indexColumns {
+		cols = append(cols, column)
+		values = append(values, data[column.Idx])
+	}
+
+	return cols, values
+}
+
+func findFitIndex(indexColumns map[string][]*tbl.Column) []*tbl.Column {
+	cols, ok := indexColumns["primary"]
+	if ok {
+		if len(cols) == 0 {
+			log.Error("cols is empty")
+		} else {
+			return cols
+		}
+	}
+
+	// second find not null unique key
+	fn := func(c *tbl.Column) bool {
+		return !c.NotNull
+	}
+
+	return getSpecifiedIndexColumn(indexColumns, fn)
+}
+
+func getAvailableIndexColumn(indexColumns map[string][]*tbl.Column, data []interface{}) []*tbl.Column {
+	fn := func(c *tbl.Column) bool {
+		return data[c.Idx] == nil
+	}
+
+	return getSpecifiedIndexColumn(indexColumns, fn)
+}
+
+func getSpecifiedIndexColumn(indexColumns map[string][]*tbl.Column, fn func(col *tbl.Column) bool) []*tbl.Column {
+	for _, indexCols := range indexColumns {
+		if len(indexCols) == 0 {
+			continue
+		}
+
+		findFitIndex := true
+		for _, col := range indexCols {
+			if fn(col) {
+				findFitIndex = false
+				break
+			}
+		}
+
+		if findFitIndex {
+			return indexCols
+		}
+	}
+
+	return nil
+}
+
+func castUnsigned(data interface{}, unsigned bool) interface{} {
+	if !unsigned {
+		return data
+	}
+
+	switch v := data.(type) {
+	case int:
+		return uint(v)
+	case int8:
+		return uint8(v)
+	case int16:
+		return uint16(v)
+	case int32:
+		return uint32(v)
+	case int64:
+		return strconv.FormatUint(uint64(v), 10)
+	}
+
+	return data
+}
+
+func columnValue(value interface{}, unsigned bool) string {
+	castValue := castUnsigned(value, unsigned)
+
+	var data string
+	switch v := castValue.(type) {
+	case nil:
+		data = "null"
+	case bool:
+		if v {
+			data = "1"
+		} else {
+			data = "0"
+		}
+	case int:
+		data = strconv.FormatInt(int64(v), 10)
+	case int8:
+		data = strconv.FormatInt(int64(v), 10)
+	case int16:
+		data = strconv.FormatInt(int64(v), 10)
+	case int32:
+		data = strconv.FormatInt(int64(v), 10)
+	case int64:
+		data = strconv.FormatInt(int64(v), 10)
+	case uint8:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		data = strconv.FormatUint(uint64(v), 10)
+	case float32:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
+	case string:
+		data = v
+	case []byte:
+		data = string(v)
+	default:
+		data = fmt.Sprintf("%v", v)
+	}
+
+	return data
 }
