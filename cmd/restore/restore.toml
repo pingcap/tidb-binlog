@@ -24,7 +24,7 @@ log-level = "info"
 # work count to execute binlogs
 worker-count = 1
 
-# dest-type choose a destination, which value can be "mysql","tidb", "print". 
+# dest-type choose a destination, which value can be "mysql", "print". 
 # for print, it just prints decoded value.
 dest-type = "mysql"
 

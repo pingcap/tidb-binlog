@@ -68,7 +68,7 @@ func NewConfig() *Config {
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
+	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
@@ -155,7 +155,7 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
-	if (c.DestType == "mysql" || c.DestType == "tidb") && (c.DestDB == nil) {
+	if c.DestType == "mysql" && c.DestDB == nil {
 		return errors.New("dest-db config must not be emtpy")
 	}
 	return nil
