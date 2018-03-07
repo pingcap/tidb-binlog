@@ -105,28 +105,38 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	go p.publish(t)
 }
 
-func (p *Pump) needFilter(binlog *binlogN) bool {
+func (p *Pump) needFilter(binlog *binlogData) bool {
 	jobID := binlog.GetDdlJobID()
+	preWrite := binlog.GetPrewriteValue()
 
+	newMumation := make([]*pb.TableMutation, 0, len(preWrite.Mutations))
+	filter := false
+	
 	// only filter dml
 	if jobID == 0 {
-		preWrite := binlog.GetPrewriteValue()
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {
-				return true
+				filter = true
+				continue
 			}
 
-			if !p.filter.SkipSchemaAndTable(schemaName, tableName) {
-				return false
+			if p.filter.SkipSchemaAndTable(schemaName, tableName) {
+				filter = true
+				continue
 			}
+
+			newMumation = append(newMumation, mutation)
 		}
-
-		return true
 	}
 
+	if len(newMumation) == 0 {
+		return true
+	}
+	
+	binlog.SetMumations(newMumation)
 	return false
 }
 

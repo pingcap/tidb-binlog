@@ -15,7 +15,7 @@ var (
 	pushRetryTime = 10 * time.Millisecond
 )
 
-type binlogN struct {
+type binlogData struct {
 	tp            pb.BinlogType
 	startTs       int64
 	commitTs      int64
@@ -26,52 +26,57 @@ type binlogN struct {
 }
 
 // GetTp returns tp
-func (b *binlogN) GetTp() pb.BinlogType {
+func (b *binlogData) GetTp() pb.BinlogType {
 	return b.tp
 }
 
 // SetTp sets tp
-func (b *binlogN) SetTp(tp pb.BinlogType) {
+func (b *binlogData) SetTp(tp pb.BinlogType) {
 	b.tp = tp
 }
 
 // GetStartTs return startTs
-func (b *binlogN) GetStartTs() int64 {
+func (b *binlogData) GetStartTs() int64 {
 	return b.startTs
 }
 
 // GetCommitTs returns commitTs
-func (b *binlogN) GetCommitTs() int64 {
+func (b *binlogData) GetCommitTs() int64 {
 	return b.commitTs
 }
 
 // SetCommitTs sets ts
-func (b *binlogN) SetCommitTs(ts int64) {
+func (b *binlogData) SetCommitTs(ts int64) {
 	b.commitTs = ts
 }
 
 // GetPrewriteKey returns prewriteKey
-func (b *binlogN) GetPrewriteKey() []byte {
+func (b *binlogData) GetPrewriteKey() []byte {
 	return b.prewriteKey
 }
 
 // GetPrewriteValue returns prewriteValue
-func (b *binlogN) GetPrewriteValue() *pb.PrewriteValue {
+func (b *binlogData) GetPrewriteValue() *pb.PrewriteValue {
 	return b.prewriteValue
 }
 
+// SetMumations sets the prewriteValue.Mutations
+func (b *binlogData) SetMumations(mumations *pb.TableMutation) {
+	b.prewriteValue.Mutations = mumations
+}
+
 // GetDdlQuery returns ddlQuery
-func (b *binlogN) GetDdlQuery() []byte {
+func (b *binlogData) GetDdlQuery() []byte {
 	return b.ddlQuery
 }
 
 // GetDdlJobID returns ddlJobID
-func (b *binlogN) GetDdlJobID() int64 {
+func (b *binlogData) GetDdlJobID() int64 {
 	return b.ddlJobID
 }
 
 type binlogItem struct {
-	binlog *binlogN
+	binlog *binlogData
 	pos    pb.Pos
 	nodeID string
 	job    *model.Job
@@ -85,7 +90,7 @@ func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
 		log.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 		return nil
 	}
-	newBinlog := &binlogN{
+	newBinlog := &binlogData{
 		tp:            b.GetTp(),
 		startTs:       b.GetStartTs(),
 		commitTs:      b.GetCommitTs(),
