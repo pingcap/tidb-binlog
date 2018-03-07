@@ -252,7 +252,7 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 		baseVal := "test"
 		val := ""
 		for i := 0; i < base; i++ {
-			val = fmt.Sprintf("%s%s", baseVal)
+			val = fmt.Sprintf("%s%s", val, baseVal)
 		}
 		d.SetBytes([]byte(val))
 		e = []byte(val)
