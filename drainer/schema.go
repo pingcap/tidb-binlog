@@ -27,10 +27,10 @@ type TableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ignoreDBs map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.reconstructSchema(jobs, ignoreSchemaNames)
+	err := s.reconstructSchema(jobs, ignoreDBs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -43,7 +43,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 }
 
 // reconstructSchema reconstruct the schema infomations by history jobs
-func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreDBs map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
@@ -58,7 +58,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 		switch job.Type {
 		case model.ActionCreateSchema:
 			schema := job.BinlogInfo.DBInfo
-			if filterIgnoreSchema(schema, ignoreSchemaNames) {
+			if filterIgnoreSchema(schema, ignoreDBs) {
 				s.AddIgnoreSchema(schema)
 				continue
 			}

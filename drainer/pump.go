@@ -113,10 +113,6 @@ func (p *Pump) needFilter(binlog *binlogN) bool {
 		preWrite := binlog.GetPrewriteValue()
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
-			_, ok := p.filter.schema.TableByID(tableID)
-			if !ok {
-				return true
-			}
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {

@@ -9,36 +9,36 @@ type filter struct {
 	schema *Schema
 
 	// because TiDB is case-insensitive, only lower-case here.
-	ignoreSchemaNames map[string]struct{}
+	ignoreDBs map[string]struct{}
 
-	reMap map[string]*regexp.Regexp
+	regexMap map[string]*regexp.Regexp
 
 	doDBs    []string
 	doTables []TableName
 	prepared bool
 }
 
-func newFilter(doDBS []string, doTables []TableName, ignoreSchemas string) *filter {
+func newFilter(doDBS []string, doTables []TableName, ignoreDBs string) *filter {
 	filter := &filter{
-		schema:            &Schema{},
-		ignoreSchemaNames: formatIgnoreSchemas(ignoreSchemas),
-		reMap:             make(map[string]*regexp.Regexp),
-		doDBs:             doDBS,
-		doTables:          doTables,
+		schema:    &Schema{},
+		ignoreDBs: formatIgnoreDBs(ignoreDBs),
+		regexMap:  make(map[string]*regexp.Regexp),
+		doDBs:     doDBS,
+		doTables:  doTables,
 	}
 	filter.genRegexMap()
 	return filter
 }
 
 func (f *filter) addOneRegex(originStr string) {
-	if _, ok := f.reMap[originStr]; !ok {
+	if _, ok := f.regexMap[originStr]; !ok {
 		var re *regexp.Regexp
 		if originStr[0] != '~' {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
 		} else {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
 		}
-		f.reMap[originStr] = re
+		f.regexMap[originStr] = re
 	}
 }
 
@@ -83,7 +83,7 @@ func (f *filter) SkipSchemaAndTable(schema string, table string) bool {
 }
 
 func (f *filter) matchString(pattern string, t string) bool {
-	if re, ok := f.reMap[pattern]; ok {
+	if re, ok := f.regexMap[pattern]; ok {
 		return re.MatchString(t)
 	}
 	return pattern == t

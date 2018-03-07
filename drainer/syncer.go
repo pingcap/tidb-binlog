@@ -140,7 +140,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
-		schema, err := NewSchema(exceptedJobs, s.filter.ignoreSchemaNames)
+		schema, err := NewSchema(exceptedJobs, s.filter.ignoreDBs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -171,7 +171,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := job.BinlogInfo.DBInfo
-		if filterIgnoreSchema(schema, s.filter.ignoreSchemaNames) {
+		if filterIgnoreSchema(schema, s.filter.ignoreDBs) {
 			s.filter.schema.AddIgnoreSchema(schema)
 			return "", "", "", nil
 		}

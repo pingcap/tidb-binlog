@@ -11,7 +11,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
 	s := &Syncer{}
 	s.filter = newFilter(nil, nil, "")
-	s.filter.ignoreSchemaNames = make(map[string]struct{})
+	s.filter.ignoreDBs = make(map[string]struct{})
 	s.filter.schema, err = NewSchema(nil, nil)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
@@ -59,7 +59,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 
-	s.filter.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
+	s.filter.ignoreDBs[ingnoreDBInfo.Name.L] = struct{}{}
 
 	testCases := []struct {
 		name        string
