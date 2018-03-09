@@ -17,25 +17,27 @@ const switchDetectInterval = 10 * time.Second
 // if master has error,  switch master and slave
 type Proxy struct {
 	sync.RWMutex
-	wg sync.WaitGroup
+	wg     sync.WaitGroup
+	nodeID string
 
 	master    Binlogger
 	replicate Binlogger
 	cp        *checkPoint
 
-	enableSwitch bool
+	enableTolerant bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func newProxy(master, replicate Binlogger, cp *checkPoint, enableProxySwitch bool) Binlogger {
+func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enableTolerant bool) Binlogger {
 	p := &Proxy{
+		nodeID:    nodeID,
 		master:    master,
 		replicate: replicate,
 		cp:        cp,
 
-		enableSwitch: enableProxySwitch,
+		enableTolerant: enableTolerant,
 	}
 
 	go p.sync()
@@ -56,10 +58,11 @@ func (p *Proxy) WriteTail(payload []byte) error {
 
 	err := p.master.WriteTail(payload)
 	if err != nil {
+		lossBinlogCacheCounter.WithLabelValues(p.nodeID).Add(1)
 		log.Errorf("write binlog error %v", err)
 	}
 
-	if p.enableSwitch {
+	if p.enableTolerant {
 		return nil
 	}
 
