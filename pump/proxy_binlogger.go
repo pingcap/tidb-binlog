@@ -74,23 +74,12 @@ func (p *Proxy) Close() error {
 	p.Lock()
 	defer p.Unlock()
 
-	var err error
-
+	var pos binlog.Pos
 	for {
-		pos := p.cp.pos()
-
+		pos = p.cp.pos()
 		entities, err := p.master.ReadFrom(pos, 1)
 		if err == nil {
 			if len(entities) == 0 {
-				break
-			}
-
-			log.Infof("proxy closing read position %+v, last file position %+v", entities[0].Pos, latestFilePos)
-			if ComparePos(entities[0].Pos, latestFilePos) >= 0 {
-				if err1 := p.cp.save(entities[0].Pos, true); err1 != nil {
-					log.Errorf("save position %+v error %v", pos, err1)
-				}
-				log.Info("complete sync, read end of binlog file")
 				break
 			}
 		}
@@ -100,6 +89,12 @@ func (p *Proxy) Close() error {
 
 		time.Sleep(time.Second)
 	}
+
+	err := p.cp.save(pos, true)
+	if err != nil {
+		log.Errorf("save position %+v error %v", pos, err)
+	}
+	log.Info("complete sync, read end of binlog file position %v", pos)
 
 	if p.master != nil {
 		err = p.master.Close()
