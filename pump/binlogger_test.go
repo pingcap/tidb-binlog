@@ -147,7 +147,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 0, Offset: 286}, 11)
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 11)
-	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26})
+	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 52})
 
 	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 52}, 18)
 	c.Assert(err, IsNil)
