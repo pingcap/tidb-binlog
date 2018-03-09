@@ -85,10 +85,7 @@ func (p *Proxy) Close() error {
 				break
 			}
 
-			// compute next binlog offset
-			entities[0].Pos.Offset += int64(len(entities[0].Payload) + 16)
 			log.Infof("proxy closing read position %+v, last file position %+v", entities[0].Pos, latestFilePos)
-
 			if ComparePos(entities[0].Pos, latestFilePos) >= 0 {
 				if err1 := p.cp.save(entities[0].Pos, true); err1 != nil {
 					log.Errorf("save position %+v error %v", pos, err1)
@@ -118,7 +115,7 @@ func (p *Proxy) Close() error {
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
 	return p.master.Walk(ctx, from, sendBinlog)
 }
 
@@ -127,29 +124,33 @@ func (p *Proxy) GC(days time.Duration, pos binlog.Pos) {
 	p.master.GC(days, p.cp.pos())
 }
 
+func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, error) {
+	if ComparePos(readPos, pos) > 0 {
+		// always return new position
+		if err := p.cp.save(readPos, false); err != nil {
+			log.Errorf("save position %+v error %v", readPos, err)
+			return readPos, errors.Trace(err)
+		}
+		return readPos, nil
+	}
+
+	return pos, nil
+}
+
 func (p *Proxy) sync() {
 	p.wg.Add(1)
 	defer p.wg.Done()
 
-	var err error
 	pos := p.cp.pos()
 	syncBinlog := func(entity binlog.Entity) error {
-		err = p.replicate.WriteTail(entity.Payload)
+		err := p.replicate.WriteTail(entity.Payload)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
 			return errors.Trace(err)
 		}
 
-		if ComparePos(entity.Pos, pos) > 0 {
-			pos.Suffix = entity.Pos.Suffix
-			pos.Offset = entity.Pos.Offset
-			if err1 := p.cp.save(pos, false); err1 != nil {
-				log.Errorf("save position %+v error %v", pos, err1)
-				return errors.Trace(err)
-			}
-		}
-
-		return nil
+		pos, err = p.updatePosition(entity.Pos, pos)
+		return errors.Trace(err)
 	}
 
 	for {
@@ -158,11 +159,11 @@ func (p *Proxy) sync() {
 			log.Info("context cancel - sycner exists")
 			return
 		default:
-			_, err = p.master.Walk(p.ctx, pos, syncBinlog)
+			err := p.master.Walk(p.ctx, pos, syncBinlog)
 			if err != nil {
 				log.Errorf("master walk error %v", err)
-				time.Sleep(time.Second)
 			}
+			time.Sleep(time.Second)
 		}
 	}
 }

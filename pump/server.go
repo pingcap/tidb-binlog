@@ -301,12 +301,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 
 	pos := in.StartFrom
 	sendBinlog := func(entity binlog.Entity) error {
+		pos.Suffix = entity.Pos.Suffix
+		pos.Offset = entity.Pos.Offset
 		resp := &binlog.PullBinlogResp{Entity: entity}
 		return errors.Trace(stream.Send(resp))
 	}
 
 	for {
-		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
+		err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
 		}
