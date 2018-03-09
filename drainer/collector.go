@@ -285,7 +285,7 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	//var startTs1 uint64 = 398611588414963735
 	//var startTs2 uint64 = 398611612191424536
 
-	
+	log.Infof("initCommitTS: %d", c.initCommitTS)
 	version := kv.NewVersion(uint64(c.initCommitTS))
 	snapshot, err := c.tiStore.GetSnapshot(version)
 	snapMeta := meta.NewSnapshotMeta(snapshot)
@@ -386,4 +386,14 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	status = c.mu.status
 	c.mu.Unlock()
 	return status
+}
+
+func (c *Collector) Prepare(jobs []*model.Job) error {
+	var err error
+	c.filter.schema, err = NewSchema(jobs, c.filter.ignoreDBs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }

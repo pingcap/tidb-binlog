@@ -83,14 +83,14 @@ func closeJobChans(jobChs []chan *job) {
 }
 
 // Start starts to sync.
-func (s *Syncer) Start(jobs []*model.Job) error {
+func (s *Syncer) Start() error {
 	// prepare schema for work
-	b, err := s.prepare(jobs)
-	if err != nil || b == nil {
-		return errors.Trace(err)
-	}
+	//b, err := s.prepare(jobs)
+	//if err != nil || b == nil {
+	//	return errors.Trace(err)
+	//}
 
-	err = s.run(b)
+	err := s.run()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -98,6 +98,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 	return nil
 }
 
+/*
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
 func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
@@ -150,6 +151,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		return b, nil
 	}
 }
+*/
 
 // handleDDL has four return values,
 // the first value[string]: the schema name
@@ -522,7 +524,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	}
 }
 
-func (s *Syncer) run(b *binlogItem) error {
+func (s *Syncer) run() error {
 	s.wg.Add(1)
 	defer func() {
 		closeJobChans(s.jobCh)
@@ -545,7 +547,14 @@ func (s *Syncer) run(b *binlogItem) error {
 		go s.sync(s.executors[i], s.jobCh[i])
 	}
 
+	var b *binlogItem
 	for {
+		select {
+		case <-s.ctx.Done():
+			return nil
+		case b = <-s.input:
+		}
+
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobID()
@@ -581,32 +590,29 @@ func (s *Syncer) run(b *binlogItem) error {
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
 		}
-
-		select {
-		case <-s.ctx.Done():
-			return nil
-		case b = <-s.input:
-		}
 	}
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
 	for _, mutation := range mutations {
-
 		table, ok := s.filter.schema.TableByID(mutation.GetTableId())
 		if !ok {
+			log.Errorf("tableId %d not found in schema!", mutation.GetTableId())
 			continue
 		}
 
 		schemaName, tableName, ok := s.filter.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
+			log.Errorf("tableId %d not found in schema!", mutation.GetTableId())
 			continue
 		}
 
+		/*
 		if s.filter.SkipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}
+		*/
 
 		var (
 			err  error

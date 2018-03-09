@@ -15,7 +15,6 @@ type filter struct {
 
 	doDBs    []string
 	doTables []TableName
-	prepared bool
 }
 
 func newFilter(doDBS []string, doTables []TableName, ignoreDBs string) *filter {
@@ -108,9 +107,4 @@ func (f *filter) matchTable(patternTBS []TableName, tb TableName) bool {
 		}
 	}
 	return false
-}
-
-// SetPrepared set the filter.prepared
-func (f *filter) SetPrepared(prepare bool) {
-	f.prepared = prepare
 }

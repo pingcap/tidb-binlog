@@ -13,7 +13,7 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb/model"
+	//"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -170,6 +170,16 @@ func calculateForwardAShortTime(current int64) int64 {
 	return int64(previous)
 }
 
+// 
+func (s *Server) PrepareCollect() error {
+	jobs, err := s.collector.LoadHistoryDDLJobs()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return s.collector.Prepare(jobs)
+}
+
 // StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
 	s.wg.Add(1)
@@ -199,7 +209,7 @@ func (s *Server) StartMetrics() {
 }
 
 // StartSyncer runs a syncer in a goroutine
-func (s *Server) StartSyncer(jobs []*model.Job) {
+func (s *Server) StartSyncer() {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
@@ -207,7 +217,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 			s.wg.Done()
 			s.Close()
 		}()
-		err := s.syncer.Start(jobs)
+		err := s.syncer.Start()
 		if err != nil {
 			log.Errorf("syncer exited, error %v", err)
 		}
@@ -263,7 +273,14 @@ func (s *Server) Start() error {
 		}
 	}()
 
+	/*
 	jobs, err := s.collector.LoadHistoryDDLJobs()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	*/
+
+	err = s.PrepareCollect()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -275,7 +292,7 @@ func (s *Server) Start() error {
 	s.StartMetrics()
 
 	// start a syncer
-	s.StartSyncer(jobs)
+	s.StartSyncer()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)

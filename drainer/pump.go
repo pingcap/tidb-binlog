@@ -138,7 +138,7 @@ func (p *Pump) needFilter(binlog *binlogData) bool {
 }
 
 // match is responsible for match p+c binlog
-func (p *Pump) match(ent pb.Entity) *pb.Binlog {
+func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -325,7 +325,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	var errorBinlogs int
 
 	for commitTS, item := range items {
-		if p.filter.prepared && p.needFilter(item.binlog) {
+		if p.needFilter(item.binlog) {
 			continue
 		}
 
@@ -469,7 +469,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Pos:     pos,
 			Payload: payload,
 		}
-		b := p.match(entity)
+		b := p.matchAndFilter(entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
