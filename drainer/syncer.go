@@ -140,7 +140,8 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
-		s.filter.schema, err := NewSchema(exceptedJobs, s.filter.ignoreDBs)
+		var err error
+		s.filter.schema, err = NewSchema(exceptedJobs, s.filter.ignoreDBs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

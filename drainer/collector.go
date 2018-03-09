@@ -58,6 +58,7 @@ type Collector struct {
 		status *HTTPStatus
 	}
 	filter *filter
+	initCommitTS int64
 }
 
 // NewCollector returns an instance of Collector
@@ -91,6 +92,9 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	initCommitTS, _ := cpt.Pos()
+
 	return &Collector{
 		clusterID:    clusterID,
 		interval:     time.Duration(cfg.DetectInterval) * time.Second,
@@ -108,6 +112,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		notifyChan:   make(chan *notifyResult),
 		offsetSeeker: offsetSeeker,
 		filter:       filter,
+		initCommitTS: initCommitTS,
 	}, nil
 }
 
@@ -277,6 +282,20 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
 func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
+	//var startTs1 uint64 = 398611588414963735
+	//var startTs2 uint64 = 398611612191424536
+
+	
+	version := kv.NewVersion(uint64(c.initCommitTS))
+	snapshot, err := c.tiStore.GetSnapshot(version)
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Infof("startTs: %d, has %d jobs", c.initCommitTS, len(jobs))
+	
+	/*
 	version, err := c.tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -290,6 +309,8 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	*/
+
 	return jobs, nil
 }
 

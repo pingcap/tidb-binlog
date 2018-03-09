@@ -109,8 +109,7 @@ func (p *Pump) needFilter(binlog *binlogData) bool {
 	jobID := binlog.GetDdlJobID()
 	preWrite := binlog.GetPrewriteValue()
 
-	newMumation := make([]*pb.TableMutation, 0, len(preWrite.Mutations))
-	filter := false
+	newMumation := make([]pb.TableMutation, 0, len(preWrite.Mutations))
 	
 	// only filter dml
 	if jobID == 0 {
@@ -119,12 +118,10 @@ func (p *Pump) needFilter(binlog *binlogData) bool {
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {
-				filter = true
 				continue
 			}
 
 			if p.filter.SkipSchemaAndTable(schemaName, tableName) {
-				filter = true
 				continue
 			}
 

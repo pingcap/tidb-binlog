@@ -61,7 +61,7 @@ func (b *binlogData) GetPrewriteValue() *pb.PrewriteValue {
 }
 
 // SetMumations sets the prewriteValue.Mutations
-func (b *binlogData) SetMumations(mumations *pb.TableMutation) {
+func (b *binlogData) SetMumations(mumations []pb.TableMutation) {
 	b.prewriteValue.Mutations = mumations
 }
 
