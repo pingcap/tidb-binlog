@@ -94,7 +94,7 @@ func (p *Proxy) Close() error {
 	if err != nil {
 		log.Errorf("save position %+v error %v", pos, err)
 	}
-	log.Info("complete sync, read end of binlog file position %v", pos)
+	log.Infof("complete sync, read end of binlog file position %v", pos)
 
 	if p.master != nil {
 		err = p.master.Close()
