@@ -153,6 +153,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 }
 */
 
+/*
 // handleDDL has four return values,
 // the first value[string]: the schema name
 // the second value[string]: the table name
@@ -182,7 +183,6 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
-
 		return schema.Name.O, "", sql, nil
 
 	case model.ActionDropSchema:
@@ -197,7 +197,8 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		return schemaName, "", sql, nil
+		schema := job.BinlogInfo.DBInfo
+		return schema.Name.O, "", sql, nil
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
@@ -214,6 +215,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
+
 		// create table
 		table := job.BinlogInfo.TableInfo
 		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
@@ -321,6 +323,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, tbInfo.Name.O, sql, nil
 	}
 }
+*/
 
 func (s *Syncer) addDMLCount(tp pb.MutationType, nums int) {
 	switch tp {
@@ -571,14 +574,30 @@ func (s *Syncer) run() error {
 			}
 
 		} else if jobID > 0 {
+			/*
 			schema, table, sql, err := s.handleDDL(b.job)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
+		
 			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
-			} else if sql != "" {
+			} else 
+			*/
+			if b.job.State == model.JobStateCancelled {
+				continue
+			}
+			if b.job.BinlogInfo == nil {
+				log.Info("b.job.BinlogInfo == nil")
+				continue
+			}
+			if b.job.BinlogInfo.DBInfo == nil {
+				log.Infof("b.job.BinlogInfo.DBInfo == nil")
+				continue
+			}
+			schema := b.job.BinlogInfo.DBInfo.Name.O
+			sql := b.job.Query
+			if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema)
 				if err != nil {
 					return errors.Trace(err)

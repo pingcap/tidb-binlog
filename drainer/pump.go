@@ -105,7 +105,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	go p.publish(t)
 }
 
-func (p *Pump) needFilter(binlog *binlogData) bool {
+func (p *Pump) needFilter(item *binlogItem) bool {
+	binlog := item.binlog
 	jobID := binlog.GetDdlJobID()
 	preWrite := binlog.GetPrewriteValue()
 
@@ -118,22 +119,33 @@ func (p *Pump) needFilter(binlog *binlogData) bool {
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {
+				log.Debugf("filter table: %d dml", tableID)
 				continue
 			}
 
 			if p.filter.SkipSchemaAndTable(schemaName, tableName) {
+				log.Debugf("skip %s.%s dml", schemaName, tableName)
 				continue
 			}
 
 			newMumation = append(newMumation, mutation)
 		}
+		if len(newMumation) == 0 {
+			return true
+		}
+		binlog.SetMumations(newMumation)
+		return false
+	} else {
+		_, _, sql, err := p.handleDDL(item.job)
+		if err != nil {
+			log.Errorf("handleDDL error: %v", err)
+		}
+		if sql == "" {
+			return true
+		}
+		return false
 	}
 
-	if len(newMumation) == 0 {
-		return true
-	}
-	
-	binlog.SetMumations(newMumation)
 	return false
 }
 
@@ -325,7 +337,8 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	var errorBinlogs int
 
 	for commitTS, item := range items {
-		if p.needFilter(item.binlog) {
+		// TODO: use binlogItem
+		if p.needFilter(item) {
 			continue
 		}
 
@@ -497,4 +510,169 @@ func (p *Pump) getPrewriteBinlogEntity(startTS int64) (b *binlogItem, ok bool) {
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete
 func (p *Pump) GetLatestValidCommitTS() int64 {
 	return atomic.LoadInt64(&p.latestValidCommitTS)
+}
+
+
+func (p *Pump) handleDDL(job *model.Job) (string, string, string, error) {
+	if job.State == model.JobStateCancelled {
+		return "", "", "", nil
+	}
+
+	log.Infof("ddl query %s", job.Query)
+	sql := job.Query
+	if sql == "" {
+		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
+	}
+
+	switch job.Type {
+	case model.ActionCreateSchema:
+		// get the DBInfo from job rawArgs
+		schema := job.BinlogInfo.DBInfo
+		if filterIgnoreSchema(schema, p.filter.ignoreDBs) {
+			p.filter.schema.AddIgnoreSchema(schema)
+			return "", "", "", nil
+		}
+
+		err := p.filter.schema.CreateSchema(schema)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, "", sql, nil
+
+	case model.ActionDropSchema:
+		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			p.filter.schema.DropIgnoreSchema(job.SchemaID)
+			return "", "", "", nil
+		}
+
+		schemaName, err := p.filter.schema.DropSchema(job.SchemaID)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schemaName, "", sql, nil
+
+	case model.ActionRenameTable:
+		// ignore schema doesn't support reanme ddl
+		_, ok := p.filter.schema.SchemaByTableID(job.TableID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
+		}
+		_, ok = p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
+		}
+		// first drop the table
+		_, err := p.filter.schema.DropTable(job.TableID)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+		// create table
+		table := job.BinlogInfo.TableInfo
+		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		err = p.filter.schema.CreateTable(schema, table)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, table.Name.O, sql, nil
+
+	case model.ActionCreateTable:
+		table := job.BinlogInfo.TableInfo
+		if table == nil {
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
+		}
+
+		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", "", nil
+		}
+
+		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		err := p.filter.schema.CreateTable(schema, table)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, table.Name.O, sql, nil
+
+	case model.ActionDropTable:
+		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", "", nil
+		}
+
+		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		tableName, err := p.filter.schema.DropTable(job.TableID)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, tableName, sql, nil
+
+	case model.ActionTruncateTable:
+		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", "", nil
+		}
+
+		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		_, err := p.filter.schema.DropTable(job.TableID)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		table := job.BinlogInfo.TableInfo
+		if table == nil {
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
+		}
+
+		err = p.filter.schema.CreateTable(schema, table)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, table.Name.O, sql, nil
+
+	default:
+		tbInfo := job.BinlogInfo.TableInfo
+		if tbInfo == nil {
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
+		}
+
+		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
+		if ok {
+			return "", "", "", nil
+		}
+
+		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		if !ok {
+			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+		}
+
+		err := p.filter.schema.ReplaceTable(tbInfo)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
+		}
+
+		return schema.Name.O, tbInfo.Name.O, sql, nil
+	}
 }

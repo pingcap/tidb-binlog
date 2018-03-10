@@ -284,9 +284,19 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	//var startTs1 uint64 = 398611588414963735
 	//var startTs2 uint64 = 398611612191424536
+	var version kv.Version
+	var err error
 
 	log.Infof("initCommitTS: %d", c.initCommitTS)
-	version := kv.NewVersion(uint64(c.initCommitTS))
+	if c.initCommitTS == 0 {
+		version, err = c.tiStore.CurrentVersion()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		version = kv.NewVersion(uint64(c.initCommitTS))
+	}
+
 	snapshot, err := c.tiStore.GetSnapshot(version)
 	snapMeta := meta.NewSnapshotMeta(snapshot)
 	jobs, err := snapMeta.GetAllHistoryDDLJobs()
