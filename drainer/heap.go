@@ -25,54 +25,9 @@ type binlogData struct {
 	ddlJobID      int64
 }
 
-// GetTp returns tp
-func (b *binlogData) GetTp() pb.BinlogType {
-	return b.tp
-}
-
-// SetTp sets tp
-func (b *binlogData) SetTp(tp pb.BinlogType) {
-	b.tp = tp
-}
-
-// GetStartTs return startTs
-func (b *binlogData) GetStartTs() int64 {
-	return b.startTs
-}
-
-// GetCommitTs returns commitTs
-func (b *binlogData) GetCommitTs() int64 {
-	return b.commitTs
-}
-
-// SetCommitTs sets ts
-func (b *binlogData) SetCommitTs(ts int64) {
-	b.commitTs = ts
-}
-
-// GetPrewriteKey returns prewriteKey
-func (b *binlogData) GetPrewriteKey() []byte {
-	return b.prewriteKey
-}
-
-// GetPrewriteValue returns prewriteValue
-func (b *binlogData) GetPrewriteValue() *pb.PrewriteValue {
-	return b.prewriteValue
-}
-
 // SetMumations sets the prewriteValue.Mutations
-func (b *binlogData) SetMumations(mumations []pb.TableMutation) {
+func (b *binlogData) setMumations(mumations []pb.TableMutation) {
 	b.prewriteValue.Mutations = mumations
-}
-
-// GetDdlQuery returns ddlQuery
-func (b *binlogData) GetDdlQuery() []byte {
-	return b.ddlQuery
-}
-
-// GetDdlJobID returns ddlJobID
-func (b *binlogData) GetDdlJobID() int64 {
-	return b.ddlJobID
 }
 
 type binlogItem struct {

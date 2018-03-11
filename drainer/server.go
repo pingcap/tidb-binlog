@@ -170,7 +170,7 @@ func calculateForwardAShortTime(current int64) int64 {
 	return int64(previous)
 }
 
-// 
+//
 func (s *Server) PrepareCollect() error {
 	jobs, err := s.collector.LoadHistoryDDLJobs()
 	if err != nil {
@@ -275,10 +275,10 @@ func (s *Server) Start() error {
 	}()
 
 	/*
-	jobs, err := s.collector.LoadHistoryDDLJobs()
-	if err != nil {
-		return errors.Trace(err)
-	}
+		jobs, err := s.collector.LoadHistoryDDLJobs()
+		if err != nil {
+			return errors.Trace(err)
+		}
 	*/
 
 	err = s.PrepareCollect()

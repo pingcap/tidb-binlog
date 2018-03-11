@@ -57,7 +57,7 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
-	filter *filter
+	filter       *filter
 	initCommitTS int64
 }
 
@@ -304,21 +304,21 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Infof("startTs: %d, has %d jobs", c.initCommitTS, len(jobs))
-	
+
 	/*
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+		version, err := c.tiStore.CurrentVersion()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		snapshot, err := c.tiStore.GetSnapshot(version)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		snapMeta := meta.NewSnapshotMeta(snapshot)
+		jobs, err := snapMeta.GetAllHistoryDDLJobs()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	*/
 
 	return jobs, nil

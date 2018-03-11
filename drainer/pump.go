@@ -86,7 +86,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		//binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 		binlogChan: make(chan *binlogItem, maxBinlogItemCount),
 
-		filter:     filter,
+		filter: filter,
 	}, nil
 }
 
@@ -111,11 +111,11 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 
 func (p *Pump) needFilter(item *binlogItem) bool {
 	binlog := item.binlog
-	jobID := binlog.GetDdlJobID()
-	preWrite := binlog.GetPrewriteValue()
+	jobID := binlog.ddlJobID
+	preWrite := binlog.prewriteValue
 
 	newMumation := make([]pb.TableMutation, 0, len(preWrite.Mutations))
-	
+
 	if jobID == 0 {
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
@@ -136,11 +136,11 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		if len(newMumation) == 0 {
 			return true
 		}
-		binlog.SetMumations(newMumation)
+		binlog.setMumations(newMumation)
 		return false
 	} else {
-		_, _, sql, err := p.handleDDL(item.job)
-		if err != nil || sql == "" {
+		_, _, _, err := p.handleDDL(item.job)
+		if err != nil {
 			log.Errorf("handleDDL error: %v", err)
 			return true
 		}
@@ -164,15 +164,9 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 	pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
 	item = newBinlogItem(b, pos, p.nodeID)
 
-	//if p.needFilter(b) {
-	//	return nil
-	//}
-
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
-		//pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
-		//item = newBinlogItem(b, pos, p.nodeID)
 		if b.GetDdlJobId() > 0 {
 			job, err := p.getDDLJob(b.GetDdlJobId())
 			if err != nil {
@@ -180,9 +174,6 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 				return nil
 			}
 			item.SetJob(job)
-			//if job.State == model.JobStateCancelled {
-			//	item.SetJob(job)
-			//}
 		}
 		if p.needFilter(item) {
 			item.filter = true
@@ -194,14 +185,14 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
-				co.binlog.SetCommitTs(b.CommitTs)
-				co.binlog.SetTp(b.Tp)
-				p.mu.binlogs[co.binlog.GetCommitTs()] = co
+				co.binlog.commitTs = b.CommitTs
+				co.binlog.tp = b.Tp
+				p.mu.binlogs[co.binlog.commitTs] = co
 			}
 			delete(p.mu.prewriteItems, b.StartTs)
 		}
 	default:
-		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.GetTp(), p.clusterID, ent.Pos)
+		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
 
@@ -222,7 +213,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	defer p.wg.Done()
 	var (
 		maxCommitTs int64
-		//entity      *binlogEntity
 		entity      *binlogItem
 		binlogs     map[int64]*binlogItem
 	)
@@ -234,22 +224,22 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 
 		//switch entity.tp {
-		switch entity.binlog.GetTp() {
+		switch entity.binlog.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			//p.mustFindCommitBinlog(t, entity.startTS)
-			p.mustFindCommitBinlog(t, entity.binlog.GetStartTs())
+			p.mustFindCommitBinlog(t, entity.binlog.startTs)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
-			if entity.binlog.GetCommitTs() > maxCommitTs {
+			if entity.binlog.commitTs > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
-				maxCommitTs = entity.binlog.GetCommitTs()
+				maxCommitTs = entity.binlog.commitTs
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
-					log.Errorf("save binlogs and status error at ts(%v)", entity.binlog.GetCommitTs())
+					log.Errorf("save binlogs and status error at ts(%v)", entity.binlog.commitTs)
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
@@ -290,23 +280,23 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	binlog := b.binlog
 	latestTs := atomic.LoadInt64(&p.latestTS)
-	startTS := oracle.ExtractPhysical(uint64(binlog.GetStartTs())) / int64(time.Second/time.Millisecond)
+	startTS := oracle.ExtractPhysical(uint64(binlog.startTs)) / int64(time.Second/time.Millisecond)
 	maxTS := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
 	if (maxTS - startTS) > maxTxnTimeout {
-		if binlog.GetDdlJobID() == 0 {
+		if binlog.ddlJobID == 0 {
 			tikvQueryCount.Add(1)
-			primaryKey := binlog.GetPrewriteKey()
-			status, err := t.GetTxnStatus(uint64(binlog.GetStartTs()), primaryKey)
+			primaryKey := binlog.prewriteKey
+			status, err := t.GetTxnStatus(uint64(binlog.startTs), primaryKey)
 			if err != nil {
 				log.Errorf("get item's(%v) txn status error: %v", binlog, err)
 				return false
 			}
-			ts := binlog.GetStartTs()
+			ts := binlog.startTs
 			p.mu.Lock()
 			if status.IsCommitted() {
-				binlog.SetCommitTs(int64(status.CommitTS()))
-				binlog.SetTp(pb.BinlogType_Commit)
-				p.mu.binlogs[binlog.GetCommitTs()] = b
+				binlog.commitTs = int64(status.CommitTS())
+				binlog.tp = pb.BinlogType_Commit
+				p.mu.binlogs[binlog.commitTs] = b
 			}
 			delete(p.mu.prewriteItems, ts)
 			p.mu.Unlock()
@@ -351,13 +341,6 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
-	/*
-	err := p.grabDDLJobs(items)
-	if err != nil {
-		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
-		return errors.Trace(err)
-	}
-	*/
 	p.putIntoHeap(items)
 	binlogCounter.Add(float64(len(items)))
 	return nil
@@ -368,10 +351,6 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	var errorBinlogs int
 
 	for commitTS, item := range items {
-		// TODO: use binlogItem
-		//if p.needFilter(item) {
-		//	continue
-		//}
 		if item.filter {
 			continue
 		}
@@ -386,62 +365,25 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	errorBinlogCount.Add(float64(errorBinlogs))
 }
 
-func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
-	var count int
-	for ts, item := range items {
-		b := item.binlog
-		if b.GetDdlJobID() > 0 {
-			job, err := p.getDDLJob(b.GetDdlJobID())
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for job == nil {
-				select {
-				case <-p.ctx.Done():
-					return errors.Trace(p.ctx.Err())
-				case <-time.After(p.timeout):
-					job, err = p.getDDLJob(b.GetDdlJobID())
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-			}
-			if job.State == model.JobStateCancelled {
-				delete(items, ts)
-			} else {
-				item.SetJob(job)
-				count++
-			}
-		}
-	}
-	ddlJobsCounter.Add(float64(count))
-	return nil
-}
-
 func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
-	getJobF := func()  {
+	getJobF := func() {
 		version, err := p.tiStore.CurrentVersion()
 		if err != nil {
 			log.Errorf("[pump] get current version error: %v", err)
 			return
-			//return nil, errors.Trace(err)
 		}
 		snapshot, err := p.tiStore.GetSnapshot(version)
 		if err != nil {
 			log.Errorf("[pump] get snapshot error: %v", err)
 			return
-			//return nil, errors.Trace(err)
 		}
 		snapMeta := meta.NewSnapshotMeta(snapshot)
 		job, err = snapMeta.GetHistoryDDLJob(id)
 		if err != nil {
 			log.Errorf("[pump] get history ddl job error: %v", err)
 			return
-			//return nil, errors.Trace(err)
 		}
 	}
-	
-	//job, err := p.getDDLJob(b.GetDdlJobID())
 	getJobF()
 
 	if err != nil {
@@ -452,7 +394,6 @@ func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
 		case <-p.ctx.Done():
 			return nil, errors.Trace(p.ctx.Err())
 		case <-time.After(p.timeout):
-			//job, err = p.getDDLJob(b.GetDdlJobID())
 			getJobF()
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -460,15 +401,16 @@ func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
 		}
 	}
 
+	ddlJobsCounter.Add(1)
 	return
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
 	item := p.bh.pop()
-	for item != nil && item.binlog.GetCommitTs() <= windowUpper {
+	for item != nil && item.binlog.commitTs <= windowUpper {
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
-		if item.binlog.GetCommitTs() > windowLower {
+		if item.binlog.commitTs > windowLower {
 			bs = append(bs, item)
 		}
 		// update pump's current position
@@ -535,7 +477,6 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
-			//log.Infof("get message from kafka")
 			pos.Offset = msg.Offset
 			payload = msg.Value
 			messageCounter.Add(1)
@@ -546,24 +487,13 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Payload: payload,
 		}
 
-		// TODO:
-		//log.Infof("matchAndFilter")
 		b := p.matchAndFilter(entity)
 		if b != nil {
-			/*
-			binlogEnt := &binlogEntity{
-				tp:       b.Tp,
-				startTS:  b.StartTs,
-				commitTS: b.CommitTs,
-				pos:      pos,
-			}
-			*/
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- b:
-				//log.Infof("send to binlogChan")
 			}
 		}
 	}
@@ -580,7 +510,6 @@ func (p *Pump) getPrewriteBinlogEntity(startTS int64) (b *binlogItem, ok bool) {
 func (p *Pump) GetLatestValidCommitTS() int64 {
 	return atomic.LoadInt64(&p.latestValidCommitTS)
 }
-
 
 func (p *Pump) handleDDL(job *model.Job) (string, string, string, error) {
 	if job.State == model.JobStateCancelled {
