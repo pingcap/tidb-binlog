@@ -140,7 +140,7 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		return false
 	}
 
-	_, _, _, err := p.handleDDL(item.job)
+	err := p.handleDDL(item.job)
 	if err != nil {
 		log.Errorf("handleDDL error: %v", err)
 		return true
@@ -544,7 +544,7 @@ func (p *Pump) handleDDL(job *model.Job) error {
 			return nil
 		}
 
-		schemaName, err := p.filter.schema.DropSchema(job.SchemaID)
+		_, err := p.filter.schema.DropSchema(job.SchemaID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -609,17 +609,17 @@ func (p *Pump) handleDDL(job *model.Job) error {
 			return nil
 		}
 
-		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		_, ok = p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		tableName, err := p.filter.schema.DropTable(job.TableID)
+		_, err := p.filter.schema.DropTable(job.TableID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		return schema.Name.O, tableName, sql, nil
+		return nil
 
 	case model.ActionTruncateTable:
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
@@ -647,7 +647,7 @@ func (p *Pump) handleDDL(job *model.Job) error {
 			return errors.Trace(err)
 		}
 
-		return schema.Name.O, table.Name.O, sql, nil
+		return nil
 
 	default:
 		tbInfo := job.BinlogInfo.TableInfo
@@ -660,7 +660,7 @@ func (p *Pump) handleDDL(job *model.Job) error {
 			return nil
 		}
 
-		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
+		_, ok = p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return errors.NotFoundf("schema %d", job.SchemaID)
 		}

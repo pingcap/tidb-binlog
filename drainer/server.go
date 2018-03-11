@@ -274,13 +274,6 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	/*
-		jobs, err := s.collector.LoadHistoryDDLJobs()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	*/
-
 	err = s.PrepareCollect()
 	if err != nil {
 		return errors.Trace(err)
