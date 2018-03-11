@@ -13,7 +13,6 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	//"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -176,6 +175,7 @@ func (s *Server) PrepareCollect() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debugf("get %d history ddl jobs", len(jobs))
 
 	return s.collector.Prepare(jobs)
 }
@@ -219,7 +219,7 @@ func (s *Server) StartSyncer() {
 		}()
 		err := s.syncer.Start()
 		if err != nil {
-			log.Errorf("syncer exited, error %v", err)
+			log.Errorf("syncer exited, error %v", errors.Trace(err))
 		}
 	}()
 }

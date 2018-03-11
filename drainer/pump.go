@@ -45,8 +45,8 @@ type Pump struct {
 	timeout time.Duration
 
 	// pullBinlogs sends the binlogs to publish function by this channel
-	//binlogChan chan *binlogEntity
-	binlogChan chan *binlogItem
+	binlogChan chan *binlogEntity
+	//binlogChan chan *binlogItem
 
 	// the latestTS from tso
 	latestTS int64
@@ -88,7 +88,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		tiStore:      tiStore,
 		window:       w,
 		timeout:      timeout,
-		binlogChan:   make(chan *binlogItem, maxBinlogItemCount),
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 		cp:           cp,
 		initCommitTS: initCommitTS,
 		filter:       filter,
@@ -119,6 +119,10 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 	jobID := binlog.ddlJobID
 	preWrite := binlog.prewriteValue
 
+	if p.initCommitTS > 0 && binlog.commitTs < p.initCommitTS {
+		return true
+	}
+
 	newMumation := make([]pb.TableMutation, 0, len(preWrite.Mutations))
 
 	if jobID == 0 {
@@ -145,9 +149,11 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		return false
 	}
 
-	err := p.handleDDL(item.job)
+	sql, err := p.handleDDL(item.job)
 	if err != nil {
 		log.Errorf("handleDDL error: %v", errors.Trace(err))
+	}
+	if sql == "" {
 		return true
 	}
 
@@ -155,8 +161,8 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 }
 
 // match is responsible for match p+c binlog
-//func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
-func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
+func (p *Pump) match(ent pb.Entity) *pb.Binlog {
+//func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -165,16 +171,22 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 		return nil
 	}
 
-	pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
-	item = newBinlogItem(b, pos, p.nodeID)
+	
+	//item = newBinlogItem(b, pos, p.nodeID)
 
-	if item.binlog.commitTs < p.initCommitTS {
-		return nil
-	}
+	//if item.binlog.commitTs != 0 && item.binlog.commitTs < p.initCommitTS {
+	//if p.initCommitTS > 0 && item.binlog.commitTs < p.initCommitTS {
+	//	log.Debugf("%d < %d", item.binlog.commitTs, p.initCommitTS)
+	//	return nil
+	//}
+	//if item.binlog.prewriteValue.GetSchemaVersion() < p.filter.schema.schemaMetaVersion {
+	//	return nil
+	//}
 
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
+		/*
 		if b.GetDdlJobId() > 0 {
 			job, err := p.getDDLJob(b.GetDdlJobId())
 			if err != nil {
@@ -184,12 +196,15 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 			item.SetJob(job)
 		}
 		if p.needFilter(item) {
+			log.Debugf("need filter: %v", item)
 			item.filter = true
 			item.binlog.ddlQuery = nil
 			item.binlog.prewriteKey = nil
 			item.binlog.prewriteValue = nil
 		}
-		p.mu.prewriteItems[b.StartTs] = item
+		*/
+		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
+		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
@@ -203,8 +218,7 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
-
-	return item
+	return b
 }
 
 // UpdateLatestTS updates the latest ts that query from pd
@@ -221,7 +235,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	defer p.wg.Done()
 	var (
 		maxCommitTs int64
-		entity      *binlogItem
+		entity      *binlogEntity
 		binlogs     map[int64]*binlogItem
 	)
 	for {
@@ -232,22 +246,22 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		}
 
 		//switch entity.tp {
-		switch entity.binlog.tp {
+		switch entity.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
-			//p.mustFindCommitBinlog(t, entity.startTS)
-			p.mustFindCommitBinlog(t, entity.binlog.startTs)
+			p.mustFindCommitBinlog(t, entity.startTS)
+			//p.mustFindCommitBinlog(t, entity.binlog.startTs)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
-			if entity.binlog.commitTs > maxCommitTs {
+			if entity.commitTS > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
-				maxCommitTs = entity.binlog.commitTs
+				maxCommitTs = entity.commitTS
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
-					log.Errorf("save binlogs and status error at ts(%v)", entity.binlog.commitTs)
+					log.Errorf("save binlogs and status error at ts(%v)", entity.commitTS)
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
@@ -349,6 +363,12 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
+	err := p.grabDDLJobs(items)
+	if err != nil {
+		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
+		return errors.Trace(err)
+	}
+	
 	p.putIntoHeap(items)
 	binlogCounter.Add(float64(len(items)))
 	return nil
@@ -367,12 +387,66 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
 		}
+
+		if p.needFilter(item) {
+			continue
+		}
 		p.bh.push(p.ctx, item)
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
 }
 
+func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
+	var count int
+	for ts, item := range items {
+		b := item.binlog
+		if b.ddlJobID > 0 {
+			job, err := p.getDDLJob(b.ddlJobID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for job == nil {
+				select {
+				case <-p.ctx.Done():
+					return errors.Trace(p.ctx.Err())
+				case <-time.After(p.timeout):
+					job, err = p.getDDLJob(b.ddlJobID)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+			}
+			if job.State == model.JobStateCancelled {
+				delete(items, ts)
+			} else {
+				item.SetJob(job)
+				count++
+			}
+		}
+	}
+	ddlJobsCounter.Add(float64(count))
+	return nil
+}
+
+func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
+	version, err := p.tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := p.tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	job, err := snapMeta.GetHistoryDDLJob(id)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return job, nil
+}
+
+/*
 func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
 	getJobF := func() {
 		version, err := p.tiStore.CurrentVersion()
@@ -412,6 +486,7 @@ func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
 	ddlJobsCounter.Add(1)
 	return
 }
+*/
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
@@ -495,13 +570,19 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Payload: payload,
 		}
 
-		b := p.matchAndFilter(entity)
+		b := p.match(entity)
 		if b != nil {
+			binlogEnt := &binlogEntity{
+				tp:       b.Tp,
+				startTS:  b.StartTs,
+				commitTS: b.CommitTs,
+				pos:      pos,
+			}
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- b:
+			case p.binlogChan <- binlogEnt:
 			}
 		}
 	}
@@ -519,15 +600,15 @@ func (p *Pump) GetLatestValidCommitTS() int64 {
 	return atomic.LoadInt64(&p.latestValidCommitTS)
 }
 
-func (p *Pump) handleDDL(job *model.Job) error {
+func (p *Pump) handleDDL(job *model.Job) (string, error) {
+	log.Infof("ddl query %s", job.Query)
 	if job.State == model.JobStateCancelled {
-		return nil
+		return "", nil
 	}
 
-	log.Infof("ddl query %s", job.Query)
 	sql := job.Query
 	if sql == "" {
-		return errors.Errorf("[ddl job sql miss]%+v", job)
+		return "", errors.Errorf("[ddl job sql miss]%+v", job)
 	}
 
 	switch job.Type {
@@ -536,149 +617,151 @@ func (p *Pump) handleDDL(job *model.Job) error {
 		schema := job.BinlogInfo.DBInfo
 		if filterIgnoreSchema(schema, p.filter.ignoreDBs) {
 			p.filter.schema.AddIgnoreSchema(schema)
-			return nil
+			return "", nil
 		}
 
 		err := p.filter.schema.CreateSchema(schema)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	case model.ActionDropSchema:
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			p.filter.schema.DropIgnoreSchema(job.SchemaID)
-			return nil
+			return "", nil
 		}
 
 		_, err := p.filter.schema.DropSchema(job.SchemaID)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
 		_, ok := p.filter.schema.SchemaByTableID(job.TableID)
 		if !ok {
-			return errors.NotFoundf("table(%d) or it's schema", job.TableID)
+			return "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
 		_, ok = p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
+			return "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 		// first drop the table
 		_, err := p.filter.schema.DropTable(job.TableID)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo
 		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return errors.NotFoundf("schema %d", job.SchemaID)
+			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err = p.filter.schema.CreateTable(schema, table)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	case model.ActionCreateTable:
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
-			return errors.NotFoundf("table %d", job.TableID)
+			return "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return nil
+			return "", nil
 		}
 
 		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return errors.NotFoundf("schema %d", job.SchemaID)
+			log.Debugf("schema ID %d not found", job.SchemaID)
+			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err := p.filter.schema.CreateTable(schema, table)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	case model.ActionDropTable:
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return nil
+			return "", nil
 		}
 
 		_, ok = p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return errors.NotFoundf("schema %d", job.SchemaID)
+			log.Debugf("schema ID %d not found", job.SchemaID)
+			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		_, err := p.filter.schema.DropTable(job.TableID)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	case model.ActionTruncateTable:
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return nil
+			return "", nil
 		}
 
 		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return errors.NotFoundf("schema %d", job.SchemaID)
+			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		_, err := p.filter.schema.DropTable(job.TableID)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
-			return errors.NotFoundf("table %d", job.TableID)
+			return "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		err = p.filter.schema.CreateTable(schema, table)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 
 	default:
 		tbInfo := job.BinlogInfo.TableInfo
 		if tbInfo == nil {
-			return errors.NotFoundf("table %d", job.TableID)
+			return "", errors.NotFoundf("table %d", job.TableID)
 		}
 
 		_, ok := p.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			return nil
+			return "", nil
 		}
 
 		_, ok = p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			return errors.NotFoundf("schema %d", job.SchemaID)
+			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
 		err := p.filter.schema.ReplaceTable(tbInfo)
 		if err != nil {
-			return errors.Trace(err)
+			return "", errors.Trace(err)
 		}
 
-		return nil
+		return sql, nil
 	}
 }
