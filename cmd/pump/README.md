@@ -7,39 +7,42 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
 ```
  Usage of pump:
   -L string
-        log level: debug, info, warn, error, fatal (default "info")
+      log level: debug, info, warn, error, fatal (default "info")
+  -V  print pump version info
   -addr string
-        addr(i.e. 'host:port') to listen on for client traffic (default "127.0.0.1:8250")
+      addr(i.e. 'host:port') to listen on for client traffic (default "127.0.0.1:8250")
   -advertise-addr string
-        addr(i.e. 'host:port') to advertise to the public
+      addr(i.e. 'host:port') to advertise to the public
   -config string
-        path to the pump configuration file
+      path to the pump configuration file
   -data-dir string
-        the path to store binlog data
-  -kafka-addrs string 
-	kafka addrs where pump push binlog to (default "127.0.0.1:9092")
-  -zookeeper-addrs string
-	zookeeper addrs where get kafka addrs
+      the path to store binlog data
+  -enable-tolerant
+      after enable tolerant, pump wouldn't return error if it fails to write binlog (default true)
   -gc int
-        recycle binlog files older than gc days, zero means never recycle (default 7)
+      recycle binlog files older than gc days, zero means never recycle (default 7)
   -heartbeat-interval int
-        number of seconds between heartbeat ticks (default 2)
+      number of seconds between heartbeat ticks (default 2)
+  -kafka-addrs string
+      a comma separated list of the kafka broker endpoints (default "127.0.0.1:9092")
   -log-file string
-        log file path
+      log file path
   -log-rotate string
-        log file rotate type, hour/day
+      log file rotate type, hour/day
+  -max-message-size int
+      max msg size producer produce into kafka (default 1073741824)
   -metrics-addr string
-        prometheus pushgateway address, leaves it empty will disable prometheus push.
+      prometheus pushgateway address, leaves it empty will disable prometheus push
   -metrics-interval int
-        prometheus client push interval in second, set "0" to disable prometheus push. (default 15)
+      prometheus client push interval in second, set "0" to disable prometheus push (default 15)
   -node-id string
-        the ID of pump node; if not specify, we will generate one from hostname and the listening port
+      the ID of pump node; if not specify, we will generate one from hostname and the listening port
   -pd-urls string
-        a comma separated list of the PD endpoints (default "http://127.0.0.1:2379")
+      a comma separated list of the PD endpoints (default "http://127.0.0.1:2379")
   -socket string
-        unix socket addr to listen on for client traffic
-  -version
-        print pump version info
+      unix socket addr to listen on for client traffic
+  -zookeeper-addrs string
+      a comma separated list of the zookeeper broker endpoints
 ```
 
 

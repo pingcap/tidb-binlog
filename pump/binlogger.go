@@ -40,7 +40,7 @@ type Binlogger interface {
 	WriteTail(payload []byte) error
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
-	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error)
+	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error
 
 	// close the binlogger
 	Close() error
@@ -205,38 +205,34 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
 	var ent = &binlog.Entity{}
 	var decoder *decoder
 	var first = true
 
 	dirpath := b.dir
-	latestPos := binlog.Pos{
-		Suffix: from.Suffix,
-		Offset: from.Offset,
-	}
 	names, err := readBinlogNames(dirpath)
 	if err != nil {
-		return latestPos, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	nameIndex, ok := searchIndex(names, from.Suffix)
 	if !ok {
-		return latestPos, ErrFileNotFound
+		return ErrFileNotFound
 	}
 
 	for _, name := range names[nameIndex:] {
 		select {
 		case <-ctx.Done():
 			log.Warningf("Walk Done!")
-			return latestPos, nil
+			return nil
 		default:
 		}
 
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
-			return latestPos, errors.Trace(err)
+			return errors.Trace(err)
 		}
 		defer f.Close()
 
@@ -245,11 +241,11 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 			size, err := f.Seek(from.Offset, os.SEEK_SET)
 			if err != nil {
-				return latestPos, errors.Trace(err)
+				return errors.Trace(err)
 			}
 
 			if size < from.Offset {
-				return latestPos, errors.Errorf("pos'offset is wrong")
+				return errors.Errorf("pos'offset is wrong")
 			}
 		}
 
@@ -259,7 +255,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			select {
 			case <-ctx.Done():
 				log.Warningf("Walk Done!")
-				return latestPos, nil
+				return nil
 			default:
 			}
 
@@ -273,27 +269,23 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				Pos:     ent.Pos,
 				Payload: ent.Payload,
 			}
-			latestPos = newEnt.Pos
 			err := sendBinlog(newEnt)
 			if err != nil {
-				return latestPos, errors.Trace(err)
+				return errors.Trace(err)
 			}
 
-			// calculate next position to send binlog
-			// 16 means magic(4 bytes) + size(8 bytes) + crc(4 bytes)
-			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 			binlogBufferPool.Put(buf)
 		}
 
 		if err != nil && err != io.EOF {
-			return latestPos, err
+			return errors.Trace(err)
 		}
 
 		from.Suffix++
 		from.Offset = 0
 	}
 
-	return latestPos, nil
+	return nil
 }
 
 // GC recycles the old binlog file
