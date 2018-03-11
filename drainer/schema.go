@@ -50,15 +50,11 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreDBs map[string]struc
 	s.tables = make(map[int64]*model.TableInfo)
 	s.ignoreSchema = make(map[int64]struct{})
 	s.schemaMetaVersion = 0
-	log.Debugf("ignoreDBs: %v", ignoreDBs)
+
 	for _, job := range jobs {
 		if job.State == model.JobStateCancelled {
 			continue
 		}
-
-		//if job.BinlogInfo.SchemaVersion > s.schemaMetaVersion {
-		//	s.schemaMetaVersion = job.BinlogInfo.SchemaVersion
-		//}
 
 		switch job.Type {
 		case model.ActionCreateSchema:

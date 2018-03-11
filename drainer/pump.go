@@ -88,7 +88,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		tiStore:      tiStore,
 		window:       w,
 		timeout:      timeout,
-		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		binlogChan:   make(chan *binlogEntity, maxBinlogItemCount),
 		cp:           cp,
 		initCommitTS: initCommitTS,
 		filter:       filter,
@@ -162,7 +162,6 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 
 // match is responsible for match p+c binlog
 func (p *Pump) match(ent pb.Entity) *pb.Binlog {
-//func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -171,38 +170,9 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		return nil
 	}
 
-	
-	//item = newBinlogItem(b, pos, p.nodeID)
-
-	//if item.binlog.commitTs != 0 && item.binlog.commitTs < p.initCommitTS {
-	//if p.initCommitTS > 0 && item.binlog.commitTs < p.initCommitTS {
-	//	log.Debugf("%d < %d", item.binlog.commitTs, p.initCommitTS)
-	//	return nil
-	//}
-	//if item.binlog.prewriteValue.GetSchemaVersion() < p.filter.schema.schemaMetaVersion {
-	//	return nil
-	//}
-
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
-		/*
-		if b.GetDdlJobId() > 0 {
-			job, err := p.getDDLJob(b.GetDdlJobId())
-			if err != nil {
-				log.Errorf("...")
-				return nil
-			}
-			item.SetJob(job)
-		}
-		if p.needFilter(item) {
-			log.Debugf("need filter: %v", item)
-			item.filter = true
-			item.binlog.ddlQuery = nil
-			item.binlog.prewriteKey = nil
-			item.binlog.prewriteValue = nil
-		}
-		*/
 		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
 		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
@@ -250,7 +220,6 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
-			//p.mustFindCommitBinlog(t, entity.binlog.startTs)
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
@@ -368,7 +337,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
 		return errors.Trace(err)
 	}
-	
+
 	p.putIntoHeap(items)
 	binlogCounter.Add(float64(len(items)))
 	return nil
@@ -445,48 +414,6 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 	}
 	return job, nil
 }
-
-/*
-func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
-	getJobF := func() {
-		version, err := p.tiStore.CurrentVersion()
-		if err != nil {
-			log.Errorf("[pump] get current version error: %v", err)
-			return
-		}
-		snapshot, err := p.tiStore.GetSnapshot(version)
-		if err != nil {
-			log.Errorf("[pump] get snapshot error: %v", err)
-			return
-		}
-		snapMeta := meta.NewSnapshotMeta(snapshot)
-		job, err = snapMeta.GetHistoryDDLJob(id)
-		if err != nil {
-			log.Errorf("[pump] get history ddl job error: %v", err)
-			return
-		}
-	}
-	getJobF()
-
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for job == nil {
-		select {
-		case <-p.ctx.Done():
-			return nil, errors.Trace(p.ctx.Err())
-		case <-time.After(p.timeout):
-			getJobF()
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
-	}
-
-	ddlJobsCounter.Add(1)
-	return
-}
-*/
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
@@ -601,7 +528,7 @@ func (p *Pump) GetLatestValidCommitTS() int64 {
 }
 
 func (p *Pump) handleDDL(job *model.Job) (string, error) {
-	log.Infof("ddl query %s", job.Query)
+	log.Infof("handle ddl query %s", job.Query)
 	if job.State == model.JobStateCancelled {
 		return "", nil
 	}
@@ -683,7 +610,6 @@ func (p *Pump) handleDDL(job *model.Job) (string, error) {
 
 		schema, ok := p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			log.Debugf("schema ID %d not found", job.SchemaID)
 			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
@@ -702,7 +628,6 @@ func (p *Pump) handleDDL(job *model.Job) (string, error) {
 
 		_, ok = p.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
-			log.Debugf("schema ID %d not found", job.SchemaID)
 			return "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 

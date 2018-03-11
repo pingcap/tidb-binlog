@@ -343,8 +343,7 @@ func (s *Syncer) run() error {
 			sql := b.job.Query
 			schema, ok := s.filter.schema.SchemaByID(b.job.SchemaID)
 			if !ok {
-				log.Debugf("schema %d not found, sql: %s", b.job.SchemaID, sql)
-				return errors.NotFoundf("schema %d", b.job.SchemaID)
+				return errors.NotFoundf("sql %s, schema %d", sql, b.job.SchemaID)
 			}
 			if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema.Name.O)
