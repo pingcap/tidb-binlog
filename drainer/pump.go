@@ -12,6 +12,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -61,32 +62,36 @@ type Pump struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	isFinished int64
-	filter     *filter
+
+	filter       *filter
+	initCommitTS int64
+	cp           checkpoint.CheckPoint
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, filter *filter) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, filter *filter, cp checkpoint.CheckPoint) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	initCommitTS, _ := cp.Pos()
 
 	return &Pump{
-		nodeID:     nodeID,
-		clusterID:  clusterID,
-		consumer:   consumer,
-		currentPos: pos,
-		latestPos:  pos,
-		bh:         newBinlogHeap(maxBinlogItemCount),
-		tiStore:    tiStore,
-		window:     w,
-		timeout:    timeout,
-		//binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
-		binlogChan: make(chan *binlogItem, maxBinlogItemCount),
-
-		filter: filter,
+		nodeID:       nodeID,
+		clusterID:    clusterID,
+		consumer:     consumer,
+		currentPos:   pos,
+		latestPos:    pos,
+		bh:           newBinlogHeap(maxBinlogItemCount),
+		tiStore:      tiStore,
+		window:       w,
+		timeout:      timeout,
+		binlogChan:   make(chan *binlogItem, maxBinlogItemCount),
+		cp:           cp,
+		initCommitTS: initCommitTS,
+		filter:       filter,
 	}, nil
 }
 
@@ -142,7 +147,7 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 
 	err := p.handleDDL(item.job)
 	if err != nil {
-		log.Errorf("handleDDL error: %v", err)
+		log.Errorf("handleDDL error: %v", errors.Trace(err))
 		return true
 	}
 
@@ -162,6 +167,10 @@ func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 
 	pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
 	item = newBinlogItem(b, pos, p.nodeID)
+
+	if item.binlog.commitTs < p.initCommitTS {
+		return nil
+	}
 
 	p.mu.Lock()
 	switch b.Tp {

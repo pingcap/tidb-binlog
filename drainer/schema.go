@@ -188,6 +188,9 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreDBs map[string]struc
 		}
 	}
 
+	log.Debugf("tableIDToName: %v", s.tableIDToName)
+	log.Debugf("schemaNameToID: %v", s.schemaNameToID)
+
 	return nil
 }
 

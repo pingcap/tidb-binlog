@@ -189,7 +189,6 @@ func (s *Server) StartCollect() {
 			s.wg.Done()
 			s.Close()
 		}()
-		log.Info("s.collector.Start(s.ctx)")
 		s.collector.Start(s.ctx)
 	}()
 }
