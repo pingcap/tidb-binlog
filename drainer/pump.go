@@ -44,7 +44,9 @@ type Pump struct {
 	timeout time.Duration
 
 	// pullBinlogs sends the binlogs to publish function by this channel
-	binlogChan chan *binlogEntity
+	//binlogChan chan *binlogEntity
+	binlogChan chan *binlogItem
+
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -81,7 +83,9 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		//binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		binlogChan: make(chan *binlogItem, maxBinlogItemCount),
+
 		filter:     filter,
 	}, nil
 }
@@ -112,7 +116,6 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 
 	newMumation := make([]pb.TableMutation, 0, len(preWrite.Mutations))
 	
-	// only filter dml
 	if jobID == 0 {
 		for _, mutation := range preWrite.Mutations {
 			tableID := mutation.TableId
@@ -137,7 +140,7 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		return false
 	} else {
 		_, _, sql, err := p.handleDDL(item.job)
-		if err != nil {
+		if err != nil || sql == "" {
 			log.Errorf("handleDDL error: %v", err)
 			return true
 		}
@@ -148,7 +151,8 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 }
 
 // match is responsible for match p+c binlog
-func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
+//func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
+func (p *Pump) matchAndFilter(ent pb.Entity) (item *binlogItem) {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -157,11 +161,36 @@ func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
 		return nil
 	}
 
+	pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
+	item = newBinlogItem(b, pos, p.nodeID)
+
+	//if p.needFilter(b) {
+	//	return nil
+	//}
+
 	p.mu.Lock()
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
-		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
-		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
+		//pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
+		//item = newBinlogItem(b, pos, p.nodeID)
+		if b.GetDdlJobId() > 0 {
+			job, err := p.getDDLJob(b.GetDdlJobId())
+			if err != nil {
+				log.Errorf("...")
+				return nil
+			}
+			item.SetJob(job)
+			//if job.State == model.JobStateCancelled {
+			//	item.SetJob(job)
+			//}
+		}
+		if p.needFilter(item) {
+			item.filter = true
+			item.binlog.ddlQuery = nil
+			item.binlog.prewriteKey = nil
+			item.binlog.prewriteValue = nil
+		}
+		p.mu.prewriteItems[b.StartTs] = item
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			if b.Tp == pb.BinlogType_Commit {
@@ -176,7 +205,7 @@ func (p *Pump) matchAndFilter(ent pb.Entity) *pb.Binlog {
 	}
 	p.mu.Unlock()
 
-	return b
+	return item
 }
 
 // UpdateLatestTS updates the latest ts that query from pd
@@ -193,7 +222,8 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	defer p.wg.Done()
 	var (
 		maxCommitTs int64
-		entity      *binlogEntity
+		//entity      *binlogEntity
+		entity      *binlogItem
 		binlogs     map[int64]*binlogItem
 	)
 	for {
@@ -203,21 +233,23 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case entity = <-p.binlogChan:
 		}
 
-		switch entity.tp {
+		//switch entity.tp {
+		switch entity.binlog.GetTp() {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
-			p.mustFindCommitBinlog(t, entity.startTS)
+			//p.mustFindCommitBinlog(t, entity.startTS)
+			p.mustFindCommitBinlog(t, entity.binlog.GetStartTs())
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
-			if entity.commitTS > maxCommitTs {
+			if entity.binlog.GetCommitTs() > maxCommitTs {
 				binlogs = p.getBinlogs(binlogs)
-				maxCommitTs = entity.commitTS
+				maxCommitTs = entity.binlog.GetCommitTs()
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
-					log.Errorf("save binlogs and status error at ts(%v)", entity.commitTS)
+					log.Errorf("save binlogs and status error at ts(%v)", entity.binlog.GetCommitTs())
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
@@ -319,12 +351,13 @@ func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int
 }
 
 func (p *Pump) publishItems(items map[int64]*binlogItem) error {
+	/*
 	err := p.grabDDLJobs(items)
 	if err != nil {
 		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
 		return errors.Trace(err)
 	}
-
+	*/
 	p.putIntoHeap(items)
 	binlogCounter.Add(float64(len(items)))
 	return nil
@@ -336,7 +369,10 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 
 	for commitTS, item := range items {
 		// TODO: use binlogItem
-		if p.needFilter(item) {
+		//if p.needFilter(item) {
+		//	continue
+		//}
+		if item.filter {
 			continue
 		}
 
@@ -382,21 +418,49 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	return nil
 }
 
-func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
-	version, err := p.tiStore.CurrentVersion()
+func (p *Pump) getDDLJob(id int64) (job *model.Job, err error) {
+	getJobF := func()  {
+		version, err := p.tiStore.CurrentVersion()
+		if err != nil {
+			log.Errorf("[pump] get current version error: %v", err)
+			return
+			//return nil, errors.Trace(err)
+		}
+		snapshot, err := p.tiStore.GetSnapshot(version)
+		if err != nil {
+			log.Errorf("[pump] get snapshot error: %v", err)
+			return
+			//return nil, errors.Trace(err)
+		}
+		snapMeta := meta.NewSnapshotMeta(snapshot)
+		job, err = snapMeta.GetHistoryDDLJob(id)
+		if err != nil {
+			log.Errorf("[pump] get history ddl job error: %v", err)
+			return
+			//return nil, errors.Trace(err)
+		}
+	}
+	
+	//job, err := p.getDDLJob(b.GetDdlJobID())
+	getJobF()
+
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	snapshot, err := p.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
+	for job == nil {
+		select {
+		case <-p.ctx.Done():
+			return nil, errors.Trace(p.ctx.Err())
+		case <-time.After(p.timeout):
+			//job, err = p.getDDLJob(b.GetDdlJobID())
+			getJobF()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
 	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	job, err := snapMeta.GetHistoryDDLJob(id)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return job, nil
+
+	return
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
@@ -471,6 +535,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
+			//log.Infof("get message from kafka")
 			pos.Offset = msg.Offset
 			payload = msg.Value
 			messageCounter.Add(1)
@@ -480,19 +545,25 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Pos:     pos,
 			Payload: payload,
 		}
+
+		// TODO:
+		//log.Infof("matchAndFilter")
 		b := p.matchAndFilter(entity)
 		if b != nil {
+			/*
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
 				startTS:  b.StartTs,
 				commitTS: b.CommitTs,
 				pos:      pos,
 			}
+			*/
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- binlogEnt:
+			case p.binlogChan <- b:
+				//log.Infof("send to binlogChan")
 			}
 		}
 	}
