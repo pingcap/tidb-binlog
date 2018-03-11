@@ -139,8 +139,6 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		_, _, sql, err := p.handleDDL(item.job)
 		if err != nil {
 			log.Errorf("handleDDL error: %v", err)
-		}
-		if sql == "" {
 			return true
 		}
 		return false

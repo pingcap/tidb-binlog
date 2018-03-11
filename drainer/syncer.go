@@ -12,7 +12,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
-	"github.com/pingcap/tidb/model"
+	//"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -584,21 +584,13 @@ func (s *Syncer) run() error {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else 
 			*/
-			if b.job.State == model.JobStateCancelled {
-				continue
+			schema, ok := s.filter.schema.SchemaByID(b.job.SchemaID)
+			if !ok {
+				return errors.NotFoundf("schema %d", b.job.SchemaID)
 			}
-			if b.job.BinlogInfo == nil {
-				log.Info("b.job.BinlogInfo == nil")
-				continue
-			}
-			if b.job.BinlogInfo.DBInfo == nil {
-				log.Infof("b.job.BinlogInfo.DBInfo == nil")
-				continue
-			}
-			schema := b.job.BinlogInfo.DBInfo.Name.O
 			sql := b.job.Query
 			if sql != "" {
-				sql, err = s.translator.GenDDLSQL(sql, schema)
+				sql, err = s.translator.GenDDLSQL(sql, schema.Name.O)
 				if err != nil {
 					return errors.Trace(err)
 				}
