@@ -170,7 +170,7 @@ func calculateForwardAShortTime(current int64) int64 {
 	return int64(previous)
 }
 
-//
+// PrepareCollect get histiry ddl jobs to struct schema info
 func (s *Server) PrepareCollect() error {
 	jobs, err := s.collector.LoadHistoryDDLJobs()
 	if err != nil {

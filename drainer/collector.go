@@ -282,12 +282,9 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
 func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
-	//var startTs1 uint64 = 398611588414963735
-	//var startTs2 uint64 = 398611612191424536
 	var version kv.Version
 	var err error
 
-	log.Infof("initCommitTS: %d", c.initCommitTS)
 	if c.initCommitTS == 0 {
 		version, err = c.tiStore.CurrentVersion()
 		if err != nil {
@@ -303,23 +300,6 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Infof("startTs: %d, has %d jobs", c.initCommitTS, len(jobs))
-
-	/*
-		version, err := c.tiStore.CurrentVersion()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		snapshot, err := c.tiStore.GetSnapshot(version)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		snapMeta := meta.NewSnapshotMeta(snapshot)
-		jobs, err := snapMeta.GetAllHistoryDDLJobs()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	*/
 
 	return jobs, nil
 }
@@ -398,6 +378,7 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	return status
 }
 
+// Prepare build the schema info
 func (c *Collector) Prepare(jobs []*model.Job) error {
 	var err error
 	c.filter.schema, err = NewSchema(jobs, c.filter.ignoreDBs)
