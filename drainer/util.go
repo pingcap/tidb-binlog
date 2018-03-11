@@ -60,14 +60,6 @@ func ComparePos(left, right binlog.Pos) int {
 	}
 }
 
-// CalculateNextPos calculates the position of binlog item next to the given one.
-func CalculateNextPos(item binlog.Entity) binlog.Pos {
-	pos := item.Pos
-	// 4 bytes(magic) + 8 bytes(size) + length of payload + 4 bytes(CRC)
-	pos.Offset += int64(len(item.Payload) + 16)
-	return pos
-}
-
 // GenCheckPointCfg returns an CheckPoint config instance
 func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	dbCfg := checkpoint.DBConfig{
