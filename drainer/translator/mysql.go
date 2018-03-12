@@ -7,6 +7,7 @@ import (
 
 	"time"
 
+	"github.com/ngaut/log"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -17,6 +18,8 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
+const implicitColName = "_tidb_rowid"
+
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct{}
 
@@ -25,6 +28,7 @@ func init() {
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+	//log.Debugf("rows: %v, length: %d", rows, len(rows))
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -42,6 +46,8 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 
+		log.Infof("pk: %v", pk)
+
 		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
@@ -49,6 +55,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		if columnValues == nil {
 			continue
 		}
+		log.Infof("len: %d, columnValues: %v", len(columnValues), columnValues)
 
 		var vals []interface{}
 		for _, col := range columns {
@@ -93,6 +100,18 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
 
+	log.Infof("rows: %v", rows)
+	if !table.PKIsHandle {
+		// add implicit column
+		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
+		newColumn := &model.ColumnInfo{
+			ID: -1, 
+			Name: model.NewCIStr(implicitColName),
+		}
+		newColumn.Tp = mysql.TypeInt24
+		columns = append(columns, newColumn)
+	}
+
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
 		var oldValues []interface{}
@@ -117,11 +136,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+		log.Infof("updateColumns: %v, newValues: %v, oldValues: %v", updateColumns, newValues, oldValues)
 
 		var value []interface{}
 		kvs := m.genKVs(updateColumns)
 		value = append(value, newValues...)
 
+		log.Infof("kvs: %s", kvs)
 		var where string
 		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
 		if err != nil {
@@ -153,6 +174,17 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders(len(columns))
+
+	if !table.PKIsHandle {
+		// add implicit column
+		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
+		newColumn := &model.ColumnInfo{
+			ID: -1, 
+			Name: model.NewCIStr(implicitColName),
+		}
+		newColumn.Tp = mysql.TypeInt24
+		columns = append(columns, newColumn)
+	}
 
 	for _, row := range rows {
 		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
@@ -201,6 +233,17 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
 
+	if !table.PKIsHandle {
+		// add implicit column
+		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
+		newColumn := &model.ColumnInfo{
+			ID: -1, 
+			Name: model.NewCIStr(implicitColName),
+		}
+		newColumn.Tp = mysql.TypeInt24
+		columns = append(columns, newColumn)
+	}
+	
 	for _, row := range rows {
 		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
 		if err != nil {
@@ -209,6 +252,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		if columnValues == nil {
 			continue
 		}
+		log.Infof("columnValues: %v", columnValues)
 
 		sql, value, key, err := m.genDeleteSQL(schema, table, columnValues)
 		if err != nil {
@@ -462,6 +506,8 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 		return nil, nil, nil
 	}
 
+	log.Infof("cols: %v", cols)
+
 	cnt := 0
 	var (
 		data   []byte
@@ -485,6 +531,7 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 			return nil, nil, errors.Trace(err)
 		}
 		id := cid.GetInt64()
+		log.Infof("cid: %d", id)
 		ft, ok := cols[id]
 		if ok {
 			v, err := tablecodec.DecodeColumnValue(data, ft, loc)
@@ -497,12 +544,15 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 			} else {
 				oldRow[id] = v
 			}
+			log.Infof("newRow: %v, oldRow: %v", newRow, oldRow)
 
 			cnt++
 			if cnt == len(cols)*2 {
 				// Get enough data.
 				break
 			}
+		} else {
+			log.Infof("cid: %d", id)
 		}
 	}
 
