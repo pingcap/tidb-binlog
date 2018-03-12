@@ -1,8 +1,5 @@
 # data-dir contains protobuf files. It's suggested to use fullpath.
 data-dir = "./data.drainer"
-# If the protobuf files are compressed, specify compression method here.
-# Values can be "gzip", or leave it empty if no compression.
-compression = "gzip"
 # Use index file to search target ts. Set this when `start-ts` is set.
 # The file path would be {data-dir}/{index-name}
 # index-name = "binlog.index"
@@ -17,7 +14,7 @@ log-level = "info"
 # stop-datetime = ""
 
 # Start-tso is similar to start-datetime, but in pd-server tso format. e.g.  395181938313123110
-# Stop-tso is is similar to stop-datetime, but in pd-server tso format. e.g. 395181938313123110
+# Stop-tso is similar to stop-datetime, but in pd-server tso format. e.g. 395181938313123110
 # start-tso = 0 
 # stop-tso = 0
 

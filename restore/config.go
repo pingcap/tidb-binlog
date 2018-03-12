@@ -31,7 +31,6 @@ type TableName struct {
 type Config struct {
 	*flag.FlagSet
 	Dir           string `toml:"data-dir" json:"data-dir"`
-	Compression   string `toml:"compression" json:"compression"`
 	IndexName     string `toml:"index-name" json:"index-name"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
