@@ -35,7 +35,6 @@ type binlogItem struct {
 	pos    pb.Pos
 	nodeID string
 	job    *model.Job
-	filter bool
 }
 
 func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
@@ -60,7 +59,6 @@ func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
 		binlog: newBinlog,
 		pos:    p,
 		nodeID: nodeID,
-		filter: false,
 	}
 }
 

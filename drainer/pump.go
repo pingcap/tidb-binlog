@@ -131,7 +131,8 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {
-				log.Debugf("filter table: %d dml", tableID)
+				log.Debugf("can't find tableID %d int schema", tableID)
+				newMumation = append(newMumation, mutation)
 				continue
 			}
 
@@ -148,7 +149,7 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		binlog.setMumations(newMumation)
 		return false
 	}
-
+	/*
 	sql, err := p.handleDDL(item.job)
 	if err != nil {
 		log.Errorf("handleDDL error: %v", errors.Trace(err))
@@ -156,6 +157,7 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 	if sql == "" {
 		return true
 	}
+	*/
 
 	return false
 }
@@ -348,10 +350,6 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	var errorBinlogs int
 
 	for commitTS, item := range items {
-		if item.filter {
-			continue
-		}
-
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
