@@ -554,6 +554,8 @@ func (s *Syncer) run(b *binlogItem) error {
 		return errors.Trace(err)
 	}
 
+	s.translator.Config(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
+
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])
 	}
@@ -609,17 +611,12 @@ func (s *Syncer) run(b *binlogItem) error {
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
-	hasImplicitCol := false
-	useMysqlProtocol := false
-	if s.cfg.DestDBType == "tidb" {
-		hasImplicitCol = true
-		useMysqlProtocol = true
-	} else if s.cfg.DestDBType == "mysql" {
+	useMysqlProtocol := false 
+	if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
 		useMysqlProtocol = true
 	}
 
 	for _, mutation := range mutations {
-
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
@@ -653,7 +650,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows(), hasImplicitCol)
+			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows())
 			if err != nil {
 				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -661,13 +658,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			// safemode is only work for mysql
-			if s.cfg.SafeMode && useMysqlProtocol {
-				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows(), hasImplicitCol)
-			} else {
-				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), hasImplicitCol)
-			}
-
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -675,7 +666,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows(), hasImplicitCol)
+			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows())
 			if err != nil {
 				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
