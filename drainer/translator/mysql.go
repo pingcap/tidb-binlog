@@ -7,8 +7,8 @@ import (
 
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -37,7 +37,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		newColumn := &model.ColumnInfo{
-			ID: -1, 
+			ID:   -1,
 			Name: model.NewCIStr(implicitColName),
 		}
 		newColumn.Tp = mysql.TypeInt24
@@ -119,7 +119,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		newColumn := &model.ColumnInfo{
-			ID: -1, 
+			ID:   -1,
 			Name: model.NewCIStr(implicitColName),
 		}
 		newColumn.Tp = mysql.TypeInt24
@@ -195,11 +195,11 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-		
+
 	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		newColumn := &model.ColumnInfo{
-			ID: -1, 
+			ID:   -1,
 			Name: model.NewCIStr(implicitColName),
 		}
 		newColumn.Tp = mysql.TypeInt24
@@ -271,7 +271,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		newColumn := &model.ColumnInfo{
-			ID: -1, 
+			ID:   -1,
 			Name: model.NewCIStr(implicitColName),
 		}
 		newColumn.Tp = mysql.TypeInt24
@@ -322,7 +322,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 		}
 
 		log.Infof("whereColumns: %v, value: %v", whereColumns, value)
-	
+
 		where, value, err = m.genWhere(table, whereColumns, value)
 		if err != nil {
 			return "", nil, nil, errors.Trace(err)
