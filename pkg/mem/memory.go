@@ -1,26 +1,22 @@
 package mem
 
 import (
-	"os"
-    "time"
-
 	"github.com/juju/errors"
-    "github.com/shirou/gopsutil/mem"
-    "github.com/shirou/gopsutil/process"
+	"github.com/shirou/gopsutil/process"
 )
 
-func (p *process.Process)GetMemoryState() (memUsed, memPercent int, err error) {
+func GetMemoryState(p *process.Process) (memUsed, memPercent uint64, err error) {
 	m, err := p.MemoryInfo()
 	if err != nil {
-		return 0, 0, error.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
 	memUsed = m.RSS
 
 	percent, err := p.MemoryPercent()
 	if err != nil {
-		return 0, 0, error.Trace(err)
+		return 0, 0, errors.Trace(err)
 	}
-	memPercent = int(percent*100)
+	memPercent = uint64(percent)
 
 	return
 }

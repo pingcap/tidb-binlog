@@ -30,8 +30,8 @@ const (
 	defaultEtcdTimeout = 5 * time.Second
 	defaultPumpTimeout = 5 * time.Second
 
-	defaultMemUsed    = 5*1024*1024*1024 // 5G
-	defaultMemPercent = 80
+	defaultMemUsed    = uint64(5 * 1024 * 1024 * 1024) // 5G
+	defaultMemPercent = uint64(80)
 )
 
 var (
@@ -54,8 +54,8 @@ type SyncerConfig struct {
 }
 
 type MemConfig struct {
-	MaxMemUsed    int `toml:"max-mem-used" json:"max-mem-used"`
-	MaxMemPercent int `toml:"max-mem-percent" json:"max-mem-percent"`
+	MaxMemUsed    uint64 `toml:"max-mem-used" json:"max-mem-used"`
+	MaxMemPercent uint64 `toml:"max-mem-percent" json:"max-mem-percent"`
 }
 
 // Config holds the configuration of drainer
@@ -89,6 +89,7 @@ func NewConfig() *Config {
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
 		SyncerCfg:   new(SyncerConfig),
+		MemCfg:      new(MemConfig),
 	}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
@@ -118,8 +119,8 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
-	fs.IntVar(&cfg.MemCfg.MaxMemUsed, "max-mem-used", defaultMemUsed, "max memory drainer used")
-	fs.IntVar(&cfg.MemCfg.MaxMemPercent, "max-mem-percent", defaultMemPercent, "max system memory used percent, when bigger than this value, drainer will stop read data from kafka")
+	fs.Uint64Var(&cfg.MemCfg.MaxMemUsed, "max-mem-used", defaultMemUsed, "max memory drainer used")
+	fs.Uint64Var(&cfg.MemCfg.MaxMemPercent, "max-mem-percent", defaultMemPercent, "max system memory used percent, when bigger than this value, drainer will stop read data from kafka")
 	return cfg
 }
 
