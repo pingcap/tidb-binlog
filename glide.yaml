@@ -297,3 +297,5 @@ import:
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
+- package: github.com/shirou/gopsutil
+  version: 5776ff9c7c5d063d574ef53d740f75c68b448e53
