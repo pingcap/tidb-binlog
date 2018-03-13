@@ -62,6 +62,6 @@ func New(providerName string) (SQLTranslator, error) {
 	if !ok {
 		return nil, errors.Errorf("SQLTranslator: unknown provider %q", providerName)
 	}
-	
+
 	return translator, nil
 }

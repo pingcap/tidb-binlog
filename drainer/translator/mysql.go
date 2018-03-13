@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/mohae/deepcopy"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -19,9 +20,10 @@ import (
 )
 
 const implicitColName = "_tidb_rowid"
+const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
-type mysqlTranslator struct{
+type mysqlTranslator struct {
 	// safeMode is a mode for translate sql, will translate update to delete and replace
 	safeMode bool
 
@@ -39,21 +41,16 @@ func (m *mysqlTranslator) Config(safeMode, hasImplicitCol bool) {
 	m.hasImplicitCol = hasImplicitCol
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+	table := t
+	if m.hasImplicitCol && !table.PKIsHandle {
+		table = addImplicitColumn(t)
+	}
+
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-
-	if m.hasImplicitCol && !table.PKIsHandle {
-		// add implicit column
-		newColumn := &model.ColumnInfo{
-			ID:   -1,
-			Name: model.NewCIStr(implicitColName),
-		}
-		newColumn.Tp = mysql.TypeInt24
-		columns = append(columns, newColumn)
-	}
 
 	colsTypeMap := toColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
@@ -72,12 +69,13 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 		if columnValues == nil {
+			log.Warnf("columnValues is nil")
 			continue
 		}
 
 		var vals []interface{}
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) || col.ID == -1 {
+			if isPKHandleColumn(table, col) || col.ID == implicitColID {
 				columnValues[col.ID] = pk
 				vals = append(vals, pk.GetValue())
 				continue
@@ -87,7 +85,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			if !ok {
 				vals = append(vals, col.DefaultValue)
 			} else {
-
 				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
@@ -116,30 +113,26 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			}
 		}
 		keys = append(keys, key)
+		log.Infof("sql: %s, key: %s, value: %v", sql, key, vals)
 	}
 
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	if m.safeMode {
-		return m.genUpdateSQLsSafeMode(schema, table, rows)
+		return m.genUpdateSQLsSafeMode(schema, t, rows)
 	}
-	
+
+	table := t
+	if m.hasImplicitCol && !table.PKIsHandle {
+		table = addImplicitColumn(t)
+	}
+
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-
-	if m.hasImplicitCol && !table.PKIsHandle {
-		// add implicit column
-		newColumn := &model.ColumnInfo{
-			ID:   -1,
-			Name: model.NewCIStr(implicitColName),
-		}
-		newColumn.Tp = mysql.TypeInt24
-		columns = append(columns, newColumn)
-	}
 	colsTypeMap := toColumnTypeMap(columns)
 
 	for _, row := range rows {
@@ -172,7 +165,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		kvs := m.genKVs(updateColumns)
 		value = append(value, newValues...)
 
-		log.Infof("kvs: %s", kvs)
 		var where string
 		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
 		if err != nil {
@@ -183,21 +175,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		sqls = append(sqls, sql)
 		values = append(values, value)
 
-		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
-			value, err := formatData(oldColumnValues[-1], *types.NewFieldType(mysql.TypeInt24))
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
-			key = []string{fmt.Sprintf("%s", value.GetValue())}
-		} else {
-			key, err = m.generateDispatchKey(table, oldColumnValues)
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
+		key, err := m.generateDispatchKey(table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
 		}
+
 		keys = append(keys, key)
 
 	}
@@ -205,22 +189,16 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+	table := t
+	if m.hasImplicitCol && !table.PKIsHandle {
+		table = addImplicitColumn(t)
+	}
+
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-
-	if m.hasImplicitCol && !table.PKIsHandle {
-		// add implicit column
-		newColumn := &model.ColumnInfo{
-			ID:   -1,
-			Name: model.NewCIStr(implicitColName),
-		}
-		newColumn.Tp = mysql.TypeInt24
-		columns = append(columns, newColumn)
-	}
-
 	colsTypeMap := toColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders(len(columns))
@@ -255,43 +233,28 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		sqls = append(sqls, sql)
 		values = append(values, newValues)
 
-		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
-			value, err := formatData(oldColumnValues[-1], *types.NewFieldType(mysql.TypeInt24))
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
-			key = []string{fmt.Sprintf("%s", value.GetValue())}
-		} else {
-			key, err = m.generateDispatchKey(table, oldColumnValues)
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
+		key, err := m.generateDispatchKey(table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
 		}
 		keys = append(keys, key)
-
 	}
 
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+	table := t
+	if m.hasImplicitCol && !table.PKIsHandle {
+		table = addImplicitColumn(t)
+	}
+
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-
-	if m.hasImplicitCol && !table.PKIsHandle {
-		// add implicit column
-		newColumn := &model.ColumnInfo{
-			ID:   -1,
-			Name: model.NewCIStr(implicitColName),
-		}
-		newColumn.Tp = mysql.TypeInt24
-		columns = append(columns, newColumn)
-	}
 	colsTypeMap := toColumnTypeMap(columns)
 
 	for _, row := range rows {
@@ -324,7 +287,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 
 	if m.hasImplicitCol && !table.PKIsHandle {
 		where = fmt.Sprintf("`%s` = ?", implicitColName)
-		v, err := formatData(columnValues[-1], *types.NewFieldType(mysql.TypeInt24))
+		v, err := formatData(columnValues[implicitColID], *types.NewFieldType(mysql.TypeInt24))
 		if err != nil {
 			return "", nil, nil, errors.Trace(err)
 		}
@@ -348,7 +311,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 	// generate dispatching key
 	// find primary keys
 	if m.hasImplicitCol {
-		v, err := formatData(columnValues[-1], *types.NewFieldType(mysql.TypeInt24))
+		v, err := formatData(columnValues[implicitColID], *types.NewFieldType(mysql.TypeInt24))
 		if err != nil {
 			return "", nil, nil, errors.Trace(err)
 		}
@@ -630,4 +593,27 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	}
 
 	return oldRow, newRow, nil
+}
+
+func addImplicitColumn(table *model.TableInfo) *model.TableInfo {
+	// can't modify the table's struct
+	newTable := deepcopy.Copy(table)
+	tableInfo, ok := newTable.(model.TableInfo)
+	if !ok {
+		return table
+	}
+
+	newColumn := &model.ColumnInfo{
+		ID:   implicitColID,
+		Name: model.NewCIStr(implicitColName),
+	}
+	newColumn.Tp = mysql.TypeInt24
+	tableInfo.Columns = append(tableInfo.Columns, newColumn)
+	newIndex := &model.IndexInfo{
+		Primary: true,
+		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr(implicitColName)}},
+	}
+	tableInfo.Indices = []*model.IndexInfo{newIndex}
+
+	return &tableInfo
 }

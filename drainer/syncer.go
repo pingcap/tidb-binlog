@@ -611,7 +611,7 @@ func (s *Syncer) run(b *binlogItem) error {
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
-	useMysqlProtocol := false 
+	useMysqlProtocol := false
 	if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
 		useMysqlProtocol = true
 	}

@@ -18,7 +18,7 @@ import (
 )
 
 // pbTranslator translates TiDB binlog to self-description protobuf
-type pbTranslator struct{
+type pbTranslator struct {
 }
 
 func init() {
