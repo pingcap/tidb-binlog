@@ -60,7 +60,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	jobs = append(jobs, job)
 	jobs = append(jobs, job)
 	_, err = NewSchema(jobs, ignoreNames)
-	c.Assert(errors.IsAlreadyExists(err), IsTrue)
+	c.Assert(err, IsNil)
 
 	// test schema drop schema error
 	jobs = jobs[:0]

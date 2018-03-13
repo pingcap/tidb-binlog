@@ -48,8 +48,8 @@ func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 
 }
 
-func (t *testDrainerSuite) TestFormatIgnoreSchemas(c *C) {
-	ignoreDBs := formatIgnoreSchemas("test1,test2")
+func (t *testDrainerSuite) TestFormatIgnoreDBs(c *C) {
+	ignoreDBs := formatIgnoreDBs("test1,test2")
 	ignoreList := make(map[string]struct{})
 	ignoreList["test1"] = struct{}{}
 	ignoreList["test2"] = struct{}{}

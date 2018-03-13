@@ -203,19 +203,19 @@ func genHashKey(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
 }
 
-func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
-	ignoreSchemas = strings.ToLower(ignoreSchemas)
-	schemas := strings.Split(ignoreSchemas, ",")
+func formatIgnoreDBs(ignoreDBNames string) map[string]struct{} {
+	ignoreDBNames = strings.ToLower(ignoreDBNames)
+	schemas := strings.Split(ignoreDBNames, ",")
 
-	ignoreSchemaNames := make(map[string]struct{})
+	ignoreDBs := make(map[string]struct{})
 	for _, schema := range schemas {
-		ignoreSchemaNames[schema] = struct{}{}
+		ignoreDBs[schema] = struct{}{}
 	}
 
-	return ignoreSchemaNames
+	return ignoreDBs
 }
 
-func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
-	_, ok := ignoreSchemaNames[schema.Name.L]
+func filterIgnoreSchema(schema *model.DBInfo, ignoreDBs map[string]struct{}) bool {
+	_, ok := ignoreDBs[schema.Name.L]
 	return ok
 }

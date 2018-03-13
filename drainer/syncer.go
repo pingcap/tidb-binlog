@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"fmt"
-	"regexp"
 	"sync"
 	"time"
 
@@ -27,8 +26,7 @@ var (
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
 type Syncer struct {
-	schema *Schema
-	cp     checkpoint.CheckPoint
+	cp checkpoint.CheckPoint
 
 	cfg *SyncerConfig
 
@@ -45,30 +43,25 @@ type Syncer struct {
 	positions    map[string]pb.Pos
 	initCommitTS int64
 
-	// because TiDB is case-insensitive, only lower-case here.
-	ignoreSchemaNames map[string]struct{}
-
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	reMap map[string]*regexp.Regexp
-
-	c *causality
+	c      *causality
+	filter *filter
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, filter *filter) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
-	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
-	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
+	syncer.filter = filter
 
 	return syncer, nil
 }
@@ -90,77 +83,13 @@ func closeJobChans(jobChs []chan *job) {
 }
 
 // Start starts to sync.
-func (s *Syncer) Start(jobs []*model.Job) error {
-	// prepare schema for work
-	b, err := s.prepare(jobs)
-	if err != nil || b == nil {
-		return errors.Trace(err)
-	}
-
-	err = s.run(b)
+func (s *Syncer) Start() error {
+	err := s.run()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	return nil
-}
-
-// the binlog maybe not complete before the initCommitTS, so we should ignore them.
-// at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
-func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
-	var latestSchemaVersion int64
-	var schemaVersion int64
-	var b *binlogItem
-	var err error
-
-	for {
-		select {
-		case <-s.ctx.Done():
-			return nil, nil
-		case b = <-s.input:
-		}
-
-		binlog := b.binlog
-		commitTS := binlog.GetCommitTs()
-		jobID := binlog.GetDdlJobId()
-
-		if jobID == 0 {
-			preWriteValue := binlog.GetPrewriteValue()
-			preWrite := &pb.PrewriteValue{}
-			err = preWrite.Unmarshal(preWriteValue)
-			if err != nil {
-				return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-			}
-			schemaVersion = preWrite.GetSchemaVersion()
-		} else {
-			schemaVersion = b.job.BinlogInfo.SchemaVersion
-		}
-		if schemaVersion > latestSchemaVersion {
-			latestSchemaVersion = schemaVersion
-		}
-
-		if commitTS <= s.initCommitTS {
-			continue
-		}
-
-		if jobID > 0 {
-			latestSchemaVersion = b.job.BinlogInfo.SchemaVersion - 1
-		}
-		// find all ddl job that need to reconstruct local schemas
-		var exceptedJobs []*model.Job
-		for _, job := range jobs {
-			if job.BinlogInfo.SchemaVersion <= latestSchemaVersion {
-				exceptedJobs = append(exceptedJobs, job)
-			}
-		}
-
-		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		return b, nil
-	}
 }
 
 // handleDDL has four return values,
@@ -183,12 +112,12 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := job.BinlogInfo.DBInfo
-		if filterIgnoreSchema(schema, s.ignoreSchemaNames) {
-			s.schema.AddIgnoreSchema(schema)
+		if filterIgnoreSchema(schema, s.filter.ignoreDBs) {
+			s.filter.schema.AddIgnoreSchema(schema)
 			return "", "", "", nil
 		}
 
-		err := s.schema.CreateSchema(schema)
+		err := s.filter.schema.CreateSchema(schema)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -196,13 +125,13 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, "", sql, nil
 
 	case model.ActionDropSchema:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			s.schema.DropIgnoreSchema(job.SchemaID)
+			s.filter.schema.DropIgnoreSchema(job.SchemaID)
 			return "", "", "", nil
 		}
 
-		schemaName, err := s.schema.DropSchema(job.SchemaID)
+		schemaName, err := s.filter.schema.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -211,27 +140,27 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
-		_, ok := s.schema.SchemaByTableID(job.TableID)
+		_, ok := s.filter.schema.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
-		_, ok = s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok = s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 		// first drop the table
-		_, err := s.schema.DropTable(job.TableID)
+		_, err := s.filter.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = s.schema.CreateTable(schema, table)
+		err = s.filter.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -244,17 +173,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.CreateTable(schema, table)
+		err := s.filter.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -262,17 +191,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	case model.ActionDropTable:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		tableName, err := s.schema.DropTable(job.TableID)
+		tableName, err := s.filter.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -280,17 +209,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, tableName, sql, nil
 
 	case model.ActionTruncateTable:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		_, err := s.schema.DropTable(job.TableID)
+		_, err := s.filter.schema.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -300,7 +229,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		err = s.schema.CreateTable(schema, table)
+		err = s.filter.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -313,17 +242,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.filter.schema.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.filter.schema.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.ReplaceTable(tbInfo)
+		err := s.filter.schema.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -534,7 +463,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	}
 }
 
-func (s *Syncer) run(b *binlogItem) error {
+func (s *Syncer) run() error {
 	s.wg.Add(1)
 	defer func() {
 		closeJobChans(s.jobCh)
@@ -543,7 +472,6 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	var err error
 
-	s.genRegexMap()
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
@@ -558,18 +486,20 @@ func (s *Syncer) run(b *binlogItem) error {
 		go s.sync(s.executors[i], s.jobCh[i])
 	}
 
+	var b *binlogItem
 	for {
+		select {
+		case <-s.ctx.Done():
+			return nil
+		case b = <-s.input:
+		}
+
 		binlog := b.binlog
-		commitTS := binlog.GetCommitTs()
-		jobID := binlog.GetDdlJobId()
+		commitTS := binlog.commitTs
+		jobID := binlog.ddlJobID
 
 		if jobID == 0 {
-			preWriteValue := binlog.GetPrewriteValue()
-			preWrite := &pb.PrewriteValue{}
-			err = preWrite.Unmarshal(preWriteValue)
-			if err != nil {
-				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
-			}
+			preWrite := binlog.prewriteValue
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -585,7 +515,7 @@ func (s *Syncer) run(b *binlogItem) error {
 				return errors.Trace(err)
 			}
 
-			if s.skipSchemaAndTable(schema, table) {
+			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema)
@@ -599,29 +529,24 @@ func (s *Syncer) run(b *binlogItem) error {
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
 		}
-
-		select {
-		case <-s.ctx.Done():
-			return nil
-		case b = <-s.input:
-		}
 	}
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
 	for _, mutation := range mutations {
-
-		table, ok := s.schema.TableByID(mutation.GetTableId())
+		table, ok := s.filter.schema.TableByID(mutation.GetTableId())
 		if !ok {
+			log.Errorf("tableId %d not found in schema!", mutation.GetTableId())
 			continue
 		}
 
-		schemaName, tableName, ok := s.schema.SchemaAndTableName(mutation.GetTableId())
+		schemaName, tableName, ok := s.filter.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
+			log.Errorf("tableId %d not found in schema!", mutation.GetTableId())
 			continue
 		}
 
-		if s.skipSchemaAndTable(schemaName, tableName) {
+		if s.filter.SkipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}

@@ -58,7 +58,7 @@ func (s *testDrainerSuite) TestHeap(c *C) {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		c.Assert(item.binlog.CommitTs, Equals, excepted[index].CommitTs)
+		c.Assert(item.binlog.commitTs, Equals, excepted[index].CommitTs)
 		index++
 	}
 

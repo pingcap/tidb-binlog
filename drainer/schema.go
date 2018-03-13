@@ -27,10 +27,10 @@ type TableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ignoreDBs map[string]struct{}) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.reconstructSchema(jobs, ignoreSchemaNames)
+	err := s.reconstructSchema(jobs, ignoreDBs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -43,12 +43,13 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 }
 
 // reconstructSchema reconstruct the schema infomations by history jobs
-func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreDBs map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*model.TableInfo)
 	s.ignoreSchema = make(map[int64]struct{})
+	s.schemaMetaVersion = 0
 
 	for _, job := range jobs {
 		if job.State == model.JobStateCancelled {
@@ -57,8 +58,10 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 
 		switch job.Type {
 		case model.ActionCreateSchema:
+			log.Debugf("ActionCreateSchema")
 			schema := job.BinlogInfo.DBInfo
-			if filterIgnoreSchema(schema, ignoreSchemaNames) {
+			if filterIgnoreSchema(schema, ignoreDBs) {
+				log.Debugf("%s should be ignore", schema.Name.L)
 				s.AddIgnoreSchema(schema)
 				continue
 			}
@@ -188,6 +191,11 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 		}
 	}
 
+	log.Debugf("tableIDToName: %v", s.tableIDToName)
+	log.Debugf("schemaNameToID: %v", s.schemaNameToID)
+	log.Debugf("schemas: %v", s.schemas)
+	log.Debugf("tables: %v", s.tables)
+
 	return nil
 }
 
@@ -268,7 +276,7 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
-		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
+		log.Warnf("schema %s(%d) already exists!", db.Name, db.ID)
 	}
 
 	s.schemas[db.ID] = db
@@ -297,7 +305,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
-		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
+		log.Warnf("table %s.%s already exist!", schema.Name, table.Name)
 	}
 
 	schema.Tables = append(schema.Tables, table)

@@ -10,8 +10,9 @@ import (
 func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
 	s := &Syncer{}
-	s.ignoreSchemaNames = make(map[string]struct{})
-	s.schema, err = NewSchema(nil, nil)
+	s.filter = newFilter(nil, nil, "")
+	s.filter.ignoreDBs = make(map[string]struct{})
+	s.filter.schema, err = NewSchema(nil, nil)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	ignoreDBName := model.NewCIStr("ignoreTest")
@@ -58,7 +59,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	}
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 
-	s.ignoreSchemaNames[ingnoreDBInfo.Name.L] = struct{}{}
+	s.filter.ignoreDBs[ingnoreDBInfo.Name.L] = struct{}{}
 
 	testCases := []struct {
 		name        string
@@ -103,20 +104,20 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		// custom check after ddl
 		switch testCase.name {
 		case "createSchema":
-			_, ok := s.schema.SchemaByID(dbInfo.ID)
+			_, ok := s.filter.schema.SchemaByID(dbInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "createTable":
-			_, ok := s.schema.TableByID(tblInfo.ID)
+			_, ok := s.filter.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "addColumn", "truncateTable":
-			tb, ok := s.schema.TableByID(tblInfo.ID)
+			tb, ok := s.filter.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 			c.Assert(tb.Columns, HasLen, 1)
 		case "dropTable":
-			_, ok := s.schema.TableByID(tblInfo.ID)
+			_, ok := s.filter.schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsFalse)
 		case "dropSchema":
-			_, ok := s.schema.SchemaByID(job.SchemaID)
+			_, ok := s.filter.schema.SchemaByID(job.SchemaID)
 			c.Assert(ok, IsFalse)
 		}
 	}

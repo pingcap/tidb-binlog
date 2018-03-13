@@ -13,7 +13,6 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -83,12 +82,13 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
+	filter := newFilter(cfg.SyncerCfg.DoDBs, cfg.SyncerCfg.DoTables, cfg.SyncerCfg.IgnoreSchemas)
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
+	c, err := NewCollector(cfg, clusterID, win, syncer, cp, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -169,6 +169,17 @@ func calculateForwardAShortTime(current int64) int64 {
 	return int64(previous)
 }
 
+// PrepareCollect get histiry ddl jobs to struct schema info
+func (s *Server) PrepareCollect() error {
+	jobs, err := s.collector.LoadHistoryDDLJobs()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Debugf("get %d history ddl jobs", len(jobs))
+
+	return s.collector.Prepare(jobs)
+}
+
 // StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
 	s.wg.Add(1)
@@ -198,7 +209,7 @@ func (s *Server) StartMetrics() {
 }
 
 // StartSyncer runs a syncer in a goroutine
-func (s *Server) StartSyncer(jobs []*model.Job) {
+func (s *Server) StartSyncer() {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
@@ -206,9 +217,9 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 			s.wg.Done()
 			s.Close()
 		}()
-		err := s.syncer.Start(jobs)
+		err := s.syncer.Start()
 		if err != nil {
-			log.Errorf("syncer exited, error %v", err)
+			log.Errorf("syncer exited, error %v", errors.Trace(err))
 		}
 	}()
 }
@@ -262,7 +273,7 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	jobs, err := s.collector.LoadHistoryDDLJobs()
+	err = s.PrepareCollect()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -274,7 +285,7 @@ func (s *Server) Start() error {
 	s.StartMetrics()
 
 	// start a syncer
-	s.StartSyncer(jobs)
+	s.StartSyncer()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)

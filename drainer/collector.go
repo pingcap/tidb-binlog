@@ -57,10 +57,12 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+	filter       *filter
+	initCommitTS int64
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint, filter *filter) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -90,6 +92,9 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	initCommitTS, _ := cpt.Pos()
+
 	return &Collector{
 		clusterID:    clusterID,
 		interval:     time.Duration(cfg.DetectInterval) * time.Second,
@@ -106,6 +111,8 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:      tiStore,
 		notifyChan:   make(chan *notifyResult),
 		offsetSeeker: offsetSeeker,
+		filter:       filter,
+		initCommitTS: initCommitTS,
 	}, nil
 }
 
@@ -204,7 +211,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos, c.filter, c.cp)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -275,19 +282,25 @@ func (c *Collector) getLatestValidCommitTS() int64 {
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
 func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
+	var version kv.Version
+	var err error
+
+	if c.initCommitTS == 0 {
+		version, err = c.tiStore.CurrentVersion()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		version = kv.NewVersion(uint64(c.initCommitTS))
 	}
+
 	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	snapMeta := meta.NewSnapshotMeta(snapshot)
 	jobs, err := snapMeta.GetAllHistoryDDLJobs()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	return jobs, nil
 }
 
@@ -363,4 +376,15 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	status = c.mu.status
 	c.mu.Unlock()
 	return status
+}
+
+// Prepare build the schema info
+func (c *Collector) Prepare(jobs []*model.Job) error {
+	var err error
+	c.filter.schema, err = NewSchema(jobs, c.filter.ignoreDBs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
