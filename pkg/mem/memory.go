@@ -5,6 +5,7 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
+// GetMemoryState get the process's memory information
 func GetMemoryState(p *process.Process) (memUsed, memPercent uint64, err error) {
 	m, err := p.MemoryInfo()
 	if err != nil {

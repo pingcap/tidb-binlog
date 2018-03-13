@@ -53,6 +53,7 @@ type SyncerConfig struct {
 	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
 }
 
+// MemConfig is memory's configuration
 type MemConfig struct {
 	MaxMemUsed    uint64 `toml:"max-mem-used" json:"max-mem-used"`
 	MaxMemPercent uint64 `toml:"max-mem-percent" json:"max-mem-percent"`
