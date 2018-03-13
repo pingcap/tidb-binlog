@@ -131,6 +131,8 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 
 			schemaName, tableName, ok := p.filter.schema.SchemaAndTableName(tableID)
 			if !ok {
+				// can't find table infomation don't mean this data should be filtered
+				// the table's ddl may be execute in syncer later
 				log.Debugf("can't find tableID %d int schema", tableID)
 				newMumation = append(newMumation, mutation)
 				continue
@@ -149,15 +151,6 @@ func (p *Pump) needFilter(item *binlogItem) bool {
 		binlog.setMumations(newMumation)
 		return false
 	}
-	/*
-	sql, err := p.handleDDL(item.job)
-	if err != nil {
-		log.Errorf("handleDDL error: %v", errors.Trace(err))
-	}
-	if sql == "" {
-		return true
-	}
-	*/
 
 	return false
 }
