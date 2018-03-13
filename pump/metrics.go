@@ -36,20 +36,20 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"nodeID"})
 
-	binlogCacheCounter = prometheus.NewCounterVec(
+	lossBinlogCacheCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "pump",
 			Name:      "binlog_count",
-			Help:      "Total binlog count in memory",
-		}, []string{"method"})
+			Help:      "Total loss binlog count",
+		}, []string{"nodeID"})
 )
 
 func init() {
 	prometheus.MustRegister(rpcCounter)
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogSizeHistogram)
-	prometheus.MustRegister(binlogCacheCounter)
+	prometheus.MustRegister(lossBinlogCacheCounter)
 }
 
 type metricClient struct {
