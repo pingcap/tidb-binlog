@@ -276,7 +276,7 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
-		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
+		log.Warnf("schema %s(%d) already exists!", db.Name, db.ID)
 	}
 
 	s.schemas[db.ID] = db
@@ -305,7 +305,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
-		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
+		log.Warnf("table %s.%s already exist!", schema.Name, table.Name)
 	}
 
 	schema.Tables = append(schema.Tables, table)
