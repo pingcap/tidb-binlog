@@ -24,7 +24,7 @@ func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -89,7 +89,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -145,11 +145,11 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
-	return p.GenUpdateSQLs(schema, table, rows)
+func (p *pbTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
+	return p.GenUpdateSQLs(schema, table, rows, hasImplicitCol)
 }
 
-func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))

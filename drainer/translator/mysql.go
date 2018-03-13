@@ -22,14 +22,14 @@ const implicitColName = "_tidb_rowid"
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct{
-	hasImplicitCol bool
+	//hasImplicitCol bool
 }
 
 func init() {
 	Register("mysql", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -37,7 +37,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	colsTypeMap := toColumnTypeMap(columns)
 
 
-	if m.hasImplicitCol && !table.PKIsHandle {
+	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
 		newColumn := &model.ColumnInfo{
@@ -96,7 +96,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
+		if hasImplicitCol && !table.PKIsHandle {
 			value, err := formatData(pk, *types.NewFieldType(mysql.TypeInt24))
 			if err != nil {
 				return nil, nil, nil, errors.Trace(err)
@@ -114,14 +114,14 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
 
-	if m.hasImplicitCol && !table.PKIsHandle {
+	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
 		newColumn := &model.ColumnInfo{
@@ -176,7 +176,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
+		if hasImplicitCol && !table.PKIsHandle {
 			value, err := formatData(oldColumnValues[int64(len(oldColumnValues)-1)], *types.NewFieldType(mysql.TypeInt24))
 			if err != nil {
 				return nil, nil, nil, errors.Trace(err)
@@ -195,7 +195,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -205,7 +205,7 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders(len(columns))
 
-	if m.hasImplicitCol && !table.PKIsHandle {
+	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
 		newColumn := &model.ColumnInfo{
@@ -233,7 +233,7 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 		}
 
 		// generate delete sql
-		deleteSQL, deleteValue, deleteKey, err := m.genDeleteSQL(schema, table, oldColumnValues, m.hasImplicitCol && !table.PKIsHandle)
+		deleteSQL, deleteValue, deleteKey, err := m.genDeleteSQL(schema, table, oldColumnValues, hasImplicitCol && !table.PKIsHandle)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -249,7 +249,7 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
+		if hasImplicitCol && !table.PKIsHandle {
 			value, err := formatData(oldColumnValues[int64(len(oldColumnValues)-1)], *types.NewFieldType(mysql.TypeInt24))
 			if err != nil {
 				return nil, nil, nil, errors.Trace(err)
@@ -268,14 +268,14 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, hasImplicitCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
 
-	if m.hasImplicitCol && !table.PKIsHandle {
+	if hasImplicitCol && !table.PKIsHandle {
 		// add implicit column
 		colsTypeMap[-1] = &types.FieldType{Tp: mysql.TypeInt24}
 		newColumn := &model.ColumnInfo{
@@ -296,7 +296,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		}
 		log.Infof("columnValues: %v", columnValues)
 
-		sql, value, key, err := m.genDeleteSQL(schema, table, columnValues, m.hasImplicitCol && !table.PKIsHandle)
+		sql, value, key, err := m.genDeleteSQL(schema, table, columnValues, hasImplicitCol && !table.PKIsHandle)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -308,14 +308,14 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum, useImplicitCol bool) (string, []interface{}, []string, error) {
+func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum, hasImplicitCol bool) (string, []interface{}, []string, error) {
 	columns := table.Columns
 	var where string
 	var value []interface{}
 	var key []string
 	var err error
 
-	if useImplicitCol {
+	if hasImplicitCol {
 		where = fmt.Sprintf("`%s` = ?", implicitColName)
 		v, err := formatData(columnValues[int64(len(columnValues)-1)], *types.NewFieldType(mysql.TypeInt24))
 		if err != nil {
@@ -337,7 +337,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 	
 	// generate dispatching key
 	// find primary keys
-	if useImplicitCol {
+	if hasImplicitCol {
 		value, err := formatData(columnValues[int64(len(columnValues)-1)], *types.NewFieldType(mysql.TypeInt24))
 		if err != nil {
 			return "", nil, nil, errors.Trace(err)
