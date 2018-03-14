@@ -50,11 +50,11 @@ type Config struct {
 	LogFile           string          `toml:"log-file" json:"log-file"`
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
+	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
 	MetricsAddr       string
 	MetricsInterval   int
 	configFile        string
 	printVersion      bool
-	enableProxySwitch bool
 	tls               *tls.Config
 }
 
@@ -87,7 +87,7 @@ func NewConfig() *Config {
 	fs.IntVar(&maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
-	fs.BoolVar(&cfg.enableProxySwitch, "enable-proxy", true, "enable proxy binlog switch to slave while master is not available")
+	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
