@@ -68,9 +68,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, t *model.TableInfo, rows 
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		if columnValues == nil {
-			log.Warnf("columnValues is nil")
-			continue
+			columnValues = make(map[int64]types.Datum)
 		}
 
 		var vals []interface{}
@@ -94,26 +94,21 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, t *model.TableInfo, rows 
 			}
 		}
 
+		if columnValues == nil {
+			log.Warn("columnValues is nil")
+			continue
+		}
+
 		sqls = append(sqls, sql)
 		values = append(values, vals)
-
 		var key []string
 		// generate dispatching key
 		// find primary keys
-		if m.hasImplicitCol && !table.PKIsHandle {
-			value, err := formatData(pk, *types.NewFieldType(mysql.TypeInt24))
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
-			key = []string{fmt.Sprintf("%s", value.GetValue())}
-		} else {
-			key, err = m.generateDispatchKey(table, columnValues)
-			if err != nil {
-				return nil, nil, nil, errors.Trace(err)
-			}
+		key, err = m.generateDispatchKey(table, columnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
 		}
 		keys = append(keys, key)
-		log.Infof("sql: %s, key: %s, value: %v", sql, key, vals)
 	}
 
 	return sqls, keys, values, nil
