@@ -17,16 +17,6 @@ func (t *testDrainerSuite) TestComparePos(c *C) {
 	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 4}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 0)
 }
 
-func (t *testDrainerSuite) TestCalculateNextPos(c *C) {
-	entry := binlog.Entity{
-		Payload: []byte("test"),
-		Pos:     binlog.Pos{Suffix: 1, Offset: 3},
-	}
-
-	p := CalculateNextPos(entry)
-	c.Assert(p.Offset, Equals, int64(23))
-}
-
 func (t *testDrainerSuite) TestPosToFloat(c *C) {
 	pos := binlog.Pos{
 		Suffix: 4,
