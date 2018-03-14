@@ -258,14 +258,14 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 		return "", nil, nil, errors.Trace(err)
 	}
 
-	where, value, err = m.genWhere(table, whereColumns, value)
+	where, value, err := m.genWhere(table, whereColumns, value)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
 
 	// generate dispatching key
 	// find primary keys
-	key, err = m.generateDispatchKey(table, columnValues)
+	key, err := m.generateDispatchKey(table, columnValues)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}

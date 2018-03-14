@@ -356,7 +356,7 @@ func addImplicitColumn(table *model.TableInfo) {
 	table.Columns = append(table.Columns, newColumn)
 	newIndex := &model.IndexInfo{
 		Primary: true,
-		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr(implicitColName)}},
+		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
 	}
 	table.Indices = []*model.IndexInfo{newIndex}
 }
