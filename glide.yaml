@@ -294,6 +294,8 @@ import:
   version: 604e922904d35e97f98a774db7881f049cd8d970
   subpackages:
   - queue
+- package: github.com/mohae/deepcopy
+  version: c48cc78d482608239f6c4c92a4abd87eb8761c90
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
