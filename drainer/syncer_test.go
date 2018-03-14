@@ -9,7 +9,7 @@ import (
 
 func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
-	cfg := &Config{SyncerCfg: &SyncerConfig{DestDBType: "mysql"}}
+	cfg := &SyncerConfig{DestDBType: "mysql"}
 	s := &Syncer{cfg: cfg}
 	s.ignoreSchemaNames = make(map[string]struct{})
 	s.schema, err = NewSchema(nil, nil, false)
