@@ -593,8 +593,9 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 func addImplicitColumn(table *model.TableInfo) *model.TableInfo {
 	// can't modify the table's struct
 	newTable := deepcopy.Copy(table)
-	tableInfo, ok := newTable.(model.TableInfo)
+	tableInfo, ok := newTable.(*model.TableInfo)
 	if !ok {
+		log.Warn("add implicit column failed!")
 		return table
 	}
 
@@ -610,5 +611,5 @@ func addImplicitColumn(table *model.TableInfo) *model.TableInfo {
 	}
 	tableInfo.Indices = []*model.IndexInfo{newIndex}
 
-	return &tableInfo
+	return tableInfo
 }
