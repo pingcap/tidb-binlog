@@ -124,8 +124,6 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 }
 
 func testDoDDLAndCheck(c *C, s *Syncer, job *model.Job, isErr bool, sql string, schema string, table string) {
-
-	c.Assert(s, NotNil)
 	schemaName, tableName, resSQL, err := s.handleDDL(job)
 	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, resSQL)

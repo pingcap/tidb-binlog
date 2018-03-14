@@ -179,7 +179,6 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
 	}
 
-	log.Infof("job.Type: %v", job.Type)
 	switch job.Type {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
@@ -240,7 +239,6 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	case model.ActionCreateTable:
-		log.Info("model.ActionCreateTable")
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
