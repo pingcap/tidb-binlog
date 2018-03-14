@@ -45,7 +45,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.L] = struct{}{}
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, ignoreNames)
+	schema, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	// check ignore DB
 	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)
@@ -53,19 +53,19 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	// test drop schema and drop ignore schema
 	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema})
 	jobs = append(jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames)
+	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	// test create schema already exist error
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, job)
-	_, err = NewSchema(jobs, ignoreNames)
+	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
 	// test schema drop schema error
 	jobs = jobs[:0]
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames)
+	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
@@ -157,7 +157,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	ignoreNames := make(map[string]struct{})
 	ignoreNames[ignoreDBName.O] = struct{}{}
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, ignoreNames)
+	schema, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	// check the historical db that constructed above whether in the schema list of local schema
 	_, ok := schema.SchemaByID(dbInfo.ID)
@@ -174,7 +174,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		State: model.StatePublic,
 	}
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
-	schema1, err := NewSchema(jobs, ignoreNames)
+	schema1, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	table, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
@@ -182,7 +182,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(ok, IsFalse)
 	// check drop table
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
-	schema2, err := NewSchema(jobs, ignoreNames)
+	schema2, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	table, ok = schema2.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)

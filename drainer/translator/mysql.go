@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/mohae/deepcopy"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -19,7 +18,6 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-const implicitColName = "_tidb_rowid"
 const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
@@ -41,12 +39,7 @@ func (m *mysqlTranslator) Config(safeMode, hasImplicitCol bool) {
 	m.hasImplicitCol = hasImplicitCol
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
-	table := t
-	if m.hasImplicitCol && !table.PKIsHandle {
-		table = addImplicitColumn(t)
-	}
-
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -114,14 +107,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, t *model.TableInfo, rows 
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	if m.safeMode {
-		return m.genUpdateSQLsSafeMode(schema, t, rows)
-	}
-
-	table := t
-	if m.hasImplicitCol && !table.PKIsHandle {
-		table = addImplicitColumn(t)
+		return m.genUpdateSQLsSafeMode(schema, table, rows)
 	}
 
 	columns := table.Columns
@@ -184,12 +172,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, t *model.TableInfo, rows 
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
-	table := t
-	if m.hasImplicitCol && !table.PKIsHandle {
-		table = addImplicitColumn(t)
-	}
-
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -240,12 +223,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, t *model.TableInf
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, t *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
-	table := t
-	if m.hasImplicitCol && !table.PKIsHandle {
-		table = addImplicitColumn(t)
-	}
-
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -280,42 +258,25 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 	var key []string
 	var err error
 
-	if m.hasImplicitCol && !table.PKIsHandle {
-		where = fmt.Sprintf("`%s` = ?", implicitColName)
-		v, err := formatData(columnValues[implicitColID], *types.NewFieldType(mysql.TypeInt24))
-		if err != nil {
-			return "", nil, nil, errors.Trace(err)
-		}
-		value = append(value, v.GetValue())
-	} else {
-		var whereColumns []*model.ColumnInfo
-		whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
-		if err != nil {
-			return "", nil, nil, errors.Trace(err)
-		}
-
-		log.Infof("whereColumns: %v, value: %v", whereColumns, value)
-
-		where, value, err = m.genWhere(table, whereColumns, value)
-		if err != nil {
-			return "", nil, nil, errors.Trace(err)
-		}
-		log.Infof("where: %s, value: %v", where, value)
+	var whereColumns []*model.ColumnInfo
+	whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
+	if err != nil {
+		return "", nil, nil, errors.Trace(err)
 	}
+
+	log.Infof("whereColumns: %v, value: %v", whereColumns, value)
+
+	where, value, err = m.genWhere(table, whereColumns, value)
+	if err != nil {
+		return "", nil, nil, errors.Trace(err)
+	}
+	log.Infof("where: %s, value: %v", where, value)
 
 	// generate dispatching key
 	// find primary keys
-	if m.hasImplicitCol {
-		v, err := formatData(columnValues[implicitColID], *types.NewFieldType(mysql.TypeInt24))
-		if err != nil {
-			return "", nil, nil, errors.Trace(err)
-		}
-		key = []string{fmt.Sprintf("%s", v.GetValue())}
-	} else {
-		key, err = m.generateDispatchKey(table, columnValues)
-		if err != nil {
-			return "", nil, nil, errors.Trace(err)
-		}
+	key, err = m.generateDispatchKey(table, columnValues)
+	if err != nil {
+		return "", nil, nil, errors.Trace(err)
 	}
 
 	sql := fmt.Sprintf("delete from `%s`.`%s` where %s limit 1;", schema, table.Name, where)
@@ -588,28 +549,4 @@ func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	}
 
 	return oldRow, newRow, nil
-}
-
-func addImplicitColumn(table *model.TableInfo) *model.TableInfo {
-	// can't modify the table's struct
-	newTable := deepcopy.Copy(table)
-	tableInfo, ok := newTable.(*model.TableInfo)
-	if !ok {
-		log.Warn("add implicit column failed!")
-		return table
-	}
-
-	newColumn := &model.ColumnInfo{
-		ID:   implicitColID,
-		Name: model.NewCIStr(implicitColName),
-	}
-	newColumn.Tp = mysql.TypeInt24
-	tableInfo.Columns = append(tableInfo.Columns, newColumn)
-	newIndex := &model.IndexInfo{
-		Primary: true,
-		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr(implicitColName)}},
-	}
-	tableInfo.Indices = []*model.IndexInfo{newIndex}
-
-	return tableInfo
 }

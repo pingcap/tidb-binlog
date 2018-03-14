@@ -4,7 +4,11 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/mysql"
 )
+
+const implicitColName = "_tidb_rowid"
+const implicitColID = -1
 
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
@@ -27,10 +31,10 @@ type TableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
+func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{}
 
-	err := s.reconstructSchema(jobs, ignoreSchemaNames)
+	err := s.reconstructSchema(jobs, ignoreSchemaNames, hasImplicitCol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -43,7 +47,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schem
 }
 
 // reconstructSchema reconstruct the schema infomations by history jobs
-func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImplicitCol bool) error {
 	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
@@ -101,7 +105,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err = s.CreateTable(schema, table)
+			err = s.CreateTable(schema, table, hasImplicitCol)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -118,7 +122,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err := s.CreateTable(schema, table)
+			err := s.CreateTable(schema, table, hasImplicitCol)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -160,7 +164,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("table %d", job.TableID)
 			}
 
-			err = s.CreateTable(schema, table)
+			err = s.CreateTable(schema, table, hasImplicitCol)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -181,7 +185,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err := s.ReplaceTable(tbInfo)
+			err := s.ReplaceTable(tbInfo, hasImplicitCol)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -294,10 +298,14 @@ func (s *Schema) DropTable(id int64) (string, error) {
 }
 
 // CreateTable creates new TableInfo
-func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
+func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo, hasImplicitCol bool) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
+	}
+
+	if hasImplicitCol && !table.PKIsHandle {
+		addImplicitColumn(table)
 	}
 
 	schema.Tables = append(schema.Tables, table)
@@ -308,10 +316,14 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *Schema) ReplaceTable(table *model.TableInfo) error {
+func (s *Schema) ReplaceTable(table *model.TableInfo, hasImplicitCol bool) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
+	}
+
+	if hasImplicitCol && !table.PKIsHandle {
+		addImplicitColumn(table)
 	}
 
 	s.tables[table.ID] = table
@@ -333,4 +345,18 @@ func (s *Schema) removeTable(tableID int64) error {
 		}
 	}
 	return nil
+}
+
+func addImplicitColumn(table *model.TableInfo) {
+	newColumn := &model.ColumnInfo{
+		ID:   implicitColID,
+		Name: model.NewCIStr(implicitColName),
+	}
+	newColumn.Tp = mysql.TypeInt24
+	table.Columns = append(table.Columns, newColumn)
+	newIndex := &model.IndexInfo{
+		Primary: true,
+		Columns: []*model.IndexColumn{&model.IndexColumn{Name: model.NewCIStr(implicitColName)}},
+	}
+	table.Indices = []*model.IndexInfo{newIndex}
 }

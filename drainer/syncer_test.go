@@ -11,7 +11,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	var err error
 	s := &Syncer{}
 	s.ignoreSchemaNames = make(map[string]struct{})
-	s.schema, err = NewSchema(nil, nil)
+	s.schema, err = NewSchema(nil, nil, false)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	ignoreDBName := model.NewCIStr("ignoreTest")
