@@ -14,13 +14,13 @@ type Position struct {
 // Savepoint holds the last position.
 type Savepoint interface {
 	// Load loads savepoint position
-	Load() (*Position, error)
+	Load() (Position, error)
 	// Save
-	Save(pos *Position) error
+	Save(pos Position) error
 	// Flush flushes the position to persistent storage.
 	Flush() error
 	// Pos tells current position
-	Pos() *Position
+	Pos() Position
 	// Close the resources the savepoint implementations needs.
 	Close() error
 }
