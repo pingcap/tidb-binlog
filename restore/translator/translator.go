@@ -28,7 +28,7 @@ func New(name string, safeMode bool) Translator {
 	switch name {
 	case "print":
 		return newPrintTranslator()
-	case "mysql", "tidb":
+	case "mysql":
 		return newMysqlTranslator()
 	}
 	log.Infof("name %s not found, use print translator by default", name)

@@ -27,27 +27,18 @@ type TableName struct {
 	Name   string `toml:"tbl-name" json:"tbl-name"`
 }
 
-// Savepoint defines a toml config for savepoint.
-type Savepoint struct {
-	Type string `toml:"type" json:"type"`
-	Name string `toml:"name" json:"name"`
-}
-
 // Config is the main configuration for the retore tool.
 type Config struct {
 	*flag.FlagSet
 	Dir           string `toml:"data-dir" json:"data-dir"`
-	Compression   string `toml:"compression" json:"compression"`
 	IndexName     string `toml:"index-name" json:"index-name"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
-	StartTSO      int64
-	StopTSO       int64
+	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
+	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
-
-	Savepoint *Savepoint `toml:"savepoint" json:"savepoint"`
 
 	DoTables []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs    []string    `toml:"replicate-do-db" json:"replicate-do-db"`
@@ -70,13 +61,15 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
-	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-ts")
-	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-ts, empty string means never end.")
+	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-datetime, empty string means starting from the beginning of the first file")
+	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-datetime, empty string means never end.")
+	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
+	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
+	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&c.configFile, "config", "", "path to configuration file")
+	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
 	return c
 }
@@ -101,11 +94,13 @@ func (c *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
+	if c.configFile == "" {
+		return errors.Errorf("please specify config file")
+	}
+
 	// Load config file if specified
-	if c.configFile != "" {
-		if err := c.configFromFile(c.configFile); err != nil {
-			return errors.Trace(err)
-		}
+	if err := c.configFromFile(c.configFile); err != nil {
+		return errors.Trace(err)
 	}
 
 	// Parse again to replace with command line options
@@ -159,7 +154,7 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
-	if (c.DestType == "mysql" || c.DestType == "tidb") && (c.DestDB == nil) {
+	if c.DestType == "mysql" && c.DestDB == nil {
 		return errors.New("dest-db config must not be emtpy")
 	}
 	return nil

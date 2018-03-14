@@ -21,7 +21,7 @@ var (
 type fileSavepoint struct {
 	mu           sync.RWMutex
 	fd           *file.LockedFile
-	pos          *Position
+	pos          Position
 	lastSaveTime time.Time
 }
 
@@ -31,25 +31,27 @@ func newFileSavepoint(filename string) (Savepoint, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &fileSavepoint{fd: fd, lastSaveTime: time.Now(), pos: &Position{}}, nil
+	return &fileSavepoint{fd: fd, lastSaveTime: time.Now(), pos: Position{}}, nil
 }
 
-func (f *fileSavepoint) Load() (pos *Position, err error) {
+func (f *fileSavepoint) Load() (pos Position, err error) {
 	_, err = f.fd.Seek(0, io.SeekStart)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return pos, errors.Trace(err)
 	}
-	pos = &Position{}
-	_, err = toml.DecodeReader(f.fd, pos)
+	pos = Position{}
+	_, err = toml.DecodeReader(f.fd, &pos)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return pos, errors.Trace(err)
 	}
+	f.mu.Lock()
 	f.pos = pos
+	f.mu.Unlock()
 
 	return pos, nil
 }
 
-func (f *fileSavepoint) Save(pos *Position) (err error) {
+func (f *fileSavepoint) Save(pos Position) (err error) {
 	f.mu.Lock()
 	f.pos = pos
 	if time.Since(f.lastSaveTime) >= flushInterval {
@@ -80,7 +82,7 @@ func (f *fileSavepoint) flush() error {
 	return nil
 }
 
-func (f *fileSavepoint) Pos() *Position {
+func (f *fileSavepoint) Pos() Position {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.pos
