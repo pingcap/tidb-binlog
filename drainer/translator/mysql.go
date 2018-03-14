@@ -142,7 +142,6 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
-		log.Infof("updateColumns: %v, newValues: %v, oldValues: %v", updateColumns, newValues, oldValues)
 
 		var value []interface{}
 		kvs := m.genKVs(updateColumns)
@@ -253,24 +252,16 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 
 func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum) (string, []interface{}, []string, error) {
 	columns := table.Columns
-	var where string
-	var value []interface{}
-	var key []string
-	var err error
 
-	var whereColumns []*model.ColumnInfo
-	whereColumns, value, err = m.generateColumnAndValue(columns, columnValues)
+	whereColumns, value, err := m.generateColumnAndValue(columns, columnValues)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
-
-	log.Infof("whereColumns: %v, value: %v", whereColumns, value)
 
 	where, value, err = m.genWhere(table, whereColumns, value)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
-	log.Infof("where: %s, value: %v", where, value)
 
 	// generate dispatching key
 	// find primary keys
