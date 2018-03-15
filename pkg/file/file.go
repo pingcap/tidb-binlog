@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -122,7 +123,7 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 		return nil, errors.Trace(err)
 	}
 
-	fnames := CheckBinlogNames(names)
+	fnames := FilterBinlogNames(names)
 	if len(fnames) == 0 {
 		return nil, errors.NotFoundf("dir %s", dirpath)
 	}
@@ -130,7 +131,8 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 	return fnames, nil
 }
 
-func CheckBinlogNames(names []string) []string {
+// FilterBinlogNames filter binlog names from names.
+func FilterBinlogNames(names []string) []string {
 	var fnames []string
 	for _, name := range names {
 		if strings.HasSuffix(name, "checkpoint") {
@@ -155,17 +157,22 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		return 0, ErrBadBinlogName
 	}
 
-	_, err = fmt.Sscanf(str, "binlog-%016d", &index)
+	var datetime string
+	_, err = fmt.Sscanf(str, "binlog-%016d-%s", &index, &datetime)
+	// backward compatibility
+	if err == io.ErrUnexpectedEOF {
+		_, err = fmt.Sscanf(str, "binlog-%016d", &index)
+	}
 	return index, errors.Trace(err)
 }
 
-// BinlogNameWithDateTime creates a binlog file name.
-func BinlogNameWithDateTime(index uint64) string {
-	currentTime := time.Now().Format(datetimeFormat)
-	return fmt.Sprintf("%s-%s", BinlogName(index), currentTime)
+// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-
+func BinlogName(index uint64) string {
+	currentTime := time.Now()
+	return binlogNameWithDateTime(index, currentTime)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001
-func BinlogName(index uint64) string {
-	return fmt.Sprintf("binlog-%016d", index)
+// binlogNameWithDateTime creates a binlog file name.
+func binlogNameWithDateTime(index uint64, datetime time.Time) string {
+	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
 }
