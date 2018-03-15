@@ -154,7 +154,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			}
 		}
 
-		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames)
+		s.schema, err = NewSchema(exceptedJobs, s.ignoreSchemaNames, s.cfg.DestDBType == "tidb")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -308,7 +308,12 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
-		tbInfo := job.BinlogInfo.TableInfo
+
+		binlogInfo := job.BinlogInfo
+		if binlogInfo == nil {
+			return "", "", "", errors.NotFoundf("table %d", job.TableID)
+		}
+		tbInfo := binlogInfo.TableInfo
 		if tbInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -554,6 +559,8 @@ func (s *Syncer) run(b *binlogItem) error {
 		return errors.Trace(err)
 	}
 
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
+
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])
 	}
@@ -609,8 +616,9 @@ func (s *Syncer) run(b *binlogItem) error {
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
-	for _, mutation := range mutations {
+	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
+	for _, mutation := range mutations {
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
@@ -652,13 +660,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			// safemode is only work for mysql
-			if s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
-				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLsSafeMode(schemaName, table, mutation.GetUpdatedRows())
-			} else {
-				sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
-			}
-
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows())
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -679,7 +681,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			}
 
 			// update is split to delete and insert
-			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && s.cfg.DestDBType == "mysql" {
+			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
 				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
 				if err != nil {
 					return errors.Trace(err)
