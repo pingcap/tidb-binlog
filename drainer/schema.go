@@ -358,7 +358,7 @@ func addImplicitColumn(table *model.TableInfo) {
 	}
 	newColumn.Tp = mysql.TypeInt24
 	table.Columns = append(table.Columns, newColumn)
-	
+
 	newIndex := &model.IndexInfo{
 		Primary: true,
 		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
