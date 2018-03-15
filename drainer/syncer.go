@@ -559,7 +559,7 @@ func (s *Syncer) run(b *binlogItem) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.Config(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])

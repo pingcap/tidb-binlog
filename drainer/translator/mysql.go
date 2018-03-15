@@ -34,7 +34,7 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) Config(safeMode, hasImplicitCol bool) {
+func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
 	m.safeMode = safeMode
 	m.hasImplicitCol = hasImplicitCol
 }

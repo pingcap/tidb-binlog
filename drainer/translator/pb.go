@@ -25,7 +25,7 @@ func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) Config(safeMode, hasImplicitCol bool) {
+func (p *pbTranslator) SetConfig(safeMode, hasImplicitCol bool) {
 	// do nothing
 }
 
