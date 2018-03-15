@@ -22,6 +22,8 @@ type Schema struct {
 	ignoreSchema map[int64]struct{}
 
 	schemaMetaVersion int64
+
+	hasImplicitCol bool
 }
 
 // TableName stores the table and schema name
@@ -32,9 +34,11 @@ type TableName struct {
 
 // NewSchema returns the Schema object
 func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImplicitCol bool) (*Schema, error) {
-	s := &Schema{}
+	s := &Schema{
+		hasImplicitCol: hasImplicitCol,
+	}
 
-	err := s.reconstructSchema(jobs, ignoreSchemaNames, hasImplicitCol)
+	err := s.reconstructSchema(jobs, ignoreSchemaNames)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -47,7 +51,7 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImpl
 }
 
 // reconstructSchema reconstruct the schema infomations by history jobs
-func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImplicitCol bool) error {
+func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
 	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
@@ -105,7 +109,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err = s.CreateTable(schema, table, hasImplicitCol)
+			err = s.CreateTable(schema, table)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -122,7 +126,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err := s.CreateTable(schema, table, hasImplicitCol)
+			err := s.CreateTable(schema, table)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -164,7 +168,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("table %d", job.TableID)
 			}
 
-			err = s.CreateTable(schema, table, hasImplicitCol)
+			err = s.CreateTable(schema, table)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -185,7 +189,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			err := s.ReplaceTable(tbInfo, hasImplicitCol)
+			err := s.ReplaceTable(tbInfo)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -298,13 +302,13 @@ func (s *Schema) DropTable(id int64) (string, error) {
 }
 
 // CreateTable creates new TableInfo
-func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo, hasImplicitCol bool) error {
+func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
 	}
 
-	if hasImplicitCol && !table.PKIsHandle {
+	if s.hasImplicitCol && !table.PKIsHandle {
 		addImplicitColumn(table)
 	}
 
@@ -316,13 +320,13 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo, hasIm
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *Schema) ReplaceTable(table *model.TableInfo, hasImplicitCol bool) error {
+func (s *Schema) ReplaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
 	}
 
-	if hasImplicitCol && !table.PKIsHandle {
+	if s.hasImplicitCol && !table.PKIsHandle {
 		addImplicitColumn(table)
 	}
 
@@ -354,6 +358,7 @@ func addImplicitColumn(table *model.TableInfo) {
 	}
 	newColumn.Tp = mysql.TypeInt24
 	table.Columns = append(table.Columns, newColumn)
+	
 	newIndex := &model.IndexInfo{
 		Primary: true,
 		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},

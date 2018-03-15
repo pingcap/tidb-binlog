@@ -231,7 +231,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = s.schema.CreateTable(schema, table, s.cfg.DestDBType == "tidb")
+		err = s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -254,7 +254,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.CreateTable(schema, table, s.cfg.DestDBType == "tidb")
+		err := s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -300,7 +300,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		err = s.schema.CreateTable(schema, table, s.cfg.DestDBType == "tidb")
+		err = s.schema.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -328,7 +328,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.ReplaceTable(tbInfo, s.cfg.DestDBType == "tidb")
+		err := s.schema.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}

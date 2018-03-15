@@ -68,7 +68,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 		var vals []interface{}
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) || col.ID == implicitColID {
+			if isPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 				vals = append(vals, pk.GetValue())
 				continue
@@ -409,7 +409,7 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 }
 
 func isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
-	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
+	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
 }
 
 func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {
