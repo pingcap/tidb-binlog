@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -17,11 +18,25 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
+const implicitColID = -1
+
 // mysqlTranslator translates TiDB binlog to mysql sqls
-type mysqlTranslator struct{}
+type mysqlTranslator struct {
+	// safeMode is a mode for translate sql, will translate update to delete and replace
+	safeMode bool
+
+	// hasImplicitCol is used for tidb implicit column
+	hasImplicitCol bool
+}
 
 func init() {
 	Register("mysql", &mysqlTranslator{})
+	Register("tidb", &mysqlTranslator{})
+}
+
+func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
+	m.safeMode = safeMode
+	m.hasImplicitCol = hasImplicitCol
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
@@ -29,8 +44,8 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
 
+	colsTypeMap := toColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders((len(columns)))
 	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
@@ -46,8 +61,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		if columnValues == nil {
-			continue
+			columnValues = make(map[int64]types.Datum)
 		}
 
 		var vals []interface{}
@@ -62,7 +78,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			if !ok {
 				vals = append(vals, col.DefaultValue)
 			} else {
-
 				value, err := formatData(val, col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
@@ -72,11 +87,17 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			}
 		}
 
+		if columnValues == nil {
+			log.Warn("columnValues is nil")
+			continue
+		}
+
 		sqls = append(sqls, sql)
 		values = append(values, vals)
+		var key []string
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, columnValues)
+		key, err = m.generateDispatchKey(table, columnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -87,6 +108,10 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 }
 
 func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+	if m.safeMode {
+		return m.genUpdateSQLsSafeMode(schema, table, rows)
+	}
+
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -131,12 +156,14 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
 		sqls = append(sqls, sql)
 		values = append(values, value)
+
 		// generate dispatching key
 		// find primary keys
 		key, err := m.generateDispatchKey(table, oldColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		keys = append(keys, key)
 
 	}
@@ -144,13 +171,12 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
-
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := m.genColumnPlaceholders(len(columns))
 
@@ -183,12 +209,14 @@ func (m *mysqlTranslator) GenUpdateSQLsSafeMode(schema string, table *model.Tabl
 		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 		sqls = append(sqls, sql)
 		values = append(values, newValues)
-		key, err := m.generateDispatchKey(table, newColumnValues)
+
+		// generate dispatching key
+		// find primary keys
+		key, err := m.generateDispatchKey(table, oldColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 		keys = append(keys, key)
-
 	}
 
 	return sqls, keys, values, nil
@@ -224,17 +252,19 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 
 func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, columnValues map[int64]types.Datum) (string, []interface{}, []string, error) {
 	columns := table.Columns
+
 	whereColumns, value, err := m.generateColumnAndValue(columns, columnValues)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
 
-	var where string
-	where, value, err = m.genWhere(table, whereColumns, value)
+	where, value, err := m.genWhere(table, whereColumns, value)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
 
+	// generate dispatching key
+	// find primary keys
 	key, err := m.generateDispatchKey(table, columnValues)
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
@@ -246,7 +276,6 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
-
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
@@ -380,7 +409,7 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 }
 
 func isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
-	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
+	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
 }
 
 func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {
