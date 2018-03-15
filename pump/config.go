@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -107,10 +106,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	if cfg.printVersion {
-		fmt.Printf("Git Commit Hash: %s\n", version.GitHash)
-		fmt.Printf("Build TS: %s\n", version.BuildTS)
-		fmt.Printf("Go Version: %s\n", runtime.Version())
-		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		version.PrintVersionInfo()
 		os.Exit(0)
 	}
 
