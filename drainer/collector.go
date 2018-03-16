@@ -51,12 +51,20 @@ type Collector struct {
 
 	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
-	notifyChan chan *notifyResult
+	notifyChan  chan *notifyResult
+	publishChan chan *publishObject
+
 	// expose savepoints to HTTP.
 	mu struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+}
+
+type publishObject struct {
+	bss   map[string]binlogItems
+	lower int64
+	upper int64
 }
 
 // NewCollector returns an instance of Collector
@@ -105,6 +113,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiClient:     tiClient,
 		tiStore:      tiStore,
 		notifyChan:   make(chan *notifyResult),
+		publishChan:  make(chan *publishObject),
 		offsetSeeker: offsetSeeker,
 	}, nil
 }
@@ -122,6 +131,8 @@ func (c *Collector) Start(ctx context.Context) {
 			log.Error(err.Error())
 		}
 	}()
+
+	go c.publishToSyncer(ctx)
 
 	for {
 		select {
@@ -167,7 +178,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
 	c.publish(ctx, windowUpper, windowLower)
-	c.updateCollectStatus(windowLower == windowUpper)
+	// c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
@@ -247,13 +258,15 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
-		c.window.SaveLower(lower)
+		//c.window.SaveLower(lower)
 		c.publishBinlogs(ctx, oldLower, lower)
-		windowGauge.WithLabelValues("lower").Set(float64(lower))
+		// TODO: don't set here
+		// windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
 		c.window.SaveUpper(upper)
 		windowGauge.WithLabelValues("upper").Set(float64(upper))
+		c.updateCollectStatus(lower == upper)
 	}
 }
 
@@ -296,31 +309,59 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
-	// todo: use multiple goroutines to collect sorted binlogs
 	bss := make(map[string]binlogItems)
-	binlogOffsets := make(map[string]int)
+	var wgTmp sync.WaitGroup
+	wgTmp.Add(len(c.pumps))
 	for id, p := range c.pumps {
-		bs := p.collectBinlogs(minTS, maxTS)
-		if bs.Len() > 0 {
-			bss[id] = bs
-			binlogOffsets[id] = 1
-			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0])
-		}
+		go func() {
+			bs := p.collectBinlogs(minTS, maxTS)
+			if bs.Len() > 0 {
+				bss[id] = bs
+			}
+			wgTmp.Done()
+		}()
 	}
+	wgTmp.Wait()
+	p := &publishObject{
+		bss:   bss,
+		lower: minTS,
+		upper: maxTS,
+	}
+	c.publishChan <- p
+}
 
-	item := c.bh.pop()
-	for item != nil {
-		c.syncer.Add(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
-		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
-			delete(bss, item.nodeID)
-		} else {
-			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
-			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
+func (c *Collector) publishToSyncer(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case p := <-c.publishChan:
+			bss := p.bss
+			binlogOffsets := make(map[string]int)
+			for id, bs := range bss {
+				binlogOffsets[id] = 1
+				// first push the first item into heap every pump
+				c.bh.push(ctx, bs[0])
+			}
+			item := c.bh.pop()
+			for item != nil {
+				c.syncer.Add(item)
+				// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
+				if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
+					delete(bss, item.nodeID)
+				} else {
+					// push next item into heap and increase the offset
+					c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
+					binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
+				}
+				item = c.bh.pop()
+			}
+
+			// update status and metric
+			c.window.SaveLower(p.lower)
+			c.updateCollectStatus(p.lower == p.upper)
+			windowGauge.WithLabelValues("lower").Set(float64(p.lower))
 		}
-		item = c.bh.pop()
 	}
 }
 
