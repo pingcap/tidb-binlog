@@ -51,8 +51,11 @@ type PbIndex struct {
 
 // NewPbIndex creates a new PbIndex object. filepath should fullpath of index file.
 func NewPbIndex(dir, indexName string) (*PbIndex, error) {
+	if dir == "" {
+		return nil, errors.Errorf("dir is empty")
+	}
 	if indexName == "" {
-		indexName = defaultIndexName
+		return nil, errors.Errorf("index name is empty")
 	}
 
 	fp := path.Join(dir, indexName)
@@ -109,9 +112,7 @@ func (pi *PbIndex) write(pos Position) error {
 
 // MarkOffset marks position to file(if meets conditions).
 func (pi *PbIndex) MarkOffset(pos Position) {
-	pi.mu.Lock()
 	pi.posCh <- pos
-	pi.mu.Unlock()
 }
 
 // Close closes pbindex.
@@ -156,16 +157,12 @@ func (pi *PbIndex) Search(ts int64) (file string, offset int64, err error) {
 
 		// FIXME: is it reliable to use len(tsStr)?
 		cmp := strings.Compare(realLine[:len(tsStr)], tsStr)
-		if cmp == 0 {
+		if cmp > 0 {
 			targetLine = realLine
 			log.Infof("found target ts line %s", targetLine)
 			break
 		} else if cmp == -1 {
 			continue
-		} else if cmp == 1 {
-			targetLine = realLine
-			log.Infof("found target ts line %s", targetLine)
-			break
 		}
 	}
 

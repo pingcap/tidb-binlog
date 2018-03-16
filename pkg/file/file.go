@@ -32,17 +32,9 @@ func ReadDir(dirpath string) ([]string, error) {
 	}
 	defer dir.Close()
 
-	stat, err := dir.Stat()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if !stat.IsDir() {
-		return nil, errors.Errorf("%s is not a dir", dirpath)
-	}
-
 	names, err := dir.Readdirnames(-1)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "dir %s", dirpath)
 	}
 
 	sort.Strings(names)
