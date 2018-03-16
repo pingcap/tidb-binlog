@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/juju/errors"
@@ -37,6 +38,7 @@ func (p Position) String() string {
 
 // PbIndex holds information about pb index file.
 type PbIndex struct {
+	mu       *sync.RWMutex
 	dir      string
 	file     string
 	fd       *file.LockedFile
@@ -72,7 +74,9 @@ func NewPbIndex(dir, indexName string) (*PbIndex, error) {
 
 // SetInterval sets interval value.
 func (pi *PbIndex) SetInterval(interval int64) {
+	pi.mu.Lock()
 	pi.interval = interval
+	pi.mu.Unlock()
 }
 
 // Run handles position.
@@ -105,15 +109,19 @@ func (pi *PbIndex) write(pos Position) error {
 
 // MarkOffset marks position to file(if meets conditions).
 func (pi *PbIndex) MarkOffset(pos Position) {
+	pi.mu.Lock()
 	pi.posCh <- pos
+	pi.mu.Unlock()
 }
 
 // Close closes pbindex.
 func (pi *PbIndex) Close() {
+	pi.mu.Lock()
 	if err := pi.bw.Flush(); err != nil {
 		log.Warnf("flush pb index error %v", err)
 	}
 	pi.fd.Close()
+	pi.mu.Unlock()
 }
 
 // Search searches target protobuf files.
@@ -127,13 +135,9 @@ func (pi *PbIndex) Search(ts int64) (file string, offset int64, err error) {
 		return "", 0, nil
 	}
 
-	// TODO: improve performance
-
 	tsStr := strconv.FormatInt(ts, 10)
 
 	var targetLine string
-	// var lastLine string
-
 	for {
 		line, err := pi.br.ReadString('\n')
 		if err != nil {
