@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 // index file format:  ts:file:offset
@@ -38,7 +39,7 @@ func (p Position) String() string {
 type PbIndex struct {
 	dir      string
 	file     string
-	fd       *os.File
+	fd       *file.LockedFile
 	bw       *bufio.Writer
 	br       *bufio.Reader
 	posCh    chan Position
@@ -53,8 +54,7 @@ func NewPbIndex(dir, indexName string) (*PbIndex, error) {
 	}
 
 	fp := path.Join(dir, indexName)
-
-	fd, err := os.OpenFile(fp, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	fd, err := file.TryLockFile(fp, os.O_CREATE|os.O_APPEND|os.O_RDWR, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -13,12 +13,6 @@ import (
 )
 
 const (
-	// PrivateFileMode is the permission for service file
-	PrivateFileMode = 0600
-
-	// PrivateDirMode is the permission for service dir
-	PrivateDirMode = 0700
-
 	datetimeFormat = "20060102150405"
 )
 
