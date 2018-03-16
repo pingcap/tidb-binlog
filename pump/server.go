@@ -13,6 +13,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -173,7 +174,7 @@ func (s *Server) init() error {
 	// init cluster data dir if not exist
 	var err error
 	clusterDir := path.Join(s.dataDir, "clusters")
-	if !file.Exist(clusterDir) {
+	if !bf.Exist(clusterDir) {
 		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
 			return errors.Trace(err)
 		}
@@ -205,7 +206,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 
 	find := false
 	clusterDir := path.Join(s.dataDir, "clusters")
-	names, err := file.ReadDir(clusterDir)
+	names, err := bf.ReadDir(clusterDir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

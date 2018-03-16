@@ -11,7 +11,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/file"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -81,7 +81,7 @@ func CheckFileExist(filepath string) (string, error) {
 
 // Exist checks the dir exist, that it should have some file
 func Exist(dirpath string) bool {
-	names, err := file.ReadDir(dirpath)
+	names, err := bf.ReadDir(dirpath)
 	if err != nil {
 		return false
 	}
