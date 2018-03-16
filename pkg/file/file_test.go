@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/check"
 )
@@ -71,4 +72,44 @@ func (t *testFileSuite) TestExist(c *C) {
 
 	os.Remove(f.Name())
 	c.Assert(Exist(f.Name()), IsFalse)
+}
+
+func (t *testFileSuite) TestFilterBinlogNames(c *C) {
+	names := []string{"binlog-0000000000000001-201803015121212", "test", "binlog-0000000000000002-201803015121212"}
+	excepted := []string{"binlog-0000000000000001-201803015121212", "binlog-0000000000000002-201803015121212"}
+	res := FilterBinlogNames(names)
+	c.Assert(res, HasLen, len(excepted))
+	c.Assert(res, DeepEquals, excepted)
+}
+
+func (t *testFileSuite) TestParseBinlogName(c *C) {
+	cases := []struct {
+		name          string
+		expectedIndex uint64
+		expectedError bool
+	}{
+		{"binlog-0000000000000001-20180315121212", 0000000000000001, false},
+		{"binlog-0000000000000001", 0000000000000001, false},
+		{"binlog-index", 0, true},
+	}
+
+	for _, t := range cases {
+		index, err := ParseBinlogName(t.name)
+		c.Assert(err != nil, Equals, t.expectedError)
+		c.Assert(index, Equals, t.expectedIndex)
+	}
+
+	index := uint64(1)
+	name := BinlogName(index)
+	gotIndex, err := ParseBinlogName(name)
+	c.Assert(err, IsNil)
+	c.Assert(gotIndex, Equals, index)
+}
+
+func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
+	index := uint64(1)
+	datetime, err := time.Parse(datetimeFormat, "20180315121212")
+	c.Assert(err, IsNil)
+	binlogName := binlogNameWithDateTime(index, datetime)
+	c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
 }
