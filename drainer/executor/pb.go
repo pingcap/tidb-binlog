@@ -2,8 +2,8 @@ package executor
 
 import (
 	"github.com/juju/errors"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/index"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -21,7 +21,7 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		err       error
 	)
 	dirPath := cfg.BinlogFileDir
-	names, err := file.ReadDir(dirPath)
+	names, err := bf.ReadDir(dirPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

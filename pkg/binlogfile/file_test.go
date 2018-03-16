@@ -1,4 +1,4 @@
-package file
+package binlogfile
 
 import (
 	"io/ioutil"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 func TestClient(t *testing.T) {
@@ -55,7 +56,7 @@ func (t *testFileSuite) TestCreateDirAll(c *C) {
 	err = CreateDirAll(tmpdir2)
 	c.Assert(err, IsNil)
 
-	err = ioutil.WriteFile(path.Join(tmpdir2, "text.txt"), []byte("test text"), PrivateFileMode)
+	err = ioutil.WriteFile(path.Join(tmpdir2, "text.txt"), []byte("test text"), file.PrivateFileMode)
 	c.Assert(err, IsNil)
 
 	err = CreateDirAll(tmpdir2)

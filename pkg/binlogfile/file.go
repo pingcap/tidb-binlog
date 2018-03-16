@@ -1,4 +1,4 @@
-package file
+package binlogfile
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 const (
@@ -44,7 +45,7 @@ func ReadDir(dirpath string) ([]string, error) {
 
 // CreateDirAll guarantees to create a new and empty dir
 func CreateDirAll(dir string) error {
-	if err := os.MkdirAll(dir, PrivateDirMode); err != nil {
+	if err := os.MkdirAll(dir, file.PrivateDirMode); err != nil {
 		return errors.Trace(err)
 	}
 
