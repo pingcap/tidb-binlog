@@ -7,8 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb-binlog/pkg/index"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 )
 
 type binlogFile struct {
@@ -19,7 +18,7 @@ type binlogFile struct {
 // searchFiles return matched file and it's offset
 func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 	// read all file names
-	sortedNames, err := readBinlogNames(dir)
+	sortedNames, err := bf.ReadBinlogNames(dir)
 	if err != nil {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
@@ -30,18 +29,19 @@ func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
 	)
 	// try to find matched beginning file.
 	if r.cfg.StartTSO != 0 {
-		idx, err := index.NewPbIndex(r.cfg.Dir, r.cfg.IndexName)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		// idx, err := index.NewPbIndex(r.cfg.Dir, r.cfg.IndexName)
+		// if err != nil {
+		// 	return nil, errors.Trace(err)
+		// }
 
-		firstFile, firstFileOffset, err = idx.Search(r.cfg.StartTSO)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		// firstFile, firstFileOffset, err = idx.Search(r.cfg.StartTSO)
+		// if err != nil {
+		// 	return nil, errors.Trace(err)
+		// }
 	}
 	log.Infof("firstfile %s %d", firstFile, firstFileOffset)
 
+	// TODO: binary search
 	binlogFiles := make([]binlogFile, 0, len(sortedNames))
 	for _, name := range sortedNames {
 		fullpath := path.Join(r.cfg.Dir, name)
