@@ -49,7 +49,6 @@ func main() {
 
 	if err := r.Process(); err != nil {
 		log.Errorf("restore processing error, %v", errors.ErrorStack(err))
-		os.Exit(2)
 	}
 	if err := r.Close(); err != nil {
 		log.Fatalf("close err %v", err)

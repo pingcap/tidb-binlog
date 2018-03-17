@@ -30,7 +30,6 @@ type TableName struct {
 type Config struct {
 	*flag.FlagSet
 	Dir           string `toml:"data-dir" json:"data-dir"`
-	IndexName     string `toml:"index-name" json:"index-name"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
 	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
@@ -111,8 +110,6 @@ func (c *Config) Parse(args []string) error {
 		return errors.Trace(err)
 	}
 
-	//TODO more
-
 	if c.StartDatetime != "" {
 		startTime, err := time.ParseInLocation(timeFormat, c.StartDatetime, time.Local)
 		if err != nil {
@@ -150,10 +147,15 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
-	if c.DestType == "mysql" && c.DestDB == nil {
-		return errors.New("dest-db config must not be emtpy")
+	switch c.DestType {
+	case "mysql":
+		if c.DestDB == nil {
+			return errors.New("dest-db config must not be emtpy")
+		}
+		return nil
+	default:
+		return errors.Errorf("dest type %s is not supported", c.DestType)
 	}
-	return nil
 }
 
 // InitLogger initalizes Pump's logger.

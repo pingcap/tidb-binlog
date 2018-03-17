@@ -98,6 +98,7 @@ func (r *Restore) Process() error {
 				log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
 			}
 
+			// TODO: calculate it by hand.
 			ret, err := fd.Seek(0, io.SeekCurrent)
 			if err != nil {
 				return errors.Trace(err)

@@ -1,8 +1,5 @@
 # data-dir contains protobuf files. It's suggested to use fullpath.
 data-dir = "./data.drainer"
-# Use index file to search target ts. Set this when `start-ts` is set.
-# The file path would be {data-dir}/{index-name}
-# index-name = "binlog.index"
 
 # log-file = ""
 # log-rotate = "hour"
