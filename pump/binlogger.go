@@ -161,7 +161,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 	nameIndex, ok := bf.SearchIndex(names, from.Suffix)
 	if !ok {
-		return nil, bf.ErrFileNotFound
+		return nil, errors.Annotatef(bf.ErrFileNotFound, "can not find index %d", from.Suffix)
 	}
 
 	for _, name := range names[nameIndex:] {
