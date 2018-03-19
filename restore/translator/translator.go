@@ -13,9 +13,6 @@ type Translator interface {
 	// GenUpdate generates the update
 	TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error)
 
-	// GenUpdateSafeMode generate delete and insert  from update sqls
-	TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error)
-
 	// GenDelete generates the delete sqls by cols values
 	TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error)
 

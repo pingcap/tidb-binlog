@@ -72,7 +72,4 @@ port = 3306
 #[syncer.to]
 #dir = "data.drainer"
 #compression = "gzip"
-## for pb output, you can set a index which helps finding restore pb files.
-#index-name = "binlog.index"
-#index-interval = 1000
 
