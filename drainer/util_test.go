@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
 )
@@ -29,21 +30,21 @@ func (t *testDrainerSuite) TestPosToFloat(c *C) {
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 	// test non-mysqltype error
 	err := errors.New("test")
-	ok := ignoreDDLError(err)
+	ok := sql.IgnoreDDLError(err)
 	c.Assert(ok, IsFalse)
 	// test ignore error
 	err1 := &mysql.MySQLError{
 		Number:  1054,
 		Message: "test",
 	}
-	ok = ignoreDDLError(err1)
+	ok = sql.IgnoreDDLError(err1)
 	c.Assert(ok, IsTrue)
 	// test non-ignore error
 	err2 := &mysql.MySQLError{
 		Number:  1052,
 		Message: "test",
 	}
-	ok = ignoreDDLError(err2)
+	ok = sql.IgnoreDDLError(err2)
 	c.Assert(ok, IsFalse)
 
 }

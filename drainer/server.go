@@ -208,7 +208,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 		}()
 		err := s.syncer.Start(jobs)
 		if err != nil {
-			log.Errorf("syncer exited, error %v", err)
+			log.Errorf("syncer exited, error %v", errors.ErrorStack(err))
 		}
 	}()
 }
