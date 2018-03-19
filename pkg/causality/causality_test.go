@@ -28,21 +28,21 @@ var _ = Suite(&testCausalitySuite{})
 type testCausalitySuite struct{}
 
 func (s *testCausalitySuite) TestCausality(c *C) {
-	ca := newCausality()
+	ca := NewCausality()
 	caseData := []string{"test_1", "test_2", "test_3"}
 	excepted := map[string]string{
 		"test_1": "test_1",
 		"test_2": "test_1",
 		"test_3": "test_1",
 	}
-	c.Assert(ca.add(caseData), IsNil)
+	c.Assert(ca.Add(caseData), IsNil)
 	c.Assert(ca.relations, DeepEquals, excepted)
-	c.Assert(ca.add([]string{"test_4"}), IsNil)
+	c.Assert(ca.Add([]string{"test_4"}), IsNil)
 	excepted["test_4"] = "test_4"
 	c.Assert(ca.relations, DeepEquals, excepted)
 	conflictData := []string{"test_4", "test_3"}
-	c.Assert(ca.detectConflict(conflictData), IsTrue)
-	c.Assert(ca.add(conflictData), NotNil)
-	ca.reset()
+	c.Assert(ca.DetectConflict(conflictData), IsTrue)
+	c.Assert(ca.Add(conflictData), NotNil)
+	ca.Reset()
 	c.Assert(ca.relations, HasLen, 0)
 }
