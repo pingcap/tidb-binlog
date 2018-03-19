@@ -3,6 +3,7 @@ package restore
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
@@ -35,7 +36,7 @@ func (r *Restore) addOneRegex(originStr string) {
 
 // SkipBySchemaAndTable skips sql based on schema and table rules.
 func (r *Restore) SkipBySchemaAndTable(schema string, table string) bool {
-	tbs := []TableName{{Schema: schema, Name: table}}
+	tbs := []TableName{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
 	tbs = r.whiteFilter(tbs)
 	if len(tbs) == 0 {
 		return true
