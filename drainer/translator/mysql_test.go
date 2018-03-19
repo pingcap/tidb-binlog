@@ -11,11 +11,6 @@ func (t *testTranslatorSuite) TestGenColumnList(c *C) {
 	c.Assert(m.genColumnList(table.Columns), Equals, "`ID`,`NAME`,`SEX`")
 }
 
-func (t *testTranslatorSuite) TestGenColumnPlaceholders(c *C) {
-	m := testGenMysqlTranslator(c)
-	c.Assert(m.genColumnPlaceholders(3), Equals, "?,?,?")
-}
-
 func (t *testTranslatorSuite) TestGenKVs(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")

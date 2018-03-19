@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
 )
 
@@ -24,7 +25,7 @@ func main() {
 	}
 
 	pump.InitLogger(cfg)
-	pump.PrintVersionInfo()
+	version.PrintVersionInfo()
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {

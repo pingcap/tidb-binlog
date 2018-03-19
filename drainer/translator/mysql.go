@@ -3,12 +3,11 @@ package translator
 import (
 	"bytes"
 	"fmt"
-	"strings"
-
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -47,7 +46,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 	colsTypeMap := toColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
-	columnPlaceholders := m.genColumnPlaceholders((len(columns)))
+	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
 	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
@@ -178,7 +177,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
-	columnPlaceholders := m.genColumnPlaceholders(len(columns))
+	columnPlaceholders := dml.GenColumnPlaceholders(len(columns))
 
 	for _, row := range rows {
 		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
@@ -343,14 +342,6 @@ func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
 	}
 
 	return string(columnList)
-}
-
-func (m *mysqlTranslator) genColumnPlaceholders(length int) string {
-	values := make([]string, length, length)
-	for i := 0; i < length; i++ {
-		values[i] = "?"
-	}
-	return strings.Join(values, ",")
 }
 
 func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
 func TestClient(t *testing.T) {
@@ -106,41 +107,41 @@ func (db *mockDB) Open(dsn string) (driver.Conn, error) {
 
 func (t *testExecutorSuite) TestExecuteSqls(c *C) {
 	// open mock db err
-	_, err := openDB("mockTestSQL", "127.0.0.1", 3306, "root", "")
+	_, err := pkgsql.OpenDB("mockTestSQL", "127.0.0.1", 3306, "root", "")
 	c.Assert(err, NotNil)
 
 	// test open db
 	sql.Register("mockTestSQL", &mockDB{})
-	db, err := openDB("mockTestSQL", "127.0.0.1", 3306, "root", "")
+	db, err := pkgsql.OpenDB("mockTestSQL", "127.0.0.1", 3306, "root", "")
 	c.Assert(err, IsNil)
 
 	// test execute empty sql
-	err = executeSQLs(db, nil, nil, false)
+	err = pkgsql.ExecuteSQLs(db, nil, nil, false)
 	c.Assert(err, IsNil)
 
 	// test execute sql
-	err = executeSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
+	err = pkgsql.ExecuteSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
 	c.Assert(err, IsNil)
 
 	// test retry sql
-	maxDMLRetryCount = 2
-	retryWaitTime = 0
+	pkgsql.MaxDMLRetryCount = 2
+	pkgsql.RetryWaitTime = 0
 	isErrMocks[beginTxErr] = true
-	err = executeSQLs(db, []string{"test sql"}, [][]interface{}{{}}, true)
+	err = pkgsql.ExecuteSQLs(db, []string{"test sql"}, [][]interface{}{{}}, true)
 	c.Assert(err, NotNil)
 
 	// test tx exec error
 	isErrMocks[beginTxErr] = false
 	isErrMocks[execErr] = true
 	isErrMocks[rollbackTxErr] = true
-	err = executeSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
+	err = pkgsql.ExecuteSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
 	c.Assert(err, NotNil)
 
 	// test tx commit err
 	isErrMocks[execErr] = false
 	isErrMocks[rollbackTxErr] = false
 	isErrMocks[commitTxErr] = true
-	err = executeSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
+	err = pkgsql.ExecuteSQLs(db, []string{"test sql"}, [][]interface{}{{}}, false)
 	c.Assert(err, NotNil)
 	isErrMocks[commitTxErr] = false
 
