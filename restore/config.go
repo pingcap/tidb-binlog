@@ -58,7 +58,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of restore:")
 		fs.PrintDefaults()
 	}
-	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
+	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path")
 	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-datetime, empty string means starting from the beginning of the first file")
 	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-datetime, empty string means never end.")
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
