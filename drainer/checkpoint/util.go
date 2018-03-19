@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/juju/errors"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -26,16 +25,6 @@ type Config struct {
 	ClusterID       uint64
 	InitialCommitTS int64
 	CheckPointFile  string `toml:"dir" json:"dir"`
-}
-
-func openDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8", username, password, host, port)
-	db, err := sql.Open(proto, dbDSN)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return db, nil
 }
 
 func checkConfig(cfg *Config) error {

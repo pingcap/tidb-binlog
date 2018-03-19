@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -501,7 +502,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				// compute txn duration
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
-					if !ignoreDDLError(err) {
+					if !pkgsql.IgnoreDDLError(err) {
 						log.Fatalf(errors.ErrorStack(err))
 					} else {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)

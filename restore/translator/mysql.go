@@ -88,10 +88,6 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	return sql, args, nil
 }
 
-func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	return "", nil, nil
-}
-
 func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
 	schema := *event.SchemaName
 	table := *event.TableName

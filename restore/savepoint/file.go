@@ -35,6 +35,9 @@ func newFileSavepoint(filename string) (Savepoint, error) {
 }
 
 func (f *fileSavepoint) Load() (pos Position, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	_, err = f.fd.Seek(0, io.SeekStart)
 	if err != nil {
 		return pos, errors.Trace(err)
@@ -44,9 +47,7 @@ func (f *fileSavepoint) Load() (pos Position, err error) {
 	if err != nil {
 		return pos, errors.Trace(err)
 	}
-	f.mu.Lock()
 	f.pos = pos
-	f.mu.Unlock()
 
 	return pos, nil
 }
@@ -62,8 +63,8 @@ func (f *fileSavepoint) Save(pos Position) (err error) {
 }
 
 func (f *fileSavepoint) Flush() error {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.flush()
 }
 
