@@ -56,6 +56,7 @@ func (r *Restore) Process() error {
 		return errors.Trace(err)
 	}
 
+	var offset int64
 	for _, file := range files {
 		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
 		if err != nil {
@@ -63,6 +64,7 @@ func (r *Restore) Process() error {
 		}
 		defer fd.Close()
 
+		offset += file.offset
 		ret, err := fd.Seek(file.offset, io.SeekStart)
 		if err != nil {
 			return errors.Trace(err)
@@ -72,15 +74,17 @@ func (r *Restore) Process() error {
 		br := bufio.NewReader(fd)
 
 		for {
-			binlog, err := Decode(br)
+			binlog, length, err := Decode(br)
 			if errors.Cause(err) == io.EOF {
 				fd.Close()
 				log.Infof("read file %s end", file.fullpath)
+				offset = 0
 				break
 			}
 			if err != nil {
 				return errors.Annotatef(err, "decode binlog error")
 			}
+			offset += length
 
 			sqls, args, isDDL, err := r.Translate(binlog)
 			if err != nil {
@@ -98,13 +102,8 @@ func (r *Restore) Process() error {
 				log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
 			}
 
-			// TODO: calculate it by hand.
-			ret, err := fd.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
-			log.Infof("offset %d ts %d, datetime %s", ret, binlog.CommitTs, dt.String())
+			log.Infof("offset %d ts %d, datetime %s", offset, binlog.CommitTs, dt.String())
 		}
 	}
 
