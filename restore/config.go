@@ -153,6 +153,8 @@ func (c *Config) validate() error {
 			return errors.New("dest-db config must not be emtpy")
 		}
 		return nil
+	case "print":
+		return nil
 	default:
 		return errors.Errorf("dest type %s is not supported", c.DestType)
 	}

@@ -91,5 +91,5 @@ func (r *Restore) matchString(pattern string, t string) bool {
 }
 
 func isAcceptableBinlog(binlog *pb.Binlog, startTs, endTs int64) bool {
-	return binlog.CommitTs >= startTs && (binlog.CommitTs == 0 || binlog.CommitTs <= endTs)
+	return binlog.CommitTs >= startTs && (endTs == 0 || binlog.CommitTs <= endTs)
 }

@@ -128,7 +128,7 @@ func FilterBinlogNames(names []string) []string {
 
 		if _, err := ParseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
-				log.Warningf("ignored file %v in wal", name)
+				log.Infof("ignored file %v in wal", name)
 			}
 			continue
 		}
