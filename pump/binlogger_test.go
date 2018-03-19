@@ -7,6 +7,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -42,7 +43,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	defer os.RemoveAll(dir)
 
 	bl, err := OpenBinlogger(dir, compress.CompressionNone)
-	c.Assert(err, Equals, bf.ErrFileNotFound)
+	c.Assert(errors.Cause(err), Equals, bf.ErrFileNotFound)
 
 	bl, err = CreateBinlogger(dir, compress.CompressionNone)
 	c.Assert(err, IsNil)
