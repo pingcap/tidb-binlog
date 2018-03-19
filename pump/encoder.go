@@ -7,6 +7,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
+	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 var magic uint32 = 471532804
@@ -15,20 +18,44 @@ var magic uint32 = 471532804
 //  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-type encoder struct {
-	bw io.Writer
+// Encoder is an interface wraps basic Encode method which encodes payload and write it, and returns offset.
+type Encoder interface {
+	Encode(payload []byte) (int64, error)
 }
 
-func newEncoder(w io.Writer) *encoder {
+type encoder struct {
+	bw    io.Writer
+	codec compress.CompressionCodec
+}
+
+func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
 	return &encoder{
-		bw: w,
+		bw:    w,
+		codec: codec,
 	}
 }
 
-func (e *encoder) encode(payload []byte) error {
+func (e *encoder) Encode(payload []byte) (int64, error) {
 	data := encode(payload)
-	_, err := e.bw.Write(data)
-	return errors.Trace(err)
+
+	data, err := compress.Compress(data, e.codec)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	_, err = e.bw.Write(data)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	if file, ok := e.bw.(*pkgfile.LockedFile); ok {
+		curOffset, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		return curOffset, nil
+	}
+	log.Warn("bw is not *file.Lockedfile, unexpected!")
+	return 0, errors.Trace(err)
 }
 
 type kafkaEncoder struct {
@@ -37,7 +64,7 @@ type kafkaEncoder struct {
 	producer  sarama.SyncProducer
 }
 
-func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) *kafkaEncoder {
+func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
 	return &kafkaEncoder{
 		producer:  producer,
 		topic:     topic,
@@ -45,7 +72,7 @@ func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32
 	}
 }
 
-func (k *kafkaEncoder) encode(payload []byte) (int64, error) {
+func (k *kafkaEncoder) Encode(payload []byte) (int64, error) {
 	msg := &sarama.ProducerMessage{Topic: k.topic, Partition: k.partition, Value: sarama.ByteEncoder(payload)}
 	partition, offset, err := k.producer.SendMessage(msg)
 	if err != nil {

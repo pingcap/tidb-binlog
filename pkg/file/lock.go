@@ -11,6 +11,13 @@ var (
 	ErrLocked = errors.New("pkg/file: file already locked")
 )
 
+const (
+	// PrivateFileMode is the permission for service file
+	PrivateFileMode = 0600
+	// PrivateDirMode is the permission for service dir
+	PrivateDirMode = 0700
+)
+
 // LockedFile wraps the file into a LockedFile concept simply
 type LockedFile struct{ *os.File }
 
