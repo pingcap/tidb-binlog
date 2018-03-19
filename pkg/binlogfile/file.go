@@ -112,7 +112,7 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 
 	fnames := FilterBinlogNames(names)
 	if len(fnames) == 0 {
-		return nil, errors.NotFoundf("dir %s", dirpath)
+		return nil, errors.Annotatef(ErrFileNotFound, "dir %s", dirpath)
 	}
 
 	return fnames, nil
