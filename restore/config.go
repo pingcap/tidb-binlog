@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -86,10 +85,7 @@ func (c *Config) Parse(args []string) error {
 	}
 
 	if c.printVersion {
-		fmt.Printf("Git Commit Hash: %s\n", version.GitHash)
-		fmt.Printf("Build TS: %s\n", version.BuildTS)
-		fmt.Printf("Go Version: %s\n", runtime.Version())
-		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		version.PrintVersionInfo()
 		os.Exit(0)
 	}
 
