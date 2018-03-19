@@ -2,7 +2,8 @@ package executor
 
 import (
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/pkg/file"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
 )
@@ -18,15 +19,16 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		err       error
 	)
 	dirPath := cfg.BinlogFileDir
-	names, err := file.ReadDir(dirPath)
+	names, err := bf.ReadDir(dirPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	codec := compress.ToCompressionCodec(cfg.Compression)
 	if len(names) > 0 {
-		binlogger, err = pump.OpenBinlogger(dirPath)
+		binlogger, err = pump.OpenBinlogger(dirPath, codec)
 	} else {
-		binlogger, err = pump.CreateBinlogger(dirPath)
+		binlogger, err = pump.CreateBinlogger(dirPath, codec)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -56,7 +58,8 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 		event := args[i][0].(*pb.Event)
 		binlog.DmlData.Events = append(binlog.DmlData.Events, *event)
 	}
-	return p.saveBinlog(binlog)
+
+	return errors.Trace(p.saveBinlog(binlog))
 }
 
 func (p *pbExecutor) Close() error {
@@ -69,5 +72,6 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
-	return p.binlogger.WriteTail(data)
+	_, err = p.binlogger.WriteTail(data)
+	return errors.Trace(err)
 }
