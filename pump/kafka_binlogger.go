@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -23,9 +24,10 @@ type kafkaBinloger struct {
 	topic string
 
 	producer sarama.SyncProducer
-	encoder  *kafkaEncoder
+	encoder  Encoder
 
 	sync.RWMutex
+	addr []string
 }
 
 func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogger, error) {
@@ -40,6 +42,7 @@ func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogg
 		topic:    topic,
 		producer: producer,
 		encoder:  newKafkaEncoder(producer, topic, DefaultTopicPartition()),
+		addr:     addr,
 	}
 	return binlogger, nil
 }
@@ -50,26 +53,26 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 }
 
 // WriteTail implements Binlogger WriteTail interface
-func (k *kafkaBinloger) WriteTail(payload []byte) error {
+func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 	// for concurrency write
 	k.RLock()
 	defer k.RUnlock()
 
 	if len(payload) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	offset, err := k.encoder.encode(payload)
+	offset, err := k.encoder.Encode(payload)
 	if offset > latestKafkaPos.Offset {
 		latestKafkaPos.Offset = offset
 	}
 
-	return errors.Trace(err)
+	return offset, errors.Trace(err)
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
-	return binlog.Pos{}, nil
+func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+	return nil
 }
 
 // Close implements Binlogger Close interface
@@ -82,3 +85,8 @@ func (k *kafkaBinloger) Close() error {
 
 // GC implements Binlogger GC interface
 func (k *kafkaBinloger) GC(days time.Duration, pos binlog.Pos) {}
+
+// Name implements the Binlogger interface.
+func (k *kafkaBinloger) Name() string {
+	return strings.Join(k.addr, ",")
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 	}
 
 	drainer.InitLogger(cfg)
-	drainer.PrintVersionInfo()
+	version.PrintVersionInfo()
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {

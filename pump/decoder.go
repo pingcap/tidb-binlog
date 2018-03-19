@@ -9,12 +9,18 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 )
 
+// Decoder is an interface wraps basic Decode method which decode binlog.Entity into binlogBuffer.
+type Decoder interface {
+	Decode(ent *binlog.Entity, buf *binlogBuffer) error
+}
+
 type decoder struct {
 	br  *bufio.Reader
 	pos binlog.Pos
 }
 
-func newDecoder(pos binlog.Pos, r io.Reader) *decoder {
+// NewDecoder creates a new Decoder.
+func NewDecoder(pos binlog.Pos, r io.Reader) Decoder {
 	reader := bufio.NewReader(r)
 
 	return &decoder{
@@ -23,7 +29,8 @@ func newDecoder(pos binlog.Pos, r io.Reader) *decoder {
 	}
 }
 
-func (d *decoder) decode(ent *binlog.Entity, buf *binlogBuffer) error {
+// Decode implements the Decoder interface.
+func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 	if d.br == nil {
 		return io.EOF
 	}
@@ -70,13 +77,13 @@ func (d *decoder) decode(ent *binlog.Entity, buf *binlogBuffer) error {
 		return ErrCRCMismatch
 	}
 
+	// 12 is size + magic length
+	d.pos.Offset += size + 16
+
 	ent.Pos = binlog.Pos{
 		Suffix: d.pos.Suffix,
 		Offset: d.pos.Offset,
 	}
-
-	// 12 is size + magic length
-	d.pos.Offset += size + 16
 
 	return nil
 }

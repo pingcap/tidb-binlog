@@ -10,6 +10,8 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -19,9 +21,6 @@ var (
 	// SegmentSizeBytes is the max threshold of binlog segment file size
 	// as an exported variable, you can define a different size
 	SegmentSizeBytes int64 = 512 * 1024 * 1024
-
-	// ErrFileNotFound is an error represents binlog file not found
-	ErrFileNotFound = errors.New("binlogger: file not found")
 
 	// ErrFileContentCorruption represents file or directory's content is curruption for some season
 	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
@@ -36,17 +35,20 @@ type Binlogger interface {
 	// read nums binlog events from the "from" position
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
-	// batch write binlog event
-	WriteTail(payload []byte) error
+	// batch write binlog event, and returns current offset(if have).
+	WriteTail(payload []byte) (int64, error)
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
-	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error)
+	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error
 
 	// close the binlogger
 	Close() error
 
 	// GC recycles the old binlog file
 	GC(days time.Duration, pos binlog.Pos)
+
+	// Name tells the name of underlying file
+	Name() string
 }
 
 // binlogger is a logical representation of the log storage
@@ -55,7 +57,9 @@ type binlogger struct {
 	dir string
 
 	// encoder encodes binlog payload into bytes, and write to file
-	encoder *encoder
+	encoder Encoder
+
+	codec compress.CompressionCodec
 
 	// file is the lastest file in the dir
 	file  *file.LockedFile
@@ -63,16 +67,17 @@ type binlogger struct {
 }
 
 // CreateBinlogger creates a binlog directory, then can append binlogs
-func CreateBinlogger(dirpath string) (Binlogger, error) {
+func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	if Exist(dirpath) {
 		return nil, os.ErrExist
 	}
 
-	if err := file.CreateDirAll(dirpath); err != nil {
+	if err := bf.CreateDirAll(dirpath); err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	p := path.Join(dirpath, fileName(0))
+	p := path.Join(dirpath, bf.BinlogName(0))
+	log.Infof("create and lock binlog file %s", p)
 	f, err := file.LockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -80,7 +85,7 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 
 	binlog := &binlogger{
 		dir:     dirpath,
-		encoder: newEncoder(f),
+		encoder: newEncoder(f, codec),
 		file:    f,
 	}
 
@@ -88,29 +93,30 @@ func CreateBinlogger(dirpath string) (Binlogger, error) {
 }
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string) (Binlogger, error) {
-	names, err := readBinlogNames(dirpath)
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+	names, err := bf.ReadBinlogNames(dirpath)
 	if err != nil {
 		return nil, err
 	}
 
-	if !isValidBinlog(names) {
+	if !bf.IsValidBinlog(names) {
 		return nil, ErrFileContentCorruption
 	}
 
 	lastFileName := names[len(names)-1]
-	lastFileSuffix, err := parseBinlogName(lastFileName)
+	lastFileSuffix, err := bf.ParseBinlogName(lastFileName)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	p := path.Join(dirpath, lastFileName)
+	log.Infof("open and lock binlog file %s", p)
 	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	offset, err := f.Seek(0, os.SEEK_END)
+	offset, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -121,7 +127,8 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	binlog := &binlogger{
 		dir:     dirpath,
 		file:    f,
-		encoder: newEncoder(f),
+		encoder: newEncoder(f, codec),
+		codec:   codec,
 	}
 
 	return binlog, nil
@@ -138,7 +145,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	var ent = &binlog.Entity{}
 	var ents = []binlog.Entity{}
 	var index int32
-	var decoder *decoder
+	var decoder Decoder
 	var first = true
 
 	dirpath := b.dir
@@ -147,14 +154,14 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		return nil, errors.Errorf("read number must be positive")
 	}
 
-	names, err := readBinlogNames(b.dir)
+	names, err := bf.ReadBinlogNames(b.dir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	nameIndex, ok := searchIndex(names, from.Suffix)
+	nameIndex, ok := bf.SearchIndex(names, from.Suffix)
 	if !ok {
-		return nil, ErrFileNotFound
+		return nil, errors.Annotatef(bf.ErrFileNotFound, "can not find index %d", from.Suffix)
 	}
 
 	for _, name := range names[nameIndex:] {
@@ -168,7 +175,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		if first {
 			first = false
 
-			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			size, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return ents, errors.Trace(err)
 			}
@@ -178,10 +185,10 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			}
 		}
 
-		decoder = newDecoder(from, io.Reader(f))
+		decoder = NewDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
-			err = decoder.decode(ent, &binlogBuffer{})
+			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
 				break
 			}
@@ -205,66 +212,62 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
 	var ent = &binlog.Entity{}
-	var decoder *decoder
+	var decoder Decoder
 	var first = true
 
 	dirpath := b.dir
-	latestPos := binlog.Pos{
-		Suffix: from.Suffix,
-		Offset: from.Offset,
-	}
-	names, err := readBinlogNames(dirpath)
+	names, err := bf.ReadBinlogNames(dirpath)
 	if err != nil {
-		return latestPos, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
-	nameIndex, ok := searchIndex(names, from.Suffix)
+	nameIndex, ok := bf.SearchIndex(names, from.Suffix)
 	if !ok {
-		return latestPos, ErrFileNotFound
+		return bf.ErrFileNotFound
 	}
 
 	for _, name := range names[nameIndex:] {
 		select {
 		case <-ctx.Done():
 			log.Warningf("Walk Done!")
-			return latestPos, nil
+			return nil
 		default:
 		}
 
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
-			return latestPos, errors.Trace(err)
+			return errors.Trace(err)
 		}
 		defer f.Close()
 
 		if first {
 			first = false
 
-			size, err := f.Seek(from.Offset, os.SEEK_SET)
+			size, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
-				return latestPos, errors.Trace(err)
+				return errors.Trace(err)
 			}
 
 			if size < from.Offset {
-				return latestPos, errors.Errorf("pos'offset is wrong")
+				return errors.Errorf("pos'offset is wrong")
 			}
 		}
 
-		decoder = newDecoder(from, io.Reader(f))
+		decoder = NewDecoder(from, io.Reader(f))
 
 		for {
 			select {
 			case <-ctx.Done():
 				log.Warningf("Walk Done!")
-				return latestPos, nil
+				return nil
 			default:
 			}
 
 			buf := binlogBufferPool.Get().(*binlogBuffer)
-			err = decoder.decode(ent, buf)
+			err = decoder.Decode(ent, buf)
 			if err != nil {
 				break
 			}
@@ -273,32 +276,28 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				Pos:     ent.Pos,
 				Payload: ent.Payload,
 			}
-			latestPos = newEnt.Pos
 			err := sendBinlog(newEnt)
 			if err != nil {
-				return latestPos, errors.Trace(err)
+				return errors.Trace(err)
 			}
 
-			// calculate next position to send binlog
-			// 16 means magic(4 bytes) + size(8 bytes) + crc(4 bytes)
-			latestPos.Offset += int64(len(newEnt.Payload) + 16)
 			binlogBufferPool.Put(buf)
 		}
 
 		if err != nil && err != io.EOF {
-			return latestPos, err
+			return errors.Trace(err)
 		}
 
 		from.Suffix++
 		from.Offset = 0
 	}
 
-	return latestPos, nil
+	return nil
 }
 
 // GC recycles the old binlog file
 func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
-	names, err := readBinlogNames(b.dir)
+	names, err := bf.ReadBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files error:", names)
 		return
@@ -317,7 +316,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			continue
 		}
 
-		curSuffix, err := parseBinlogName(name)
+		curSuffix, err := bf.ParseBinlogName(name)
 		if err != nil {
 			log.Errorf("parse binlog error %v", err)
 		}
@@ -335,29 +334,27 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(payload []byte) error {
+func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	if len(payload) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	if err := b.encoder.encode(payload); err != nil {
-		return errors.Trace(err)
-	}
-
-	curOffset, err := b.file.Seek(0, os.SEEK_CUR)
+	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
+
 	latestFilePos.Offset = curOffset
 
 	if curOffset < SegmentSizeBytes {
-		return nil
+		return curOffset, nil
 	}
 
-	return b.rotate()
+	err = b.rotate()
+	return curOffset, errors.Trace(err)
 }
 
 // Close closes the binlogger
@@ -374,9 +371,13 @@ func (b *binlogger) Close() error {
 	return nil
 }
 
+func (b *binlogger) Name() string {
+	return b.file.Name()
+}
+
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
-	filename := fileName(b.seq() + 1)
+	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
 	fpath := path.Join(b.dir, filename)
@@ -391,7 +392,7 @@ func (b *binlogger) rotate() error {
 	}
 	b.file = newTail
 
-	b.encoder = newEncoder(b.file)
+	b.encoder = newEncoder(b.file, b.codec)
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }
@@ -401,7 +402,7 @@ func (b *binlogger) seq() uint64 {
 		return 0
 	}
 
-	seq, err := parseBinlogName(path.Base(b.file.Name()))
+	seq, err := bf.ParseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
 		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
 	}

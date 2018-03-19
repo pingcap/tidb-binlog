@@ -8,12 +8,13 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tipb/go-binlog"
@@ -45,11 +46,8 @@ var (
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
-	// RWMutex protects dispatcher
-	sync.RWMutex
-
 	// dispatcher keeps all opened binloggers which is indexed by clusterID.
-	dispatcher map[string]Binlogger
+	dispatcher Binlogger
 
 	// dataDir is the root directory of all pump data
 	// |
@@ -131,19 +129,18 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
-		dispatcher: make(map[string]Binlogger),
-		dataDir:    cfg.DataDir,
-		clusterID:  fmt.Sprintf("%d", clusterID),
-		node:       n,
-		tcpAddr:    cfg.ListenAddr,
-		unixAddr:   cfg.Socket,
-		gs:         grpc.NewServer(grpcOpts...),
-		ctx:        ctx,
-		cancel:     cancel,
-		metrics:    metrics,
-		gc:         time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:      pdCli,
-		cfg:        cfg,
+		dataDir:   cfg.DataDir,
+		clusterID: fmt.Sprintf("%d", clusterID),
+		node:      n,
+		tcpAddr:   cfg.ListenAddr,
+		unixAddr:  cfg.Socket,
+		gs:        grpc.NewServer(grpcOpts...),
+		ctx:       ctx,
+		cancel:    cancel,
+		metrics:   metrics,
+		gc:        time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:     pdCli,
+		cfg:       cfg,
 	}, nil
 }
 
@@ -177,13 +174,13 @@ func (s *Server) init() error {
 	// init cluster data dir if not exist
 	var err error
 	clusterDir := path.Join(s.dataDir, "clusters")
-	if !file.Exist(clusterDir) {
+	if !bf.Exist(clusterDir) {
 		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
-	s.dispatcher[s.clusterID], err = s.getBinloggerToWrite(s.clusterID)
+	s.dispatcher, err = s.getBinloggerToWrite()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -191,12 +188,9 @@ func (s *Server) init() error {
 	return nil
 }
 
-func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
-	s.Lock()
-	defer s.Unlock()
-	blr, ok := s.dispatcher[cid]
-	if ok {
-		return blr, nil
+func (s *Server) getBinloggerToWrite() (Binlogger, error) {
+	if s.dispatcher != nil {
+		return s.dispatcher, nil
 	}
 
 	// use tiStore's currentVersion method to get the ts from tso
@@ -205,19 +199,19 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(cid, s.node.ID(), addrs)
+	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	find := false
 	clusterDir := path.Join(s.dataDir, "clusters")
-	names, err := file.ReadDir(clusterDir)
+	names, err := bf.ReadDir(clusterDir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	for _, n := range names {
-		if cid == n {
+		if s.clusterID == n {
 			find = true
 			break
 		}
@@ -225,12 +219,12 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 
 	var (
 		fb        Binlogger
-		binlogDir = path.Join(clusterDir, cid)
+		binlogDir = path.Join(clusterDir, s.clusterID)
 	)
 	if find {
-		fb, err = OpenBinlogger(binlogDir)
+		fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 	} else {
-		fb, err = CreateBinlogger(binlogDir)
+		fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -241,18 +235,15 @@ func (s *Server) getBinloggerToWrite(cid string) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	s.dispatcher[cid] = newProxy(fb, kb, cp, s.cfg.enableProxySwitch)
-	return s.dispatcher[cid], nil
+	s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
+	return s.dispatcher, nil
 }
 
-func (s *Server) getBinloggerToRead(cid string) (Binlogger, error) {
-	s.RLock()
-	defer s.RUnlock()
-	blr, ok := s.dispatcher[cid]
-	if ok {
-		return blr, nil
+func (s *Server) getBinloggerToRead() (Binlogger, error) {
+	if s.dispatcher != nil {
+		return s.dispatcher, nil
 	}
-	return nil, errors.NotFoundf("no binlogger of clusterID: %s", cid)
+	return nil, errors.NotFoundf("no binlogger of clusterID: %s", s.clusterID)
 }
 
 // WriteBinlog implements the gRPC interface of pump server
@@ -275,16 +266,21 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}()
 
 	s.needGenBinlog.Set(false)
+
 	cid := fmt.Sprintf("%d", in.ClusterID)
+	if cid != s.clusterID {
+		return nil, errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	}
+
 	ret := &binlog.WriteBinlogResp{}
-	binlogger, err1 := s.getBinloggerToWrite(cid)
+	binlogger, err1 := s.getBinloggerToWrite()
 	if err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
 
-	if err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
@@ -296,19 +292,25 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 // PullBinlogs sends binlogs in the streaming way
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
 	cid := fmt.Sprintf("%d", in.ClusterID)
-	binlogger, err := s.getBinloggerToRead(cid)
+	if cid != s.clusterID {
+		return errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	}
+
+	binlogger, err := s.getBinloggerToRead()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	pos := in.StartFrom
 	sendBinlog := func(entity binlog.Entity) error {
+		pos.Suffix = entity.Pos.Suffix
+		pos.Offset = entity.Pos.Offset
 		resp := &binlog.PullBinlogResp{Entity: entity}
 		return errors.Trace(stream.Send(resp))
 	}
 
 	for {
-		pos, err = binlogger.Walk(s.ctx, pos, sendBinlog)
+		err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -415,26 +417,25 @@ func (s *Server) writeFakeBinlog() {
 	// there are only one binlogger for the specified cluster
 	// so we can use only one needGenBinlog flag
 	if s.needGenBinlog.Get() {
-		for cid := range s.dispatcher {
-			binlogger, err := s.getBinloggerToWrite(cid)
-			if err != nil {
-				log.Errorf("generate forward binlog, get binlogger err %v", err)
-				return
-			}
-			payload, err := s.genFakeBinlog()
-			if err != nil {
-				log.Errorf("generate forward binlog, generate binlog err %v", err)
-				return
-			}
-
-			err = binlogger.WriteTail(payload)
-			if err != nil {
-				log.Errorf("generate forward binlog, write binlog err %v", err)
-				return
-			}
-
-			log.Infof("generate fake binlog successfully")
+		binlogger, err := s.getBinloggerToWrite()
+		if err != nil {
+			log.Errorf("generate forward binlog, get binlogger err %v", err)
+			return
 		}
+		payload, err := s.genFakeBinlog()
+		if err != nil {
+			log.Errorf("generate forward binlog, generate binlog err %v", err)
+			return
+		}
+
+		_, err = binlogger.WriteTail(payload)
+		if err != nil {
+			log.Errorf("generate forward binlog, write binlog err %v", err)
+			return
+		}
+
+		log.Infof("generate fake binlog successfully")
+
 	}
 
 	s.needGenBinlog.Set(true)
@@ -458,8 +459,8 @@ func (s *Server) gcBinlogFile() {
 		return
 	}
 	for {
-		for _, b := range s.dispatcher {
-			b.GC(s.gc, binlog.Pos{})
+		if s.dispatcher != nil {
+			s.dispatcher.GC(s.gc, binlog.Pos{})
 		}
 		time.Sleep(time.Hour)
 	}
@@ -546,8 +547,8 @@ func (s *Server) getTSO() (int64, error) {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	for _, bl := range s.dispatcher {
-		if err := bl.Close(); err != nil {
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Close(); err != nil {
 			log.Errorf("close binlogger error %v", err)
 		}
 	}
