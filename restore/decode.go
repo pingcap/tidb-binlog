@@ -15,31 +15,31 @@ var (
 )
 
 // Decode decodes binlog from protobuf content.
-func Decode(r io.Reader) (*pb.Binlog, error) {
-	payload, err := decode(r)
+func Decode(r io.Reader) (*pb.Binlog, int64, error) {
+	payload, length, err := decode(r)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 
 	binlog := &pb.Binlog{}
 	err = binlog.Unmarshal(payload)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
-	return binlog, nil
+	return binlog, length, nil
 }
 
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-func decode(r io.Reader) ([]byte, error) {
+func decode(r io.Reader) ([]byte, int64, error) {
 	// read and chekc magic number
 	magicNum, err := readInt32(r)
 	if errors.Cause(err) == io.EOF {
-		return nil, io.EOF
+		return nil, 0, io.EOF
 	}
 	if err := checkMagic(magicNum); err != nil {
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 	// read payload length
 	size, err := readInt64(r)
@@ -47,7 +47,7 @@ func decode(r io.Reader) ([]byte, error) {
 		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 	// size+4 = len(payload)+len(crc)
 	data := make([]byte, size+4)
@@ -56,16 +56,18 @@ func decode(r io.Reader) ([]byte, error) {
 		if errors.Cause(err) == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 	payload := data[:size]
 	// crc32 check
 	entryCrc := binary.LittleEndian.Uint32(data[size:])
 	crc := crc32.Checksum(payload, crcTable)
 	if crc != entryCrc {
-		return nil, errors.Errorf("expected crc32 %v but got %v", entryCrc, crc)
+		return nil, 0, errors.Errorf("expected crc32 %v but got %v", entryCrc, crc)
 	}
-	return payload, nil
+	// len(magic) + len(size) + len(payload) + len(crc)
+	length := 4 + 8 + size + 4
+	return payload, length, nil
 }
 
 func checkMagic(magicNum uint32) error {

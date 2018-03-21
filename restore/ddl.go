@@ -32,38 +32,34 @@ func parseDDL(sql string) (node ast.Node, table TableName, err error) {
 		}
 		switch v := n.(type) {
 		case *ast.CreateDatabaseStmt:
-			setSchemaIfExists(&table, v.Name)
+			setSchemaIfExists(&table, v.Name, "")
 		case *ast.DropDatabaseStmt:
-			setSchemaIfExists(&table, v.Name)
+			setSchemaIfExists(&table, v.Name, "")
 		case *ast.CreateTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
+			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.DropTableStmt:
-			setSchemaIfExists(&table, v.Tables[0].Schema.O)
-			table.Name = v.Tables[0].Name.O
+			setSchemaIfExists(&table, v.Tables[0].Schema.O, v.Tables[0].Name.O)
 		case *ast.AlterTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
+			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.RenameTableStmt:
-			setSchemaIfExists(&table, v.OldTable.Schema.O)
-			table.Name = v.OldTable.Name.O
+			setSchemaIfExists(&table, v.OldTable.Schema.O, v.OldTable.Name.O)
 		case *ast.TruncateTableStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
+			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.CreateIndexStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
+			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.DropIndexStmt:
-			setSchemaIfExists(&table, v.Table.Schema.O)
-			table.Name = v.Table.Name.O
+			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		}
 	}
 
 	return
 }
 
-func setSchemaIfExists(table *TableName, schema string) {
-	if schema != "" {
-		table.Schema = schema
+func setSchemaIfExists(table *TableName, schemaName string, tableName string) {
+	if schemaName != "" {
+		table.Schema = schemaName
+	}
+	if tableName != "" {
+		table.Name = tableName
 	}
 }

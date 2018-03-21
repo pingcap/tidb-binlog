@@ -35,12 +35,6 @@ func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row []
 
 }
 
-func (p *printTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
-	printHeader(binlog, event)
-	printUpdateEvent(row)
-	return nil, nil
-}
-
 func (p *printTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
 	printDDL(binlog)
 	return nil, nil

@@ -32,7 +32,7 @@ func (s *testSavepointSuite) TestSavepoint(c *C) {
 	cp, err = newFileSavepoint(fileNotExists)
 	c.Assert(err, IsNil)
 
-	pos = &Position{
+	pos = Position{
 		Filename: "binlog-00001",
 		Offset:   1,
 		Ts:       1,

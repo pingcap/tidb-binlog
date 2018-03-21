@@ -4,10 +4,8 @@ package executor
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -32,10 +30,6 @@ func newMysqlExecutor(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, isDDL bool) error {
-	begin := time.Now()
-	defer func() {
-		log.Infof("costs %f", time.Since(begin).Seconds())
-	}()
 	return errors.Trace(pkgsql.ExecuteSQLs(m.db, sqls, args, isDDL))
 }
 

@@ -31,10 +31,7 @@ func (r *Restore) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult
 	}
 	results := make([]*translator.TranslateResult, 0, len(dml.Events))
 
-	var (
-		result *translator.TranslateResult
-		err    error
-	)
+	var result *translator.TranslateResult
 
 	for _, event := range dml.Events {
 		if r.SkipBySchemaAndTable(event.GetSchemaName(), event.GetTableName()) {

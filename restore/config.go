@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -31,12 +30,10 @@ type TableName struct {
 type Config struct {
 	*flag.FlagSet
 	Dir           string `toml:"data-dir" json:"data-dir"`
-	Compression   string `toml:"compression" json:"compression"`
-	IndexName     string `toml:"index-name" json:"index-name"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
-	StartTSO      int64
-	StopTSO       int64
+	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
+	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
 
 	TxnBatch         int  `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int  `toml:"worker-count" json:"worker-count"`
@@ -65,16 +62,17 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of restore:")
 		fs.PrintDefaults()
 	}
-	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path (default data.drainer)")
-	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-ts")
-	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-ts, empty string means never end.")
+	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path")
+	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-datetime, empty string means starting from the beginning of the first file")
+	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-datetime, empty string means never end.")
+	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
+	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql,tidb]")
+	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
-	fs.BoolVar(&c.DisableCausality, "disable-detect", false, "disbale detect causality")
 	return c
 }
 
@@ -91,20 +89,20 @@ func (c *Config) Parse(args []string) error {
 	}
 
 	if c.printVersion {
-		fmt.Printf("Git Commit Hash: %s\n", version.GitHash)
-		fmt.Printf("Build TS: %s\n", version.BuildTS)
-		fmt.Printf("Go Version: %s\n", runtime.Version())
-		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		version.PrintVersionInfo()
 		os.Exit(0)
 	}
 
-	if c.configFile == "" {
+	// the mysql configuration should be in the file.
+	if c.DestType == "mysql" && c.configFile == "" {
 		return errors.Errorf("please specify config file")
 	}
 
-	// Load config file if specified
-	if err := c.configFromFile(c.configFile); err != nil {
-		return errors.Trace(err)
+	if c.configFile != "" {
+		// Load config file if specified
+		if err := c.configFromFile(c.configFile); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Parse again to replace with command line options
@@ -118,8 +116,6 @@ func (c *Config) Parse(args []string) error {
 	if err := flags.SetFlagsFromEnv("RESTORE", c.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
-
-	//TODO more
 
 	if c.StartDatetime != "" {
 		startTime, err := time.ParseInLocation(timeFormat, c.StartDatetime, time.Local)
@@ -158,10 +154,21 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
-	if (c.DestType == "mysql" || c.DestType == "tidb") && (c.DestDB == nil) {
-		return errors.New("dest-db config must not be emtpy")
+	if c.Dir == "" {
+		return errors.New("data-dir is empty")
 	}
-	return nil
+
+	switch c.DestType {
+	case "mysql":
+		if c.DestDB == nil {
+			return errors.New("dest-db config must not be emtpy")
+		}
+		return nil
+	case "print":
+		return nil
+	default:
+		return errors.Errorf("dest type %s is not supported", c.DestType)
+	}
 }
 
 // InitLogger initalizes Pump's logger.

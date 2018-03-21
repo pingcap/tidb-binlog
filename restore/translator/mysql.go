@@ -50,7 +50,6 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	tableName := *event.TableName
 	allCols := make([]string, 0, len(row))
 	oldValues := make([]interface{}, 0, len(row))
-	changedValues := make([]interface{}, 0, len(row))
 
 	updatedColumns := make([]string, 0, len(row))
 	updatedValues := make([]interface{}, 0, len(row))
@@ -75,7 +74,6 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 		oldDatum := formatValue(oldValue, tp)
 		oldValues = append(oldValues, oldDatum.GetValue())
 		changedDatum := formatValue(changedValue, tp)
-		changedValues = append(changedValues, changedDatum.GetValue())
 
 		log.Debugf("%s(%s %v): %v => %v\n", col.Name, col.MysqlType, tp, oldDatum.GetValue(), changedDatum.GetValue())
 
@@ -104,10 +102,6 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 		Args: args,
 	}
 	return result, nil
-}
-
-func (p *mysqlTranslator) TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
-	return nil, nil
 }
 
 func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {

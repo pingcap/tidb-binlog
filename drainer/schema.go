@@ -4,7 +4,11 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/mysql"
 )
+
+const implicitColName = "_tidb_rowid"
+const implicitColID = -1
 
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
@@ -18,6 +22,8 @@ type Schema struct {
 	ignoreSchema map[int64]struct{}
 
 	schemaMetaVersion int64
+
+	hasImplicitCol bool
 }
 
 // TableName stores the table and schema name
@@ -27,8 +33,10 @@ type TableName struct {
 }
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) (*Schema, error) {
-	s := &Schema{}
+func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImplicitCol bool) (*Schema, error) {
+	s := &Schema{
+		hasImplicitCol: hasImplicitCol,
+	}
 
 	err := s.reconstructSchema(jobs, ignoreSchemaNames)
 	if err != nil {
@@ -300,6 +308,10 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
 	}
 
+	if s.hasImplicitCol && !table.PKIsHandle {
+		addImplicitColumn(table)
+	}
+
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
@@ -312,6 +324,10 @@ func (s *Schema) ReplaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
+	}
+
+	if s.hasImplicitCol && !table.PKIsHandle {
+		addImplicitColumn(table)
 	}
 
 	s.tables[table.ID] = table
@@ -333,4 +349,19 @@ func (s *Schema) removeTable(tableID int64) error {
 		}
 	}
 	return nil
+}
+
+func addImplicitColumn(table *model.TableInfo) {
+	newColumn := &model.ColumnInfo{
+		ID:   implicitColID,
+		Name: model.NewCIStr(implicitColName),
+	}
+	newColumn.Tp = mysql.TypeInt24
+	table.Columns = append(table.Columns, newColumn)
+
+	newIndex := &model.IndexInfo{
+		Primary: true,
+		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
+	}
+	table.Indices = []*model.IndexInfo{newIndex}
 }

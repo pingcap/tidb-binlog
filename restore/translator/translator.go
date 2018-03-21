@@ -21,9 +21,6 @@ type Translator interface {
 	// GenUpdate generates the update
 	TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error)
 
-	// GenUpdateSafeMode generate delete and insert  from update sqls
-	TransUpdateSafeMode(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error)
-
 	// GenDelete generates the delete sqls by cols values
 	TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error)
 
@@ -36,7 +33,7 @@ func New(name string, safeMode bool) Translator {
 	switch name {
 	case "print":
 		return newPrintTranslator()
-	case "mysql", "tidb":
+	case "mysql":
 		return newMysqlTranslator()
 	}
 	log.Infof("name %s not found, use print translator by default", name)

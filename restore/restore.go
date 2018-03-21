@@ -2,7 +2,6 @@ package restore
 
 import (
 	"bufio"
-	"compress/gzip"
 	"database/sql"
 	"fmt"
 	"hash/crc32"
@@ -15,7 +14,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/causality"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/restore/executor"
 	tbl "github.com/pingcap/tidb-binlog/restore/table"
@@ -91,8 +89,8 @@ func (r *Restore) Process() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	codec := compress.ToCompressionCodec(r.cfg.Compression)
 
+	var offset int64
 	for _, file := range files {
 		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
 		if err != nil {
@@ -100,6 +98,7 @@ func (r *Restore) Process() error {
 		}
 		defer fd.Close()
 
+		offset += file.offset
 		ret, err := fd.Seek(file.offset, io.SeekStart)
 		if err != nil {
 			return errors.Trace(err)
@@ -107,61 +106,38 @@ func (r *Restore) Process() error {
 		log.Infof("seek to file %s offset %d got %d", file.fullpath, file.offset, ret)
 
 		br := bufio.NewReader(fd)
-		var rd io.Reader
-
-		switch codec {
-		case compress.CompressionNone:
-			rd = br
-		case compress.CompressionGZIP:
-			gzr, err := gzip.NewReader(br)
-			if err == io.EOF {
-				log.Infof("EOF")
-				continue
-			}
-			if err != nil {
-				return errors.Trace(err)
-			}
-			rd = gzr
-			defer gzr.Close()
-		}
 
 		for {
-			binlog, err := Decode(rd)
+			binlog, length, err := Decode(br)
 			if errors.Cause(err) == io.EOF {
-				if gzr, ok := rd.(*gzip.Reader); ok {
-					gzr.Close()
-				}
 				fd.Close()
 				log.Infof("read file %s end", file.fullpath)
+				offset = 0
 				break
 			}
 			if err != nil {
 				return errors.Annotatef(err, "decode binlog error")
 			}
+			offset += length
 
-			sqls, args, isDDL, err := r.Translate(binlog)
+			results, isDDL, err := r.Translate(binlog)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if len(sqls) == 0 {
+			if len(results) == 0 {
 				continue
 			}
 
-			// TODO: send to channel.
-			// if isDDL {
-			// 	newDDLJob(sqls[0], args[0], "")
-			// } else {
-			// 	for i, sql := range sqls {
-			// 		// r.commitDMLJob(sql, args[i], "")
-			// 	}
-			// }
-
-			ret, err := fd.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return errors.Trace(err)
+			if isDDL {
+				r.commitDDLJob(results[0].SQL, results[0].Args, "")
+			} else {
+				for _, result := range results {
+					r.commitDMLJob(result.SQL, result.Args, result.Keys)
+				}
 			}
+
 			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
-			log.Infof("offset %d ts %d, datetime %s", ret, binlog.CommitTs, dt.String())
+			log.Infof("offset %d ts %d, datetime %s", offset, binlog.CommitTs, dt.String())
 		}
 	}
 
@@ -280,6 +256,11 @@ func (r *Restore) commitDMLJob(sql string, args []interface{}, keys []string) er
 	job := newDMLJob(sql, args, key)
 	r.addJob(job)
 	return nil
+}
+
+func (r *Restore) commitDDLJob(sql string, args []interface{}, key string) {
+	job := newDDLJob(sql, args, key)
+	r.addJob(job)
 }
 
 func (r *Restore) resolveCausality(keys []string) (string, error) {

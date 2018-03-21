@@ -77,13 +77,13 @@ func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 		return ErrCRCMismatch
 	}
 
+	// 12 is size + magic length
+	d.pos.Offset += size + 16
+
 	ent.Pos = binlog.Pos{
 		Suffix: d.pos.Suffix,
 		Offset: d.pos.Offset,
 	}
-
-	// 12 is size + magic length
-	d.pos.Offset += size + 16
 
 	return nil
 }

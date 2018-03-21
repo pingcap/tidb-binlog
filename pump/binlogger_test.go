@@ -7,7 +7,9 @@ import (
 	"path"
 	"time"
 
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tipb/go-binlog"
 )
@@ -27,7 +29,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(b.file.Name()), Equals, fileName(0))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(0))
 
 	bl.Close()
 
@@ -41,7 +43,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	defer os.RemoveAll(dir)
 
 	bl, err := OpenBinlogger(dir, compress.CompressionNone)
-	c.Assert(err, Equals, ErrFileNotFound)
+	c.Assert(errors.Cause(err), Equals, bf.ErrFileNotFound)
 
 	bl, err = CreateBinlogger(dir, compress.CompressionNone)
 	c.Assert(err, IsNil)
@@ -60,7 +62,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	b, ok = bl.(*binlogger)
 	curFile := b.file
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(curFile.Name()), Equals, fileName(1))
+	c.Assert(path.Base(curFile.Name()), Equals, bf.BinlogName(1))
 	latestPos := &binlog.Pos{Suffix: 1}
 	c.Assert(latestPos.Suffix, Equals, uint64(1))
 
@@ -95,7 +97,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	err = b.rotate()
 	c.Assert(err, IsNil)
-	c.Assert(path.Base(b.file.Name()), Equals, fileName(1))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1))
 
 	_, err = bl.WriteTail(ent)
 	c.Assert(err, IsNil)
@@ -108,13 +110,13 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	binlogs, err := bl.ReadFrom(binlog.Pos{}, 1)
 	c.Assert(err, IsNil)
 	c.Assert(binlogs, HasLen, 1)
-	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{})
+	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{Offset: 26})
 	c.Assert(binlogs[0].Payload, BytesEquals, []byte("binlogtest"))
 
 	binlogs, err = bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 0}, 1)
 	c.Assert(err, IsNil)
 	c.Assert(binlogs, HasLen, 1)
-	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{Suffix: 1})
+	c.Assert(binlogs[0].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26})
 	c.Assert(binlogs[0].Payload, BytesEquals, []byte("binlogtest"))
 	bl.Close()
 }
@@ -143,22 +145,22 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	ents, err := bl.ReadFrom(binlog.Pos{}, 11)
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 11)
-	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Offset: 260})
+	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Offset: 286})
 
 	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 0, Offset: 286}, 11)
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 11)
-	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26})
+	c.Assert(ents[10].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 52})
 
 	ents, err = bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 52}, 18)
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 18)
-	c.Assert(ents[17].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26 * 19})
+	c.Assert(ents[17].Pos, DeepEquals, binlog.Pos{Suffix: 1, Offset: 26 * 20})
 
 	ents, err = bl.ReadFrom(binlog.Pos{Offset: 26, Suffix: 5}, 20)
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 20)
-	c.Assert(ents[19].Pos, Equals, binlog.Pos{Offset: 0, Suffix: 6})
+	c.Assert(ents[19].Pos, Equals, binlog.Pos{Offset: 26, Suffix: 6})
 }
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {
@@ -182,7 +184,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 		c.Assert(b.rotate(), IsNil)
 	}
 
-	file := path.Join(dir, fileName(1))
+	file := path.Join(dir, bf.BinlogName(1))
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0600)
 	c.Assert(err, IsNil)
 
@@ -213,8 +215,8 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	time.Sleep(10 * time.Millisecond)
 	b.GC(time.Millisecond, binlog.Pos{})
 
-	names, err := readBinlogNames(b.dir)
+	names, err := bf.ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 1)
-	c.Assert(names[0], Equals, fileName(1))
+	c.Assert(names[0], Equals, bf.BinlogName(1))
 }

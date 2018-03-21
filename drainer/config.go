@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -125,10 +124,7 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(2)
 	}
 	if cfg.printVersion {
-		fmt.Printf("Git Commit Hash: %s\n", version.GitHash)
-		fmt.Printf("Build TS: %s\n", version.BuildTS)
-		fmt.Printf("Go Version: %s\n", runtime.Version())
-		fmt.Printf("Go OS/Arch: %s%s\n", runtime.GOOS, runtime.GOARCH)
+		version.PrintVersionInfo()
 		os.Exit(0)
 	}
 
@@ -165,7 +161,7 @@ func (cfg *Config) Parse(args []string) error {
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
 		cfg.SyncerCfg.To = new(executor.DBConfig)
-		if cfg.SyncerCfg.DestDBType == "mysql" {
+		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 			cfg.SyncerCfg.To.Host = "localhost"
 			cfg.SyncerCfg.To.Port = 3306
 			cfg.SyncerCfg.To.User = "root"

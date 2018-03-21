@@ -32,7 +32,7 @@ all: dev install
 
 dev: check test build
 
-build: pump drainer
+build: pump drainer restore
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go

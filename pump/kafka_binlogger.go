@@ -71,8 +71,8 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) (binlog.Pos, error) {
-	return binlog.Pos{}, nil
+func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+	return nil
 }
 
 // Close implements Binlogger Close interface
