@@ -17,7 +17,7 @@ type Executor interface {
 // New creates a new executor based on the name.
 func New(name string, cfg *DBConfig) (Executor, error) {
 	switch name {
-	case "mysql", "tidb":
+	case "mysql":
 		return newMysqlExecutor(cfg)
 	case "print":
 		return newDummyExecutor()
