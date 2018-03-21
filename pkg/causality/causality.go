@@ -11,31 +11,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package drainer
+package causality
 
 import "github.com/juju/errors"
 
-// causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
+// Causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
 // causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
 // if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
 // this mechanism meets quiescent consistency to ensure correctness.
-type causality struct {
+type Causality struct {
 	relations map[string]string
 }
 
-func newCausality() *causality {
-	return &causality{
+// NewCausality creates a new Causality.
+func NewCausality() *Causality {
+	return &Causality{
 		relations: make(map[string]string),
 	}
 }
 
-func (c *causality) add(keys []string) error {
+// Add adds keys to relations.
+func (c *Causality) Add(keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
 
 	if c.detectConflict(keys) {
-		return errors.New("some conflicts in causality, must be resolved")
+		return errors.New("some conflicts in Causality, must be resolved")
 	}
 	// find causal key
 	selectedRelation := keys[0]
@@ -54,16 +56,22 @@ func (c *causality) add(keys []string) error {
 	return nil
 }
 
-func (c *causality) get(key string) string {
+// Get gets value from relations by key.
+func (c *Causality) Get(key string) string {
 	return c.relations[key]
 }
 
-func (c *causality) reset() {
+// Reset resets the relations.
+func (c *Causality) Reset() {
 	c.relations = make(map[string]string)
 }
 
-// detectConflict detects whether there is a conflict
-func (c *causality) detectConflict(keys []string) bool {
+// DetectConflict detects whether there is a conflict.
+func (c *Causality) DetectConflict(keys []string) bool {
+	return c.detectConflict(keys)
+}
+
+func (c *Causality) detectConflict(keys []string) bool {
 	if len(keys) == 0 {
 		return false
 	}

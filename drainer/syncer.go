@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/causality"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -54,7 +55,7 @@ type Syncer struct {
 
 	reMap map[string]*regexp.Regexp
 
-	c *causality
+	c *causality.Causality
 }
 
 // NewSyncer returns a Drainer instance
@@ -69,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
-	syncer.c = newCausality()
+	syncer.c = causality.NewCausality()
 
 	return syncer, nil
 }
@@ -429,20 +430,20 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 		}
 		return "", nil
 	}
-	if s.c.detectConflict(keys) {
+	if s.c.DetectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
-		s.c.reset()
+		s.c.Reset()
 	}
-	if err := s.c.add(keys); err != nil {
+	if err := s.c.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
 	var key string
 	if len(keys) > 0 {
 		key = keys[0]
 	}
-	return s.c.get(key), nil
+	return s.c.Get(key), nil
 }
 
 func (s *Syncer) flushJobs() error {
