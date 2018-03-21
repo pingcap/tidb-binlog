@@ -23,7 +23,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 var genBinlogInterval = 3 * time.Second
@@ -93,7 +92,7 @@ type Server struct {
 	pdCli         pd.Client
 	cfg           *Config
 
-	pos pb.Pos
+	cp  *checkPoint
 }
 
 func init() {
@@ -238,6 +237,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
+	s.cp = cp
 	s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
 	return s.dispatcher, nil
 }
@@ -317,8 +317,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		if err != nil {
 			return errors.Trace(err)
 		}
-		s.pos = pb.Pos{Suffix: pos.Suffix, Offset: pos.Offset}
-		log.Infof("s.pos: %v", s.pos)
+
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
@@ -526,12 +525,11 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	log.Infof("s.pos: %v", s.pos)
+	log.Infof("s.cp: %v", s.cp)
 	return &HTTPStatus{
 		BinlogPos: binlogPos,
 		CommitTS:  commitTS,
-		CheckPoint: s.pos,
-		ErrMsg: fmt.Sprintf("%v", s.pos),
+		CheckPoint: s.cp.Position,
 	}
 }
 
