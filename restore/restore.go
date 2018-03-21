@@ -67,7 +67,6 @@ func New(cfg *Config) (*Restore, error) {
 		db:         db,
 	}, nil
 }
-
 func (r *Restore) prepare() error {
 	r.GenRegexMap()
 
