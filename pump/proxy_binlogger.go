@@ -167,7 +167,3 @@ func (p *Proxy) sync() {
 		}
 	}
 }
-
-func (p *Proxy) GetCheckpoint() *checkPoint {
-	return p.cp
-} 

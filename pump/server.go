@@ -92,7 +92,7 @@ type Server struct {
 	pdCli         pd.Client
 	cfg           *Config
 
-	cp  *checkPoint
+	cp *checkPoint
 }
 
 func init() {
@@ -525,10 +525,9 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	log.Infof("s.cp: %v", s.cp)
 	return &HTTPStatus{
-		BinlogPos: binlogPos,
-		CommitTS:  commitTS,
+		BinlogPos:  binlogPos,
+		CommitTS:   commitTS,
 		CheckPoint: s.cp.Position,
 	}
 }
