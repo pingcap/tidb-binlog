@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 var genBinlogInterval = 3 * time.Second
@@ -91,6 +92,8 @@ type Server struct {
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
 	cfg           *Config
+
+	pos pb.Pos
 }
 
 func init() {
@@ -314,6 +317,8 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		if err != nil {
 			return errors.Trace(err)
 		}
+		s.pos = pb.Pos{Suffix: pos.Suffix, Offset: pos.Offset}
+		log.Infof("s.pos: %v", s.pos)
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
@@ -521,9 +526,12 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
+	log.Infof("s.pos: %v", s.pos)
 	return &HTTPStatus{
 		BinlogPos: binlogPos,
 		CommitTS:  commitTS,
+		CheckPoint: s.pos,
+		ErrMsg: fmt.Sprintf("%v", s.pos),
 	}
 }
 
