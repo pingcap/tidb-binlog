@@ -8,7 +8,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/mem"
 	"github.com/pingcap/tidb-binlog/pkg/flow"
 	"github.com/shirou/gopsutil/process"
-)
+)                                                                                                                                                                                                                                                                                                      
 
 type FlowControl struct {
 	Mu sync.RWMutex
@@ -68,7 +68,6 @@ func (f *FlowControl) BalanceMem() {
 	for _, memUsed := range f.PumpMemUsed {
 		totalMemUsed += memUsed
 	}
-
 
 	for pumpId, memUsed := range f.PumpMemUsed {
 		f.MemMap[pumpId].MaxSize = f.MaxMemSize*memUsed/totalMemUsed
