@@ -40,9 +40,10 @@ func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enable
 		enableTolerant: enableTolerant,
 	}
 
+	p.ctx, p.cancel = context.WithCancel(context.Background())
+	
 	go p.sync()
 
-	p.ctx, p.cancel = context.WithCancel(context.Background())
 	return p
 }
 

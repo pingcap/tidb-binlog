@@ -22,7 +22,7 @@ func main() {
 
 	cfg := pump.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'pump --help'.", errors.Trace(err))
+		log.Fatalf("verifying flags error, %v. See 'pump --help'.", errors.ErrorStack(err))
 	}
 
 	pump.InitLogger(cfg)
