@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt diff
+.PHONY: build test check update clean pump drainer fmt diff restore
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
@@ -20,10 +20,8 @@ MAC       := "Darwin"
 PACKAGES  := $$(go list ./...| grep -vE 'vendor|cmd|test|proto|diff')
 FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/pump.GitHash=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-LDFLAGS += -X "github.com/pingcap/tidb-binlog/drainer.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
 
 default: build buildsucc
 
@@ -44,6 +42,9 @@ drainer:
 
 diff:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/diff cmd/diff/main.go
+
+restore:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/restore cmd/restore/main.go	
 
 install:
 	go install ./...
