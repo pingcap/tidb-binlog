@@ -30,3 +30,4 @@ bin
 
 cscope.*
 **/*.swp
+data*
