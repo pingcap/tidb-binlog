@@ -31,9 +31,9 @@ type FlowControl struct {
 	//StageMemUsed map[string]uint64
 }
 
-func NewControl(maxMemSize, rate, token, maxToken, interval uint64) *FlowControl {
+func NewControl(maxMemSize, rate, maxToken, interval uint64) *FlowControl {
 	//m := mem.NewMemoryControl(maxSize)
-	f := flow.NewSpeedControl(rate, token, maxToken, interval)
+	f := flow.NewSpeedControl(rate, maxToken, interval)
 	return &FlowControl{
 		MaxMemSize:  maxMemSize,
 		Flow:        f,

@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/shirou/gopsutil/process"
+	"github.com/pingcap/tidb-binlog/pkg/channel"
 )
 
 type binlogEntity struct {
@@ -45,7 +46,8 @@ type Pump struct {
 	timeout time.Duration
 
 	// pullBinlogs sends the binlogs to publish function by this channel
-	binlogChan chan *binlogEntity
+	//binlogChan chan *binlogEntity
+	binlogChan *channel.ChannelPro
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -84,7 +86,8 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		tiStore:       tiStore,
 		window:        w,
 		timeout:       timeout,
-		binlogChan:    make(chan *binlogEntity, maxBinlogItemCount),
+		//binlogChan:    make(chan *binlogEntity, maxBinlogItemCount),
+		binlogChan:    channel.NewChannelPro(uint64(maxBinlogItemCount), 5*1024*1024, 1000, 2000, 1, true, false),
 		ps:            ps,
 		maxMemUsed:    maxMemUsed,
 		maxMemPercent: maxMemPercent,
@@ -106,6 +109,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.binlogs = make(map[int64]*binlogItem)
+
+	go p.binlogChan.Run()
 	go p.pullBinlogs()
 	go p.publish(t)
 }
@@ -162,7 +167,16 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		select {
 		case <-p.ctx.Done():
 			return
-		case entity = <-p.binlogChan:
+		default:
+			log.Infof("read data from binlogChan")
+			e := p.binlogChan.Pop()
+			var ok bool
+			entity, ok = e.(*binlogEntity)
+			if !ok {
+				log.Error("convert type binlogEntity failed!")
+				return
+			}
+			//case entity = <-p.binlogChan:
 		}
 
 		switch entity.tp {
@@ -468,7 +482,9 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- binlogEnt:
+			default:
+				p.binlogChan.Push(binlogEnt, uint64(len(payload)))
+			//case p.binlogChan <- binlogEnt:
 			}
 		}
 	}
