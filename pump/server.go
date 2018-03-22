@@ -91,6 +91,8 @@ type Server struct {
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
 	cfg           *Config
+
+	cp *checkPoint
 }
 
 func init() {
@@ -235,6 +237,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
+	s.cp = cp
 	s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
 	return s.dispatcher, nil
 }
@@ -314,6 +317,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
@@ -522,8 +526,9 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	return &HTTPStatus{
-		BinlogPos: binlogPos,
-		CommitTS:  commitTS,
+		BinlogPos:  binlogPos,
+		CommitTS:   commitTS,
+		CheckPoint: s.cp.pos(),
 	}
 }
 
