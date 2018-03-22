@@ -41,7 +41,7 @@ func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enable
 	}
 
 	p.ctx, p.cancel = context.WithCancel(context.Background())
-	
+
 	go p.sync()
 
 	return p
