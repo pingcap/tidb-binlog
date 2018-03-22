@@ -110,7 +110,6 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.binlogs = make(map[int64]*binlogItem)
 
-	go p.binlogChan.Run()
 	go p.pullBinlogs()
 	go p.publish(t)
 }

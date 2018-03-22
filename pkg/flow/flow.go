@@ -3,6 +3,8 @@ package flow
 import (
 	"sync"
 	"time"
+
+	"github.com/ngaut/log"
 	//"golang.org/x/net/context"
 
 	//"github.com/juju/errors"
@@ -16,10 +18,9 @@ type SpeedControl struct {
 	Mu       sync.Mutex
 }
 
-func NewSpeedControl(rate, token, maxToken, interval uint64) *SpeedControl {
+func NewSpeedControl(rate, maxToken, interval uint64) *SpeedControl {
 	s := &SpeedControl{
 		Rate:     rate,
-		Token:    token,
 		MaxToken: maxToken,
 		Interval: interval,
 	}
@@ -29,7 +30,7 @@ func NewSpeedControl(rate, token, maxToken, interval uint64) *SpeedControl {
 }
 
 func (f *SpeedControl)AwardToken() {
-	timer := time.NewTimer(time.Duration(f.Interval)*time.Second)
+	timer := time.NewTicker(time.Duration(f.Interval)*time.Second)
 	defer timer.Stop()
 	for {
 		select {
@@ -40,6 +41,7 @@ func (f *SpeedControl)AwardToken() {
 			} else {
 				f.Token += f.Rate*f.Interval
 			}
+			log.Debugf("award token %d", f.Token)
 			f.Mu.Unlock()
 		default:
 		}
@@ -50,7 +52,7 @@ func (f *SpeedControl)ApplyToken() bool {
 	f.Mu.Lock()
 	defer f.Mu.Unlock()
 
-	if f.Token > 0 {
+	if f.Token >= 1 {
 		f.Token -= 1
 		return true
 	}

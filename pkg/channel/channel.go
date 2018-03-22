@@ -2,6 +2,8 @@ package channel
 
 import (
 	"time"
+
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/mem"
 	"github.com/pingcap/tidb-binlog/pkg/flow"
 )
@@ -25,8 +27,8 @@ type ChannelPro struct {
 	memUsedcount uint64
 }
 
-func NewChannelPro(chanSize, memSize, rate, token, maxToken, interval uint64, isSource, isEnd bool) *ChannelPro {
-	return &ChannelPro{
+func NewChannelPro(chanSize, memSize, rate, maxToken, interval uint64, isSource, isEnd bool) *ChannelPro {
+	c := &ChannelPro{
 		//inValue:   make(chan interface{}),
 		//outValue:  make(chan interface{}),
 		channel:   make(chan interface{}, chanSize),
@@ -36,23 +38,17 @@ func NewChannelPro(chanSize, memSize, rate, token, maxToken, interval uint64, is
 		isSource: isSource,
 		isEnd:    isEnd,
 		
-		memControl: mem.NewMemControl(memSize),
-		if !isEnd {
-			speedControl: flow.NewSpeedControl(rate, token, maxToken, interval uint64)
-		}
+		memControl: mem.NewMemoryControl(memSize),	
 	}
+
+	if !isEnd {
+		c.speedControl = flow.NewSpeedControl(rate, maxToken, interval)
+	}
+
+	return c
 }
 
 func (c *ChannelPro) Push(value interface{}, size uint64) {
-	/*
-	size := EstimateSize(value)
-	reach := c.memControl.AllocMemory(size)
-	if reach {
-		// TODO: count the wait time
-		time.Sleep(time.Second)
-	}
-	*/
-	//c.inValue <-value
 	reach, usedPercent := c.memControl.AllocMemory(size)
 	if reach {
 		time.Sleep(time.Duration(usedPercent-1)*time.Second)
@@ -60,50 +56,25 @@ func (c *ChannelPro) Push(value interface{}, size uint64) {
 	c.channel <-value
 	c.sizeChan <-size
 	c.memUsedcount += size
+	log.Debugf("push data to channel, usedPercent: %v, memoryUsedcount: %d", usedPercent, c.memUsedcount)
 }
 
-//func (c *ChannelPro) Pop() <-chan interface{} {
 func (c *ChannelPro) Pop() interface{} {
 	if !c.isEnd {
 		c.speedControl.ApplyTokenSync()
 	}
 
-	value := <- c.outValue:
+	value := <- c.channel
 	size := <- c.sizeChan
 	c.memControl.FreeMemory(size)
 	return value
-	//return c.channel
 }
 
 func (c *ChannelPro) Close() {
-	c.channel.Close()
-	c.sizeChan.Close()
+	close(c.channel)
+	close(c.sizeChan)
 }
 
 func (c *ChannelPro) GetMemoryUsedCount() uint64 {
 	return c.memUsedcount
-}
-
-func EstimateSize(value interface{}) uint64 {
-
-
-	return 0
-}
-
-func (c *ChannelPro) Run() {
-	// push inValue to channel, and pop channel value to outValue
-	for {
-
-
-
-	}
-}
-
-// 
-func (c *ChannelPro) pushToChannel() {
-
-}
-
-func (c *ChannelPro) popFromChannel() {
-
 }
