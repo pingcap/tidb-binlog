@@ -17,22 +17,24 @@ func NewMemoryControl(maxSize uint64) *MemoryControl {
 	}
 }
 
-func (m *MemoryControl)AllocMemory(allocSize uint64) bool {
+func (m *MemoryControl)AllocMemory(allocSize uint64) (reach bool, usedPercent float32)  {
 	//if allocSize > (m.MaxSize - m.UsedSize) {
 	//	return errors.Errorf("not enough free memory for allocate! allocate %d bytes memory", allocSize)
 	//}
 
 	m.UsedSize += allocSize
-	return m.UsedSize > m.MaxSize
+	reach = m.UsedSize > m.MaxSize
+	usedPercent = float32(m.UsedSize)/float32(m.MaxSize)
+	return
 }
 
-func (m *MemoryControl)FreeMemory(freeSize uint64) error {
-	if m.UsedSize > freeSize {
-		return errors.Errorf("free memory failed! free memory bytes: %d", freeSize)
-	}
+func (m *MemoryControl)FreeMemory(freeSize uint64) {
+	//if m.UsedSize > freeSize {
+	//	return errors.Errorf("free memory failed! free memory bytes: %d", freeSize)
+	//}
 
 	m.UsedSize -= freeSize
-	return nil
+	//return nil
 }
 
 // GetMemoryState get the process's memory information

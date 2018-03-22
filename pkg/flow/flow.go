@@ -3,7 +3,7 @@ package flow
 import (
 	"sync"
 	"time"
-	"golang.org/x/net/context"
+	//"golang.org/x/net/context"
 
 	//"github.com/juju/errors"
 )
@@ -17,21 +17,22 @@ type SpeedControl struct {
 }
 
 func NewSpeedControl(rate, token, maxToken, interval uint64) *SpeedControl {
-	return &SpeedControl{
+	s := &SpeedControl{
 		Rate:     rate,
 		Token:    token,
 		MaxToken: maxToken,
 		Interval: interval,
 	}
+	go s.AwardToken()
+
+	return s
 }
 
-func (f *SpeedControl)AwardToken(ctx context.Context) {
+func (f *SpeedControl)AwardToken() {
 	timer := time.NewTimer(time.Duration(f.Interval)*time.Second)
 	defer timer.Stop()
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-timer.C:
 			f.Mu.Lock()
 			if f.Token + f.Rate*f.Interval > f.MaxToken {
@@ -55,4 +56,15 @@ func (f *SpeedControl)ApplyToken() bool {
 	}
 	
 	return false
+}
+
+func (f *SpeedControl)ApplyTokenSync() {
+	for {
+		apply := f.ApplyToken()
+		if apply {
+			break
+		}
+
+		time.Sleep(time.Second)
+	}
 }
