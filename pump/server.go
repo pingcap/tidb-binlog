@@ -528,7 +528,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	return &HTTPStatus{
 		BinlogPos:  binlogPos,
 		CommitTS:   commitTS,
-		CheckPoint: s.cp.Position,
+		CheckPoint: s.cp.pos(),
 	}
 }
 
