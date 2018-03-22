@@ -41,7 +41,7 @@ func NewControl(maxMemSize, rate, token, maxToken, interval uint64) *FlowControl
 }
 
 // return true if memory used is gt max memory size
-func (f *FlowControl) AllocMem(pumpId int, memSize uint64) bool {
+func (f *FlowControl) AllocMem(pumpId int, memSize uint64) (bool, float32) {
 	f.Mu.RLock()
 	_, ok := f.MemMap[pumpId]
 	f.Mu.RUnlock()
@@ -73,9 +73,6 @@ func (f *FlowControl) BalanceMem() {
 		f.MemMap[pumpId].MaxSize = f.MaxMemSize*memUsed/totalMemUsed
 	}
 }
-
-
-
 
 func reachMemoryLimit(ps *process.Process, maxMemUsed, maxMemPercent uint64) (bool, error) {
 	memUsed, memPercent, err := mem.GetMemoryState(ps)
