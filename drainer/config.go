@@ -29,6 +29,9 @@ const (
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout = 5 * time.Second
 	defaultPumpTimeout = 5 * time.Second
+
+	defaultMemUsed    = uint64(5 * 1024 * 1024 * 1024) // 5G
+	defaultMemPercent = uint64(80)
 )
 
 var (
@@ -50,6 +53,12 @@ type SyncerConfig struct {
 	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
 }
 
+// MemConfig is memory's configuration
+type MemConfig struct {
+	MaxMemUsed    uint64 `toml:"max-mem-used" json:"max-mem-used"`
+	MaxMemPercent uint64 `toml:"max-mem-percent" json:"max-mem-percent"`
+}
+
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet
@@ -65,6 +74,7 @@ type Config struct {
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
+	MemCfg          *MemConfig      `toml:"memory" json:"memory"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -80,6 +90,7 @@ func NewConfig() *Config {
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
 		SyncerCfg:   new(SyncerConfig),
+		MemCfg:      new(MemConfig),
 	}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
@@ -109,6 +120,8 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
+	fs.Uint64Var(&cfg.MemCfg.MaxMemUsed, "max-mem-used", defaultMemUsed, "max memory drainer used")
+	fs.Uint64Var(&cfg.MemCfg.MaxMemPercent, "max-mem-percent", defaultMemPercent, "max system memory used percent, when bigger than this value, drainer will stop read data from kafka")
 	return cfg
 }
 

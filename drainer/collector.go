@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
+	"github.com/shirou/gopsutil/process"
 	"golang.org/x/net/context"
 )
 
@@ -57,6 +59,10 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+
+	ps            *process.Process
+	maxMemUsed    uint64
+	maxMemPercent uint64
 }
 
 // NewCollector returns an instance of Collector
@@ -90,22 +96,32 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	pid := os.Getpid()
+	ps, err := process.NewProcess(int32(pid))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &Collector{
-		clusterID:    clusterID,
-		interval:     time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:   kafkaAddrs,
-		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:      cfg.PumpTimeout,
-		pumps:        make(map[string]*Pump),
-		offlines:     make(map[string]struct{}),
-		bh:           newBinlogHeap(maxBinlogItemCount),
-		window:       w,
-		syncer:       s,
-		cp:           cpt,
-		tiClient:     tiClient,
-		tiStore:      tiStore,
-		notifyChan:   make(chan *notifyResult),
-		offsetSeeker: offsetSeeker,
+		clusterID:     clusterID,
+		interval:      time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:    kafkaAddrs,
+		reg:           pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:       cfg.PumpTimeout,
+		pumps:         make(map[string]*Pump),
+		offlines:      make(map[string]struct{}),
+		bh:            newBinlogHeap(maxBinlogItemCount),
+		window:        w,
+		syncer:        s,
+		cp:            cpt,
+		tiClient:      tiClient,
+		tiStore:       tiStore,
+		notifyChan:    make(chan *notifyResult),
+		offsetSeeker:  offsetSeeker,
+		ps:            ps,
+		maxMemUsed:    cfg.MemCfg.MaxMemUsed,
+		maxMemPercent: cfg.MemCfg.MaxMemPercent,
 	}, nil
 }
 
@@ -204,7 +220,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos, c.ps, c.maxMemUsed, c.maxMemPercent)
 			if err != nil {
 				return errors.Trace(err)
 			}

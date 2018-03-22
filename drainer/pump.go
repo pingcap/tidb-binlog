@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/shirou/gopsutil/process"
+	"github.com/pingcap/tidb-binlog/pkg/channel"
 )
 
 type binlogEntity struct {
@@ -44,7 +46,8 @@ type Pump struct {
 	timeout time.Duration
 
 	// pullBinlogs sends the binlogs to publish function by this channel
-	binlogChan chan *binlogEntity
+	//binlogChan chan *binlogEntity
+	binlogChan *channel.ChannelPro
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -55,14 +58,17 @@ type Pump struct {
 		binlogs       map[int64]*binlogItem
 	}
 
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isFinished int64
+	wg            sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
+	isFinished    int64
+	ps            *process.Process
+	maxMemUsed    uint64
+	maxMemPercent uint64
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, ps *process.Process, maxMemUsed, maxMemPercent uint64) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
@@ -71,16 +77,20 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 	}
 
 	return &Pump{
-		nodeID:     nodeID,
-		clusterID:  clusterID,
-		consumer:   consumer,
-		currentPos: pos,
-		latestPos:  pos,
-		bh:         newBinlogHeap(maxBinlogItemCount),
-		tiStore:    tiStore,
-		window:     w,
-		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		nodeID:        nodeID,
+		clusterID:     clusterID,
+		consumer:      consumer,
+		currentPos:    pos,
+		latestPos:     pos,
+		bh:            newBinlogHeap(maxBinlogItemCount),
+		tiStore:       tiStore,
+		window:        w,
+		timeout:       timeout,
+		//binlogChan:    make(chan *binlogEntity, maxBinlogItemCount),
+		binlogChan:    channel.NewChannelPro(uint64(maxBinlogItemCount), 5*1024*1024, 1000, 2000, 1, true, false),
+		ps:            ps,
+		maxMemUsed:    maxMemUsed,
+		maxMemPercent: maxMemPercent,
 	}, nil
 }
 
@@ -99,6 +109,7 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.binlogs = make(map[int64]*binlogItem)
+
 	go p.pullBinlogs()
 	go p.publish(t)
 }
@@ -155,7 +166,16 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		select {
 		case <-p.ctx.Done():
 			return
-		case entity = <-p.binlogChan:
+		default:
+			log.Infof("read data from binlogChan")
+			e := p.binlogChan.Pop()
+			var ok bool
+			entity, ok = e.(*binlogEntity)
+			if !ok {
+				log.Error("convert type binlogEntity failed!")
+				return
+			}
+			//case entity = <-p.binlogChan:
 		}
 
 		switch entity.tp {
@@ -414,7 +434,26 @@ func (p *Pump) pullBinlogs() {
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
 	defer stream.Close()
 
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+
 	for {
+		select {
+		case <-timer.C:
+			for {
+				reach, err := reachMemoryLimit(p.ps, p.maxMemUsed, p.maxMemPercent)
+				if err != nil {
+					log.Errorf("get memory information error: %v", err)
+					break
+				}
+				if !reach {
+					break
+				}
+				time.Sleep(time.Second)
+			}
+		default:
+		}
+
 		var payload []byte
 		select {
 		case <-p.ctx.Done():
@@ -442,7 +481,9 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- binlogEnt:
+			default:
+				p.binlogChan.Push(binlogEnt, uint64(len(payload)))
+			//case p.binlogChan <- binlogEnt:
 			}
 		}
 	}
