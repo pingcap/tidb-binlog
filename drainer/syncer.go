@@ -55,10 +55,12 @@ type Syncer struct {
 	reMap map[string]*regexp.Regexp
 
 	c *causality
+
+	lastSyncTime *time.Time
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, lastSyncTime *time.Time) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
@@ -70,6 +72,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
+	syncer.lastSyncTime = lastSyncTime
 
 	return syncer, nil
 }
@@ -525,6 +528,8 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				clearF()
 			}
 
+			*s.lastSyncTime = time.Now()
+
 		default:
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
@@ -533,6 +538,8 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
+
+				*s.lastSyncTime = time.Now()
 			}
 
 			time.Sleep(executionWaitTime)

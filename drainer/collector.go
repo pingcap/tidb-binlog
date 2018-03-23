@@ -58,11 +58,11 @@ type Collector struct {
 		status *HTTPStatus
 	}
 
-	lastBinlogTime time.Time
+	lastSyncTime *time.Time
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint, lastSyncTime *time.Time) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -93,22 +93,22 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:      clusterID,
-		interval:       time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:     kafkaAddrs,
-		reg:            pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:        cfg.PumpTimeout,
-		pumps:          make(map[string]*Pump),
-		offlines:       make(map[string]struct{}),
-		bh:             newBinlogHeap(maxBinlogItemCount),
-		window:         w,
-		syncer:         s,
-		cp:             cpt,
-		tiClient:       tiClient,
-		tiStore:        tiStore,
-		notifyChan:     make(chan *notifyResult),
-		offsetSeeker:   offsetSeeker,
-		lastBinlogTime: time.Now(),
+		clusterID:    clusterID,
+		interval:     time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:   kafkaAddrs,
+		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:      cfg.PumpTimeout,
+		pumps:        make(map[string]*Pump),
+		offlines:     make(map[string]struct{}),
+		bh:           newBinlogHeap(maxBinlogItemCount),
+		window:       w,
+		syncer:       s,
+		cp:           cpt,
+		tiClient:     tiClient,
+		tiStore:      tiStore,
+		notifyChan:   make(chan *notifyResult),
+		offsetSeeker: offsetSeeker,
+		lastSyncTime: lastSyncTime,
 	}, nil
 }
 
@@ -207,7 +207,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos, &c.lastBinlogTime)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -366,9 +366,9 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	status = c.mu.status
 
 	interval := status.DepositWindow.Upper>>18/1000 - status.DepositWindow.Lower>>18/1000
-	// if the gap between lower and upper is small and don't have binlog input in a minitue, 
+	// if the gap between lower and upper is small and don't have binlog input in a minitue,
 	// we can think the all binlog is synced
-	if interval < 10 && time.Since(c.lastBinlogTime) > time.Minute {
+	if interval < 10 && time.Since(*c.lastSyncTime) > time.Minute {
 		status.Synced = true
 	}
 

@@ -55,15 +55,14 @@ type Pump struct {
 		binlogs       map[int64]*binlogItem
 	}
 
-	wg             sync.WaitGroup
-	ctx            context.Context
-	cancel         context.CancelFunc
-	isFinished     int64
-	lastBinlogTime *time.Time
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isFinished int64
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, lastBinlogTime *time.Time) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
@@ -72,17 +71,16 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 	}
 
 	return &Pump{
-		nodeID:         nodeID,
-		clusterID:      clusterID,
-		consumer:       consumer,
-		currentPos:     pos,
-		latestPos:      pos,
-		bh:             newBinlogHeap(maxBinlogItemCount),
-		tiStore:        tiStore,
-		window:         w,
-		timeout:        timeout,
-		binlogChan:     make(chan *binlogEntity, maxBinlogItemCount),
-		lastBinlogTime: lastBinlogTime,
+		nodeID:     nodeID,
+		clusterID:  clusterID,
+		consumer:   consumer,
+		currentPos: pos,
+		latestPos:  pos,
+		bh:         newBinlogHeap(maxBinlogItemCount),
+		tiStore:    tiStore,
+		window:     w,
+		timeout:    timeout,
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 	}, nil
 }
 
@@ -284,9 +282,6 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 	}
 
 	p.putIntoHeap(items)
-	if len(items) > 0 {
-		*p.lastBinlogTime = time.Now()
-	}
 	binlogCounter.Add(float64(len(items)))
 	return nil
 }
