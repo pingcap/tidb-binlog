@@ -57,6 +57,7 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+
 	lastBinlogTime time.Time
 }
 
@@ -92,21 +93,21 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:    clusterID,
-		interval:     time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:   kafkaAddrs,
-		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:      cfg.PumpTimeout,
-		pumps:        make(map[string]*Pump),
-		offlines:     make(map[string]struct{}),
-		bh:           newBinlogHeap(maxBinlogItemCount),
-		window:       w,
-		syncer:       s,
-		cp:           cpt,
-		tiClient:     tiClient,
-		tiStore:      tiStore,
-		notifyChan:   make(chan *notifyResult),
-		offsetSeeker: offsetSeeker,
+		clusterID:      clusterID,
+		interval:       time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:     kafkaAddrs,
+		reg:            pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:        cfg.PumpTimeout,
+		pumps:          make(map[string]*Pump),
+		offlines:       make(map[string]struct{}),
+		bh:             newBinlogHeap(maxBinlogItemCount),
+		window:         w,
+		syncer:         s,
+		cp:             cpt,
+		tiClient:       tiClient,
+		tiStore:        tiStore,
+		notifyChan:     make(chan *notifyResult),
+		offsetSeeker:   offsetSeeker,
 		lastBinlogTime: time.Now(),
 	}, nil
 }
@@ -365,6 +366,8 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	status = c.mu.status
 
 	interval := status.DepositWindow.Upper>>18/1000 - status.DepositWindow.Lower>>18/1000
+	// if the gap between lower and upper is small and don't have binlog input in a minitue, 
+	// we can think the all binlog is synced
 	if interval < 10 && time.Since(c.lastBinlogTime) > time.Minute {
 		status.Synced = true
 	}
