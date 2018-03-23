@@ -89,13 +89,16 @@ func (c *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
-	if c.configFile == "" {
+	// the mysql configuration should be in the file.
+	if c.DestType == "mysql" && c.configFile == "" {
 		return errors.Errorf("please specify config file")
 	}
 
-	// Load config file if specified
-	if err := c.configFromFile(c.configFile); err != nil {
-		return errors.Trace(err)
+	if c.configFile != "" {
+		// Load config file if specified
+		if err := c.configFromFile(c.configFile); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Parse again to replace with command line options
@@ -147,6 +150,10 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
+	if c.Dir == "" {
+		return errors.New("data-dir is empty")
+	}
+
 	switch c.DestType {
 	case "mysql":
 		if c.DestDB == nil {
