@@ -57,6 +57,7 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+	lastBinlogTime time.Time
 }
 
 // NewCollector returns an instance of Collector
@@ -106,6 +107,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:      tiStore,
 		notifyChan:   make(chan *notifyResult),
 		offsetSeeker: offsetSeeker,
+		lastBinlogTime: time.Now(),
 	}, nil
 }
 
@@ -204,7 +206,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos, &c.lastBinlogTime)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -361,6 +363,12 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	var status *HTTPStatus
 	c.mu.Lock()
 	status = c.mu.status
+
+	interval := status.DepositWindow.Upper>>18/1000 - status.DepositWindow.Lower>>18/1000
+	if interval < 10 && time.Since(c.lastBinlogTime) > time.Minute {
+		status.Synced = true
+	}
+
 	c.mu.Unlock()
 	return status
 }
