@@ -50,6 +50,7 @@ type Config struct {
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
+	UseLocal          bool            `toml:"use-local" json:"use-local"`
 	MetricsAddr       string
 	MetricsInterval   int
 	configFile        string
@@ -89,7 +90,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-
+	fs.BoolVar(&cfg.UseLocal, "use-local", true, "if use local, pump will write binlog to file, and then send to kafka")
 	return cfg
 }
 

@@ -206,6 +206,12 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
+	if !s.cfg.UseLocal {
+		log.Debug("send binlog to kafka directly")
+		s.dispatcher = kb
+		return kb, nil
+	}
+
 	find := false
 	clusterDir := path.Join(s.dataDir, "clusters")
 	names, err := bf.ReadDir(clusterDir)
