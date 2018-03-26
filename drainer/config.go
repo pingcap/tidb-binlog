@@ -34,6 +34,7 @@ const (
 var (
 	maxBinlogItemCount     int
 	defaultBinlogItemCount = 16 << 12
+	defaultMaxMemory       = int64(5 * 1024 * 1024 * 1024) // 5G
 )
 
 // SyncerConfig is the Syncer's configuration.
@@ -65,6 +66,7 @@ type Config struct {
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
+	MaxMemory       int64           `toml:"max-memory" json:"max-memory"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -109,6 +111,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
+	fs.Int64Var(&cfg.MaxMemory, "max-memory", defaultMaxMemory, "max memory drainer can use")
 	return cfg
 }
 

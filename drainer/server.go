@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/resource"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -29,6 +30,8 @@ var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
 var pdReconnTimes = 30
+var defaultMemoryMaxToken = 10 * 1024 * 1024 // 10M
+var defaultMemoryTokenRate = 1024 * 1024     // 1M
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -83,12 +86,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
+	memControl := resource.NewResourceControl(uint64(cfg.MaxMemory), uint64(defaultMemoryMaxToken), uint64(defaultMemoryTokenRate))
+
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, memControl)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
+	c, err := NewCollector(cfg, clusterID, win, syncer, cp, memControl)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
