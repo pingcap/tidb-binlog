@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -365,7 +366,7 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	c.mu.Lock()
 	status = c.mu.status
 
-	interval := status.DepositWindow.Upper>>18/1000 - status.DepositWindow.Lower>>18/1000
+	interval := util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower)
 	// if the gap between lower and upper is small and don't have binlog input in a minitue,
 	// we can think the all binlog is synced
 	if interval < 10 && time.Since(*c.lastSyncTime) > time.Minute {
