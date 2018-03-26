@@ -11,12 +11,22 @@ import (
 // do some filters based on schema/table
 
 // GenRegexMap generates regular expression map.
+// Priority order: do-db > do-table > ignore-db > ignore-table.
 func (r *Restore) GenRegexMap() {
 	for _, db := range r.cfg.DoDBs {
 		r.addOneRegex(db)
 	}
 
 	for _, tb := range r.cfg.DoTables {
+		r.addOneRegex(tb.Schema)
+		r.addOneRegex(tb.Name)
+	}
+
+	for _, db := range r.cfg.IgnoreDBs {
+		r.addOneRegex(db)
+	}
+
+	for _, tb := range r.cfg.IgnoreTables {
 		r.addOneRegex(tb.Schema)
 		r.addOneRegex(tb.Name)
 	}
@@ -36,17 +46,15 @@ func (r *Restore) addOneRegex(originStr string) {
 
 // SkipBySchemaAndTable skips sql based on schema and table rules.
 func (r *Restore) SkipBySchemaAndTable(schema string, table string) bool {
-	tbs := []TableName{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
+	tbs := []Table{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
 	tbs = r.whiteFilter(tbs)
-	if len(tbs) == 0 {
-		return true
-	}
-	return false
+	tbs = r.blackFilter(tbs)
+	return len(tbs) == 0
 }
 
-// whiteFilter whitelist filtering
-func (r *Restore) whiteFilter(stbs []TableName) []TableName {
-	var tbs []TableName
+// whiteFilter is whitelist filter.
+func (r *Restore) whiteFilter(stbs []Table) []Table {
+	var tbs []Table
 	if len(r.cfg.DoTables) == 0 && len(r.cfg.DoDBs) == 0 {
 		return stbs
 	}
@@ -63,7 +71,26 @@ func (r *Restore) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-func (r *Restore) matchTable(patternTBS []TableName, tb TableName) bool {
+// blackFilter is a blacklist filter
+func (r *Restore) blackFilter(stbs []Table) []Table {
+	var tbs []Table
+	if len(r.cfg.IgnoreTables) == 0 && len(r.cfg.IgnoreDBs) == 0 {
+		return stbs
+	}
+
+	for _, tb := range stbs {
+		if r.matchTable(r.cfg.IgnoreTables, tb) {
+			continue
+		}
+		if r.matchDB(r.cfg.IgnoreDBs, tb.Schema) {
+			continue
+		}
+		tbs = append(tbs, tb)
+	}
+	return tbs
+}
+
+func (r *Restore) matchTable(patternTBS []Table, tb Table) bool {
 	for _, ptb := range patternTBS {
 		if r.matchString(ptb.Schema, tb.Schema) {
 			// tb.Table == "" means create or drop database
