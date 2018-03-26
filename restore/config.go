@@ -20,8 +20,8 @@ const (
 	timeFormat = "2006-01-02 15:04:05"
 )
 
-// TableName stores the table and schema name
-type TableName struct {
+// Table stores the table and schema name
+type Table struct {
 	Schema string `toml:"db-name" json:"db-name"`
 	Name   string `toml:"tbl-name" json:"tbl-name"`
 }
@@ -38,8 +38,11 @@ type Config struct {
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
 
-	DoTables []TableName `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs    []string    `toml:"replicate-do-db" json:"replicate-do-db"`
+	DoTables []Table  `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs    []string `toml:"replicate-do-db" json:"replicate-do-db"`
+
+	IgnoreTables []Table  `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
+	IgnoreDBs    []string `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -89,13 +92,16 @@ func (c *Config) Parse(args []string) error {
 		os.Exit(0)
 	}
 
-	if c.configFile == "" {
+	// the mysql configuration should be in the file.
+	if c.DestType == "mysql" && c.configFile == "" {
 		return errors.Errorf("please specify config file")
 	}
 
-	// Load config file if specified
-	if err := c.configFromFile(c.configFile); err != nil {
-		return errors.Trace(err)
+	if c.configFile != "" {
+		// Load config file if specified
+		if err := c.configFromFile(c.configFile); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	// Parse again to replace with command line options
@@ -147,6 +153,10 @@ func (c *Config) configFromFile(path string) error {
 }
 
 func (c *Config) validate() error {
+	if c.Dir == "" {
+		return errors.New("data-dir is empty")
+	}
+
 	switch c.DestType {
 	case "mysql":
 		if c.DestDB == nil {
