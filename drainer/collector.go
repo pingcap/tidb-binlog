@@ -59,11 +59,11 @@ type Collector struct {
 		status *HTTPStatus
 	}
 
-	memControl *resource.ResourceControl
+	memControl *resource.Control
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint, memControl *resource.ResourceControl) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint, memControl *resource.Control) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)

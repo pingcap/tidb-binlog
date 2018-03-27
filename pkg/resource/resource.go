@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-type ResourceControl struct {
+// Control controls the resource
+type Control struct {
 	mu sync.RWMutex
 	// used for token
 	mut sync.RWMutex
@@ -25,8 +26,9 @@ type ResourceControl struct {
 	ResourceTokenMap map[string]uint64
 }
 
-func NewResourceControl(maxResource, maxResourceToken, tokenRate uint64) *ResourceControl {
-	m := &ResourceControl{
+// NewControl creates a new Control
+func NewControl(maxResource, maxResourceToken, tokenRate uint64) *Control {
+	m := &Control{
 		ResourceUsedMap: make(map[string]uint64),
 		NumMap:          make(map[string]uint64),
 		MaxResourceMap:  make(map[string]uint64),
@@ -41,14 +43,15 @@ func NewResourceControl(maxResource, maxResourceToken, tokenRate uint64) *Resour
 	return m
 }
 
-func (m *ResourceControl) Allocate(size uint64, label string) {
+// Allocate allocates resource
+func (m *Control) Allocate(size uint64, label string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if label != "" {
 		m.addNewLabel(label)
 		m.ResourceUsedMap[label] += size
-		m.NumMap[label] += 1
+		m.NumMap[label]++
 		if m.ResourceUsedMap[label] > m.MaxResourceMap[label] {
 			m.applyTokenSync(label, size)
 		}
@@ -61,19 +64,21 @@ func (m *ResourceControl) Allocate(size uint64, label string) {
 	}
 }
 
-func (m *ResourceControl) Free(size uint64, label string) {
+// Free frees the resource
+func (m *Control) Free(size uint64, label string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if label != "" {
 		m.ResourceUsedMap[label] -= size
-		m.NumMap[label] -= 1
+		m.NumMap[label]--
 	}
 
 	m.ResourceUsed -= size
 }
 
-func (m *ResourceControl) OfflineLabel(label string) {
+// OfflineLabel offlines the label
+func (m *Control) OfflineLabel(label string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -84,7 +89,7 @@ func (m *ResourceControl) OfflineLabel(label string) {
 	m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, true)
 }
 
-func (m *ResourceControl) addNewLabel(label string) {
+func (m *Control) addNewLabel(label string) {
 	_, ok := m.ResourceUsedMap[label]
 	if ok {
 		return
@@ -97,7 +102,7 @@ func (m *ResourceControl) addNewLabel(label string) {
 	m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, true)
 }
 
-func (m *ResourceControl) background() {
+func (m *Control) background() {
 	// time1 is used for award resource token
 	timer1 := time.NewTicker(time.Second)
 	// time2 is used for balance resource between label by average
@@ -126,7 +131,7 @@ func (m *ResourceControl) background() {
 	}
 }
 
-func (m *ResourceControl) awardToken() {
+func (m *Control) awardToken() {
 	labelNum := uint64(len(m.ResourceTokenMap))
 	for label, token := range m.ResourceTokenMap {
 		if token+m.GenTokenRate/labelNum > m.MaxResourceToken/labelNum {
@@ -143,7 +148,7 @@ func (m *ResourceControl) awardToken() {
 	}
 }
 
-func (m *ResourceControl) applyToken(label string, size uint64) bool {
+func (m *Control) applyToken(label string, size uint64) bool {
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
@@ -162,7 +167,7 @@ func (m *ResourceControl) applyToken(label string, size uint64) bool {
 	return false
 }
 
-func (m *ResourceControl) applyTokenSync(label string, size uint64) {
+func (m *Control) applyTokenSync(label string, size uint64) {
 	for {
 		labelSize := uint64(len(m.ResourceTokenMap))
 		if labelSize == 0 {

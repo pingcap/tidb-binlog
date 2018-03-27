@@ -61,11 +61,11 @@ type Pump struct {
 	cancel     context.CancelFunc
 	isFinished int64
 
-	memControl *resource.ResourceControl
+	memControl *resource.Control
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, memControl *resource.ResourceControl) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, memControl *resource.Control) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)

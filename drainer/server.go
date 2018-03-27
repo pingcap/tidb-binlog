@@ -86,7 +86,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	memControl := resource.NewResourceControl(uint64(cfg.MaxMemory), uint64(defaultMemoryMaxToken), uint64(defaultMemoryTokenRate))
+	memControl := resource.NewControl(uint64(cfg.MaxMemory), uint64(defaultMemoryMaxToken), uint64(defaultMemoryTokenRate))
 
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, memControl)
 	if err != nil {

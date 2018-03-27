@@ -4,6 +4,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+// EstimateSize estimates the interface's size
 func EstimateSize(i interface{}) uint64 {
 	switch v := i.(type) {
 	case *pb.Binlog:

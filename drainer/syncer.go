@@ -57,11 +57,11 @@ type Syncer struct {
 
 	c *causality
 
-	memControl *resource.ResourceControl
+	memControl *resource.Control
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, memControl *resource.ResourceControl) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, memControl *resource.Control) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
