@@ -193,7 +193,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
 			if n.IsOffline {
 				c.memControl.OfflineLabel(n.nodeID)
-				
+
 				if n.OfflineTS <= safeTS {
 					continue
 				}
