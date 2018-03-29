@@ -289,11 +289,13 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
+	beginTime := time.Now()
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
+	writeBinlogHistogram.Observe(time.Since(beginTime).Seconds())
 
 	return ret, nil
 }
