@@ -56,11 +56,11 @@ type Syncer struct {
 
 	c *causality
 
-	lastSyncTime *time.Time
+	lastSyncTime time.Time
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, lastSyncTime *time.Time) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
@@ -72,6 +72,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig,
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
+	syncer.lastSyncTime = time.Now()
 
 	return syncer, nil
 }
@@ -472,7 +473,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
-	lastSyncTime := time.Now()
 	tpCnt := make(map[pb.MutationType]int)
 
 	clearF := func() {
@@ -484,7 +484,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		sqls = sqls[0:0]
 		args = args[0:0]
 		commitTSs = commitTSs[0:0]
-		lastSyncTime = time.Now()
+		s.lastSyncTime = time.Now()
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
@@ -527,18 +527,15 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				clearF()
 			}
 
-			*s.lastSyncTime = time.Now()
-
 		default:
 			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+			if now.Sub(s.lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
 
-				*s.lastSyncTime = time.Now()
 			}
 
 			time.Sleep(executionWaitTime)
@@ -733,6 +730,6 @@ func (s *Syncer) Close() {
 	closeExecutors(s.executors...)
 }
 
-func (s *Syncer) SetLastSyncTime(lastSyncTime *time.Time) {
-	s.lastSyncTime = lastSyncTime
+func (s *Syncer) GetLastSyncTime() time.Time {
+	return s.lastSyncTime
 }

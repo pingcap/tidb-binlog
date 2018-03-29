@@ -83,13 +83,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	lastSyncTime := time.Now()
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, &lastSyncTime)
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp, &lastSyncTime)
+	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

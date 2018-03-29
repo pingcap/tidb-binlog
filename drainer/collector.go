@@ -50,6 +50,8 @@ type Collector struct {
 	latestTS   int64
 	cp         checkpoint.CheckPoint
 
+	syncedCheckTime int
+
 	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -58,8 +60,6 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
-
-	lastSyncTime *time.Time
 }
 
 // NewCollector returns an instance of Collector
@@ -94,21 +94,22 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 	return &Collector{
-		clusterID:    clusterID,
-		interval:     time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:   kafkaAddrs,
-		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:      cfg.PumpTimeout,
-		pumps:        make(map[string]*Pump),
-		offlines:     make(map[string]struct{}),
-		bh:           newBinlogHeap(maxBinlogItemCount),
-		window:       w,
-		syncer:       s,
-		cp:           cpt,
-		tiClient:     tiClient,
-		tiStore:      tiStore,
-		notifyChan:   make(chan *notifyResult),
-		offsetSeeker: offsetSeeker,
+		clusterID:       clusterID,
+		interval:        time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:      kafkaAddrs,
+		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:         cfg.PumpTimeout,
+		pumps:           make(map[string]*Pump),
+		offlines:        make(map[string]struct{}),
+		bh:              newBinlogHeap(maxBinlogItemCount),
+		window:          w,
+		syncer:          s,
+		cp:              cpt,
+		tiClient:        tiClient,
+		tiStore:         tiStore,
+		notifyChan:      make(chan *notifyResult),
+		offsetSeeker:    offsetSeeker,
+		syncedCheckTime: cfg.syncedCheckTime,
 	}, nil
 }
 
@@ -365,17 +366,13 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	c.mu.Lock()
 	status = c.mu.status
 
-	interval := util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower)
+	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
 	// if the gap between lower and upper is small and don't have binlog input in a minitue,
 	// we can think the all binlog is synced
-	if interval < 10 && time.Since(*c.lastSyncTime) > time.Minute {
+	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
 
 	c.mu.Unlock()
 	return status
-}
-
-func (c *Collector) SetLastSyncTime(lastSyncTime time.Time) {
-	c.lastSyncTime = lastSyncTime
 }
