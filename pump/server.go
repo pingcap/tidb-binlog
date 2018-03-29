@@ -206,7 +206,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if !s.cfg.UseLocal {
+	if s.cfg.WriteMode == KafkaWriteMode {
 		log.Debug("send binlog to kafka directly")
 		s.dispatcher = kb
 		return kb, nil
@@ -289,13 +289,13 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	beginTime := time.Now()
+	bt := time.Now()
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
 		return ret, err
 	}
-	writeBinlogHistogram.Observe(time.Since(beginTime).Seconds())
+	writeBinlogHistogram.Observe(time.Since(bt).Seconds())
 
 	return ret, nil
 }

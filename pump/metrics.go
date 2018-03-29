@@ -59,6 +59,7 @@ func init() {
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogSizeHistogram)
 	prometheus.MustRegister(lossBinlogCacheCounter)
+	prometheus.MustRegister(writeBinlogHistogram)
 }
 
 type metricClient struct {
