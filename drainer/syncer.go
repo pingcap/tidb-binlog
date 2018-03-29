@@ -730,6 +730,7 @@ func (s *Syncer) Close() {
 	closeExecutors(s.executors...)
 }
 
+// GetLastSyncTime returns lastSyncTime
 func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
 }
