@@ -109,7 +109,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		offsetSeeker:    offsetSeeker,
-		syncedCheckTime: cfg.syncedCheckTime,
+		syncedCheckTime: cfg.SyncedCheckTime,
 	}, nil
 }
 
