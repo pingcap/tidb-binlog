@@ -206,7 +206,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if s.cfg.WriteMode == KafkaWriteMode {
+	if s.cfg.WriteMode == kafkaWriteMode {
 		log.Debug("send binlog to kafka directly")
 		s.dispatcher = kb
 		return kb, nil

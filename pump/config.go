@@ -30,9 +30,9 @@ const (
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
 
-	KafkaWriteMode = "kafka"
-	// MixedWriteMode will write binlog to local file and then send to kafka
-	MixedWriteMode = "mixed"
+	kafkaWriteMode = "kafka"
+	// mixedWriteMode will write binlog to local file and then send to kafka
+	mixedWriteMode = "mixed"
 )
 
 // Config holds the configuration of pump
@@ -94,7 +94,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.WriteMode, "write-mode", MixedWriteMode, "support kafka and mixed mode")
+	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
 	return cfg
 }
 
@@ -236,7 +236,7 @@ func (cfg *Config) validate() error {
 		cfg.KafkaAddrs = kafkaUrls
 	}
 
-	if cfg.WriteMode != KafkaWriteMode && cfg.WriteMode != MixedWriteMode {
+	if cfg.WriteMode != kafkaWriteMode && cfg.WriteMode != mixedWriteMode {
 		return errors.Errorf("unknow binlog mode %s", cfg.WriteMode)
 	}
 
