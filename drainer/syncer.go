@@ -72,7 +72,6 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig,
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
-	syncer.lastSyncTime = lastSyncTime
 
 	return syncer, nil
 }
@@ -732,4 +731,8 @@ func (s *Syncer) Close() {
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
+}
+
+func (s *Syncer) SetLastSyncTime(lastSyncTime *time.Time) {
+	s.lastSyncTime = lastSyncTime
 }
