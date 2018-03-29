@@ -55,6 +55,8 @@ type Syncer struct {
 	reMap map[string]*regexp.Regexp
 
 	c *causality
+
+	lastSyncTime time.Time
 }
 
 // NewSyncer returns a Drainer instance
@@ -70,6 +72,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
+	syncer.lastSyncTime = time.Now()
 
 	return syncer, nil
 }
@@ -470,7 +473,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
-	lastSyncTime := time.Now()
 	tpCnt := make(map[pb.MutationType]int)
 
 	clearF := func() {
@@ -482,7 +484,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		sqls = sqls[0:0]
 		args = args[0:0]
 		commitTSs = commitTSs[0:0]
-		lastSyncTime = time.Now()
+		s.lastSyncTime = time.Now()
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
@@ -527,12 +529,13 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 
 		default:
 			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+			if now.Sub(s.lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
+
 			}
 
 			time.Sleep(executionWaitTime)
@@ -725,4 +728,9 @@ func (s *Syncer) Close() {
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
+}
+
+// GetLastSyncTime returns lastSyncTime
+func (s *Syncer) GetLastSyncTime() time.Time {
+	return s.lastSyncTime
 }
