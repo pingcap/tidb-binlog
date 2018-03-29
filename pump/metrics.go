@@ -44,14 +44,14 @@ var (
 			Help:      "Total loss binlog count",
 		}, []string{"nodeID"})
 
-	writeBinlogHistogram = prometheus.NewHistogram(
+	writeBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "pump",
 			Name:      "write_binlog_duration_time",
 			Help:      "Bucketed histogram of write time (s) of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
-		})
+		}, []string{"label"})
 )
 
 func init() {

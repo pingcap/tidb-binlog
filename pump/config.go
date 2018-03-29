@@ -236,7 +236,10 @@ func (cfg *Config) validate() error {
 		cfg.KafkaAddrs = kafkaUrls
 	}
 
-	if cfg.WriteMode != kafkaWriteMode && cfg.WriteMode != mixedWriteMode {
+	switch cfg.WriteMode {
+	case kafkaWriteMode, mixedWriteMode:
+		// do nothing
+	default:
 		return errors.Errorf("unknow binlog mode %s", cfg.WriteMode)
 	}
 
