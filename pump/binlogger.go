@@ -335,6 +335,11 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
 func (b *binlogger) WriteTail(payload []byte) (int64, error) {
+	beginTime := time.Now()
+	defer func() {
+		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+	}()
+
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 

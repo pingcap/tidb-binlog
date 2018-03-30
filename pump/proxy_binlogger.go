@@ -162,7 +162,7 @@ func (p *Proxy) sync() {
 		default:
 			err := p.master.Walk(p.ctx, pos, syncBinlog)
 			if err != nil {
-				log.Errorf("master walk error %v", err)
+				log.Errorf("master walk error %v", errors.ErrorStack(err))
 			}
 			time.Sleep(time.Second)
 		}

@@ -206,40 +206,50 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	find := false
-	clusterDir := path.Join(s.dataDir, "clusters")
-	names, err := bf.ReadDir(clusterDir)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for _, n := range names {
-		if s.clusterID == n {
-			find = true
-			break
+	switch s.cfg.WriteMode {
+	case kafkaWriteMode:
+		log.Debug("send binlog to kafka directly")
+		s.dispatcher = kb
+		return kb, nil
+	case mixedWriteMode:
+		find := false
+		clusterDir := path.Join(s.dataDir, "clusters")
+		names, err := bf.ReadDir(clusterDir)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-	}
+		for _, n := range names {
+			if s.clusterID == n {
+				find = true
+				break
+			}
+		}
 
-	var (
-		fb        Binlogger
-		binlogDir = path.Join(clusterDir, s.clusterID)
-	)
-	if find {
-		fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-	} else {
-		fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
-	}
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+		var (
+			fb        Binlogger
+			binlogDir = path.Join(clusterDir, s.clusterID)
+		)
+		if find {
+			fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
+		} else {
+			fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
+		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
-	cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+		cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
-	s.cp = cp
-	s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
-	return s.dispatcher, nil
+		s.cp = cp
+		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
+		return s.dispatcher, nil
+
+	default:
+		return nil, errors.New("unsupport write mode")
+	}
 }
 
 func (s *Server) getBinloggerToRead() (Binlogger, error) {
