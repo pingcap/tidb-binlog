@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"bufio"
@@ -10,13 +10,13 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/restore/executor"
-	"github.com/pingcap/tidb-binlog/restore/translator"
+	"github.com/pingcap/tidb-binlog/reparo/executor"
+	"github.com/pingcap/tidb-binlog/reparo/translator"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
-// Restore i the main part of the restore tool.
-type Restore struct {
+// Reparo i the main part of the recovery tool.
+type Reparo struct {
 	cfg        *Config
 	translator translator.Translator
 	executor   executor.Executor
@@ -24,14 +24,14 @@ type Restore struct {
 	reMap map[string]*regexp.Regexp
 }
 
-// New creates a Restore object.
-func New(cfg *Config) (*Restore, error) {
+// New creates a Reparo object.
+func New(cfg *Config) (*Reparo, error) {
 	executor, err := executor.New(cfg.DestType, cfg.DestDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	log.Infof("cfg %+v", cfg)
-	return &Restore{
+	return &Reparo{
 		cfg:        cfg,
 		translator: translator.New(cfg.DestType, false),
 		executor:   executor,
@@ -39,13 +39,13 @@ func New(cfg *Config) (*Restore, error) {
 	}, nil
 }
 
-func (r *Restore) prepare() error {
+func (r *Reparo) prepare() error {
 	r.GenRegexMap()
 	return nil
 }
 
 // Process runs the main procedure.
-func (r *Restore) Process() error {
+func (r *Reparo) Process() error {
 	if err := r.prepare(); err != nil {
 		return errors.Trace(err)
 	}
@@ -110,7 +110,7 @@ func (r *Restore) Process() error {
 	return nil
 }
 
-// Close closes the Restore object.
-func (r *Restore) Close() error {
+// Close closes the Reparo object.
+func (r *Reparo) Close() error {
 	return errors.Trace(r.executor.Close())
 }

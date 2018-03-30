@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 
 // GenRegexMap generates regular expression map.
 // Priority order: do-db > do-table > ignore-db > ignore-table.
-func (r *Restore) GenRegexMap() {
+func (r *Reparo) GenRegexMap() {
 	for _, db := range r.cfg.DoDBs {
 		r.addOneRegex(db)
 	}
@@ -32,7 +32,7 @@ func (r *Restore) GenRegexMap() {
 	}
 }
 
-func (r *Restore) addOneRegex(originStr string) {
+func (r *Reparo) addOneRegex(originStr string) {
 	if _, ok := r.reMap[originStr]; !ok {
 		var re *regexp.Regexp
 		if originStr[0] != '~' {
@@ -45,7 +45,7 @@ func (r *Restore) addOneRegex(originStr string) {
 }
 
 // SkipBySchemaAndTable skips sql based on schema and table rules.
-func (r *Restore) SkipBySchemaAndTable(schema string, table string) bool {
+func (r *Reparo) SkipBySchemaAndTable(schema string, table string) bool {
 	tbs := []Table{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
 	tbs = r.whiteFilter(tbs)
 	tbs = r.blackFilter(tbs)
@@ -53,7 +53,7 @@ func (r *Restore) SkipBySchemaAndTable(schema string, table string) bool {
 }
 
 // whiteFilter is whitelist filter.
-func (r *Restore) whiteFilter(stbs []Table) []Table {
+func (r *Reparo) whiteFilter(stbs []Table) []Table {
 	var tbs []Table
 	if len(r.cfg.DoTables) == 0 && len(r.cfg.DoDBs) == 0 {
 		return stbs
@@ -72,7 +72,7 @@ func (r *Restore) whiteFilter(stbs []Table) []Table {
 }
 
 // blackFilter is a blacklist filter
-func (r *Restore) blackFilter(stbs []Table) []Table {
+func (r *Reparo) blackFilter(stbs []Table) []Table {
 	var tbs []Table
 	if len(r.cfg.IgnoreTables) == 0 && len(r.cfg.IgnoreDBs) == 0 {
 		return stbs
@@ -90,7 +90,7 @@ func (r *Restore) blackFilter(stbs []Table) []Table {
 	return tbs
 }
 
-func (r *Restore) matchTable(patternTBS []Table, tb Table) bool {
+func (r *Reparo) matchTable(patternTBS []Table, tb Table) bool {
 	for _, ptb := range patternTBS {
 		if r.matchString(ptb.Schema, tb.Schema) {
 			// tb.Name == "" means create or drop database
@@ -102,7 +102,7 @@ func (r *Restore) matchTable(patternTBS []Table, tb Table) bool {
 	return false
 }
 
-func (r *Restore) matchDB(patternDBS []string, a string) bool {
+func (r *Reparo) matchDB(patternDBS []string, a string) bool {
 	for _, b := range patternDBS {
 		if r.matchString(b, a) {
 			return true
@@ -111,7 +111,7 @@ func (r *Restore) matchDB(patternDBS []string, a string) bool {
 	return false
 }
 
-func (r *Restore) matchString(pattern string, t string) bool {
+func (r *Reparo) matchString(pattern string, t string) bool {
 	if re, ok := r.reMap[pattern]; ok {
 		return re.MatchString(t)
 	}

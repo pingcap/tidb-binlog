@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"github.com/juju/errors"
@@ -6,7 +6,7 @@ import (
 )
 
 // Translate translates payload to SQL.
-func (r *Restore) Translate(binlog *pb.Binlog) (sqls []string, args [][]interface{}, isDDL bool, err error) {
+func (r *Reparo) Translate(binlog *pb.Binlog) (sqls []string, args [][]interface{}, isDDL bool, err error) {
 	if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
 		return
 	}
@@ -23,7 +23,7 @@ func (r *Restore) Translate(binlog *pb.Binlog) (sqls []string, args [][]interfac
 	}
 }
 
-func (r *Restore) translateDML(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
+func (r *Reparo) translateDML(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
 	// skip
 
 	dml := binlog.DmlData
@@ -68,7 +68,7 @@ func (r *Restore) translateDML(binlog *pb.Binlog) ([]string, [][]interface{}, er
 	return sqls, args, nil
 }
 
-func (r *Restore) translateDDL(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
+func (r *Reparo) translateDDL(binlog *pb.Binlog) ([]string, [][]interface{}, error) {
 	_, table, err := parseDDL(string(binlog.GetDdlQuery()))
 	if err != nil {
 		return nil, nil, errors.Trace(err)

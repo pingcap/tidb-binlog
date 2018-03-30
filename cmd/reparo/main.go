@@ -13,19 +13,18 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/restore"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	cfg := restore.NewConfig()
+	cfg := reparo.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'restore --help'.", err)
+		log.Fatalf("verifying flags error, %v. See 'reparo --help'.", err)
 	}
 
-	restore.InitLogger(cfg)
+	reparo.InitLogger(cfg)
 	version.PrintVersionInfo()
 
 	sc := make(chan os.Signal, 1)
@@ -35,9 +34,9 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	r, err := restore.New(cfg)
+	r, err := reparo.New(cfg)
 	if err != nil {
-		log.Fatalf("create restore err %v", errors.ErrorStack(err))
+		log.Fatalf("create reparo err %v", errors.ErrorStack(err))
 	}
 
 	go func() {
@@ -48,7 +47,7 @@ func main() {
 	}()
 
 	if err := r.Process(); err != nil {
-		log.Errorf("restore processing error, %v", errors.ErrorStack(err))
+		log.Errorf("reparo processing error, %v", errors.ErrorStack(err))
 	}
 	if err := r.Close(); err != nil {
 		log.Fatalf("close err %v", err)

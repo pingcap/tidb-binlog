@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"github.com/juju/errors"
