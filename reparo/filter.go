@@ -93,7 +93,7 @@ func (r *Restore) blackFilter(stbs []Table) []Table {
 func (r *Restore) matchTable(patternTBS []Table, tb Table) bool {
 	for _, ptb := range patternTBS {
 		if r.matchString(ptb.Schema, tb.Schema) {
-			// tb.Table == "" means create or drop database
+			// tb.Name == "" means create or drop database
 			if tb.Name == "" || r.matchString(ptb.Name, tb.Name) {
 				return true
 			}
