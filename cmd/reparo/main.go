@@ -13,6 +13,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	reparo "github.com/pingcap/tidb-binlog/reparo"
 )
 
 func main() {
