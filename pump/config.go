@@ -29,6 +29,10 @@ const (
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
+
+	kafkaWriteMode = "kafka"
+	// mixedWriteMode will write binlog to local file and then send to kafka
+	mixedWriteMode = "mixed"
 )
 
 // Config holds the configuration of pump
@@ -50,6 +54,7 @@ type Config struct {
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
+	WriteMode         string          `toml:"write-mode" json:"write-mode"`
 	MetricsAddr       string
 	MetricsInterval   int
 	configFile        string
@@ -89,7 +94,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-
+	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
 	return cfg
 }
 
@@ -229,6 +234,13 @@ func (cfg *Config) validate() error {
 		// use kafka address get from zookeeper to reset the config
 		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
+	}
+
+	switch cfg.WriteMode {
+	case kafkaWriteMode, mixedWriteMode:
+		// do nothing
+	default:
+		return errors.Errorf("unknow binlog mode %s", cfg.WriteMode)
 	}
 
 	return nil

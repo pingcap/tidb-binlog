@@ -43,6 +43,15 @@ var (
 			Name:      "binlog_count",
 			Help:      "Total loss binlog count",
 		}, []string{"nodeID"})
+
+	writeBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "write_binlog_duration_time",
+			Help:      "Bucketed histogram of write time (s) of a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+		}, []string{"label"})
 )
 
 func init() {
@@ -50,6 +59,7 @@ func init() {
 	prometheus.MustRegister(rpcHistogram)
 	prometheus.MustRegister(binlogSizeHistogram)
 	prometheus.MustRegister(lossBinlogCacheCounter)
+	prometheus.MustRegister(writeBinlogHistogram)
 }
 
 type metricClient struct {
