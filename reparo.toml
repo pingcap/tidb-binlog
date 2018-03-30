@@ -22,7 +22,7 @@ dest-type = "print"
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regular expression , start with '~' declare use regular expression.
 #
-replicate-do-db = ["sbtest3","sbtest4"]
+replicate-do-db = []
 #[[replicate-do-table]]
 #db-name ="test"
 #tbl-name = "log"
@@ -31,7 +31,7 @@ replicate-do-db = ["sbtest3","sbtest4"]
 #db-name ="test"
 #tbl-name = "~^a.*"
 
-replicate-ignore-db = ["sbtest3", "sbtest4"]
+# replicate-ignore-db = ["sbtest3", "sbtest4"]
 #[[replicate-ignore-table]]
 #db-name ="sbtest4"
 #tbl-name = "~^sbtest[2-5]"
