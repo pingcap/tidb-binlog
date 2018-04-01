@@ -89,7 +89,7 @@ func (m *Control) Free(size uint64, owner string) {
 }
 
 // Offlineowner offlines the owner
-func (m *Control) Offlineowner(owner string) {
+func (m *Control) OfflineOwner(owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

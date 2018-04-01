@@ -2,8 +2,6 @@ package resource
 
 // BalanceResource balances the resource
 func BalanceResource(total, used uint64, resources map[string]*Resource, average bool) {
-	maxMap := make(map[string]uint64)
-
 	if resources == nil || len(resources) == 0 {
 		return
 	}
