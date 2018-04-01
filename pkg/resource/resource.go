@@ -5,6 +5,26 @@ import (
 	"time"
 )
 
+// Resource is a struct for Resource
+type Resource struct {
+	Max   uint64
+	Num   uint64
+	Used  uint64
+	Token uint64
+}
+
+// NewResource returns a new Resource
+func NewResource(max uint64) *Resource {
+	return &Resource{
+		Max: max,
+	}
+}
+
+// ReachMax returns true if used is gt max
+func (r *Resource) ReachMax() bool {
+	return r.Used > r.Max
+}
+
 // Control controls the resource
 type Control struct {
 	mu sync.RWMutex
@@ -14,25 +34,18 @@ type Control struct {
 	MaxResource  uint64
 	ResourceUsed uint64
 
-	ResourceUsedMap map[string]uint64
-	NumMap          map[string]uint64
-	MaxResourceMap  map[string]uint64
+	ResourceBucket map[string]*Resource
 
 	// if resource reach the max resource, use the resource token temporary
 	GenTokenRate     uint64
 	ResourceToken    uint64
 	MaxResourceToken uint64
-
-	ResourceTokenMap map[string]uint64
 }
 
 // NewControl creates a new Control
 func NewControl(maxResource, maxResourceToken, tokenRate uint64) *Control {
 	m := &Control{
-		ResourceUsedMap: make(map[string]uint64),
-		NumMap:          make(map[string]uint64),
-		MaxResourceMap:  make(map[string]uint64),
-		MaxResource:     maxResource,
+		MaxResource: maxResource,
 
 		GenTokenRate:     tokenRate,
 		MaxResourceToken: maxResourceToken,
@@ -44,73 +57,68 @@ func NewControl(maxResource, maxResourceToken, tokenRate uint64) *Control {
 }
 
 // Allocate allocates resource
-func (m *Control) Allocate(size uint64, label string) {
+func (m *Control) Allocate(size uint64, owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if label != "" {
-		m.addNewLabel(label)
-		m.ResourceUsedMap[label] += size
-		m.NumMap[label]++
-		if m.ResourceUsedMap[label] > m.MaxResourceMap[label] {
-			m.applyTokenSync(label, size)
+	if owner != "" {
+		m.addNewOwner(owner)
+		m.ResourceBucket[owner].Used += size
+		m.ResourceBucket[owner].Num++
+		if m.ResourceBucket[owner].ReachMax() {
+			m.applyTokenSync(owner, size)
 		}
 		m.ResourceUsed += size
 	} else {
 		m.ResourceUsed += size
 		if m.ResourceUsed > m.MaxResource {
-			m.applyTokenSync(label, size)
+			m.applyTokenSync(owner, size)
 		}
 	}
 }
 
 // Free frees the resource
-func (m *Control) Free(size uint64, label string) {
+func (m *Control) Free(size uint64, owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if label != "" {
-		m.ResourceUsedMap[label] -= size
-		m.NumMap[label]--
+	if owner != "" {
+		m.ResourceBucket[owner].Used -= size
+		m.ResourceBucket[owner].Num--
 	}
 
 	m.ResourceUsed -= size
 }
 
-// OfflineLabel offlines the label
-func (m *Control) OfflineLabel(label string) {
+// Offlineowner offlines the owner
+func (m *Control) Offlineowner(owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.ResourceUsedMap, label)
-	delete(m.MaxResourceMap, label)
-	delete(m.NumMap, label)
-	delete(m.ResourceTokenMap, label)
-	m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, true)
+	delete(m.ResourceBucket, owner)
+	BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
 }
 
-func (m *Control) addNewLabel(label string) {
-	_, ok := m.ResourceUsedMap[label]
+func (m *Control) addNewOwner(owner string) {
+	_, ok := m.ResourceBucket[owner]
 	if ok {
 		return
 	}
 
-	m.ResourceUsedMap[label] = 0
-	m.NumMap[label] = 0
-	m.ResourceTokenMap[label] = 0
-	m.MaxResourceMap[label] = 0
-	m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, true)
+	m.ResourceBucket[owner] = NewResource(0)
+	BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
 }
 
 func (m *Control) background() {
 	// time1 is used for award resource token
 	timer1 := time.NewTicker(time.Second)
-	// time2 is used for balance resource between label by average
+	// time2 is used for balance resource between owner by average
 	timer2 := time.NewTicker(time.Hour)
-	// time2 is used for balance resource between label
+	// time2 is used for balance resource between owner
 	timer3 := time.NewTicker(9 * time.Minute)
 	defer timer1.Stop()
 	defer timer2.Stop()
+	defer timer3.Stop()
 
 	for {
 		select {
@@ -120,11 +128,11 @@ func (m *Control) background() {
 			m.mut.Unlock()
 		case <-timer2.C:
 			m.mu.Lock()
-			m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, true)
+			BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
 			m.mu.Unlock()
 		case <-timer3.C:
 			m.mu.Lock()
-			m.MaxResourceMap = BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceUsedMap, false)
+			BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, false)
 			m.mu.Unlock()
 		default:
 		}
@@ -132,12 +140,15 @@ func (m *Control) background() {
 }
 
 func (m *Control) awardToken() {
-	labelNum := uint64(len(m.ResourceTokenMap))
-	for label, token := range m.ResourceTokenMap {
-		if token+m.GenTokenRate/labelNum > m.MaxResourceToken/labelNum {
-			m.ResourceTokenMap[label] = m.MaxResourceToken / labelNum
+	m.mut.Lock()
+	defer m.mut.Unlock()
+
+	ownerNum := uint64(len(m.ResourceBucket))
+	for _, resource := range m.ResourceBucket {
+		if resource.Token+m.GenTokenRate/ownerNum > m.MaxResourceToken/ownerNum {
+			resource.Token = m.MaxResourceToken / ownerNum
 		} else {
-			m.ResourceTokenMap[label] = token + m.GenTokenRate/labelNum
+			resource.Token += m.GenTokenRate / ownerNum
 		}
 	}
 
@@ -148,13 +159,13 @@ func (m *Control) awardToken() {
 	}
 }
 
-func (m *Control) applyToken(label string, size uint64) bool {
+func (m *Control) applyToken(owner string, size uint64) bool {
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
-	if label != "" {
-		if m.ResourceTokenMap[label] > size {
-			m.ResourceTokenMap[label] -= size
+	if owner != "" {
+		if m.ResourceBucket[owner].Token > size {
+			m.ResourceBucket[owner].Token -= size
 			return true
 		}
 		return false
@@ -167,23 +178,22 @@ func (m *Control) applyToken(label string, size uint64) bool {
 	return false
 }
 
-func (m *Control) applyTokenSync(label string, size uint64) {
+func (m *Control) applyTokenSync(owner string, size uint64) {
 	for {
-		labelSize := uint64(len(m.ResourceTokenMap))
-		if labelSize == 0 {
-			labelSize = 1
+		ownerSize := uint64(len(m.ResourceBucket))
+		if ownerSize == 0 {
+			ownerSize = 1
 		}
-		if size > m.MaxResourceToken/labelSize {
+		if size > m.MaxResourceToken/ownerSize {
 			time.Sleep(time.Duration(2*size/m.MaxResourceToken) * time.Second)
-			m.applyToken(label, m.MaxResourceToken/labelSize)
+			m.applyToken(owner, m.MaxResourceToken/ownerSize)
 			break
 		}
 
-		if m.applyToken(label, size) {
+		if m.applyToken(owner, size) {
 			break
 		}
 
 		time.Sleep(time.Second)
 	}
-
 }
