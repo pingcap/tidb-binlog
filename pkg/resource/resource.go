@@ -61,20 +61,17 @@ func (m *Control) Allocate(size uint64, owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if owner != "" {
-		m.addNewOwner(owner)
-		m.ResourceBucket[owner].Used += size
-		m.ResourceBucket[owner].Num++
-		if m.ResourceBucket[owner].ReachMax() {
-			m.applyTokenSync(owner, size)
-		}
-		m.ResourceUsed += size
-	} else {
-		m.ResourceUsed += size
-		if m.ResourceUsed > m.MaxResource {
-			m.applyTokenSync(owner, size)
-		}
+	if owner == "" {
+		owner = "all"
 	}
+
+	m.addNewOwner(owner)
+	m.ResourceBucket[owner].Used += size
+	m.ResourceBucket[owner].Num++
+	if m.ResourceBucket[owner].ReachMax() {
+		m.applyTokenSync(owner, size)
+	}
+	m.ResourceUsed += size
 }
 
 // Free frees the resource
@@ -82,11 +79,12 @@ func (m *Control) Free(size uint64, owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if owner != "" {
-		m.ResourceBucket[owner].Used -= size
-		m.ResourceBucket[owner].Num--
+	if owner == "" {
+		owner = "all"
 	}
 
+	m.ResourceBucket[owner].Used -= size
+	m.ResourceBucket[owner].Num--
 	m.ResourceUsed -= size
 }
 
@@ -163,16 +161,12 @@ func (m *Control) applyToken(owner string, size uint64) bool {
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
-	if owner != "" {
-		if m.ResourceBucket[owner].Token > size {
-			m.ResourceBucket[owner].Token -= size
-			return true
-		}
-		return false
+	if owner == "" {
+		owner = "all"
 	}
 
-	if m.ResourceToken > size {
-		m.ResourceToken -= size
+	if m.ResourceBucket[owner].Token > size {
+		m.ResourceBucket[owner].Token -= size
 		return true
 	}
 	return false
@@ -182,7 +176,7 @@ func (m *Control) applyTokenSync(owner string, size uint64) {
 	for {
 		ownerSize := uint64(len(m.ResourceBucket))
 		if ownerSize == 0 {
-			ownerSize = 1
+			return
 		}
 		if size > m.MaxResourceToken/ownerSize {
 			time.Sleep(time.Duration(2*size/m.MaxResourceToken) * time.Second)
