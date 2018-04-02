@@ -30,8 +30,6 @@ var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
 var pdReconnTimes = 30
-var defaultMemoryMaxToken = 10 * 1024 * 1024 // 10M
-var defaultMemoryTokenRate = 1024 * 1024     // 1M
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -86,7 +84,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	memControl := resource.NewControl(uint64(cfg.MaxMemory), uint64(defaultMemoryMaxToken), uint64(defaultMemoryTokenRate))
+	memControl := resource.NewControl(uint64(cfg.MaxMemory))
 
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, memControl)
 	if err != nil {

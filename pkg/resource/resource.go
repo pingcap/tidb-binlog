@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+var AwardTokenDuration time.Duration = time.Second
+var BalanceResourceAverageDuration time.Duration = time.Hour
+var BalanceResourceByUsedDuration time.Duration = 9 * time.Minute
+
 // Resource is a struct for Resource
 type Resource struct {
 	Max   uint64
@@ -43,10 +47,11 @@ type Control struct {
 }
 
 // NewControl creates a new Control
-func NewControl(maxResource, maxResourceToken, tokenRate uint64) *Control {
+func NewControl(maxResource uint64) *Control {
+	maxResourceToken := maxResource / 10
+	tokenRate := maxResource / 1000
 	m := &Control{
-		MaxResource: maxResource,
-
+		MaxResource:      maxResource,
 		GenTokenRate:     tokenRate,
 		MaxResourceToken: maxResourceToken,
 	}
@@ -109,11 +114,11 @@ func (m *Control) addNewOwner(owner string) {
 
 func (m *Control) background() {
 	// time1 is used for award resource token
-	timer1 := time.NewTicker(time.Second)
+	timer1 := time.NewTicker(AwardTokenDuration)
 	// time2 is used for balance resource between owner by average
-	timer2 := time.NewTicker(time.Hour)
-	// time2 is used for balance resource between owner
-	timer3 := time.NewTicker(9 * time.Minute)
+	timer2 := time.NewTicker(BalanceResourceAverageDuration)
+	// time2 is used for balance resource between owner by used
+	timer3 := time.NewTicker(BalanceResourceByUsedDuration)
 	defer timer1.Stop()
 	defer timer2.Stop()
 	defer timer3.Stop()
