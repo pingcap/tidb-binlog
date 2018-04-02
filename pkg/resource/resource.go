@@ -5,12 +5,11 @@ import (
 	"time"
 )
 
-// AwardTokenDuration
-var AwardTokenDuration time.Duration = time.Second
-// BalanceResourceAverageDuration
-var BalanceResourceAverageDuration time.Duration = time.Hour
-// BalanceResourceByUsedDuration
-var BalanceResourceByUsedDuration time.Duration = 9 * time.Minute
+const (
+	awardTokenDuration             = time.Second
+	balanceResourceAverageDuration = time.Hour
+	balanceResourceByUsedDuration  = 9 * time.Minute
+)
 
 // Resource is a struct for Resource
 type Resource struct {
@@ -47,16 +46,21 @@ type Control struct {
 	GenTokenRate     uint64
 	ResourceToken    uint64
 	MaxResourceToken uint64
+
+	ResourceBalancer Balancer
 }
 
 // NewControl creates a new Control
 func NewControl(maxResource uint64) *Control {
 	maxResourceToken := maxResource / 10
 	tokenRate := maxResource / 1000
+	resourceBucket := make(map[string]*Resource)
 	m := &Control{
 		MaxResource:      maxResource,
 		GenTokenRate:     tokenRate,
 		MaxResourceToken: maxResourceToken,
+		ResourceBucket:   resourceBucket,
+		ResourceBalancer: NewResourceBalance(resourceBucket),
 	}
 
 	go m.background()
@@ -102,7 +106,7 @@ func (m *Control) OfflineOwner(owner string) {
 	defer m.mu.Unlock()
 
 	delete(m.ResourceBucket, owner)
-	BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
+	m.ResourceBalancer.Apply(m.MaxResource, m.ResourceUsed, average)
 }
 
 func (m *Control) addNewOwner(owner string) {
@@ -112,16 +116,16 @@ func (m *Control) addNewOwner(owner string) {
 	}
 
 	m.ResourceBucket[owner] = NewResource(0)
-	BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
+	m.ResourceBalancer.Apply(m.MaxResource, m.ResourceUsed, average)
 }
 
 func (m *Control) background() {
 	// time1 is used for award resource token
-	timer1 := time.NewTicker(AwardTokenDuration)
+	timer1 := time.NewTicker(awardTokenDuration)
 	// time2 is used for balance resource between owner by average
-	timer2 := time.NewTicker(BalanceResourceAverageDuration)
+	timer2 := time.NewTicker(balanceResourceAverageDuration)
 	// time2 is used for balance resource between owner by used
-	timer3 := time.NewTicker(BalanceResourceByUsedDuration)
+	timer3 := time.NewTicker(balanceResourceByUsedDuration)
 	defer timer1.Stop()
 	defer timer2.Stop()
 	defer timer3.Stop()
@@ -134,11 +138,11 @@ func (m *Control) background() {
 			m.mut.Unlock()
 		case <-timer2.C:
 			m.mu.Lock()
-			BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, true)
+			m.ResourceBalancer.Apply(m.MaxResource, m.ResourceUsed, average)
 			m.mu.Unlock()
 		case <-timer3.C:
 			m.mu.Lock()
-			BalanceResource(m.MaxResource, m.ResourceUsed, m.ResourceBucket, false)
+			m.ResourceBalancer.Apply(m.MaxResource, m.ResourceUsed, proportion)
 			m.mu.Unlock()
 		default:
 		}
