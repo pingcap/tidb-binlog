@@ -88,7 +88,7 @@ func (m *Control) Free(size uint64, owner string) {
 	m.ResourceUsed -= size
 }
 
-// Offlineowner offlines the owner
+// OfflineOwner offlines the owner
 func (m *Control) OfflineOwner(owner string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
