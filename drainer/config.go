@@ -27,8 +27,9 @@ const (
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
 	defaultKafkaAddrs     = "127.0.0.1:9092"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
-	defaultEtcdTimeout = 5 * time.Second
-	defaultPumpTimeout = 5 * time.Second
+	defaultEtcdTimeout     = 5 * time.Second
+	defaultPumpTimeout     = 5 * time.Second
+	defaultSyncedCheckTime = 5 // 5 minute
 )
 
 var (
@@ -67,6 +68,7 @@ type Config struct {
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
 	MaxMemory       int64           `toml:"max-memory" json:"max-memory"`
+	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -112,6 +114,8 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.Int64Var(&cfg.MaxMemory, "max-memory", defaultMaxMemory, "max memory drainer can use")
+	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+
 	return cfg
 }
 
