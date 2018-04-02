@@ -60,7 +60,7 @@ func NewControl(maxResource uint64) *Control {
 		GenTokenRate:     tokenRate,
 		MaxResourceToken: maxResourceToken,
 		ResourceBucket:   resourceBucket,
-		ResourceBalancer: NewResourceBalance(resourceBucket),
+		ResourceBalancer: NewResBalance(resourceBucket),
 	}
 
 	go m.background()

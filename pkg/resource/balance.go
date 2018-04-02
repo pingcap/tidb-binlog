@@ -10,20 +10,20 @@ type Balancer interface {
 	Apply(total, used uint64, algorithm string)
 }
 
-// ResourceBalance is used for balance resource
-type ResourceBalance struct {
+// ResBalance is used for balance resource
+type ResBalance struct {
 	Resources map[string]*Resource
 }
 
-// NewResourceBalance retuns a new ResourceBalance
-func NewResourceBalance(resources map[string]*Resource) Balancer {
-	return &ResourceBalance{
+// NewResBalance retuns a new ResBalance
+func NewResBalance(resources map[string]*Resource) Balancer {
+	return &ResBalance{
 		Resources: resources,
 	}
 }
 
 // Apply implement Balancer.Apply interface
-func (b *ResourceBalance) Apply(total, used uint64, algorithm string) {
+func (b *ResBalance) Apply(total, used uint64, algorithm string) {
 	if len(b.Resources) == 0 {
 		return
 	}
