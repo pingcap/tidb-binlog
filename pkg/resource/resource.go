@@ -5,8 +5,11 @@ import (
 	"time"
 )
 
+// AwardTokenDuration
 var AwardTokenDuration time.Duration = time.Second
+// BalanceResourceAverageDuration
 var BalanceResourceAverageDuration time.Duration = time.Hour
+// BalanceResourceByUsedDuration
 var BalanceResourceByUsedDuration time.Duration = 9 * time.Minute
 
 // Resource is a struct for Resource
