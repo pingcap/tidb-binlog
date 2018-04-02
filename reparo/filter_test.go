@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"testing"
@@ -11,11 +11,11 @@ func TestClient(t *testing.T) {
 	TestingT(t)
 }
 
-var _ = Suite(&testRestoreSuite{})
+var _ = Suite(&testReparoSuite{})
 
-type testRestoreSuite struct{}
+type testReparoSuite struct{}
 
-func (s *testRestoreSuite) TestIsAcceptableBinlog(c *C) {
+func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 	cases := []struct {
 		startTs  int64
 		endTs    int64

@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"flag"
@@ -12,7 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/restore/executor"
+	"github.com/pingcap/tidb-binlog/reparo/executor"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -55,15 +55,15 @@ type Config struct {
 // NewConfig creates a Config object.
 func NewConfig() *Config {
 	c := &Config{}
-	c.FlagSet = flag.NewFlagSet("restore", flag.ContinueOnError)
+	c.FlagSet = flag.NewFlagSet("reparo", flag.ContinueOnError)
 	fs := c.FlagSet
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage of restore:")
+		fmt.Fprintln(os.Stderr, "Usage of reparo:")
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path")
-	fs.StringVar(&c.StartDatetime, "start-datetime", "", "restore from start-datetime, empty string means starting from the beginning of the first file")
-	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "restore end in stop-datetime, empty string means never end.")
+	fs.StringVar(&c.StartDatetime, "start-datetime", "", "recovery from start-datetime, empty string means starting from the beginning of the first file")
+	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "recovery end in stop-datetime, empty string means never end.")
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
@@ -71,7 +71,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
-	fs.BoolVar(&c.printVersion, "V", false, "print restore version info")
+	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")
 	return c
 }
 
@@ -112,7 +112,7 @@ func (c *Config) Parse(args []string) error {
 	c.adjustDoDBAndTable()
 
 	// replace with environment vars
-	if err := flags.SetFlagsFromEnv("RESTORE", c.FlagSet); err != nil {
+	if err := flags.SetFlagsFromEnv("Reparo", c.FlagSet); err != nil {
 		return errors.Trace(err)
 	}
 
