@@ -211,7 +211,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, oldColumnValues)
+		key, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
