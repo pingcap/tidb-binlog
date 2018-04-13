@@ -29,6 +29,7 @@ const (
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
+	defaultGenBinlogInterval = 3 // second
 
 	kafkaWriteMode = "kafka"
 	// mixedWriteMode will write binlog to local file and then send to kafka
@@ -55,11 +56,13 @@ type Config struct {
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
 	WriteMode         string          `toml:"write-mode" json:"write-mode"`
-	MetricsAddr       string
-	MetricsInterval   int
-	configFile        string
-	printVersion      bool
-	tls               *tls.Config
+	GenBinlogInterval int             `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
+
+	MetricsAddr     string
+	MetricsInterval int
+	configFile      string
+	printVersion    bool
+	tls             *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -95,6 +98,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
+	fs.IntVar(&cfg.GenBinlogInterval, "gen-binlog-interval", defaultGenBinlogInterval, "number of seconds for generate fake binlog")
+
 	return cfg
 }
 
