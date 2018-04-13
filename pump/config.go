@@ -98,7 +98,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
-	fs.IntVar(&cfg.GenBinlogInterval, "gen-binlog-interval", defaultGenBinlogInterval, "number of seconds for generate fake binlog")
+	fs.IntVar(&cfg.GenBinlogInterval, "gen-binlog-interval", defaultGenBinlogInterval, "interval time for generate fake binlog")
 
 	return cfg
 }
