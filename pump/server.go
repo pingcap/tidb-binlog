@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
@@ -458,11 +457,12 @@ func (s *Server) writeFakeBinlog() {
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog.Set(true)
+	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		case <-time.After(genBinlogInterval):
+		case <-time.After(genFakeBinlogInterval):
 			s.writeFakeBinlog()
 		}
 	}
