@@ -457,7 +457,7 @@ func (s *Server) writeFakeBinlog() {
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog.Set(true)
-	genFakeBinlogInterval := time.Duration(s.cfg.GenBinlogInterval) * time.Second
+	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
 		case <-s.ctx.Done():
