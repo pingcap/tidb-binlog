@@ -150,7 +150,6 @@ func (p *Proxy) sync() {
 		if enabelDebug {
 			printDebugBinlog(entity, pos)
 		}
-
 		_, err := p.replicate.WriteTail(entity.Payload)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
@@ -177,7 +176,7 @@ func (p *Proxy) sync() {
 }
 
 func printDebugBinlog(entity binlog.Entity, pos binlog.Pos) {
-	str := fmt.Sprintf("========== [proxy debug] update position from %+v to %+v\n", pos, entity.Pos)
+	str := fmt.Sprintf("\n========== [proxy debug] update position from %+v to %+v\n", pos, entity.Pos)
 
 	b := new(binlog.Binlog)
 	err := b.Unmarshal(entity.Payload)
