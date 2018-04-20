@@ -213,6 +213,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
 func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+	log.Infof("[binlogger] walk from position %+v", from)
 	var ent = &binlog.Entity{}
 	var decoder Decoder
 	var first = true

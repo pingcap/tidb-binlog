@@ -38,6 +38,8 @@ const (
 	mixedWriteMode = "mixed"
 )
 
+var enabelDebug bool
+
 // Config holds the configuration of pump
 type Config struct {
 	*flag.FlagSet
@@ -102,6 +104,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
+	fs.BoolVar(&enabelDebug, "enable-debug", false, "enable print debug log")
 
 	return cfg
 }

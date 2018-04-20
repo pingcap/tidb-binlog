@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -40,9 +41,14 @@ func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enable
 		enableTolerant: enableTolerant,
 	}
 
+	log.Infof("proxy checkpoint %+v", cp.pos())
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 
-	go p.sync()
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sync()
+	}()
 
 	return p
 }
@@ -139,11 +145,12 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 }
 
 func (p *Proxy) sync() {
-	p.wg.Add(1)
-	defer p.wg.Done()
-
 	pos := p.cp.pos()
 	syncBinlog := func(entity binlog.Entity) error {
+		if enabelDebug {
+			printDebugBinlog(entity, pos)
+		}
+
 		_, err := p.replicate.WriteTail(entity.Payload)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
@@ -167,4 +174,22 @@ func (p *Proxy) sync() {
 			time.Sleep(time.Second)
 		}
 	}
+}
+
+func printDebugBinlog(entity binlog.Entity, pos binlog.Pos) {
+	str := fmt.Sprintf("========== [proxy debug] update position from %+v to %+v\n", pos, entity.Pos)
+
+	b := new(binlog.Binlog)
+	err := b.Unmarshal(entity.Payload)
+	if err != nil {
+		// skip?
+		str = str + fmt.Sprintf("unmarshal payload error %v \n", err)
+	} else {
+		str = str + fmt.Sprintf("binlog start ts %d \n", b.StartTs)
+		str = str + fmt.Sprintf("binlog commit ts %d \n", b.CommitTs)
+		str = str + fmt.Sprintf("binlog Type ts %d \n", b.GetTp())
+	}
+
+	str = str + "=================================================================\n"
+	log.Warning(str)
 }
