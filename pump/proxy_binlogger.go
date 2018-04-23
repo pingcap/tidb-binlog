@@ -147,7 +147,7 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 func (p *Proxy) sync() {
 	pos := p.cp.pos()
 	syncBinlog := func(entity binlog.Entity) error {
-		if enabelDebug {
+		if enableDebug {
 			printDebugBinlog(entity, pos)
 		}
 		_, err := p.replicate.WriteTail(entity.Payload)
