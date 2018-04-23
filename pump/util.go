@@ -133,6 +133,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 		config.Producer.Partitioner = sarama.NewManualPartitioner
 		config.Producer.MaxMessageBytes = maxMsgSize
 		config.Producer.Return.Successes = true
+		config.Producer.RequiredAcks = sarama.WaitForAll
 
 		client, err = sarama.NewSyncProducer(addr, config)
 		if err != nil {
