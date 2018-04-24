@@ -12,6 +12,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/resource"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -59,10 +60,12 @@ type Pump struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	isFinished int64
+
+	memControl *resource.Control
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos, memControl *resource.Control) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
@@ -81,6 +84,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		memControl: memControl,
 	}, nil
 }
 
@@ -112,6 +116,8 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
 	}
+	p.memControl.Free(EstimateSize(ent), p.nodeID)
+	p.memControl.Allocate(EstimateSize(b), p.nodeID)
 
 	p.mu.Lock()
 	switch b.Tp {
@@ -131,6 +137,7 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
+
 	return b
 }
 
@@ -295,6 +302,8 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
 		}
+		p.memControl.Free(EstimateSize(item), p.nodeID)
+		p.memControl.Allocate(EstimateSize(item), "all")
 		p.bh.push(p.ctx, item)
 	}
 
@@ -430,6 +439,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			Pos:     pos,
 			Payload: payload,
 		}
+		p.memControl.Allocate(EstimateSize(entity), p.nodeID)
+
 		b := p.match(entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{

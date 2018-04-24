@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/resource"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -56,11 +57,12 @@ type Syncer struct {
 
 	c *causality
 
+	memControl   *resource.Control
 	lastSyncTime time.Time
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, memControl *resource.Control) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
@@ -72,6 +74,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = newCausality()
+	syncer.memControl = memControl
 	syncer.lastSyncTime = time.Now()
 
 	return syncer, nil
@@ -135,6 +138,9 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			if err != nil {
 				return nil, errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
+
+			s.memControl.Free(EstimateSize(binlog), "all")
+
 			schemaVersion = preWrite.GetSchemaVersion()
 		} else {
 			schemaVersion = b.job.BinlogInfo.SchemaVersion
@@ -392,6 +398,7 @@ func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
 }
 
 func (s *Syncer) addJob(job *job) {
+	s.memControl.Allocate(EstimateSize(job), "all")
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
@@ -420,6 +427,7 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+	s.memControl.Allocate(2*uint64(len(sql)), "all")
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
 	s.addJob(job)
 	return nil
@@ -501,6 +509,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			idx++
 
 			if job.binlogTp == translator.DDL {
+				s.memControl.Free(2*uint64(len(job.sql)), "all")
 				// compute txn duration
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
@@ -520,6 +529,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			}
 
 			if (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+				s.memControl.Free(EstimateSize(sqls), "all")
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -574,6 +584,8 @@ func (s *Syncer) run(b *binlogItem) error {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
+		s.memControl.Free(EstimateSize(binlog), "all")
+
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
@@ -581,6 +593,8 @@ func (s *Syncer) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
+			//s.memControl.Allocate(EstimateSize(preWrite, "all"))
+
 			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
@@ -678,6 +692,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			}
 			offsets[pb.MutationType_DeleteRow] = 0
 		}
+		//s.memControl.Free(EstimateSize(mutation), "all")
 
 		for _, dmlType := range sequences {
 			if offsets[dmlType] >= len(sqls[dmlType]) {

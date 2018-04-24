@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
+	"github.com/pingcap/tidb-binlog/pkg/resource"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
@@ -60,10 +61,12 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+
+	memControl *resource.Control
 }
 
 // NewCollector returns an instance of Collector
-func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
+func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint, memControl *resource.Control) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -109,6 +112,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		offsetSeeker:    offsetSeeker,
+		memControl:      memControl,
 		syncedCheckTime: cfg.SyncedCheckTime,
 	}, nil
 }
@@ -192,6 +196,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
 			if n.IsOffline {
+				c.memControl.OfflineOwner(n.NodeID)
+
 				if n.OfflineTS <= safeTS {
 					continue
 				}
@@ -208,7 +214,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos, c.memControl)
 			if err != nil {
 				return errors.Trace(err)
 			}
