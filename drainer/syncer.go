@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -401,8 +400,9 @@ func (s *Syncer) addJob(job *job) {
 	}
 
 	s.jobWg.Add(1)
-	idx := int(genHashKey(fmt.Sprintf("%v", job.key))) % s.cfg.WorkerCount
+	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
+	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 
 	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
 		s.positions[job.nodeID] = job.pos
@@ -420,32 +420,33 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
 	s.addJob(job)
 	return nil
 }
 
 func (s *Syncer) resolveCasuality(keys []string) (string, error) {
-	if s.cfg.DisableCausality {
-		if len(keys) > 0 {
-			return keys[0], nil
-		}
+	if len(keys) == 0 {
 		return "", nil
 	}
+
+	if s.cfg.DisableCausality {
+		return keys[0], nil
+	}
+
 	if s.c.detectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
 		s.c.reset()
 	}
+
 	if err := s.c.add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
-	var key string
-	if len(keys) > 0 {
-		key = keys[0]
-	}
-	return s.c.get(key), nil
+
+	return s.c.get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {
@@ -456,6 +457,7 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
+	log.Infof("[write save point]%d[positions]%v", ts, positions)
 	err := s.cp.Save(ts, positions)
 	if err != nil {
 		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
