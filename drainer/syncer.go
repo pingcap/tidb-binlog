@@ -393,7 +393,6 @@ func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
 func (s *Syncer) addJob(job *job) {
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
-		log.Debug("ddl job wait dml to commit")
 		s.jobWg.Wait()
 	} else if job.binlogTp == translator.FLUSH {
 		s.jobWg.Wait()
@@ -411,7 +410,6 @@ func (s *Syncer) addJob(job *job) {
 
 	wait := s.checkWait(job)
 	if wait {
-		log.Debug("wait to save checkpoint")
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
 	}
@@ -459,6 +457,7 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
+	log.Infof("[write save point]%d[positions]%v", ts, positions)
 	err := s.cp.Save(ts, positions)
 	if err != nil {
 		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
