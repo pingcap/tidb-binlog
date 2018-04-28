@@ -15,20 +15,25 @@ type pbExecutor struct {
 
 func newPB(cfg *DBConfig) (Executor, error) {
 	var (
-		binlogger pump.Binlogger
-		err       error
+		binlogger  pump.Binlogger
+		err        error
+		needCreate = true
+		dirPath    = cfg.BinlogFileDir
 	)
-	dirPath := cfg.BinlogFileDir
-	names, err := bf.ReadDir(dirPath)
-	if err != nil {
-		return nil, errors.Trace(err)
+
+	if pump.Exist(dirPath) {
+		// ignore file not found error
+		binlogNames, _ := bf.ReadBinlogNames(dirPath)
+		if len(binlogNames) > 0 {
+			needCreate = false
+		}
 	}
 
 	codec := compress.ToCompressionCodec(cfg.Compression)
-	if len(names) > 0 {
-		binlogger, err = pump.OpenBinlogger(dirPath, codec)
-	} else {
+	if needCreate {
 		binlogger, err = pump.CreateBinlogger(dirPath, codec)
+	} else {
+		binlogger, err = pump.OpenBinlogger(dirPath, codec)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)

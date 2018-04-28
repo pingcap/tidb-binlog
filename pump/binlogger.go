@@ -68,17 +68,15 @@ type binlogger struct {
 
 // CreateBinlogger creates a binlog directory, then can append binlogs
 func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
-	if Exist(dirpath) {
-		return nil, os.ErrExist
-	}
-
-	if err := bf.CreateDirAll(dirpath); err != nil {
-		return nil, errors.Trace(err)
+	if !Exist(dirpath) {
+		if err := bf.CreateDirAll(dirpath); err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	p := path.Join(dirpath, bf.BinlogName(0))
 	log.Infof("create and lock binlog file %s", p)
-	f, err := file.LockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	f, err := file.LockFile(p, os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -96,7 +94,7 @@ func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	names, err := bf.ReadBinlogNames(dirpath)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	if !bf.IsValidBinlog(names) {
