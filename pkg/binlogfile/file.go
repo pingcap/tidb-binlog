@@ -122,13 +122,13 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 func FilterBinlogNames(names []string) []string {
 	var fnames []string
 	for _, name := range names {
-		if strings.HasSuffix(name, "checkpoint") {
+		if strings.HasSuffix(name, "checkpoint") || strings.HasSuffix(name, ".lock") {
 			continue
 		}
 
 		if _, err := ParseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
-				log.Infof("ignored file %v in wal", name)
+				log.Infof("ignored file %v in binlog dir", name)
 			}
 			continue
 		}
