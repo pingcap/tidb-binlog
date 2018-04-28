@@ -211,25 +211,9 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		s.dispatcher = kb
 		return kb, nil
 	case mixedWriteMode:
-		var (
-			fb         Binlogger
-			needCreate = true
-			binlogDir  = path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
-		)
+		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
 
-		if Exist(binlogDir) {
-			// ignore file not found error
-			binlogNames, _ := bf.ReadBinlogNames(binlogDir)
-			if len(binlogNames) > 0 {
-				needCreate = false
-			}
-		}
-
-		if needCreate {
-			fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-		} else {
-			fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
-		}
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
