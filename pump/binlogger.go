@@ -82,7 +82,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		return nil, errors.Trace(err)
 	}
 
-	// lock dir firstly
+	// lock directory firstly
 	dirLockFile := path.Join(dirpath, ".lock")
 	dirLock, err = file.LockFile(dirLockFile, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
@@ -91,7 +91,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	defer func() {
 		if err != nil && dirLock != nil {
 			if err1 := dirLock.Close(); err1 != nil {
-				log.Errorf("failed to unlock dir %s with return error %v", dirpath, err)
+				log.Errorf("failed to unlock directory %s: %v with return error %v", dirpath, err1, err)
 			}
 		}
 	}()
