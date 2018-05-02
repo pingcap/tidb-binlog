@@ -93,10 +93,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 		sqls = append(sqls, sql)
 		values = append(values, vals)
-		var key []string
 		// generate dispatching key
 		// find primary keys
-		key, err = m.generateDispatchKey(table, columnValues)
+		key, err := m.generateDispatchKey(table, columnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
@@ -158,13 +157,17 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, oldColumnValues)
+		oldKey, err := m.generateDispatchKey(table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		newKey, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
+		key := append(newKey, oldKey...)
 		keys = append(keys, key)
-
 	}
 
 	return sqls, keys, values, nil
@@ -200,6 +203,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		sqls = append(sqls, deleteSQL)
 		values = append(values, deleteValue)
 		keys = append(keys, deleteKey)
@@ -215,6 +219,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		keys = append(keys, key)
 	}
 
@@ -241,6 +246,7 @@ func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
+
 		values = append(values, value)
 		sqls = append(sqls, sql)
 		keys = append(keys, key)
@@ -374,14 +380,13 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 	}
 
 	var cols []*model.ColumnInfo
+	columns := make(map[string]*model.ColumnInfo)
+	for _, col := range table.Columns {
+		columns[col.Name.O] = col
+	}
+
 	for _, idx := range table.Indices {
 		if idx.Primary {
-			columns := make(map[string]*model.ColumnInfo)
-
-			for _, col := range table.Columns {
-				columns[col.Name.O] = col
-			}
-
 			for _, col := range idx.Columns {
 				if column, ok := columns[col.Name.O]; ok {
 					cols = append(cols, column)
@@ -391,7 +396,6 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 			if len(cols) == 0 {
 				return nil, errors.New("primay index is empty, but should not be empty")
 			}
-
 			return cols, nil
 		}
 	}
@@ -429,6 +433,7 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if ok {
@@ -436,9 +441,10 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, fmt.Sprintf("%s:%s", col.Name.O, value.GetValue()))
+
+			columnsValues = append(columnsValues, fmt.Sprintf("[%s: %v]", col.Name, value.GetValue()))
 		} else {
-			columnsValues = append(columnsValues, fmt.Sprintf("%s:%s", col.Name.O, col.DefaultValue))
+			columnsValues = append(columnsValues, fmt.Sprintf("[%s: %v]", col.Name, col.DefaultValue))
 		}
 	}
 	return columnsValues, nil
