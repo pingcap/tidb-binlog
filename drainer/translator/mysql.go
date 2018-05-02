@@ -436,9 +436,9 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", value.GetValue()))
+			columnsValues = append(columnsValues, fmt.Sprintf("%s:%s", col.Name.O, value.GetValue()))
 		} else {
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", col.DefaultValue))
+			columnsValues = append(columnsValues, fmt.Sprintf("%s:%s", col.Name.O, col.DefaultValue))
 		}
 	}
 	return columnsValues, nil
