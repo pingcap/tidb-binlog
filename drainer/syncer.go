@@ -93,9 +93,9 @@ func closeJobChans(jobChs []chan *job) {
 }
 
 // Start starts to sync.
-func (s *Syncer) Start(jobs []*model.Job, initCommitTS int64) error {
+func (s *Syncer) Start(jobs []*model.Job) error {
 	// prepare schema for work
-	b, err := s.prepare(jobs, initCommitTS)
+	b, err := s.prepare(jobs)
 	if err != nil || b == nil {
 		return errors.Trace(err)
 	}
@@ -110,7 +110,7 @@ func (s *Syncer) Start(jobs []*model.Job, initCommitTS int64) error {
 
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
-func (s *Syncer) prepare(jobs []*model.Job, initCommitTS int64) (*binlogItem, error) {
+func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 	var latestSchemaVersion int64
 	var schemaVersion int64
 	var b *binlogItem
@@ -142,7 +142,7 @@ func (s *Syncer) prepare(jobs []*model.Job, initCommitTS int64) (*binlogItem, er
 			latestSchemaVersion = schemaVersion
 		}
 
-		if commitTS <= initCommitTS {
+		if commitTS <= s.initCommitTS {
 			continue
 		}
 
