@@ -52,6 +52,7 @@ func (sp *PbCheckPoint) Load() error {
 		return errors.Trace(err)
 	}
 	if os.IsNotExist(errors.Cause(err)) {
+		sp.CommitTS = sp.initialCommitTS
 		return nil
 	}
 	defer file.Close()

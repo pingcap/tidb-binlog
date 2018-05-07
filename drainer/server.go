@@ -206,7 +206,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 			s.wg.Done()
 			s.Close()
 		}()
-		err := s.syncer.Start(jobs)
+		err := s.syncer.Start(jobs, getSafeTS(s.syncer.initCommitTS, int64(s.cfg.SafeLeadTime)))
 		if err != nil {
 			log.Errorf("syncer exited, error %v", errors.ErrorStack(err))
 		}
