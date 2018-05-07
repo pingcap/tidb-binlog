@@ -296,7 +296,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 			return ret, err
 		}
 
-		lossBinlogCacheCounter.Add(1)
+		lossBinlogCacheCounter.WithLabelValues(s.node.ID()).Add(1)
 		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 	}
 

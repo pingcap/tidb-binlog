@@ -268,10 +268,12 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 
 			buf := binlogBufferPool.Get().(*binlogBuffer)
+			beginTime := time.Now()
 			err = decoder.Decode(ent, buf)
 			if err != nil {
 				break
 			}
+			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
 			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
@@ -339,7 +341,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
-		binlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
+		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
 	}()
 
 	b.mutex.Lock()

@@ -282,7 +282,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 	}
 
 	p.putIntoHeap(items)
-	binlogCounter.Add(float64(len(items)))
+	publishBinlogCounter.WithLabelValues(p.nodeID).Add(float64(len(items)))
 	return nil
 }
 
@@ -294,6 +294,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
+			continue
 		}
 		p.bh.push(p.ctx, item)
 	}
@@ -415,7 +416,10 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
-		var payload []byte
+		var (
+			payload   []byte
+			beginTime = time.Now()
+		)
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
@@ -425,6 +429,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			pos.Offset = msg.Offset
 			payload = msg.Value
 		}
+		readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+		readBinlogCounter.WithLabelValues(p.nodeID).Add(1)
 
 		entity := pb.Entity{
 			Pos:     pos,

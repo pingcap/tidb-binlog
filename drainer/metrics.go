@@ -26,30 +26,13 @@ var (
 			Help:      "Save point for each node.",
 		}, []string{"nodeID"})
 
-	rpcCounter = prometheus.NewCounterVec(
+	publishBinlogCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "rpc_counter",
-			Help:      "RPC counter for every rpc related operations.",
-		}, []string{"method", "label"})
-
-	rpcHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "rpc_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
-			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
-		}, []string{"method", "label"})
-
-	binlogCounter = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "binlog_count_total",
+			Name:      "publish_binlog_count_total",
 			Help:      "Total binlog count been stored.",
-		})
+		}, []string{"nodeID"})
 
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -96,20 +79,43 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
+	readBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "read_binlog_duration_time",
+			Help:      "Bucketed histogram of read time (s) of a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+		}, []string{"nodeID"})
+	readBinlogCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "read_binlog_counter",
+			Help:      "Total count of read binlog",
+		}, []string{"nodeID"})
+	waitFlushJobsCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "wait_flush_jobs_counter",
+			Help:      "Total count of binlog that wait to flushed",
+		}, []string{"type"})
 )
 
 func init() {
 	prometheus.MustRegister(windowGauge)
 	prometheus.MustRegister(savepointGauge)
-	prometheus.MustRegister(rpcCounter)
-	prometheus.MustRegister(rpcHistogram)
-	prometheus.MustRegister(binlogCounter)
+	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
 	prometheus.MustRegister(tikvQueryCount)
 	prometheus.MustRegister(errorBinlogCount)
 	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
+	prometheus.MustRegister(readBinlogHistogram)
+	prometheus.MustRegister(readBinlogCounter)
+	prometheus.MustRegister(waitFlushJobsCounter)
 }
 
 type metricClient struct {

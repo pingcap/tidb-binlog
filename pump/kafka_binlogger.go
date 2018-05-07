@@ -57,7 +57,7 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("kafka").Observe(time.Since(beginTime).Seconds())
-		binlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(payload)))
+		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(payload)))
 	}()
 
 	// for concurrency write
