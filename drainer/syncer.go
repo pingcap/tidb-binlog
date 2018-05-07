@@ -395,6 +395,9 @@ func (s *Syncer) addJob(job *job) {
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
 	} else if job.binlogTp == translator.FLUSH {
+		for i := 0; i < s.cfg.WorkerCount; i++ {
+			s.jobCh[i] <- job
+		}
 		s.jobWg.Wait()
 		return
 	}
@@ -521,7 +524,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				tpCnt[job.mutationTp]++
 			}
 
-			if (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+			if job.binlogTp == translator.FLUSH || (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -537,7 +540,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
-
 			}
 
 			time.Sleep(executionWaitTime)
