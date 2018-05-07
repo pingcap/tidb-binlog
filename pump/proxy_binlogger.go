@@ -31,14 +31,12 @@ type Proxy struct {
 	cancel context.CancelFunc
 }
 
-func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enableTolerant bool) Binlogger {
+func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint) Binlogger {
 	p := &Proxy{
 		nodeID:    nodeID,
 		master:    master,
 		replicate: replicate,
 		cp:        cp,
-
-		enableTolerant: enableTolerant,
 	}
 
 	log.Infof("proxy checkpoint %+v", cp.pos())
@@ -64,15 +62,6 @@ func (p *Proxy) WriteTail(payload []byte) (int64, error) {
 	defer p.Unlock()
 
 	n, err := p.master.WriteTail(payload)
-	if err != nil {
-		lossBinlogCacheCounter.WithLabelValues(p.nodeID).Add(1)
-		log.Errorf("write binlog error %v", err)
-	}
-
-	if p.enableTolerant {
-		return 0, nil
-	}
-
 	return n, errors.Trace(err)
 }
 
@@ -83,6 +72,7 @@ func (p *Proxy) Close() error {
 
 	var pos binlog.Pos
 	for {
+		// wait to write all binlogs into slave
 		pos = p.cp.pos()
 		entities, err := p.master.ReadFrom(pos, 1)
 		if err == nil {

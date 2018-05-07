@@ -243,7 +243,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		}
 
 		s.cp = cp
-		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
+		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp)
 		return s.dispatcher, nil
 
 	default:
@@ -269,12 +269,10 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		} else {
 			label = "succ"
 		}
-		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
-		if len(in.Payload) > 100*1024*1024 {
-			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
-		}
+		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
+		binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
 	}()
 
 	s.needGenBinlog.Set(false)
@@ -293,9 +291,14 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+		if !s.cfg.EnableTolerant {
+			ret.Errmsg = err1.Error()
+			err = errors.Trace(err1)
+			return ret, err
+		}
+
+		lossBinlogCacheCounter.WithLabelValues(s.node.ID()).Add(1)
+		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 	}
 
 	return ret, nil
