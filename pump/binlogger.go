@@ -339,6 +339,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+		binlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
 	}()
 
 	b.mutex.Lock()

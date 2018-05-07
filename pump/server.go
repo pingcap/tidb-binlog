@@ -272,7 +272,6 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 
 		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
-		binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
 	}()
 
 	s.needGenBinlog.Set(false)
@@ -297,7 +296,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 			return ret, err
 		}
 
-		lossBinlogCacheCounter.WithLabelValues(s.node.ID()).Add(1)
+		lossBinlogCacheCounter.Add(1)
 		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 	}
 
