@@ -69,6 +69,7 @@ type binlogger struct {
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
 		lastFileName   string

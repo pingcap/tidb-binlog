@@ -181,7 +181,10 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DisableDispatch {
+	if c.DestDBType == "pb" {
+		c.DisableDispatch = true
+		c.WorkerCount = 1
+	} else if c.DisableDispatch {
 		c.WorkerCount = 1
 	}
 }
