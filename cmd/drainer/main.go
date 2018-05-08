@@ -25,8 +25,12 @@ func main() {
 	}
 
 	drainer.InitLogger(cfg)
+
+	// print it whatever the config log level is
+	log.SetLevelByString("debug")
 	version.PrintVersionInfo()
 	log.Infof("use config: %+v", cfg.String())
+	log.SetLevelByString(cfg.LogLevel)
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {
