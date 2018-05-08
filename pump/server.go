@@ -270,7 +270,6 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 			label = "succ"
 		}
 
-		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
