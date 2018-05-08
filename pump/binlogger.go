@@ -178,7 +178,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 		if first {
 			first = false
-			err := seekOffset(f, from.Offset)
+			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return ents, errors.Trace(err)
 			}
@@ -263,7 +263,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 		if first {
 			first = false
-			err := seekOffset(f, from.Offset)
+			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return errors.Trace(err)
 			}

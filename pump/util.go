@@ -157,7 +157,7 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 		tail      = buff[3:]
 	)
 
-	err := seekOffset(f, offset)
+	_, err := f.Seek(offset, io.SeekStart)
 	if err != nil {
 		return 0, err
 	}
@@ -175,7 +175,7 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 			err = checkMagic(magicNum)
 			if err == nil {
 				offset = offset + int64(i)
-				if err1 := seekOffset(f, offset); err1 != nil {
+				if _, err1 := f.Seek(offset, io.SeekStart); err1 != nil {
 					return 0, errors.Trace(err1)
 				}
 				return offset, nil
@@ -189,16 +189,4 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 		offset += int64(batchSize - 4)
 		header[0], header[1], header[2] = tail[batchSize-3], tail[batchSize-2], tail[batchSize-1]
 	}
-}
-
-func seekOffset(f *os.File, offset int64) error {
-	currentOffset, err := f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	if currentOffset < offset {
-		return errors.Errorf("seek to wrong offset %d is, not expected %d", currentOffset, offset)
-	}
-
-	return nil
 }

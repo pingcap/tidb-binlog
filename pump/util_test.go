@@ -1,14 +1,14 @@
 package pump
 
 import (
-	"io"
 	"io/ioutil"
 	"os"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 )
 
-func (t *testPumpServerSuite) TestSeekOffset(c *C) {
+func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	f, err := ioutil.TempFile(os.TempDir(), "testOffset")
 	c.Assert(err, IsNil)
 	defer func() {
@@ -16,18 +16,22 @@ func (t *testPumpServerSuite) TestSeekOffset(c *C) {
 		os.Remove(f.Name())
 	}()
 
-	content := "test offset"
-	_, err = f.Write([]byte(content))
+	encoder := newEncoder(f, compress.CompressionNone)
+	_, err = encoder.Encode([]byte("testOffset"))
 	c.Assert(err, IsNil)
 
-	offsets := []int64{0, 5, 10}
-	for _, offset := range offsets {
-		err = seekOffset(f, offset)
-		c.Assert(err, IsNil)
+	_, err = f.Write([]byte("aaa"))
+	c.Assert(err, IsNil)
 
-		b := make([]byte, 1)
-		_, err = io.ReadFull(f, b)
-		c.Assert(err, IsNil)
-		c.Assert(b[0], Equals, content[offset])
-	}
+	_, err = encoder.Encode([]byte("testOffset"))
+	c.Assert(err, IsNil)
+	_, err = f.Write([]byte("aaa"))
+	c.Assert(err, IsNil)
+
+	offset, err := seekNextBinlog(f, 10)
+	c.Assert(offset, Equals, 12)
+	c.Assert(err, IsNil)
+
+	_, err = seekNextBinlog(f, 15)
+	c.Assert(err, isNil)
 }
