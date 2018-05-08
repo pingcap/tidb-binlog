@@ -73,7 +73,12 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 // Load implements CheckPoint.Load interface
 func (sp *MysqlCheckPoint) Load() error {
 	sp.Lock()
-	defer sp.Unlock()
+	defer func() {
+		if sp.CommitTS == 0 {
+			sp.CommitTS = sp.initialCommitTS
+		}
+		sp.Unlock()
+	}()
 
 	sql := genSelectSQL(sp)
 	rows, err := querySQL(sp.db, sql)
@@ -101,9 +106,6 @@ func (sp *MysqlCheckPoint) Load() error {
 		return errors.Trace(err)
 	}
 
-	if sp.CommitTS == 0 {
-		sp.CommitTS = sp.initialCommitTS
-	}
 	return nil
 }
 
