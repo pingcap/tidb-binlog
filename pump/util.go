@@ -165,6 +165,9 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 	// read head firstly
 	_, err = io.ReadFull(f, header)
 	if err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return 0, io.EOF
+		}
 		return 0, err
 	}
 
@@ -181,6 +184,9 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 			}
 		}
 		if err != nil {
+			if err == io.ErrUnexpectedEOF {
+				return 0, io.EOF
+			}
 			return 0, err
 		}
 

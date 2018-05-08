@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"io"
 	"io/ioutil"
 	"os"
 
@@ -33,5 +34,5 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	c.Assert(err, IsNil)
 
 	_, err = seekNextBinlog(f, 35)
-	c.Assert(err, IsNil)
+	c.Assert(err, io.EOF)
 }
