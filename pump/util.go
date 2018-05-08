@@ -1,7 +1,9 @@
 package pump
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -145,4 +147,58 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	}
 
 	return nil, errors.Trace(err)
+}
+
+func seekMagic(f *os.File, offset int64) (int64, error) {
+	var (
+		batchSize = 1024
+		buff      = make([]byte, batchSize)
+		header    = buff[0:3]
+		tail      = buff[3:]
+	)
+
+	err := seekOffset(f, offset)
+	if err != nil {
+		return 0, err
+	}
+
+	// read head firstly
+	_, err = io.ReadFull(f, header)
+	if err != nil {
+		return 0, err
+	}
+
+	for {
+		_, err = io.ReadFull(f, tail)
+		for i := 0; i < batchSize-3; i++ {
+			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
+			err = checkMagic(magicNum)
+			if err == nil {
+				offset = offset + int64(i)
+				if err1 := seekOffset(f, offset); err1 != nil {
+					return 0, errors.Trace(err1)
+				}
+				return offset, nil
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		// hard code
+		offset += int64(batchSize - 4)
+		header[0], header[1], header[2] = tail[batchSize-3], tail[batchSize-2], tail[batchSize-1]
+	}
+}
+
+func seekOffset(f *os.File, offset int64) error {
+	currentOffset, err := f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	if currentOffset < offset {
+		return errors.Errorf("seek to wrong offset %d is, not expected %d", currentOffset, offset)
+	}
+
+	return nil
 }
