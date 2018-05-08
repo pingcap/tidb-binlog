@@ -149,7 +149,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()

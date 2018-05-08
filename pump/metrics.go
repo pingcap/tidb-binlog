@@ -19,13 +19,13 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"method", "label"})
 
-	lossBinlogCacheCounter = prometheus.NewCounterVec(
+	lossBinlogCacheCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "pump",
-			Name:      "binlog_count",
+			Name:      "loss_binlog_count",
 			Help:      "Total loss binlog count",
-		}, []string{"nodeID"})
+		})
 
 	writeBinlogSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{

@@ -18,19 +18,19 @@ var (
 			Help:      "DepositWindow boundary.",
 		}, []string{"marker"})
 
-	savepointGauge = prometheus.NewGaugeVec(
+	offsetGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "savepoint",
-			Help:      "Save point for each node.",
+			Name:      "offset",
+			Help:      "offset for each pump.",
 		}, []string{"nodeID"})
 
 	publishBinlogCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "publish_binlog_count_total",
+			Name:      "publish_binlog_count",
 			Help:      "Total binlog count been stored.",
 		}, []string{"nodeID"})
 
@@ -104,7 +104,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(windowGauge)
-	prometheus.MustRegister(savepointGauge)
+	prometheus.MustRegister(offsetGauge)
 	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
 	prometheus.MustRegister(tikvQueryCount)

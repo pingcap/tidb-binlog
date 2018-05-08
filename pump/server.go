@@ -289,7 +289,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		lossBinlogCacheCounter.WithLabelValues(s.node.ID()).Add(1)
+		lossBinlogCacheCounter.Add(1)
 		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 
 		if !s.cfg.EnableTolerant {
