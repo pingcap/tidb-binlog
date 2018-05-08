@@ -77,6 +77,13 @@ var (
 			Name:      "read_binlog_error_count",
 			Help:      "read binlog error count",
 		}, []string{"label", "return"})
+	checkpointGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "checkpoint",
+			Help:      "check position of local file",
+		}, []string{"label"})
 )
 
 func init() {
@@ -88,6 +95,7 @@ func init() {
 	prometheus.MustRegister(writeBinlogHistogram)
 	prometheus.MustRegister(readBinlogCounter)
 	prometheus.MustRegister(writeBinlogCounter)
+	prometheus.MustRegister(checkpointGauge)
 }
 
 type metricClient struct {

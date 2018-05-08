@@ -123,6 +123,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	latestFilePos.Suffix = lastFileSuffix
 	latestFilePos.Offset = offset
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
 	binlog := &binlogger{
 		dir:     dirpath,
@@ -373,6 +374,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	}
 
 	latestFilePos.Offset = curOffset
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
 	if curOffset < SegmentSizeBytes {
 		return curOffset, nil
@@ -405,6 +407,8 @@ func (b *binlogger) rotate() error {
 	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
+
 	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)

@@ -128,6 +128,7 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 			log.Errorf("save position %+v error %v", readPos, err)
 			return readPos, errors.Trace(err)
 		}
+		checkpointGauge.WithLabelValues("current").Set(posToFloat(&readPos))
 		return readPos, nil
 	}
 
