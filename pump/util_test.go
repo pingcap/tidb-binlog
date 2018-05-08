@@ -35,7 +35,7 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	c.Assert(err, IsNil)
 
 	_, err = seekNextBinlog(f, 35)
-	c.Assert(err, Equals, io.EOF)
+	c.Assert(err, Equals, io.ErrUnexpectedEOF)
 }
 
 func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
