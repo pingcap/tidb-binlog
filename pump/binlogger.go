@@ -186,7 +186,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 		decoder = NewDecoder(from, io.Reader(f))
 
-		for ; index < nums; index++ {
+		for index < nums {
 			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
 				log.Errorf("decode %+v binlog error %v", from, err)
@@ -213,6 +213,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 				Payload: ent.Payload,
 			}
 			ents = append(ents, newEnt)
+			index++
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
