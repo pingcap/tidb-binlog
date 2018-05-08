@@ -98,6 +98,7 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 			return offsets, errors.Annotatef(err, "get newest offset from topic %s partition %d", topic, partition)
 		}
 
+		log.Infof("seek pos %v in topic %s partition %d, oldest offset %d, newest offset %d", pos, topic, partition, start, end)
 		offset, err := ks.seekOffset(topic, partition, start, end-1, pos)
 		if err != nil {
 			return offsets, errors.Annotatef(err, "seek Offset in topic %s partition %d", topic, partition)

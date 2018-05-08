@@ -234,16 +234,18 @@ func (cfg *Config) validate() error {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
 		if err != nil {
+			log.Errorf("connect to zookeeper cfg.ZkAddr %s error %v", cfg.ZkAddrs, err)
 			return errors.Trace(err)
 		}
 
 		kafkaUrls, err := zkClient.KafkaUrls()
 		if err != nil {
+			log.Errorf("get kafka urls from zookeeper error %v", err)
 			return errors.Trace(err)
 		}
 
 		// use kafka address get from zookeeper to reset the config
-		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		log.Infof("get kafka addrs %v from zookeeper", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
 	}
 
