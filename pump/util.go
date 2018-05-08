@@ -169,11 +169,10 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 	}
 
 	for {
-		_, err = io.ReadFull(f, tail)
-		for i := 0; i < batchSize-3; i++ {
+		n, err := io.ReadFull(f, tail)
+		for i := 0; i < 3+n; i++ {
 			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
-			err = checkMagic(magicNum)
-			if err == nil {
+			if checkMagic(magicNum) == nil {
 				offset = offset + int64(i)
 				if _, err1 := f.Seek(offset, io.SeekStart); err1 != nil {
 					return 0, errors.Trace(err1)
