@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -53,7 +54,7 @@ type SyncerConfig struct {
 
 // Config holds the configuration of drainer
 type Config struct {
-	*flag.FlagSet
+	flagSet         *flag.FlagSet
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
@@ -83,8 +84,8 @@ func NewConfig() *Config {
 		PumpTimeout: defaultPumpTimeout,
 		SyncerCfg:   new(SyncerConfig),
 	}
-	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
-	fs := cfg.FlagSet
+	cfg.flagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
+	fs := cfg.flagSet
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
@@ -116,10 +117,19 @@ func NewConfig() *Config {
 	return cfg
 }
 
+func (cfg *Config) String() string {
+	data, err := json.MarshalIndent(cfg, "\t", "\t")
+	if err != nil {
+		log.Info(err)
+	}
+
+	return string(data)
+}
+
 // Parse parses all config from command-line flags, environment vars or the configuration file
 func (cfg *Config) Parse(args []string) error {
 	// parse first to get config file
-	perr := cfg.FlagSet.Parse(args)
+	perr := cfg.flagSet.Parse(args)
 	switch perr {
 	case nil:
 	case flag.ErrHelp:
@@ -139,12 +149,12 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 	// parse again to replace with command line options
-	cfg.FlagSet.Parse(args)
-	if len(cfg.FlagSet.Args()) > 0 {
-		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
+	cfg.flagSet.Parse(args)
+	if len(cfg.flagSet.Args()) > 0 {
+		return errors.Errorf("'%s' is not a valid flag", cfg.flagSet.Arg(0))
 	}
 	// replace with environment vars
-	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
+	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.flagSet)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -220,9 +230,16 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-	if _, _, err = net.SplitHostPort(urllis.Host); err != nil {
+
+	var host string
+	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
+
+	if host == "127.0.0.1" {
+		log.Warnf("drainer listen on: %v, pumb must access drainer, make sure you only need deploy pumb and drainer on the same host or change the listen addr config", host)
+	}
+
 	// check EtcdEndpoints
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {

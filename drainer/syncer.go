@@ -162,6 +162,9 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			return nil, errors.Trace(err)
 		}
 
+		log.Infof("prepare commitTS: %d", commitTS)
+		log.Infof("prepare schema: %s", s.schema.String())
+
 		return b, nil
 	}
 }
