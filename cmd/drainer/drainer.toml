@@ -1,7 +1,8 @@
 # drainer Configuration.
 
 # addr (i.e. 'host:port') to listen on for drainer connections
-addr = "0.0.0.0:8249"
+# will register this addr into etcd
+# addr = "127.0.0.1:8249"
 
 # the interval time (in seconds) of detect pumps' status
 detect-interval = 10

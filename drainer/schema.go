@@ -49,7 +49,8 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImpl
 
 func (s *Schema) String() string {
 	mp := map[string]interface{}{
-		"tableIDToName": s.tableIDToName,
+		"tableIDToName":  s.tableIDToName,
+		"schemaNameToID": s.schemaNameToID,
 		// "schemas":           s.schemas,
 		// "tables":            s.tables,
 		"ignoreSchema":      s.ignoreSchema,

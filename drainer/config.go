@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	defaultListenAddr     = "0.0.0.0:8249"
 	defaultDataDir        = "data.drainer"
 	defaultDetectInterval = 10
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
@@ -77,8 +76,18 @@ type Config struct {
 	tls             *tls.Config
 }
 
+func defaultListenAddr() string {
+	defaultIP, err := defaultIP()
+	if err != nil {
+		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+	}
+	return defaultIP + ":8249"
+
+}
+
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
+
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
@@ -90,7 +99,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
 	}
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr(), "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
@@ -165,7 +174,7 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, defaultListenAddr)
+	adjustString(&cfg.ListenAddr, defaultListenAddr())
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
@@ -236,8 +245,8 @@ func (cfg *Config) validate() error {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 
-	if host == "127.0.0.1" {
-		log.Fatal("drainer listen on: %v, pumb must access drainer, change the listen addr config", host)
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
 	}
 
 	// check EtcdEndpoints
@@ -270,4 +279,44 @@ func (cfg *Config) validate() error {
 	}
 
 	return nil
+}
+
+func defaultIP() (ip string, err error) {
+	ip = "127.0.0.1"
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return
+	}
+
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip.IsUnspecified() || ip.IsLoopback() {
+				continue
+			}
+
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+
+			return ip.String(), nil
+			// process IP address
+		}
+	}
+
+	err = errors.New("no ip found")
+	return
 }

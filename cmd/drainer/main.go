@@ -24,13 +24,10 @@ func main() {
 		log.Fatalf("verifying flags error, See 'drainer --help'. %s", errors.ErrorStack(err))
 	}
 
-	drainer.InitLogger(cfg)
-
-	// print it whatever the config log level is
-	log.SetLevelByString("info")
 	version.PrintVersionInfo()
 	log.Infof("use config: %+v", cfg)
-	log.SetLevelByString(cfg.LogLevel)
+
+	drainer.InitLogger(cfg)
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {
