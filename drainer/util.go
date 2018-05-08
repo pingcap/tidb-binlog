@@ -69,8 +69,8 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	}
 }
 
-func getSafeTS(ts int64, leadTime int64) int64 {
-	subTime := (leadTime * 60 * 1000) << 18
+func getSafeTS(ts int64, forwardTime int64) int64 {
+	subTime := (forwardTime * 60 * 1000) << 18
 	ts -= subTime
 	if ts < int64(0) {
 		ts = int64(0)

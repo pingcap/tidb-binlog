@@ -51,7 +51,7 @@ type Collector struct {
 	cp         checkpoint.CheckPoint
 
 	syncedCheckTime int
-	safeLeadTime    int
+	safeForwardTime int
 
 	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
@@ -112,7 +112,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		notifyChan:      make(chan *notifyResult),
 		offsetSeeker:    offsetSeeker,
 		syncedCheckTime: cfg.SyncedCheckTime,
-		safeLeadTime:    cfg.SafeLeadTime,
+		safeForwardTime: cfg.SafeForwardTime,
 	}, nil
 }
 
@@ -186,7 +186,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 	// get current binlog's commit ts which in process
 	currentCommitTS, _ := c.cp.Pos()
-	safeTS := getSafeTS(currentCommitTS, int64(c.safeLeadTime))
+	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
 
@@ -339,7 +339,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	}
 
 	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
-	safeCommitTS := getSafeTS(commitTS, int64(c.safeLeadTime))
+	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	offsets, err := c.offsetSeeker.Do(topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
 		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
