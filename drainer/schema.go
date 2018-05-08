@@ -44,18 +44,14 @@ func NewSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}, hasImpl
 		return nil, errors.Trace(err)
 	}
 
-	// log.Infof("[local schema/table] %v", s.tableIDToName)
-	// log.Infof("[local schema] %v", s.schemas)
-	// log.Infof("[ignore schema] %v", s.ignoreSchema)
-
 	return s, nil
 }
 
 func (s *Schema) String() string {
 	mp := map[string]interface{}{
-		"tableIDToName":     s.tableIDToName,
-		"schemas":           s.schemas,
-		"tables":            s.tables,
+		"tableIDToName": s.tableIDToName,
+		// "schemas":           s.schemas,
+		// "tables":            s.tables,
 		"ignoreSchema":      s.ignoreSchema,
 		"schemaMetaVersion": s.schemaMetaVersion,
 		"hasImplicitCol":    s.hasImplicitCol,

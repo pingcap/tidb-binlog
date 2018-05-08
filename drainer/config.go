@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultListenAddr     = "127.0.0.1:8249"
+	defaultListenAddr     = "0.0.0.0:8249"
 	defaultDataDir        = "data.drainer"
 	defaultDetectInterval = 10
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
@@ -54,7 +54,7 @@ type SyncerConfig struct {
 
 // Config holds the configuration of drainer
 type Config struct {
-	flagSet         *flag.FlagSet
+	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
@@ -84,8 +84,8 @@ func NewConfig() *Config {
 		PumpTimeout: defaultPumpTimeout,
 		SyncerCfg:   new(SyncerConfig),
 	}
-	cfg.flagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
-	fs := cfg.flagSet
+	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
+	fs := cfg.FlagSet
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
@@ -120,7 +120,7 @@ func NewConfig() *Config {
 func (cfg *Config) String() string {
 	data, err := json.MarshalIndent(cfg, "\t", "\t")
 	if err != nil {
-		log.Info(err)
+		log.Error(err)
 	}
 
 	return string(data)
@@ -129,7 +129,7 @@ func (cfg *Config) String() string {
 // Parse parses all config from command-line flags, environment vars or the configuration file
 func (cfg *Config) Parse(args []string) error {
 	// parse first to get config file
-	perr := cfg.flagSet.Parse(args)
+	perr := cfg.FlagSet.Parse(args)
 	switch perr {
 	case nil:
 	case flag.ErrHelp:
@@ -149,12 +149,12 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 	// parse again to replace with command line options
-	cfg.flagSet.Parse(args)
-	if len(cfg.flagSet.Args()) > 0 {
-		return errors.Errorf("'%s' is not a valid flag", cfg.flagSet.Arg(0))
+	cfg.FlagSet.Parse(args)
+	if len(cfg.FlagSet.Args()) > 0 {
+		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
 	// replace with environment vars
-	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.flagSet)
+	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -237,7 +237,7 @@ func (cfg *Config) validate() error {
 	}
 
 	if host == "127.0.0.1" {
-		log.Warnf("drainer listen on: %v, pumb must access drainer, make sure you only need deploy pumb and drainer on the same host or change the listen addr config", host)
+		log.Fatal("drainer listen on: %v, pumb must access drainer, change the listen addr config", host)
 	}
 
 	// check EtcdEndpoints
