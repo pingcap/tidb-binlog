@@ -180,7 +180,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			first = false
 			err := seekOffset(f, from.Offset)
 			if err != nil {
-				return errors.Trace(err)
+				return ents, errors.Trace(err)
 			}
 		}
 
@@ -191,7 +191,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			if err != nil {
 				log.Errorf("decode %+v binlog error %v", from, err)
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
-					offset, err1 := seekMagic(f, from.Offset)
+					offset, err1 := seekNextBinlog(f, from.Offset)
 					if err1 == nil {
 						from.Offset = offset
 						decoder = NewDecoder(from, io.Reader(f))
@@ -285,7 +285,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				// seek next binlog and report metrics
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
 					log.Errorf("decode %+v binlog error %v", from, err)
-					offset, err1 := seekMagic(f, from.Offset)
+					offset, err1 := seekNextBinlog(f, from.Offset)
 					if err1 == nil {
 						from.Offset = offset
 						decoder = NewDecoder(from, io.Reader(f))

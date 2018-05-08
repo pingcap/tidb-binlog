@@ -149,7 +149,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	return nil, errors.Trace(err)
 }
 
-func seekMagic(f *os.File, offset int64) (int64, error) {
+func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 	var (
 		batchSize = 1024
 		buff      = make([]byte, batchSize)
