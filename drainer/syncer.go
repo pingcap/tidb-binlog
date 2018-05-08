@@ -111,6 +111,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
 func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
+	log.Infof("[prepare] begin to construct schema infomation in syncer")
 	var latestSchemaVersion int64
 	var schemaVersion int64
 	var b *binlogItem
