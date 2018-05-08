@@ -57,6 +57,7 @@ var (
 			Name:      "error_binlog_count",
 			Help:      "Total count of binlog that store too late.",
 		})
+
 	eventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -64,6 +65,7 @@ var (
 			Name:      "event",
 			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
+
 	positionGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -71,6 +73,7 @@ var (
 			Name:      "position",
 			Help:      "save position of drainer.",
 		})
+
 	txnHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -79,6 +82,7 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
+
 	readBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -87,20 +91,6 @@ var (
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"nodeID"})
-	readBinlogCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "read_binlog_counter",
-			Help:      "Total count of read binlog",
-		}, []string{"nodeID"})
-	waitFlushJobsCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "wait_flush_jobs_counter",
-			Help:      "Total count of binlog that wait to flushed",
-		}, []string{"type"})
 )
 
 func init() {
@@ -114,8 +104,6 @@ func init() {
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(readBinlogHistogram)
-	prometheus.MustRegister(readBinlogCounter)
-	prometheus.MustRegister(waitFlushJobsCounter)
 }
 
 type metricClient struct {
