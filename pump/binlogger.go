@@ -186,7 +186,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		}
 
 		decoder = NewDecoder(from, io.Reader(f))
-
 		for ; index < nums; index++ {
 			beginTime := time.Now()
 			err = decoder.Decode(ent, &binlogBuffer{})
@@ -204,10 +203,15 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			ents = append(ents, newEnt)
 		}
 
-		if (err != nil && err != io.EOF) || index == nums {
+		if err != nil && err != io.EOF {
 			readBinlogCounter.WithLabelValues("local", "fail").Add(1)
 			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
 			return ents, err
+		}
+
+		// read enough binlogs
+		if index == nums {
+			return ents, nil
 		}
 
 		from.Suffix++
