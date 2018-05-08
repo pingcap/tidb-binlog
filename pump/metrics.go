@@ -53,6 +53,14 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"label"})
 
+	writeBinlogCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "write_binlog_error_count",
+			Help:      "write binlog error count",
+		}, []string{"label", "return"})
+
 	readBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -61,6 +69,14 @@ var (
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"label"})
+
+	readBinlogCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "read_binlog_error_count",
+			Help:      "read binlog error count",
+		}, []string{"label", "return"})
 )
 
 func init() {
@@ -70,6 +86,8 @@ func init() {
 	prometheus.MustRegister(readBinlogHistogram)
 	prometheus.MustRegister(lossBinlogCacheCounter)
 	prometheus.MustRegister(writeBinlogHistogram)
+	prometheus.MustRegister(readBinlogCounter)
+	prometheus.MustRegister(writeBinlogCounter)
 }
 
 type metricClient struct {

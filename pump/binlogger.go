@@ -274,6 +274,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				break
 			}
 			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+			readBinlogCounter.WithLabelValues("local", "success").Add(1)
 
 			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
@@ -288,6 +289,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		}
 
 		if err != nil && err != io.EOF {
+			readBinlogCounter.WithLabelValues("local", "fail").Add(1)
+			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
 			return errors.Trace(err)
 		}
 
@@ -342,6 +345,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
+		writeBinlogCounter.WithLabelValues("local", "success").Add(1)
 	}()
 
 	b.mutex.Lock()
@@ -353,6 +357,8 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 
 	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
+		writeBinlogCounter.WithLabelValues("local", "fail").Add(1)
+		log.Errorf("write local binlog file %d error %v", latestFilePos.Suffix, err)
 		return 0, errors.Trace(err)
 	}
 

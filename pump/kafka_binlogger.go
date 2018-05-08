@@ -58,6 +58,7 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("kafka").Observe(time.Since(beginTime).Seconds())
 		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(payload)))
+		writeBinlogCounter.WithLabelValues("kafka", "success").Add(1)
 	}()
 
 	// for concurrency write
@@ -69,6 +70,10 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 	}
 
 	offset, err := k.encoder.Encode(payload)
+	if err != nil {
+		writeBinlogCounter.WithLabelValues("kafka", "fail").Add(1)
+		log.Errorf("write binlog into kafka %d error %v", latestKafkaPos.Offset, err)
+	}
 	if offset > latestKafkaPos.Offset {
 		latestKafkaPos.Offset = offset
 	}
