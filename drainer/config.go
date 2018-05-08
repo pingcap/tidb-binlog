@@ -29,7 +29,8 @@ const (
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout     = 5 * time.Second
 	defaultPumpTimeout     = 5 * time.Second
-	defaultSyncedCheckTime = 5 // 5 minute
+	defaultSyncedCheckTime = 5  // 5 minute
+	defaultSafeForwardTime = 20 // 20 minute
 )
 
 var (
@@ -67,6 +68,7 @@ type Config struct {
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
 	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
+	SafeForwardTime int             `toml:"safe-forward-time" json:"safe-forward-time"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -112,6 +114,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	fs.IntVar(&cfg.SafeForwardTime, "safe-forward-time", defaultSafeForwardTime, "how many minutes drainer sync before the commit ts in checkpoint file or initial-commit-ts")
 
 	return cfg
 }
