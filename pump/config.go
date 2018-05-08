@@ -234,7 +234,7 @@ func (cfg *Config) validate() error {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
 		if err != nil {
-			log.Errorf("connect to zookeeper cfg.ZkAddr %s error %v", cfg.ZkAddrs, err)
+			log.Errorf("connect to zookeeper %s error %v", cfg.ZkAddrs, err)
 			return errors.Trace(err)
 		}
 
