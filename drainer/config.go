@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
@@ -79,7 +80,7 @@ type Config struct {
 }
 
 func defaultListenAddr() string {
-	defaultIP, err := defaultIP()
+	defaultIP, err := util.DefaultIP()
 	if err != nil {
 		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
 	}
@@ -235,6 +236,13 @@ func adjustInt(v *int, defValue int) {
 	}
 }
 
+func isValidateListenHost(host string) bool {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		return false
+	}
+	return true
+}
+
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -248,7 +256,7 @@ func (cfg *Config) validate() error {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+	if !isValidateListenHost(host) {
 		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
 	}
 
@@ -282,44 +290,4 @@ func (cfg *Config) validate() error {
 	}
 
 	return nil
-}
-
-func defaultIP() (ip string, err error) {
-	ip = "127.0.0.1"
-
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return
-	}
-
-	for _, i := range ifaces {
-		addrs, err := i.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip.IsUnspecified() || ip.IsLoopback() {
-				continue
-			}
-
-			ip = ip.To4()
-			if ip == nil {
-				continue
-			}
-
-			return ip.String(), nil
-			// process IP address
-		}
-	}
-
-	err = errors.New("no ip found")
-	return
 }
