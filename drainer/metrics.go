@@ -91,6 +91,15 @@ var (
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		}, []string{"nodeID"})
+
+	readBinlogSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "read_binlog_size",
+			Help:      "Bucketed histogram of size of a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+		}, []string{"nodeID"})
 )
 
 func init() {
@@ -104,6 +113,7 @@ func init() {
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(readBinlogHistogram)
+	prometheus.MustRegister(readBinlogSizeHistogram)
 }
 
 type metricClient struct {

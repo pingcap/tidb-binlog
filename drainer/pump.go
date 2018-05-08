@@ -430,6 +430,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			payload = msg.Value
 		}
 		readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+		readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(payload)))
 
 		entity := pb.Entity{
 			Pos:     pos,
