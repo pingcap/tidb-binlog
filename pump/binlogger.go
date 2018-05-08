@@ -188,10 +188,14 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		decoder = NewDecoder(from, io.Reader(f))
 
 		for ; index < nums; index++ {
+			beginTime := time.Now()
 			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
 				break
 			}
+
+			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+			readBinlogCounter.WithLabelValues("local", "success").Add(1)
 
 			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
@@ -201,6 +205,8 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		}
 
 		if (err != nil && err != io.EOF) || index == nums {
+			readBinlogCounter.WithLabelValues("local", "fail").Add(1)
+			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
 			return ents, err
 		}
 
