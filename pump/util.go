@@ -149,6 +149,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	return nil, errors.Trace(err)
 }
 
+// use magic code to find next binlog and skips corruption data
 func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 	var (
 		batchSize = 1024
@@ -162,18 +163,18 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 		return 0, err
 	}
 
-	// read head firstly
+	// read header firstly
 	_, err = io.ReadFull(f, header)
 	if err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return 0, io.EOF
-		}
 		return 0, err
 	}
 
 	for {
+		// read tail
 		n, err := io.ReadFull(f, tail)
+		// maybe it meets EOF and dont read fully
 		for i := 0; i < 3+n; i++ {
+			// forward one byte and compute magic
 			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
 			if checkMagic(magicNum) == nil {
 				offset = offset + int64(i)
@@ -184,9 +185,6 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 			}
 		}
 		if err != nil {
-			if err == io.ErrUnexpectedEOF {
-				return 0, io.EOF
-			}
 			return 0, err
 		}
 

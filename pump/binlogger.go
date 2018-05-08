@@ -197,8 +197,8 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 						decoder = NewDecoder(from, io.Reader(f))
 						continue
 					}
-					if err1 == io.EOF {
-						err = err1
+					if err1 == io.EOF || err1 == io.ErrUnexpectedEOF {
+						err = io.EOF
 					} else {
 						err = errors.Annotatef(err1, "decode %+v binlog error %v, and fail to seek next magic", from, err)
 						log.Error(err)
@@ -292,8 +292,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 						decoder = NewDecoder(from, io.Reader(f))
 						continue
 					}
-					if err1 == io.EOF {
-						err = err1
+					if err1 == io.EOF || err1 == io.ErrUnexpectedEOF {
+						err = io.EOF
 					} else {
 						err = errors.Annotatef(err1, "decode %+v binlog error %v, and fail to seek next magic", from, err)
 					}
