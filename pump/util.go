@@ -160,7 +160,7 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 
 	_, err := f.Seek(offset, io.SeekStart)
 	if err != nil {
-		return 0, err
+		return 0, errors.Trace(err)
 	}
 
 	// read header firstly
