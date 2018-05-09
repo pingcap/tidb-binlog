@@ -211,28 +211,9 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		s.dispatcher = kb
 		return kb, nil
 	case mixedWriteMode:
-		find := false
-		clusterDir := path.Join(s.dataDir, "clusters")
-		names, err := bf.ReadDir(clusterDir)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		for _, n := range names {
-			if s.clusterID == n {
-				find = true
-				break
-			}
-		}
+		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
 
-		var (
-			fb        Binlogger
-			binlogDir = path.Join(clusterDir, s.clusterID)
-		)
-		if find {
-			fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-		} else {
-			fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
-		}
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

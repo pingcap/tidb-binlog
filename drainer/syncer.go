@@ -521,7 +521,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				s.addDDLCount()
 				clearF()
-			} else if !job.isCompleteBinlog {
+			} else if !job.isCompleteBinlog && job.binlogTp != translator.FLUSH {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
