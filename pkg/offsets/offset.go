@@ -110,12 +110,12 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 }
 
 func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, end int64, pos interface{}) (int64, error) {
-	cmp, err := ks.getAndCompare(topic, partition, start, pos)
+	cmp, startPos, err := ks.getAndCompare(topic, partition, start, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
 	if cmp == -1 {
-		log.Errorf("given position %v is smaller than oldest message, some binlogs may lose", pos)
+		log.Errorf("given position %v is smaller than oldest message's position %v, some binlogs may lose", pos, startPos)
 	}
 	if cmp <= 0 {
 		return start, nil
@@ -123,7 +123,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 	for start < end-1 {
 		mid := (end-start)/2 + start
-		cmp, err = ks.getAndCompare(topic, partition, mid, pos)
+		cmp, _, err = ks.getAndCompare(topic, partition, mid, pos)
 		if err != nil {
 			return -1, errors.Trace(err)
 		}
@@ -139,7 +139,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 	}
 
-	cmp, err = ks.getAndCompare(topic, partition, end, pos)
+	cmp, _, err = ks.getAndCompare(topic, partition, end, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
@@ -152,26 +152,26 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 // getAndCompare queries message at give offset and compare pos with it's position
 // returns Opeator.Compare()
-func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64, pos interface{}) (int, error) {
+func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64, pos interface{}) (int, interface{}, error) {
 	pc, err := ks.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
-		return 0, errors.Trace(err)
+		return 0, nil, errors.Trace(err)
 	}
 	defer pc.Close()
 
 	for msg := range pc.Messages() {
 		bp, err := ks.operator.Decode(msg)
 		if err != nil {
-			return 0, errors.Annotatef(err, "decode %s", msg)
+			return 0, bp, errors.Annotatef(err, "decode %s", msg)
 		}
 
 		cmp, err := ks.operator.Compare(pos, bp)
 		if err != nil {
-			return 0, errors.Annotatef(err, "compare %s with position %v", msg, pos)
+			return 0, bp, errors.Annotatef(err, "compare %s with position %v", msg, pos)
 		}
 
-		return cmp, nil
+		return cmp, bp, nil
 	}
 
 	panic("unreachable")
