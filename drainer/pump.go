@@ -294,6 +294,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
+			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
 			continue
 		}
 		p.bh.push(p.ctx, item)

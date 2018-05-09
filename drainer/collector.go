@@ -255,6 +255,7 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 
 	if lower > oldLower {
 		c.publishBinlogs(ctx, oldLower, lower)
+		// we should update window after publishing binlogs
 		c.window.SaveLower(lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
