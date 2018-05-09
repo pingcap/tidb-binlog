@@ -37,12 +37,12 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	case "pb":
 		cp, err = newPb(cfg)
 	default:
-		err = errors.Errorf("unsupport checkpoint type %s", name)
+		err = errors.Errorf("unsupported checkpoint type %s", name)
 	}
 	if err != nil {
-		return nil, errors.Annotatef(err, "initial %s type checkpoint with config %+v", name, cfg)
+		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", name, cfg)
 	}
 
-	log.Infof("initial %s type checkpoint %s with config %+v", name, cp, cfg)
+	log.Infof("initialize %s type checkpoint %s with config %+v", name, cp, cfg)
 	return cp, nil
 }

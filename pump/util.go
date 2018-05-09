@@ -147,7 +147,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	return nil, errors.Trace(err)
 }
 
-// combine suffix offset in one float, the format would be suffix.offset
+// combine suffix offset in one float, the format would be offset.suffix
 func posToFloat(pos *binlog.Pos) float64 {
 	var decimal float64
 	decimal = float64(pos.Suffix)

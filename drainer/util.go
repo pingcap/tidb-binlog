@@ -79,7 +79,7 @@ func getSafeTS(ts int64, forwardTime int64) int64 {
 	return ts
 }
 
-// combine suffix offset in one float, the format would be suffix.offset
+// combine suffix offset in one float, the format would be offset.suffix
 func posToFloat(pos *binlog.Pos) float64 {
 	var decimal float64
 	decimal = float64(pos.Suffix)
