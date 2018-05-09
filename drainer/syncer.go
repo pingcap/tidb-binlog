@@ -163,6 +163,9 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			return nil, errors.Trace(err)
 		}
 
+		log.Infof("prepare commitTS: %d, schema venison %d", commitTS, latestSchemaVersion)
+		log.Infof("prepare schema: %s", s.schema)
+
 		return b, nil
 	}
 }
@@ -400,6 +403,7 @@ func (s *Syncer) addJob(job *job) {
 		for i := 0; i < s.cfg.WorkerCount; i++ {
 			s.jobCh[i] <- job
 		}
+		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
 	}
@@ -415,6 +419,7 @@ func (s *Syncer) addJob(job *job) {
 
 	wait := s.checkWait(job)
 	if wait {
+		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
 	}

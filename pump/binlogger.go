@@ -27,7 +27,11 @@ var (
 
 	// ErrCRCMismatch is the error represents crc don't match
 	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
-	crcTable       = crc32.MakeTable(crc32.Castagnoli)
+
+	// ErrMagicMismatch is the error represents magic don't match
+	ErrMagicMismatch = errors.New("binlogger: magic mismatch")
+
+	crcTable = crc32.MakeTable(crc32.Castagnoli)
 )
 
 // Binlogger is the interface that for append and read binlog
@@ -130,6 +134,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	latestFilePos.Suffix = lastFileSuffix
 	latestFilePos.Offset = offset
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
 	binlog := &binlogger{
 		dir:     dirpath,
@@ -182,34 +187,56 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 		if first {
 			first = false
-
-			size, err := f.Seek(from.Offset, io.SeekStart)
+			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return ents, errors.Trace(err)
-			}
-
-			if size < from.Offset {
-				return ents, errors.Errorf("pos'offset is wrong")
 			}
 		}
 
 		decoder = NewDecoder(from, io.Reader(f))
 
-		for ; index < nums; index++ {
+		for index < nums {
+			beginTime := time.Now()
 			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
+				if err == ErrCRCMismatch || err == ErrMagicMismatch {
+					corruptionBinlogCounter.Add(1)
+					log.Errorf("decode %+v binlog error %v", from, err)
+					offset, err1 := seekNextBinlog(f, from.Offset)
+					if err1 == nil {
+						from.Offset = offset
+						decoder = NewDecoder(from, io.Reader(f))
+						continue
+					}
+					if err1 == io.EOF || err1 == io.ErrUnexpectedEOF {
+						err = io.EOF
+					} else {
+						err = errors.Annotatef(err1, "decode %+v binlog error %v, and fail to seek next magic", from, err)
+						log.Error(err)
+					}
+				}
 				break
 			}
+			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
+			from.Offset = ent.Pos.Offset
 			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
 				Payload: ent.Payload,
 			}
 			ents = append(ents, newEnt)
+			index++
 		}
 
-		if (err != nil && err != io.EOF) || index == nums {
+		if err != nil && err != io.EOF {
+			readErrorCounter.WithLabelValues("local").Add(1)
+			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
 			return ents, err
+		}
+
+		// read enough binlogs
+		if index == nums {
+			return ents, nil
 		}
 
 		from.Suffix++
@@ -222,11 +249,13 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
 func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
 	log.Infof("[binlogger] walk from position %+v", from)
-	var ent = &binlog.Entity{}
-	var decoder Decoder
-	var first = true
+	var (
+		ent     = &binlog.Entity{}
+		decoder Decoder
+		first   = true
+		dirpath = b.dir
+	)
 
-	dirpath := b.dir
 	names, err := bf.ReadBinlogNames(dirpath)
 	if err != nil {
 		return errors.Trace(err)
@@ -254,14 +283,9 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 		if first {
 			first = false
-
-			size, err := f.Seek(from.Offset, io.SeekStart)
+			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
 				return errors.Trace(err)
-			}
-
-			if size < from.Offset {
-				return errors.Errorf("pos'offset is wrong")
 			}
 		}
 
@@ -276,11 +300,30 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 
 			buf := binlogBufferPool.Get().(*binlogBuffer)
+			beginTime := time.Now()
 			err = decoder.Decode(ent, buf)
 			if err != nil {
+				// seek next binlog and report metrics
+				if err == ErrCRCMismatch || err == ErrMagicMismatch {
+					corruptionBinlogCounter.Add(1)
+					log.Errorf("decode %+v binlog error %v", from, err)
+					offset, err1 := seekNextBinlog(f, from.Offset)
+					if err1 == nil {
+						from.Offset = offset
+						decoder = NewDecoder(from, io.Reader(f))
+						continue
+					}
+					if err1 == io.EOF || err1 == io.ErrUnexpectedEOF {
+						err = io.EOF
+					} else {
+						err = errors.Annotatef(err1, "decode %+v binlog error %v, and fail to seek next magic", from, err)
+					}
+				}
 				break
 			}
+			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
+			from.Offset = ent.Pos.Offset
 			newEnt := binlog.Entity{
 				Pos:     ent.Pos,
 				Payload: ent.Payload,
@@ -294,6 +337,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		}
 
 		if err != nil && err != io.EOF {
+			readErrorCounter.WithLabelValues("local").Add(1)
+			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
 			return errors.Trace(err)
 		}
 
@@ -349,6 +394,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
 	}()
 
 	b.mutex.Lock()
@@ -360,10 +406,13 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 
 	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
+		writeErrorCounter.WithLabelValues("local").Add(1)
+		log.Errorf("write local binlog file %d error %v", latestFilePos.Suffix, err)
 		return 0, errors.Trace(err)
 	}
 
 	latestFilePos.Offset = curOffset
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
 	if curOffset < SegmentSizeBytes {
 		return curOffset, nil
@@ -402,6 +451,8 @@ func (b *binlogger) rotate() error {
 	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
+	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
+
 	fpath := path.Join(b.dir, filename)
 
 	newTail, err := file.LockFile(fpath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)

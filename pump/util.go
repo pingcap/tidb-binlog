@@ -1,7 +1,9 @@
 package pump
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -19,6 +21,10 @@ const (
 	physicalShiftBits = 18
 	maxRetry          = 12
 	retryInterval     = 5 * time.Second
+
+	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
+	// SegmentSizeBytes = 512 * 1024 * 1024
+	segmentSizeLevel int64 = 1000 * 1000 * 1000
 )
 
 // AtomicBool is bool type that support atomic operator
@@ -145,4 +151,56 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	}
 
 	return nil, errors.Trace(err)
+}
+
+// combine suffix offset in one float
+func posToFloat(pos *binlog.Pos) float64 {
+	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
+}
+
+// use magic code to find next binlog and skips corruption data
+func seekNextBinlog(f *os.File, offset int64) (int64, error) {
+	var (
+		batchSize    = 1024
+		headerLength = 3 // length of magic code - 1
+		tailLength   = batchSize - headerLength
+		buff         = make([]byte, batchSize)
+		header       = buff[0:headerLength]
+		tail         = buff[headerLength:]
+	)
+
+	_, err := f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	// read header firstly
+	_, err = io.ReadFull(f, header)
+	if err != nil {
+		return 0, err
+	}
+
+	for {
+		// read tail
+		n, err := io.ReadFull(f, tail)
+		// maybe it meets EOF and dont read fully
+		for i := 0; i < n; i++ {
+			// forward one byte and compute magic
+			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
+			if checkMagic(magicNum) == nil {
+				offset = offset + int64(i)
+				if _, err1 := f.Seek(offset, io.SeekStart); err1 != nil {
+					return 0, errors.Trace(err1)
+				}
+				return offset, nil
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		// hard code
+		offset += int64(tailLength)
+		header[0], header[1], header[2] = tail[tailLength-3], tail[tailLength-2], tail[tailLength-1]
+	}
 }
