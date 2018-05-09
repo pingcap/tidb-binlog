@@ -62,61 +62,68 @@ type binlogger struct {
 	codec compress.CompressionCodec
 
 	// file is the lastest file in the dir
-	file  *file.LockedFile
-	mutex sync.Mutex
-}
-
-// CreateBinlogger creates a binlog directory, then can append binlogs
-func CreateBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
-	if Exist(dirpath) {
-		return nil, os.ErrExist
-	}
-
-	if err := bf.CreateDirAll(dirpath); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	p := path.Join(dirpath, bf.BinlogName(0))
-	log.Infof("create and lock binlog file %s", p)
-	f, err := file.LockFile(p, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	binlog := &binlogger{
-		dir:     dirpath,
-		encoder: newEncoder(f, codec),
-		file:    f,
-	}
-
-	return binlog, nil
+	file    *file.LockedFile
+	dirLock *file.LockedFile
+	mutex   sync.Mutex
 }
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
-	names, err := bf.ReadBinlogNames(dirpath)
-	if err != nil {
-		return nil, err
-	}
-
-	if !bf.IsValidBinlog(names) {
-		return nil, ErrFileContentCorruption
-	}
-
-	lastFileName := names[len(names)-1]
-	lastFileSuffix, err := bf.ParseBinlogName(lastFileName)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	p := path.Join(dirpath, lastFileName)
-	log.Infof("open and lock binlog file %s", p)
-	f, err := file.TryLockFile(p, os.O_WRONLY, file.PrivateFileMode)
+	log.Infof("open binlog directory %s", dirpath)
+	var (
+		err            error
+		lastFileName   string
+		lastFileSuffix uint64
+		dirLock        *file.LockedFile
+		f              *file.LockedFile
+		offset         int64
+	)
+	err = os.MkdirAll(dirpath, file.PrivateDirMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	offset, err := f.Seek(0, io.SeekEnd)
+	// lock directory firstly
+	dirLockFile := path.Join(dirpath, ".lock")
+	dirLock, err = file.LockFile(dirLockFile, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		if err != nil && dirLock != nil {
+			if err1 := dirLock.Close(); err1 != nil {
+				log.Errorf("failed to unlock directory %s: %v with return error %v", dirpath, err1, err)
+			}
+		}
+	}()
+
+	// ignore file not found error
+	names, _ := bf.ReadBinlogNames(dirpath)
+	// if no binlog files, we create from binlog.0000000000000000
+	if len(names) == 0 {
+		lastFileName = path.Join(dirpath, bf.BinlogName(0))
+		lastFileSuffix = 0
+	} else {
+		// check binlog files and find last binlog file
+		if !bf.IsValidBinlog(names) {
+			err = ErrFileContentCorruption
+			return nil, errors.Trace(err)
+		}
+
+		lastFileName = path.Join(dirpath, names[len(names)-1])
+		lastFileSuffix, err = bf.ParseBinlogName(names[len(names)-1])
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	log.Infof("open and lock binlog file %s", lastFileName)
+	f, err = file.TryLockFile(lastFileName, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	offset, err = f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -129,6 +136,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		file:    f,
 		encoder: newEncoder(f, codec),
 		codec:   codec,
+		dirLock: dirLock,
 	}
 
 	return binlog, nil
@@ -370,7 +378,13 @@ func (b *binlogger) Close() error {
 
 	if b.file != nil {
 		if err := b.file.Close(); err != nil {
-			log.Errorf("failed to unlock during closing file: %s", err)
+			log.Errorf("failed to unlock file %s during closing file: %v", b.file.Name(), err)
+		}
+	}
+
+	if b.dirLock != nil {
+		if err := b.dirLock.Close(); err != nil {
+			log.Errorf("failed to unlock dir %s during closing file: %v", b.dir, err)
 		}
 	}
 
