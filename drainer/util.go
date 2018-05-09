@@ -20,6 +20,10 @@ import (
 
 const (
 	lengthOfBinaryTime = 15
+
+	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
+	// SegmentSizeBytes = 512 * 1024 * 1024
+	segmentSizeLevel int64 = 1000 * 1000 * 1000
 )
 
 // InitLogger initalizes Pump's logger.
@@ -79,14 +83,9 @@ func getSafeTS(ts int64, forwardTime int64) int64 {
 	return ts
 }
 
-// combine suffix offset in one float, the format would be offset.suffix
+// combine suffix offset in one float
 func posToFloat(pos *binlog.Pos) float64 {
-	var decimal float64
-	decimal = float64(pos.Suffix)
-	for decimal >= 1 {
-		decimal = decimal / 10
-	}
-	return float64(pos.Offset) + decimal
+	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
 }
 
 func genDrainerID(listenAddr string) (string, error) {

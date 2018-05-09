@@ -19,6 +19,10 @@ const (
 	physicalShiftBits = 18
 	maxRetry          = 12
 	retryInterval     = 5 * time.Second
+
+	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
+	// SegmentSizeBytes = 512 * 1024 * 1024
+	segmentSizeLevel int64 = 1000 * 1000 * 1000
 )
 
 // AtomicBool is bool type that support atomic operator
@@ -147,12 +151,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	return nil, errors.Trace(err)
 }
 
-// combine suffix offset in one float, the format would be offset.suffix
+// combine suffix offset in one float
 func posToFloat(pos *binlog.Pos) float64 {
-	var decimal float64
-	decimal = float64(pos.Suffix)
-	for decimal >= 1 {
-		decimal = decimal / 10
-	}
-	return float64(pos.Offset) + decimal
+	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
 }

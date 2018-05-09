@@ -24,7 +24,7 @@ func (t *testDrainerSuite) TestPosToFloat(c *C) {
 		Offset: 3721,
 	}
 	f := posToFloat(&pos)
-	c.Assert(f, Equals, 3721.4)
+	c.Assert(f, Equals, 4*1000*1000*1000+3721)
 }
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
