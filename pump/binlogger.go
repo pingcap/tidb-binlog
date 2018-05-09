@@ -375,13 +375,15 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			log.Errorf("parse binlog error %v", err)
 		}
 
-		if curSuffix < pos.Suffix || time.Now().Sub(fi.ModTime()) > days {
+		if curSuffix < pos.Suffix {
 			err := os.Remove(fileName)
 			if err != nil {
 				log.Error("remove old binlog file err")
 				continue
 			}
 			log.Info("GC binlog file:", fileName)
+		} else if time.Now().Sub(fi.ModTime()) > days {
+			log.Warningf("binlog file %s is already reach the gc time, but data is not send to kafka, position is %v", fileName, pos)
 		}
 	}
 }
