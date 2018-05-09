@@ -98,7 +98,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "read_binlog_size",
 			Help:      "Bucketed histogram of size of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
 		}, []string{"nodeID"})
 )
 

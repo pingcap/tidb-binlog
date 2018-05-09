@@ -33,7 +33,7 @@ var (
 			Subsystem: "pump",
 			Name:      "write_binlog_size",
 			Help:      "write binlog size",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
 		}, []string{"label"})
 
 	writeBinlogHistogram = prometheus.NewHistogramVec(
