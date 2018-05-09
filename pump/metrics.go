@@ -70,6 +70,14 @@ var (
 			Help:      "read binlog error count",
 		}, []string{"label"})
 
+	corruptionBinlogCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "corruption_binlog_count",
+			Help:      "corruption binlog count",
+		})
+
 	checkpointGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -88,6 +96,7 @@ func init() {
 	prometheus.MustRegister(readErrorCounter)
 	prometheus.MustRegister(writeErrorCounter)
 	prometheus.MustRegister(checkpointGauge)
+	prometheus.MustRegister(corruptionBinlogCounter)
 }
 
 type metricClient struct {
