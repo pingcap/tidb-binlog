@@ -218,6 +218,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 
 	names, err := bf.ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
-	c.Assert(names, HasLen, 1)
-	c.Assert(names[0], Equals, bf.BinlogName(1))
+	c.Assert(names, HasLen, 2)
+	c.Assert(names[0], Equals, bf.BinlogName(0))
+	c.Assert(names[1], Equals, bf.BinlogName(1))
 }
