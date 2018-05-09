@@ -24,7 +24,7 @@ func (t *testDrainerSuite) TestPosToFloat(c *C) {
 		Offset: 3721,
 	}
 	f := posToFloat(&pos)
-	c.Assert(f, Equals, 4*segmentSizeLevel+pos.Offset)
+	c.Assert(f, Equals, float64(4*segmentSizeLevel+pos.Offset))
 }
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
