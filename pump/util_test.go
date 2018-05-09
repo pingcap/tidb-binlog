@@ -35,10 +35,10 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	c.Assert(err, IsNil)
 
 	offset, err := seekNextBinlog(f, 10)
-	c.Assert(offset, Equals, int64(2064))
+	c.Assert(offset, Equals, int64(2074))
 	c.Assert(err, IsNil)
 
-	_, err = seekNextBinlog(f, 2070)
+	_, err = seekNextBinlog(f, 2080)
 	c.Assert(err, Equals, io.ErrUnexpectedEOF)
 }
 
