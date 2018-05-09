@@ -152,7 +152,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -254,8 +254,9 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
-		c.window.SaveLower(lower)
 		c.publishBinlogs(ctx, oldLower, lower)
+		// we should update window after publishing binlogs
+		c.window.SaveLower(lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
@@ -304,6 +305,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
 	// todo: use multiple goroutines to collect sorted binlogs
+	total := 0
 	bss := make(map[string]binlogItems)
 	binlogOffsets := make(map[string]int)
 	for id, p := range c.pumps {
@@ -314,6 +316,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			// first push the first item into heap every pump
 			c.bh.push(ctx, bs[0])
 		}
+		total += bs.Len()
 	}
 
 	item := c.bh.pop()
@@ -329,6 +332,8 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 		}
 		item = c.bh.pop()
 	}
+
+	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {

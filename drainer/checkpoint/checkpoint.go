@@ -2,6 +2,7 @@ package checkpoint
 
 import (
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -26,12 +27,22 @@ type CheckPoint interface {
 
 // NewCheckPoint returns a CheckPoint instance by giving name
 func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
+	var (
+		cp  CheckPoint
+		err error
+	)
 	switch name {
 	case "mysql", "tidb":
-		return newMysql(cfg)
+		cp, err = newMysql(cfg)
 	case "pb":
-		return newPb(cfg)
+		cp, err = newPb(cfg)
 	default:
-		return nil, errors.Errorf("unsupport SaveCheckPoint type %s", name)
+		err = errors.Errorf("unsupported checkpoint type %s", name)
 	}
+	if err != nil {
+		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", name, cfg)
+	}
+
+	log.Infof("initialize %s type checkpoint %s with config %+v", name, cp, cfg)
+	return cp, nil
 }
