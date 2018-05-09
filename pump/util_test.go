@@ -22,19 +22,23 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	_, err = encoder.Encode([]byte("testOffset"))
 	c.Assert(err, IsNil)
 
-	_, err = f.Write([]byte("aaa"))
+	testCase := make([]byte, 2048)
+	for i := 0; i < 2048; i++ {
+		testCase[i] = 'a'
+	}
+	_, err = f.Write(testCase)
 	c.Assert(err, IsNil)
 
 	_, err = encoder.Encode([]byte("testOffset"))
 	c.Assert(err, IsNil)
-	_, err = f.Write([]byte("aaa"))
+	_, err = f.Write(testCase)
 	c.Assert(err, IsNil)
 
 	offset, err := seekNextBinlog(f, 10)
-	c.Assert(offset, Equals, int64(29))
+	c.Assert(offset, Equals, int64(2064))
 	c.Assert(err, IsNil)
 
-	_, err = seekNextBinlog(f, 35)
+	_, err = seekNextBinlog(f, 2070)
 	c.Assert(err, Equals, io.ErrUnexpectedEOF)
 }
 
