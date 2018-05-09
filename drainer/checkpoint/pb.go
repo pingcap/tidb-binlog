@@ -45,7 +45,12 @@ func newPb(cfg *Config) (CheckPoint, error) {
 // Load implements CheckPointor.Load interface.
 func (sp *PbCheckPoint) Load() error {
 	sp.Lock()
-	defer sp.Unlock()
+	defer func() {
+		if sp.CommitTS == 0 {
+			sp.CommitTS = sp.initialCommitTS
+		}
+		sp.Unlock()
+	}()
 
 	file, err := os.Open(sp.name)
 	if err != nil && !os.IsNotExist(errors.Cause(err)) {
@@ -61,9 +66,6 @@ func (sp *PbCheckPoint) Load() error {
 		return errors.Trace(err)
 	}
 
-	if sp.CommitTS == 0 {
-		sp.CommitTS = sp.initialCommitTS
-	}
 	return nil
 }
 
