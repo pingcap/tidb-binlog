@@ -43,7 +43,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := CreateBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
