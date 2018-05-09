@@ -403,6 +403,7 @@ func (s *Syncer) addJob(job *job) {
 		for i := 0; i < s.cfg.WorkerCount; i++ {
 			s.jobCh[i] <- job
 		}
+		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
 	}
@@ -418,6 +419,7 @@ func (s *Syncer) addJob(job *job) {
 
 	wait := s.checkWait(job)
 	if wait {
+		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
 	}
