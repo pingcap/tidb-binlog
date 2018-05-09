@@ -83,7 +83,7 @@ func getSafeTS(ts int64, forwardTime int64) int64 {
 func posToFloat(pos *binlog.Pos) float64 {
 	var decimal float64
 	decimal = float64(pos.Suffix)
-	for decimal > 1 {
+	for decimal >= 1 {
 		decimal = decimal / 10
 	}
 	return float64(pos.Offset) + decimal

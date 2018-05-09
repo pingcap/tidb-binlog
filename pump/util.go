@@ -151,7 +151,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 func posToFloat(pos *binlog.Pos) float64 {
 	var decimal float64
 	decimal = float64(pos.Suffix)
-	for decimal > 1 {
+	for decimal >= 1 {
 		decimal = decimal / 10
 	}
 	return float64(pos.Offset) + decimal
