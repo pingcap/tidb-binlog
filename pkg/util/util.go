@@ -10,6 +10,7 @@ func TsToTimestamp(ts int64) int64 {
 	return ts >> 18 / 1000
 }
 
+// get a default non local ip, err is not nil, ip return 127.0.0.1
 func DefaultIP() (ip string, err error) {
 	ip = "127.0.0.1"
 
