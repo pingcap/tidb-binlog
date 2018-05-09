@@ -173,7 +173,7 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 		// read tail
 		n, err := io.ReadFull(f, tail)
 		// maybe it meets EOF and dont read fully
-		for i := 0; i < 3+n; i++ {
+		for i := 0; i < n; i++ {
 			// forward one byte and compute magic
 			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
 			if checkMagic(magicNum) == nil {
