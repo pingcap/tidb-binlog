@@ -163,7 +163,6 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 			return nil, errors.Trace(err)
 		}
 
-		log.Infof("[prepare] finish construct schema infomation in syncer")
 		return b, nil
 	}
 }
