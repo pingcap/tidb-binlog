@@ -340,6 +340,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 
 	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
+	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
 	offsets, err := c.offsetSeeker.Do(topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
 		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
