@@ -1,7 +1,9 @@
 package pump
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"strings"
@@ -145,4 +147,51 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	}
 
 	return nil, errors.Trace(err)
+}
+
+// use magic code to find next binlog and skips corruption data
+func seekNextBinlog(f *os.File, offset int64) (int64, error) {
+	var (
+		batchSize    = 1024
+		headerLength = 3 // length of magic code - 1
+		tailLength   = batchSize - headerLength
+		buff         = make([]byte, batchSize)
+		header       = buff[0:headerLength]
+		tail         = buff[headerLength:]
+	)
+
+	_, err := f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	// read header firstly
+	_, err = io.ReadFull(f, header)
+	if err != nil {
+		return 0, err
+	}
+
+	for {
+		// read tail
+		n, err := io.ReadFull(f, tail)
+		// maybe it meets EOF and dont read fully
+		for i := 0; i < n; i++ {
+			// forward one byte and compute magic
+			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
+			if checkMagic(magicNum) == nil {
+				offset = offset + int64(i)
+				if _, err1 := f.Seek(offset, io.SeekStart); err1 != nil {
+					return 0, errors.Trace(err1)
+				}
+				return offset, nil
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		// hard code
+		offset += int64(tailLength)
+		header[0], header[1], header[2] = tail[tailLength-3], tail[tailLength-2], tail[tailLength-1]
+	}
 }
