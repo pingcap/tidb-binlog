@@ -152,8 +152,9 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 // use magic code to find next binlog and skips corruption data
 func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 	var (
-		headerLength = 3 // length of magic code - 1
 		batchSize    = 1024
+		headerLength = 3 // length of magic code - 1
+		tailLength   = batchSize - headerLength
 		buff         = make([]byte, batchSize)
 		header       = buff[0:headerLength]
 		tail         = buff[headerLength:]
@@ -190,7 +191,7 @@ func seekNextBinlog(f *os.File, offset int64) (int64, error) {
 		}
 
 		// hard code
-		offset += int64(batchSize - headerLength)
-		header[0], header[1], header[2] = tail[batchSize-3], tail[batchSize-2], tail[batchSize-1]
+		offset += int64(tailLength)
+		header[0], header[1], header[2] = tail[tailLength-3], tail[tailLength-2], tail[tailLength-1]
 	}
 }
