@@ -199,9 +199,9 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			beginTime := time.Now()
 			err = decoder.Decode(ent, &binlogBuffer{})
 			if err != nil {
-				corruptionBinlogCounter.Add(1)
-				log.Errorf("decode %+v binlog error %v", from, err)
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
+					corruptionBinlogCounter.Add(1)
+					log.Errorf("decode %+v binlog error %v", from, err)
 					offset, err1 := seekNextBinlog(f, from.Offset)
 					if err1 == nil {
 						from.Offset = offset
