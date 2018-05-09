@@ -392,6 +392,7 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
+			log.Infof("consume from topic %s partition %d offset %d", topic, pump.DefaultTopicPartition(), pos.Offset)
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
