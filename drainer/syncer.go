@@ -396,6 +396,7 @@ func (s *Syncer) addJob(job *job) {
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
 	} else if job.binlogTp == translator.FLUSH {
+		s.jobWg.Add(s.cfg.WorkerCount)
 		for i := 0; i < s.cfg.WorkerCount; i++ {
 			s.jobCh[i] <- job
 		}
