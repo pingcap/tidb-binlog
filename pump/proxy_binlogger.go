@@ -84,6 +84,7 @@ func (p *Proxy) Close() error {
 			log.Errorf("read binlogs from master in close error %v", err)
 		}
 
+		log.Infof("proxy wait to write all binlogs into kafka, now read at %+v, the latest pos %+v", pos, latestFilePos)
 		time.Sleep(time.Second)
 	}
 
