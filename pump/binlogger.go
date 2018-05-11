@@ -181,6 +181,8 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
+			corruptionBinlogCounter.Add(1)
+			log.Errorf("open binlog file %s error %v", name, err)
 			return ents, errors.Trace(err)
 		}
 		defer f.Close()
@@ -189,6 +191,8 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			first = false
 			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
+				corruptionBinlogCounter.Add(1)
+				log.Errorf("seek offset %d in file %s failed, error %v", from.Offset, name, err)
 				return ents, errors.Trace(err)
 			}
 		}
