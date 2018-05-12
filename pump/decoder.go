@@ -71,8 +71,7 @@ func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 
 	// decode bytes to ent struct and validate crc
 	entryCrc := binary.LittleEndian.Uint32(data[size:])
-	ent.Payload = data[:size]
-	crc := crc32.Checksum(ent.Payload, crcTable)
+	crc := crc32.Checksum(data[:size], crcTable)
 	if crc != entryCrc {
 		return ErrCRCMismatch
 	}
@@ -80,6 +79,8 @@ func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 	// 12 is size + magic length
 	d.pos.Offset += size + 16
 
+	ent.Payload = data[:size]
+	ent.Checksum = data[size:]
 	ent.Pos = binlog.Pos{
 		Suffix: d.pos.Suffix,
 		Offset: d.pos.Offset,

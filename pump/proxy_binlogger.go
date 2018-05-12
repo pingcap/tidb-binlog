@@ -57,11 +57,11 @@ func (p *Proxy) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error) {
 }
 
 // WriteTail implements Binlogger WriteTail interface
-func (p *Proxy) WriteTail(payload []byte) (int64, error) {
+func (p *Proxy) WriteTail(entity *binlog.Entity) (int64, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	n, err := p.master.WriteTail(payload)
+	n, err := p.master.WriteTail(entity)
 	return n, errors.Trace(err)
 }
 
@@ -108,7 +108,7 @@ func (p *Proxy) Close() error {
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+func (p *Proxy) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
 	return p.master.Walk(ctx, from, sendBinlog)
 }
 
@@ -138,11 +138,12 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 
 func (p *Proxy) sync() {
 	pos := p.cp.pos()
-	syncBinlog := func(entity binlog.Entity) error {
-		if enableDebug {
+	syncBinlog := func(entity *binlog.Entity) error {
+		if GlobalConfig.enableDebug {
 			printDebugBinlog(entity, pos)
 		}
-		_, err := p.replicate.WriteTail(entity.Payload)
+
+		_, err := p.replicate.WriteTail(entity)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
 			return errors.Trace(err)
@@ -167,13 +168,12 @@ func (p *Proxy) sync() {
 	}
 }
 
-func printDebugBinlog(entity binlog.Entity, pos binlog.Pos) {
+func printDebugBinlog(entity *binlog.Entity, pos binlog.Pos) {
 	str := fmt.Sprintf("\n========== [proxy debug] update position from %+v to %+v\n", pos, entity.Pos)
 
 	b := new(binlog.Binlog)
 	err := b.Unmarshal(entity.Payload)
 	if err != nil {
-		// skip?
 		str = str + fmt.Sprintf("unmarshal payload error %v \n", err)
 	} else {
 		str = str + fmt.Sprintf("binlog start ts %d \n", b.StartTs)

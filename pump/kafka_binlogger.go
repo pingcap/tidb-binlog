@@ -53,22 +53,22 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 }
 
 // WriteTail implements Binlogger WriteTail interface
-func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
+func (k *kafkaBinloger) WriteTail(entity *binlog.Entity) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("kafka").Observe(time.Since(beginTime).Seconds())
-		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(payload)))
+		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(entity.Payload)))
 	}()
 
 	// for concurrency write
 	k.RLock()
 	defer k.RUnlock()
 
-	if len(payload) == 0 {
+	if len(entity.Payload) == 0 {
 		return 0, nil
 	}
 
-	offset, err := k.encoder.Encode(payload)
+	offset, err := k.encoder.Encode(entity)
 	if err != nil {
 		writeErrorCounter.WithLabelValues("kafka").Add(1)
 		log.Errorf("write binlog into kafka %d error %v", latestKafkaPos.Offset, err)
@@ -81,7 +81,7 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
 	return nil
 }
 
