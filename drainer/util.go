@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
-
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
@@ -83,20 +81,6 @@ func getSafeTS(ts int64, forwardTime int64) int64 {
 	}
 
 	return ts
-}
-
-func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage) []byte {
-	for _, record := range message.Headers {
-		if string(record.Key) == string(key) {
-			return record.Value
-		}
-	}
-
-	return nil
-}
-
-func assembleBinlog(messages []*sarama.ConsumerMessage) (*binlog.Entity, error) {
-	return nil, nil
 }
 
 // combine suffix offset in one float

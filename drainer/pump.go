@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"encoding/binary"
 	"io"
 	"strconv"
 	"sync"
@@ -21,11 +20,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
-
-// slice cache size is to cache non-complete binlog slices, two use cases
-// * large binlog - upper limit sliceCacheSize * MaxsliceSize, default 5G now
-// * ease loss binlog slice alert
-const sliceCacheSize = 5000
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -61,13 +55,7 @@ type Pump struct {
 		binlogs       map[int64]*binlogItem
 	}
 
-	cache struct {
-		// store binlog slices to check whether it's complete
-		bms map[string]*bitmap
-		// cache all slices
-		slices chan *sarama.ConsumerMessage
-	}
-
+	asm        *assembler
 	wg         sync.WaitGroup
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -94,6 +82,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		asm:        newAssembler(),
 	}, nil
 }
 
@@ -113,100 +102,8 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.binlogs = make(map[int64]*binlogItem)
 
-	p.cache.bms = make(map[string]*bitmap, sliceCacheSize/10)
-	p.cache.slices = make(chan *sarama.ConsumerMessage, sliceCacheSize)
-
 	go p.pullBinlogs()
 	go p.publish(t)
-}
-
-func (p *Pump) assemble(msg *sarama.ConsumerMessage) *pb.Entity {
-	if len(msg.Headers) == 0 && len(p.cache.bms) == 0 {
-		return &pb.Entity{
-			Payload: msg.Value,
-			Pos: pb.Pos{
-				Offset: msg.Offset,
-			},
-		}
-	}
-
-	// skip non-complete binlog slice in the front of slices channel
-	// maybe we loss some binlog slices, issue an alert
-	if len(p.cache.slices) == sliceCacheSize {
-		// fetch message id
-		// dont do any check here, i know it's right and bothered to handle error
-		// just ignore it now, refine it later
-		p.popBinlogSlices()
-	}
-
-	// get total of binlog slices and no from consumerMessage header
-	var (
-		totalByte = getKeyFromComsumerMessageHeader(pump.Total, msg)
-		total     = int(binary.LittleEndian.Uint32(totalByte))
-		noByte    = getKeyFromComsumerMessageHeader(pump.No, msg)
-		no        = int(binary.LittleEndian.Uint32(noByte))
-		messageID = string(getKeyFromComsumerMessageHeader(pump.MessageID, msg))
-	)
-
-	_, ok := p.cache.bms[messageID]
-	// check whether new binlog slice arrive
-	if ok {
-		// only one binlog in slices
-		// check completed or append
-		if len(p.cache.bms) == 1 {
-			p.cache.bms[messageID].set(no)
-			if !p.cache.bms[messageID].completed() {
-				p.cache.slices <- msg
-				return nil
-			}
-
-			messages := append(p.peekBinlogSlices(), msg)
-			entity, err := assembleBinlog(messages)
-			if err != nil {
-				log.Errorf("[pump] assemble messages error %v", err)
-				return nil
-			}
-
-			return entity
-		}
-		// meet same and incontinuity binlogs slices
-		// we must have sent duplicate binlog slices
-		// just ingnore all slices before it
-		for len(p.cache.slices) > 0 {
-			p.popBinlogSlices()
-		}
-	}
-
-	// just append slices
-	p.cache.slices <- msg
-	p.cache.bms[messageID] = newBitmap(total)
-	p.cache.bms[messageID].set(no)
-	return nil
-}
-
-func (p *Pump) peekBinlogSlices() []*sarama.ConsumerMessage {
-	skippedMsg := <-p.cache.slices
-	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
-	skippedBitmap := p.cache.bms[string(skippedID)]
-
-	messages := make([]*sarama.ConsumerMessage, 0, skippedBitmap.current)
-	messages = append(messages, skippedMsg)
-	for i := 0; i < skippedBitmap.current-1; i++ {
-		messages = append(messages, <-p.cache.slices)
-	}
-	delete(p.cache.bms, skippedID)
-
-	return messages
-}
-
-func (p *Pump) popBinlogSlices() {
-	skippedMsg := <-p.cache.slices
-	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
-	skippedBitmap := p.cache.bms[string(skippedID)]
-	for i := 0; i < skippedBitmap.current-1; i++ {
-		<-p.cache.slices
-	}
-	delete(p.cache.bms, skippedID)
 }
 
 // match is responsible for match p+c binlog.
@@ -490,7 +387,10 @@ func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
-	defer p.wg.Done()
+	defer func() {
+		p.asm.close()
+		p.wg.Done()
+	}()
 	var err error
 	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
@@ -539,7 +439,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 
 			pos.Offset = msg.Offset
-			entity = p.assemble(msg)
+			p.asm.append(msg)
+		case entity = <-p.asm.messages():
 		}
 		if entity == nil {
 			continue
