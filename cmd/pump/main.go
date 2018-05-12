@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -41,14 +42,22 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
+	var wg sync.WaitGroup
+
 	go func() {
 		sig := <-sc
 		log.Infof("got signal [%d] to exit.", sig)
+		wg.Add(1)
 		p.Close()
-		os.Exit(0)
+		log.Info("pump is closed")
+		wg.Done()
 	}()
 
+	// Start will block until the server is closed
 	if err := p.Start(); err != nil {
 		log.Errorf("pump server error, %v", err)
 	}
+
+	wg.Wait()
+	log.Info("pump exit")
 }
