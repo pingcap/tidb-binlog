@@ -26,7 +26,7 @@ func (b *bitmap) set(index int) {
 	mask := uint8(1 << uint(index%8))
 	bucket := b.value[index/8]
 
-	if bucket^mask != bucket {
+	if bucket|mask != bucket {
 		b.value[index/8] = bucket | mask
 		b.current++
 	}
