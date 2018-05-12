@@ -66,6 +66,7 @@ type Pump struct {
 func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
+	kafkaCfg.Version = sarama.V1_0_0_0
 	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 	if err != nil {
 		return nil, errors.Trace(err)

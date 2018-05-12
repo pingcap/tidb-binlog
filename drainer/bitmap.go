@@ -18,7 +18,9 @@ func newBitmap(total int) *bitmap {
 	}
 
 	// mask useless bit
-	bm.value[len(bm.value)-1] = 0xFF ^ (1<<uint(total%8) - 1)
+	if total%8 > 0 {
+		bm.value[len(bm.value)-1] = 0xFF ^ (1<<uint(total%8) - 1)
+	}
 	return bm
 }
 

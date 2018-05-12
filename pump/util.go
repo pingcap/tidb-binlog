@@ -132,6 +132,7 @@ func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
 	for i := 0; i < maxRetry; i++ {
 		// initial kafka client to use manual partitioner
 		config := sarama.NewConfig()
+		config.Version = sarama.V1_0_0_0
 		config.Producer.Partitioner = sarama.NewManualPartitioner
 		config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
 		config.Producer.Return.Successes = true

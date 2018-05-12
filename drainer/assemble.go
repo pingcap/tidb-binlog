@@ -119,6 +119,8 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *pb.Entity {
 		// fetch message id
 		// dont do any check here, i know it's right and bothered to handle error
 		// just ignore it now, refine it later
+		log.Error("[assembler] cache is full, pop binlog slice in the front of slices")
+		errorBinlogCount.Add(1)
 		a.popBinlogSlices()
 	}
 
@@ -147,17 +149,18 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *pb.Entity {
 			entity, err := assembleBinlog(messages)
 			if err != nil {
 				log.Errorf("[pump] assemble messages error %v", err)
+				errorBinlogCount.Add(1)
 				return nil
 			}
 
 			return entity
 		}
 		// meet same and incontinuity binlogs slices
-		// we must have sent duplicate binlog slices
+		// we must have sent duplicate binlog slices or lose some binlog
 		// just ingnore all slices before it
-		for len(a.slices) > 0 {
-			a.popBinlogSlices()
-		}
+		log.Error("[assembler] meet corruption binlog, pop corrpution binlog and skip it")
+		errorBinlogCount.Add(1)
+		a.popBinlogSlices()
 	}
 
 	// just append slices
@@ -203,5 +206,6 @@ func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage
 }
 
 func assembleBinlog(messages []*sarama.ConsumerMessage) (*pb.Entity, error) {
+
 	return nil, nil
 }

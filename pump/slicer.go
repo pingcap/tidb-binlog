@@ -56,9 +56,7 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 	)
 
 	binary.LittleEndian.PutUint32(totalByte, uint32(total))
-	for i := 1; i < total; i++ {
-		no := make([]byte, 4)
-		binary.LittleEndian.PutUint32(no, uint32(i))
+	for i := 0; i < total-1; i++ {
 		right = left + GlobalConfig.slicesSize
 		messages = append(messages, s.wrapProducerMessage(i, messageID, totalByte, entity.Payload[left:right], nil))
 		left = right
