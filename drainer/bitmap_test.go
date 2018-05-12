@@ -25,7 +25,7 @@ func (t *testDrainerSuite) TestBitmap(c *C) {
 
 	bm = newBitmap(10)
 	c.Assert(bm.value, HasLen, 2)
-	c.Assert(bm.value, DeepEquals, []uint8{0x0, 0xFC})
+	c.Assert(bm.value, DeepEquals, []uint8{0x0, 0xFD})
 	testSetBitMap(c, bm, 10)
 
 	bm = newBitmap(16)
