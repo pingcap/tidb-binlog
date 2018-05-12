@@ -19,7 +19,7 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	}()
 
 	encoder := newEncoder(f, compress.CompressionNone)
-	_, err = encoder.Encode([]byte("testOffset"))
+	_, err = encoder.Encode(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 
 	testCase := make([]byte, 2048)
@@ -29,7 +29,7 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	_, err = f.Write(testCase)
 	c.Assert(err, IsNil)
 
-	_, err = encoder.Encode([]byte("testOffset"))
+	_, err = encoder.Encode(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 	_, err = f.Write(testCase)
 	c.Assert(err, IsNil)
@@ -56,7 +56,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 
 	for i := 0; i < 10; i++ {
 		for i := 0; i < 20; i++ {
-			_, err = bl.WriteTail([]byte("binlogtest"))
+			_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 			c.Assert(err, IsNil)
 
 			_, err = b.file.Write([]byte("test"))
