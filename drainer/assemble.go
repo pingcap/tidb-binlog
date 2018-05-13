@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"encoding/binary"
+	"hash/crc32"
 	"sync"
 
 	"github.com/Shopify/sarama"
@@ -18,6 +19,8 @@ import (
 // * ease loss binlog slice alert
 const sliceCacheSize = 5000
 
+var crcTable = crc32.MakeTable(crc32.Castagnoli)
+
 // assembler is to assmeble binlog slices to binlog
 type assembler struct {
 	ctx    context.Context
@@ -29,7 +32,7 @@ type assembler struct {
 	// cache all slices
 	slices chan *sarama.ConsumerMessage
 	// output complete binlog channel
-	msgs  chan *pb.Entity
+	msgs  chan *assembledBinlog
 	input chan *sarama.ConsumerMessage
 
 	cacheSize int
@@ -43,7 +46,7 @@ func newAssembler() *assembler {
 		cancel:    cancel,
 		cacheSize: sliceCacheSize,
 		bms:       make(map[string]*bitmap, sliceCacheSize/10),
-		msgs:      make(chan *pb.Entity, sliceCacheSize/10),
+		msgs:      make(chan *assembledBinlog, sliceCacheSize/10),
 		input:     make(chan *sarama.ConsumerMessage, sliceCacheSize/10),
 		slices:    make(chan *sarama.ConsumerMessage, sliceCacheSize),
 	}
@@ -65,7 +68,7 @@ func (a *assembler) append(msg *sarama.ConsumerMessage) {
 	}
 }
 
-func (a *assembler) messages() chan *pb.Entity {
+func (a *assembler) messages() chan *assembledBinlog {
 	return a.msgs
 }
 
@@ -77,7 +80,7 @@ func (a *assembler) close() {
 func (a *assembler) do() {
 	var (
 		msg    *sarama.ConsumerMessage
-		binlog *pb.Entity
+		binlog *assembledBinlog
 	)
 	for {
 		select {
@@ -97,20 +100,23 @@ func (a *assembler) do() {
 			log.Warningf("assembler was canceled: %v", a.ctx.Err())
 			return
 		case a.msgs <- binlog:
-			log.Infof("assemble a binlog %+v, size %d", binlog.Pos, len(binlog.Payload))
+			log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
 		}
 
 	}
 }
 
-func (a *assembler) assemble(msg *sarama.ConsumerMessage) *pb.Entity {
+func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 	if len(msg.Headers) == 0 && len(a.bms) == 0 {
-		return &pb.Entity{
+		b := constructAssembledBinlog(false)
+		b.entity = &pb.Entity{
 			Payload: msg.Value,
 			Pos: pb.Pos{
 				Offset: msg.Offset,
 			},
 		}
+
+		return b
 	}
 
 	// skip non-complete binlog slice in the front of slices channel
@@ -146,14 +152,14 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *pb.Entity {
 			}
 
 			messages := append(a.peekBinlogSlices(), msg)
-			entity, err := assembleBinlog(messages)
+			b, err := assembleBinlog(messages)
 			if err != nil {
 				log.Errorf("[pump] assemble messages error %v", err)
 				errorBinlogCount.Add(1)
 				return nil
 			}
 
-			return entity
+			return b
 		}
 		// meet same and incontinuity binlogs slices
 		// we must have sent duplicate binlog slices or lose some binlog
@@ -205,7 +211,29 @@ func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage
 	return nil
 }
 
-func assembleBinlog(messages []*sarama.ConsumerMessage) (*pb.Entity, error) {
+func assembleBinlog(messages []*sarama.ConsumerMessage) (*assembledBinlog, error) {
+	slices := make([]*sarama.ConsumerMessage, len(messages))
+	totalSize := 0
+	for _, msg := range messages {
+		no := int(binary.LittleEndian.Uint32(getKeyFromComsumerMessageHeader(pump.No, msg)))
+		slices[no] = msg
+		totalSize += len(msg.Value)
+	}
 
-	return nil, nil
+	b := constructAssembledBinlog(true)
+	b.entity.Pos = pb.Pos{
+		Offset: slices[0].Offset,
+	}
+	for _, slice := range slices {
+		b.entity.Payload = append(b.entity.Payload, slice.Value...)
+	}
+
+	checksumByte := getKeyFromComsumerMessageHeader(pump.Checksum, slices[len(slices)-1])
+	originChecksum := binary.LittleEndian.Uint32(checksumByte)
+	checksum := crc32.Checksum(b.entity.Payload, crcTable)
+	if checksum != originChecksum {
+		return nil, pump.ErrCRCMismatch
+	}
+
+	return b, nil
 }

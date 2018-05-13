@@ -428,7 +428,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	for {
 		var (
 			beginTime = time.Now()
-			entity    *pb.Entity
+			binlog    *assembledBinlog
 		)
 		select {
 		case <-p.ctx.Done():
@@ -441,20 +441,21 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 
 			pos.Offset = msg.Offset
 			p.asm.append(msg)
-		case entity = <-p.asm.messages():
+		case binlog = <-p.asm.messages():
 		}
-		if entity == nil {
+		if binlog == nil {
 			continue
 		}
 
-		b := p.match(entity)
+		b := p.match(binlog.entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
 				startTS:  b.StartTs,
 				commitTS: b.CommitTs,
-				pos:      entity.Pos,
+				pos:      binlog.entity.Pos,
 			}
+			destructAssembledBinlog(binlog)
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
