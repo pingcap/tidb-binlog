@@ -1,4 +1,4 @@
-package restore
+package reparo
 
 import (
 	"database/sql"
@@ -22,7 +22,7 @@ const (
 	retryTimeout = time.Second * 1
 )
 
-func (r *Restore) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Table, error) {
+func (r *Reparo) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Table, error) {
 	table := &tbl.Table{}
 	table.Schema = schema
 	table.Name = name
@@ -45,7 +45,7 @@ func (r *Restore) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.T
 	return table, nil
 }
 
-func (r *Restore) getTable(schema string, table string) (*tbl.Table, error) {
+func (r *Reparo) getTable(schema string, table string) (*tbl.Table, error) {
 	key := fmt.Sprintf("%s.%s", schema, table)
 
 	value, ok := r.tables[key]
@@ -62,7 +62,7 @@ func (r *Restore) getTable(schema string, table string) (*tbl.Table, error) {
 	return t, nil
 }
 
-func (r *Restore) clearTables() {
+func (r *Reparo) clearTables() {
 	r.tables = make(map[string]*tbl.Table)
 }
 

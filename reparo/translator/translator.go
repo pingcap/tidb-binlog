@@ -3,7 +3,7 @@ package translator
 import (
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	tbl "github.com/pingcap/tidb-binlog/restore/table"
+	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 )
 
 // TranslateResult contains translation result.

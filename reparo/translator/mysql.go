@@ -11,7 +11,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	tbl "github.com/pingcap/tidb-binlog/restore/table"
+	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	"github.com/pingcap/tidb/util/codec"
 )
 
