@@ -65,16 +65,19 @@ func NewStdLogger(prefix string) *StdLogger {
 	}
 }
 
+// Print implement samara.StdLogger
 func (l *StdLogger) Print(v ...interface{}) {
 	logger := log.Logger()
 	logger.Output(2, l.prefix+fmt.Sprint(v...))
 }
 
+// Printf implement samara.StdLogger
 func (l *StdLogger) Printf(format string, v ...interface{}) {
 	logger := log.Logger()
 	logger.Output(2, l.prefix+fmt.Sprintf(format, v...))
 }
 
+// Println implement samara.StdLogger
 func (l *StdLogger) Println(v ...interface{}) {
 	logger := log.Logger()
 	logger.Output(2, l.prefix+fmt.Sprintln(v...))
