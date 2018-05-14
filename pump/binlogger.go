@@ -183,6 +183,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
+			corruptionBinlogCounter.Add(1)
 			return ents, errors.Trace(err)
 		}
 		defer f.Close()
@@ -191,6 +192,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			first = false
 			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
+				corruptionBinlogCounter.Add(1)
 				return ents, errors.Trace(err)
 			}
 		}
@@ -260,11 +262,13 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 	names, err := bf.ReadBinlogNames(dirpath)
 	if err != nil {
+		corruptionBinlogCounter.Add(1)
 		return errors.Trace(err)
 	}
 
 	nameIndex, ok := bf.SearchIndex(names, from.Suffix)
 	if !ok {
+		corruptionBinlogCounter.Add(1)
 		return bf.ErrFileNotFound
 	}
 
@@ -279,6 +283,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		p := path.Join(dirpath, name)
 		f, err := os.OpenFile(p, os.O_RDONLY, file.PrivateFileMode)
 		if err != nil {
+			corruptionBinlogCounter.Add(1)
 			return errors.Trace(err)
 		}
 		defer f.Close()
@@ -287,6 +292,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			first = false
 			_, err := f.Seek(from.Offset, io.SeekStart)
 			if err != nil {
+				corruptionBinlogCounter.Add(1)
 				return errors.Trace(err)
 			}
 		}
