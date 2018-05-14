@@ -132,7 +132,10 @@ func (r *Reparo) Process() error {
 				r.commitDDLJob(results[0].SQL, results[0].Args, "")
 			} else {
 				for _, result := range results {
-					r.commitDMLJob(result.SQL, result.Args, result.Keys)
+					err = r.commitDMLJob(result.SQL, result.Args, result.Keys)
+					if err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 
@@ -250,7 +253,7 @@ func (r *Reparo) checkWait(job *job) bool {
 
 func (r *Reparo) commitDMLJob(sql string, args []interface{}, keys []string) error {
 	key, err := r.resolveCausality(keys)
-	if err == nil {
+	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
 	job := newDMLJob(sql, args, key)
