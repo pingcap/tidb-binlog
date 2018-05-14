@@ -58,6 +58,7 @@ type StdLogger struct {
 	prefix string
 }
 
+// NewStdLogger return an instance of StdLogger
 func NewStdLogger(prefix string) *StdLogger {
 	return &StdLogger{
 		prefix: prefix,
