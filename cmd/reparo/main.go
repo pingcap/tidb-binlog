@@ -1,12 +1,10 @@
 package main
 
 import (
-	"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
-	"time"
 
 	_ "net/http/pprof"
 
@@ -18,7 +16,6 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	cfg := reparo.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {

@@ -59,6 +59,9 @@ func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if result == nil {
+			continue
+		}
 		results = append(results, result)
 	}
 
@@ -80,5 +83,8 @@ func (r *Reparo) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		return nil, errors.Trace(err)
 	}
 	r.clearTables()
+	if result == nil {
+		return nil, nil
+	}
 	return []*translator.TranslateResult{result}, nil
 }
