@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/causality"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/reparo/executor"
+	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	"github.com/pingcap/tidb-binlog/reparo/translator"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
@@ -38,7 +39,7 @@ type Reparo struct {
 	c          *causality.Causality
 	wg         sync.WaitGroup
 
-	tables map[string]*Table
+	tables map[string]*tbl.Table
 	db     *sql.DB
 }
 
@@ -62,7 +63,7 @@ func New(cfg *Config) (*Reparo, error) {
 		regexMap:   make(map[string]*regexp.Regexp),
 		jobCh:      newJobChans(cfg.WorkerCount),
 		c:          causality.NewCausality(),
-		tables:     make(map[string]*Table),
+		tables:     make(map[string]*tbl.Table),
 		db:         db,
 	}, nil
 }

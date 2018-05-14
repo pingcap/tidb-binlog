@@ -11,7 +11,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	tbl "github.com/pingcap/tidb-binlog/restore/table"
+	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	tmysql "github.com/pingcap/tidb/mysql"
 	gmysql "github.com/siddontang/go-mysql/mysql"
 )
