@@ -10,10 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
 )
@@ -39,6 +41,8 @@ func InitLogger(cfg *Config) {
 			log.SetRotateByDay()
 		}
 	}
+
+	sarama.Logger = util.NewStdLogger("[sarama] ")
 }
 
 // ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,

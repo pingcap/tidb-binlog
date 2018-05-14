@@ -2,7 +2,10 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"net"
+
+	"github.com/ngaut/log"
 )
 
 // TsToTimestamp translate ts to timestamp
@@ -48,4 +51,29 @@ func DefaultIP() (ip string, err error) {
 
 	err = errors.New("no ip found")
 	return
+}
+
+type StdLogger struct {
+	prefix string
+}
+
+func NewStdLogger(prefix string) *StdLogger {
+	return &StdLogger{
+		prefix: prefix,
+	}
+}
+
+func (l *StdLogger) Print(v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprint(v...))
+}
+
+func (l *StdLogger) Printf(format string, v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprintf(format, v...))
+}
+
+func (l *StdLogger) Println(v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprintln(v...))
 }

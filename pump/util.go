@@ -14,6 +14,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -57,6 +58,8 @@ func InitLogger(cfg *Config) {
 			log.SetRotateByDay()
 		}
 	}
+
+	sarama.Logger = util.NewStdLogger("[sarama] ")
 }
 
 // KRand is an algorithm that compute rand nums
