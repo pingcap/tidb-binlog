@@ -1,5 +1,5 @@
-hash: 233241055fc80db5c2c81fde0119cf168bb6b64eb7587a270069b0983c3536a7
-updated: 2018-05-12T19:56:17.426539+08:00
+hash: 4a7b6ca2d8991fd4b746aa6037fc23fa2fad794200707b15b1e2119cdb1a6d37
+updated: 2018-05-14T13:46:23.464709503+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -184,7 +184,7 @@ imports:
 - name: github.com/ngaut/log
   version: cec23d3e10b016363780d894a0eb732a12c06e02
 - name: github.com/ngaut/pools
-  version: 6352e005618615ffaf1cb1c6622b8e91435751fe
+  version: b7bc8c42aac787667ba45adea78233f53f548443
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/opentracing/opentracing-go
@@ -446,7 +446,7 @@ imports:
   - tap
   - transport
 - name: gopkg.in/natefinch/lumberjack.v2
-  version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
+  version: a96e63847dc3c67d17befa69c303767e2f84e54f
 testImports:
 - name: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
