@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"github.com/juju/errors"
@@ -7,7 +7,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 )
 
-func parseDDL(sql string) (node ast.Node, table TableName, err error) {
+func parseDDL(sql string) (node ast.Node, table Table, err error) {
 	nodes, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return nil, table, errors.Trace(err)
@@ -55,7 +55,7 @@ func parseDDL(sql string) (node ast.Node, table TableName, err error) {
 	return
 }
 
-func setSchemaIfExists(table *TableName, schemaName string, tableName string) {
+func setSchemaIfExists(table *Table, schemaName string, tableName string) {
 	if schemaName != "" {
 		table.Schema = schemaName
 	}

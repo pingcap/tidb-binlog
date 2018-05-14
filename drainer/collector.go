@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -48,6 +49,9 @@ type Collector struct {
 	syncer     *Syncer
 	latestTS   int64
 	cp         checkpoint.CheckPoint
+
+	syncedCheckTime int
+	safeForwardTime int
 
 	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
@@ -90,22 +94,25 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	return &Collector{
-		clusterID:    clusterID,
-		interval:     time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:   kafkaAddrs,
-		reg:          pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:      cfg.PumpTimeout,
-		pumps:        make(map[string]*Pump),
-		offlines:     make(map[string]struct{}),
-		bh:           newBinlogHeap(maxBinlogItemCount),
-		window:       w,
-		syncer:       s,
-		cp:           cpt,
-		tiClient:     tiClient,
-		tiStore:      tiStore,
-		notifyChan:   make(chan *notifyResult),
-		offsetSeeker: offsetSeeker,
+		clusterID:       clusterID,
+		interval:        time.Duration(cfg.DetectInterval) * time.Second,
+		kafkaAddrs:      kafkaAddrs,
+		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:         cfg.PumpTimeout,
+		pumps:           make(map[string]*Pump),
+		offlines:        make(map[string]struct{}),
+		bh:              newBinlogHeap(maxBinlogItemCount),
+		window:          w,
+		syncer:          s,
+		cp:              cpt,
+		tiClient:        tiClient,
+		tiStore:         tiStore,
+		notifyChan:      make(chan *notifyResult),
+		offsetSeeker:    offsetSeeker,
+		syncedCheckTime: cfg.SyncedCheckTime,
+		safeForwardTime: cfg.SafeForwardTime,
 	}, nil
 }
 
@@ -145,7 +152,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		savepointGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -179,7 +186,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 	// get current binlog's commit ts which in process
 	currentCommitTS, _ := c.cp.Pos()
-	safeTS := getSafeTS(currentCommitTS)
+	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
 
@@ -247,8 +254,9 @@ func (c *Collector) publish(ctx context.Context, upper, lower int64) {
 	oldUpper := c.window.LoadUpper()
 
 	if lower > oldLower {
-		c.window.SaveLower(lower)
 		c.publishBinlogs(ctx, oldLower, lower)
+		// we should update window after publishing binlogs
+		c.window.SaveLower(lower)
 		windowGauge.WithLabelValues("lower").Set(float64(lower))
 	}
 	if upper > oldUpper {
@@ -297,6 +305,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
 	// todo: use multiple goroutines to collect sorted binlogs
+	total := 0
 	bss := make(map[string]binlogItems)
 	binlogOffsets := make(map[string]int)
 	for id, p := range c.pumps {
@@ -307,6 +316,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			// first push the first item into heap every pump
 			c.bh.push(ctx, bs[0])
 		}
+		total += bs.Len()
 	}
 
 	item := c.bh.pop()
@@ -322,6 +332,8 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 		}
 		item = c.bh.pop()
 	}
+
+	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
 func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
@@ -332,8 +344,9 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	}
 
 	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
-	safeComitTS := getSafeTS(commitTS)
-	offsets, err := c.offsetSeeker.Do(topic, safeComitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
+	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
+	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
+	offsets, err := c.offsetSeeker.Do(topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
 		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
 	}
@@ -361,6 +374,14 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	var status *HTTPStatus
 	c.mu.Lock()
 	status = c.mu.status
+
+	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
+	// if the gap between lower and upper is small and don't have binlog input in a minitue,
+	// we can think the all binlog is synced
+	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+		status.Synced = true
+	}
+
 	c.mu.Unlock()
 	return status
 }

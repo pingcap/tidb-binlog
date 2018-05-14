@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"bufio"
@@ -15,9 +15,8 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/causality"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/restore/executor"
-	tbl "github.com/pingcap/tidb-binlog/restore/table"
-	"github.com/pingcap/tidb-binlog/restore/translator"
+	"github.com/pingcap/tidb-binlog/reparo/executor"
+	"github.com/pingcap/tidb-binlog/reparo/translator"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -28,8 +27,8 @@ const (
 	executionWaitTime    = 10 * time.Millisecond
 )
 
-// Restore i the main part of the restore tool.
-type Restore struct {
+// Reparo i the main part of the restore tool.
+type Reparo struct {
 	cfg        *Config
 	translator translator.Translator
 	executors  []executor.Executor
@@ -39,12 +38,12 @@ type Restore struct {
 	c          *causality.Causality
 	wg         sync.WaitGroup
 
-	tables map[string]*tbl.Table
+	tables map[string]*Table
 	db     *sql.DB
 }
 
-// New creates a Restore object.
-func New(cfg *Config) (*Restore, error) {
+// New creates a Reparo object.
+func New(cfg *Config) (*Reparo, error) {
 	executors, err := createExecutors(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -56,18 +55,19 @@ func New(cfg *Config) (*Restore, error) {
 	}
 
 	log.Infof("cfg %+v", cfg)
-	return &Restore{
+	return &Reparo{
 		cfg:        cfg,
 		translator: translator.New(cfg.DestType, false),
 		executors:  executors,
 		regexMap:   make(map[string]*regexp.Regexp),
 		jobCh:      newJobChans(cfg.WorkerCount),
 		c:          causality.NewCausality(),
-		tables:     make(map[string]*tbl.Table),
+		tables:     make(map[string]*Table),
 		db:         db,
 	}, nil
 }
-func (r *Restore) prepare() error {
+
+func (r *Reparo) prepare() error {
 	r.GenRegexMap()
 
 	for i := 0; i < r.cfg.WorkerCount; i++ {
@@ -78,7 +78,7 @@ func (r *Restore) prepare() error {
 }
 
 // Process runs the main procedure.
-func (r *Restore) Process() error {
+func (r *Reparo) Process() error {
 	if err := r.prepare(); err != nil {
 		return errors.Trace(err)
 	}
@@ -143,8 +143,8 @@ func (r *Restore) Process() error {
 	return nil
 }
 
-// Close closes the Restore object.
-func (r *Restore) Close() error {
+// Close closes the Reparo object.
+func (r *Reparo) Close() error {
 	r.db.Close()
 	closeExecutors(r.executors)
 	return nil
@@ -164,7 +164,7 @@ const (
 	ddl
 )
 
-func (r *Restore) sync(executor executor.Executor, jobCh chan *job) {
+func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 	r.wg.Add(1)
 	defer r.wg.Done()
 
@@ -229,7 +229,7 @@ func (r *Restore) sync(executor executor.Executor, jobCh chan *job) {
 	}
 }
 
-func (r *Restore) addJob(job *job) {
+func (r *Reparo) addJob(job *job) {
 	if job.binlogTp == ddl {
 		r.jobWg.Wait()
 	}
@@ -243,11 +243,11 @@ func (r *Restore) addJob(job *job) {
 	}
 }
 
-func (r *Restore) checkWait(job *job) bool {
+func (r *Reparo) checkWait(job *job) bool {
 	return job.binlogTp == ddl
 }
 
-func (r *Restore) commitDMLJob(sql string, args []interface{}, keys []string) error {
+func (r *Reparo) commitDMLJob(sql string, args []interface{}, keys []string) error {
 	key, err := r.resolveCausality(keys)
 	if err == nil {
 		return errors.Errorf("resolve karam error %v", err)
@@ -257,12 +257,12 @@ func (r *Restore) commitDMLJob(sql string, args []interface{}, keys []string) er
 	return nil
 }
 
-func (r *Restore) commitDDLJob(sql string, args []interface{}, key string) {
+func (r *Reparo) commitDDLJob(sql string, args []interface{}, key string) {
 	job := newDDLJob(sql, args, key)
 	r.addJob(job)
 }
 
-func (r *Restore) resolveCausality(keys []string) (string, error) {
+func (r *Reparo) resolveCausality(keys []string) (string, error) {
 	if r.cfg.DisableCausality {
 		if len(keys) > 0 {
 			return keys[0], nil

@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -55,7 +54,8 @@ type Syncer struct {
 
 	reMap map[string]*regexp.Regexp
 
-	c *causality.Causality
+	c            *causality.Causality
+	lastSyncTime time.Time
 }
 
 // NewSyncer returns a Drainer instance
@@ -71,6 +71,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
 	syncer.c = causality.NewCausality()
+	syncer.lastSyncTime = time.Now()
 
 	return syncer, nil
 }
@@ -110,6 +111,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 // the binlog maybe not complete before the initCommitTS, so we should ignore them.
 // at the same time, we try to find the latest schema version before the initCommitTS to reconstruct local schemas.
 func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
+	log.Infof("[prepare] begin to construct schema infomation in syncer")
 	var latestSchemaVersion int64
 	var schemaVersion int64
 	var b *binlogItem
@@ -160,6 +162,9 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+
+		log.Infof("prepare commitTS: %d, schema venison %d", commitTS, latestSchemaVersion)
+		log.Infof("prepare schema: %s", s.schema)
 
 		return b, nil
 	}
@@ -394,13 +399,19 @@ func (s *Syncer) addJob(job *job) {
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
 	} else if job.binlogTp == translator.FLUSH {
+		s.jobWg.Add(s.cfg.WorkerCount)
+		for i := 0; i < s.cfg.WorkerCount; i++ {
+			s.jobCh[i] <- job
+		}
+		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
 	}
 
 	s.jobWg.Add(1)
-	idx := int(genHashKey(fmt.Sprintf("%v", job.key))) % s.cfg.WorkerCount
+	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
+	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 
 	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
 		s.positions[job.nodeID] = job.pos
@@ -408,6 +419,7 @@ func (s *Syncer) addJob(job *job) {
 
 	wait := s.checkWait(job)
 	if wait {
+		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
 	}
@@ -418,19 +430,22 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
 	s.addJob(job)
 	return nil
 }
 
-func (s *Syncer) resolveCausality(keys []string) (string, error) {
-	if s.cfg.DisableCausality {
-		if len(keys) > 0 {
-			return keys[0], nil
-		}
+func (s *Syncer) resolveCasuality(keys []string) (string, error) {
+	if len(keys) == 0 {
 		return "", nil
 	}
-	if s.c.DetectConflict(keys) {
+
+	if s.cfg.DisableCausality {
+		return keys[0], nil
+	}
+
+	if s.c.detectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
@@ -454,6 +469,7 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
+	log.Infof("[write save point]%d[positions]%v", ts, positions)
 	err := s.cp.Save(ts, positions)
 	if err != nil {
 		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
@@ -471,7 +487,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
-	lastSyncTime := time.Now()
 	tpCnt := make(map[pb.MutationType]int)
 
 	clearF := func() {
@@ -483,7 +498,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		sqls = sqls[0:0]
 		args = args[0:0]
 		commitTSs = commitTSs[0:0]
-		lastSyncTime = time.Now()
+		s.lastSyncTime = time.Now()
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
@@ -511,14 +526,14 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				s.addDDLCount()
 				clearF()
-			} else if !job.isCompleteBinlog {
+			} else if !job.isCompleteBinlog && job.binlogTp != translator.FLUSH {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
 				tpCnt[job.mutationTp]++
 			}
 
-			if (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+			if job.binlogTp == translator.FLUSH || (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -527,7 +542,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			}
 
 		default:
-			if time.Since(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+			if time.Since(s.lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -725,4 +740,9 @@ func (s *Syncer) Close() {
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
+}
+
+// GetLastSyncTime returns lastSyncTime
+func (s *Syncer) GetLastSyncTime() time.Time {
+	return s.lastSyncTime
 }

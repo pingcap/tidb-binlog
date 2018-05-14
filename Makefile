@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt diff restore
+.PHONY: build test check update clean pump drainer fmt diff reparo
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
@@ -43,8 +43,8 @@ drainer:
 diff:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/diff cmd/diff/main.go
 
-restore:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/restore cmd/restore/main.go	
+reparo:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go	
 
 install:
 	go install ./...

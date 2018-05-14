@@ -90,7 +90,7 @@ func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 
 func checkMagic(mgicNum uint32) error {
 	if mgicNum != magic {
-		return ErrCRCMismatch
+		return ErrMagicMismatch
 	}
 
 	return nil

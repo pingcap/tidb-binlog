@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
@@ -91,6 +90,8 @@ type Server struct {
 	needGenBinlog AtomicBool
 	pdCli         pd.Client
 	cfg           *Config
+
+	cp *checkPoint
 }
 
 func init() {
@@ -204,39 +205,31 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	find := false
-	clusterDir := path.Join(s.dataDir, "clusters")
-	names, err := bf.ReadDir(clusterDir)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for _, n := range names {
-		if s.clusterID == n {
-			find = true
-			break
+	switch s.cfg.WriteMode {
+	case kafkaWriteMode:
+		log.Debug("send binlog to kafka directly")
+		s.dispatcher = kb
+		return kb, nil
+	case mixedWriteMode:
+		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
+
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-	}
 
-	var (
-		fb        Binlogger
-		binlogDir = path.Join(clusterDir, s.clusterID)
-	)
-	if find {
-		fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-	} else {
-		fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
-	}
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+		cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 
-	cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+		s.cp = cp
+		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp)
+		return s.dispatcher, nil
 
-	s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
-	return s.dispatcher, nil
+	default:
+		return nil, errors.New("unsupport write mode")
+	}
 }
 
 func (s *Server) getBinloggerToRead() (Binlogger, error) {
@@ -257,12 +250,8 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		} else {
 			label = "succ"
 		}
-		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
-		if len(in.Payload) > 100*1024*1024 {
-			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
-		}
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
 	s.needGenBinlog.Set(false)
@@ -281,9 +270,14 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+		lossBinlogCacheCounter.Add(1)
+		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
+
+		if !s.cfg.EnableTolerant {
+			ret.Errmsg = err1.Error()
+			err = errors.Trace(err1)
+			return ret, err
+		}
 	}
 
 	return ret, nil
@@ -314,6 +308,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 		// sleep 50 ms to prevent cpu occupied
 		time.Sleep(pullBinlogInterval)
 	}
@@ -444,11 +439,12 @@ func (s *Server) writeFakeBinlog() {
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog.Set(true)
+	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		case <-time.After(genBinlogInterval):
+		case <-time.After(genFakeBinlogInterval):
 			s.writeFakeBinlog()
 		}
 	}
@@ -522,8 +518,9 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	return &HTTPStatus{
-		BinlogPos: binlogPos,
-		CommitTS:  commitTS,
+		BinlogPos:  binlogPos,
+		CommitTS:   commitTS,
+		CheckPoint: s.cp.pos(),
 	}
 }
 

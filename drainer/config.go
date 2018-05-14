@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -16,19 +17,21 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
 const (
-	defaultListenAddr     = "127.0.0.1:8249"
 	defaultDataDir        = "data.drainer"
 	defaultDetectInterval = 10
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
 	defaultKafkaAddrs     = "127.0.0.1:9092"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
-	defaultEtcdTimeout = 5 * time.Second
-	defaultPumpTimeout = 5 * time.Second
+	defaultEtcdTimeout     = 5 * time.Second
+	defaultPumpTimeout     = 5 * time.Second
+	defaultSyncedCheckTime = 5  // 5 minute
+	defaultSafeForwardTime = 20 // 20 minute
 )
 
 var (
@@ -52,7 +55,7 @@ type SyncerConfig struct {
 
 // Config holds the configuration of drainer
 type Config struct {
-	*flag.FlagSet
+	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
@@ -65,6 +68,8 @@ type Config struct {
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
+	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
+	SafeForwardTime int             `toml:"safe-forward-time" json:"safe-forward-time"`
 	EtcdTimeout     time.Duration
 	PumpTimeout     time.Duration
 	MetricsAddr     string
@@ -74,8 +79,18 @@ type Config struct {
 	tls             *tls.Config
 }
 
+func defaultListenAddr() string {
+	defaultIP, err := util.DefaultIP()
+	if err != nil {
+		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+	}
+	return defaultIP + ":8249"
+
+}
+
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
+
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
 		PumpTimeout: defaultPumpTimeout,
@@ -87,7 +102,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
 	}
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr(), "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
@@ -109,7 +124,19 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
+	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	fs.IntVar(&cfg.SafeForwardTime, "safe-forward-time", defaultSafeForwardTime, "how many minutes drainer sync before the commit ts in checkpoint file or initial-commit-ts")
+
 	return cfg
+}
+
+func (cfg *Config) String() string {
+	data, err := json.MarshalIndent(cfg, "\t", "\t")
+	if err != nil {
+		log.Error(err)
+	}
+
+	return string(data)
 }
 
 // Parse parses all config from command-line flags, environment vars or the configuration file
@@ -151,7 +178,7 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, defaultListenAddr)
+	adjustString(&cfg.ListenAddr, defaultListenAddr())
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
@@ -177,7 +204,10 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DisableDispatch {
+	if c.DestDBType == "pb" {
+		c.DisableDispatch = true
+		c.WorkerCount = 1
+	} else if c.DisableDispatch {
 		c.WorkerCount = 1
 	}
 }
@@ -209,6 +239,13 @@ func adjustInt(v *int, defValue int) {
 	}
 }
 
+func isValidateListenHost(host string) bool {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		return false
+	}
+	return true
+}
+
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -216,9 +253,16 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-	if _, _, err = net.SplitHostPort(urllis.Host); err != nil {
+
+	var host string
+	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
+
+	if !isValidateListenHost(host) {
+		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
+	}
+
 	// check EtcdEndpoints
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {

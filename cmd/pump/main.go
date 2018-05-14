@@ -10,6 +10,7 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -21,7 +22,7 @@ func main() {
 
 	cfg := pump.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'pump --help'.", err)
+		log.Fatalf("verifying flags error, %v. See 'pump --help'.", errors.ErrorStack(err))
 	}
 
 	pump.InitLogger(cfg)

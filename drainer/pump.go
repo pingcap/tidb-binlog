@@ -108,6 +108,7 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
+		errorBinlogCount.Add(1)
 		// skip?
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
@@ -282,7 +283,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 	}
 
 	p.putIntoHeap(items)
-	binlogCounter.Add(float64(len(items)))
+	publishBinlogCounter.WithLabelValues(p.nodeID).Add(float64(len(items)))
 	return nil
 }
 
@@ -294,6 +295,8 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
+			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
+			continue
 		}
 		p.bh.push(p.ctx, item)
 	}
@@ -392,6 +395,7 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
+			log.Infof("consume from topic %s partition %d offset %d", topic, pump.DefaultTopicPartition(), pos.Offset)
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
@@ -415,7 +419,10 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
-		var payload []byte
+		var (
+			payload   []byte
+			beginTime = time.Now()
+		)
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
@@ -425,6 +432,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			pos.Offset = msg.Offset
 			payload = msg.Value
 		}
+		readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+		readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(payload)))
 
 		entity := pb.Entity{
 			Pos:     pos,

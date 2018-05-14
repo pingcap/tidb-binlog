@@ -1,13 +1,13 @@
-package restore
+package repora
 
 import (
 	"github.com/juju/errors"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb-binlog/restore/translator"
+	"github.com/pingcap/tidb-binlog/reparo/translator"
 )
 
 // Translate translates payload to SQL.
-func (r *Restore) Translate(binlog *pb.Binlog) (results []*translator.TranslateResult, isDDL bool, err error) {
+func (r *Reparo) Translate(binlog *pb.Binlog) (results []*translator.TranslateResult, isDDL bool, err error) {
 	if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
 		return
 	}
@@ -24,7 +24,7 @@ func (r *Restore) Translate(binlog *pb.Binlog) (results []*translator.TranslateR
 	}
 }
 
-func (r *Restore) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
+func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
 	dml := binlog.DmlData
 	if dml == nil {
 		return nil, errors.New("dml binlog's data can't be empty")
@@ -65,7 +65,7 @@ func (r *Restore) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult
 	return results, nil
 }
 
-func (r *Restore) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
+func (r *Reparo) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult, error) {
 	_, table, err := parseDDL(string(binlog.GetDdlQuery()))
 	if err != nil {
 		return nil, errors.Trace(err)

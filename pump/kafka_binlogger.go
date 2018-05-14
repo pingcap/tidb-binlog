@@ -54,6 +54,12 @@ func (k *kafkaBinloger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, 
 
 // WriteTail implements Binlogger WriteTail interface
 func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
+	beginTime := time.Now()
+	defer func() {
+		writeBinlogHistogram.WithLabelValues("kafka").Observe(time.Since(beginTime).Seconds())
+		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(payload)))
+	}()
+
 	// for concurrency write
 	k.RLock()
 	defer k.RUnlock()
@@ -63,6 +69,10 @@ func (k *kafkaBinloger) WriteTail(payload []byte) (int64, error) {
 	}
 
 	offset, err := k.encoder.Encode(payload)
+	if err != nil {
+		writeErrorCounter.WithLabelValues("kafka").Add(1)
+		log.Errorf("write binlog into kafka %d error %v", latestKafkaPos.Offset, err)
+	}
 	if offset > latestKafkaPos.Offset {
 		latestKafkaPos.Offset = offset
 	}

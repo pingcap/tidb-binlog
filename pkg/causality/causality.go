@@ -41,7 +41,7 @@ func (c *Causality) Add(keys []string) error {
 	}
 	// find causal key
 	selectedRelation := keys[0]
-	var nonExistKeys []string
+	nonExistKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if val, ok := c.relations[key]; ok {
 			selectedRelation = val

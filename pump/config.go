@@ -29,7 +29,16 @@ const (
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
+
+	// default interval time to generate fake binlog, the unit is second
+	defaultGenFakeBinlogInterval = 3
+
+	kafkaWriteMode = "kafka"
+	// mixedWriteMode will write binlog to local file and then send to kafka
+	mixedWriteMode = "mixed"
 )
+
+var enableDebug bool
 
 // Config holds the configuration of pump
 type Config struct {
@@ -50,11 +59,15 @@ type Config struct {
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
-	MetricsAddr       string
-	MetricsInterval   int
-	configFile        string
-	printVersion      bool
-	tls               *tls.Config
+	WriteMode         string          `toml:"write-mode" json:"write-mode"`
+
+	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
+
+	MetricsAddr     string
+	MetricsInterval int
+	configFile      string
+	printVersion    bool
+	tls             *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -89,6 +102,9 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
+	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
+	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
+	fs.BoolVar(&enableDebug, "enable-debug", false, "enable print debug log")
 
 	return cfg
 }
@@ -218,17 +234,26 @@ func (cfg *Config) validate() error {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
 		if err != nil {
+			log.Errorf("connect to zookeeper %s error %v", cfg.ZkAddrs, err)
 			return errors.Trace(err)
 		}
 
 		kafkaUrls, err := zkClient.KafkaUrls()
 		if err != nil {
+			log.Errorf("get kafka urls from zookeeper error %v", err)
 			return errors.Trace(err)
 		}
 
 		// use kafka address get from zookeeper to reset the config
-		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		log.Infof("get kafka addrs %v from zookeeper", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
+	}
+
+	switch cfg.WriteMode {
+	case kafkaWriteMode, mixedWriteMode:
+		// do nothing
+	default:
+		return errors.Errorf("unknow binlog mode %s", cfg.WriteMode)
 	}
 
 	return nil

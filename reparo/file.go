@@ -1,4 +1,4 @@
-package restore
+package repora
 
 import (
 	"path"
@@ -14,7 +14,7 @@ type binlogFile struct {
 }
 
 // searchFiles return matched file and it's offset
-func (r *Restore) searchFiles(dir string) ([]binlogFile, error) {
+func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
 	// read all file names
 	sortedNames, err := bf.ReadBinlogNames(dir)
 	if err != nil {
