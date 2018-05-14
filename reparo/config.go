@@ -56,15 +56,25 @@ type Config struct {
 	printVersion bool
 }
 
+var defaultConf = &Config{
+	TxnBatch:         1,
+	WorkerCount:      1,
+	DisableCausality: false,
+	LogFile:          "reparo.log",
+	LogLevel:         "info",
+	LogRotate:        "day",
+}
+
 // NewConfig creates a Config object.
 func NewConfig() *Config {
-	c := &Config{}
+	c := defaultConf
 	c.FlagSet = flag.NewFlagSet("reparo", flag.ContinueOnError)
 	fs := c.FlagSet
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage of reparo:")
 		fs.PrintDefaults()
 	}
+
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path")
 	fs.StringVar(&c.StartDatetime, "start-datetime", "", "recovery from start-datetime, empty string means starting from the beginning of the first file")
 	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "recovery end in stop-datetime, empty string means never end.")
