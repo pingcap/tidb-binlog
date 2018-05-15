@@ -168,8 +168,8 @@ type job struct {
 type opType byte
 
 const (
-	dml opType = iota + 1
-	ddl
+	dmlType opType = iota + 1
+	ddlType
 )
 
 func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
@@ -201,7 +201,7 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 				return
 			}
 			idx++
-			if job.binlogTp == ddl {
+			if job.binlogTp == ddlType {
 				err = executor.Execute([]string{job.sql}, [][]interface{}{job.args}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
@@ -238,7 +238,8 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 }
 
 func (r *Reparo) addJob(job *job) {
-	if job.binlogTp == ddl {
+	begin := time.Now()
+	if job.binlogTp == ddlType {
 		r.jobWg.Wait()
 	}
 
@@ -249,10 +250,13 @@ func (r *Reparo) addJob(job *job) {
 	if r.checkWait(job) {
 		r.jobWg.Wait()
 	}
+	if cost := time.Since(begin).Seconds(); cost > 1 {
+		log.Warnf("[reparo] add job takes %f seconds, job %+v, is_ddl %v", cost, job, job.binlogTp == ddlType)
+	}
 }
 
 func (r *Reparo) checkWait(job *job) bool {
-	return job.binlogTp == ddl
+	return job.binlogTp == ddlType
 }
 
 func (r *Reparo) commitDMLJob(sql string, args []interface{}, keys []string) error {
@@ -293,11 +297,11 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 }
 
 func newDDLJob(sql string, args []interface{}, key string) *job {
-	return &job{binlogTp: ddl, sql: sql, args: args, key: key}
+	return &job{binlogTp: ddlType, sql: sql, args: args, key: key}
 }
 
 func newDMLJob(sql string, args []interface{}, key string) *job {
-	return &job{binlogTp: dml, sql: sql, args: args, key: key}
+	return &job{binlogTp: dmlType, sql: sql, args: args, key: key}
 }
 
 func genHashKey(key string) uint32 {
