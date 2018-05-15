@@ -1,7 +1,5 @@
 package executor
 
-// execute sql to mysql/tidb
-
 import (
 	"database/sql"
 	"time"
@@ -9,6 +7,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/reparo/metrics"
 )
 
 // DBConfig is the DB configuration.
@@ -40,11 +39,14 @@ func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, isDDL bool)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if cost := time.Since(begin).Seconds(); cost > 1 {
+	cost := time.Since(begin).Seconds()
+	if cost > 1 {
 		log.Warnf("[reparo] execute sql takes %f seconds, is_ddl %v, length of sqls %d", cost, isDDL, len(sqls))
 	} else {
 		log.Debugf("[reparo] execute sql takes %f seconds, is_ddl %v, length of sqls %d", cost, isDDL, len(sqls))
 	}
+	metrics.TxnHistogram.Observe(cost)
+
 	return nil
 }
 

@@ -52,6 +52,8 @@ type Config struct {
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
 	LogLevel  string `toml:"log-level" json:"log-level"`
 
+	StatusAddr string `toml:"status-addr" json:"status-addr"`
+
 	configFile   string
 	printVersion bool
 }
@@ -63,6 +65,7 @@ var defaultConf = &Config{
 	LogFile:          "reparo.log",
 	LogLevel:         "info",
 	LogRotate:        "day",
+	StatusAddr:       ":10085",
 }
 
 // NewConfig creates a Config object.

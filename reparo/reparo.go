@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"regexp"
 	"sync"
@@ -16,9 +18,11 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/causality"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/reparo/executor"
+	"github.com/pingcap/tidb-binlog/reparo/metrics"
 	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	"github.com/pingcap/tidb-binlog/reparo/translator"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -74,6 +78,14 @@ func (r *Reparo) prepare() error {
 	for i := 0; i < r.cfg.WorkerCount; i++ {
 		go r.sync(r.executors[i], r.jobCh[i])
 	}
+
+	go func() {
+		http.Handle("/metrics", prometheus.Handler())
+		err1 := http.ListenAndServe(r.cfg.StatusAddr, nil)
+		if err1 != nil {
+			log.Fatal(err1)
+		}
+	}()
 
 	return nil
 }
@@ -243,11 +255,13 @@ func (r *Reparo) addJob(job *job) {
 	if job.binlogTp == ddlType {
 		r.jobWg.Wait()
 	}
-	if cost := time.Since(begin).Seconds(); cost > 1 {
-		log.Warnf("[reparo] wait dml executed takes %f seconds", cost)
+	dmlCost := time.Since(begin).Seconds()
+	if dmlCost > 1 {
+		log.Warnf("[reparo] wait dml executed takes %f seconds", dmlCost)
 	} else {
-		log.Debugf("[reparo] wait dml executed takes %f seconds", cost)
+		log.Debugf("[reparo] wait dml executed takes %f seconds", dmlCost)
 	}
+	metrics.WaitDMLExecutedHistogram.Observe(dmlCost)
 
 	r.jobWg.Add(1)
 	idx := int(genHashKey(fmt.Sprintf("%s", job.key))) % r.cfg.WorkerCount
@@ -257,16 +271,21 @@ func (r *Reparo) addJob(job *job) {
 	if r.checkWait(job) {
 		r.jobWg.Wait()
 	}
-	if cost := time.Since(begin1).Seconds(); cost > 1 {
-		log.Warnf("[reparo] wait ddl executed takes %f seconds", cost)
+	ddlCost := time.Since(begin1).Seconds()
+	if ddlCost > 1 {
+		log.Warnf("[reparo] wait ddl executed takes %f seconds", ddlCost)
 	} else {
-		log.Debugf("[reparo] wait ddl executed takes %f seconds", cost)
+		log.Debugf("[reparo] wait ddl executed takes %f seconds", ddlCost)
 	}
-	if cost := time.Since(begin).Seconds(); cost > 1 {
-		log.Warnf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", cost, job.binlogTp == ddlType, job)
+	metrics.WaitDDLExecutedHistogram.Observe(ddlCost)
+
+	totalCost := time.Since(begin).Seconds()
+	if totalCost > 1 {
+		log.Warnf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", totalCost, job.binlogTp == ddlType, job)
 	} else {
-		log.Debugf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", cost, job.binlogTp == ddlType, job)
+		log.Debugf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", totalCost, job.binlogTp == ddlType, job)
 	}
+	metrics.AddJobHistogram.Observe(totalCost)
 }
 
 func (r *Reparo) checkWait(job *job) bool {
@@ -291,10 +310,13 @@ func (r *Reparo) commitDDLJob(sql string, args []interface{}, key string) {
 func (r *Reparo) resolveCausality(keys []string) (string, error) {
 	begin := time.Now()
 	defer func() {
-		if cost := time.Since(begin).Seconds(); cost > 0.1 {
+		cost := time.Since(begin).Seconds()
+		if cost > 0.1 {
 			log.Warnf("[reparo] resolve causality takes %f seconds", cost)
 		}
+		metrics.ResolveCausalityHistogram.Observe(cost)
 	}()
+
 	if r.cfg.DisableCausality {
 		if len(keys) > 0 {
 			return keys[0], nil

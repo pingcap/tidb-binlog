@@ -5,6 +5,9 @@ data-dir = "./data.drainer"
 # log-rotate = "hour"
 log-level = "info"
 
+# status-addr is used for debugging and prometheus metrics.
+status-addr = ":10085"
+
 # start-datetime and stop-datetime enable you to pick a range of binlog to recovery.
 # The datetime format is like '2018-02-28 12:12:12'. 
 # start-datetime = ""
