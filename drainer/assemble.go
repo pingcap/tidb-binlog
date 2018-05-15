@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"sync"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
@@ -109,6 +110,7 @@ func (a *assembler) do() {
 				}
 			}
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

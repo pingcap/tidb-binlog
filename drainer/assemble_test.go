@@ -3,6 +3,7 @@ package drainer
 import (
 	"encoding/binary"
 	"hash/crc32"
+	"time"
 
 	"github.com/Shopify/sarama"
 	. "github.com/pingcap/check"
@@ -29,6 +30,9 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	asm := newAssembler()
 	defer asm.close()
 
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	// normal binlog slices
 	messages := t.testGenerateConsumerMessage("t1", 4, nil)
 	for _, message := range messages {
@@ -38,7 +42,7 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	var binlog *assembledBinlog
 	select {
 	case binlog = <-asm.messages():
-	default:
+	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
 	c.Assert(binlog, NotNil)
@@ -52,7 +56,7 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	asm.append(messages[0])
 	select {
 	case binlog = <-asm.messages():
-	default:
+	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
 	c.Assert(binlog, NotNil)
