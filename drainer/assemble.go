@@ -166,11 +166,11 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 				return nil
 			}
 
+			a.slices <- msg
 			if !a.bms[messageID].completed() {
-				a.slices <- msg
 				return nil
 			}
-			messages := append(a.peekBinlogSlices(), msg)
+			messages := a.peekBinlogSlices()
 			b, err := assembleBinlog(messages)
 			if err != nil {
 				log.Errorf("[pump] assemble messages error %v", err)
