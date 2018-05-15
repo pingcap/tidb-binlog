@@ -12,7 +12,7 @@ var _ = Suite(&testSlicerSuite{})
 type testSlicerSuite struct{}
 
 func (s *testSlicerSuite) TestGenerate(c *C) {
-	sli := newKafkaSlicer("test", 0)
+	sli := NewKafkaSlicer("test", 0)
 
 	var (
 		pos = binlog.Pos{

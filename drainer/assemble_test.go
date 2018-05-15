@@ -21,7 +21,7 @@ func (t *testDrainerSuite) TestGetKeyFromComsumerMessageHeader(c *C) {
 		}},
 	}
 
-	c.Assert(getKeyFromComsumerMessageHeader(pump.No, message), Equals, data)
+	c.Assert(getKeyFromComsumerMessageHeader(pump.No, message), DeepEquals, data)
 	c.Assert(getKeyFromComsumerMessageHeader(pump.Total, message), IsNil)
 }
 
@@ -48,10 +48,8 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	// normal unsplit binlog
 	binlog = nil
 	messages = t.testGenerateConsumerMessage("t1", 1, nil)
-	for _, message := range messages {
-		asm.append(message)
-	}
 	messages[0].Headers = nil
+	asm.append(messages[0])
 	select {
 	case binlog = <-asm.messages():
 	default:
