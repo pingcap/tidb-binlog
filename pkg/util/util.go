@@ -53,7 +53,7 @@ func DefaultIP() (ip string, err error) {
 	return
 }
 
-// StdLogger implement samara.StdLogger
+// StdLogger implements samara.StdLogger
 type StdLogger struct {
 	prefix string
 }
