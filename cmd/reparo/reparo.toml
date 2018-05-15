@@ -31,6 +31,10 @@ dest-type = "mysql"
 #db-name ="test"
 #tbl-name = "~^a.*"
 
+#replicate-ignore-db = ["~^c.*","s2"]
+#[[replicate-ignore-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
 
 txn-batch = 10
 worker-count = 1
