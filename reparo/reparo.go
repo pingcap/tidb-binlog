@@ -80,6 +80,7 @@ func (r *Reparo) prepare() error {
 
 // Process runs the main procedure.
 func (r *Reparo) Process() error {
+	begin := time.Now()
 	if err := r.prepare(); err != nil {
 		return errors.Trace(err)
 	}
@@ -140,9 +141,12 @@ func (r *Reparo) Process() error {
 			}
 
 			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
-			log.Infof("offset %d ts %d, datetime %s", offset, binlog.CommitTs, dt.String())
+			log.Debugf("offset %d ts %d, datetime %s", offset, binlog.CommitTs, dt.String())
 		}
 	}
+
+	r.jobWg.Wait()
+	log.Infof("[reparo] recovery is done, takes %f seconds", time.Since(begin).Seconds())
 
 	return nil
 }
