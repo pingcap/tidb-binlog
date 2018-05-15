@@ -39,7 +39,7 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	select {
 	case binlog = <-asm.messages():
 	default:
-		t.Fatalf("assembler was wrong")
+		c.Fatalf("assembler was wrong")
 	}
 	c.Assert(binlog, NotNil)
 	c.Assert(asm.bms, HasLen, 0)
@@ -55,12 +55,11 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	select {
 	case binlog = <-asm.messages():
 	default:
-		t.Fatalf("assembler was wrong")
+		c.Fatalf("assembler was wrong")
 	}
 	c.Assert(binlog, NotNil)
 	c.Assert(asm.bms, HasLen, 0)
 	c.Assert(asm.slices, HasLen, 0)
-
 
 }
 
@@ -78,6 +77,8 @@ func (t *testDrainerSuite) testGenerateConsumerMessage(id string, size int, loss
 		data = append(data, basicData...)
 	}
 	checksum := crc32.Checksum(data, crcTable)
+	checksumByte := make([]byte, 4)
+	binary.LittleEndian.PutUint32(checksumByte, checksum)
 
 	messages := make([]*sarama.ConsumerMessage, 0, size-len(loss))
 
@@ -106,9 +107,9 @@ func (t *testDrainerSuite) testGenerateConsumerMessage(id string, size int, loss
 					Key:   pump.Total,
 					Value: totalByte,
 				}, {
-					Key: pump.Checksum,
-					Value: checksum,
-				}
+					Key:   pump.Checksum,
+					Value: checksumByte,
+				},
 			},
 		})
 	}
