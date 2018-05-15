@@ -32,6 +32,9 @@ func newMysqlExecutor(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, isDDL bool) error {
+	if len(sqls) == 0 {
+		return nil
+	}
 	begin := time.Now()
 	err := pkgsql.ExecuteSQLs(m.db, sqls, args, isDDL)
 	if err != nil {

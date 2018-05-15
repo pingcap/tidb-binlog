@@ -545,7 +545,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 			if time.Since(s.lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
+				log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
 			}

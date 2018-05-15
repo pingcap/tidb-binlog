@@ -24,7 +24,7 @@ import (
 const (
 	jobChanSize = 1000
 
-	maxExecutionWaitTime = 3 * time.Second
+	maxExecutionWaitTime = 100 * time.Millisecond
 	executionWaitTime    = 10 * time.Millisecond
 )
 
@@ -202,12 +202,6 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 			}
 			idx++
 			if job.binlogTp == ddlType {
-				// execute all remaining dmls before executing ddl
-				err = executor.Execute(sqls, args, false)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-
 				err = executor.Execute([]string{job.sql}, [][]interface{}{job.args}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
@@ -215,8 +209,9 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 					} else {
 						log.Warnf("[ignore ddl error] [sql] %s [args]%v [error]%v", job.sql, job.args, err)
 					}
-					clearF()
 				}
+				clearF()
+
 			} else {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
