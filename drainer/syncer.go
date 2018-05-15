@@ -436,7 +436,7 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	return nil
 }
 
-func (s *Syncer) resolveCasuality(keys []string) (string, error) {
+func (s *Syncer) resolveCausality(keys []string) (string, error) {
 	if len(keys) == 0 {
 		return "", nil
 	}
@@ -445,7 +445,7 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 		return keys[0], nil
 	}
 
-	if s.c.detectConflict(keys) {
+	if s.c.DetectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
