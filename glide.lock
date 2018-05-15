@@ -1,5 +1,5 @@
-hash: 59fc3f023346bd8efc6c4e6ad4833274d2c0810e5926f0f9ef95c5bf434e982c
-updated: 2018-05-15T13:25:45.143718509+08:00
+hash: 4a7b6ca2d8991fd4b746aa6037fc23fa2fad794200707b15b1e2119cdb1a6d37
+updated: 2018-05-14T13:46:23.464709503+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -110,7 +110,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: 78ad7f262603437f0ecfebc835d80094f89c8f54
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -164,7 +164,7 @@ imports:
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: 6b7015e65d366bf3f19b2b2a000a831940f0f7e0
+  version: 39de4380c2e0353a115b80b1c730719c79bfb771
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -337,25 +337,18 @@ imports:
   version: e6b59f6144beb8570562539c1898a0b1fea34b41
   subpackages:
   - zk
-- name: github.com/satori/go.uuid
-  version: f58768cc1a7a7e77a3bd49e98cdd21419399b6a3
 - name: github.com/Shopify/sarama
   version: f7be6aa2bc7b2e38edf816b08b582782194a1c02
 - name: github.com/siddontang/go
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
-  - hack
   - ioutil2
-- name: github.com/siddontang/go-mysql
-  version: 2b6ddb04ded1419f74aa5e26d8f8adc2fec1a5a1
-  subpackages:
-  - mysql
 - name: github.com/sirupsen/logrus
-  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+  version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
-  version: 0d12bf811670bf6a1a63828dfbd003eded177fce
+  version: f09979ecbc725b9e6d41a297405f65e7e8804acc
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
@@ -385,6 +378,7 @@ imports:
   subpackages:
   - bcrypt
   - blowfish
+  - ssh/terminal
 - name: golang.org/x/net
   version: d1e1b351919c6738fdeb9893d5c998b161464f0c
   repo: https://github.com/golang/net.git
@@ -452,7 +446,7 @@ imports:
   - tap
   - transport
 - name: gopkg.in/natefinch/lumberjack.v2
-  version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
+  version: a96e63847dc3c67d17befa69c303767e2f84e54f
 testImports:
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1

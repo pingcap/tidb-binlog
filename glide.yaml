@@ -294,8 +294,6 @@ import:
   version: 604e922904d35e97f98a774db7881f049cd8d970
   subpackages:
   - queue
-- package: github.com/siddontang/go-mysql
-  version: 2b6ddb04ded1419f74aa5e26d8f8adc2fec1a5a1
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
