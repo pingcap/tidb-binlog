@@ -159,7 +159,8 @@ func posToFloat(pos *binlog.Pos) float64 {
 }
 
 // use magic code to find next binlog and skips corruption data
-func seekNextBinlog(f *os.File, offset int64) (int64, error) {
+// seekBinlog seeks one binlog from current offset
+func seekBinlog(f *os.File, offset int64) (int64, error) {
 	var (
 		batchSize    = 1024
 		headerLength = 3 // length of magic code - 1
