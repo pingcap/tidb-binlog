@@ -202,6 +202,12 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 			}
 			idx++
 			if job.binlogTp == ddlType {
+				// execute all remaining dmls before executing ddl
+				err = executor.Execute(sqls, args, false)
+				if err != nil {
+					log.Fatalf(errors.ErrorStack(err))
+				}
+
 				err = executor.Execute([]string{job.sql}, [][]interface{}{job.args}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
@@ -242,16 +248,29 @@ func (r *Reparo) addJob(job *job) {
 	if job.binlogTp == ddlType {
 		r.jobWg.Wait()
 	}
+	if cost := time.Since(begin).Seconds(); cost > 1 {
+		log.Warnf("[reparo] wait dml executed takes %f seconds", cost)
+	} else {
+		log.Debugf("[reparo] wait dml executed takes %f seconds", cost)
+	}
 
 	r.jobWg.Add(1)
 	idx := int(genHashKey(fmt.Sprintf("%s", job.key))) % r.cfg.WorkerCount
 	r.jobCh[idx] <- job
 
+	begin1 := time.Now()
 	if r.checkWait(job) {
 		r.jobWg.Wait()
 	}
+	if cost := time.Since(begin1).Seconds(); cost > 1 {
+		log.Warnf("[reparo] wait ddl executed takes %f seconds", cost)
+	} else {
+		log.Debugf("[reparo] wait ddl executed takes %f seconds", cost)
+	}
 	if cost := time.Since(begin).Seconds(); cost > 1 {
-		log.Warnf("[reparo] add job takes %f seconds, job %+v, is_ddl %v", cost, job, job.binlogTp == ddlType)
+		log.Warnf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", cost, job.binlogTp == ddlType, job)
+	} else {
+		log.Debugf("[reparo] add job takes %f seconds, is_ddl %v, job %+v", cost, job.binlogTp == ddlType, job)
 	}
 }
 
@@ -275,6 +294,12 @@ func (r *Reparo) commitDDLJob(sql string, args []interface{}, key string) {
 }
 
 func (r *Reparo) resolveCausality(keys []string) (string, error) {
+	begin := time.Now()
+	defer func() {
+		if cost := time.Since(begin).Seconds(); cost > 0.1 {
+			log.Warnf("[reparo] resolve causality takes %f seconds", cost)
+		}
+	}()
 	if r.cfg.DisableCausality {
 		if len(keys) > 0 {
 			return keys[0], nil
