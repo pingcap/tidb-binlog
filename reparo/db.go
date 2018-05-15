@@ -13,7 +13,6 @@ import (
 	"github.com/ngaut/log"
 	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	tmysql "github.com/pingcap/tidb/mysql"
-	gmysql "github.com/siddontang/go-mysql/mysql"
 )
 
 const (
@@ -254,7 +253,7 @@ func querySQL(db *sql.DB, query string) (*sql.Rows, error) {
 
 func isRetryableError(err error) bool {
 	err = errors.Cause(err)
-	if err == driver.ErrBadConn || err == gmysql.ErrBadConn {
+	if err == driver.ErrBadConn {
 		return true
 	}
 
@@ -268,7 +267,7 @@ func isRetryableError(err error) bool {
 	if ok {
 		switch mysqlErr.Number {
 		// ER_LOCK_DEADLOCK can retry to commit while meet deadlock
-		case tmysql.ErrUnknown, gmysql.ER_LOCK_DEADLOCK, tmysql.ErrPDServerTimeout, tmysql.ErrTiKVServerTimeout, tmysql.ErrTiKVServerBusy, tmysql.ErrResolveLockTimeout, tmysql.ErrRegionUnavailable:
+		case tmysql.ErrUnknown, tmysql.ErrLockDeadlock, tmysql.ErrPDServerTimeout, tmysql.ErrTiKVServerTimeout, tmysql.ErrTiKVServerBusy, tmysql.ErrResolveLockTimeout, tmysql.ErrRegionUnavailable:
 			return true
 		default:
 			return false
