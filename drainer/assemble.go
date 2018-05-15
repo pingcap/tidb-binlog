@@ -180,6 +180,9 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 
 			return b
 		}
+	}
+
+	if len(a.bms) >= 1 {
 		// meet incontinuity binlogs slices
 		// pump must have sent duplicate binlog slices or lose some binlog in kafka
 		// just ingnore all slices before it and issue an alert
