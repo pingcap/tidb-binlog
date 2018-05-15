@@ -329,11 +329,10 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 			from.Offset = ent.Pos.Offset
 			err := sendBinlog(ent)
+			binlogBufferPool.Put(buf)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			binlogBufferPool.Put(buf)
 		}
 
 		if err != nil && err != io.EOF {

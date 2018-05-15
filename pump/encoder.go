@@ -82,8 +82,7 @@ func (k *kafkaEncoder) Encode(entity *binlog.Entity) (int64, error) {
 		errMessages []*sarama.ProducerMessage
 		err         error
 		retry       int
-		// generate messageID for every kafka message to indicate which binlog it is
-		offset int64 = math.MaxInt64
+		offset      int64 = math.MaxInt64
 	)
 
 	messages, err = k.slicer.Generate(entity)
@@ -107,6 +106,9 @@ func (k *kafkaEncoder) Encode(entity *binlog.Entity) (int64, error) {
 			errMessages = append(errMessages, errMessage.Msg)
 		}
 		err = k.producer.SendMessages(errMessages)
+	}
+	if err != nil {
+		return 0, errors.Trace(err)
 	}
 
 	for _, message := range messages {

@@ -52,11 +52,10 @@ type globalConfig struct {
 	enableBinlogSlice bool
 	// size of one binlog slice
 	slicesSize int
-	// num of retry to send to kafka
+	// retry to send to kafka
 	sendKafKaRetryNum int
 
 	// segmentSizeBytes is the max threshold of binlog segment file size
-	// as an exported variable, you can define a different size
 	segmentSizeBytes int64
 }
 

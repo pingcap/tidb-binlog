@@ -33,6 +33,13 @@ func newKafkaSlicer(topic string, partition int32) *kafkaSlicer {
 	}
 }
 
+// rules of binlog split
+// unsplitted binlog doesn't have header - [disable binlog slice, length of payload is smaller than slice size limit]
+// splitted binlog header
+// * messageID: pos.Suffix_pos.Offset
+// * total: total count of binlog slices
+// * No: the number of slice in binlog slices
+// * checksum: checksum code of binlog
 func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage, error) {
 	if !GlobalConfig.enableBinlogSlice || len(entity.Payload) < GlobalConfig.slicesSize {
 		// no header, no slices
@@ -46,7 +53,6 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 	}
 
 	var (
-		// hard code, lenght of checksum code is 4
 		total     = (len(entity.Payload) + GlobalConfig.slicesSize - 1) / GlobalConfig.slicesSize
 		messages  = make([]*sarama.ProducerMessage, 0, total)
 		left      = 0
