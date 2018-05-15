@@ -68,7 +68,7 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 		left = right
 	}
 
-	messages = append(messages, s.wrapProducerMessage(total, messageID, totalByte, entity.Payload[left:], entity.Checksum))
+	messages = append(messages, s.wrapProducerMessage(total-1, messageID, totalByte, entity.Payload[left:], entity.Checksum))
 	return messages, nil
 }
 
