@@ -42,7 +42,12 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
 		})
 
-	// Total
+	ExecuteTotalCounter = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "reparo",
+			Name:      "execute_total",
+			Help:      "counter of total execution",
+		})
 )
 
 func init() {
@@ -51,4 +56,5 @@ func init() {
 	prometheus.MustRegister(WaitDDLExecutedHistogram)
 	prometheus.MustRegister(AddJobHistogram)
 	prometheus.MustRegister(ResolveCausalityHistogram)
+	prometheus.MustRegister(ExecuteTotalCounter)
 }

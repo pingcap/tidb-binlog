@@ -46,6 +46,7 @@ func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, isDDL bool)
 		log.Debugf("[reparo] execute sql takes %f seconds, is_ddl %v, length of sqls %d", cost, isDDL, len(sqls))
 	}
 	metrics.TxnHistogram.Observe(cost)
+	metrics.ExecuteTotalCounter.Add(float64(len(sqls)))
 
 	return nil
 }
