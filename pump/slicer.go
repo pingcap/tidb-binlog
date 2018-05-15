@@ -39,7 +39,7 @@ func newKafkaSlicer(topic string, partition int32) *kafkaSlicer {
 // * messageID: pos.Suffix_pos.Offset
 // * total: total count of binlog slices
 // * No: the number of slice in binlog slices
-// * checksum: checksum code of binlog
+// * checksum: checksum code of binlog - only last slice have checksum code to save space
 func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage, error) {
 	if !GlobalConfig.enableBinlogSlice || len(entity.Payload) < GlobalConfig.slicesSize {
 		// no header, no slices
@@ -58,7 +58,7 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 		left      = 0
 		right     = 0
 		totalByte = make([]byte, 4)
-		messageID = []byte(fmt.Sprintf("%d-%d", entity.Pos.Suffix, entity.Pos.Offset))
+		messageID = []byte(binlogSliceMessageID(entity.Pos))
 	)
 
 	binary.LittleEndian.PutUint32(totalByte, uint32(total))
@@ -102,4 +102,8 @@ func (s *kafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []b
 	}
 
 	return msg
+}
+
+func binlogSliceMessageID(pos binlog.Pos) string {
+	return fmt.Sprintf("%d-%d", pos.Suffix, pos.Offset)
 }

@@ -2,7 +2,6 @@ package pump
 
 import (
 	"encoding/binary"
-	"fmt"
 
 	. "github.com/pingcap/check"
 	binlog "github.com/pingcap/tipb/go-binlog"
@@ -24,7 +23,7 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 		basisData = []byte("binlogtest")
 		testData  = make([]byte, 0, 4*len(basisData))
 		checksum  = []byte("hash")
-		messageID = []byte(fmt.Sprintf("%d_%d", pos.Suffix, pos.Offset))
+		messageID = []byte(binlogSliceMessageID(pos))
 	)
 
 	for i := 0; i < duplicate; i++ {
