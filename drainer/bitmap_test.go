@@ -37,14 +37,14 @@ func (t *testDrainerSuite) TestBitmap(c *C) {
 func testSetBitMap(c *C, bm *bitmap, total int) {
 	for i := 0; i < total; i++ {
 		c.Assert(bm.completed(), IsFalse)
-		bm.set(i)
+		c.Assert(bm.set(i), IsTrue)
 		c.Assert(bm.current, Equals, i+1)
 	}
 
 	c.Assert(bm.completed(), IsTrue)
 
 	for i := 0; i < total; i++ {
-		bm.set(i)
+		c.Assert(bm.set(i), IsFalse)
 		c.Assert(bm.completed(), IsTrue)
 	}
 

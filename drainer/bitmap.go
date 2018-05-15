@@ -24,14 +24,17 @@ func newBitmap(total int) *bitmap {
 	return bm
 }
 
-func (b *bitmap) set(index int) {
+func (b *bitmap) set(index int) bool {
 	mask := uint8(1 << uint(index%8))
 	bucket := b.value[index/8]
 
 	if bucket|mask != bucket {
 		b.value[index/8] = bucket | mask
 		b.current++
+		return true
 	}
+
+	return false
 }
 
 func (b *bitmap) completed() bool {

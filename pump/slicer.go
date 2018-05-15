@@ -20,19 +20,21 @@ var (
 	Checksum = []byte("checksum")
 )
 
-// kafkaSlicer spit payload into multiple messages
-type kafkaSlicer struct {
+// KafkaSlicer spit payload into multiple messages
+type KafkaSlicer struct {
 	topic     string
 	partition int32
 }
 
-func newKafkaSlicer(topic string, partition int32) *kafkaSlicer {
-	return &kafkaSlicer{
+// NewKafkaSlicer returns a kafka slicer
+func NewKafkaSlicer(topic string, partition int32) *KafkaSlicer {
+	return &KafkaSlicer{
 		topic:     topic,
 		partition: partition,
 	}
 }
 
+// Generate genrates binlog slices
 // rules of binlog split
 // unsplitted binlog doesn't have header - [disable binlog slice, length of payload is smaller than slice size limit]
 // splitted binlog header
@@ -40,7 +42,7 @@ func newKafkaSlicer(topic string, partition int32) *kafkaSlicer {
 // * total: total count of binlog slices
 // * No: the number of slice in binlog slices
 // * checksum: checksum code of binlog - only last slice have checksum code to save space
-func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage, error) {
+func (s *KafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage, error) {
 	if !GlobalConfig.enableBinlogSlice || len(entity.Payload) < GlobalConfig.slicesSize {
 		// no header, no slices
 		return []*sarama.ProducerMessage{
@@ -58,7 +60,7 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 		left      = 0
 		right     = 0
 		totalByte = make([]byte, 4)
-		messageID = []byte(binlogSliceMessageID(entity.Pos))
+		messageID = []byte(BinlogSliceMessageID(entity.Pos))
 	)
 
 	binary.LittleEndian.PutUint32(totalByte, uint32(total))
@@ -72,7 +74,7 @@ func (s *kafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 	return messages, nil
 }
 
-func (s *kafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []byte, payload []byte, checksum []byte) *sarama.ProducerMessage {
+func (s *KafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []byte, payload []byte, checksum []byte) *sarama.ProducerMessage {
 	no := make([]byte, 4)
 	binary.LittleEndian.PutUint32(no, uint32(index))
 
@@ -104,6 +106,7 @@ func (s *kafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []b
 	return msg
 }
 
-func binlogSliceMessageID(pos binlog.Pos) string {
+// BinlogSliceMessageID return a message ID of pos
+func BinlogSliceMessageID(pos binlog.Pos) string {
 	return fmt.Sprintf("%d-%d", pos.Suffix, pos.Offset)
 }

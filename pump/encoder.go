@@ -64,7 +64,7 @@ type kafkaEncoder struct {
 	topic     string
 	partition int32
 	producer  sarama.SyncProducer
-	slicer    *kafkaSlicer
+	slicer    *KafkaSlicer
 }
 
 func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
@@ -72,7 +72,7 @@ func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32
 		producer:  producer,
 		topic:     topic,
 		partition: partition,
-		slicer:    newKafkaSlicer(topic, partition),
+		slicer:    NewKafkaSlicer(topic, partition),
 	}
 }
 

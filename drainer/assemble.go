@@ -14,9 +14,8 @@ import (
 
 // unsupported concurrency
 
-// slice cache size is to cache non-complete binlog slices, two use cases
+// slice cache size is to cache non-complete binlog slices to assemble binlog
 // * large binlog - upper limit sliceCacheSize * MaxsliceSize, default 5G now
-// * ease loss binlog slice alert
 const sliceCacheSize = 5000
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
@@ -79,35 +78,49 @@ func (a *assembler) close() {
 
 func (a *assembler) do() {
 	var (
-		msg    *sarama.ConsumerMessage
-		binlog *assembledBinlog
+		msg     *sarama.ConsumerMessage
+		binlogs = make([]*assembledBinlog, 0, 16)
 	)
 	for {
-		select {
-		case <-a.ctx.Done():
-			log.Warningf("assembler was canceled: %v", a.ctx.Err())
-			return
-		case msg = <-a.input:
-			binlog = a.assemble(msg)
+		if len(binlogs) > 0 {
+			binlog := binlogs[0]
+			select {
+			case <-a.ctx.Done():
+				log.Warningf("assembler was canceled: %v", a.ctx.Err())
+				return
+			case a.msgs <- binlog:
+				log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
+				binlogs = binlogs[1:]
+			case msg = <-a.input:
+				binlog := a.assemble(msg)
+				if binlog != nil {
+					binlogs = append(binlogs, binlog)
+				}
+			}
+		} else {
+			select {
+			case <-a.ctx.Done():
+				log.Warningf("assembler was canceled: %v", a.ctx.Err())
+				return
+			case msg = <-a.input:
+				binlog := a.assemble(msg)
+				if binlog != nil {
+					binlogs = append(binlogs, binlog)
+				}
+			}
 		}
-
-		if binlog == nil {
-			continue
-		}
-
-		select {
-		case <-a.ctx.Done():
-			log.Warningf("assembler was canceled: %v", a.ctx.Err())
-			return
-		case a.msgs <- binlog:
-			log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
-		}
-
 	}
 }
 
 func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
-	if len(msg.Headers) == 0 && len(a.bms) == 0 {
+	// unsplit binlog, just return
+	if len(msg.Headers) == 0 {
+		if len(a.bms) != 0 {
+			log.Error("[assembler] meet corruption binlog, pop corrpution binlog and skip it")
+			errorBinlogCount.Add(1)
+			a.popBinlogSlices()
+		}
+
 		b := constructAssembledBinlog(false)
 		b.entity = &pb.Entity{
 			Payload: msg.Value,
@@ -119,7 +132,7 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 		return b
 	}
 
-	// skip non-complete binlog slice in the front of slices channel
+	// if slices channel is full, skip non-complete binlog slice that is in the front of slices channel
 	// maybe we loss some binlog slices, issue an alert
 	if len(a.slices) == a.cacheSize {
 		// fetch message id
@@ -145,12 +158,16 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 		// only one binlog in slices
 		// check completed or append
 		if len(a.bms) == 1 {
-			a.bms[messageID].set(no)
+			isNew := a.bms[messageID].set(no)
+			// duplicate slice arrives, just ignore
+			if !isNew {
+				return nil
+			}
+
 			if !a.bms[messageID].completed() {
 				a.slices <- msg
 				return nil
 			}
-
 			messages := append(a.peekBinlogSlices(), msg)
 			b, err := assembleBinlog(messages)
 			if err != nil {
@@ -161,9 +178,9 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 
 			return b
 		}
-		// meet same and incontinuity binlogs slices
-		// we must have sent duplicate binlog slices or lose some binlog
-		// just ingnore all slices before it
+		// meet incontinuity binlogs slices
+		// pump must have sent duplicate binlog slices or lose some binlog in kafka
+		// just ingnore all slices before it and issue an alert
 		log.Error("[assembler] meet corruption binlog, pop corrpution binlog and skip it")
 		errorBinlogCount.Add(1)
 		a.popBinlogSlices()

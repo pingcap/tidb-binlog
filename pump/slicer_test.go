@@ -23,7 +23,7 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 		basisData = []byte("binlogtest")
 		testData  = make([]byte, 0, 4*len(basisData))
 		checksum  = []byte("hash")
-		messageID = []byte(binlogSliceMessageID(pos))
+		messageID = []byte(BinlogSliceMessageID(pos))
 	)
 
 	for i := 0; i < duplicate; i++ {
@@ -83,5 +83,9 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 		default:
 			c.Fatalf("unsupport header %s", header.Key)
 		}
+	}
+
+	for _, exist := range Nos {
+		c.Assert(exist, IsTrue)
 	}
 }
