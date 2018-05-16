@@ -2,7 +2,10 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"net"
+
+	"github.com/ngaut/log"
 )
 
 // TsToTimestamp translate ts to timestamp
@@ -48,4 +51,34 @@ func DefaultIP() (ip string, err error) {
 
 	err = errors.New("no ip found")
 	return
+}
+
+// StdLogger implements samara.StdLogger
+type StdLogger struct {
+	prefix string
+}
+
+// NewStdLogger return an instance of StdLogger
+func NewStdLogger(prefix string) *StdLogger {
+	return &StdLogger{
+		prefix: prefix,
+	}
+}
+
+// Print implements samara.StdLogger
+func (l *StdLogger) Print(v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprint(v...))
+}
+
+// Printf implements samara.StdLogger
+func (l *StdLogger) Printf(format string, v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprintf(format, v...))
+}
+
+// Println implements samara.StdLogger
+func (l *StdLogger) Println(v ...interface{}) {
+	logger := log.Logger()
+	logger.Output(2, l.prefix+fmt.Sprintln(v...))
 }
