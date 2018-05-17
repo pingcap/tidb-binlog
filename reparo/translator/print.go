@@ -5,7 +5,6 @@ import (
 
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -16,19 +15,19 @@ func newPrintTranslator() Translator {
 	return &printTranslator{}
 }
 
-func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printInsertAndDeleteEvent(row)
 	return nil, nil
 }
 
-func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printUpdateEvent(row)
 	return nil, nil
 }
 
-func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	printHeader(binlog, event)
 	printInsertAndDeleteEvent(row)
 	return nil, nil

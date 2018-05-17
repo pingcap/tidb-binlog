@@ -1,4 +1,4 @@
-package reparo
+package translator
 
 import (
 	"database/sql"
@@ -21,18 +21,18 @@ const (
 	retryTimeout = time.Second * 1
 )
 
-func (r *Reparo) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Table, error) {
+func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Table, error) {
 	table := &tbl.Table{}
 	table.Schema = schema
 	table.Name = name
 	table.IndexColumns = make(map[string][]*tbl.Column)
 
-	err := getTableColumns(r.db, table)
+	err := getTableColumns(m.db, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	err = getTableIndex(r.db, table)
+	err = getTableIndex(m.db, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -44,25 +44,25 @@ func (r *Reparo) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Ta
 	return table, nil
 }
 
-func (r *Reparo) getTable(schema string, table string) (*tbl.Table, error) {
+func (m *mysqlTranslator) getTable(schema string, table string) (*tbl.Table, error) {
 	key := fmt.Sprintf("%s.%s", schema, table)
 
-	value, ok := r.tables[key]
+	value, ok := m.tables[key]
 	if ok {
 		return value, nil
 	}
 
-	t, err := r.getTableFromDB(r.db, schema, table)
+	t, err := m.getTableFromDB(m.db, schema, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	r.tables[key] = t
+	m.tables[key] = t
 	return t, nil
 }
 
-func (r *Reparo) clearTables() {
-	r.tables = make(map[string]*tbl.Table)
+func (m *mysqlTranslator) clearTables() {
+	m.tables = make(map[string]*tbl.Table)
 }
 
 func getTableIndex(db *sql.DB, table *tbl.Table) error {

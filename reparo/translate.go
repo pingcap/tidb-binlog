@@ -30,17 +30,14 @@ func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		return nil, errors.New("dml binlog's data can't be empty")
 	}
 	results := make([]*translator.TranslateResult, 0, len(dml.Events))
-
-	var result *translator.TranslateResult
+	var (
+		result *translator.TranslateResult
+		err    error
+	)
 
 	for _, event := range dml.Events {
 		if r.SkipBySchemaAndTable(event.GetSchemaName(), event.GetTableName()) {
 			continue
-		}
-
-		table, err := r.getTable(event.GetSchemaName(), event.GetTableName())
-		if err != nil {
-			return nil, errors.Trace(err)
 		}
 
 		e := &event
@@ -48,11 +45,11 @@ func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		row := e.GetRow()
 		switch tp {
 		case pb.EventType_Insert:
-			result, err = r.translator.TransInsert(binlog, e, row, table)
+			result, err = r.translator.TransInsert(binlog, e, row)
 		case pb.EventType_Update:
-			result, err = r.translator.TransUpdate(binlog, e, row, table)
+			result, err = r.translator.TransUpdate(binlog, e, row)
 		case pb.EventType_Delete:
-			result, err = r.translator.TransDelete(binlog, e, row, table)
+			result, err = r.translator.TransDelete(binlog, e, row)
 		default:
 			panic("unreachable")
 		}
@@ -82,7 +79,6 @@ func (r *Reparo) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	r.clearTables()
 	if result == nil {
 		return nil, nil
 	}

@@ -2,6 +2,7 @@ package translator
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -15,15 +16,26 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-type mysqlTranslator struct{}
-
-func newMysqlTranslator() Translator {
-	return &mysqlTranslator{}
+type mysqlTranslator struct {
+	db     *sql.DB
+	tables map[string]*tbl.Table
 }
 
-func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func newMysqlTranslator(db *sql.DB) Translator {
+	return &mysqlTranslator{
+		db:     db,
+		tables: make(map[string]*tbl.Table),
+	}
+}
+
+func (m *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	table, err := m.getTable(schemaName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	placeholders := dml.GenColumnPlaceholders(len(row))
 
 	cols, args, err := genColsAndArgs(row)
@@ -33,7 +45,7 @@ func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row []
 
 	keys := genMultipleKeys(table.Columns, args, table.IndexColumns)
 
-	columnList := p.genColumnList(cols)
+	columnList := m.genColumnList(cols)
 	sql := fmt.Sprintf("REPLACE INTO `%s`.`%s` (%s) VALUES (%s);", schemaName, tableName, columnList, placeholders)
 
 	log.Debugf("insert sql %s, args %+v, keys %+v", sql, args, keys)
@@ -45,9 +57,13 @@ func (p *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row []
 	return result, nil
 }
 
-func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	// table, err := m.getTable(schemaName, tableName)
+	// if err != nil {
+	// 	return nil, errors.Trace(err)
+	// }
 	allCols := make([]string, 0, len(row))
 	oldValues := make([]interface{}, 0, len(row))
 
@@ -104,9 +120,13 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	return result, nil
 }
 
-func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte, table *tbl.Table) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	// table, err := m.getTable(schemaName, tableName)
+	// if err != nil {
+	// 	return nil, errors.Trace(err)
+	// }
 
 	cols, args, err := genColsAndArgs(row)
 	if err != nil {
@@ -151,11 +171,12 @@ func genColsAndArgs(row [][]byte) ([]string, []interface{}, error) {
 	return cols, args, nil
 }
 
-func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
+	m.clearTables()
 	return &TranslateResult{SQL: string(binlog.DdlQuery)}, nil
 }
 
-func (p *mysqlTranslator) genColumnList(columns []string) string {
+func (m *mysqlTranslator) genColumnList(columns []string) string {
 	return strings.Join(columns, ",")
 }
 

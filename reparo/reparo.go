@@ -19,7 +19,6 @@ import (
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/reparo/executor"
 	"github.com/pingcap/tidb-binlog/reparo/metrics"
-	tbl "github.com/pingcap/tidb-binlog/reparo/table"
 	"github.com/pingcap/tidb-binlog/reparo/translator"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,8 +42,7 @@ type Reparo struct {
 	c          *causality.Causality
 	wg         sync.WaitGroup
 
-	tables map[string]*tbl.Table
-	db     *sql.DB
+	db *sql.DB
 }
 
 // New creates a Reparo object.
@@ -56,13 +54,11 @@ func New(cfg *Config) (*Reparo, error) {
 
 	log.Infof("cfg %+v", cfg)
 	r := &Reparo{
-		cfg:        cfg,
-		translator: translator.New(cfg.DestType, false),
-		executors:  executors,
-		regexMap:   make(map[string]*regexp.Regexp),
-		jobCh:      newJobChans(cfg.WorkerCount),
-		c:          causality.NewCausality(),
-		tables:     make(map[string]*tbl.Table),
+		cfg:       cfg,
+		executors: executors,
+		regexMap:  make(map[string]*regexp.Regexp),
+		jobCh:     newJobChans(cfg.WorkerCount),
+		c:         causality.NewCausality(),
 	}
 
 	if cfg.DestType == "mysql" {
@@ -71,6 +67,9 @@ func New(cfg *Config) (*Reparo, error) {
 			return nil, errors.Trace(err)
 		}
 		r.db = db
+		r.translator = translator.New(cfg.DestType, false, db)
+	} else {
+		r.translator = translator.New(cfg.DestType, false, nil)
 	}
 
 	return r, nil
