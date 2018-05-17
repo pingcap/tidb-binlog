@@ -15,36 +15,36 @@ func newPrintTranslator() Translator {
 	return &printTranslator{}
 }
 
-func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
-	printHeader(binlog, event)
+func (p *printTranslator) TransInsert(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+	printHeader(event)
 	printInsertAndDeleteEvent(row)
 	return nil, nil
 }
 
-func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
-	printHeader(binlog, event)
+func (p *printTranslator) TransUpdate(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+	printHeader(event)
 	printUpdateEvent(row)
 	return nil, nil
 }
 
-func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
-	printHeader(binlog, event)
+func (p *printTranslator) TransDelete(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+	printHeader(event)
 	printInsertAndDeleteEvent(row)
 	return nil, nil
 
 }
 
-func (p *printTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
-	printDDL(binlog)
+func (p *printTranslator) TransDDL(ddl string) (*TranslateResult, error) {
+	printDDL(ddl)
 	return nil, nil
 }
 
-func printHeader(binlog *pb.Binlog, event *pb.Event) {
+func printHeader(event *pb.Event) {
 	printEventHeader(event)
 }
 
-func printDDL(binlog *pb.Binlog) {
-	fmt.Printf("DDL query: %s\n", binlog.DdlQuery)
+func printDDL(ddl string) {
+	fmt.Printf("DDL query: %s\n", ddl)
 }
 
 func printEventHeader(event *pb.Event) {

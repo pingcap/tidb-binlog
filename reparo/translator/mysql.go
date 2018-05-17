@@ -28,7 +28,7 @@ func newMysqlTranslator(db *sql.DB) Translator {
 	}
 }
 
-func (m *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransInsert(event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	table, err := m.getTable(schemaName, tableName)
@@ -57,7 +57,7 @@ func (m *mysqlTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row []
 	return result, nil
 }
 
-func (m *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransUpdate(event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	// table, err := m.getTable(schemaName, tableName)
@@ -120,7 +120,7 @@ func (m *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	return result, nil
 }
 
-func (m *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransDelete(event *pb.Event, row [][]byte) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	// table, err := m.getTable(schemaName, tableName)
@@ -171,9 +171,9 @@ func genColsAndArgs(row [][]byte) ([]string, []interface{}, error) {
 	return cols, args, nil
 }
 
-func (m *mysqlTranslator) TransDDL(binlog *pb.Binlog) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransDDL(ddl string) (*TranslateResult, error) {
 	m.clearTables()
-	return &TranslateResult{SQL: string(binlog.DdlQuery)}, nil
+	return &TranslateResult{SQL: ddl}, nil
 }
 
 func (m *mysqlTranslator) genColumnList(columns []string) string {

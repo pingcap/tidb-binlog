@@ -17,16 +17,16 @@ type TranslateResult struct {
 // Translator is the interface for translating binlog to target sqls
 type Translator interface {
 	// GenInsert generates the insert sqls
-	TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error)
+	TransInsert(event *pb.Event, row [][]byte) (*TranslateResult, error)
 
 	// GenUpdate generates the update
-	TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error)
+	TransUpdate(event *pb.Event, row [][]byte) (*TranslateResult, error)
 
 	// GenDelete generates the delete sqls by cols values
-	TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (*TranslateResult, error)
+	TransDelete(event *pb.Event, row [][]byte) (*TranslateResult, error)
 
 	// GenDDL generates the ddl sql by query string
-	TransDDL(binlog *pb.Binlog) (*TranslateResult, error)
+	TransDDL(ddl string) (*TranslateResult, error)
 }
 
 // New creates a new Translator based on name.
