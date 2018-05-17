@@ -54,13 +54,8 @@ func New(cfg *Config) (*Reparo, error) {
 		return nil, errors.Trace(err)
 	}
 
-	db, err := pkgsql.OpenDB("mysql", cfg.DestDB.Host, cfg.DestDB.Port, cfg.DestDB.User, cfg.DestDB.Password)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	log.Infof("cfg %+v", cfg)
-	return &Reparo{
+	r := &Reparo{
 		cfg:        cfg,
 		translator: translator.New(cfg.DestType, false),
 		executors:  executors,
@@ -68,8 +63,17 @@ func New(cfg *Config) (*Reparo, error) {
 		jobCh:      newJobChans(cfg.WorkerCount),
 		c:          causality.NewCausality(),
 		tables:     make(map[string]*tbl.Table),
-		db:         db,
-	}, nil
+	}
+
+	if cfg.DestType == "mysql" {
+		db, err := pkgsql.OpenDB("mysql", cfg.DestDB.Host, cfg.DestDB.Port, cfg.DestDB.User, cfg.DestDB.Password)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		r.db = db
+	}
+
+	return r, nil
 }
 
 func (r *Reparo) prepare() error {
@@ -165,7 +169,12 @@ func (r *Reparo) Process() error {
 
 // Close closes the Reparo object.
 func (r *Reparo) Close() error {
-	r.db.Close()
+	if r.db != nil {
+		err := r.db.Close()
+		if err != nil {
+			log.Errorf("[reparo] close db err %v", err)
+		}
+	}
 	closeExecutors(r.executors)
 	return nil
 }
