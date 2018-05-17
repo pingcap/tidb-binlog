@@ -254,14 +254,14 @@ func (r *Reparo) addJob(job *job) {
 	begin := time.Now()
 	if job.binlogTp == ddlType {
 		r.jobWg.Wait()
+		dmlCost := time.Since(begin).Seconds()
+		if dmlCost > 1 {
+			log.Warnf("[reparo] wait dml executed takes %f seconds", dmlCost)
+		} else {
+			log.Debugf("[reparo] wait dml executed takes %f seconds", dmlCost)
+		}
+		metrics.WaitDMLExecutedHistogram.Observe(dmlCost)
 	}
-	dmlCost := time.Since(begin).Seconds()
-	if dmlCost > 1 {
-		log.Warnf("[reparo] wait dml executed takes %f seconds", dmlCost)
-	} else {
-		log.Debugf("[reparo] wait dml executed takes %f seconds", dmlCost)
-	}
-	metrics.WaitDMLExecutedHistogram.Observe(dmlCost)
 
 	r.jobWg.Add(1)
 	idx := int(genHashKey(fmt.Sprintf("%s", job.key))) % r.cfg.WorkerCount
@@ -270,14 +270,14 @@ func (r *Reparo) addJob(job *job) {
 	begin1 := time.Now()
 	if r.checkWait(job) {
 		r.jobWg.Wait()
+		ddlCost := time.Since(begin1).Seconds()
+		if ddlCost > 1 {
+			log.Warnf("[reparo] wait ddl executed takes %f seconds", ddlCost)
+		} else {
+			log.Debugf("[reparo] wait ddl executed takes %f seconds", ddlCost)
+		}
+		metrics.WaitDDLExecutedHistogram.Observe(ddlCost)
 	}
-	ddlCost := time.Since(begin1).Seconds()
-	if ddlCost > 1 {
-		log.Warnf("[reparo] wait ddl executed takes %f seconds", ddlCost)
-	} else {
-		log.Debugf("[reparo] wait ddl executed takes %f seconds", ddlCost)
-	}
-	metrics.WaitDDLExecutedHistogram.Observe(ddlCost)
 
 	totalCost := time.Since(begin).Seconds()
 	if totalCost > 1 {
