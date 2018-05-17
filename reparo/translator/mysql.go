@@ -28,9 +28,10 @@ func newMysqlTranslator(db *sql.DB) Translator {
 	}
 }
 
-func (m *mysqlTranslator) TransInsert(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransInsert(event *pb.Event) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	row := event.GetRow()
 	table, err := m.getTable(schemaName, tableName)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -57,9 +58,10 @@ func (m *mysqlTranslator) TransInsert(event *pb.Event, row [][]byte) (*Translate
 	return result, nil
 }
 
-func (m *mysqlTranslator) TransUpdate(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	row := event.GetRow()
 	// table, err := m.getTable(schemaName, tableName)
 	// if err != nil {
 	// 	return nil, errors.Trace(err)
@@ -120,9 +122,10 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event, row [][]byte) (*Translate
 	return result, nil
 }
 
-func (m *mysqlTranslator) TransDelete(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (m *mysqlTranslator) TransDelete(event *pb.Event) (*TranslateResult, error) {
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
+	row := event.GetRow()
 	// table, err := m.getTable(schemaName, tableName)
 	// if err != nil {
 	// 	return nil, errors.Trace(err)

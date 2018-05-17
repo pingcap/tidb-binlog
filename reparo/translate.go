@@ -42,14 +42,13 @@ func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult,
 
 		e := &event
 		tp := e.GetTp()
-		row := e.GetRow()
 		switch tp {
 		case pb.EventType_Insert:
-			result, err = r.translator.TransInsert(e, row)
+			result, err = r.translator.TransInsert(e)
 		case pb.EventType_Update:
-			result, err = r.translator.TransUpdate(e, row)
+			result, err = r.translator.TransUpdate(e)
 		case pb.EventType_Delete:
-			result, err = r.translator.TransDelete(e, row)
+			result, err = r.translator.TransDelete(e)
 		default:
 			panic("unreachable")
 		}

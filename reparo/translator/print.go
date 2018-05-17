@@ -15,21 +15,21 @@ func newPrintTranslator() Translator {
 	return &printTranslator{}
 }
 
-func (p *printTranslator) TransInsert(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (p *printTranslator) TransInsert(event *pb.Event) (*TranslateResult, error) {
 	printHeader(event)
-	printInsertAndDeleteEvent(row)
+	printInsertAndDeleteEvent(event.GetRow())
 	return nil, nil
 }
 
-func (p *printTranslator) TransUpdate(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (p *printTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error) {
 	printHeader(event)
-	printUpdateEvent(row)
+	printUpdateEvent(event.GetRow())
 	return nil, nil
 }
 
-func (p *printTranslator) TransDelete(event *pb.Event, row [][]byte) (*TranslateResult, error) {
+func (p *printTranslator) TransDelete(event *pb.Event) (*TranslateResult, error) {
 	printHeader(event)
-	printInsertAndDeleteEvent(row)
+	printInsertAndDeleteEvent(event.GetRow())
 	return nil, nil
 
 }
