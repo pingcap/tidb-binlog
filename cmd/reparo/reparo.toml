@@ -39,12 +39,12 @@ dest-type = "mysql"
 #db-name ="test"
 #tbl-name = "~^a.*"
 
-txn-batch = 10
-worker-count = 1
+txn-batch = 100
+worker-count = 8
 disable-detect = false
 
 [dest-db]
 host = "127.0.0.1"
-port = 3309
+port = 3306
 user = "root"
 password = ""
