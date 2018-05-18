@@ -366,7 +366,7 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 			p.currentPos = item.pos
 		}
 		_ = p.bh.pop()
-		item := p.bh.peek()
+		item = p.bh.peek()
 	}
 
 	return bs
