@@ -130,20 +130,25 @@ func ComparePos(left, right binlog.Pos) int {
 	}
 }
 
-func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
+func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
 	var (
 		client sarama.SyncProducer
 		err    error
 	)
 
-	for i := 0; i < maxRetry; i++ {
-		// initial kafka client to use manual partitioner
-		config := sarama.NewConfig()
-		config.Producer.Partitioner = sarama.NewManualPartitioner
-		config.Producer.MaxMessageBytes = maxMsgSize
-		config.Producer.Return.Successes = true
-		config.Producer.RequiredAcks = sarama.WaitForAll
+	// initial kafka client to use manual partitioner
+	config := sarama.NewConfig()
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.MaxMessageBytes = maxMsgSize
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	config.Version = version
 
+	for i := 0; i < maxRetry; i++ {
 		client, err = sarama.NewSyncProducer(addr, config)
 		if err != nil {
 			log.Errorf("create kafka client error %v", err)

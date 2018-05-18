@@ -164,3 +164,15 @@ func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struc
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
 }
+
+func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Consumer.Return.Errors = true
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	kafkaCfg.Version = version
+
+	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+}
