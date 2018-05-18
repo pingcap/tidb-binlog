@@ -75,7 +75,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	offsetSeeker, err := createOffsetSeeker(kafkaAddrs)
+	offsetSeeker, err := createOffsetSeeker(kafkaAddrs, cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
