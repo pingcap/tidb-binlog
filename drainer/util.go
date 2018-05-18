@@ -177,6 +177,7 @@ func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 		return nil, errors.Trace(err)
 	}
 	kafkaCfg.Version = version
+	log.Infof("kafka consumer version %v", version)
 
 	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }

@@ -353,7 +353,7 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	var bs binlogItems
-	item := p.bh.pop()
+	item := p.bh.peek()
 	for item != nil && item.binlog.CommitTs <= windowUpper {
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
 		if item.binlog.CommitTs > windowLower {
@@ -363,12 +363,10 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 		if ComparePos(p.currentPos, item.pos) == -1 {
 			p.currentPos = item.pos
 		}
-		item = p.bh.pop()
+		_ = p.bh.pop()
+		item = p.bh.peek()
 	}
 
-	if item != nil {
-		p.bh.push(p.ctx, item)
-	}
 	return bs
 }
 

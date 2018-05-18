@@ -97,3 +97,18 @@ func (b *binlogHeap) pop() *binlogItem {
 	b.Unlock()
 	return item.(*binlogItem)
 }
+
+func (b *binlogHeap) peek() *binlogItem {
+	b.Lock()
+	if b.bh.Len() == 0 {
+		b.Unlock()
+		return nil
+	}
+
+	item := heap.Pop(b.bh)
+	heap.Push(b.bh, item)
+	b.Unlock()
+
+	return item.(*binlogItem)
+
+}

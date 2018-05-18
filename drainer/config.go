@@ -32,7 +32,7 @@ const (
 	defaultPumpTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5  // 5 minute
 	defaultSafeForwardTime = 20 // 20 minute
-	defaultKafkaVersion    = "0.8.2.0"
+	defaultKafkaVersion    = "1.0.0"
 	defautMaxKafkaSize     = 1024 * 1024 * 1024
 )
 
