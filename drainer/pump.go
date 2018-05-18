@@ -157,10 +157,12 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case entity = <-p.binlogChan:
 		}
 
+		begin := time.Now()
 		switch entity.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
+			findMatchedBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
@@ -175,6 +177,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
+				publishBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 			}
 		}
 

@@ -167,6 +167,11 @@ func (c *Collector) updateCollectStatus(synced bool) {
 // updateStatus queries pumps' status , deletes the offline pump
 // and updates pumps' latest ts
 func (c *Collector) updateStatus(ctx context.Context) error {
+	begin := time.Now()
+	defer func() {
+		publishBinlogHistogram.WithLabelValues("drainer").Observe(time.Since(begin).Seconds())
+	}()
+
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 		c.updateCollectStatus(false)
