@@ -130,6 +130,10 @@ func ComparePos(left, right binlog.Pos) int {
 	}
 }
 
+func initializeSaramaGlobalConfig() {
+	sarama.MaxRequestSize = int32(maxMsgSize)
+}
+
 func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
 	var (
 		client sarama.SyncProducer

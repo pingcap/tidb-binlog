@@ -161,6 +161,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	initializeSaramaGlobalConfig()
 
 	return cfg.validate()
 }

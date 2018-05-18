@@ -29,6 +29,7 @@ var nodePrefix = "cisterns"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
 var pdReconnTimes = 30
+var maxMsgSize = 1024 * 1024 * 1024
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
