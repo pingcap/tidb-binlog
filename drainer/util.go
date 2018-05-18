@@ -77,6 +77,10 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	}
 }
 
+func initializeSaramaGlobalConfig() {
+	sarama.MaxResponseSize = int32(maxMsgSize)
+}
+
 func getSafeTS(ts int64, forwardTime int64) int64 {
 	subTime := (forwardTime * 60 * 1000) << 18
 	ts -= subTime

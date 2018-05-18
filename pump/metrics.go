@@ -16,7 +16,7 @@ var (
 			Subsystem: "pump",
 			Name:      "rpc_duration_seconds",
 			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"method", "label"})
 
 	lossBinlogCacheCounter = prometheus.NewCounter(
@@ -42,7 +42,7 @@ var (
 			Subsystem: "pump",
 			Name:      "write_binlog_duration_time",
 			Help:      "Bucketed histogram of write time (s) of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"label"})
 
 	writeErrorCounter = prometheus.NewCounterVec(
@@ -59,7 +59,7 @@ var (
 			Subsystem: "pump",
 			Name:      "read_binlog_duration_time",
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"label"})
 
 	readErrorCounter = prometheus.NewCounterVec(

@@ -32,6 +32,7 @@ const (
 	defaultPumpTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5  // 5 minute
 	defaultSafeForwardTime = 20 // 20 minute
+	defautMaxKafkaSize     = 1024 * 1024 * 1024
 )
 
 var (
@@ -126,6 +127,7 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
 	fs.IntVar(&cfg.SafeForwardTime, "safe-forward-time", defaultSafeForwardTime, "how many minutes drainer sync before the commit ts in checkpoint file or initial-commit-ts")
+	fs.IntVar(&maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size that consume from kafka")
 
 	return cfg
 }
@@ -200,6 +202,7 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 
+	initializeSaramaGlobalConfig()
 	return cfg.validate()
 }
 
