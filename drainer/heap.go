@@ -54,10 +54,6 @@ func (b *binlogItems) Pop() interface{} {
 	return x
 }
 
-func (b *binlogItems) Peek() interface{} {
-	return b[len(b)-1]
-}
-
 type binlogHeap struct {
 	sync.Mutex
 	bh   heap.Interface
@@ -110,7 +106,7 @@ func (b *binlogHeap) peek() *binlogItem {
 	}
 
 	item := heap.Pop(b.bh)
-	heap.Push(item)
+	heap.Push(b.bh, item)
 	b.Unlock()
 
 	return item.(*binlogItem)
