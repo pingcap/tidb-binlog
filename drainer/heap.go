@@ -20,14 +20,22 @@ type binlogItem struct {
 	pos    pb.Pos
 	nodeID string
 	job    *model.Job
+	// we close the chan to signal than we has know the txn status in pump.go now
+	commitOrRollback chan struct{}
 }
 
 func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
-	return &binlogItem{
-		binlog: b,
-		pos:    p,
-		nodeID: nodeID,
+	itemp := &binlogItem{
+		binlog:           b,
+		pos:              p,
+		nodeID:           nodeID,
+		commitOrRollback: make(chan struct{}),
 	}
+	if b.Tp != pb.BinlogType_Prewrite {
+		close(itemp.commitOrRollback)
+	}
+
+	return itemp
 }
 
 func (b *binlogItem) SetJob(job *model.Job) {

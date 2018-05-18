@@ -51,8 +51,7 @@ type Pump struct {
 	latestValidCommitTS int64
 	mu                  struct {
 		sync.Mutex
-		prewriteItems map[int64]*binlogItem
-		binlogs       map[int64]*binlogItem
+		binlogs map[int64]*binlogItem
 	}
 
 	wg         sync.WaitGroup
@@ -95,7 +94,6 @@ func (p *Pump) Close() {
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
-	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.binlogs = make(map[int64]*binlogItem)
 	go p.pullBinlogs()
 	go p.publish(t)
@@ -116,15 +114,16 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
 		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
-		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
+		p.mu.binlogs[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
-		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
+		if co, ok := p.mu.binlogs[b.StartTs]; ok {
+			close(co.commitOrRollback)
+			delete(p.mu.binlogs, b.StartTs)
 			if b.Tp == pb.BinlogType_Commit {
 				co.binlog.CommitTs = b.CommitTs
 				co.binlog.Tp = b.Tp
 				p.mu.binlogs[co.binlog.CommitTs] = co
 			}
-			delete(p.mu.prewriteItems, b.StartTs)
 		}
 	default:
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
@@ -187,24 +186,23 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 
 func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 	for {
+		p.mu.Lock()
+		b, ok := p.mu.binlogs[startTS]
+		p.mu.Unlock()
+		if !ok {
+			return
+		}
+
 		select {
 		case <-p.ctx.Done():
 			return
-		default:
-		}
-
-		b, ok := p.getPrewriteBinlogEntity(startTS)
-		if ok {
-			time.Sleep(waitTime)
-			// check again after sleep a moment
-			b, ok = p.getPrewriteBinlogEntity(startTS)
-			if ok {
-				if ok := p.query(t, b); !ok {
-					continue
-				}
+		case <-time.After(waitTime):
+			if p.query(t, b) {
+				return
 			}
+		case <-b.commitOrRollback:
+
 		}
-		return
 	}
 }
 
@@ -231,7 +229,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 				binlog.Tp = pb.BinlogType_Commit
 				p.mu.binlogs[binlog.CommitTs] = b
 			}
-			delete(p.mu.prewriteItems, ts)
+			delete(p.mu.binlogs, ts)
 			p.mu.Unlock()
 			return true
 		}
@@ -451,13 +449,6 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			}
 		}
 	}
-}
-
-func (p *Pump) getPrewriteBinlogEntity(startTS int64) (b *binlogItem, ok bool) {
-	p.mu.Lock()
-	b, ok = p.mu.prewriteItems[startTS]
-	p.mu.Unlock()
-	return
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete
