@@ -27,12 +27,24 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	}
 	topic := "test"
 
+	config := sarama.NewConfig()
+	config.Version = sarama.V1_0_0_0
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.Return.Successes = true
+
+	// Tear down previous produced messages
+	broker := sarama.NewBroker(kafkaAddr + ":9092")
+	err := broker.Open(config)
+	c.Assert(err, IsNil)
+	_, err = broker.Connected()
+	c.Assert(err, IsNil)
+	defer broker.Close()
+	_, err = broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
+	c.Assert(err, IsNil)
+
 	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, nil, PositionOperator{})
 	c.Assert(err, IsNil)
 
-	config := sarama.NewConfig()
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.Return.Successes = true
 	to.producer, err = sarama.NewSyncProducer([]string{kafkaAddr + ":9092"}, config)
 	c.Assert(err, IsNil)
 	defer to.producer.Close()
