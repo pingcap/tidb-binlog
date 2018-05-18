@@ -62,10 +62,8 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Consumer.Return.Errors = true
-	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+	consumer, err := createKafkaConsumer(kafkaAddrs, kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
