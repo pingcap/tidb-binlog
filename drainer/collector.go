@@ -34,21 +34,22 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	clusterID  uint64
-	batch      int32
-	kafkaAddrs []string
-	interval   time.Duration
-	reg        *pump.EtcdRegistry
-	timeout    time.Duration
-	window     *DepositWindow
-	tiClient   *tikv.LockResolver
-	tiStore    kv.Storage
-	pumps      map[string]*Pump
-	offlines   map[string]struct{}
-	bh         *binlogHeap
-	syncer     *Syncer
-	latestTS   int64
-	cp         checkpoint.CheckPoint
+	clusterID    uint64
+	batch        int32
+	kafkaAddrs   []string
+	kafkaVersion string
+	interval     time.Duration
+	reg          *pump.EtcdRegistry
+	timeout      time.Duration
+	window       *DepositWindow
+	tiClient     *tikv.LockResolver
+	tiStore      kv.Storage
+	pumps        map[string]*Pump
+	offlines     map[string]struct{}
+	bh           *binlogHeap
+	syncer       *Syncer
+	latestTS     int64
+	cp           checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
@@ -99,6 +100,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
 		kafkaAddrs:      kafkaAddrs,
+		kafkaVersion:    cfg.KafkaVersion,
 		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
@@ -211,7 +213,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.kafkaVersion, c.timeout, c.window, c.tiStore, pos)
 			if err != nil {
 				return errors.Trace(err)
 			}
