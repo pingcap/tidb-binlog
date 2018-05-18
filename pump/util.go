@@ -152,6 +152,7 @@ func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProduce
 	}
 	config.Version = version
 
+	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {
 		client, err = sarama.NewSyncProducer(addr, config)
 		if err != nil {
