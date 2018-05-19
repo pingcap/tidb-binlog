@@ -75,14 +75,14 @@ func newBinlogHeap(size int) *binlogHeap {
 	}
 }
 
-func (b *binlogHeap) push(ctx context.Context, item *binlogItem) {
+func (b *binlogHeap) push(ctx context.Context, item *binlogItem, check bool) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 			b.Lock()
-			if b.bh.Len() == b.size {
+			if check && b.bh.Len() == b.size {
 				b.Unlock()
 				time.Sleep(pushRetryTime)
 				continue
@@ -104,19 +104,4 @@ func (b *binlogHeap) pop() *binlogItem {
 	item := heap.Pop(b.bh)
 	b.Unlock()
 	return item.(*binlogItem)
-}
-
-func (b *binlogHeap) peek() *binlogItem {
-	b.Lock()
-	if b.bh.Len() == 0 {
-		b.Unlock()
-		return nil
-	}
-
-	item := heap.Pop(b.bh)
-	heap.Push(b.bh, item)
-	b.Unlock()
-
-	return item.(*binlogItem)
-
 }

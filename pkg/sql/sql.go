@@ -41,7 +41,7 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 			time.Sleep(RetryWaitTime)
 		}
 
-		err = appleTxn(db, sqls, args)
+		err = ExecuteTxn(db, sqls, args)
 		if err == nil {
 			return nil
 		}
@@ -50,7 +50,8 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 	return errors.Trace(err)
 }
 
-func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
+// ExecuteTxn executes transaction
+func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 	txn, err := db.Begin()
 	if err != nil {
 		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
