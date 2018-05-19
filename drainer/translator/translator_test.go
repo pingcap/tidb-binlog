@@ -66,7 +66,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
-		for index := range vals {
+		for index := range vals[0] {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
 	}
@@ -350,7 +350,7 @@ func testGenTable(tt string) *model.TableInfo {
 	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, sexCol}
 
 	switch tt {
-	case "hasPK":
+	case "hasID":
 		index := &model.IndexInfo{
 			Primary: true,
 			Columns: []*model.IndexColumn{{Name: userIDCol.Name, Offset: 0, Length: -1}, {Name: userNameCol.Name, Offset: 1, Length: -1}},
@@ -358,10 +358,20 @@ func testGenTable(tt string) *model.TableInfo {
 		t.Indices = []*model.IndexInfo{index}
 		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 
-	case "hasID":
-		t.PKIsHandle = true
+		t.Indices = append(t.Indices, &IndexInfo{
+			Primary: true,
+			Columns: []*model.IndexColumn{&model.IndexColumn{Name: userIDCol.Name}},
+		})
+
+	case "hasPK":
+		t.PKIsHandle = false
 		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
+
+		t.Indices = append(t.Indices, &IndexInfo{
+			Primary: true,
+			Columns: []*model.IndexColumn{&model.IndexColumn{Name: userIDCol.Name}, &model.IndexColumn{Name: userNameCol.Name}},
+		})
 	}
 
 	return t
