@@ -21,6 +21,9 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+// sleep 500 millisecond to wait matched binlog
+var waitMatchedTime = 10 * time.Millisecond
+
 type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
@@ -198,7 +201,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 
 		b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
-			time.Sleep(waitTime)
+			time.Sleep(waitMatchedTime)
 			// check again after sleep a moment
 			b, ok = p.getPrewriteBinlogEntity(startTS)
 			if ok {
