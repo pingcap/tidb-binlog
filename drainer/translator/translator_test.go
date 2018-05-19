@@ -351,14 +351,10 @@ func testGenTable(tt string) *model.TableInfo {
 
 	switch tt {
 	case "hasID":
-		index := &model.IndexInfo{
-			Primary: true,
-			Columns: []*model.IndexColumn{{Name: userIDCol.Name, Offset: 0, Length: -1}, {Name: userNameCol.Name, Offset: 1, Length: -1}},
-		}
-		t.Indices = []*model.IndexInfo{index}
 		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 
-		t.Indices = append(t.Indices, &IndexInfo{
+		t.PKIsHandle = true
+		t.Indices = append(t.Indices, &model.IndexInfo{
 			Primary: true,
 			Columns: []*model.IndexColumn{{Name: userIDCol.Name}},
 		})
@@ -368,7 +364,7 @@ func testGenTable(tt string) *model.TableInfo {
 		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
 
-		t.Indices = append(t.Indices, &IndexInfo{
+		t.Indices = append(t.Indices, &model.IndexInfo{
 			Primary: true,
 			Columns: []*model.IndexColumn{{Name: userIDCol.Name}, {Name: userNameCol.Name}},
 		})
