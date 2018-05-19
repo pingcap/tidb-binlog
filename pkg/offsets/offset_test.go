@@ -32,15 +32,8 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.Return.Successes = true
 
-	// Tear down previous produced messages
-	broker := sarama.NewBroker(kafkaAddr + ":9092")
-	err := broker.Open(config)
-	c.Assert(err, IsNil)
-	_, err = broker.Connected()
-	c.Assert(err, IsNil)
-	defer broker.Close()
-	_, err = broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
-	c.Assert(err, IsNil)
+	// clear previous tests produced
+	to.deleteTopic(kafkaAddr, config, topic, c)
 
 	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, nil, PositionOperator{})
 	c.Assert(err, IsNil)
@@ -72,6 +65,21 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 		c.Assert(offsetFounds, HasLen, 1)
 		c.Assert(offsetFounds[0], Equals, res)
 	}
+
+	// tear down or clear up
+	to.deleteTopic(kafkaAddr, config, topic, c)
+}
+
+func (to *testOffsetSuite) deleteTopic(kafkaAddr string, config *sarama.Config, topic string, c *C) {
+	// delete topic to clear produced messages
+	broker := sarama.NewBroker(kafkaAddr + ":9092")
+	err := broker.Open(config)
+	c.Assert(err, IsNil)
+	_, err = broker.Connected()
+	c.Assert(err, IsNil)
+	defer broker.Close()
+	_, err = broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
+	c.Assert(err, IsNil)
 }
 
 func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, error) {
