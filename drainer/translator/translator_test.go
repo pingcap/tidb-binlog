@@ -360,7 +360,7 @@ func testGenTable(tt string) *model.TableInfo {
 
 		t.Indices = append(t.Indices, &IndexInfo{
 			Primary: true,
-			Columns: []*model.IndexColumn{&model.IndexColumn{Name: userIDCol.Name}},
+			Columns: []*model.IndexColumn{{Name: userIDCol.Name}},
 		})
 
 	case "hasPK":
@@ -370,7 +370,7 @@ func testGenTable(tt string) *model.TableInfo {
 
 		t.Indices = append(t.Indices, &IndexInfo{
 			Primary: true,
-			Columns: []*model.IndexColumn{&model.IndexColumn{Name: userIDCol.Name}, &model.IndexColumn{Name: userNameCol.Name}},
+			Columns: []*model.IndexColumn{{Name: userIDCol.Name}, {Name: userNameCol.Name}},
 		})
 	}
 

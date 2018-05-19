@@ -26,7 +26,7 @@ type Reparo struct {
 
 // New creates a Reparo object.
 func New(cfg *Config) (*Reparo, error) {
-	executor, err := executor.New(cfg.DestType, cfg.DestDB)
+	reporaExecutor, err := executor.New(cfg.DestType, cfg.DestDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -34,7 +34,7 @@ func New(cfg *Config) (*Reparo, error) {
 	return &Reparo{
 		cfg:        cfg,
 		translator: translator.New(cfg.DestType, false),
-		executor:   executor,
+		executor:   reporaExecutor,
 		reMap:      make(map[string]*regexp.Regexp),
 	}, nil
 }
