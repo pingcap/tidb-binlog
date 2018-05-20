@@ -22,7 +22,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-// sleep 500 millisecond to wait matched binlog
+// sleep 10 millisecond to wait matched binlog
 var waitMatchedTime = 10 * time.Millisecond
 
 type binlogEntity struct {
