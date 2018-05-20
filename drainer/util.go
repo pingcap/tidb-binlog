@@ -22,12 +22,6 @@ import (
 
 const (
 	lengthOfBinaryTime = 15
-	// MaxDMLRetryCount defines maximum number of times of DML retrying.
-	MaxDMLRetryCount = 100
-	// MaxDDLRetryCount defines maximum number of times of DDL retrying.
-	MaxDDLRetryCount = 5
-	// RetryWaitTime defines wait time when retrying.
-	RetryWaitTime = 3 * time.Second
 
 	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
 	// SegmentSizeBytes = 512 * 1024 * 1024
