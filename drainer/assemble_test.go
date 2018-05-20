@@ -106,6 +106,8 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	c.Assert(asm.slices, HasLen, 1)
 	asm.append(messages[1])
 	time.Sleep(time.Second)
+	// sleep sometime above, try fetch ticker once (maybe a *reset* is better)
+	<-ticker.C
 	select {
 	case binlog = <-asm.messages():
 	case <-ticker.C:
