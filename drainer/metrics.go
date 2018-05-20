@@ -80,7 +80,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "txn_duration_time",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
 	readBinlogHistogram = prometheus.NewHistogramVec(
@@ -89,7 +89,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "read_binlog_duration_time",
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 
 	readBinlogSizeHistogram = prometheus.NewHistogramVec(

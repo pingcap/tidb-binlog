@@ -32,6 +32,8 @@ const (
 	defaultPumpTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5  // 5 minute
 	defaultSafeForwardTime = 20 // 20 minute
+	defaultKafkaVersion    = "1.0.0"
+	defautMaxKafkaSize     = 1024 * 1024 * 1024
 )
 
 var (
@@ -62,6 +64,7 @@ type Config struct {
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs      string          `toml:"kafka-addrs" json:"kafka-addrs"`
+	KafkaVersion    string          `toml:"kafka-version" json:"kafka-version"`
 	ZkAddrs         string          `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	LogFile         string          `toml:"log-file" json:"log-file"`
 	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
@@ -107,6 +110,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
+	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
 	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper endpoints")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
@@ -126,6 +130,7 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
 	fs.IntVar(&cfg.SafeForwardTime, "safe-forward-time", defaultSafeForwardTime, "how many minutes drainer sync before the commit ts in checkpoint file or initial-commit-ts")
+	fs.IntVar(&maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size that consume from kafka")
 
 	return cfg
 }
@@ -200,6 +205,7 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 
+	initializeSaramaGlobalConfig()
 	return cfg.validate()
 }
 
