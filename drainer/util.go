@@ -139,7 +139,11 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 
 		beginTime := time.Now()
 		err = executor.Execute(sqls, args, commitTSs, isDDL)
-		txnHistogram.Observe(time.Since(beginTime).Seconds())
+		cost := time.Since(beginTime).Seconds()
+		txnHistogram.Observe(cost)
+		if cost > 1 {
+			log.Infof("transaction cost %v", cost)
+		}
 		if err == nil {
 			return nil
 		}

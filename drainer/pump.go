@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"io"
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -302,7 +303,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
 			continue
 		}
-		p.bh.push(p.ctx, item)
+		p.bh.push(p.ctx, item, true)
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
@@ -358,8 +359,9 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
+	begin := time.Now()
 	var bs binlogItems
-	item := p.bh.peek()
+	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= windowUpper {
 		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
 		if item.binlog.CommitTs > windowLower {
@@ -369,9 +371,13 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 		if ComparePos(p.currentPos, item.pos) == -1 {
 			p.currentPos = item.pos
 		}
-		_ = p.bh.pop()
-		item = p.bh.peek()
+		item = p.bh.pop()
 	}
+	if item != nil {
+		p.bh.push(p.ctx, item, false)
+	}
+
+	publishBinlogHistogram.WithLabelValues(fmt.Sprintf("%s_collect_binlogs", p.nodeID)).Observe(time.Since(begin).Seconds())
 
 	return bs
 }
