@@ -1,8 +1,8 @@
 package drainer
 
 import (
-	"io"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
