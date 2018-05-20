@@ -126,30 +126,12 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 		return nil
 	}
 
-	retryCount := MaxDMLRetryCount
-	if isDDL {
-		retryCount = MaxDDLRetryCount
-	}
+	beginTime := time.Now()
+	defer func() {
+		txnHistogram.Observe(time.Since(beginTime).Seconds())
+	}()
 
-	var err error
-	for i := 0; i < retryCount; i++ {
-		if i > 0 {
-			time.Sleep(RetryWaitTime)
-		}
-
-		beginTime := time.Now()
-		err = executor.Execute(sqls, args, commitTSs, isDDL)
-		cost := time.Since(beginTime).Seconds()
-		txnHistogram.Observe(cost)
-		if cost > 1 {
-			log.Infof("transaction cost %v", cost)
-		}
-		if err == nil {
-			return nil
-		}
-	}
-
-	return errors.Trace(err)
+	return executor.Execute(sqls, args, commitTSs, isDDL)
 }
 
 func closeExecutors(executors ...executor.Executor) {

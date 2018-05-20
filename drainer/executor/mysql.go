@@ -23,7 +23,7 @@ func newMysql(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	return pkgsql.ExecuteTxn(m.db, sqls, args)
+	return pkgsql.ExecuteSQLs(m.db, sqls, args, isDDL)
 }
 
 func (m *mysqlExecutor) Close() error {
