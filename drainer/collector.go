@@ -167,6 +167,11 @@ func (c *Collector) updateCollectStatus(synced bool) {
 // updateStatus queries pumps' status , deletes the offline pump
 // and updates pumps' latest ts
 func (c *Collector) updateStatus(ctx context.Context) error {
+	begin := time.Now()
+	defer func() {
+		publishBinlogHistogram.WithLabelValues("drainer").Observe(time.Since(begin).Seconds())
+	}()
+
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 		c.updateCollectStatus(false)
@@ -303,6 +308,7 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 
 // publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
 func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
+	begin := time.Now()
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
@@ -316,11 +322,13 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			bss[id] = bs
 			binlogOffsets[id] = 1
 			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0])
+			c.bh.push(ctx, bs[0], false)
 		}
 		total += bs.Len()
 	}
+	publishBinlogHistogram.WithLabelValues("drainer_collector").Observe(time.Since(begin).Seconds())
 
+	begin = time.Now()
 	item := c.bh.pop()
 	for item != nil {
 		c.syncer.Add(item)
@@ -329,11 +337,12 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			delete(bss, item.nodeID)
 		} else {
 			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
+			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]], false)
 			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
 		}
 		item = c.bh.pop()
 	}
+	publishBinlogHistogram.WithLabelValues("drainer_merge_sort").Observe(time.Since(begin).Seconds())
 
 	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }

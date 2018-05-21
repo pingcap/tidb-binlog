@@ -46,7 +46,7 @@ func (s *testDrainerSuite) TestHeap(c *C) {
 		wg.Add(1)
 		defer wg.Done()
 		for _, cs := range testCase {
-			bh.push(ctx, newBinlogItem(cs, pb.Pos{}, "testnode"))
+			bh.push(ctx, newBinlogItem(cs, pb.Pos{}, "testnode"), true)
 		}
 	}()
 
@@ -64,12 +64,12 @@ func (s *testDrainerSuite) TestHeap(c *C) {
 
 	//test push block and cancel push operator
 	bh = newBinlogHeap(1)
-	bh.push(ctx, newBinlogItem(testCase[0], pb.Pos{}, "testnode"))
+	bh.push(ctx, newBinlogItem(testCase[0], pb.Pos{}, "testnode"), true)
 	go func() {
 		wg.Add(1)
 		defer wg.Done()
 		for _, cs := range testCase {
-			bh.push(ctx, newBinlogItem(cs, pb.Pos{}, "testnode"))
+			bh.push(ctx, newBinlogItem(cs, pb.Pos{}, "testnode"), true)
 		}
 	}()
 
