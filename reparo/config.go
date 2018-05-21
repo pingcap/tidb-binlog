@@ -187,7 +187,7 @@ func (c *Config) validate() error {
 	}
 }
 
-// InitLogger initalizes Pump's logger.
+// InitLogger initalizes reparo's logger.
 func InitLogger(c *Config) {
 	log.SetLevelByString(c.LogLevel)
 

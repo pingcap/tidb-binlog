@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"net/http"
+	// pprof(don't delete me)
 	_ "net/http/pprof"
 	"os"
 	"regexp"
