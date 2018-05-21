@@ -67,6 +67,7 @@ func NewKafkaSeeker(address []string, config *sarama.Config, operator Operator) 
 	}, nil
 }
 
+// Close shuts down consumer and client of Kafka
 func (ks *KafkaSeeker) Close() error {
 	ks.consumer.Close()
 	ks.client.Close()
