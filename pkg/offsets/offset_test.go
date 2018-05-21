@@ -37,6 +37,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 
 	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, nil, PositionOperator{})
 	c.Assert(err, IsNil)
+	defer sk.Close()
 
 	to.producer, err = sarama.NewSyncProducer([]string{kafkaAddr + ":9092"}, config)
 	c.Assert(err, IsNil)

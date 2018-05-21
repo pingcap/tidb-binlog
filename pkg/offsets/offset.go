@@ -15,6 +15,7 @@ const (
 // Seeker is a struct for finding offsets in kafka/rocketmq
 type Seeker interface {
 	Do(topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error)
+	Close() error
 }
 
 // Operator is an interface for seeker operation
@@ -64,6 +65,12 @@ func NewKafkaSeeker(address []string, config *sarama.Config, operator Operator) 
 		operator: operator,
 		client:   client,
 	}, nil
+}
+
+func (ks *KafkaSeeker) Close() error {
+	ks.consumer.Close()
+	ks.client.Close()
+	return nil
 }
 
 // Do returns offsets by given pos
