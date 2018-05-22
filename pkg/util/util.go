@@ -6,6 +6,8 @@ import (
 	"net"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/types"
 )
 
 // TsToTimestamp translate ts to timestamp
@@ -81,4 +83,13 @@ func (l *StdLogger) Printf(format string, v ...interface{}) {
 func (l *StdLogger) Println(v ...interface{}) {
 	logger := log.Logger()
 	logger.Output(2, l.prefix+fmt.Sprintln(v...))
+}
+
+func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
+	colTypeMap := make(map[int64]*types.FieldType)
+	for _, col := range columns {
+		colTypeMap[col.ID] = &col.FieldType
+	}
+
+	return colTypeMap
 }

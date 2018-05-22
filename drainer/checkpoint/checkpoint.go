@@ -34,7 +34,7 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	switch name {
 	case "mysql", "tidb":
 		cp, err = newMysql(cfg)
-	case "pb":
+	case "pb", "kafka":
 		cp, err = newPb(cfg)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", name)
