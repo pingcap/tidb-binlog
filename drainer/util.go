@@ -116,7 +116,10 @@ func genDrainerID(listenAddr string) (string, error) {
 }
 
 func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	// compute txn duration
+	if len(sqls) == 0 {
+		return nil
+	}
+
 	beginTime := time.Now()
 	defer func() {
 		txnHistogram.Observe(time.Since(beginTime).Seconds())

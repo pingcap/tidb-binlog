@@ -163,6 +163,8 @@ func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64
 	for msg := range pc.Messages() {
 		bp, err := ks.operator.Decode(msg)
 		if err != nil {
+			//log.Errorf("decode message(offset %d) error %v", message.Offset, err)
+			//return 1, -2, nil
 			return 0, bp, errors.Annotatef(err, "decode %s", msg)
 		}
 
