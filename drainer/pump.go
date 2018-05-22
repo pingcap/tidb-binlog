@@ -249,7 +249,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	return false
 }
 
-// get all commit binlog item
+// get all commit binlog items
 func (p *Pump) getCommitBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 	var tmpBinlogs map[int64]*binlogItem
 

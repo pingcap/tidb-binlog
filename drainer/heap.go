@@ -20,7 +20,7 @@ type binlogItem struct {
 	pos    pb.Pos
 	nodeID string
 	job    *model.Job
-	// we close the chan to signal than we has know the txn status in pump.go now
+	// close the channel to signal other goroutine that we had received it's matched commit/rollback binlog
 	commitOrRollback chan struct{}
 }
 
