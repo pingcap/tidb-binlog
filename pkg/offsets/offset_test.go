@@ -35,7 +35,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	// clear previous tests produced
 	to.deleteTopic(kafkaAddr, config, topic, c)
 
-	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, nil, PositionOperator{})
+	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, config, PositionOperator{})
 	c.Assert(err, IsNil)
 	defer sk.Close()
 
