@@ -360,7 +360,6 @@ func testGenTable(tt string) *model.TableInfo {
 		})
 
 	case "hasPK":
-		t.PKIsHandle = false
 		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
 		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
 
