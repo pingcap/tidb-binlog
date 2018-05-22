@@ -55,7 +55,8 @@ type Pump struct {
 	latestValidCommitTS int64
 	mu                  struct {
 		sync.Mutex
-		binlogs map[int64]*binlogItem
+		prewriteItems map[int64]*binlogItem
+		commitItems   map[int64]*binlogItem
 	}
 
 	wg         sync.WaitGroup
@@ -98,7 +99,8 @@ func (p *Pump) Close() {
 func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
-	p.mu.binlogs = make(map[int64]*binlogItem)
+	p.mu.prewriteItems = make(map[int64]*binlogItem)
+	p.mu.commitItems = make(map[int64]*binlogItem)
 	go p.pullBinlogs()
 	go p.publish(t)
 }
@@ -118,15 +120,15 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	switch b.Tp {
 	case pb.BinlogType_Prewrite:
 		pos := pb.Pos{Suffix: ent.Pos.Suffix, Offset: ent.Pos.Offset}
-		p.mu.binlogs[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
+		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
-		if co, ok := p.mu.binlogs[b.StartTs]; ok {
+		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
 			close(co.commitOrRollback)
-			delete(p.mu.binlogs, b.StartTs)
+			delete(p.mu.prewriteItems, b.StartTs)
 			if b.Tp == pb.BinlogType_Commit {
 				co.binlog.CommitTs = b.CommitTs
 				co.binlog.Tp = b.Tp
-				p.mu.binlogs[co.binlog.CommitTs] = co
+				p.mu.commitItems[co.binlog.CommitTs] = co
 			}
 		}
 	default:
@@ -172,7 +174,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
 			if entity.commitTS > maxCommitTs {
-				binlogs = p.getBinlogs(binlogs)
+				binlogs = p.getCommitBinlogs(binlogs)
 				maxCommitTs = entity.commitTS
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
@@ -194,7 +196,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 	for {
 		p.mu.Lock()
-		b, ok := p.mu.binlogs[startTS]
+		b, ok := p.mu.prewriteItems[startTS]
 		p.mu.Unlock()
 		if !ok {
 			return
@@ -234,9 +236,9 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 			if status.IsCommitted() {
 				binlog.CommitTs = int64(status.CommitTS())
 				binlog.Tp = pb.BinlogType_Commit
-				p.mu.binlogs[binlog.CommitTs] = b
+				p.mu.commitItems[binlog.CommitTs] = b
 			}
-			delete(p.mu.binlogs, ts)
+			delete(p.mu.prewriteItems, ts)
 			p.mu.Unlock()
 			return true
 		}
@@ -247,13 +249,15 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	return false
 }
 
-// get all binlogs that don't store in boltdb
-func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
+// get all commit binlog item
+func (p *Pump) getCommitBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 	var tmpBinlogs map[int64]*binlogItem
+
 	p.mu.Lock()
-	tmpBinlogs = p.mu.binlogs
-	p.mu.binlogs = make(map[int64]*binlogItem)
+	tmpBinlogs = p.mu.commitItems
+	p.mu.commitItems = make(map[int64]*binlogItem)
 	p.mu.Unlock()
+
 	if binlogs == nil {
 		return tmpBinlogs
 	}
