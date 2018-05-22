@@ -97,8 +97,7 @@ func (to *testOffsetSuite) deleteTopic(kafkaAddr string, config *sarama.Config, 
 	_, err = broker.Connected()
 	c.Assert(err, IsNil)
 	defer broker.Close()
-	_, err = broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
-	c.Assert(err, IsNil)
+	broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
 }
 
 func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, error) {
