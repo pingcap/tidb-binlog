@@ -1,10 +1,12 @@
 package drainer
 
 import (
+	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
+	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -35,10 +37,34 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 }
 
 // Decode implements Operator.Decode interface
-func (s *seekOperator) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
+func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
 	bg := new(pb.Binlog)
 
-	err := bg.Unmarshal(message.Value)
+	var payload []byte
+	msg := <-messages
+	if len(msg.Headers) == 0 {
+		// unsplited message
+		payload = msg.Value
+	} else {
+		for {
+			// find the first slice of a message
+			noByte := getKeyFromComsumerMessageHeader(pump.No, msg)
+			no := binary.LittleEndian.Uint32(noByte)
+			if no == 0 {
+				payload = make([]byte, 0, 1024*1024)
+				payload = append(payload, msg.Value...)
+				break
+			}
+			msg = <-messages
+		}
+		for msg := range messages {
+			payload = append(payload, msg.Value...)
+			if getKeyFromComsumerMessageHeader(pump.Checksum, msg) != nil {
+				break // assembled a complete message
+			}
+		}
+	}
+	err := bg.Unmarshal(payload)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
 		return nil, errors.Trace(err)

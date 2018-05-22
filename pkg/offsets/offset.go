@@ -20,9 +20,9 @@ type Seeker interface {
 
 // Operator is an interface for seeker operation
 type Operator interface {
-	// Decode decodes message from kafka or rocketmq
+	// Decode decodes message(or slices) from kafka or rocketmq
 	// return message's position
-	Decode(message *sarama.ConsumerMessage) (interface{}, error)
+	Decode(messages <-chan *sarama.ConsumerMessage) (interface{}, error)
 	// Compare compares excepted and current position, return
 	// -1 if exceptedPos < currentPos
 	// 0 if exceptedPos == currentPos
@@ -168,21 +168,15 @@ func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64
 	}
 	defer pc.Close()
 
-	for msg := range pc.Messages() {
-		bp, err := ks.operator.Decode(msg)
-		if err != nil {
-			return 0, bp, errors.Annotatef(err, "decode %s", msg)
-		}
-
-		cmp, err := ks.operator.Compare(pos, bp)
-		if err != nil {
-			return 0, bp, errors.Annotatef(err, "compare %s with position %v", msg, pos)
-		}
-
-		return cmp, bp, nil
+	bp, err := ks.operator.Decode(pc.Messages())
+	if err != nil {
+		return 0, bp, errors.Annotate(err, "decode message")
 	}
-
-	panic("unreachable")
+	cmp, err := ks.operator.Compare(pos, bp)
+	if err != nil {
+		return 0, bp, errors.Annotatef(err, "compare %s with position %v", bp, pos)
+	}
+	return cmp, bp, nil
 }
 
 // getOffset return offset by given pos
