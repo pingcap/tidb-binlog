@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"bytes"
 	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -224,6 +225,7 @@ func (p PositionOperator) Decode(messages <-chan *sarama.ConsumerMessage) (inter
 		// unsplited message
 		payload = msg.Value
 	} else {
+		var messageID []byte
 		for {
 			// find the first slice of a message
 			noByte := getKeyFromComsumerMessageHeader(No, msg)
@@ -231,11 +233,16 @@ func (p PositionOperator) Decode(messages <-chan *sarama.ConsumerMessage) (inter
 			if no == 0 {
 				payload = make([]byte, 0, 10)
 				payload = append(payload, msg.Value...)
+				messageID = getKeyFromComsumerMessageHeader(MessageID, msg)
 				break
 			}
 			msg = <-messages
 		}
 		for msg := range messages {
+			messageIDNew := getKeyFromComsumerMessageHeader(MessageID, msg)
+			if !bytes.Equal(messageID, messageIDNew) {
+				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
+			}
 			payload = append(payload, msg.Value...)
 			if getKeyFromComsumerMessageHeader(Checksum, msg) != nil {
 				break // assembled a complete message

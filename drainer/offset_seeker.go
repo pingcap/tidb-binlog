@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -46,6 +47,7 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 		// unsplited message
 		payload = msg.Value
 	} else {
+		var messageID []byte
 		for {
 			// find the first slice of a message
 			noByte := getKeyFromComsumerMessageHeader(pump.No, msg)
@@ -53,11 +55,16 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 			if no == 0 {
 				payload = make([]byte, 0, 1024*1024)
 				payload = append(payload, msg.Value...)
+				messageID = getKeyFromComsumerMessageHeader(pump.MessageID, msg)
 				break
 			}
 			msg = <-messages
 		}
 		for msg := range messages {
+			messageIDNew := getKeyFromComsumerMessageHeader(pump.MessageID, msg)
+			if !bytes.Equal(messageID, messageIDNew) {
+				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
+			}
 			payload = append(payload, msg.Value...)
 			if getKeyFromComsumerMessageHeader(pump.Checksum, msg) != nil {
 				break // assembled a complete message
