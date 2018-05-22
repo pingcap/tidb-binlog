@@ -22,8 +22,8 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-// sleep 10 millisecond to wait matched binlog
-var waitMatchedTime = 10 * time.Millisecond
+// we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
+var waitMatchedTime = 3 * time.Second
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -205,12 +205,12 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 		select {
 		case <-p.ctx.Done():
 			return
-		case <-time.After(waitTime):
+		case <-time.After(waitMatchedTime):
 			if p.query(t, b) {
 				return
 			}
 		case <-b.commitOrRollback:
-
+			return
 		}
 	}
 }
