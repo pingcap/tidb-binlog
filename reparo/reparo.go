@@ -26,8 +26,6 @@ import (
 )
 
 const (
-	jobChanSize = 1000
-
 	maxExecutionWaitTime = 100 * time.Millisecond
 	executionWaitTime    = 10 * time.Millisecond
 )
@@ -58,7 +56,7 @@ func New(cfg *Config) (*Reparo, error) {
 		cfg:       cfg,
 		executors: executors,
 		regexMap:  make(map[string]*regexp.Regexp),
-		jobCh:     newJobChans(cfg.WorkerCount),
+		jobCh:     newJobChans(cfg.WorkerCount, cfg.JobChannelSize),
 		causality: causality.NewCausality(),
 	}
 
@@ -376,7 +374,7 @@ func closeExecutors(executors []executor.Executor) {
 	}
 }
 
-func newJobChans(count int) []chan *job {
+func newJobChans(count int, jobChanSize int) []chan *job {
 	jobChs := make([]chan *job, 0, count)
 	for i := 0; i < count; i++ {
 		jobChs = append(jobChs, make(chan *job, jobChanSize))
