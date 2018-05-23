@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/bitmap"
 	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -26,7 +27,7 @@ type assembler struct {
 	wg     sync.WaitGroup
 
 	// store binlog slices bitmap to check whether it's complete binlog
-	bms map[string]*bitmap
+	bms map[string]*bitmap.Bitmap
 	// cache all slices
 	slices chan *sarama.ConsumerMessage
 	// output complete binlog channel
@@ -43,7 +44,7 @@ func newAssembler() *assembler {
 		ctx:       ctx,
 		cancel:    cancel,
 		cacheSize: sliceCacheSize,
-		bms:       make(map[string]*bitmap, sliceCacheSize/10),
+		bms:       make(map[string]*bitmap.Bitmap, sliceCacheSize/10),
 		msgs:      make(chan *assembledBinlog, sliceCacheSize/10),
 		input:     make(chan *sarama.ConsumerMessage, sliceCacheSize/10),
 		slices:    make(chan *sarama.ConsumerMessage, sliceCacheSize),
@@ -157,14 +158,14 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 		// only one binlog in slices
 		// check completed or append
 		if len(a.bms) == 1 {
-			isNew := a.bms[messageID].set(no)
+			isNew := a.bms[messageID].Set(no)
 			// duplicate slice arrives, just ignore
 			if !isNew {
 				return nil
 			}
 
 			a.slices <- msg
-			if !a.bms[messageID].completed() {
+			if !a.bms[messageID].Completed() {
 				return nil
 			}
 			messages := a.peekBinlogSlices()
@@ -190,8 +191,8 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 
 	// just append slices
 	a.slices <- msg
-	a.bms[messageID] = newBitmap(total)
-	a.bms[messageID].set(no)
+	a.bms[messageID] = bitmap.NewBitmap(total)
+	a.bms[messageID].Set(no)
 	return nil
 }
 
@@ -200,9 +201,9 @@ func (a *assembler) peekBinlogSlices() []*sarama.ConsumerMessage {
 	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
 	skippedBitmap := a.bms[string(skippedID)]
 
-	messages := make([]*sarama.ConsumerMessage, 0, skippedBitmap.current)
+	messages := make([]*sarama.ConsumerMessage, 0, skippedBitmap.Current)
 	messages = append(messages, skippedMsg)
-	for i := 0; i < skippedBitmap.current-1; i++ {
+	for i := 0; i < skippedBitmap.Current-1; i++ {
 		messages = append(messages, <-a.slices)
 	}
 	delete(a.bms, skippedID)
@@ -214,7 +215,7 @@ func (a *assembler) popBinlogSlices() {
 	skippedMsg := <-a.slices
 	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
 	skippedBitmap := a.bms[string(skippedID)]
-	for i := 0; i < skippedBitmap.current-1; i++ {
+	for i := 0; i < skippedBitmap.Current-1; i++ {
 		<-a.slices
 	}
 	delete(a.bms, skippedID)
