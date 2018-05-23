@@ -85,20 +85,6 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 	return ts, nil
 }
 
-// Adjust implements Operator.Adjust interface
-func (s *seekOperator) Adjust(pos interface{}, startTime int64, endTime int64) (interface{}, error) {
-	if endTime <= 0 {
-		return pos, nil // ignore startTime and endTime
-	}
-	tmp := pos.(int64)
-	if tmp < startTime {
-		return startTime, nil
-	} else if tmp > endTime {
-		return endTime, nil
-	}
-	return pos, nil
-}
-
 func createOffsetSeeker(addrs []string, kafkaVersion string) (offsets.Seeker, error) {
 	cfg := sarama.NewConfig()
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
