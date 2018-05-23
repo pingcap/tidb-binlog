@@ -7,6 +7,7 @@ type Bitmap struct {
 	Current int
 }
 
+// NewBitmap returns Bitmap instance
 func NewBitmap(total int) *Bitmap {
 	if total == 0 {
 		return nil
@@ -24,6 +25,7 @@ func NewBitmap(total int) *Bitmap {
 	return bm
 }
 
+// Set sets a bit in bitmap
 func (b *Bitmap) Set(index int) bool {
 	mask := uint8(1 << uint(index%8))
 	bucket := b.Value[index/8]
@@ -37,6 +39,7 @@ func (b *Bitmap) Set(index int) bool {
 	return false
 }
 
+// Completed checks whether bitmap is completed (all bits set)
 func (b *Bitmap) Completed() bool {
 	return b.Current == b.Total
 }
