@@ -28,6 +28,9 @@ type Operator interface {
 	// 0 if exceptedPos == currentPos
 	// 1 if exceptedPos > currentPos
 	Compare(exceptedPos interface{}, currentPos interface{}) (int, error)
+	// Adjust adjusts pos based on startTime and endTime
+	// return adjusted pos
+	Adjust(pos interface{}, startTime int64, endTime int64) (interface{}, error)
 }
 
 // KafkaSeeker implements Kafka Seeker
@@ -85,6 +88,10 @@ func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTim
 		}
 	}
 
+	pos, err = ks.operator.Adjust(pos, startTime, endTime)
+	if err != nil {
+		log.Errorf("adjust pos %v error", pos)
+	}
 	offsets, err := ks.seekOffsets(topic, partitions, pos)
 	if err != nil {
 		log.Errorf("seek offsets error %v", err)

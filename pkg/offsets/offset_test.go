@@ -252,6 +252,10 @@ func (p PositionOperator) Decode(messages <-chan *sarama.ConsumerMessage) (inter
 	return string(payload), nil
 }
 
+func (p PositionOperator) Adjust(pos interface{}, startTime int64, endTime int64) (interface{}, error) {
+	return pos, nil
+}
+
 func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage) []byte {
 	for _, record := range message.Headers {
 		if string(record.Key) == string(key) {
