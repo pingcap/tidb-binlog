@@ -43,6 +43,9 @@ txn-batch = 100
 worker-count = 8
 disable-detect = false
 
+# The channel size(in number,not bytes) of reparo buffer jobs. For the most time, you don't need to change it.
+# job-channel-size = 1000
+
 [dest-db]
 host = "127.0.0.1"
 port = 3306

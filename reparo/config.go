@@ -52,15 +52,16 @@ type Config struct {
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
 	LogLevel  string `toml:"log-level" json:"log-level"`
 
-	StatusAddr string `toml:"status-addr" json:"status-addr"`
+	StatusAddr     string `toml:"status-addr" json:"status-addr"`
+	JobChannelSize int    `toml:"job-channel-size" json:"job-channel-size"`
 
 	configFile   string
 	printVersion bool
 }
 
 var defaultConf = &Config{
-	TxnBatch:         1,
-	WorkerCount:      1,
+	TxnBatch:         100,
+	WorkerCount:      8,
 	DisableCausality: false,
 	LogFile:          "reparo.log",
 	LogLevel:         "info",
@@ -85,8 +86,13 @@ func NewConfig() *Config {
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
+	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
+	fs.IntVar(&c.TxnBatch, "txn-batch", 100, "number of binlog events in a transaction")
+	fs.IntVar(&c.WorkerCount, "worker-count", 8, "number of workers to execute sqls")
+	fs.BoolVar(&c.DisableCausality, "disable-detect", false, "disbale detect causality")
+	fs.StringVar(&c.StatusAddr, "status-addr", ":10085", "status address for prometheus metrics and go pprof debugging")
+	fs.IntVar(&c.JobChannelSize, "job-channel-size", 1000, "the channel size(in number,not bytes) of reparo buffer jobs")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")
 	return c

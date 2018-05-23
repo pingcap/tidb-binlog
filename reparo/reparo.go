@@ -272,8 +272,8 @@ func (r *Reparo) addJob(job *job) {
 	idx := int(genHashKey(fmt.Sprintf("%s", job.key))) % r.cfg.WorkerCount
 	r.jobCh[idx] <- job
 
-	begin1 := time.Now()
 	if r.checkWait(job) {
+		begin1 := time.Now()
 		r.jobWg.Wait()
 		ddlCost := time.Since(begin1).Seconds()
 		if ddlCost > 1 {
