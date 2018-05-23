@@ -85,7 +85,15 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 	return ts, nil
 }
 
-func createOffsetSeeker(addrs []string) (offsets.Seeker, error) {
-	seeker, err := offsets.NewKafkaSeeker(addrs, sarama.NewConfig(), &seekOperator{})
+func createOffsetSeeker(addrs []string, kafkaVersion string) (offsets.Seeker, error) {
+	cfg := sarama.NewConfig()
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	cfg.Version = version
+	log.Infof("kafka consumer version %v", version)
+
+	seeker, err := offsets.NewKafkaSeeker(addrs, cfg, &seekOperator{})
 	return seeker, errors.Trace(err)
 }

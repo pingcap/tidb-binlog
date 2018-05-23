@@ -67,14 +67,14 @@ func newBinlogHeap(size int) *binlogHeap {
 	}
 }
 
-func (b *binlogHeap) push(ctx context.Context, item *binlogItem) {
+func (b *binlogHeap) push(ctx context.Context, item *binlogItem, check bool) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 			b.Lock()
-			if b.bh.Len() == b.size {
+			if check && b.bh.Len() == b.size {
 				b.Unlock()
 				time.Sleep(pushRetryTime)
 				continue

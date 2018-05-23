@@ -34,21 +34,22 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	clusterID  uint64
-	batch      int32
-	kafkaAddrs []string
-	interval   time.Duration
-	reg        *pump.EtcdRegistry
-	timeout    time.Duration
-	window     *DepositWindow
-	tiClient   *tikv.LockResolver
-	tiStore    kv.Storage
-	pumps      map[string]*Pump
-	offlines   map[string]struct{}
-	bh         *binlogHeap
-	syncer     *Syncer
-	latestTS   int64
-	cp         checkpoint.CheckPoint
+	clusterID    uint64
+	batch        int32
+	kafkaAddrs   []string
+	kafkaVersion string
+	interval     time.Duration
+	reg          *pump.EtcdRegistry
+	timeout      time.Duration
+	window       *DepositWindow
+	tiClient     *tikv.LockResolver
+	tiStore      kv.Storage
+	pumps        map[string]*Pump
+	offlines     map[string]struct{}
+	bh           *binlogHeap
+	syncer       *Syncer
+	latestTS     int64
+	cp           checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
@@ -74,7 +75,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	offsetSeeker, err := createOffsetSeeker(kafkaAddrs)
+	offsetSeeker, err := createOffsetSeeker(kafkaAddrs, cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -99,6 +100,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
 		kafkaAddrs:      kafkaAddrs,
+		kafkaVersion:    cfg.KafkaVersion,
 		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
@@ -165,6 +167,11 @@ func (c *Collector) updateCollectStatus(synced bool) {
 // updateStatus queries pumps' status , deletes the offline pump
 // and updates pumps' latest ts
 func (c *Collector) updateStatus(ctx context.Context) error {
+	begin := time.Now()
+	defer func() {
+		publishBinlogHistogram.WithLabelValues("drainer").Observe(time.Since(begin).Seconds())
+	}()
+
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 		c.updateCollectStatus(false)
@@ -211,7 +218,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.timeout, c.window, c.tiStore, pos)
+			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.kafkaVersion, c.timeout, c.window, c.tiStore, pos)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -301,6 +308,7 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 
 // publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
 func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
+	begin := time.Now()
 	// multiple ways sort:
 	// 1. get multiple way sorted binlogs
 	// 2. use heap to merge sort
@@ -314,11 +322,13 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			bss[id] = bs
 			binlogOffsets[id] = 1
 			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0])
+			c.bh.push(ctx, bs[0], false)
 		}
 		total += bs.Len()
 	}
+	publishBinlogHistogram.WithLabelValues("drainer_collector").Observe(time.Since(begin).Seconds())
 
+	begin = time.Now()
 	item := c.bh.pop()
 	for item != nil {
 		c.syncer.Add(item)
@@ -327,11 +337,12 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 			delete(bss, item.nodeID)
 		} else {
 			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]])
+			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]], false)
 			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
 		}
 		item = c.bh.pop()
 	}
+	publishBinlogHistogram.WithLabelValues("drainer_merge_sort").Observe(time.Since(begin).Seconds())
 
 	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }

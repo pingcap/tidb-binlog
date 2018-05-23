@@ -26,6 +26,24 @@ var (
 			Help:      "offset for each pump.",
 		}, []string{"nodeID"})
 
+	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "find_matched_binlog_duration_time",
+			Help:      "Bucketed histogram of find a matched binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"nodeID"})
+
+	publishBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "publish_binlog_duration_time",
+			Help:      "Bucketed histogram of publish a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"nodeID"})
+
 	publishBinlogCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -80,7 +98,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "txn_duration_time",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
 	readBinlogHistogram = prometheus.NewHistogramVec(
@@ -89,7 +107,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "read_binlog_duration_time",
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 
 	readBinlogSizeHistogram = prometheus.NewHistogramVec(
@@ -114,6 +132,8 @@ func init() {
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(readBinlogHistogram)
 	prometheus.MustRegister(readBinlogSizeHistogram)
+	prometheus.MustRegister(publishBinlogHistogram)
+	prometheus.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {

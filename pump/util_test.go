@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"encoding/binary"
 	"io"
 	"io/ioutil"
 	"os"
@@ -10,7 +11,7 @@ import (
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
-func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
+func (t *testPumpServerSuite) TestSeekBinlog(c *C) {
 	f, err := ioutil.TempFile(os.TempDir(), "testOffset")
 	c.Assert(err, IsNil)
 	defer func() {
@@ -23,7 +24,8 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	c.Assert(err, IsNil)
 
 	testCase := make([]byte, 2048)
-	for i := 0; i < 2048; i++ {
+	binary.LittleEndian.PutUint32(testCase[:4], magic)
+	for i := 4; i < 2048; i++ {
 		testCase[i] = 'a'
 	}
 	_, err = f.Write(testCase)
@@ -34,11 +36,27 @@ func (t *testPumpServerSuite) TestSeekNextBinlog(c *C) {
 	_, err = f.Write(testCase)
 	c.Assert(err, IsNil)
 
-	offset, err := seekNextBinlog(f, 10)
+	offset, err := seekBinlog(f, 10)
+	c.Assert(offset, Equals, int64(26))
+	c.Assert(err, IsNil)
+
+	offset, err = seekBinlog(f, 26)
+	c.Assert(offset, Equals, int64(26))
+	c.Assert(err, IsNil)
+
+	offset, err = seekBinlog(f, 27)
 	c.Assert(offset, Equals, int64(2074))
 	c.Assert(err, IsNil)
 
-	_, err = seekNextBinlog(f, 2080)
+	offset, err = seekBinlog(f, 2080)
+	c.Assert(offset, Equals, int64(2100))
+	c.Assert(err, IsNil)
+
+	offset, err = seekBinlog(f, 2100)
+	c.Assert(offset, Equals, int64(2100))
+	c.Assert(err, IsNil)
+
+	_, err = seekBinlog(f, 2101)
 	c.Assert(err, Equals, io.ErrUnexpectedEOF)
 }
 

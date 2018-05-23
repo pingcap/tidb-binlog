@@ -14,6 +14,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -53,6 +54,8 @@ func InitLogger(cfg *Config) {
 			log.SetRotateByDay()
 		}
 	}
+
+	sarama.Logger = util.NewStdLogger("[sarama] ")
 }
 
 // KRand is an algorithm that compute rand nums
@@ -123,21 +126,30 @@ func ComparePos(left, right binlog.Pos) int {
 	}
 }
 
-func createKafkaClient(addr []string) (sarama.SyncProducer, error) {
+func initializeSaramaGlobalConfig() {
+	sarama.MaxRequestSize = int32(maxMsgSize)
+}
+
+func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
 	var (
 		client sarama.SyncProducer
 		err    error
 	)
 
-	for i := 0; i < maxRetry; i++ {
-		// initial kafka client to use manual partitioner
-		config := sarama.NewConfig()
-		config.Version = sarama.V1_0_0_0
-		config.Producer.Partitioner = sarama.NewManualPartitioner
-		config.Producer.Return.Successes = true
-		config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
-		config.Producer.RequiredAcks = sarama.WaitForAll
+	// initial kafka client to use manual partitioner
+	config := sarama.NewConfig()
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	config.Version = version
 
+	log.Infof("kafka producer version %v", version)
+	for i := 0; i < maxRetry; i++ {
 		client, err = sarama.NewSyncProducer(addr, config)
 		if err != nil {
 			log.Errorf("create kafka client error %v", err)
@@ -156,7 +168,8 @@ func posToFloat(pos *binlog.Pos) float64 {
 }
 
 // use magic code to find next binlog and skips corruption data
-func seekNextBinlog(f *os.File, offset int64) (int64, error) {
+// seekBinlog seeks one binlog from current offset
+func seekBinlog(f *os.File, offset int64) (int64, error) {
 	var (
 		batchSize    = 1024
 		headerLength = 3 // length of magic code - 1

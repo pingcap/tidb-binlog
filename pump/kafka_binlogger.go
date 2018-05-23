@@ -30,8 +30,8 @@ type kafkaBinloger struct {
 	addr []string
 }
 
-func createKafkaBinlogger(clusterID string, node string, addr []string) (Binlogger, error) {
-	producer, err := createKafkaClient(addr)
+func createKafkaBinlogger(clusterID string, node string, addr []string, kafkaVersion string) (Binlogger, error) {
+	producer, err := createKafkaProducer(addr, kafkaVersion)
 	if err != nil {
 		log.Errorf("create kafka producer error: %v", err)
 		return nil, errors.Trace(err)

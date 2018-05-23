@@ -1,11 +1,22 @@
 ## TiDB-Binlog
 
-A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binlog, with features:
+A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
 
-* *Data replication*: synchronize datas from TiDB cluster to heterogeneous databases.
-* *Real-time backup & recovery*: backup TiDB cluster into dump file and can be used for recovery.
-* *Multiple output format*: support mysql, dump file, etc.
-* *history replay*: replay from any history point.
+- Data replication
+    
+    Synchronize data from the TiDB cluster to heterogeneous databases.
+
+- Real-time backup and recovery
+    
+    Backup the TiDB cluster into the Dump file and it can be used for recovery.
+
+- Multiple output format
+    
+    Support MySQL, Dump file, etc.
+    
+- History replay
+    
+    Replay from any history point.
 
 ## Documentation
 
@@ -18,25 +29,25 @@ A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binl
 ## How to build
 
 ```
-make build   # build all compoents
+make build   # build all components
 
 make pump    # build pump
 
 make drainer # build drainer
 ```
 
-When build successfully, you can find the binary in bin directory. 
+When TiDB-Binlog is built successfully, you can find the binary in the `bin` directory. 
 
 ## Service list
 
-[pump](./cmd/pump)
+[Pump](./cmd/pump)
 
-pump is a daemon that receives realtime binlog from tidb-server and writes in sequential disk files synchronously.
+Pump is a daemon that receives real-time binlogs from tidb-server and writes in sequential disk files synchronously.
 
-[drainer](./cmd/drainer)
+[Drainer](./cmd/drainer)
 
-drainer collects binlog from each pump in cluster, transforms binlog to various dialects of SQL, and applies to downstream database or filesystem.
+Drainer collects binlogs from each Pump in the cluster, transforms binlogs to various dialects of SQL, and applies to the downstream database or filesystem.
 
 ## Deployment
 
-The recommended startup sequence: PD -> TiKV -> [pump](./cmd/pump) -> TiDB -> [drainer](./cmd/drainer)
+The recommended startup sequence: PD -> TiKV -> [Pump](./cmd/pump) -> TiDB -> [Drainer](./cmd/drainer)

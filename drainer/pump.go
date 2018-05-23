@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -20,6 +21,9 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
+
+// sleep 10 millisecond to wait matched binlog
+var waitMatchedTime = 10 * time.Millisecond
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -63,11 +67,8 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Consumer.Return.Errors = true
-	kafkaCfg.Version = sarama.V1_0_0_0
-	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+	consumer, err := createKafkaConsumer(kafkaAddrs, kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -163,10 +164,12 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case entity = <-p.binlogChan:
 		}
 
+		begin := time.Now()
 		switch entity.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
+			findMatchedBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
@@ -181,6 +184,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
+				publishBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 			}
 		}
 
@@ -201,7 +205,7 @@ func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 
 		b, ok := p.getPrewriteBinlogEntity(startTS)
 		if ok {
-			time.Sleep(waitTime)
+			time.Sleep(waitMatchedTime)
 			// check again after sleep a moment
 			b, ok = p.getPrewriteBinlogEntity(startTS)
 			if ok {
@@ -302,7 +306,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
 			continue
 		}
-		p.bh.push(p.ctx, item)
+		p.bh.push(p.ctx, item, true)
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
@@ -358,6 +362,7 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
+	begin := time.Now()
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= windowUpper {
@@ -371,10 +376,12 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 		}
 		item = p.bh.pop()
 	}
-
 	if item != nil {
-		p.bh.push(p.ctx, item)
+		p.bh.push(p.ctx, item, false)
 	}
+
+	publishBinlogHistogram.WithLabelValues(fmt.Sprintf("%s_collect_binlogs", p.nodeID)).Observe(time.Since(begin).Seconds())
+
 	return bs
 }
 

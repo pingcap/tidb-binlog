@@ -20,15 +20,16 @@ import (
 )
 
 const (
-	defaultEtcdDialTimeout         = 5 * time.Second
-	defaultEtcdURLs                = "http://127.0.0.1:2379"
-	defaultKafkaAddrs              = "127.0.0.1:9092"
-	defaultListenAddr              = "127.0.0.1:8250"
-	defaultSocket                  = "unix:///tmp/pump.sock"
-	defautMaxKafkaSize             = 1024 * 1024 * 1024
-	defaultHeartbeatInterval       = 2
-	defaultGC                      = 7
-	defaultDataDir                 = "data.pump"
+	defaultEtcdDialTimeout   = 5 * time.Second
+	defaultEtcdURLs          = "http://127.0.0.1:2379"
+	defaultKafkaAddrs        = "127.0.0.1:9092"
+	defaultListenAddr        = "127.0.0.1:8250"
+	defaultSocket            = "unix:///tmp/pump.sock"
+	defautMaxKafkaSize       = 1024 * 1024 * 1024
+	defaultHeartbeatInterval = 2
+	defaultGC                = 7
+	defaultDataDir           = "data.pump"
+	defaultKafkaVersion      = "1.0.0"
 	defaultBinlogSlice             = 10 * 1024 * 1024
 	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
 	defaultSendKafKaRetryNum int   = 10
@@ -69,6 +70,7 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
+	KafkaVersion      string `toml:"kafka-version" json:"kafka-version"`
 	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string          `toml:"data-dir" json:"data-dir"`
@@ -108,6 +110,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
+	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
 	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
@@ -182,6 +185,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	initializeSaramaGlobalConfig()
 
 	return cfg.validate()
 }
