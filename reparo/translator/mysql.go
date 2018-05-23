@@ -62,10 +62,6 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	row := event.GetRow()
-	// table, err := m.getTable(schemaName, tableName)
-	// if err != nil {
-	// 	return nil, errors.Trace(err)
-	// }
 	allCols := make([]string, 0, len(row))
 	oldValues := make([]interface{}, 0, len(row))
 
@@ -100,7 +96,6 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 		}
 		updatedColumns = append(updatedColumns, col.Name)
 		updatedValues = append(updatedValues, changedDatum.GetValue())
-		// fmt.Printf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
 	}
 
 	kvs := genKVs(updatedColumns)
@@ -110,7 +105,6 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 	args = append(args, updatedValues...)
 	args = append(args, oldValues...)
 
-	//TODO
 	var keys []string
 	sql := fmt.Sprintf("UPDATE `%s`.`%s` SET %s WHERE %s LIMIT 1;", schemaName, tableName, kvs, where)
 	log.Debugf("update sql %s, args %+v", sql, args)
@@ -126,10 +120,6 @@ func (m *mysqlTranslator) TransDelete(event *pb.Event) (*TranslateResult, error)
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	row := event.GetRow()
-	// table, err := m.getTable(schemaName, tableName)
-	// if err != nil {
-	// 	return nil, errors.Trace(err)
-	// }
 
 	cols, args, err := genColsAndArgs(row)
 	if err != nil {
@@ -138,7 +128,6 @@ func (m *mysqlTranslator) TransDelete(event *pb.Event) (*TranslateResult, error)
 
 	where := genWhere(cols, args)
 
-	//TODO
 	var keys []string
 	sql := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s limit 1", schemaName, tableName, where)
 	log.Debugf("delete sql %s, args %+v", sql, args)
