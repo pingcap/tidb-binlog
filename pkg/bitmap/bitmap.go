@@ -1,5 +1,6 @@
 package bitmap
 
+// Bitmap used to check slices all fetched
 // unsupported concurrency
 type Bitmap struct {
 	Value   []uint8
