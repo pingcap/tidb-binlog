@@ -38,7 +38,7 @@ func decode(r io.Reader) ([]byte, int64, error) {
 	if errors.Cause(err) == io.EOF {
 		return nil, 0, io.EOF
 	}
-	if err := checkMagic(magicNum); err != nil {
+	if err = checkMagic(magicNum); err != nil {
 		return nil, 0, errors.Trace(err)
 	}
 	// read payload length
