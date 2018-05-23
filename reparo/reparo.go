@@ -201,7 +201,6 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 	count := r.cfg.TxnBatch
 	sqls := make([]string, 0, count)
 	args := make([][]interface{}, 0, count)
-	lastSyncTime := time.Now()
 
 	clearF := func() {
 		for i := 0; i < idx; i++ {
@@ -211,7 +210,6 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 		idx = 0
 		sqls = sqls[0:0]
 		args = args[0:0]
-		lastSyncTime = time.Now()
 	}
 
 	var err error
@@ -246,14 +244,12 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 				clearF()
 			}
 
-		default:
-			if time.Since(lastSyncTime) >= maxExecutionWaitTime {
-				err = executor.Execute(sqls, args, false)
-				if err != nil {
-					log.Fatalf(errors.ErrorStack(err))
-				}
-				clearF()
+		case <-time.After(maxExecutionWaitTime):
+			err = executor.Execute(sqls, args, false)
+			if err != nil {
+				log.Fatalf(errors.ErrorStack(err))
 			}
+			clearF()
 			time.Sleep(executionWaitTime)
 		}
 	}
