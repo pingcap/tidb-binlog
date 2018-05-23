@@ -102,7 +102,7 @@ func (k *kafkaEncoder) Encode(entity *binlog.Entity) (int64, error) {
 
 		errMessages = errMessages[:0]
 		for _, errMessage := range producerErrors {
-			log.Errorf("[encodr] produce message %s, now retry No. %d", errMessage.Error(), retry)
+			log.Errorf("[encode] produce message %s, now retry No. %d", errMessage.Error(), retry)
 			errMessages = append(errMessages, errMessage.Msg)
 		}
 		err = k.producer.SendMessages(errMessages)
