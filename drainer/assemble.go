@@ -2,15 +2,13 @@ package drainer
 
 import (
 	"encoding/binary"
-	"hash/crc32"
-	"sync"
-	"time"
-
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+	"hash/crc32"
+	"sync"
 )
 
 // unsupported concurrency
@@ -110,7 +108,6 @@ func (a *assembler) do() {
 				}
 			}
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 
