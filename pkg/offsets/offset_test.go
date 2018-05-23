@@ -10,14 +10,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	"math"
-)
-
-var (
-	MessageID = []byte("messageID")
-	No        = []byte("No")
-	Total     = []byte("total")
-	Checksum  = []byte("checksum")
 )
 
 func TestClient(t *testing.T) {
@@ -156,14 +150,14 @@ func (to *testOffsetSuite) produceMessageSlices(message []byte, topic string) (i
 				Value:     sarama.ByteEncoder(slice),
 				Headers: []sarama.RecordHeader{
 					{
-						Key:   MessageID,
+						Key:   slicer.MessageID,
 						Value: messageID,
 					},
 					{
-						Key:   No,
+						Key:   slicer.No,
 						Value: no,
 					}, {
-						Key:   Total,
+						Key:   slicer.Total,
 						Value: total,
 					},
 				},
@@ -171,7 +165,7 @@ func (to *testOffsetSuite) produceMessageSlices(message []byte, topic string) (i
 			if j == sliceCount-1 {
 				// last slice, append checksum
 				msg.Headers = append(msg.Headers, sarama.RecordHeader{
-					Key:   Checksum,
+					Key:   slicer.Checksum,
 					Value: checksum,
 				})
 			}
@@ -228,35 +222,26 @@ func (p PositionOperator) Decode(messages <-chan *sarama.ConsumerMessage) (inter
 		var messageID []byte
 		for {
 			// find the first slice of a message
-			noByte := getKeyFromComsumerMessageHeader(No, msg)
+			noByte := slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)
 			no := binary.LittleEndian.Uint32(noByte)
 			if no == 0 {
 				payload = make([]byte, 0, 10)
 				payload = append(payload, msg.Value...)
-				messageID = getKeyFromComsumerMessageHeader(MessageID, msg)
+				messageID = slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
 				break
 			}
 			msg = <-messages
 		}
 		for msg := range messages {
-			messageIDNew := getKeyFromComsumerMessageHeader(MessageID, msg)
+			messageIDNew := slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
 			if !bytes.Equal(messageID, messageIDNew) {
 				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
 			}
 			payload = append(payload, msg.Value...)
-			if getKeyFromComsumerMessageHeader(Checksum, msg) != nil {
+			if slicer.GetValueFromComsumerMessageHeader(slicer.Checksum, msg) != nil {
 				break // assembled a complete message
 			}
 		}
 	}
 	return string(payload), nil
-}
-
-func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage) []byte {
-	for _, record := range message.Headers {
-		if string(record.Key) == string(key) {
-			return record.Value
-		}
-	}
-	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -57,11 +58,11 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 		c.Assert(messages[i].Headers, HasLen, 3)
 		for _, header := range messages[i].Headers {
 			switch string(header.Key) {
-			case string(No):
+			case string(slicer.No):
 				Nos[int(binary.LittleEndian.Uint32(header.Value))] = true
-			case string(Total):
+			case string(slicer.Total):
 				c.Assert(binary.LittleEndian.Uint32(header.Value), Equals, uint32(duplicate))
-			case string(MessageID):
+			case string(slicer.MessageID):
 				c.Assert(header.Value, DeepEquals, messageID)
 			default:
 				c.Fatalf("unsupport header %s", header.Key)
@@ -72,13 +73,13 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 	c.Assert(messages[duplicate-1].Headers, HasLen, 4)
 	for _, header := range messages[duplicate-1].Headers {
 		switch string(header.Key) {
-		case string(No):
+		case string(slicer.No):
 			Nos[int(binary.LittleEndian.Uint32(header.Value))] = true
-		case string(Total):
+		case string(slicer.Total):
 			c.Assert(binary.LittleEndian.Uint32(header.Value), Equals, uint32(duplicate))
-		case string(MessageID):
+		case string(slicer.MessageID):
 			c.Assert(header.Value, DeepEquals, messageID)
-		case string(Checksum):
+		case string(slicer.Checksum):
 			c.Assert(header.Value, DeepEquals, checksum)
 		default:
 			c.Fatalf("unsupport header %s", header.Key)

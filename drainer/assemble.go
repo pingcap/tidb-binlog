@@ -5,6 +5,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/bitmap"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -145,11 +146,11 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 
 	// get total of binlog slices and no from consumerMessage header
 	var (
-		totalByte = getKeyFromComsumerMessageHeader(pump.Total, msg)
+		totalByte = slicer.GetValueFromComsumerMessageHeader(slicer.Total, msg)
 		total     = int(binary.LittleEndian.Uint32(totalByte))
-		noByte    = getKeyFromComsumerMessageHeader(pump.No, msg)
+		noByte    = slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)
 		no        = int(binary.LittleEndian.Uint32(noByte))
-		messageID = string(getKeyFromComsumerMessageHeader(pump.MessageID, msg))
+		messageID = string(slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg))
 	)
 
 	_, ok := a.bms[messageID]
@@ -198,7 +199,7 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 
 func (a *assembler) peekBinlogSlices() []*sarama.ConsumerMessage {
 	skippedMsg := <-a.slices
-	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
+	skippedID := string(slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, skippedMsg))
 	skippedBitmap := a.bms[string(skippedID)]
 
 	messages := make([]*sarama.ConsumerMessage, 0, skippedBitmap.Current)
@@ -213,7 +214,7 @@ func (a *assembler) peekBinlogSlices() []*sarama.ConsumerMessage {
 
 func (a *assembler) popBinlogSlices() {
 	skippedMsg := <-a.slices
-	skippedID := string(getKeyFromComsumerMessageHeader(pump.MessageID, skippedMsg))
+	skippedID := string(slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, skippedMsg))
 	skippedBitmap := a.bms[string(skippedID)]
 	for i := 0; i < skippedBitmap.Current-1; i++ {
 		<-a.slices
@@ -221,21 +222,11 @@ func (a *assembler) popBinlogSlices() {
 	delete(a.bms, skippedID)
 }
 
-func getKeyFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage) []byte {
-	for _, record := range message.Headers {
-		if string(record.Key) == string(key) {
-			return record.Value
-		}
-	}
-
-	return nil
-}
-
 func assembleBinlog(messages []*sarama.ConsumerMessage) (*assembledBinlog, error) {
 	slices := make([]*sarama.ConsumerMessage, len(messages))
 	totalSize := 0
 	for _, msg := range messages {
-		no := int(binary.LittleEndian.Uint32(getKeyFromComsumerMessageHeader(pump.No, msg)))
+		no := int(binary.LittleEndian.Uint32(slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)))
 		slices[no] = msg
 		totalSize += len(msg.Value)
 	}
@@ -248,7 +239,7 @@ func assembleBinlog(messages []*sarama.ConsumerMessage) (*assembledBinlog, error
 		b.entity.Payload = append(b.entity.Payload, slice.Value...)
 	}
 
-	checksumByte := getKeyFromComsumerMessageHeader(pump.Checksum, slices[len(slices)-1])
+	checksumByte := slicer.GetValueFromComsumerMessageHeader(slicer.Checksum, slices[len(slices)-1])
 	originChecksum := binary.LittleEndian.Uint32(checksumByte)
 	checksum := crc32.Checksum(b.entity.Payload, crcTable)
 	if checksum != originChecksum {

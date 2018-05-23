@@ -1,4 +1,4 @@
-package slices
+package slicer
 
 import (
 	"encoding/binary"
@@ -6,7 +6,18 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/bitmap"
-	"github.com/pingcap/tidb-binlog/pump"
+)
+
+var (
+	// MessageID is ID to indicate which binlog it belongs
+	MessageID = []byte("messageID")
+	// No is index of slicer of binlog
+	No = []byte("No")
+	// Total is total number of binlog slicer
+	Total = []byte("total")
+	// Checksum is checksum code of binlog payload
+	// to save space, it's only in last binlog slice
+	Checksum = []byte("checksum")
 )
 
 // Tracker is a struct for tracking slices of a binlog in kafka/rocketmq
@@ -65,18 +76,18 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 	sos := make(map[string][]int64) // cache offset rather than ConsumerMessage
 	messageID := ""
 	for {
-		messageID = string(GetValueFromComsumerMessageHeader(pump.MessageID, msg))
+		messageID = string(GetValueFromComsumerMessageHeader(MessageID, msg))
 		bm, ok := bms[messageID]
 		so, ok := sos[messageID]
 		if !ok {
-			totalByte := GetValueFromComsumerMessageHeader(pump.Total, msg)
+			totalByte := GetValueFromComsumerMessageHeader(Total, msg)
 			total := int(binary.LittleEndian.Uint32(totalByte))
 			bm = bitmap.NewBitmap(total)
 			bms[messageID] = bm
 			so = make([]int64, total)
 			sos[messageID] = so
 		}
-		noByte := GetValueFromComsumerMessageHeader(pump.No, msg)
+		noByte := GetValueFromComsumerMessageHeader(No, msg)
 		no := int(binary.LittleEndian.Uint32(noByte))
 		isNew := bm.Set(no)
 		if isNew {

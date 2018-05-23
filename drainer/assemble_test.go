@@ -7,23 +7,23 @@ import (
 
 	"github.com/Shopify/sarama"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 )
 
 func (t *testDrainerSuite) TestGetKeyFromComsumerMessageHeader(c *C) {
 	data := []byte("1")
 	message := &sarama.ConsumerMessage{
 		Headers: []*sarama.RecordHeader{{
-			Key:   pump.MessageID,
+			Key:   slicer.MessageID,
 			Value: data,
 		}, {
-			Key:   pump.No,
+			Key:   slicer.No,
 			Value: data,
 		}},
 	}
 
-	c.Assert(getKeyFromComsumerMessageHeader(pump.No, message), DeepEquals, data)
-	c.Assert(getKeyFromComsumerMessageHeader(pump.Total, message), IsNil)
+	c.Assert(slicer.GetValueFromComsumerMessageHeader(slicer.No, message), DeepEquals, data)
+	c.Assert(slicer.GetValueFromComsumerMessageHeader(slicer.Total, message), IsNil)
 }
 
 func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
@@ -169,16 +169,16 @@ func (t *testDrainerSuite) testGenerateConsumerMessage(id string, size int, loss
 			Value:     sarama.ByteEncoder(basicData),
 			Headers: []*sarama.RecordHeader{
 				{
-					Key:   pump.MessageID,
+					Key:   slicer.MessageID,
 					Value: []byte(id),
 				}, {
-					Key:   pump.No,
+					Key:   slicer.No,
 					Value: noByte,
 				}, {
-					Key:   pump.Total,
+					Key:   slicer.Total,
 					Value: totalByte,
 				}, {
-					Key:   pump.Checksum,
+					Key:   slicer.Checksum,
 					Value: checksumByte,
 				},
 			},

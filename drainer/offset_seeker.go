@@ -7,7 +7,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
-	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -50,23 +50,23 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 		var messageID []byte
 		for {
 			// find the first slice of a message
-			noByte := getKeyFromComsumerMessageHeader(pump.No, msg)
+			noByte := slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)
 			no := binary.LittleEndian.Uint32(noByte)
 			if no == 0 {
 				payload = make([]byte, 0, 1024*1024)
 				payload = append(payload, msg.Value...)
-				messageID = getKeyFromComsumerMessageHeader(pump.MessageID, msg)
+				messageID = slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
 				break
 			}
 			msg = <-messages
 		}
 		for msg := range messages {
-			messageIDNew := getKeyFromComsumerMessageHeader(pump.MessageID, msg)
+			messageIDNew := slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
 			if !bytes.Equal(messageID, messageIDNew) {
 				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
 			}
 			payload = append(payload, msg.Value...)
-			if getKeyFromComsumerMessageHeader(pump.Checksum, msg) != nil {
+			if slicer.GetValueFromComsumerMessageHeader(slicer.Checksum, msg) != nil {
 				break // assembled a complete message
 			}
 		}

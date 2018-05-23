@@ -5,19 +5,8 @@ import (
 	"fmt"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	binlog "github.com/pingcap/tipb/go-binlog"
-)
-
-var (
-	// MessageID is ID to indicate which binlog it belongs
-	MessageID = []byte("messageID")
-	// No is index of slices of binlog
-	No = []byte("No")
-	// Total is total number of binlog slices
-	Total = []byte("total")
-	// Checksum is checksum code of binlog payload
-	// to save space, it's only in last binlog slice
-	Checksum = []byte("checksum")
 )
 
 // KafkaSlicer spit payload into multiple messages
@@ -84,13 +73,13 @@ func (s *KafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []b
 		Value:     sarama.ByteEncoder(payload),
 		Headers: []sarama.RecordHeader{
 			{
-				Key:   MessageID,
+				Key:   slicer.MessageID,
 				Value: messageID,
 			}, {
-				Key:   No,
+				Key:   slicer.No,
 				Value: no,
 			}, {
-				Key:   Total,
+				Key:   slicer.Total,
 				Value: total,
 			},
 		},
@@ -98,7 +87,7 @@ func (s *KafkaSlicer) wrapProducerMessage(index int, messageID []byte, total []b
 
 	if len(checksum) > 0 {
 		msg.Headers = append(msg.Headers, sarama.RecordHeader{
-			Key:   Checksum,
+			Key:   slicer.Checksum,
 			Value: checksum,
 		})
 	}
