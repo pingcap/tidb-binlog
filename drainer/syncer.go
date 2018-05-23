@@ -454,11 +454,8 @@ func (s *Syncer) resolveCausality(keys []string) (string, error) {
 	if err := s.c.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
-	var key string
-	if len(keys) > 0 {
-		key = keys[0]
-	}
-	return s.c.Get(key), nil
+
+	return s.c.Get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {

@@ -317,6 +317,10 @@ func (r *Reparo) commitDDLJob(sql string, args []interface{}, key string) {
 }
 
 func (r *Reparo) resolveCausality(keys []string) (string, error) {
+	if len(keys) == 0 {
+		return "", nil
+	}
+
 	begin := time.Now()
 	defer func() {
 		cost := time.Since(begin).Seconds()
@@ -340,11 +344,7 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 	if err := r.c.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
-	var key string
-	if len(keys) > 0 {
-		key = keys[0]
-	}
-	return r.c.Get(key), nil
+	return r.c.Get(keys[0]), nil
 }
 
 func newDDLJob(sql string, args []interface{}, key string) *job {
