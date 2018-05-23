@@ -40,7 +40,7 @@ type Reparo struct {
 	regexMap   map[string]*regexp.Regexp
 	jobWg      sync.WaitGroup
 	jobCh      []chan *job
-	c          *causality.Causality
+	causality  *causality.Causality
 	wg         sync.WaitGroup
 
 	db *sql.DB
@@ -59,7 +59,7 @@ func New(cfg *Config) (*Reparo, error) {
 		executors: executors,
 		regexMap:  make(map[string]*regexp.Regexp),
 		jobCh:     newJobChans(cfg.WorkerCount),
-		c:         causality.NewCausality(),
+		causality: causality.NewCausality(),
 	}
 
 	if cfg.DestType == "mysql" {
@@ -337,14 +337,14 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 		return "", nil
 	}
 
-	if r.c.DetectConflict(keys) {
-		r.c.Reset()
+	if r.causality.DetectConflict(keys) {
+		r.causality.Reset()
 	}
 
-	if err := r.c.Add(keys); err != nil {
+	if err := r.causality.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
-	return r.c.Get(keys[0]), nil
+	return r.causality.Get(keys[0]), nil
 }
 
 func newDDLJob(sql string, args []interface{}, key string) *job {
