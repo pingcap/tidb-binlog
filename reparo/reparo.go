@@ -321,7 +321,6 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 		if cost > 0.1 {
 			log.Warnf("[reparo] resolve causality takes %f seconds", cost)
 		}
-		metrics.ResolveCausalityHistogram.Observe(cost)
 	}()
 
 	if r.cfg.DisableCausality {
