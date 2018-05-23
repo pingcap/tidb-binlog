@@ -101,6 +101,7 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 	return slices, nil
 }
 
+// GetValueFromComsumerMessageHeader gets value from message header
 func GetValueFromComsumerMessageHeader(key []byte, message *sarama.ConsumerMessage) []byte {
 	for _, record := range message.Headers {
 		if string(record.Key) == string(key) {
