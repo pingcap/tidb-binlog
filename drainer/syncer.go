@@ -54,7 +54,7 @@ type Syncer struct {
 
 	reMap map[string]*regexp.Regexp
 
-	c            *causality.Causality
+	causality    *causality.Causality
 	lastSyncTime time.Time
 }
 
@@ -70,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
-	syncer.c = causality.NewCausality()
+	syncer.causality = causality.NewCausality()
 	syncer.lastSyncTime = time.Now()
 
 	return syncer, nil
@@ -445,17 +445,17 @@ func (s *Syncer) resolveCausality(keys []string) (string, error) {
 		return keys[0], nil
 	}
 
-	if s.c.DetectConflict(keys) {
+	if s.causality.DetectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
-		s.c.Reset()
+		s.causality.Reset()
 	}
-	if err := s.c.Add(keys); err != nil {
+	if err := s.causality.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	return s.c.Get(keys[0]), nil
+	return s.causality.Get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {
