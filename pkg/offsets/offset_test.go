@@ -11,6 +11,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	"math"
+	"math/rand"
 )
 
 func TestClient(t *testing.T) {
@@ -28,6 +29,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	if os.Getenv("HOSTIP") != "" {
 		kafkaAddr = os.Getenv("HOSTIP")
 	}
+	kafkaAddr = kafkaAddr + ":9092"
 	topic := "test"
 
 	config := sarama.NewConfig()
@@ -37,12 +39,14 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 
 	// clear previous tests produced
 	to.deleteTopic(kafkaAddr, config, topic, c)
+	// tear down or clear up
+	defer to.deleteTopic(kafkaAddr, config, topic, c)
 
-	sk, err := NewKafkaSeeker([]string{kafkaAddr + ":9092"}, config, PositionOperator{})
+	sk, err := NewKafkaSeeker([]string{kafkaAddr}, config, PositionOperator{})
 	c.Assert(err, IsNil)
 	defer sk.Close()
 
-	to.producer, err = sarama.NewSyncProducer([]string{kafkaAddr + ":9092"}, config)
+	to.producer, err = sarama.NewSyncProducer([]string{kafkaAddr}, config)
 	c.Assert(err, IsNil)
 	defer to.producer.Close()
 
@@ -70,22 +74,23 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 		c.Assert(offsetFounds[0], Equals, res)
 	}
 
-	// offset seek for slice messages
-	message := []byte("aaaaaaaaaa")
-	offset, err := to.produceMessageSlices(message, topic)
+	// offset seek for slice messages, out-of-order
+	message := []byte("aaaaaaaaaaaaaaaaaaaa")
+	slices, err := to.splitMessageToSlices(topic, []byte("messageID1"), message, 4)
+	rand.Shuffle(len(slices), func(i, j int) {
+		slices[i], slices[j] = slices[j], slices[i]
+	})
+	offset, err := to.produceMessageSlices(slices)
 	c.Assert(err, IsNil)
 	offsetFounds, err := sk.Do(topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
-
-	// tear down or clear up
-	to.deleteTopic(kafkaAddr, config, topic, c)
 }
 
 func (to *testOffsetSuite) deleteTopic(kafkaAddr string, config *sarama.Config, topic string, c *C) {
 	// delete topic to clear produced messages
-	broker := sarama.NewBroker(kafkaAddr + ":9092")
+	broker := sarama.NewBroker(kafkaAddr)
 	err := broker.Open(config)
 	c.Assert(err, IsNil)
 	_, err = broker.Connected()
@@ -117,58 +122,16 @@ func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, 
 	return offset, err
 }
 
-func (to *testOffsetSuite) produceMessageSlices(message []byte, topic string) (int64, error) {
-	sliceCount := 4
-	sliceLen := int(math.Ceil(float64(len(message)) / float64(sliceCount)))
-	if sliceLen <= 0 {
-		sliceLen = 1
-	}
-	sliceCount = int(math.Ceil(float64(len(message)) / float64(sliceLen)))
+func (ts *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, error) {
 	var (
-		offset    int64
-		err       error
-		messageID = []byte("MessageID")
-		total     = make([]byte, 4)
-		checksum  = []byte("hash")
+		offset int64
+		err    error
+		j      int
+		slice  interface{}
 	)
-	binary.LittleEndian.PutUint32(total, uint32(sliceCount))
-	slices := make([][]byte, 0, sliceCount)
 	for i := 0; i < 5; i++ {
-		for j := 0; j < sliceCount; j++ {
-			startIdx, endIdx := j*sliceLen, (j+1)*sliceLen
-			if j == sliceCount-1 {
-				endIdx = len(message)
-			}
-			slice := message[startIdx:endIdx]
-			no := make([]byte, 4)
-			binary.LittleEndian.PutUint32(no, uint32(j))
-			msg := &sarama.ProducerMessage{
-				Topic:     topic,
-				Partition: int32(0),
-				Key:       sarama.StringEncoder("key"),
-				Value:     sarama.ByteEncoder(slice),
-				Headers: []sarama.RecordHeader{
-					{
-						Key:   slicer.MessageID,
-						Value: messageID,
-					},
-					{
-						Key:   slicer.No,
-						Value: no,
-					}, {
-						Key:   slicer.Total,
-						Value: total,
-					},
-				},
-			}
-			if j == sliceCount-1 {
-				// last slice, append checksum
-				msg.Headers = append(msg.Headers, sarama.RecordHeader{
-					Key:   slicer.Checksum,
-					Value: checksum,
-				})
-			}
-			_, offsetSlice, err := to.producer.SendMessage(msg)
+		for j, slice = range slices {
+			_, offsetSlice, err := ts.producer.SendMessage(slice.(*sarama.ProducerMessage))
 			if err != nil {
 				if j == 0 {
 					time.Sleep(time.Second)
@@ -176,14 +139,68 @@ func (to *testOffsetSuite) produceMessageSlices(message []byte, topic string) (i
 				}
 				return offset, errors.Trace(err)
 			}
-			slices = append(slices, slice)
 			if j == 0 {
-				offset = offsetSlice // use the first slice's offset
+				offset = offsetSlice // saves for return
 			}
 		}
-		break
+		if j == len(slices)-1 {
+			break // all slices sent
+		}
 	}
 	return offset, err
+}
+
+func (ts *testOffsetSuite) splitMessageToSlices(topic string, messageID []byte, message []byte, preferSliceCount int) ([]interface{}, error) {
+	sliceLen := int(math.Ceil(float64(len(message)) / float64(preferSliceCount)))
+	if sliceLen <= 0 {
+		sliceLen = 1
+	}
+	sliceCount := int(math.Ceil(float64(len(message)) / float64(sliceLen)))
+	slices := make([]interface{}, sliceCount)
+
+	var (
+		total    = make([]byte, 4)
+		checksum = []byte("hash")
+	)
+	binary.LittleEndian.PutUint32(total, uint32(sliceCount))
+
+	for i := 0; i < sliceCount; i++ {
+		startIdx, endIdx := i*sliceLen, (i+1)*sliceLen
+		if i == sliceCount-1 {
+			endIdx = len(message)
+		}
+		payload := message[startIdx:endIdx]
+		no := make([]byte, 4)
+		binary.LittleEndian.PutUint32(no, uint32(i))
+		msg := &sarama.ProducerMessage{
+			Topic:     topic,
+			Partition: int32(0),
+			Key:       sarama.StringEncoder("key"),
+			Value:     sarama.ByteEncoder(payload),
+			Headers: []sarama.RecordHeader{
+				{
+					Key:   slicer.MessageID,
+					Value: messageID,
+				},
+				{
+					Key:   slicer.No,
+					Value: no,
+				}, {
+					Key:   slicer.Total,
+					Value: total,
+				},
+			},
+		}
+		if i == sliceCount-1 {
+			// last slice, append checksum
+			msg.Headers = append(msg.Headers, sarama.RecordHeader{
+				Key:   slicer.Checksum,
+				Value: checksum,
+			})
+		}
+		slices[i] = msg
+	}
+	return slices, nil
 }
 
 type PositionOperator struct{}
