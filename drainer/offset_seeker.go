@@ -1,13 +1,10 @@
 package drainer
 
 import (
-	"bytes"
-	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
-	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -38,39 +35,20 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 }
 
 // Decode implements Operator.Decode interface
-func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
-	bg := new(pb.Binlog)
-
+func (s *seekOperator) Decode(slices []interface{}) (interface{}, error) {
 	var payload []byte
-	msg := <-messages
-	if len(msg.Headers) == 0 {
-		// unsplited message
+	if len(slices) == 1 {
+		msg := slices[0].(*sarama.ConsumerMessage)
 		payload = msg.Value
 	} else {
-		var messageID []byte
-		for {
-			// find the first slice of a message
-			noByte := slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)
-			no := binary.LittleEndian.Uint32(noByte)
-			if no == 0 {
-				payload = make([]byte, 0, 1024*1024)
-				payload = append(payload, msg.Value...)
-				messageID = slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
-				break
-			}
-			msg = <-messages
-		}
-		for msg := range messages {
-			messageIDNew := slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
-			if !bytes.Equal(messageID, messageIDNew) {
-				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
-			}
+		payload = make([]byte, 0, 1024*1024)
+		for _, slice := range slices {
+			msg := slice.(*sarama.ConsumerMessage)
 			payload = append(payload, msg.Value...)
-			if slicer.GetValueFromComsumerMessageHeader(slicer.Checksum, msg) != nil {
-				break // assembled a complete message
-			}
 		}
 	}
+
+	bg := new(pb.Binlog)
 	err := bg.Unmarshal(payload)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
@@ -81,7 +59,6 @@ func (s *seekOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interfac
 	if ts == 0 {
 		ts = bg.GetStartTs()
 	}
-
 	return ts, nil
 }
 

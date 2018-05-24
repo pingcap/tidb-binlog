@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"bytes"
 	"encoding/binary"
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -212,35 +211,16 @@ func (p PositionOperator) Compare(exceptedPos interface{}, currentPos interface{
 }
 
 // Decode implements Operator.Decode interface
-func (p PositionOperator) Decode(messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
-	msg := <-messages
+func (p PositionOperator) Decode(slices []interface{}) (interface{}, error) {
 	var payload []byte
-	if len(msg.Headers) == 0 {
-		// unsplited message
+	if len(slices) == 1 {
+		msg := slices[0].(*sarama.ConsumerMessage)
 		payload = msg.Value
 	} else {
-		var messageID []byte
-		for {
-			// find the first slice of a message
-			noByte := slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)
-			no := binary.LittleEndian.Uint32(noByte)
-			if no == 0 {
-				payload = make([]byte, 0, 10)
-				payload = append(payload, msg.Value...)
-				messageID = slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
-				break
-			}
-			msg = <-messages
-		}
-		for msg := range messages {
-			messageIDNew := slicer.GetValueFromComsumerMessageHeader(slicer.MessageID, msg)
-			if !bytes.Equal(messageID, messageIDNew) {
-				return nil, errors.Errorf("decode messageID %v mismatch %v", messageID, messageIDNew)
-			}
+		payload = make([]byte, 0, 1024*1024)
+		for _, slice := range slices {
+			msg := slice.(*sarama.ConsumerMessage)
 			payload = append(payload, msg.Value...)
-			if slicer.GetValueFromComsumerMessageHeader(slicer.Checksum, msg) != nil {
-				break // assembled a complete message
-			}
 		}
 	}
 	return string(payload), nil
