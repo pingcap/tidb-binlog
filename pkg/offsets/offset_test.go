@@ -122,7 +122,7 @@ func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, 
 	return offset, err
 }
 
-func (ts *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, error) {
+func (to *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, error) {
 	var (
 		offset int64
 		err    error
@@ -131,7 +131,7 @@ func (ts *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, er
 	)
 	for i := 0; i < 5; i++ {
 		for j, slice = range slices {
-			_, offsetSlice, err := ts.producer.SendMessage(slice.(*sarama.ProducerMessage))
+			_, offsetSlice, err := to.producer.SendMessage(slice.(*sarama.ProducerMessage))
 			if err != nil {
 				if j == 0 {
 					time.Sleep(time.Second)
@@ -150,7 +150,7 @@ func (ts *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, er
 	return offset, err
 }
 
-func (ts *testOffsetSuite) splitMessageToSlices(topic string, messageID []byte, message []byte, preferSliceCount int) ([]interface{}, error) {
+func (to *testOffsetSuite) splitMessageToSlices(topic string, messageID []byte, message []byte, preferSliceCount int) ([]interface{}, error) {
 	sliceLen := int(math.Ceil(float64(len(message)) / float64(preferSliceCount)))
 	if sliceLen <= 0 {
 		sliceLen = 1
