@@ -65,11 +65,12 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 		log.Errorf("ConsumePartition error %v", err)
 		return nil, errors.Trace(err)
 	}
-	defer cp.Close()
+	//defer cp.Close()  // NOTE: close cp manually
 
 	msg := <-cp.Messages()
 	// unsplit binlog
 	if len(msg.Headers) == 0 {
+		cp.Close()
 		return []interface{}{msg}, nil
 	}
 	bms := make(map[string]*bitmap.Bitmap)
@@ -96,12 +97,13 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 				break
 			}
 		}
-		msg = <-cp.Messages()
+		msg = <-cp.Messages() // TODO: timeout?
 	}
 
 	so := sos[messageID]
 	slices := make([]interface{}, len(so))
 	for i, offset := range so {
+		cp.Close() // close previous cp
 		cp, err = t.consumer.ConsumePartition(topic, partition, offset)
 		if err != nil {
 			log.Errorf("ConsumePartition error %v", err)
@@ -109,6 +111,7 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 		}
 		slices[i] = <-cp.Messages()
 	}
+	cp.Close()
 	return slices, nil
 }
 

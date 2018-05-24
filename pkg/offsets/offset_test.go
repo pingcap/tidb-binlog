@@ -142,7 +142,7 @@ func (to *testOffsetSuite) produceMessageSlices(message []byte, topic string) (i
 			}
 			slice := message[startIdx:endIdx]
 			no := make([]byte, 4)
-			binary.LittleEndian.PutUint32(no, uint32(i))
+			binary.LittleEndian.PutUint32(no, uint32(j))
 			msg := &sarama.ProducerMessage{
 				Topic:     topic,
 				Partition: int32(0),
