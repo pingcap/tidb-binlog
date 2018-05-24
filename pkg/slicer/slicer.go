@@ -11,9 +11,9 @@ import (
 var (
 	// MessageID is ID to indicate which binlog it belongs
 	MessageID = []byte("messageID")
-	// No is index of slicer of binlog
+	// No is index of slices of binlog
 	No = []byte("No")
-	// Total is total number of binlog slicer
+	// Total is total number of binlog slices
 	Total = []byte("total")
 	// Checksum is checksum code of binlog payload
 	// to save space, it's only in last binlog slice
@@ -112,6 +112,13 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 		slices[i] = <-cp.Messages()
 	}
 	cp.Close()
+
+	lastSlice := slices[len(slices)-1].(*sarama.ConsumerMessage)
+	check := GetValueFromComsumerMessageHeader(Checksum, lastSlice)
+	if check == nil {
+		log.Error("Slices miss checksum, binlog may corrupted")
+	}
+
 	return slices, nil
 }
 
