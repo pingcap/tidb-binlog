@@ -3,7 +3,6 @@ package reparo
 import (
 	"bufio"
 	"database/sql"
-	"fmt"
 	"hash/crc32"
 	"io"
 	"net/http"
@@ -30,7 +29,7 @@ const (
 	executionWaitTime    = 10 * time.Millisecond
 )
 
-// Reparo i the main part of the restore tool.
+// Reparo is the main part of the restore tool.
 type Reparo struct {
 	cfg        *Config
 	translator translator.Translator
@@ -255,7 +254,7 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 
 func (r *Reparo) addJob(job *job) {
 	begin := time.Now()
-	if job.binlogTp == ddlType {
+	if r.checkWait(job) {
 		r.jobWg.Wait()
 		dmlCost := time.Since(begin).Seconds()
 		if dmlCost > 1 {
@@ -267,7 +266,7 @@ func (r *Reparo) addJob(job *job) {
 	}
 
 	r.jobWg.Add(1)
-	idx := int(genHashKey(fmt.Sprintf("%s", job.key))) % r.cfg.WorkerCount
+	idx := int(genHashKey(job.key)) % r.cfg.WorkerCount
 	r.jobCh[idx] <- job
 
 	if r.checkWait(job) {
