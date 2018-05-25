@@ -75,9 +75,9 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 	}
 	bms := make(map[string]*bitmap.Bitmap)
 	sos := make(map[string][]int64) // cache offset rather than ConsumerMessage
-	messageID := ""
+	fullMessageID := ""
 	for {
-		messageID = string(GetValueFromComsumerMessageHeader(MessageID, msg))
+		messageID := string(GetValueFromComsumerMessageHeader(MessageID, msg))
 		bm, ok := bms[messageID]
 		so, ok := sos[messageID]
 		if !ok {
@@ -94,13 +94,19 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 		if isNew {
 			so[no] = msg.Offset
 			if bm.Completed() {
+				fullMessageID = messageID
 				break
 			}
 		}
 		msg = <-cp.Messages() // TODO: timeout?
 	}
 
-	so := sos[messageID]
+	if len(fullMessageID) < 1 {
+		log.Error("Slices not get all slices of a binlog")
+		return nil, errors.Errorf("Slices get error")
+	}
+
+	so := sos[fullMessageID]
 	slices := make([]interface{}, len(so))
 	for i, offset := range so {
 		cp.Close() // close previous cp
@@ -118,6 +124,7 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 	if check == nil {
 		log.Error("Slices miss checksum, binlog may corrupted")
 	}
+	log.Infof("get %d slices of a binlog", len(slices))
 
 	return slices, nil
 }
