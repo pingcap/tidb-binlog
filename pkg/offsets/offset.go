@@ -5,6 +5,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
+	"math"
 )
 
 const (
@@ -119,7 +120,7 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 }
 
 func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, end int64, pos interface{}) (int64, error) {
-	cmp, startPos, err := ks.getAndCompare(topic, partition, start, pos)
+	cmp, startPos, firstOffset, err := ks.getAndCompare(topic, partition, start, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
@@ -127,12 +128,12 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 		log.Errorf("given position %v is smaller than oldest message's position %v, some binlogs may lose", pos, startPos)
 	}
 	if cmp <= 0 {
-		return start, nil
+		return firstOffset, nil
 	}
 
 	for start < end-1 {
 		mid := (end-start)/2 + start
-		cmp, _, err = ks.getAndCompare(topic, partition, mid, pos)
+		cmp, _, firstOffset, err = ks.getAndCompare(topic, partition, mid, pos)
 		if err != nil {
 			return -1, errors.Trace(err)
 		}
@@ -141,14 +142,14 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 		case less:
 			end = mid - 1
 		case equal:
-			return mid, nil
+			return firstOffset, nil
 		case large:
 			start = mid
 		}
 
 	}
 
-	cmp, _, err = ks.getAndCompare(topic, partition, end, pos)
+	cmp, _, _, err = ks.getAndCompare(topic, partition, end, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
@@ -161,36 +162,47 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 // getAndCompare queries message at give offset and compare pos with it's position
 // returns Opeator.Compare()
-func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64, pos interface{}) (int, interface{}, error) {
+func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64, pos interface{}) (int, interface{}, int64, error) {
 	pc, err := ks.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
-		return 0, nil, errors.Trace(err)
+		return 0, nil, offset, errors.Trace(err)
 	}
 	defer pc.Close()
 
 	kt, err := slicer.NewKafkaTracker(ks.addr, ks.cfg)
 	if err != nil {
 		log.Errorf("NewKafkaTracker error %v", err)
-		return 0, nil, errors.Trace(err)
+		return 0, nil, offset, errors.Trace(err)
 	}
 	defer kt.Close()
 
 	slices, err := kt.Slices(topic, partition, offset)
 	if err != nil {
 		log.Errorf("KafkaTracker get slices error, with [topic]%s, [partition]%d, [offset]%d", topic, partition, offset)
-		return 0, nil, errors.Trace(err)
+		return 0, nil, offset, errors.Trace(err)
 	}
 
 	bp, err := ks.operator.Decode(slices)
 	if err != nil {
-		return 0, bp, errors.Annotate(err, "decode message")
+		return 0, bp, offset, errors.Annotate(err, "decode message")
 	}
 	cmp, err := ks.operator.Compare(pos, bp)
 	if err != nil {
-		return 0, bp, errors.Annotatef(err, "compare %s with position %v", bp, pos)
+		return 0, bp, offset, errors.Annotatef(err, "compare %s with position %v", bp, pos)
 	}
-	return cmp, bp, nil
+	firstOffset := offset
+	if cmp == equal && len(slices) > 1 {
+		// get the first (earliest) offset of slices
+		firstOffset = int64(math.MaxInt64)
+		for _, slice := range slices {
+			offset := slice.(*sarama.ConsumerMessage).Offset
+			if offset < firstOffset {
+				firstOffset = offset
+			}
+		}
+	}
+	return cmp, bp, firstOffset, nil
 }
 
 // getOffset return offset by given pos
