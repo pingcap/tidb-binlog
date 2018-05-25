@@ -113,6 +113,7 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 		if err != nil {
 			return offsets, errors.Annotatef(err, "seek Offset in topic %s partition %d", topic, partition)
 		}
+		log.Infof("seek position %v in topic %s partition %d, offset %d", pos, topic, partition, offset)
 		offsets[partition] = offset
 	}
 
