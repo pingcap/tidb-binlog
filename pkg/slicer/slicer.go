@@ -6,6 +6,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/bitmap"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -23,7 +24,7 @@ var (
 // Tracker is a struct for tracking slices of a binlog in kafka/rocketmq
 type Tracker interface {
 	// Slices gets all slices of a binlog for specified topic and partition with >= offset
-	Slices(topic string, partition int32, offset int64) ([]interface{}, error)
+	Slices(ctx context.Context, topic string, partition int32, offset int64) ([]interface{}, error)
 	Close() error
 }
 
@@ -59,7 +60,7 @@ func (t *KafkaTracker) Close() error {
 }
 
 // Slices returns all slices of a binlog
-func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]interface{}, error) {
+func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32, offset int64) ([]interface{}, error) {
 	cp, err := t.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
@@ -67,7 +68,13 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 	}
 	//defer cp.Close()  // NOTE: close cp manually
 
-	msg := <-cp.Messages()
+	var msg *sarama.ConsumerMessage
+	select {
+	case <-ctx.Done():
+		log.Infof("slicer was canceled: %v", ctx.Err())
+		return nil, nil
+	case msg = <-cp.Messages():
+	}
 	// unsplit binlog
 	if len(msg.Headers) == 0 {
 		cp.Close()
@@ -98,7 +105,12 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 				break
 			}
 		}
-		msg = <-cp.Messages() // TODO: timeout?
+		select {
+		case <-ctx.Done():
+			log.Infof("slicer was canceled: %v", ctx.Err())
+			return nil, nil
+		case msg = <-cp.Messages(): // TODO: timeout?
+		}
 	}
 
 	if len(fullMessageID) < 1 {
@@ -115,7 +127,12 @@ func (t *KafkaTracker) Slices(topic string, partition int32, offset int64) ([]in
 			log.Errorf("ConsumePartition error %v", err)
 			return nil, errors.Trace(err)
 		}
-		slices[i] = <-cp.Messages()
+		select {
+		case <-ctx.Done():
+			log.Infof("slicer was canceled: %v", ctx.Err())
+			return nil, nil
+		case slices[i] = <-cp.Messages(): // TODO: timeout?
+		}
 	}
 	cp.Close()
 

@@ -5,6 +5,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
+	"golang.org/x/net/context"
 	"math"
 )
 
@@ -16,7 +17,7 @@ const (
 
 // Seeker is a struct for finding offsets in kafka/rocketmq
 type Seeker interface {
-	Do(topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error)
+	Do(ctx context.Context, topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error)
 	Close() error
 }
 
@@ -77,7 +78,7 @@ func (ks *KafkaSeeker) Close() error {
 }
 
 // Do returns offsets by given pos
-func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error) {
+func (ks *KafkaSeeker) Do(ctx context.Context, topic string, pos interface{}, startTime int64, endTime int64, partitions []int32) ([]int64, error) {
 	var err error
 	if len(partitions) == 0 {
 		partitions, err = ks.consumer.Partitions(topic)
@@ -87,7 +88,7 @@ func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTim
 		}
 	}
 
-	offsets, err := ks.seekOffsets(topic, partitions, pos)
+	offsets, err := ks.seekOffsets(ctx, topic, partitions, pos)
 	if err != nil {
 		log.Errorf("seek offsets error %v", err)
 	}
@@ -95,7 +96,7 @@ func (ks *KafkaSeeker) Do(topic string, pos interface{}, startTime int64, endTim
 }
 
 // seekOffsets returns all valid offsets in partitions
-func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interface{}) ([]int64, error) {
+func (ks *KafkaSeeker) seekOffsets(ctx context.Context, topic string, partitions []int32, pos interface{}) ([]int64, error) {
 	offsets := make([]int64, len(partitions))
 	for _, partition := range partitions {
 		start, err := ks.getOffset(topic, partition, sarama.OffsetOldest)
@@ -109,7 +110,7 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 		}
 
 		log.Infof("seek position %v in topic %s partition %d, oldest offset %d, newest offset %d", pos, topic, partition, start, end)
-		offset, err := ks.seekOffset(topic, partition, start, end-1, pos)
+		offset, err := ks.seekOffset(ctx, topic, partition, start, end-1, pos)
 		if err != nil {
 			return offsets, errors.Annotatef(err, "seek Offset in topic %s partition %d", topic, partition)
 		}
@@ -120,8 +121,8 @@ func (ks *KafkaSeeker) seekOffsets(topic string, partitions []int32, pos interfa
 	return offsets, nil
 }
 
-func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, end int64, pos interface{}) (int64, error) {
-	cmp, startPos, firstOffset, err := ks.getAndCompare(topic, partition, start, pos)
+func (ks *KafkaSeeker) seekOffset(ctx context.Context, topic string, partition int32, start int64, end int64, pos interface{}) (int64, error) {
+	cmp, startPos, firstOffset, err := ks.getAndCompare(ctx, topic, partition, start, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
@@ -134,7 +135,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 	for start < end-1 {
 		mid := (end-start)/2 + start
-		cmp, _, firstOffset, err = ks.getAndCompare(topic, partition, mid, pos)
+		cmp, _, firstOffset, err = ks.getAndCompare(ctx, topic, partition, mid, pos)
 		if err != nil {
 			return -1, errors.Trace(err)
 		}
@@ -150,7 +151,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 	}
 
-	cmp, _, _, err = ks.getAndCompare(topic, partition, end, pos)
+	cmp, _, _, err = ks.getAndCompare(ctx, topic, partition, end, pos)
 	if err != nil {
 		return -1, errors.Trace(err)
 	}
@@ -163,7 +164,7 @@ func (ks *KafkaSeeker) seekOffset(topic string, partition int32, start int64, en
 
 // getAndCompare queries message at give offset and compare pos with it's position
 // returns Opeator.Compare()
-func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64, pos interface{}) (int, interface{}, int64, error) {
+func (ks *KafkaSeeker) getAndCompare(ctx context.Context, topic string, partition int32, offset int64, pos interface{}) (int, interface{}, int64, error) {
 	pc, err := ks.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
@@ -178,7 +179,7 @@ func (ks *KafkaSeeker) getAndCompare(topic string, partition int32, offset int64
 	}
 	defer kt.Close()
 
-	slices, err := kt.Slices(topic, partition, offset)
+	slices, err := kt.Slices(ctx, topic, partition, offset)
 	if err != nil {
 		log.Errorf("KafkaTracker get slices error, with [topic]%s, [partition]%d, [offset]%d", topic, partition, offset)
 		return 0, nil, offset, errors.Trace(err)

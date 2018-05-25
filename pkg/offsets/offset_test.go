@@ -10,6 +10,7 @@ import (
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
+	"golang.org/x/net/context"
 	"math"
 	"math/rand"
 )
@@ -50,6 +51,9 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	c.Assert(err, IsNil)
 	defer to.producer.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var testDatas = []string{"b", "d", "e"}
 	var testPoss = map[string]int64{
 		"b": 0,
@@ -68,7 +72,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 		"h": testPoss["e"],
 	}
 	for m, res := range testCases {
-		offsetFounds, err := sk.Do(topic, m, 0, 0, []int32{0})
+		offsetFounds, err := sk.Do(ctx, topic, m, 0, 0, []int32{0})
 		c.Assert(err, IsNil)
 		c.Assert(offsetFounds, HasLen, 1)
 		c.Assert(offsetFounds[0], Equals, res)
@@ -82,7 +86,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	})
 	offset, err := to.produceMessageSlices(slices)
 	c.Assert(err, IsNil)
-	offsetFounds, err := sk.Do(topic, string(message), 0, 0, []int32{0})
+	offsetFounds, err := sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
@@ -101,7 +105,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	}
 	offset, err = to.produceMessageSlices(dupSlices)
 	c.Assert(err, IsNil)
-	offsetFounds, err = sk.Do(topic, string(message), 0, 0, []int32{0})
+	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
