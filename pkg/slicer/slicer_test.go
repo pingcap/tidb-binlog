@@ -5,6 +5,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
+	"golang.org/x/net/context"
 	"math"
 	"os"
 	"testing"
@@ -47,6 +48,9 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 	c.Assert(err, IsNil)
 	defer ts.producer.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var offsetExpected int64
 
 	// unsplit binlog
@@ -54,7 +58,7 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 	messageToSend := []byte("a test message 1 for slicer tracker")
 	slicesToSend := ts.testSlicesSplit(topic, messageIDToSend, messageToSend, 1, c)
 	offset, offsetExpected := ts.testSlicesSend(slicesToSend, offsetExpected, c)
-	messageIDReceive, messageReceive := ts.testSlicesTracker(kt, topic, offset, c)
+	messageIDReceive, messageReceive := ts.testSlicesTracker(ctx, kt, topic, offset, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 
@@ -63,11 +67,11 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 	messageToSend = []byte("a test message 2 for slicer tracker")
 	slicesToSend = ts.testSlicesSplit(topic, messageIDToSend, messageToSend, 4, c)
 	offset, offsetExpected = ts.testSlicesSend(slicesToSend, offsetExpected, c)
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset-1, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset-1, c)
 	c.Assert(messageIDReceive, Not(DeepEquals), messageIDToSend)
 	c.Assert(messageReceive, Not(DeepEquals), messageToSend)
 
@@ -82,11 +86,11 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 	slicesDuplicated[3] = slicesToSend[1]
 	slicesDuplicated[4] = slicesToSend[2]
 	offset, offsetExpected = ts.testSlicesSend(slicesDuplicated, offsetExpected, c)
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset-3, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset-3, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 
@@ -98,11 +102,11 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 	slicesOutOfOrder[1] = slicesToSend[1]
 	slicesOutOfOrder[2], slicesOutOfOrder[0] = slicesToSend[0], slicesToSend[2]
 	offset, offsetExpected = ts.testSlicesSend(slicesOutOfOrder, offsetExpected, c)
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 
-	messageIDReceive, messageReceive = ts.testSlicesTracker(kt, topic, offset-3, c)
+	messageIDReceive, messageReceive = ts.testSlicesTracker(ctx, kt, topic, offset-3, c)
 	c.Assert(messageIDReceive, DeepEquals, messageIDToSend)
 	c.Assert(messageReceive, DeepEquals, messageToSend)
 }
@@ -120,8 +124,8 @@ func (ts *testSlicerSuite) testSlicesSend(slicesToSend []interface{}, offsetExpe
 	return offset, offsetExpected + int64(len(slicesToSend))
 }
 
-func (ts *testSlicerSuite) testSlicesTracker(kt Tracker, topic string, offset int64, c *C) ([]byte, []byte) {
-	slicesReceive, err := kt.Slices(topic, 0, offset)
+func (ts *testSlicerSuite) testSlicesTracker(ctx context.Context, kt Tracker, topic string, offset int64, c *C) ([]byte, []byte) {
+	slicesReceive, err := kt.Slices(ctx, topic, 0, offset)
 	c.Assert(err, IsNil)
 	messageID, message, err := ts.getMessageFromSlices(slicesReceive)
 	c.Assert(err, IsNil)
