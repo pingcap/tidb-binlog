@@ -27,7 +27,7 @@ func (ts *testSlicerSuite) TestTracker(c *C) {
 		kafkaAddr = os.Getenv("HOSTIP")
 	}
 	kafkaAddr = kafkaAddr + ":9092"
-	topic := "test"
+	topic := "slicer_test"
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V1_0_0_0
