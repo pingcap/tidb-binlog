@@ -78,6 +78,7 @@ func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32
 	// unsplit binlog
 	if len(msg.Headers) == 0 {
 		cp.Close()
+		log.Infof("get an unsplit binlog")
 		return []interface{}{msg}, nil
 	}
 	bms := make(map[string]*bitmap.Bitmap)
