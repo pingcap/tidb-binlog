@@ -16,17 +16,22 @@ type testTranslatorSuite struct{}
 
 func (s *testTranslatorSuite) TestGenWhere(c *C) {
 	cases := []struct {
-		cols  []string
-		args  []interface{}
-		where string
+		cols               []string
+		args               []interface{}
+		where              string
+		expectedArgsLength int
 	}{
-		{[]string{"a"}, []interface{}{""}, "`a` = ?"},
-		{[]string{"a", "b"}, []interface{}{"", ""}, "`a` = ? AND `b` = ?"},
-		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS ? AND `b` = ?"},
+		{[]string{"a"}, []interface{}{""}, "`a` = ?", 1},
+		{[]string{"a", "b"}, []interface{}{"", ""}, "`a` = ? AND `b` = ?", 2},
+		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS NULL AND `b` = ?", 1},
+		{[]string{"a", "b", "c"}, []interface{}{"a", nil, "c"}, "`a` = ? AND `b` IS NULL AND `c` = ?", 2},
+		{[]string{"a", "b", "c"}, []interface{}{"a", "b", nil}, "`a` = ? AND `b` = ? AND `c` IS NULL", 2},
+		{[]string{"a", "b"}, []interface{}{nil, nil}, "`a` IS NULL AND `b` IS NULL", 0},
 	}
 
 	for _, t := range cases {
-		where := genWhere(t.cols, t.args)
+		where, values := genWhere(t.cols, t.args)
+		c.Assert(len(values), Equals, t.expectedArgsLength)
 		c.Assert(where, Equals, t.where)
 	}
 }
