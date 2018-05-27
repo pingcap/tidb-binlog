@@ -199,6 +199,7 @@ func InitLogger(c *Config) {
 
 	if len(c.LogFile) > 0 {
 		log.SetOutputByName(c.LogFile)
+		log.SetHighlighting(false)
 		if c.LogRotate == "hour" {
 			log.SetRotateByHour()
 		} else {

@@ -34,7 +34,7 @@ func InitLogger(cfg *Config) {
 
 	if len(cfg.LogFile) > 0 {
 		log.SetOutputByName(cfg.LogFile)
-
+		log.SetHighlighting(false)
 		if cfg.LogRotate == "hour" {
 			log.SetRotateByHour()
 		} else {
