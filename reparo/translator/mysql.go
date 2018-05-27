@@ -62,11 +62,18 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	row := event.GetRow()
+	table, err := m.getTable(schemaName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	allCols := make([]string, 0, len(row))
 	oldValues := make([]interface{}, 0, len(row))
 
 	updatedColumns := make([]string, 0, len(row))
+	// updatedValues is the values which is really updated.
 	updatedValues := make([]interface{}, 0, len(row))
+	// changedValues is the values which is just recorded by the binlog event(whatever it's updated or not).
+	changedValues := make([]interface{}, 0, len(row))
 	for _, c := range row {
 		col := &pb.Column{}
 		err := col.Unmarshal(c)
@@ -88,8 +95,9 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 		oldDatum := formatValue(oldValue, tp)
 		oldValues = append(oldValues, oldDatum.GetValue())
 		changedDatum := formatValue(changedValue, tp)
+		changedValues = append(changedValues, changedDatum.GetValue())
 
-		log.Debugf("%s(%s %v): %v => %v\n", col.Name, col.MysqlType, tp, oldDatum.GetValue(), changedDatum.GetValue())
+		log.Debugf("update value %s(%s %v): %v => %v\n", col.Name, col.MysqlType, tp, oldDatum.GetValue(), changedDatum.GetValue())
 
 		if reflect.DeepEqual(oldDatum.GetValue(), changedDatum.GetValue()) {
 			continue
@@ -98,6 +106,9 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 		updatedValues = append(updatedValues, changedDatum.GetValue())
 	}
 
+	keys := genMultipleKeys(table.Columns, oldValues, table.IndexColumns)
+	keys = append(keys, genMultipleKeys(table.Columns, changedValues, table.IndexColumns)...)
+
 	kvs := genKVs(updatedColumns)
 	where, oldValues := genWhere(allCols, oldValues)
 
@@ -105,9 +116,8 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 	args = append(args, updatedValues...)
 	args = append(args, oldValues...)
 
-	var keys []string
 	sql := fmt.Sprintf("UPDATE `%s`.`%s` SET %s WHERE %s LIMIT 1;", schemaName, tableName, kvs, where)
-	log.Debugf("update sql %s, args %+v", sql, args)
+	log.Debugf("update sql %s, args %+v, keys %+v", sql, args, keys)
 	result := &TranslateResult{
 		SQL:  sql,
 		Keys: keys,
@@ -120,17 +130,20 @@ func (m *mysqlTranslator) TransDelete(event *pb.Event) (*TranslateResult, error)
 	schemaName := *event.SchemaName
 	tableName := *event.TableName
 	row := event.GetRow()
+	table, err := m.getTable(schemaName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	cols, args, err := genColsAndArgs(row)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	keys := genMultipleKeys(table.Columns, args, table.IndexColumns)
 	where, args := genWhere(cols, args)
 
-	var keys []string
 	sql := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s limit 1", schemaName, tableName, where)
-	log.Debugf("delete sql %s, args %+v", sql, args)
+	log.Debugf("delete sql %s, args %+v, keys %+v", sql, args, keys)
 	result := &TranslateResult{
 		SQL:  sql,
 		Keys: keys,
@@ -229,54 +242,6 @@ func getColumnData(columns []*tbl.Column, indexColumns []*tbl.Column, data []int
 	}
 
 	return cols, values
-}
-
-func findFitIndex(indexColumns map[string][]*tbl.Column) []*tbl.Column {
-	cols, ok := indexColumns["primary"]
-	if ok {
-		if len(cols) == 0 {
-			log.Error("cols is empty")
-		} else {
-			return cols
-		}
-	}
-
-	// second find not null unique key
-	fn := func(c *tbl.Column) bool {
-		return !c.NotNull
-	}
-
-	return getSpecifiedIndexColumn(indexColumns, fn)
-}
-
-func getAvailableIndexColumn(indexColumns map[string][]*tbl.Column, data []interface{}) []*tbl.Column {
-	fn := func(c *tbl.Column) bool {
-		return data[c.Idx] == nil
-	}
-
-	return getSpecifiedIndexColumn(indexColumns, fn)
-}
-
-func getSpecifiedIndexColumn(indexColumns map[string][]*tbl.Column, fn func(col *tbl.Column) bool) []*tbl.Column {
-	for _, indexCols := range indexColumns {
-		if len(indexCols) == 0 {
-			continue
-		}
-
-		findFitIndex := true
-		for _, col := range indexCols {
-			if fn(col) {
-				findFitIndex = false
-				break
-			}
-		}
-
-		if findFitIndex {
-			return indexCols
-		}
-	}
-
-	return nil
 }
 
 func castUnsigned(data interface{}, unsigned bool) interface{} {
