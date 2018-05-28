@@ -1,6 +1,6 @@
 package savepoint
 
-import "github.com/pkg/errors"
+import "github.com/juju/errors"
 
 // Position represents a savepoint position .
 type Position struct {

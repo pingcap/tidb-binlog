@@ -1,6 +1,6 @@
 package executor
 
-import "github.com/pkg/errors"
+import "github.com/juju/errors"
 
 // execute sql to target database.
 
