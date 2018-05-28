@@ -32,7 +32,7 @@ func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string)
 		return nil, errors.Trace(err)
 	}
 
-	err = getTableIndex(m.db, table)
+	err = setTableIndex(m.db, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -65,7 +65,7 @@ func (m *mysqlTranslator) clearTables() {
 	m.tables = make(map[string]*tbl.Table)
 }
 
-func getTableIndex(db *sql.DB, table *tbl.Table) error {
+func setTableIndex(db *sql.DB, table *tbl.Table) error {
 	if table.Schema == "" || table.Name == "" {
 		return errors.New("schema/table is empty")
 	}

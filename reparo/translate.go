@@ -20,7 +20,7 @@ func (r *Reparo) Translate(binlog *pb.Binlog) (results []*translator.TranslateRe
 		results, err = r.translateDDL(binlog)
 		return results, true, errors.Trace(err)
 	default:
-		panic("unreachable")
+		return nil, false, errors.Errorf("unknown binlog type %v", binlog.Tp)
 	}
 }
 
@@ -50,7 +50,7 @@ func (r *Reparo) translateDML(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		case pb.EventType_Delete:
 			result, err = r.translator.TransDelete(e)
 		default:
-			panic("unreachable")
+			return nil, errors.Errorf("unknown event type %v", tp)
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
