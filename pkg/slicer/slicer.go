@@ -61,6 +61,7 @@ func (t *KafkaTracker) Close() error {
 
 // Slices returns all slices of a binlog
 func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32, offset int64) ([]interface{}, error) {
+	log.Infof("get slices, with[topic]%v, [partition]%v, [offset]%v", topic, partition, offset)
 	cp, err := t.consumer.ConsumePartition(topic, partition, offset)
 	if err != nil {
 		log.Errorf("ConsumePartition error %v", err)
