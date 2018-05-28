@@ -1,8 +1,6 @@
 package executor
 
-import (
-	"fmt"
-)
+import "github.com/pkg/errors"
 
 // execute sql to target database.
 
@@ -22,5 +20,5 @@ func New(name string, cfg *DBConfig) (Executor, error) {
 	case "print":
 		return newDummyExecutor()
 	}
-	panic(fmt.Sprintf("unknown executor %s", name))
+	return nil, errors.Errorf("unknown executor %s", name)
 }

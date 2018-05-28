@@ -188,6 +188,7 @@ type opType byte
 const (
 	dmlType opType = iota + 1
 	ddlType
+	flushType
 )
 
 func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
@@ -217,7 +218,9 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 				return
 			}
 			idx++
-			if job.binlogTp == ddlType {
+
+			switch job.binlogTp {
+			case ddlType:
 				err = executor.Execute([]string{job.sql}, [][]interface{}{job.args}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
@@ -228,7 +231,14 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 				}
 				clearF()
 
-			} else {
+			case flushType:
+				err = executor.Execute(sqls, args, false)
+				if err != nil {
+					log.Fatal(errors.ErrorStack(err))
+				}
+				clearF()
+
+			case dmlType:
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 			}
@@ -254,7 +264,8 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 
 func (r *Reparo) addJob(job *job) {
 	begin := time.Now()
-	if r.checkWait(job) {
+	switch job.binlogTp {
+	case ddlType:
 		r.jobWg.Wait()
 		dmlCost := time.Since(begin).Seconds()
 		if dmlCost > 1 {
@@ -263,6 +274,13 @@ func (r *Reparo) addJob(job *job) {
 			log.Debugf("[reparo] wait dml executed takes %f seconds", dmlCost)
 		}
 		metrics.WaitDMLExecutedHistogram.Observe(dmlCost)
+	case flushType:
+		r.jobWg.Add(r.cfg.WorkerCount)
+		for i := 0; i < r.cfg.WorkerCount; i++ {
+			r.jobCh[i] <- job
+		}
+		r.jobWg.Wait()
+		return
 	}
 
 	r.jobWg.Add(1)
@@ -291,7 +309,7 @@ func (r *Reparo) addJob(job *job) {
 }
 
 func (r *Reparo) checkWait(job *job) bool {
-	return job.binlogTp == ddlType
+	return job.binlogTp == ddlType || job.binlogTp == flushType
 }
 
 func (r *Reparo) commitDMLJob(sql string, args []interface{}, keys []string) error {
@@ -310,10 +328,6 @@ func (r *Reparo) commitDDLJob(sql string, args []interface{}, key string) {
 }
 
 func (r *Reparo) resolveCausality(keys []string) (string, error) {
-	if len(keys) == 0 {
-		return "", nil
-	}
-
 	begin := time.Now()
 	defer func() {
 		cost := time.Since(begin).Seconds()
@@ -322,14 +336,16 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 		}
 	}()
 
-	if r.cfg.DisableCausality {
-		if len(keys) > 0 {
-			return keys[0], nil
-		}
+	if len(keys) == 0 {
 		return "", nil
 	}
 
+	if r.cfg.DisableCausality {
+		return keys[0], nil
+	}
+
 	if r.causality.DetectConflict(keys) {
+		r.flushJobs()
 		r.causality.Reset()
 	}
 
@@ -339,12 +355,22 @@ func (r *Reparo) resolveCausality(keys []string) (string, error) {
 	return r.causality.Get(keys[0]), nil
 }
 
+func (r *Reparo) flushJobs() {
+	log.Info("flush all jobs")
+	job := newFlushJob()
+	r.addJob(job)
+}
+
 func newDDLJob(sql string, args []interface{}, key string) *job {
 	return &job{binlogTp: ddlType, sql: sql, args: args, key: key}
 }
 
 func newDMLJob(sql string, args []interface{}, key string) *job {
 	return &job{binlogTp: dmlType, sql: sql, args: args, key: key}
+}
+
+func newFlushJob() *job {
+	return &job{binlogTp: flushType}
 }
 
 func genHashKey(key string) uint32 {

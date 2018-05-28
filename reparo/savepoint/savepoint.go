@@ -1,8 +1,6 @@
 package savepoint
 
-import (
-	"fmt"
-)
+import "github.com/pkg/errors"
 
 // Position represents a savepoint position .
 type Position struct {
@@ -31,6 +29,6 @@ func Open(tp string, path string) (Savepoint, error) {
 	case "file":
 		return newFileSavepoint(path)
 	default:
-		panic(fmt.Sprintf("savepoint %s not implemented yet", tp))
+		return nil, errors.Errorf("savepoint %s not implemented yet", tp)
 	}
 }
