@@ -63,6 +63,7 @@ type Config struct {
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
+	SlaveEtcdURLS   string          `toml:"slave-pd-urls" json:"slave-pd-urls"`
 	KafkaAddrs      string          `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion    string          `toml:"kafka-version" json:"kafka-version"`
 	ZkAddrs         string          `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
@@ -71,6 +72,7 @@ type Config struct {
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
+	SlaveSecurity   security.Config `toml:"slave-security" json:"slave-security"`
 	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
 	SafeForwardTime int             `toml:"safe-forward-time" json:"safe-forward-time"`
 	EtcdTimeout     time.Duration
@@ -80,6 +82,7 @@ type Config struct {
 	configFile      string
 	printVersion    bool
 	tls             *tls.Config
+	slaveTls        *tls.Config
 }
 
 func defaultListenAddr() string {
@@ -109,6 +112,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
+	fs.StringVar(&cfg.SlaveEtcdURLS, "slave-pd-urls", "", "slave cluster's pd urls, it is used for compare data between master with slave")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
 	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
 	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper endpoints")
@@ -180,6 +184,11 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.tls, err = cfg.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
+	}
+
+	cfg.slaveTls, err = cfg.SlaveSecurity.ToTLSConfig()
+	if err != nil {
+		return errors.Errorf("slave tls config %+v error %v", cfg.SlaveSecurity, err)
 	}
 
 	// adjust configuration
@@ -277,6 +286,18 @@ func (cfg *Config) validate() error {
 	for _, u := range urlv.URLSlice() {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
+		}
+	}
+
+	if cfg.SlaveEtcdURLS != "" {
+		urlv, err := flags.NewURLsValue(cfg.SlaveEtcdURLS)
+		if err != nil {
+			return errors.Errorf("parse SlaveEtcdURLs error: %s, %v", cfg.SlaveEtcdURLS, err)
+		}
+		for _, u := range urlv.URLSlice() {
+			if _, _, err := net.SplitHostPort(u.Host); err != nil {
+				return errors.Errorf("bad SlaveEtcdURL host format: %s, %v", u.Host, err)
+			}
 		}
 	}
 

@@ -3,9 +3,19 @@ package checkpoint
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/juju/errors"
+	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
+	"golang.org/x/net/context"
+)
+
+const (
+	physicalShiftBits = 18
+	slowDist          = 30 * time.Millisecond
 )
 
 // DBConfig is the DB configuration.
@@ -25,6 +35,8 @@ type Config struct {
 	ClusterID       uint64
 	InitialCommitTS int64
 	CheckPointFile  string `toml:"dir" json:"dir"`
+
+	SlavePdCli pd.Client
 }
 
 func checkConfig(cfg *Config) error {
@@ -81,4 +93,20 @@ func genDropSchema(cp CheckPoint) (sql.Result, error) {
 	sp := cp.(*MysqlCheckPoint)
 	sql := fmt.Sprintf("drop schema if exists %s", sp.schema)
 	return sp.db.Exec(sql)
+}
+
+// GetTSO gets ts from pd
+func GetTSO(pdCli pd.Client) (int64, error) {
+	now := time.Now()
+
+	physical, logical, err := pdCli.GetTS(context.Background())
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	dist := time.Since(now)
+	if dist > slowDist {
+		log.Warnf("get timestamp too slow: %s", dist)
+	}
+
+	return int64(uint64((physical << physicalShiftBits) + logical)), nil
 }

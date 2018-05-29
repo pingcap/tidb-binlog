@@ -13,6 +13,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -62,7 +63,7 @@ func ComparePos(left, right binlog.Pos) int {
 }
 
 // GenCheckPointCfg returns an CheckPoint config instance
-func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
+func GenCheckPointCfg(cfg *Config, id uint64, slavePdCli pd.Client) *checkpoint.Config {
 	dbCfg := checkpoint.DBConfig{
 		Host:     cfg.SyncerCfg.To.Host,
 		User:     cfg.SyncerCfg.To.User,
@@ -71,6 +72,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	}
 	return &checkpoint.Config{
 		Db:              &dbCfg,
+		SlavePdCli:      slavePdCli,
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
 		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),

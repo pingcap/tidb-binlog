@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -67,9 +68,17 @@ func NewServer(cfg *Config) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// get pd client and cluster ID
-	pdCli, err := getPdClient(cfg)
+	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	var slavePdCli pd.Client
+	if cfg.SlaveEtcdURLS != "" {
+		slavePdCli, err = getPdClient(cfg.SlaveEtcdURLS, cfg.SlaveSecurity)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	clusterID = pdCli.GetClusterID(ctx)
@@ -78,7 +87,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	win := NewDepositWindow()
 
-	cpCfg := GenCheckPointCfg(cfg, clusterID)
+	cpCfg := GenCheckPointCfg(cfg, clusterID, slavePdCli)
 	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -116,10 +125,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	}, nil
 }
 
-func getPdClient(cfg *Config) (pd.Client, error) {
+func getPdClient(etcdUrls string, securityCfg security.Config) (pd.Client, error) {
 	// lockResolver and tikvStore doesn't exposed a method to get clusterID
 	// so have to create a PD client temporarily.
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	urlv, err := flags.NewURLsValue(etcdUrls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -127,9 +136,9 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 	var pdCli pd.Client
 	for i := 1; i < pdReconnTimes; i++ {
 		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
-			CAPath:   cfg.Security.SSLCA,
-			CertPath: cfg.Security.SSLCert,
-			KeyPath:  cfg.Security.SSLKey,
+			CAPath:   securityCfg.SSLCA,
+			CertPath: securityCfg.SSLCert,
+			KeyPath:  securityCfg.SSLKey,
 		})
 		if err != nil {
 			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)

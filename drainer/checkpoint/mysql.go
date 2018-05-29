@@ -11,6 +11,7 @@ import (
 	"github.com/ngaut/log"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/pd/pd-client"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -26,8 +27,11 @@ type MysqlCheckPoint struct {
 	table    string
 	saveTime time.Time
 
+	slavePdCli pd.Client
+
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
 	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
+	TsMap     string            `toml:"ts-map" json:"ts-map"`
 }
 
 func newMysql(cfg *Config) (CheckPoint, error) {
@@ -49,6 +53,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		Positions:       make(map[string]pb.Pos),
+		slavePdCli:      cfg.SlavePdCli,
 	}
 
 	sql := genCreateSchema(sp)
@@ -125,6 +130,15 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
+
+	if sp.slavePdCli != nil {
+		slaveTs, err := GetTSO(sp.slavePdCli)
+		if err != nil {
+			log.Errorf("get ts from slave pd error %v", err)
+			return errors.Trace(err)
+		}
+		sp.TsMap = fmt.Sprintf("%d:%d", ts, slaveTs)
+	}
 
 	b, err := json.Marshal(sp)
 	if err != nil {
