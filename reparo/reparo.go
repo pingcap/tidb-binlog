@@ -73,9 +73,9 @@ func (r *Reparo) prepare() error {
 
 	go func() {
 		http.Handle("/metrics", prometheus.Handler())
-		err1 := http.ListenAndServe(r.cfg.StatusAddr, nil)
-		if err1 != nil {
-			log.Fatal(err1)
+		err := http.ListenAndServe(r.cfg.StatusAddr, nil)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}()
 
