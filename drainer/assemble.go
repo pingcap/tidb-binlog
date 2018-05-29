@@ -84,14 +84,14 @@ func (a *assembler) do() {
 	for {
 		select {
 		case <-a.ctx.Done():
-			log.Infof("assembler was canceled: %v", a.ctx.Err())
+			log.Warnf("assembler was canceled: %v", a.ctx.Err())
 			return
 		case msg = <-a.input:
 			binlog := a.assemble(msg)
 			if binlog != nil {
 				select {
 				case <-a.ctx.Done():
-					log.Infof("assembler was canceled: %v", a.ctx.Err())
+					log.Warnf("assembler was canceled: %v", a.ctx.Err())
 					return
 				case a.msgs <- binlog:
 					log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
