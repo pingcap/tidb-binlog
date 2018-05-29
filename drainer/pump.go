@@ -13,6 +13,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -59,7 +60,7 @@ type Pump struct {
 		commitItems   map[int64]*binlogItem
 	}
 
-	asm        *assembler
+	asm        *assemble.Assembler
 	wg         sync.WaitGroup
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -84,7 +85,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
-		asm:        newAssembler(),
+		asm:        assemble.NewAssembler(errorBinlogCount),
 	}, nil
 }
 
@@ -397,7 +398,7 @@ func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
 	defer func() {
-		p.asm.close()
+		p.asm.Close()
 		p.wg.Done()
 	}()
 	var err error
@@ -436,7 +437,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	for {
 		var (
 			beginTime = time.Now()
-			binlog    *assembledBinlog
+			binlog    *assemble.AssembledBinlog
 		)
 		select {
 		case <-p.ctx.Done():
@@ -448,22 +449,22 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 
 			pos.Offset = msg.Offset
-			p.asm.append(msg)
-		case binlog = <-p.asm.messages():
+			p.asm.Append(msg)
+		case binlog = <-p.asm.Messages():
 		}
 		if binlog == nil {
 			continue
 		}
 
-		b := p.match(binlog.entity)
+		b := p.match(binlog.Entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
 				startTS:  b.StartTs,
 				commitTS: b.CommitTs,
-				pos:      binlog.entity.Pos,
+				pos:      binlog.Entity.Pos,
 			}
-			destructAssembledBinlog(binlog)
+			assemble.DestructAssembledBinlog(binlog)
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():

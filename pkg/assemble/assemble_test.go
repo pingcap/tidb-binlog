@@ -1,4 +1,4 @@
-package drainer
+package assemble
 
 import (
 	"encoding/binary"
@@ -8,9 +8,19 @@ import (
 	"github.com/Shopify/sarama"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
+	"github.com/prometheus/client_golang/prometheus"
+	"testing"
 )
 
-func (t *testDrainerSuite) TestGetKeyFromComsumerMessageHeader(c *C) {
+func TestClient(t *testing.T) {
+	TestingT(t)
+}
+
+var _ = Suite(&testAssemblerSuite{})
+
+type testAssemblerSuite struct{}
+
+func (t *testAssemblerSuite) TestGetKeyFromComsumerMessageHeader(c *C) {
 	data := []byte("1")
 	message := &sarama.ConsumerMessage{
 		Headers: []*sarama.RecordHeader{{
@@ -26,9 +36,11 @@ func (t *testDrainerSuite) TestGetKeyFromComsumerMessageHeader(c *C) {
 	c.Assert(slicer.GetValueFromComsumerMessageHeader(slicer.Total, message), IsNil)
 }
 
-func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
-	asm := newAssembler()
-	defer asm.close()
+func (t *testAssemblerSuite) TestAssembleBinlog(c *C) {
+	errorBinlogCount := prometheus.NewCounter(prometheus.CounterOpts{})
+
+	asm := NewAssembler(errorBinlogCount)
+	defer asm.Close()
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -36,11 +48,11 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	// [complete binlog slices]
 	messages := t.testGenerateConsumerMessage("t1", 4, nil)
 	for _, message := range messages {
-		asm.append(message)
+		asm.Append(message)
 	}
-	var binlog *assembledBinlog
+	var binlog *AssembledBinlog
 	select {
-	case binlog = <-asm.messages():
+	case binlog = <-asm.Messages():
 	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
@@ -54,9 +66,9 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	binlog = nil
 	messages = t.testGenerateConsumerMessage("t1", 1, nil)
 	messages[0].Headers = nil
-	asm.append(messages[0])
+	asm.Append(messages[0])
 	select {
-	case binlog = <-asm.messages():
+	case binlog = <-asm.Messages():
 	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
@@ -70,15 +82,15 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	binlog = nil
 	messages = t.testGenerateConsumerMessage("t1", 4, []int{1})
 	for _, message := range messages {
-		asm.append(message)
+		asm.Append(message)
 	}
 	time.Sleep(time.Second)
 	c.Assert(asm.slices, HasLen, 3)
 	messages = t.testGenerateConsumerMessage("t2", 1, nil)
 	messages[0].Headers = nil
-	asm.append(messages[0])
+	asm.Append(messages[0])
 	select {
-	case binlog = <-asm.messages():
+	case binlog = <-asm.Messages():
 	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
@@ -92,24 +104,24 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	binlog = nil
 	messages = t.testGenerateConsumerMessage("t1", 4, []int{1})
 	for _, message := range messages {
-		asm.append(message)
+		asm.Append(message)
 	}
 	time.Sleep(time.Second)
 	c.Assert(asm.slices, HasLen, 3)
 	messages = t.testGenerateConsumerMessage("t2", 2, nil)
-	asm.append(messages[0])
+	asm.Append(messages[0])
 	time.Sleep(time.Second)
 	c.Assert(asm.slices, HasLen, 1)
 	// duplicate binlog slices
-	asm.append(messages[0])
+	asm.Append(messages[0])
 	time.Sleep(time.Second)
 	c.Assert(asm.slices, HasLen, 1)
-	asm.append(messages[1])
+	asm.Append(messages[1])
 	time.Sleep(time.Second)
 	// sleep sometime above, try fetch ticker once (maybe a *reset* is better)
 	<-ticker.C
 	select {
-	case binlog = <-asm.messages():
+	case binlog = <-asm.Messages():
 	case <-ticker.C:
 		c.Fatalf("assembler was wrong")
 	}
@@ -125,7 +137,7 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	messages = t.testGenerateConsumerMessage("t1", 4, nil)
 	asm.cacheSize = 3
 	for _, message := range messages {
-		asm.append(message)
+		asm.Append(message)
 	}
 	time.Sleep(time.Second)
 	c.Assert(asm.slices, HasLen, 1)
@@ -134,7 +146,7 @@ func (t *testDrainerSuite) TestAssembleBinlog(c *C) {
 	c.Assert(asm.bms, HasLen, 1)
 }
 
-func (t *testDrainerSuite) testGenerateConsumerMessage(id string, size int, loss []int) []*sarama.ConsumerMessage {
+func (t *testAssemblerSuite) testGenerateConsumerMessage(id string, size int, loss []int) []*sarama.ConsumerMessage {
 	lossM := make(map[int]bool)
 	for _, value := range loss {
 		lossM[value] = true
