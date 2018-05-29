@@ -123,7 +123,7 @@ func extractRowHandle(stmt *ast.CreateTableStmt) (colName string, explicitHandle
 	for _, colDef := range columns {
 		cNameLowercase := colDef.Name.Name.L
 		if isPrimaryKeyColumn(colDef) {
-			primaryCnt += 1
+			primaryCnt++
 			primaryColumn = cNameLowercase
 		} else {
 			for _, constrain := range constrains {
@@ -185,7 +185,7 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 	case ast.AlterTableAddColumns:
 		var colDefStr = ""
 		var colPosStr = ""
-		var err error = nil
+		var err error
 		// TODO: Support add multiple columns.
 		colDefStr, err = analyzeColumnDef(alterSpec.NewColumns[0], "")
 		if err != nil {
@@ -231,7 +231,7 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 func analyzeModifyColumn(alterSpec *ast.AlterTableSpec) (string, error) {
 	var colDefStr = ""
 	var colPosStr = ""
-	var err error = nil
+	var err error
 	colDefStr, err = analyzeColumnDef(alterSpec.NewColumns[0], "")
 	if err != nil {
 		return "", errors.Trace(err)
@@ -785,9 +785,8 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 		if e.FnName.L == ast.CurrentTimestamp {
 			t := types.NewTimeDatum(types.CurrentTime(e.GetType().Tp))
 			return fmt.Sprintf("'%v'", t.GetMysqlTime().String()), shouldQuote, nil
-		} else {
-			return "", false, errors.New(fmt.Sprintf("Function expression %s is not supported.", e.FnName))
 		}
+		return "", false, errors.New(fmt.Sprintf("Function expression %s is not supported.", e.FnName))
 	case *ast.UnaryOperationExpr:
 		op := ""
 		switch e.Op {
@@ -812,8 +811,6 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	default:
 		return "", false, errors.New(fmt.Sprintf("Expression %v is not supported.", e))
 	}
-
-	return "", false, errors.New("Shouldn't reach here.")
 }
 
 // Poor man's data conversion function.

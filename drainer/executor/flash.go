@@ -3,7 +3,6 @@ package executor
 import (
 	"database/sql"
 	"github.com/juju/errors"
-	_ "github.com/kshvakov/clickhouse"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -53,7 +52,7 @@ func (m *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		sqlsMap := make(map[int][]string)
 		for i, row := range args {
 			hashKey := m.partition(row[0].(int64))
-			rowsMap[hashKey] = append(rowsMap[hashKey], row[1:len(row)])
+			rowsMap[hashKey] = append(rowsMap[hashKey], row[1:])
 			sqlsMap[hashKey] = append(sqlsMap[hashKey], sqls[i])
 		}
 		for i, db := range m.dbs {

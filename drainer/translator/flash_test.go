@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var tidbRowId = int64(11)
+var tidbRowID = int64(11)
 
 func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 	f := testGenFlashTranslator(c)
@@ -412,7 +412,7 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag int) ([]types.Datum, []interface{}) {
 	datas := make([]types.Datum, 3)
 	expected := make([]interface{}, 3)
-	var pk interface{} = nil
+	var pk interface{}
 	for index, col := range table.Columns {
 		d, e := testFlashGenDatum(c, col, base%2+1)
 		datas[index] = d
@@ -423,8 +423,8 @@ func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag int) ([
 		}
 	}
 	if pk == nil {
-		pk = tidbRowId
-		expected = append(expected, tidbRowId)
+		pk = tidbRowID
+		expected = append(expected, tidbRowID)
 	}
 	var pks []interface{}
 	pks = append(pks, pk)
@@ -450,7 +450,7 @@ func testFlashGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, inte
 func testFlashGenInsertBinlog(c *C, table *model.TableInfo, r []types.Datum) []byte {
 	colIDs := make([]int64, 0, len(r))
 	row := make([]types.Datum, 0, len(r))
-	var pk interface{} = nil
+	var pk interface{}
 	for _, col := range table.Columns {
 		if pk == nil && testIsPKHandleColumn(table, col) {
 			pk = r[col.Offset]
@@ -464,7 +464,7 @@ func testFlashGenInsertBinlog(c *C, table *model.TableInfo, r []types.Datum) []b
 	c.Assert(err, IsNil)
 
 	if pk == nil {
-		pk = types.NewIntDatum(tidbRowId)
+		pk = types.NewIntDatum(tidbRowID)
 	}
 	handleVal, _ := codec.EncodeValue(sc, nil, pk.(types.Datum))
 	bin := append(handleVal, value...)
@@ -487,8 +487,8 @@ func testFlashGenUpdateBinlog(c *C, table *model.TableInfo, oldData []types.Datu
 
 	if !hasPK {
 		colIDs = append(colIDs, implicitColID)
-		oldRow = append(oldRow, types.NewIntDatum(tidbRowId))
-		newRow = append(newRow, types.NewIntDatum(tidbRowId))
+		oldRow = append(oldRow, types.NewIntDatum(tidbRowID))
+		newRow = append(newRow, types.NewIntDatum(tidbRowID))
 	}
 
 	var bin []byte
@@ -515,7 +515,7 @@ func testFlashGenDeleteBinlog(c *C, table *model.TableInfo, r []types.Datum) []b
 
 	if !hasPK {
 		colIDs = append(colIDs, implicitColID)
-		row = append(row, types.NewIntDatum(tidbRowId))
+		row = append(row, types.NewIntDatum(tidbRowID))
 	}
 
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}

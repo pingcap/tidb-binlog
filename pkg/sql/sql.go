@@ -5,16 +5,17 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/kshvakov/clickhouse"
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
+	// Importing ClickHouse sql driver.
+	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -118,11 +119,13 @@ func IgnoreDDLError(err error) bool {
 	}
 }
 
+// CHHostAndPort is a CH host:port pair.
 type CHHostAndPort struct {
 	Host string
 	Port int
 }
 
+// ParseCHHosts parses a host config string to CHHostAndPort pairs.
 func ParseCHHosts(hostStrs string) ([]CHHostAndPort, error) {
 	hostParts := strings.Split(hostStrs, ",")
 	result := make([]CHHostAndPort, 0)
@@ -138,13 +141,14 @@ func ParseCHHosts(hostStrs string) ([]CHHostAndPort, error) {
 			return nil, errors.Annotate(err, "port is not number")
 		}
 		result = append(result, CHHostAndPort{
-			Host : host,
-			Port : port,
+			Host: host,
+			Port: port,
 		})
 	}
 	return result, nil
 }
 
+// OpenCH opens a connection to ClickHouse.
 func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
 	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
 	log.Warnf("Connecting to %s", dbDSN)
