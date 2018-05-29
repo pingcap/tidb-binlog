@@ -26,7 +26,6 @@ import (
 
 const (
 	maxExecutionWaitTime = 100 * time.Millisecond
-	executionWaitTime    = 10 * time.Millisecond
 )
 
 // Reparo is the main part of the restore tool.
@@ -257,7 +256,6 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 				log.Fatalf(errors.ErrorStack(err))
 			}
 			clearF()
-			time.Sleep(executionWaitTime)
 		}
 	}
 }
