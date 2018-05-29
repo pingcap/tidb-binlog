@@ -37,9 +37,9 @@ type Syncer struct {
 
 	wg sync.WaitGroup
 
-	input chan *binlogItem
-	jobWg sync.WaitGroup
-	jobCh []chan *job
+	input  chan *binlogItem
+	jobWg  sync.WaitGroup
+	jobChs []chan *job
 
 	executors []executor.Executor
 
@@ -65,7 +65,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
-	syncer.jobCh = newJobChans(cfg.WorkerCount)
+	syncer.jobChs = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
@@ -77,13 +77,13 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 }
 
 func newJobChans(count int) []chan *job {
-	jobCh := make([]chan *job, 0, count)
+	jobChs := make([]chan *job, 0, count)
 	size := maxBinlogItemCount / count
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, size))
+		jobChs = append(jobChs, make(chan *job, size))
 	}
 
-	return jobCh
+	return jobChs
 }
 
 func closeJobChans(jobChs []chan *job) {
@@ -401,7 +401,7 @@ func (s *Syncer) addJob(job *job) {
 	} else if job.binlogTp == translator.FLUSH {
 		s.jobWg.Add(s.cfg.WorkerCount)
 		for i := 0; i < s.cfg.WorkerCount; i++ {
-			s.jobCh[i] <- job
+			s.jobChs[i] <- job
 		}
 		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
@@ -410,7 +410,7 @@ func (s *Syncer) addJob(job *job) {
 
 	s.jobWg.Add(1)
 	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-	s.jobCh[idx] <- job
+	s.jobChs[idx] <- job
 	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 
 	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
@@ -555,7 +555,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 func (s *Syncer) run(b *binlogItem) error {
 	s.wg.Add(1)
 	defer func() {
-		closeJobChans(s.jobCh)
+		closeJobChans(s.jobChs)
 		s.wg.Done()
 	}()
 
@@ -575,7 +575,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
-		go s.sync(s.executors[i], s.jobCh[i])
+		go s.sync(s.executors[i], s.jobChs[i])
 	}
 
 	for {

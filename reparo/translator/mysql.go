@@ -11,21 +11,26 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	tbl "github.com/pingcap/tidb-binlog/reparo/table"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 	"github.com/pingcap/tidb/util/codec"
 )
 
 type mysqlTranslator struct {
 	db     *sql.DB
-	tables map[string]*tbl.Table
+	tables map[string]*common.Table
 }
 
-func newMysqlTranslator(db *sql.DB) Translator {
+func newMysqlTranslator(cfg *common.DBConfig) (Translator, error) {
+	db, err := pkgsql.OpenDB("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &mysqlTranslator{
 		db:     db,
-		tables: make(map[string]*tbl.Table),
-	}
+		tables: make(map[string]*common.Table),
+	}, nil
 }
 
 func (m *mysqlTranslator) TransInsert(event *pb.Event) (*TranslateResult, error) {
@@ -181,6 +186,10 @@ func (m *mysqlTranslator) TransDDL(ddl string) (*TranslateResult, error) {
 	return &TranslateResult{SQL: ddl}, nil
 }
 
+func (m *mysqlTranslator) Close() error {
+	return m.db.Close()
+}
+
 func (m *mysqlTranslator) genColumnList(columns []string) string {
 	return strings.Join(columns, ",")
 }
@@ -215,7 +224,7 @@ func genKVs(columns []string) string {
 	return kvs.String()
 }
 
-func genMultipleKeys(columns []*tbl.Column, value []interface{}, indexColumns map[string][]*tbl.Column) []string {
+func genMultipleKeys(columns []*common.Column, value []interface{}, indexColumns map[string][]*common.Column) []string {
 	var multipleKeys []string
 	for _, indexCols := range indexColumns {
 		cols, vals := getColumnData(columns, indexCols, value)
@@ -224,7 +233,7 @@ func genMultipleKeys(columns []*tbl.Column, value []interface{}, indexColumns ma
 	return multipleKeys
 }
 
-func genKeyList(columns []*tbl.Column, dataSeq []interface{}) string {
+func genKeyList(columns []*common.Column, dataSeq []interface{}) string {
 	values := make([]string, 0, len(dataSeq))
 	for i, data := range dataSeq {
 		values = append(values, columnValue(data, columns[i].Unsigned))
@@ -233,8 +242,8 @@ func genKeyList(columns []*tbl.Column, dataSeq []interface{}) string {
 	return strings.Join(values, ",")
 }
 
-func getColumnData(columns []*tbl.Column, indexColumns []*tbl.Column, data []interface{}) ([]*tbl.Column, []interface{}) {
-	cols := make([]*tbl.Column, 0, len(columns))
+func getColumnData(columns []*common.Column, indexColumns []*common.Column, data []interface{}) ([]*common.Column, []interface{}) {
+	cols := make([]*common.Column, 0, len(columns))
 	values := make([]interface{}, 0, len(columns))
 	for _, column := range indexColumns {
 		cols = append(cols, column)

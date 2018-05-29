@@ -11,7 +11,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	tbl "github.com/pingcap/tidb-binlog/reparo/table"
+	common "github.com/pingcap/tidb-binlog/reparo/common"
 	tmysql "github.com/pingcap/tidb/mysql"
 )
 
@@ -21,11 +21,11 @@ const (
 	retryTimeout = time.Second * 1
 )
 
-func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string) (*tbl.Table, error) {
-	table := &tbl.Table{}
+func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string) (*common.Table, error) {
+	table := &common.Table{}
 	table.Schema = schema
 	table.Name = name
-	table.IndexColumns = make(map[string][]*tbl.Column)
+	table.IndexColumns = make(map[string][]*common.Column)
 
 	err := getTableColumns(m.db, table)
 	if err != nil {
@@ -44,7 +44,7 @@ func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string)
 	return table, nil
 }
 
-func (m *mysqlTranslator) getTable(schema string, table string) (*tbl.Table, error) {
+func (m *mysqlTranslator) getTable(schema string, table string) (*common.Table, error) {
 	key := fmt.Sprintf("%s.%s", schema, table)
 
 	value, ok := m.tables[key]
@@ -62,10 +62,10 @@ func (m *mysqlTranslator) getTable(schema string, table string) (*tbl.Table, err
 }
 
 func (m *mysqlTranslator) clearTables() {
-	m.tables = make(map[string]*tbl.Table)
+	m.tables = make(map[string]*common.Table)
 }
 
-func setTableIndex(db *sql.DB, table *tbl.Table) error {
+func setTableIndex(db *sql.DB, table *common.Table) error {
 	if table.Schema == "" || table.Name == "" {
 		return errors.New("schema/table is empty")
 	}
@@ -122,11 +122,11 @@ func setTableIndex(db *sql.DB, table *tbl.Table) error {
 	return nil
 }
 
-func findColumns(columns []*tbl.Column, indexColumns map[string][]string) map[string][]*tbl.Column {
-	result := make(map[string][]*tbl.Column)
+func findColumns(columns []*common.Column, indexColumns map[string][]string) map[string][]*common.Column {
+	result := make(map[string][]*common.Column)
 
 	for keyName, indexCols := range indexColumns {
-		cols := make([]*tbl.Column, 0, len(indexCols))
+		cols := make([]*common.Column, 0, len(indexCols))
 		for _, name := range indexCols {
 			column := findColumn(columns, name)
 			if column != nil {
@@ -139,7 +139,7 @@ func findColumns(columns []*tbl.Column, indexColumns map[string][]string) map[st
 	return result
 }
 
-func findColumn(columns []*tbl.Column, indexColumn string) *tbl.Column {
+func findColumn(columns []*common.Column, indexColumn string) *common.Column {
 	for _, column := range columns {
 		if column.Name == indexColumn {
 			return column
@@ -149,7 +149,7 @@ func findColumn(columns []*tbl.Column, indexColumn string) *tbl.Column {
 	return nil
 }
 
-func getTableColumns(db *sql.DB, table *tbl.Table) error {
+func getTableColumns(db *sql.DB, table *common.Table) error {
 	if table.Schema == "" || table.Name == "" {
 		return errors.New("schema/table is empty")
 	}
@@ -193,7 +193,7 @@ func getTableColumns(db *sql.DB, table *tbl.Table) error {
 			return errors.Trace(err)
 		}
 
-		column := &tbl.Column{}
+		column := &common.Column{}
 		column.Idx = idx
 		column.Name = string(data[0])
 

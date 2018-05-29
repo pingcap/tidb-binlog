@@ -12,7 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/reparo/executor"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -39,8 +39,8 @@ type Config struct {
 	WorkerCount      int  `toml:"worker-count" json:"worker-count"`
 	DisableCausality bool `toml:"disable-causality" json:"disable-causality"`
 
-	DestType string             `toml:"dest-type" json:"dest-type"`
-	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
+	DestType string           `toml:"dest-type" json:"dest-type"`
+	DestDB   *common.DBConfig `toml:"dest-db" json:"dest-db"`
 
 	DoTables []Table  `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs    []string `toml:"replicate-do-db" json:"replicate-do-db"`

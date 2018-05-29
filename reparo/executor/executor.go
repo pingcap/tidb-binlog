@@ -1,6 +1,9 @@
 package executor
 
-import "github.com/juju/errors"
+import (
+	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/reparo/common"
+)
 
 // execute sql to target database.
 
@@ -13,7 +16,7 @@ type Executor interface {
 }
 
 // New creates a new executor based on the name.
-func New(name string, cfg *DBConfig) (Executor, error) {
+func New(name string, cfg *common.DBConfig) (Executor, error) {
 	switch name {
 	case "mysql":
 		return newMysqlExecutor(cfg)

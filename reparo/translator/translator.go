@@ -1,10 +1,9 @@
 package translator
 
 import (
-	"database/sql"
-
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 )
 
 // TranslateResult contains translation result.
@@ -27,15 +26,18 @@ type Translator interface {
 
 	// GenDDL generates the ddl sql by query string
 	TransDDL(ddl string) (*TranslateResult, error)
+
+	// Close closes the Translator.
+	Close() error
 }
 
 // New creates a new Translator based on name.
-func New(name string, safeMode bool, db *sql.DB) Translator {
+func New(name string, safeMode bool, cfg *common.DBConfig) (Translator, error) {
 	switch name {
 	case "print":
 		return newPrintTranslator()
 	case "mysql":
-		return newMysqlTranslator(db)
+		return newMysqlTranslator(cfg)
 	}
 	log.Infof("name %s not found, use print translator by default", name)
 	return newPrintTranslator()

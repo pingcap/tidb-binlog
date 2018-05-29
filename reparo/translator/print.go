@@ -11,8 +11,8 @@ import (
 type printTranslator struct {
 }
 
-func newPrintTranslator() Translator {
-	return &printTranslator{}
+func newPrintTranslator() (Translator, error) {
+	return &printTranslator{}, nil
 }
 
 func (p *printTranslator) TransInsert(event *pb.Event) (*TranslateResult, error) {
@@ -37,6 +37,10 @@ func (p *printTranslator) TransDelete(event *pb.Event) (*TranslateResult, error)
 func (p *printTranslator) TransDDL(ddl string) (*TranslateResult, error) {
 	printDDL(ddl)
 	return nil, nil
+}
+
+func (p *printTranslator) Close() error {
+	return nil
 }
 
 func printHeader(event *pb.Event) {

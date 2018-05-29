@@ -2,7 +2,6 @@ package reparo
 
 import (
 	"bufio"
-	"database/sql"
 	"hash/crc32"
 	"io"
 	"net/http"
@@ -35,11 +34,9 @@ type Reparo struct {
 	executors  []executor.Executor
 	regexpMap  map[string]*regexp.Regexp
 	jobWg      sync.WaitGroup
-	jobCh      []chan *job
+	jobChs     []chan *job
 	causality  *causality.Causality
 	wg         sync.WaitGroup
-
-	db *sql.DB
 }
 
 // New creates a Reparo object.
@@ -49,24 +46,19 @@ func New(cfg *Config) (*Reparo, error) {
 		return nil, errors.Trace(err)
 	}
 
-	log.Infof("cfg %+v", cfg)
-	r := &Reparo{
-		cfg:       cfg,
-		executors: executors,
-		regexpMap: make(map[string]*regexp.Regexp),
-		jobCh:     newJobChans(cfg),
-		causality: causality.NewCausality(),
+	translator, err := translator.New(cfg.DestType, false, cfg.DestDB)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	if cfg.DestType == "mysql" {
-		db, err := pkgsql.OpenDB("mysql", cfg.DestDB.Host, cfg.DestDB.Port, cfg.DestDB.User, cfg.DestDB.Password)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		r.db = db
-		r.translator = translator.New(cfg.DestType, false, db)
-	} else {
-		r.translator = translator.New(cfg.DestType, false, nil)
+	log.Infof("cfg %+v", cfg)
+	r := &Reparo{
+		cfg:        cfg,
+		executors:  executors,
+		translator: translator,
+		regexpMap:  make(map[string]*regexp.Regexp),
+		jobChs:     newJobChans(cfg),
+		causality:  causality.NewCausality(),
 	}
 
 	return r, nil
@@ -76,7 +68,7 @@ func (r *Reparo) prepare() error {
 	r.GenRegexMap()
 
 	for i := 0; i < r.cfg.WorkerCount; i++ {
-		go r.sync(r.executors[i], r.jobCh[i])
+		go r.sync(r.executors[i], r.jobChs[i])
 	}
 
 	go func() {
@@ -96,6 +88,9 @@ func (r *Reparo) Process() error {
 	if err := r.prepare(); err != nil {
 		return errors.Trace(err)
 	}
+	defer func() {
+		closeJobChans(r.jobChs)
+	}()
 
 	files, err := r.searchFiles()
 	if err != nil {
@@ -164,12 +159,8 @@ func (r *Reparo) Process() error {
 
 // Close closes the Reparo object.
 func (r *Reparo) Close() error {
-	if r.db != nil {
-		err := r.db.Close()
-		if err != nil {
-			log.Errorf("[reparo] close db err %v", err)
-		}
-	}
+	r.wg.Wait()
+	r.translator.Close()
 	closeExecutors(r.executors)
 	return nil
 }
@@ -189,7 +180,7 @@ const (
 	flushType
 )
 
-func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
+func (r *Reparo) sync(executor executor.Executor, jobChs chan *job) {
 	r.wg.Add(1)
 	defer r.wg.Done()
 
@@ -211,7 +202,7 @@ func (r *Reparo) sync(executor executor.Executor, jobCh chan *job) {
 	var err error
 	for {
 		select {
-		case job, ok := <-jobCh:
+		case job, ok := <-jobChs:
 			if !ok {
 				return
 			}
@@ -274,7 +265,7 @@ func (r *Reparo) addJob(job *job) {
 	case flushType:
 		r.jobWg.Add(r.cfg.WorkerCount)
 		for i := 0; i < r.cfg.WorkerCount; i++ {
-			r.jobCh[i] <- job
+			r.jobChs[i] <- job
 		}
 		r.jobWg.Wait()
 		return
@@ -282,7 +273,7 @@ func (r *Reparo) addJob(job *job) {
 
 	r.jobWg.Add(1)
 	idx := int(genHashKey(job.key)) % r.cfg.WorkerCount
-	r.jobCh[idx] <- job
+	r.jobChs[idx] <- job
 
 	if r.checkWait(job) {
 		begin1 := time.Now()
@@ -401,4 +392,10 @@ func newJobChans(cfg *Config) []chan *job {
 		jobChs = append(jobChs, make(chan *job, cfg.JobChannelSize))
 	}
 	return jobChs
+}
+
+func closeJobChans(jobChs []chan *job) {
+	for _, ch := range jobChs {
+		close(ch)
+	}
 }
