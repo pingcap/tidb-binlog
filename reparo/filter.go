@@ -33,14 +33,14 @@ func (r *Reparo) GenRegexMap() {
 }
 
 func (r *Reparo) addOneRegex(originStr string) {
-	if _, ok := r.regexMap[originStr]; !ok {
+	if _, ok := r.regexpMap[originStr]; !ok {
 		var re *regexp.Regexp
 		if originStr[0] != '~' {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
 		} else {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
 		}
-		r.regexMap[originStr] = re
+		r.regexpMap[originStr] = re
 	}
 }
 
@@ -112,7 +112,7 @@ func (r *Reparo) matchDB(patternDBS []string, a string) bool {
 }
 
 func (r *Reparo) matchString(pattern string, t string) bool {
-	if re, ok := r.regexMap[pattern]; ok {
+	if re, ok := r.regexpMap[pattern]; ok {
 		return re.MatchString(t)
 	}
 	return pattern == t

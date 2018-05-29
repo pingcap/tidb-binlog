@@ -41,7 +41,7 @@ dest-type = "mysql"
 
 txn-batch = 100
 worker-count = 8
-disable-detect = false
+disable-causality = false
 
 # The channel size(in number,not bytes) of reparo buffer jobs. For the most time, you don't need to change it.
 # job-channel-size = 1000

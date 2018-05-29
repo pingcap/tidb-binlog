@@ -33,7 +33,7 @@ type Reparo struct {
 	cfg        *Config
 	translator translator.Translator
 	executors  []executor.Executor
-	regexMap   map[string]*regexp.Regexp
+	regexpMap  map[string]*regexp.Regexp
 	jobWg      sync.WaitGroup
 	jobCh      []chan *job
 	causality  *causality.Causality
@@ -53,8 +53,8 @@ func New(cfg *Config) (*Reparo, error) {
 	r := &Reparo{
 		cfg:       cfg,
 		executors: executors,
-		regexMap:  make(map[string]*regexp.Regexp),
-		jobCh:     newJobChans(cfg.WorkerCount, cfg.JobChannelSize),
+		regexpMap: make(map[string]*regexp.Regexp),
+		jobCh:     newJobChans(cfg),
 		causality: causality.NewCausality(),
 	}
 
@@ -396,10 +396,10 @@ func closeExecutors(executors []executor.Executor) {
 	}
 }
 
-func newJobChans(count int, jobChanSize int) []chan *job {
-	jobChs := make([]chan *job, 0, count)
-	for i := 0; i < count; i++ {
-		jobChs = append(jobChs, make(chan *job, jobChanSize))
+func newJobChans(cfg *Config) []chan *job {
+	jobChs := make([]chan *job, 0, cfg.WorkerCount)
+	for i := 0; i < cfg.WorkerCount; i++ {
+		jobChs = append(jobChs, make(chan *job, cfg.JobChannelSize))
 	}
 	return jobChs
 }

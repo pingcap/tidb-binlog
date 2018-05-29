@@ -37,7 +37,7 @@ type Config struct {
 
 	TxnBatch         int  `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int  `toml:"worker-count" json:"worker-count"`
-	DisableCausality bool `toml:"disable-detect" json:"disable-detect"`
+	DisableCausality bool `toml:"disable-causality" json:"disable-causality"`
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -90,7 +90,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.IntVar(&c.TxnBatch, "txn-batch", 100, "number of binlog events in a transaction")
 	fs.IntVar(&c.WorkerCount, "worker-count", 8, "number of workers to execute sqls")
-	fs.BoolVar(&c.DisableCausality, "disable-detect", false, "disbale detect causality")
+	fs.BoolVar(&c.DisableCausality, "disable-causality", false, "disbale causality checking")
 	fs.StringVar(&c.StatusAddr, "status-addr", ":10085", "status address for prometheus metrics and go pprof debugging")
 	fs.IntVar(&c.JobChannelSize, "job-channel-size", 1000, "the channel size(in number,not bytes) of reparo buffer jobs")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
