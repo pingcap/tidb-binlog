@@ -76,7 +76,7 @@ func (k *kafkaEncoder) Encode(payload []byte) (int64, error) {
 	msg := &sarama.ProducerMessage{Topic: k.topic, Partition: k.partition, Value: sarama.ByteEncoder(payload)}
 	partition, offset, err := k.producer.SendMessage(msg)
 	if err != nil {
-		if err != io.EOF {
+		if err == io.EOF {
 			log.Warn("produce message meet EOF error")
 		} else {
 			return 0, errors.Trace(err)
