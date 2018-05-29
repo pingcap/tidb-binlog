@@ -8,6 +8,7 @@ import (
 
 const mib = 1024 * 1024
 
+// AssembledBinlog is an assembled binlog
 type AssembledBinlog struct {
 	Entity *pb.Entity
 	inPool bool
