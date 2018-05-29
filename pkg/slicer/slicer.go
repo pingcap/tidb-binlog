@@ -72,7 +72,7 @@ func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32
 	var msg *sarama.ConsumerMessage
 	select {
 	case <-ctx.Done():
-		log.Infof("slicer was canceled: %v", ctx.Err())
+		log.Warnf("slicer was canceled: %v", ctx.Err())
 		return nil, nil
 	case msg = <-cp.Messages():
 	}
@@ -109,7 +109,7 @@ func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32
 		}
 		select {
 		case <-ctx.Done():
-			log.Infof("slicer was canceled: %v", ctx.Err())
+			log.Warnf("slicer was canceled: %v", ctx.Err())
 			return nil, nil
 		case msg = <-cp.Messages(): // TODO: timeout?
 		}
@@ -131,7 +131,7 @@ func (t *KafkaTracker) Slices(ctx context.Context, topic string, partition int32
 		}
 		select {
 		case <-ctx.Done():
-			log.Infof("slicer was canceled: %v", ctx.Err())
+			log.Warnf("slicer was canceled: %v", ctx.Err())
 			return nil, nil
 		case slices[i] = <-cp.Messages(): // TODO: timeout?
 		}
