@@ -14,9 +14,9 @@ type binlogFile struct {
 }
 
 // searchFiles return matched file and it's offset
-func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
+func (r *Reparo) searchFiles() ([]binlogFile, error) {
 	// read all file names
-	sortedNames, err := bf.ReadBinlogNames(dir)
+	sortedNames, err := bf.ReadBinlogNames(r.cfg.Dir)
 	if err != nil {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}

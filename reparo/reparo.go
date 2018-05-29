@@ -97,8 +97,7 @@ func (r *Reparo) Process() error {
 		return errors.Trace(err)
 	}
 
-	dir := r.cfg.Dir
-	files, err := r.searchFiles(dir)
+	files, err := r.searchFiles()
 	if err != nil {
 		return errors.Trace(err)
 	}
