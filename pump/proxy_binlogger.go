@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -30,19 +31,22 @@ type Proxy struct {
 	cancel context.CancelFunc
 }
 
-func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint, enableTolerant bool) Binlogger {
+func newProxy(nodeID string, master, replicate Binlogger, cp *checkPoint) Binlogger {
 	p := &Proxy{
 		nodeID:    nodeID,
 		master:    master,
 		replicate: replicate,
 		cp:        cp,
-
-		enableTolerant: enableTolerant,
 	}
 
+	log.Infof("proxy checkpoint %+v", cp.pos())
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 
-	go p.sync()
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sync()
+	}()
 
 	return p
 }
@@ -58,15 +62,6 @@ func (p *Proxy) WriteTail(payload []byte) (int64, error) {
 	defer p.Unlock()
 
 	n, err := p.master.WriteTail(payload)
-	if err != nil {
-		lossBinlogCacheCounter.WithLabelValues(p.nodeID).Add(1)
-		log.Errorf("write binlog error %v", err)
-	}
-
-	if p.enableTolerant {
-		return 0, nil
-	}
-
 	return n, errors.Trace(err)
 }
 
@@ -77,6 +72,7 @@ func (p *Proxy) Close() error {
 
 	var pos binlog.Pos
 	for {
+		// wait to write all binlogs into slave
 		pos = p.cp.pos()
 		entities, err := p.master.ReadFrom(pos, 1)
 		if err == nil {
@@ -88,6 +84,7 @@ func (p *Proxy) Close() error {
 			log.Errorf("read binlogs from master in close error %v", err)
 		}
 
+		log.Infof("proxy wait to write all binlogs into kafka, now read at %+v, the latest pos %+v", pos, latestFilePos)
 		time.Sleep(time.Second)
 	}
 
@@ -132,6 +129,7 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 			log.Errorf("save position %+v error %v", readPos, err)
 			return readPos, errors.Trace(err)
 		}
+		checkpointGauge.WithLabelValues("current").Set(posToFloat(&readPos))
 		return readPos, nil
 	}
 
@@ -139,11 +137,11 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 }
 
 func (p *Proxy) sync() {
-	p.wg.Add(1)
-	defer p.wg.Done()
-
 	pos := p.cp.pos()
 	syncBinlog := func(entity binlog.Entity) error {
+		if enableDebug {
+			printDebugBinlog(entity, pos)
+		}
 		_, err := p.replicate.WriteTail(entity.Payload)
 		if err != nil {
 			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
@@ -167,4 +165,22 @@ func (p *Proxy) sync() {
 			time.Sleep(time.Second)
 		}
 	}
+}
+
+func printDebugBinlog(entity binlog.Entity, pos binlog.Pos) {
+	str := fmt.Sprintf("\n========== [proxy debug] update position from %+v to %+v\n", pos, entity.Pos)
+
+	b := new(binlog.Binlog)
+	err := b.Unmarshal(entity.Payload)
+	if err != nil {
+		// skip?
+		str = str + fmt.Sprintf("unmarshal payload error %v \n", err)
+	} else {
+		str = str + fmt.Sprintf("binlog start ts %d \n", b.StartTs)
+		str = str + fmt.Sprintf("binlog commit ts %d \n", b.CommitTs)
+		str = str + fmt.Sprintf("binlog Type ts %d \n", b.GetTp())
+	}
+
+	str = str + "=================================================================\n"
+	log.Warning(str)
 }

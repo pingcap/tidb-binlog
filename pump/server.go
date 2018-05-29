@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-var genBinlogInterval = 3 * time.Second
 var pullBinlogInterval = 50 * time.Millisecond
 
 var maxMsgSize = 1024 * 1024 * 1024
@@ -201,7 +200,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs)
+	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs, s.cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -212,28 +211,9 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		s.dispatcher = kb
 		return kb, nil
 	case mixedWriteMode:
-		find := false
-		clusterDir := path.Join(s.dataDir, "clusters")
-		names, err := bf.ReadDir(clusterDir)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		for _, n := range names {
-			if s.clusterID == n {
-				find = true
-				break
-			}
-		}
+		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
 
-		var (
-			fb        Binlogger
-			binlogDir = path.Join(clusterDir, s.clusterID)
-		)
-		if find {
-			fb, err = OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-		} else {
-			fb, err = CreateBinlogger(binlogDir, compress.CompressionNone) // ditto
-		}
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -244,7 +224,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 		}
 
 		s.cp = cp
-		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp, s.cfg.EnableTolerant)
+		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp)
 		return s.dispatcher, nil
 
 	default:
@@ -270,12 +250,8 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		} else {
 			label = "succ"
 		}
-		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
-		rpcCounter.WithLabelValues("WriteBinlog", label).Add(1)
 
-		if len(in.Payload) > 100*1024*1024 {
-			binlogSizeHistogram.WithLabelValues(s.node.ID()).Observe(float64(len(in.Payload)))
-		}
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
 	s.needGenBinlog.Set(false)
@@ -294,9 +270,14 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+		lossBinlogCacheCounter.Add(1)
+		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
+
+		if !s.cfg.EnableTolerant {
+			ret.Errmsg = err1.Error()
+			err = errors.Trace(err1)
+			return ret, err
+		}
 	}
 
 	return ret, nil
@@ -458,11 +439,12 @@ func (s *Server) writeFakeBinlog() {
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	s.needGenBinlog.Set(true)
+	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
-		case <-time.After(genBinlogInterval):
+		case <-time.After(genFakeBinlogInterval):
 			s.writeFakeBinlog()
 		}
 	}

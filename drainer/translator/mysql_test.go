@@ -58,7 +58,7 @@ func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 func (t *testTranslatorSuite) testGenerateColumnAndValue(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
-	rawData, expected := testGenRowData(c, table.Columns, 1)
+	rawData, expected, _ := testGenRowData(c, table.Columns, 1)
 	rawData = append(rawData, rawData[0])
 	data := make(map[int64]types.Datum)
 	for index, d := range rawData {

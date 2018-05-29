@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -20,6 +21,9 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
+
+// we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
+var waitMatchedTime = 3 * time.Second
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -52,7 +56,7 @@ type Pump struct {
 	mu                  struct {
 		sync.Mutex
 		prewriteItems map[int64]*binlogItem
-		binlogs       map[int64]*binlogItem
+		commitItems   map[int64]*binlogItem
 	}
 
 	wg         sync.WaitGroup
@@ -62,10 +66,8 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Consumer.Return.Errors = true
-	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
+	consumer, err := createKafkaConsumer(kafkaAddrs, kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -98,7 +100,7 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 	p.ctx, p.cancel = context.WithCancel(pctx)
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
-	p.mu.binlogs = make(map[int64]*binlogItem)
+	p.mu.commitItems = make(map[int64]*binlogItem)
 	go p.pullBinlogs()
 	go p.publish(t)
 }
@@ -108,6 +110,7 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
+		errorBinlogCount.Add(1)
 		// skip?
 		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
 		return nil
@@ -120,12 +123,13 @@ func (p *Pump) match(ent pb.Entity) *pb.Binlog {
 		p.mu.prewriteItems[b.StartTs] = newBinlogItem(b, pos, p.nodeID)
 	case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 		if co, ok := p.mu.prewriteItems[b.StartTs]; ok {
+			close(co.commitOrRollback)
+			delete(p.mu.prewriteItems, b.StartTs)
 			if b.Tp == pb.BinlogType_Commit {
 				co.binlog.CommitTs = b.CommitTs
 				co.binlog.Tp = b.Tp
-				p.mu.binlogs[co.binlog.CommitTs] = co
+				p.mu.commitItems[co.binlog.CommitTs] = co
 			}
-			delete(p.mu.prewriteItems, b.StartTs)
 		}
 	default:
 		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
@@ -158,17 +162,19 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		case entity = <-p.binlogChan:
 		}
 
+		begin := time.Now()
 		switch entity.tp {
 		case pb.BinlogType_Prewrite:
 			// while we meet the prebinlog we must find it's mathced commit binlog
 			p.mustFindCommitBinlog(t, entity.startTS)
+			findMatchedBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 		case pb.BinlogType_Commit, pb.BinlogType_Rollback:
 			// if the commitTs is larger than maxCommitTs,
 			// we would publish all binlogs:
 			// 1. push binlog that matched into a heap
 			// 2. update lateValidCommitTs
 			if entity.commitTS > maxCommitTs {
-				binlogs = p.getBinlogs(binlogs)
+				binlogs = p.getCommitBinlogs(binlogs)
 				maxCommitTs = entity.commitTS
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
@@ -176,6 +182,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
+				publishBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(begin).Seconds())
 			}
 		}
 
@@ -188,24 +195,23 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 
 func (p *Pump) mustFindCommitBinlog(t *tikv.LockResolver, startTS int64) {
 	for {
+		p.mu.Lock()
+		b, ok := p.mu.prewriteItems[startTS]
+		p.mu.Unlock()
+		if !ok {
+			return
+		}
+
 		select {
 		case <-p.ctx.Done():
 			return
-		default:
-		}
-
-		b, ok := p.getPrewriteBinlogEntity(startTS)
-		if ok {
-			time.Sleep(waitTime)
-			// check again after sleep a moment
-			b, ok = p.getPrewriteBinlogEntity(startTS)
-			if ok {
-				if ok := p.query(t, b); !ok {
-					continue
-				}
+		case <-time.After(waitMatchedTime):
+			if p.query(t, b) {
+				return
 			}
+		case <-b.commitOrRollback:
+			return
 		}
-		return
 	}
 }
 
@@ -230,7 +236,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 			if status.IsCommitted() {
 				binlog.CommitTs = int64(status.CommitTS())
 				binlog.Tp = pb.BinlogType_Commit
-				p.mu.binlogs[binlog.CommitTs] = b
+				p.mu.commitItems[binlog.CommitTs] = b
 			}
 			delete(p.mu.prewriteItems, ts)
 			p.mu.Unlock()
@@ -243,13 +249,15 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 	return false
 }
 
-// get all binlogs that don't store in boltdb
-func (p *Pump) getBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
+// get all commit binlog items
+func (p *Pump) getCommitBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
 	var tmpBinlogs map[int64]*binlogItem
+
 	p.mu.Lock()
-	tmpBinlogs = p.mu.binlogs
-	p.mu.binlogs = make(map[int64]*binlogItem)
+	tmpBinlogs = p.mu.commitItems
+	p.mu.commitItems = make(map[int64]*binlogItem)
 	p.mu.Unlock()
+
 	if binlogs == nil {
 		return tmpBinlogs
 	}
@@ -282,7 +290,7 @@ func (p *Pump) publishItems(items map[int64]*binlogItem) error {
 	}
 
 	p.putIntoHeap(items)
-	binlogCounter.Add(float64(len(items)))
+	publishBinlogCounter.WithLabelValues(p.nodeID).Add(float64(len(items)))
 	return nil
 }
 
@@ -294,8 +302,10 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 		if commitTS < boundary {
 			errorBinlogs++
 			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
+			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
+			continue
 		}
-		p.bh.push(p.ctx, item)
+		p.bh.push(p.ctx, item, true)
 	}
 
 	errorBinlogCount.Add(float64(errorBinlogs))
@@ -351,6 +361,7 @@ func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
+	begin := time.Now()
 	var bs binlogItems
 	item := p.bh.pop()
 	for item != nil && item.binlog.CommitTs <= windowUpper {
@@ -364,10 +375,12 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 		}
 		item = p.bh.pop()
 	}
-
 	if item != nil {
-		p.bh.push(p.ctx, item)
+		p.bh.push(p.ctx, item, false)
 	}
+
+	publishBinlogHistogram.WithLabelValues(fmt.Sprintf("%s_collect_binlogs", p.nodeID)).Observe(time.Since(begin).Seconds())
+
 	return bs
 }
 
@@ -392,6 +405,7 @@ func (p *Pump) pullBinlogs() {
 		case <-p.ctx.Done():
 			return
 		default:
+			log.Infof("consume from topic %s partition %d offset %d", topic, pump.DefaultTopicPartition(), pos.Offset)
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
@@ -415,7 +429,10 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
-		var payload []byte
+		var (
+			payload   []byte
+			beginTime = time.Now()
+		)
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
@@ -425,6 +442,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			pos.Offset = msg.Offset
 			payload = msg.Value
 		}
+		readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+		readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(payload)))
 
 		entity := pb.Entity{
 			Pos:     pos,
@@ -446,13 +465,6 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			}
 		}
 	}
-}
-
-func (p *Pump) getPrewriteBinlogEntity(startTS int64) (b *binlogItem, ok bool) {
-	p.mu.Lock()
-	b, ok = p.mu.prewriteItems[startTS]
-	p.mu.Unlock()
-	return
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete

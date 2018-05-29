@@ -29,11 +29,17 @@ const (
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
+	defaultKafkaVersion      = "1.0.0"
+
+	// default interval time to generate fake binlog, the unit is second
+	defaultGenFakeBinlogInterval = 3
 
 	kafkaWriteMode = "kafka"
 	// mixedWriteMode will write binlog to local file and then send to kafka
 	mixedWriteMode = "mixed"
 )
+
+var enableDebug bool
 
 // Config holds the configuration of pump
 type Config struct {
@@ -45,6 +51,7 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
+	KafkaVersion      string `toml:"kafka-version" json:"kafka-version"`
 	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string          `toml:"data-dir" json:"data-dir"`
@@ -55,11 +62,14 @@ type Config struct {
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
 	WriteMode         string          `toml:"write-mode" json:"write-mode"`
-	MetricsAddr       string
-	MetricsInterval   int
-	configFile        string
-	printVersion      bool
-	tls               *tls.Config
+
+	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
+
+	MetricsAddr     string
+	MetricsInterval int
+	configFile      string
+	printVersion    bool
+	tls             *tls.Config
 }
 
 // NewConfig return an instance of configuration
@@ -81,6 +91,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
+	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
 	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
@@ -95,6 +106,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
+	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
+	fs.BoolVar(&enableDebug, "enable-debug", false, "enable print debug log")
+
 	return cfg
 }
 
@@ -147,6 +161,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	initializeSaramaGlobalConfig()
 
 	return cfg.validate()
 }
@@ -223,16 +238,18 @@ func (cfg *Config) validate() error {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
 		if err != nil {
+			log.Errorf("connect to zookeeper %s error %v", cfg.ZkAddrs, err)
 			return errors.Trace(err)
 		}
 
 		kafkaUrls, err := zkClient.KafkaUrls()
 		if err != nil {
+			log.Errorf("get kafka urls from zookeeper error %v", err)
 			return errors.Trace(err)
 		}
 
 		// use kafka address get from zookeeper to reset the config
-		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		log.Infof("get kafka addrs %v from zookeeper", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
 	}
 

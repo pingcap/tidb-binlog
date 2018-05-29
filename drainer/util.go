@@ -10,17 +10,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
 )
 
 const (
 	lengthOfBinaryTime = 15
-	subTime            = (20 * 60 * 1000) << 18
+
+	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
+	// SegmentSizeBytes = 512 * 1024 * 1024
+	segmentSizeLevel int64 = 1000 * 1000 * 1000
 )
 
 // InitLogger initalizes Pump's logger.
@@ -36,6 +41,8 @@ func InitLogger(cfg *Config) {
 			log.SetRotateByDay()
 		}
 	}
+
+	sarama.Logger = util.NewStdLogger("[sarama] ")
 }
 
 // ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
@@ -70,7 +77,12 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 	}
 }
 
-func getSafeTS(ts int64) int64 {
+func initializeSaramaGlobalConfig() {
+	sarama.MaxResponseSize = int32(maxMsgSize)
+}
+
+func getSafeTS(ts int64, forwardTime int64) int64 {
+	subTime := (forwardTime * 60 * 1000) << 18
 	ts -= subTime
 	if ts < int64(0) {
 		ts = int64(0)
@@ -79,14 +91,9 @@ func getSafeTS(ts int64) int64 {
 	return ts
 }
 
-// combine suffix offset in one float, the format would be suffix.offset
+// combine suffix offset in one float
 func posToFloat(pos *binlog.Pos) float64 {
-	var decimal float64
-	decimal = float64(pos.Suffix)
-	for decimal > 1 {
-		decimal = decimal / 10
-	}
-	return float64(pos.Offset) + decimal
+	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
 }
 
 func genDrainerID(listenAddr string) (string, error) {
@@ -109,7 +116,10 @@ func genDrainerID(listenAddr string) (string, error) {
 }
 
 func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	// compute txn duration
+	if len(sqls) == 0 {
+		return nil
+	}
+
 	beginTime := time.Now()
 	defer func() {
 		txnHistogram.Observe(time.Since(beginTime).Seconds())
@@ -160,4 +170,17 @@ func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
+}
+
+func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Consumer.Return.Errors = true
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	kafkaCfg.Version = version
+	log.Infof("kafka consumer version %v", version)
+
+	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }

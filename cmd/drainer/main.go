@@ -26,6 +26,7 @@ func main() {
 
 	drainer.InitLogger(cfg)
 	version.PrintVersionInfo()
+	log.Infof("use config: %+v", cfg)
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {

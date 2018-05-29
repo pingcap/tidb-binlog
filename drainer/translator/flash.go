@@ -157,14 +157,6 @@ func isPrimaryKeyColumn(colDef *ast.ColumnDef) bool {
 	return false
 }
 
-func isPrimaryKeyConstraint(c *ast.Constraint) bool {
-	switch c.Tp {
-	case ast.ConstraintPrimaryKey:
-		return true
-	}
-	return false
-}
-
 func isNullable(colDef *ast.ColumnDef) bool {
 	if isPrimaryKeyColumn(colDef) {
 		return false

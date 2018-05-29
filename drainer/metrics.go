@@ -18,38 +18,39 @@ var (
 			Help:      "DepositWindow boundary.",
 		}, []string{"marker"})
 
-	savepointGauge = prometheus.NewGaugeVec(
+	offsetGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "savepoint",
-			Help:      "Save point for each node.",
+			Name:      "offset",
+			Help:      "offset for each pump.",
 		}, []string{"nodeID"})
 
-	rpcCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "rpc_counter",
-			Help:      "RPC counter for every rpc related operations.",
-		}, []string{"method", "label"})
-
-	rpcHistogram = prometheus.NewHistogramVec(
+	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "rpc_duration_seconds",
-			Help:      "Bucketed histogram of processing time (s) of rpc queries.",
-			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 13),
-		}, []string{"method", "label"})
+			Name:      "find_matched_binlog_duration_time",
+			Help:      "Bucketed histogram of find a matched binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"nodeID"})
 
-	binlogCounter = prometheus.NewCounter(
+	publishBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "publish_binlog_duration_time",
+			Help:      "Bucketed histogram of publish a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"nodeID"})
+
+	publishBinlogCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "binlog_count_total",
+			Name:      "publish_binlog_count",
 			Help:      "Total binlog count been stored.",
-		})
+		}, []string{"nodeID"})
 
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -74,6 +75,7 @@ var (
 			Name:      "error_binlog_count",
 			Help:      "Total count of binlog that store too late.",
 		})
+
 	eventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -81,6 +83,7 @@ var (
 			Name:      "event",
 			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
+
 	positionGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -88,28 +91,49 @@ var (
 			Name:      "position",
 			Help:      "save position of drainer.",
 		})
+
 	txnHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "txn_duration_time",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 13),
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
+
+	readBinlogHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "read_binlog_duration_time",
+			Help:      "Bucketed histogram of read time (s) of a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"nodeID"})
+
+	readBinlogSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "read_binlog_size",
+			Help:      "Bucketed histogram of size of a binlog.",
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
+		}, []string{"nodeID"})
 )
 
 func init() {
 	prometheus.MustRegister(windowGauge)
-	prometheus.MustRegister(savepointGauge)
-	prometheus.MustRegister(rpcCounter)
-	prometheus.MustRegister(rpcHistogram)
-	prometheus.MustRegister(binlogCounter)
+	prometheus.MustRegister(offsetGauge)
+	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
 	prometheus.MustRegister(tikvQueryCount)
 	prometheus.MustRegister(errorBinlogCount)
 	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
+	prometheus.MustRegister(readBinlogHistogram)
+	prometheus.MustRegister(readBinlogSizeHistogram)
+	prometheus.MustRegister(publishBinlogHistogram)
+	prometheus.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {

@@ -20,14 +20,22 @@ type binlogItem struct {
 	pos    pb.Pos
 	nodeID string
 	job    *model.Job
+	// close the channel to signal other goroutine that we had received it's matched commit/rollback binlog
+	commitOrRollback chan struct{}
 }
 
 func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
-	return &binlogItem{
-		binlog: b,
-		pos:    p,
-		nodeID: nodeID,
+	itemp := &binlogItem{
+		binlog:           b,
+		pos:              p,
+		nodeID:           nodeID,
+		commitOrRollback: make(chan struct{}),
 	}
+	if b.Tp != pb.BinlogType_Prewrite {
+		close(itemp.commitOrRollback)
+	}
+
+	return itemp
 }
 
 func (b *binlogItem) SetJob(job *model.Job) {
@@ -67,14 +75,14 @@ func newBinlogHeap(size int) *binlogHeap {
 	}
 }
 
-func (b *binlogHeap) push(ctx context.Context, item *binlogItem) {
+func (b *binlogHeap) push(ctx context.Context, item *binlogItem, check bool) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 			b.Lock()
-			if b.bh.Len() == b.size {
+			if check && b.bh.Len() == b.size {
 				b.Unlock()
 				time.Sleep(pushRetryTime)
 				continue

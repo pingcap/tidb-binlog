@@ -40,11 +40,11 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 	var err error
 	for i := 0; i < retryCount; i++ {
 		if i > 0 {
-			log.Warnf("exec sql retry %d - %v", i, sqls)
+			//log.Warnf("exec sql retry %d - %v", i, sqls)
 			time.Sleep(RetryWaitTime)
 		}
 
-		err = appleTxn(db, sqls, args)
+		err = ExecuteTxn(db, sqls, args)
 		if err == nil {
 			return nil
 		}
@@ -53,7 +53,8 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 	return errors.Trace(err)
 }
 
-func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
+// ExecuteTxn executes transaction
+func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 	txn, err := db.Begin()
 	if err != nil {
 		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
@@ -61,11 +62,11 @@ func appleTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 	}
 
 	for i := range sqls {
-		log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
+		//log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
 
 		_, err = txn.Exec(sqls[i], args[i]...)
 		if err != nil {
-			log.Warnf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
+			log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
 			rerr := txn.Rollback()
 			if rerr != nil {
 				log.Errorf("[rollback][error]%v", rerr)
