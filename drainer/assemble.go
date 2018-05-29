@@ -163,7 +163,7 @@ func (a *assembler) assemble(msg *sarama.ConsumerMessage) *assembledBinlog {
 				errorBinlogCount.Add(1)
 				return nil
 			}
-
+			log.Debugf("assemble a binlog %+v, size %d", b.entity.Pos, len(b.entity.Payload))
 			return b
 		}
 	}
