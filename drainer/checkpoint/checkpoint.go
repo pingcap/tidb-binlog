@@ -31,6 +31,8 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 		return newMysql(cfg)
 	case "pb":
 		return newPb(cfg)
+	case "flash":
+		return newFlash(cfg)
 	default:
 		return nil, errors.Errorf("unsupport SaveCheckPoint type %s", name)
 	}

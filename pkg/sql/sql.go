@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	_ "github.com/kshvakov/clickhouse"
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -12,6 +13,8 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
+	"strings"
+	"strconv"
 )
 
 var (
@@ -112,4 +115,42 @@ func IgnoreDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+type CHHostAndPort struct {
+	Host string
+	Port int
+}
+
+func ParseCHHosts(hostStrs string) ([]CHHostAndPort, error) {
+	hostParts := strings.Split(hostStrs, ",")
+	result := make([]CHHostAndPort, 0)
+	for _, hostStr := range hostParts {
+		trimedHostStr := strings.TrimSpace(hostStr)
+		hostAndPortStr := strings.Split(trimedHostStr, ":")
+		if len(hostAndPortStr) != 2 {
+			return nil, errors.New("wrong host format")
+		}
+		host := strings.TrimSpace(hostAndPortStr[0])
+		port, err := strconv.Atoi(strings.TrimSpace(hostAndPortStr[1]))
+		if err != nil {
+			return nil, errors.Annotate(err, "port is not number")
+		}
+		result = append(result, CHHostAndPort{
+			Host : host,
+			Port : port,
+		})
+	}
+	return result, nil
+}
+
+func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
+	log.Warnf("Connecting to %s", dbDSN)
+	db, err := sql.Open("clickhouse", dbDSN)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return db, nil
 }
