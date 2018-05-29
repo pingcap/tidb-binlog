@@ -40,6 +40,7 @@ insert into binlog_case1(t_bigint, t_double, t_decimal
 `,
 }
 
+// RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB) {
 	err := execSQLs(src, case1)
 	if err != nil {
