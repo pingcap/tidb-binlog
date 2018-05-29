@@ -79,34 +79,22 @@ func (a *assembler) close() {
 
 func (a *assembler) do() {
 	var (
-		msg     *sarama.ConsumerMessage
-		binlogs = make([]*assembledBinlog, 0, 16)
+		msg *sarama.ConsumerMessage
 	)
 	for {
-		if len(binlogs) > 0 {
-			binlog := binlogs[0]
-			select {
-			case <-a.ctx.Done():
-				log.Infof("assembler was canceled: %v", a.ctx.Err())
-				return
-			case a.msgs <- binlog:
-				log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
-				binlogs = binlogs[1:]
-			case msg = <-a.input:
-				binlog := a.assemble(msg)
-				if binlog != nil {
-					binlogs = append(binlogs, binlog)
-				}
-			}
-		} else {
-			select {
-			case <-a.ctx.Done():
-				log.Infof("assembler was canceled: %v", a.ctx.Err())
-				return
-			case msg = <-a.input:
-				binlog := a.assemble(msg)
-				if binlog != nil {
-					binlogs = append(binlogs, binlog)
+		select {
+		case <-a.ctx.Done():
+			log.Infof("assembler was canceled: %v", a.ctx.Err())
+			return
+		case msg = <-a.input:
+			binlog := a.assemble(msg)
+			if binlog != nil {
+				select {
+				case <-a.ctx.Done():
+					log.Infof("assembler was canceled: %v", a.ctx.Err())
+					return
+				case a.msgs <- binlog:
+					log.Infof("assemble a binlog %+v, size %d", binlog.entity.Pos, len(binlog.entity.Payload))
 				}
 			}
 		}
