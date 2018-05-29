@@ -211,11 +211,9 @@ func (a *assembler) popBinlogSlices() {
 
 func assembleBinlog(messages []*sarama.ConsumerMessage) (*assembledBinlog, error) {
 	slices := make([]*sarama.ConsumerMessage, len(messages))
-	totalSize := 0
 	for _, msg := range messages {
 		no := int(binary.LittleEndian.Uint32(slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)))
 		slices[no] = msg
-		totalSize += len(msg.Value)
 	}
 
 	b := constructAssembledBinlog(true)
