@@ -1,5 +1,5 @@
-hash: 3c51c79b510fbcc71ece8d6294d7bee50fc0f946918fb8ffc2d052e5d0993349
-updated: 2018-05-30T19:16:48.81660907+08:00
+hash: 55b61a97e916af2cd5fe5614ae4672d415f52acd8eaeb05067b1dc821c3b2ff7
+updated: 2018-05-30T20:27:01.474824121+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -144,7 +144,7 @@ imports:
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - jsonpb
   - proto
@@ -152,6 +152,7 @@ imports:
   - ptypes
   - ptypes/any
   - ptypes/duration
+  - ptypes/struct
   - ptypes/timestamp
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a

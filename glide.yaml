@@ -93,7 +93,7 @@ import:
   subpackages:
   - lru
 - package: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: v1.1.0
   subpackages:
   - jsonpb
   - proto
