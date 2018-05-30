@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	"hash/crc32"
+	"math"
 	"sync"
 )
 
@@ -220,14 +221,18 @@ func (a *Assembler) popBinlogSlices() {
 
 func assembleBinlog(messages []*sarama.ConsumerMessage) (*AssembledBinlog, error) {
 	slices := make([]*sarama.ConsumerMessage, len(messages))
+	var firstOffset int64 = math.MaxInt64
 	for _, msg := range messages {
 		no := int(binary.LittleEndian.Uint32(slicer.GetValueFromComsumerMessageHeader(slicer.No, msg)))
 		slices[no] = msg
+		if msg.Offset < firstOffset {
+			firstOffset = msg.Offset
+		}
 	}
 
 	b := ConstructAssembledBinlog(true)
 	b.Entity.Pos = pb.Pos{
-		Offset: slices[0].Offset,
+		Offset: firstOffset, // first (or lowest) offset in slices
 	}
 	for _, slice := range slices {
 		b.Entity.Payload = append(b.Entity.Payload, slice.Value...)

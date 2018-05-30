@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	"hash/crc32"
+	"math/rand"
 )
 
 var (
@@ -85,7 +86,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 
 	sli := pump.NewKafkaSlicer(topic, 0)
 	pump.GlobalConfig.EnableBinlogSlice = true
-	pump.GlobalConfig.SlicesSize = 10
+	pump.GlobalConfig.SlicesSize = 4
 
 	// offset seek for slice messages
 	message := []byte("aaaaaaaaaaaaaaaaaaaa")
@@ -95,6 +96,20 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	offset, err := to.produceMessageSlices(messages)
 	c.Assert(err, IsNil)
 	offsetFounds, err := sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
+	c.Assert(err, IsNil)
+	c.Assert(offsetFounds, HasLen, 1)
+	c.Assert(offsetFounds[0], Equals, offset)
+
+	// offset seek for slice messages, out-of-order
+	message = []byte("bbbbbbbbbbbbbbbbbbbb")
+	entity = to.genBinlogEntity(message, 2, 3)
+	messages, err = sli.Generate(entity)
+	rand.Shuffle(len(messages), func(i, j int) {
+		messages[i], messages[j] = messages[j], messages[i]
+	})
+	c.Assert(err, IsNil)
+	offset, err = to.produceMessageSlices(messages)
+	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
@@ -201,7 +216,7 @@ func (p PositionOperator) Compare(exceptedPos interface{}, currentPos interface{
 }
 
 // Decode implements Operator.Decode interface
-func (p PositionOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
+func (p PositionOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, int64, error) {
 	errCounter := prometheus.NewCounter(prometheus.CounterOpts{})
 	asm := assemble.NewAssembler(errCounter)
 	defer asm.Close()
@@ -210,15 +225,14 @@ func (p PositionOperator) Decode(ctx context.Context, messages <-chan *sarama.Co
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, errors.New("offset seeker was canceled")
+			return nil, 0, errors.New("offset seeker was canceled")
 		case msg := <-messages:
 			asm.Append(msg)
 		case binlog2 = <-asm.Messages():
 		}
-		if binlog2 == nil {
-			continue
+		if binlog2 != nil {
+			break
 		}
-		break
 	}
-	return string(binlog2.Entity.Payload), nil
+	return string(binlog2.Entity.Payload), binlog2.Entity.Pos.Offset, nil
 }

@@ -23,7 +23,7 @@ type Seeker interface {
 type Operator interface {
 	// Decode decodes message slices from kafka or rocketmq
 	// return message's position
-	Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error)
+	Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, int64, error)
 	// Compare compares excepted and current position, return
 	// -1 if exceptedPos < currentPos
 	// 0 if exceptedPos == currentPos
@@ -170,7 +170,7 @@ func (ks *KafkaSeeker) getAndCompare(ctx context.Context, topic string, partitio
 	}
 	defer pc.Close()
 
-	bp, err := ks.operator.Decode(ctx, pc.Messages())
+	bp, firstOffset, err := ks.operator.Decode(ctx, pc.Messages())
 	if err != nil {
 		return 0, bp, offset, errors.Annotate(err, "decode message")
 	}
@@ -178,7 +178,7 @@ func (ks *KafkaSeeker) getAndCompare(ctx context.Context, topic string, partitio
 	if err != nil {
 		return 0, bp, offset, errors.Annotatef(err, "compare %s with position %v", bp, pos)
 	}
-	return cmp, bp, offset, nil
+	return cmp, bp, firstOffset, nil
 }
 
 // getOffset return offset by given pos

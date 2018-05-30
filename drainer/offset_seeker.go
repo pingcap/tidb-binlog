@@ -38,7 +38,7 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 }
 
 // Decode implements Operator.Decode interface
-func (s *seekOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
+func (s *seekOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, int64, error) {
 	errCounter := prometheus.NewCounter(prometheus.CounterOpts{})
 	asm := assemble.NewAssembler(errCounter)
 	defer asm.Close()
@@ -48,29 +48,28 @@ func (s *seekOperator) Decode(ctx context.Context, messages <-chan *sarama.Consu
 		select {
 		case <-ctx.Done():
 			log.Warningf("offset seeker was canceled: %v", ctx.Err())
-			return nil, errors.New("offset seeker was canceled")
+			return nil, 0, errors.New("offset seeker was canceled")
 		case msg := <-messages:
 			asm.Append(msg)
 		case binlog = <-asm.Messages():
 		}
-		if binlog == nil {
-			continue
+		if binlog != nil {
+			break
 		}
-		break
 	}
 
 	bg := new(pb.Binlog)
 	err := bg.Unmarshal(binlog.Entity.Payload)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 
 	ts := bg.GetCommitTs()
 	if ts == 0 {
 		ts = bg.GetStartTs()
 	}
-	return ts, nil
+	return ts, binlog.Entity.Pos.Offset, nil
 }
 
 func createOffsetSeeker(addrs []string, kafkaVersion string) (offsets.Seeker, error) {
