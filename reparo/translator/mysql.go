@@ -186,8 +186,8 @@ func genColsAndArgs(row [][]byte) ([]string, []interface{}, error) {
 	return cols, args, nil
 }
 
-func (m *mysqlTranslator) TransDDL(ddl string) (*TranslateResult, error) {
-	m.clearTables()
+func (m *mysqlTranslator) TransDDL(ddl string, table common.Table) (*TranslateResult, error) {
+	m.clearTable(table)
 	return &TranslateResult{SQL: ddl}, nil
 }
 

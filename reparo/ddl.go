@@ -3,11 +3,12 @@ package reparo
 import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/parser"
 )
 
-func parseDDL(sql string) (node ast.Node, table Table, err error) {
+func parseDDL(sql string) (node ast.Node, table common.Table, err error) {
 	nodes, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return nil, table, errors.Trace(err)
@@ -55,7 +56,7 @@ func parseDDL(sql string) (node ast.Node, table Table, err error) {
 	return
 }
 
-func setSchemaIfExists(table *Table, schemaName string, tableName string) {
+func setSchemaIfExists(table *common.Table, schemaName string, tableName string) {
 	if schemaName != "" {
 		table.Schema = schemaName
 	}

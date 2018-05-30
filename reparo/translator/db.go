@@ -44,8 +44,7 @@ func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string)
 }
 
 func (m *mysqlTranslator) getTable(schema string, table string) (*common.Table, error) {
-	key := fmt.Sprintf("%s.%s", schema, table)
-
+	key := tableKey(schema, table)
 	value, ok := m.tables[key]
 	if ok {
 		return value, nil
@@ -60,8 +59,13 @@ func (m *mysqlTranslator) getTable(schema string, table string) (*common.Table, 
 	return t, nil
 }
 
-func (m *mysqlTranslator) clearTables() {
-	m.tables = make(map[string]*common.Table)
+func tableKey(schema, table string) string {
+	return fmt.Sprintf("`%s`.`%s`", schema, table)
+}
+
+func (m *mysqlTranslator) clearTable(table common.Table) {
+	key := tableKey(table.Schema, table.Name)
+	delete(m.tables, key)
 }
 
 func setTableIndex(db *sql.DB, table *common.Table) error {

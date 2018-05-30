@@ -20,12 +20,6 @@ const (
 	timeFormat = "2006-01-02 15:04:05"
 )
 
-// Table stores the table and schema name
-type Table struct {
-	Schema string `toml:"db-name" json:"db-name"`
-	Name   string `toml:"tbl-name" json:"tbl-name"`
-}
-
 // Config is the main configuration for the retore tool.
 type Config struct {
 	*flag.FlagSet
@@ -42,11 +36,11 @@ type Config struct {
 	DestType string           `toml:"dest-type" json:"dest-type"`
 	DestDB   *common.DBConfig `toml:"dest-db" json:"dest-db"`
 
-	DoTables []Table  `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs    []string `toml:"replicate-do-db" json:"replicate-do-db"`
+	DoTables []common.Table `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs    []string       `toml:"replicate-do-db" json:"replicate-do-db"`
 
-	IgnoreTables []Table  `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
-	IgnoreDBs    []string `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
+	IgnoreTables []common.Table `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
+	IgnoreDBs    []string       `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`

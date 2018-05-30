@@ -25,7 +25,7 @@ type Translator interface {
 	TransDelete(event *pb.Event) (*TranslateResult, error)
 
 	// GenDDL generates the ddl sql by query string
-	TransDDL(ddl string) (*TranslateResult, error)
+	TransDDL(ddl string, table common.Table) (*TranslateResult, error)
 
 	// Close closes the Translator.
 	Close() error

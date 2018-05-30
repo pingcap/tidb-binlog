@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 )
 
 // do some filters based on schema/table
@@ -46,15 +47,15 @@ func (r *Reparo) addOneRegex(originStr string) {
 
 // SkipBySchemaAndTable skips sql based on schema and table rules.
 func (r *Reparo) SkipBySchemaAndTable(schema string, table string) bool {
-	tbs := []Table{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
+	tbs := []common.Table{{Schema: strings.ToLower(schema), Name: strings.ToLower(table)}}
 	tbs = r.whiteFilter(tbs)
 	tbs = r.blackFilter(tbs)
 	return len(tbs) == 0
 }
 
 // whiteFilter is whitelist filter.
-func (r *Reparo) whiteFilter(stbs []Table) []Table {
-	var tbs []Table
+func (r *Reparo) whiteFilter(stbs []common.Table) []common.Table {
+	var tbs []common.Table
 	if len(r.cfg.DoTables) == 0 && len(r.cfg.DoDBs) == 0 {
 		return stbs
 	}
@@ -72,8 +73,8 @@ func (r *Reparo) whiteFilter(stbs []Table) []Table {
 }
 
 // blackFilter is a blacklist filter
-func (r *Reparo) blackFilter(stbs []Table) []Table {
-	var tbs []Table
+func (r *Reparo) blackFilter(stbs []common.Table) []common.Table {
+	var tbs []common.Table
 	if len(r.cfg.IgnoreTables) == 0 && len(r.cfg.IgnoreDBs) == 0 {
 		return stbs
 	}
@@ -90,7 +91,7 @@ func (r *Reparo) blackFilter(stbs []Table) []Table {
 	return tbs
 }
 
-func (r *Reparo) matchTable(patternTBS []Table, tb Table) bool {
+func (r *Reparo) matchTable(patternTBS []common.Table, tb common.Table) bool {
 	for _, ptb := range patternTBS {
 		if r.matchString(ptb.Schema, tb.Schema) {
 			// tb.Name == "" means create or drop database

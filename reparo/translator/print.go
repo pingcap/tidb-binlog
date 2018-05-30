@@ -5,6 +5,7 @@ import (
 
 	"github.com/ngaut/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/reparo/common"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -34,7 +35,7 @@ func (p *printTranslator) TransDelete(event *pb.Event) (*TranslateResult, error)
 
 }
 
-func (p *printTranslator) TransDDL(ddl string) (*TranslateResult, error) {
+func (p *printTranslator) TransDDL(ddl string, table common.Table) (*TranslateResult, error) {
 	printDDL(ddl)
 	return nil, nil
 }

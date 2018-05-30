@@ -74,7 +74,7 @@ func (r *Reparo) translateDDL(binlog *pb.Binlog) ([]*translator.TranslateResult,
 		return nil, nil
 	}
 
-	result, err := r.translator.TransDDL(string(binlog.DdlQuery))
+	result, err := r.translator.TransDDL(string(binlog.DdlQuery), table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

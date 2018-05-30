@@ -13,22 +13,14 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 18),
 		})
-	// WaitDMLExecutedHistogram is histogram of waiting dml execution duration
-	WaitDMLExecutedHistogram = prometheus.NewHistogram(
+	// WaitExecutedHistogram is histogram of waiting dml execution duration
+	WaitExecutedHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reparo",
 			Name:      "wait_dml_executed",
 			Help:      "Bucketed histogram of processing time(s) of waiting DML executed before DDL executed",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 18),
-		})
-	// WaitDDLExecutedHistogram is histogram of waiting ddl execution duration.
-	WaitDDLExecutedHistogram = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: "reparo",
-			Name:      "wait_ddl_executed",
-			Help:      "Bucketed histogram of processing time(s) of waiting ddl executed",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 18),
-		})
+		}, []string{"type"})
 	// AddJobHistogram is histogram of adding job to channel(queue).
 	AddJobHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
@@ -48,8 +40,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(TxnHistogram)
-	prometheus.MustRegister(WaitDMLExecutedHistogram)
-	prometheus.MustRegister(WaitDDLExecutedHistogram)
+	prometheus.MustRegister(WaitExecutedHistogram)
 	prometheus.MustRegister(AddJobHistogram)
 	prometheus.MustRegister(ExecuteTotalCounter)
 }

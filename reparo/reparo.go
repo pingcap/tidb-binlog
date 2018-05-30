@@ -261,13 +261,20 @@ func (r *Reparo) addJob(job *job) {
 		} else {
 			log.Debugf("[reparo] wait dml executed takes %f seconds", dmlCost)
 		}
-		metrics.WaitDMLExecutedHistogram.Observe(dmlCost)
+		metrics.WaitExecutedHistogram.WithLabelValues("dml").Observe(dmlCost)
 	case flushType:
 		r.jobWg.Add(r.cfg.WorkerCount)
 		for i := 0; i < r.cfg.WorkerCount; i++ {
 			r.jobChs[i] <- job
 		}
 		r.jobWg.Wait()
+		flushCost := time.Since(begin).Seconds()
+		if flushCost > 1 {
+			log.Warnf("[reparo] wait dml executed takes %f seconds", flushCost)
+		} else {
+			log.Debugf("[reparo] wait dml executed takes %f seconds", flushCost)
+		}
+		metrics.WaitExecutedHistogram.WithLabelValues("flush").Observe(flushCost)
 		return
 	}
 
@@ -284,7 +291,7 @@ func (r *Reparo) addJob(job *job) {
 		} else {
 			log.Debugf("[reparo] wait ddl executed takes %f seconds", ddlCost)
 		}
-		metrics.WaitDDLExecutedHistogram.Observe(ddlCost)
+		metrics.WaitExecutedHistogram.WithLabelValues("ddl").Observe(ddlCost)
 	}
 
 	totalCost := time.Since(begin).Seconds()

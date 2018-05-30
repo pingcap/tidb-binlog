@@ -18,8 +18,8 @@ func (c *Column) String() string {
 
 // Table represents a table in database.
 type Table struct {
-	Schema string
-	Name   string
+	Schema string `toml:"db-name" json:"db-name"`
+	Name   string `toml:"tbl-name" json:"tbl-name"`
 
 	Columns      []*Column
 	IndexColumns map[string][]*Column
