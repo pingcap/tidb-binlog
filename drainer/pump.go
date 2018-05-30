@@ -471,6 +471,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- binlogEnt:
 			}
+		} else {
+			assemble.DestructAssembledBinlog(binlog)
 		}
 	}
 }
