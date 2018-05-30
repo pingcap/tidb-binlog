@@ -113,6 +113,26 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
+
+	// offset seek for slice messages,  out-of-order and duplicated
+	message = []byte("cccccccccccccccccccc")
+	entity = to.genBinlogEntity(message, 3, 4)
+	messages, err = sli.Generate(entity)
+	rand.Shuffle(len(messages), func(i, j int) {
+		messages[i], messages[j] = messages[j], messages[i]
+	})
+	dupSlices := make([]*sarama.ProducerMessage, len(messages)+2)
+	dupSlices[0] = messages[0]
+	dupSlices[len(dupSlices)-1] = messages[len(messages)-1]
+	for i, slice := range messages {
+		dupSlices[i+1] = slice
+	}
+	offset, err = to.produceMessageSlices(dupSlices)
+	c.Assert(err, IsNil)
+	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
+	c.Assert(err, IsNil)
+	c.Assert(offsetFounds, HasLen, 1)
+	c.Assert(offsetFounds[0], Equals, offset)
 }
 
 func (to *testOffsetSuite) deleteTopic(kafkaAddr string, config *sarama.Config, topic string, c *C) {
