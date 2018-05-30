@@ -114,6 +114,11 @@ func (m *mysqlTranslator) TransUpdate(event *pb.Event) (*TranslateResult, error)
 	keys := genMultipleKeys(table.Columns, oldValues, table.IndexColumns)
 	keys = append(keys, genMultipleKeys(table.Columns, changedValues, table.IndexColumns)...)
 
+	if len(updatedColumns) == 0 {
+		log.Warnf("%s.%s updated columns is empty", schemaName, tableName)
+		return nil, nil
+	}
+
 	kvs := genKVs(updatedColumns)
 	where, oldValues := genWhere(allCols, oldValues)
 

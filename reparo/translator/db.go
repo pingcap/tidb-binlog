@@ -130,6 +130,8 @@ func findColumns(columns []*common.Column, indexColumns map[string][]string) map
 			column := findColumn(columns, name)
 			if column != nil {
 				cols = append(cols, column)
+			} else {
+				log.Errorf("cannot found column %s in columns %+v", name, columns)
 			}
 		}
 		result[keyName] = cols
