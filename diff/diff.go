@@ -7,6 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/onsi/gomega"
 )
 
 // Diff contains two sql DB, used for comparing.
@@ -137,11 +138,11 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 	}
 	defer rows2.Close()
 
-	cols1, err := rows1.Columns()
+	cols1, err := rows1.ColumnTypes()
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	cols2, err := rows2.Columns()
+	cols2, err := rows2.ColumnTypes()
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -149,8 +150,8 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 		return false, nil
 	}
 
-	row1 := make(rawBytesRow, len(cols1))
-	row2 := make(rawBytesRow, len(cols2))
+	row1 := newRawBytesRow(cols1)
+	row2 := newRawBytesRow(cols2)
 	return equalRows(rows1, rows2, row1, row2)
 }
 
@@ -263,16 +264,26 @@ type comparable interface {
 	Equal(comparable) bool
 }
 
-type rawBytesRow []sql.RawBytes
+type rawBytesRow struct {
+	rawBytes []sql.RawBytes
+	colTypes []*sql.ColumnType
+}
+
+func newRawBytesRow(colTypes []*sql.ColumnType) rawBytesRow {
+	return rawBytesRow{
+		colTypes: colTypes,
+		rawBytes: make([]sql.RawBytes, len(colTypes)),
+	}
+}
 
 func (r rawBytesRow) Len() int {
-	return len([]sql.RawBytes(r))
+	return len(r.rawBytes)
 }
 
 func (r rawBytesRow) Scan(rows *sql.Rows) error {
-	args := make([]interface{}, len(r))
+	args := make([]interface{}, len(r.rawBytes))
 	for i := 0; i < len(args); i++ {
-		args[i] = &r[i]
+		args[i] = &r.rawBytes[i]
 	}
 
 	err := rows.Scan(args...)
@@ -280,6 +291,31 @@ func (r rawBytesRow) Scan(rows *sql.Rows) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func equalJSON(data1 []byte, data2 []byte) bool {
+	if len(data1) == 0 && len(data2) != 0 {
+		return false
+	}
+
+	if len(data2) == 0 && len(data1) != 0 {
+		return false
+	}
+
+	if len(data1) == 0 && len(data2) == 0 {
+		return true
+	}
+
+	matcher := gomega.MatchJSON(string(data1))
+
+	// key-ordering and whitespace shouldn't matter
+	match, err := matcher.Match(string(data2))
+	if err != nil {
+		log.Error(err, "data1: ", string(data1), " data2: ", string(data2))
+		return false
+	}
+
+	return match
 }
 
 func (r rawBytesRow) Equal(data comparable) bool {
@@ -291,8 +327,14 @@ func (r rawBytesRow) Equal(data comparable) bool {
 		return false
 	}
 	for i := 0; i < r.Len(); i++ {
-		if bytes.Compare(r[i], r2[i]) != 0 {
-			return false
+		if r.colTypes[i].DatabaseTypeName() == "JSON" {
+			if !equalJSON(r.rawBytes[i], r2.rawBytes[i]) {
+				return false
+			}
+		} else {
+			if bytes.Compare(r.rawBytes[i], r2.rawBytes[i]) != 0 {
+				return false
+			}
 		}
 	}
 	return true
