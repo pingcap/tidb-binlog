@@ -104,11 +104,12 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	message = []byte("bbbbbbbbbbbbbbbbbbbb")
 	entity = to.genBinlogEntity(message, 2, 3)
 	messages, err = sli.Generate(entity)
+	c.Assert(err, IsNil)
 	rand.Shuffle(len(messages), func(i, j int) {
 		messages[i], messages[j] = messages[j], messages[i]
 	})
-	c.Assert(err, IsNil)
 	offset, err = to.produceMessageSlices(messages)
+	c.Assert(err, IsNil)
 	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
@@ -118,6 +119,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	message = []byte("cccccccccccccccccccc")
 	entity = to.genBinlogEntity(message, 3, 4)
 	messages, err = sli.Generate(entity)
+	c.Assert(err, IsNil)
 	rand.Shuffle(len(messages), func(i, j int) {
 		messages[i], messages[j] = messages[j], messages[i]
 	})
@@ -128,6 +130,26 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 		dupSlices[i+1] = slice
 	}
 	offset, err = to.produceMessageSlices(dupSlices)
+	c.Assert(err, IsNil)
+	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
+	c.Assert(err, IsNil)
+	c.Assert(offsetFounds, HasLen, 1)
+	c.Assert(offsetFounds[0], Equals, offset)
+
+	// complete binlog slices follow incomplete slices
+	message = []byte("dddddddddddddddddddd")
+	entity = to.genBinlogEntity(message, 4, 5)
+	messages, err = sli.Generate(entity)
+	c.Assert(err, IsNil)
+	messages = messages[1:] // drop a slice
+	offset, err = to.produceMessageSlices(messages)
+	c.Assert(err, IsNil)
+
+	message = []byte("eeeeeeeeeeeeeeeeeeee")
+	entity = to.genBinlogEntity(message, 1, 2)
+	messages, err = sli.Generate(entity)
+	c.Assert(err, IsNil)
+	offset, err = to.produceMessageSlices(messages)
 	c.Assert(err, IsNil)
 	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
