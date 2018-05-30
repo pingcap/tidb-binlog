@@ -4,8 +4,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/net/context"
 )
 
 type seekOperator struct{}
@@ -35,21 +38,29 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 }
 
 // Decode implements Operator.Decode interface
-func (s *seekOperator) Decode(slices []interface{}) (interface{}, error) {
-	var payload []byte
-	if len(slices) == 1 {
-		msg := slices[0].(*sarama.ConsumerMessage)
-		payload = msg.Value
-	} else {
-		payload = make([]byte, 0, 1024*1024)
-		for _, slice := range slices {
-			msg := slice.(*sarama.ConsumerMessage)
-			payload = append(payload, msg.Value...)
+func (s *seekOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
+	errCounter := prometheus.NewCounter(prometheus.CounterOpts{})
+	asm := assemble.NewAssembler(errCounter)
+	defer asm.Close()
+
+	var binlog *assemble.AssembledBinlog
+	for {
+		select {
+		case <-ctx.Done():
+			log.Warningf("offset seeker was canceled: %v", ctx.Err())
+			return nil, errors.New("offset seeker was canceled")
+		case msg := <-messages:
+			asm.Append(msg)
+		case binlog = <-asm.Messages():
 		}
+		if binlog == nil {
+			continue
+		}
+		break
 	}
 
 	bg := new(pb.Binlog)
-	err := bg.Unmarshal(payload)
+	err := bg.Unmarshal(binlog.Entity.Payload)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
 		return nil, errors.Trace(err)

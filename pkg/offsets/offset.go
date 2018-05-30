@@ -4,9 +4,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	"golang.org/x/net/context"
-	"math"
 )
 
 const (
@@ -25,7 +23,7 @@ type Seeker interface {
 type Operator interface {
 	// Decode decodes message slices from kafka or rocketmq
 	// return message's position
-	Decode(slices []interface{}) (interface{}, error)
+	Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error)
 	// Compare compares excepted and current position, return
 	// -1 if exceptedPos < currentPos
 	// 0 if exceptedPos == currentPos
@@ -172,20 +170,7 @@ func (ks *KafkaSeeker) getAndCompare(ctx context.Context, topic string, partitio
 	}
 	defer pc.Close()
 
-	kt, err := slicer.NewKafkaTracker(ks.addr, ks.cfg)
-	if err != nil {
-		log.Errorf("NewKafkaTracker error %v", err)
-		return 0, nil, offset, errors.Trace(err)
-	}
-	defer kt.Close()
-
-	slices, err := kt.Slices(ctx, topic, partition, offset)
-	if err != nil {
-		log.Errorf("KafkaTracker get slices error, with [topic]%s, [partition]%d, [offset]%d", topic, partition, offset)
-		return 0, nil, offset, errors.Trace(err)
-	}
-
-	bp, err := ks.operator.Decode(slices)
+	bp, err := ks.operator.Decode(ctx, pc.Messages())
 	if err != nil {
 		return 0, bp, offset, errors.Annotate(err, "decode message")
 	}
@@ -193,18 +178,7 @@ func (ks *KafkaSeeker) getAndCompare(ctx context.Context, topic string, partitio
 	if err != nil {
 		return 0, bp, offset, errors.Annotatef(err, "compare %s with position %v", bp, pos)
 	}
-	firstOffset := offset
-	if cmp == equal && len(slices) > 1 {
-		// get the first (earliest) offset of slices
-		firstOffset = int64(math.MaxInt64)
-		for _, slice := range slices {
-			offset := slice.(*sarama.ConsumerMessage).Offset
-			if offset < firstOffset {
-				firstOffset = offset
-			}
-		}
-	}
-	return cmp, bp, firstOffset, nil
+	return cmp, bp, offset, nil
 }
 
 // getOffset return offset by given pos

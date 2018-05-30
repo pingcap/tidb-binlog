@@ -9,17 +9,22 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/slicer"
+	"github.com/pingcap/tidb-binlog/pkg/assemble"
+	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tipb/go-binlog"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
-	"math"
-	"math/rand"
+	"hash/crc32"
+)
+
+var (
+	_        = Suite(&testOffsetSuite{})
+	crcTable = crc32.MakeTable(crc32.Castagnoli)
 )
 
 func TestClient(t *testing.T) {
 	TestingT(t)
 }
-
-var _ = Suite(&testOffsetSuite{})
 
 type testOffsetSuite struct {
 	producer sarama.SyncProducer
@@ -78,34 +83,16 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 		c.Assert(offsetFounds[0], Equals, res)
 	}
 
-	// offset seek for slice messages, out-of-order
+	sli := pump.NewKafkaSlicer(topic, 0)
+
+	// offset seek for slice messages, todo: slicer config
 	message := []byte("aaaaaaaaaaaaaaaaaaaa")
-	slices, err := to.splitMessageToSlices(topic, []byte("messageID1"), message, 4)
-	rand.Shuffle(len(slices), func(i, j int) {
-		slices[i], slices[j] = slices[j], slices[i]
-	})
-	offset, err := to.produceMessageSlices(slices)
+	entity := to.genBinlogEntity(message, 1, 2)
+	messages, err := sli.Generate(entity)
+	c.Assert(err, IsNil)
+	offset, err := to.produceMessageSlices(messages)
 	c.Assert(err, IsNil)
 	offsetFounds, err := sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
-	c.Assert(err, IsNil)
-	c.Assert(offsetFounds, HasLen, 1)
-	c.Assert(offsetFounds[0], Equals, offset)
-
-	// offset seek for slice messages,  out-of-order and duplicated
-	message = []byte("bbbbbbbbbbbbbbbbbbbb")
-	slices, err = to.splitMessageToSlices(topic, []byte("messageID2"), message, 4)
-	rand.Shuffle(len(slices), func(i, j int) {
-		slices[i], slices[j] = slices[j], slices[i]
-	})
-	dupSlices := make([]interface{}, len(slices)+2)
-	dupSlices[0] = slices[0]
-	dupSlices[len(dupSlices)-1] = slices[len(slices)-1]
-	for i, slice := range slices {
-		dupSlices[i+1] = slice
-	}
-	offset, err = to.produceMessageSlices(dupSlices)
-	c.Assert(err, IsNil)
-	offsetFounds, err = sk.Do(ctx, topic, string(message), 0, 0, []int32{0})
 	c.Assert(err, IsNil)
 	c.Assert(offsetFounds, HasLen, 1)
 	c.Assert(offsetFounds[0], Equals, offset)
@@ -120,6 +107,20 @@ func (to *testOffsetSuite) deleteTopic(kafkaAddr string, config *sarama.Config, 
 	c.Assert(err, IsNil)
 	defer broker.Close()
 	broker.DeleteTopics(&sarama.DeleteTopicsRequest{Topics: []string{topic}, Timeout: 30 * time.Second})
+}
+
+func (to *testOffsetSuite) genBinlogEntity(message []byte, suffix uint64, offset int64) *binlog.Entity {
+	crc := crc32.Checksum(message, crcTable)
+	checksum := make([]byte, 4)
+	binary.LittleEndian.PutUint32(checksum, crc)
+	return &binlog.Entity{
+		Pos: binlog.Pos{
+			Suffix: suffix,
+			Offset: offset,
+		},
+		Payload:  message,
+		Checksum: checksum,
+	}
 }
 
 func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, error) {
@@ -145,16 +146,16 @@ func (to *testOffsetSuite) procudeMessage(message []byte, topic string) (int64, 
 	return offset, err
 }
 
-func (to *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, error) {
+func (to *testOffsetSuite) produceMessageSlices(slices []*sarama.ProducerMessage) (int64, error) {
 	var (
 		offset int64
 		err    error
 		j      int
-		slice  interface{}
+		slice  *sarama.ProducerMessage
 	)
 	for i := 0; i < 5; i++ {
 		for j, slice = range slices {
-			_, offsetSlice, err := to.producer.SendMessage(slice.(*sarama.ProducerMessage))
+			_, offsetSlice, err := to.producer.SendMessage(slice)
 			if err != nil {
 				if j == 0 {
 					time.Sleep(time.Second)
@@ -171,59 +172,6 @@ func (to *testOffsetSuite) produceMessageSlices(slices []interface{}) (int64, er
 		}
 	}
 	return offset, err
-}
-
-func (to *testOffsetSuite) splitMessageToSlices(topic string, messageID []byte, message []byte, preferSliceCount int) ([]interface{}, error) {
-	sliceLen := int(math.Ceil(float64(len(message)) / float64(preferSliceCount)))
-	if sliceLen <= 0 {
-		sliceLen = 1
-	}
-	sliceCount := int(math.Ceil(float64(len(message)) / float64(sliceLen)))
-	slices := make([]interface{}, sliceCount)
-
-	var (
-		total    = make([]byte, 4)
-		checksum = []byte("hash")
-	)
-	binary.LittleEndian.PutUint32(total, uint32(sliceCount))
-
-	for i := 0; i < sliceCount; i++ {
-		startIdx, endIdx := i*sliceLen, (i+1)*sliceLen
-		if i == sliceCount-1 {
-			endIdx = len(message)
-		}
-		payload := message[startIdx:endIdx]
-		no := make([]byte, 4)
-		binary.LittleEndian.PutUint32(no, uint32(i))
-		msg := &sarama.ProducerMessage{
-			Topic:     topic,
-			Partition: int32(0),
-			Key:       sarama.StringEncoder("key"),
-			Value:     sarama.ByteEncoder(payload),
-			Headers: []sarama.RecordHeader{
-				{
-					Key:   slicer.MessageID,
-					Value: messageID,
-				},
-				{
-					Key:   slicer.No,
-					Value: no,
-				}, {
-					Key:   slicer.Total,
-					Value: total,
-				},
-			},
-		}
-		if i == sliceCount-1 {
-			// last slice, append checksum
-			msg.Headers = append(msg.Headers, sarama.RecordHeader{
-				Key:   slicer.Checksum,
-				Value: checksum,
-			})
-		}
-		slices[i] = msg
-	}
-	return slices, nil
 }
 
 type PositionOperator struct{}
@@ -251,17 +199,24 @@ func (p PositionOperator) Compare(exceptedPos interface{}, currentPos interface{
 }
 
 // Decode implements Operator.Decode interface
-func (p PositionOperator) Decode(slices []interface{}) (interface{}, error) {
-	var payload []byte
-	if len(slices) == 1 {
-		msg := slices[0].(*sarama.ConsumerMessage)
-		payload = msg.Value
-	} else {
-		payload = make([]byte, 0, 1024*1024)
-		for _, slice := range slices {
-			msg := slice.(*sarama.ConsumerMessage)
-			payload = append(payload, msg.Value...)
+func (p PositionOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, error) {
+	errCounter := prometheus.NewCounter(prometheus.CounterOpts{})
+	asm := assemble.NewAssembler(errCounter)
+	defer asm.Close()
+
+	var binlog2 *assemble.AssembledBinlog
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("offset seeker was canceled")
+		case msg := <-messages:
+			asm.Append(msg)
+		case binlog2 = <-asm.Messages():
 		}
+		if binlog2 == nil {
+			continue
+		}
+		break
 	}
-	return string(payload), nil
+	return string(binlog2.Entity.Payload), nil
 }
