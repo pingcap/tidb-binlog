@@ -82,7 +82,7 @@ type Config struct {
 	configFile      string
 	printVersion    bool
 	tls             *tls.Config
-	slaveTls        *tls.Config
+	slaveTLS        *tls.Config
 }
 
 func defaultListenAddr() string {
@@ -186,7 +186,7 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
-	cfg.slaveTls, err = cfg.SlaveSecurity.ToTLSConfig()
+	cfg.slaveTLS, err = cfg.SlaveSecurity.ToTLSConfig()
 	if err != nil {
 		return errors.Errorf("slave tls config %+v error %v", cfg.SlaveSecurity, err)
 	}
