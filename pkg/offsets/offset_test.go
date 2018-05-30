@@ -84,8 +84,10 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	}
 
 	sli := pump.NewKafkaSlicer(topic, 0)
+	pump.GlobalConfig.EnableBinlogSlice = true
+	pump.GlobalConfig.SlicesSize = 10
 
-	// offset seek for slice messages, todo: slicer config
+	// offset seek for slice messages
 	message := []byte("aaaaaaaaaaaaaaaaaaaa")
 	entity := to.genBinlogEntity(message, 1, 2)
 	messages, err := sli.Generate(entity)

@@ -50,9 +50,9 @@ type globalConfig struct {
 	maxMsgSize int
 
 	// enable binlogger to split large binlog into small binlog slices
-	enableBinlogSlice bool
+	EnableBinlogSlice bool
 	// size of one binlog slice
-	slicesSize int
+	SlicesSize int
 	// retry to send to kafka
 	sendKafKaRetryNum int
 
@@ -130,8 +130,8 @@ func NewConfig() *Config {
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
 	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
 	fs.Int64Var(&GlobalConfig.segmentSizeBytes, "binlog-file-size", defaultSegmentSizeBytes, "binlog-file-seize is the max threshold of binlog segment file size")
-	fs.BoolVar(&GlobalConfig.enableBinlogSlice, "enable-binlog-slice", false, "enable pump to split large binlog into small binlog slices")
-	fs.IntVar(&GlobalConfig.slicesSize, "binlog-slice-size", defaultBinlogSlice, "size of one binlog slice")
+	fs.BoolVar(&GlobalConfig.EnableBinlogSlice, "enable-binlog-slice", false, "enable pump to split large binlog into small binlog slices")
+	fs.IntVar(&GlobalConfig.SlicesSize, "binlog-slice-size", defaultBinlogSlice, "size of one binlog slice")
 
 	return cfg
 }

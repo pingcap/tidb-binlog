@@ -42,13 +42,13 @@ func (s *testSlicerSuite) TestGenerate(c *C) {
 	c.Assert(messages, HasLen, 1)
 	c.Assert(messages[0].Headers, HasLen, 0)
 
-	GlobalConfig.enableBinlogSlice = true
+	GlobalConfig.EnableBinlogSlice = true
 	messages, err = sli.Generate(entity)
 	c.Assert(err, IsNil)
 	c.Assert(messages, HasLen, 1)
 	c.Assert(messages[0].Headers, HasLen, 0)
 
-	GlobalConfig.slicesSize = len(basisData)
+	GlobalConfig.SlicesSize = len(basisData)
 	messages, err = sli.Generate(entity)
 	c.Assert(err, IsNil)
 	c.Assert(messages, HasLen, duplicate)
