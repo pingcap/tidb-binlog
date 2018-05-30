@@ -27,18 +27,17 @@ func (m *mysqlTranslator) getTableFromDB(db *sql.DB, schema string, name string)
 	table.Name = name
 	table.IndexColumns = make(map[string][]*common.Column)
 
-	err := getTableColumns(m.db, table)
+	err := setTableColumns(m.db, table)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	if len(table.Columns) == 0 {
+		return nil, errors.Errorf("invalid table %s.%s", schema, name)
 	}
 
 	err = setTableIndex(m.db, table)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	if len(table.Columns) == 0 {
-		return nil, errors.Errorf("invalid table %s.%s", schema, name)
 	}
 
 	return table, nil
@@ -149,7 +148,7 @@ func findColumn(columns []*common.Column, indexColumn string) *common.Column {
 	return nil
 }
 
-func getTableColumns(db *sql.DB, table *common.Table) error {
+func setTableColumns(db *sql.DB, table *common.Table) error {
 	if table.Schema == "" || table.Name == "" {
 		return errors.New("schema/table is empty")
 	}
@@ -225,7 +224,6 @@ func querySQL(db *sql.DB, query string) (*sql.Rows, error) {
 
 	for i := 0; i < maxRetryCount; i++ {
 		if i > 0 {
-			log.Warnf("sql query retry %d: %s", i, query)
 			time.Sleep(retryTimeout)
 		}
 
