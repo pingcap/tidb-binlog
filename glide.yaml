@@ -274,7 +274,7 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
-  version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
+  version: "1.12.0"
   subpackages:
   - codes
   - credentials
