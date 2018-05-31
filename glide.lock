@@ -1,5 +1,5 @@
 hash: 55b61a97e916af2cd5fe5614ae4672d415f52acd8eaeb05067b1dc821c3b2ff7
-updated: 2018-05-30T20:27:01.474824121+08:00
+updated: 2018-05-31T18:55:42.550037439+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -188,6 +188,20 @@ imports:
   version: b7bc8c42aac787667ba45adea78233f53f548443
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
+- name: github.com/onsi/gomega
+  version: 62bff4df71bdbc266561a0caee19f0594b17c240
+  subpackages:
+  - format
+  - internal/assertion
+  - internal/asyncassertion
+  - internal/oraclematcher
+  - internal/testingtsupport
+  - matchers
+  - matchers/support/goraph/bipartitegraph
+  - matchers/support/goraph/edge
+  - matchers/support/goraph/node
+  - matchers/support/goraph/util
+  - types
 - name: github.com/opentracing/opentracing-go
   version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
   subpackages:
@@ -385,6 +399,9 @@ imports:
   repo: https://github.com/golang/net.git
   subpackages:
   - context
+  - html
+  - html/atom
+  - html/charset
   - http2
   - http2/hpack
   - idna
@@ -403,6 +420,7 @@ imports:
   subpackages:
   - encoding
   - encoding/charmap
+  - encoding/htmlindex
   - encoding/internal
   - encoding/internal/identifier
   - encoding/japanese
@@ -410,7 +428,9 @@ imports:
   - encoding/simplifiedchinese
   - encoding/traditionalchinese
   - encoding/unicode
+  - internal/tag
   - internal/utf8internal
+  - language
   - runes
   - secure
   - secure/bidirule
@@ -455,6 +475,8 @@ imports:
   - transport
 - name: gopkg.in/natefinch/lumberjack.v2
   version: a96e63847dc3c67d17befa69c303767e2f84e54f
+- name: gopkg.in/yaml.v2
+  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/pingcap/check
   version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
