@@ -83,7 +83,7 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 
 // OpenDB creates an instance of sql.DB.
 func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&multiStatements=true", username, password, host, port)
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&multiStatements=true", username, password, host, port)
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
