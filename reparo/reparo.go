@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	maxExecutionWaitTime = 100 * time.Millisecond
+	maxExecutionWaitTime = 1 * time.Second
 )
 
 // Reparo is the main part of the restore tool.
