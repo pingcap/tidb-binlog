@@ -82,6 +82,12 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 	return fmt.Sprintf("ALTER TABLE `%s`.`%s` %s;", schema, tableName, strings.Join(specStrs, ", ")), nil
 }
 
+func extractTruncateTable(stmt *ast.TruncateTableStmt, schema string) string {
+	tableName := stmt.Table.Name.L
+	// TODO: Use the genuine TRUNCATE statement rather than DELETE, when CH supports it.
+	return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE 1", schema, tableName)
+}
+
 func extractRenameTable(stmt *ast.RenameTableStmt, schema string) (string, error) {
 	return makeRenameTableStmt(schema, stmt.OldTable, stmt.NewTable), nil
 }
@@ -607,6 +613,9 @@ func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 	case *ast.RenameTableStmt:
 		renameTableStmt, _ := stmt.(*ast.RenameTableStmt)
 		return extractRenameTable(renameTableStmt, schema)
+	case *ast.TruncateTableStmt:
+		truncateTableStmt, _ := stmt.(*ast.TruncateTableStmt)
+		return extractTruncateTable(truncateTableStmt, schema), nil
 	default:
 		// TODO: hacking around empty sql, should bypass in upper level
 		return genEmptySQL(sql), nil
