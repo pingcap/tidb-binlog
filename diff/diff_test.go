@@ -18,6 +18,10 @@ func TestClient(t *testing.T) {
 
 var _ = Suite(&testDBSuite{})
 
+var _ = Suite(&testEqualJSON{})
+
+type testEqualJSON struct{}
+
 type testDBSuite struct {
 	user      string
 	pass      string
@@ -54,7 +58,7 @@ func (s *testDBSuite) SetUpSuite(c *C) {
 	s.dbname = env("MYSQL_TEST_DBNAME", "test")
 	s.netAddr = fmt.Sprintf("%s(%s)", s.prot, s.addr)
 
-	s.dsn = fmt.Sprintf("%s:%s@%s/%s?timeout=30s&strict=true", s.user, s.pass, s.netAddr, s.dbname)
+	s.dsn = fmt.Sprintf("%s:%s@%s/%s?timeout=30s", s.user, s.pass, s.netAddr, s.dbname)
 	conn, err := net.Dial(s.prot, s.addr)
 	if err == nil {
 		s.available = true
@@ -70,8 +74,47 @@ func (s *testDBSuite) TestDiff(c *C) {
 	db, err := sql.Open("mysql", s.dsn)
 	c.Assert(err, IsNil)
 
+	_, err = db.Query("create table tidb_binlog_diff_test(id int, jdoc json);")
+	defer db.Query("drop table tidb_binlog_diff_test;")
+	c.Assert(err, IsNil)
+	_, err = db.Query(
+		`INSERT INTO tidb_binlog_diff_test(jdoc) VALUES('{"key1": "value1", "key2": "value2"}');
+	`)
+	c.Assert(err, IsNil)
+
 	df := New(db, db)
 	eq, err := df.Equal()
 	c.Assert(err, IsNil)
 	c.Assert(eq, IsTrue)
+}
+
+func (s *testEqualJSON) TestAll(c *C) {
+	var d1 string
+	var d2 string
+	var match bool
+
+	d1 = `{"key1":"value1","key2":"value2"}`
+	d2 = `{"key1":"value1","key2":"value2"}`
+	match = equalJSON([]byte(d1), []byte(d2))
+	c.Assert(match, IsTrue)
+
+	// add space
+	d1 = `{"key1":"value1", "key2":"value2"}`
+	match = equalJSON([]byte(d1), []byte(d2))
+	c.Assert(match, IsTrue)
+
+	// reorder key
+	d1 = `{"key2":"value2","key1":"value1"}`
+	match = equalJSON([]byte(d1), []byte(d2))
+	c.Assert(match, IsTrue)
+
+	//test some empty
+	match = equalJSON([]byte(""), []byte("{}"))
+	c.Assert(match, IsFalse)
+
+	match = equalJSON([]byte("{}"), []byte(""))
+	c.Assert(match, IsFalse)
+
+	match = equalJSON([]byte(""), []byte(""))
+	c.Assert(match, IsTrue)
 }
