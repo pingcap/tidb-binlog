@@ -36,7 +36,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 	db, err := pkgsql.OpenCH("clickhouse", hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
 		log.Errorf("open database error %v", err)
-		return &MysqlCheckPoint{}, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	sp := &FlashCheckPoint{
@@ -59,7 +59,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 	_, err = execSQL(db, sql)
 	if err != nil {
 		log.Errorf("Create table error %v", err)
-		return sp, errors.Trace(err)
+		return nil, errors.Trace(err)
 
 	}
 
