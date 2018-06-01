@@ -3,8 +3,10 @@ package util
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // DBConfig is the DB configuration.
@@ -41,4 +43,15 @@ func CreateDB(cfg DBConfig) (*sql.DB, error) {
 // CloseDB close the mysql fd
 func CloseDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
+}
+
+// CheckSyncState check if srouceDB and targetDB has the same table and data
+func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
+	d := diff.New(sourceDB, targetDB)
+	ok, err := d.Equal()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return ok
 }
