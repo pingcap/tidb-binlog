@@ -309,13 +309,13 @@ func equalJSON(data1 []byte, data2 []byte) bool {
 	matcher := gomega.MatchJSON(string(data1))
 
 	// key-ordering and whitespace shouldn't matter
-	match, err := matcher.Match(string(data2))
+	matched, err := matcher.Match(string(data2))
 	if err != nil {
 		log.Error(err, "data1: ", string(data1), " data2: ", string(data2))
 		return false
 	}
 
-	return match
+	return matched
 }
 
 func (r rawBytesRow) Equal(data comparable) bool {
