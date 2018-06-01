@@ -77,7 +77,10 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 		log.Fatal("src don't equal dst")
 	}
 	// clean table
-	execSQLs(src, case1Clean)
+	err = execSQLs(src, case1Clean)
+	if err != nil {
+		log.Fatal(err)
+	}
 	time.Sleep(15 * time.Second)
 	if !util.CheckSyncState(src, dst) {
 		log.Fatal("src don't equal dst")
