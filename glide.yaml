@@ -297,3 +297,6 @@ import:
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
+
+- package: github.com/onsi/gomega
+  version: v1.4.0
