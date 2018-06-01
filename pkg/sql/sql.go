@@ -151,8 +151,8 @@ func ParseCHHosts(hostStrs string) ([]CHHostAndPort, error) {
 // OpenCH opens a connection to ClickHouse.
 func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
 	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
-	log.Warnf("Connecting to %s", dbDSN)
-	db, err := sql.Open("clickhouse", dbDSN)
+	log.Infof("Connecting to %s", dbDSN)
+	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

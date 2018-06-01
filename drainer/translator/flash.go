@@ -738,14 +738,20 @@ func formatFlashData(data types.Datum, ft types.FieldType) (types.Datum, error) 
 			mysqlTime := data.GetMysqlTime().Time
 			// Using UTC timezone
 			timezone := gotime.UTC
-			// Need to consider timezone for timestamp.
-			if ft.Tp == mysql.TypeTimestamp {
+			// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
+			if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
 				timezone = gotime.Local
 			}
 			goTime := gotime.Date(mysqlTime.Year(), gotime.Month(mysqlTime.Month()), mysqlTime.Day(), mysqlTime.Hour(), mysqlTime.Minute(), mysqlTime.Second(), mysqlTime.Microsecond()*1000, timezone)
-			data = types.NewDatum(goTime.Unix())
+			unixTime := goTime.Unix()
+			// Zero the negative unix time to prevent overflow in CH.
+			if unixTime < 0 {
+				unixTime = 0
+			}
+			data = types.NewDatum(unixTime)
 		}
 	case mysql.TypeDecimal, mysql.TypeNewDecimal:
+		// TODO: Map Decimal to CH Decimal once its support is done.
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
 		data = types.NewDatum(data.GetMysqlEnum().Name)
