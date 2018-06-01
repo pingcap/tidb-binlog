@@ -35,6 +35,7 @@ const (
 	defaultKafkaVersion    = "1.0.0"
 	defautMaxKafkaSize     = 1024 * 1024 * 1024
 
+	// DestKafka if the config name of kafka DestDBType
 	DestKafka = "kafka"
 )
 

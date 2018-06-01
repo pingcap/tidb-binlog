@@ -404,6 +404,7 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 	return cols, nil
 }
 
+// IsPKHandleColumn check if the column if the pk handle of tidb
 func IsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
 }
@@ -470,7 +471,7 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	return data, nil
 }
 
-// DecodeRowWithMap decodes a byte slice into datums with a existing row map.
+// DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {

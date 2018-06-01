@@ -23,15 +23,15 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, changed_rows []*obinlog.Row, err error) {
+func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, changedRow []*obinlog.Row, err error) {
 	for _, raw := range rawRows {
-		row, changed_row, err := updateRowToRow(table, raw)
+		row, changedRow, err := updateRowToRow(table, raw)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
 
 		rows = append(rows, row)
-		changed_rows = append(changed_rows, changed_row)
+		changedRow = append(changedRow, changedRow)
 	}
 	return
 }
@@ -67,6 +67,7 @@ func nullColumn() (col *obinlog.Column) {
 	return
 }
 
+// DatumToColumn convert types.Datum to obinlog.Column
 func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.Column) {
 	col = new(obinlog.Column)
 
@@ -135,7 +136,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 	return
 }
 
-func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changed_row *obinlog.Row, err error) {
+func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
 	oldDatums, newDatums, err := translator.DecodeOldAndNewRow(raw, colsTypeMap, time.Local)
 	if err != nil {
@@ -143,7 +144,7 @@ func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, c
 	}
 
 	row = new(obinlog.Row)
-	changed_row = new(obinlog.Row)
+	changedRow = new(obinlog.Row)
 	for _, col := range tableInfo.Columns {
 		if val, ok := newDatums[col.ID]; ok {
 			column := DatumToColumn(col, val)
@@ -158,7 +159,7 @@ func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, c
 		}
 		if val, ok := oldDatums[col.ID]; ok {
 			column := DatumToColumn(col, val)
-			changed_row.Columns = append(changed_row.Columns, column)
+			changedRow.Columns = append(changedRow.Columns, column)
 		} else {
 			if col.DefaultValue == nil {
 				column := nullColumn()
@@ -304,12 +305,12 @@ func mutationsToBinlog(schema *Schema, commitTs int64, mutations []pb.TableMutat
 
 			case pb.MutationType_Update:
 				table.Type = obinlog.MutationType_Update.Enum()
-				rows, changed_row, err := updateRowsToRows(tableInfo, mutation.UpdatedRows)
+				rows, changedRow, err := updateRowsToRows(tableInfo, mutation.UpdatedRows)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
 				table.Rows = rows
-				table.ChangedRows = changed_row
+				table.ChangedRows = changedRow
 				binlog.DmlData.Tables = append(binlog.DmlData.Tables, table)
 			case pb.MutationType_DeleteRow:
 				table.Type = obinlog.MutationType_Delete.Enum()
@@ -328,6 +329,7 @@ func mutationsToBinlog(schema *Schema, commitTs int64, mutations []pb.TableMutat
 	return binlog, nil
 }
 
+// Kafka is the syncer to kafka
 type Kafka struct {
 	addr   []string
 	schema *Schema
@@ -344,6 +346,7 @@ type Kafka struct {
 	wg sync.WaitGroup
 }
 
+// NewKafka return a instance of Kafka
 func NewKafka(kafkaAddr string, clusterID string, schema *Schema, checkPoint checkpoint.CheckPoint, ignoreSchemas map[string]struct{}) *Kafka {
 	commitTs, pos := checkPoint.Pos()
 	return &Kafka{
@@ -359,6 +362,7 @@ func NewKafka(kafkaAddr string, clusterID string, schema *Schema, checkPoint che
 	}
 }
 
+// Stop stop the kafka syncker
 func (k *Kafka) Stop() {
 	close(k.items)
 	k.wg.Wait()
@@ -425,6 +429,7 @@ func (k *Kafka) filter(binlog *obinlog.Binlog) *obinlog.Binlog {
 	return binlog
 }
 
+// Run start sync binlog to kafka
 func (k *Kafka) Run() error {
 	log.Debug("start run...")
 	k.wg.Add(1)
