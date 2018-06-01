@@ -102,7 +102,7 @@ func init() {
 	GlobalConfig = &globalConfig{
 		maxMsgSize:        defautMaxKafkaSize,
 		segmentSizeBytes:  defaultSegmentSizeBytes,
-		SlicesSize:        defaultBinlogSlice,
+		SlicesSize:        defaultBinlogSliceSize,
 		sendKafKaRetryNum: defaultSendKafKaRetryNum,
 	}
 }

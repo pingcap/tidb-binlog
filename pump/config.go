@@ -30,7 +30,7 @@ const (
 	defaultGC                      = 7
 	defaultDataDir                 = "data.pump"
 	defaultKafkaVersion            = "1.0.0"
-	defaultBinlogSlice             = 10 * 1024 * 1024
+	defaultBinlogSliceSize         = 10 * 1024 * 1024
 	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
 	defaultSendKafKaRetryNum int   = 10
 
@@ -129,9 +129,9 @@ func NewConfig() *Config {
 	// global config
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
 	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
-	fs.Int64Var(&GlobalConfig.segmentSizeBytes, "binlog-file-size", defaultSegmentSizeBytes, "binlog-file-seize is the max threshold of binlog segment file size")
+	fs.Int64Var(&GlobalConfig.segmentSizeBytes, "binlog-file-size", defaultSegmentSizeBytes, "binlog-file-size is the max threshold of binlog segment file size")
 	fs.BoolVar(&GlobalConfig.EnableBinlogSlice, "enable-binlog-slice", false, "enable pump to split large binlog into small binlog slices")
-	fs.IntVar(&GlobalConfig.SlicesSize, "binlog-slice-size", defaultBinlogSlice, "size of one binlog slice")
+	fs.IntVar(&GlobalConfig.SlicesSize, "binlog-slice-size", defaultBinlogSliceSize, "size of one binlog slice")
 
 	return cfg
 }
