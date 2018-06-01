@@ -163,7 +163,13 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 				return nil
 			}
 
-			a.slices <- msg
+			select {
+			case <-a.ctx.Done():
+				log.Warnf("assembler was canceled: %v", a.ctx.Err())
+				return nil
+			case a.slices <- msg:
+			}
+
 			if !a.bms[messageID].Completed() {
 				return nil
 			}
@@ -188,8 +194,13 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 		a.popBinlogSlices()
 	}
 
-	// just append slices
-	a.slices <- msg
+	select {
+	case <-a.ctx.Done():
+		log.Warnf("assembler was canceled: %v", a.ctx.Err())
+		return nil
+	case a.slices <- msg: // just append slices
+	}
+
 	a.bms[messageID] = bitmap.NewBitmap(total)
 	a.bms[messageID].Set(no)
 	return nil
