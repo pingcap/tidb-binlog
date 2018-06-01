@@ -159,6 +159,7 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 			isNew := a.bms[messageID].Set(no)
 			// duplicate slice arrives, just ignore
 			if !isNew {
+				log.Warn("[assembler] meet duplicate slice, ignore it")
 				return nil
 			}
 
@@ -169,7 +170,7 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 			messages := a.peekBinlogSlices()
 			b, err := assembleBinlog(messages)
 			if err != nil {
-				log.Errorf("[pump] assemble messages error %v", err)
+				log.Errorf("[assembler] assemble messages error %v", err)
 				a.errCounter.Add(1)
 				return nil
 			}
