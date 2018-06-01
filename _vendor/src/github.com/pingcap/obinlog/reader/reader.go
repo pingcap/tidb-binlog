@@ -3,7 +3,7 @@ package reader
 import (
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
-	"github.com/pingcap/binlog/go-binlog"
+	"github.com/pingcap/obinlog/go-binlog"
 )
 
 func init() {
