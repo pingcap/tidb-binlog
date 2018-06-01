@@ -85,6 +85,7 @@ func (l *StdLogger) Println(v ...interface{}) {
 	logger.Output(2, l.prefix+fmt.Sprintln(v...))
 }
 
+// ToColumnTypeMap return a map index by column id
 func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	colTypeMap := make(map[int64]*types.FieldType)
 	for _, col := range columns {
