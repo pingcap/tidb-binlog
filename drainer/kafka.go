@@ -11,7 +11,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	obinlog "github.com/pingcap/binlog/go-binlog"
+	obinlog "github.com/pingcap/obinlog/go-binlog"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -23,7 +23,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, changedRow []*obinlog.Row, err error) {
+func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, changedRows []*obinlog.Row, err error) {
 	for _, raw := range rawRows {
 		row, changedRow, err := updateRowToRow(table, raw)
 		if err != nil {
@@ -31,7 +31,7 @@ func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog
 		}
 
 		rows = append(rows, row)
-		changedRow = append(changedRow, changedRow)
+		changedRows = append(changedRows, changedRow)
 	}
 	return
 }

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
-	obinlog "github.com/pingcap/binlog/go-binlog"
 	. "github.com/pingcap/check"
+	obinlog "github.com/pingcap/obinlog/go-binlog"
 )
 
 func TestClient(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
-	"github.com/pingcap/binlog/reader"
+	"github.com/pingcap/obinlog/reader"
 )
 
 var (
