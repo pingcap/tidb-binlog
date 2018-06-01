@@ -6,7 +6,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	. "github.com/pingcap/check"
-	obinlog "github.com/pingcap/obinlog/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/obinlog/go-binlog"
 )
 
 func TestClient(t *testing.T) {

@@ -3,7 +3,7 @@ package reader
 import (
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
-	obinlog "github.com/pingcap/obinlog/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/obinlog/go-binlog"
 )
 
 // KafkaSeeker implements Kafka Seeker

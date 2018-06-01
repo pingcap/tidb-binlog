@@ -9,8 +9,8 @@ import (
 	"github.com/Shopify/sarama"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ngaut/log"
-	obinlog "github.com/pingcap/obinlog/go-binlog"
-	"github.com/pingcap/obinlog/reader"
+	obinlog "github.com/pingcap/tidb-tools/obinlog/go-binlog"
+	"github.com/pingcap/tidb-tools/obinlog/reader"
 )
 
 // a simple example to sync data to mysql
