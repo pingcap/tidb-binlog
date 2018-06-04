@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"os"
 	"time"
@@ -9,7 +8,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
 )
@@ -64,6 +62,9 @@ create table ntest(
 	}
 	defer util.CloseDB(targetDB)
 
+	// run the simple test case
+	dailytest.RunCase(sourceDB, targetDB)
+
 	// generate insert/update/delete sqls and execute
 	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 
@@ -71,7 +72,7 @@ create table ntest(
 	time.Sleep(90 * time.Second)
 
 	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -82,7 +83,7 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -93,19 +94,9 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
 	log.Info("test pass!!!")
-}
-
-func checkSyncState(sourceDB, targetDB *sql.DB) bool {
-	d := diff.New(sourceDB, targetDB)
-	ok, err := d.Equal()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return ok
 }

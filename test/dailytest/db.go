@@ -322,6 +322,16 @@ func genColumnData(table *table, column *column) (string, error) {
 	}
 }
 
+func execSQLs(db *sql.DB, sqls []string) error {
+	for _, sql := range sqls {
+		err := execSQL(db, sql)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 func execSQL(db *sql.DB, sql string) error {
 	if len(sql) == 0 {
 		return nil
