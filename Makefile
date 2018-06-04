@@ -11,8 +11,8 @@ path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
 GO        := go
-GOBUILD   := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=1 $(GO) test -p 3
+GOBUILD   := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST    := CGO_ENABLED=1 $(GO) test -p 3
 
 ARCH      := "`uname -s`"
 LINUX     := "Linux"
@@ -72,8 +72,6 @@ check:
 update:
 	which glide >/dev/null || curl https://glide.sh/get | sh
 	which glide-vc || go get -v -u github.com/sgotti/glide-vc
-	rm -r vendor && mv _vendor/src vendor || true
-	rm -rf _vendor
 ifdef PKG
 	glide get -s -v --skip-test ${PKG}
 else
@@ -81,8 +79,6 @@ else
 endif
 	@echo "removing test files"
 	glide vc --use-lock-file --only-code --no-tests
-	mkdir -p _vendor
-	mv vendor _vendor/src
 
 clean:
 	go clean -i ./...
