@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	gotime "time"
@@ -18,7 +19,6 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"math"
 )
 
 const implicitColName = "_tidb_rowid"

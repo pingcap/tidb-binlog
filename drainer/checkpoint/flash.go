@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tipb/go-binlog"
-	"sync"
-	"time"
 )
 
 // FlashCheckPoint is a local savepoint struct for flash

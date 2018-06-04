@@ -2,6 +2,8 @@ package translator
 
 import (
 	"fmt"
+	"time"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -9,7 +11,6 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"time"
 )
 
 var tidbRowID = int64(11)
