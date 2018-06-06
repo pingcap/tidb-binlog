@@ -36,11 +36,9 @@ func fakeImplicitColumn(table *model.TableInfo) *model.ColumnInfo {
 		}
 	}
 
-	handleColumn := &model.ColumnInfo{
-		ID:   implicitColID,
-		Name: model.NewCIStr(implicitColName),
-	}
-	handleColumn.Flag = mysql.PriKeyFlag
+	handleColumn := model.NewExtraHandleColInfo()
+	// Transform TiDB's default extra handle column name and type into our own.
+	handleColumn.Name = model.NewCIStr(implicitColName)
 	handleColumn.Tp = mysql.TypeLonglong
 	table.Columns = append(table.Columns, handleColumn)
 
@@ -220,7 +218,7 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 		oldColName := alterSpec.OldColumnName.Name.L
 		newColName := alterSpec.NewColumns[0].Name.Name.L
 		if oldColName != newColName {
-			return "", errors.New("Don't support rename column: " + alterSpec.Text())
+			return "", errors.NotSupportedf("Rename column: " + alterSpec.Text())
 		}
 		return analyzeModifyColumn(alterSpec)
 	case ast.AlterTableModifyColumn:
@@ -353,15 +351,6 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 	return colDefStr, nil
 }
 
-func findColumnInfo(tableInfo *model.TableInfo, colDef *ast.ColumnDef) *model.ColumnInfo {
-	for _, colInfo := range tableInfo.Columns {
-		if colInfo.Name.L == colDef.Name.Name.L {
-			return colInfo
-		}
-	}
-	return nil
-}
-
 func analyzeColumnPosition(cp *ast.ColumnPosition) (string, error) {
 	switch cp.Tp {
 	// case ast.ColumnPositionFirst:
@@ -385,7 +374,7 @@ func (f *flashTranslator) SetConfig(bool, bool) {
 
 func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	schema = strings.ToLower(schema)
-	if f.pkHandleColumn(table) == nil {
+	if pkHandleColumn(table) == nil {
 		fakeImplicitColumn(table)
 	}
 	columns := table.Columns
@@ -395,7 +384,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	delFlag := 0
 
 	colsTypeMap := toFlashColumnTypeMap(columns)
-	columnList := f.genColumnList(columns)
+	columnList := genColumnList(columns)
 	// addition 2 holder is for del flag and version
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns) + 2)
 	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
@@ -472,7 +461,7 @@ func makeRow(pk int64, values []interface{}, delFlag int, commitTS int64) []inte
 
 func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	schema = strings.ToLower(schema)
-	pkColumn := f.pkHandleColumn(table)
+	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
 		pkColumn = fakeImplicitColumn(table)
 	}
@@ -503,7 +492,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 			return nil, nil, nil, errors.Trace(err)
 		}
 		// TODO: confirm column list should be the same across update
-		columnList := f.genColumnList(updateColumns)
+		columnList := genColumnList(updateColumns)
 		// addition 2 holder is for del flag and version
 		columnPlaceholders := dml.GenColumnPlaceholders(len(table.Columns) + 2)
 
@@ -528,7 +517,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	schema = strings.ToLower(schema)
-	pkColumn := f.pkHandleColumn(table)
+	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
 		pkColumn = fakeImplicitColumn(table)
 	}
@@ -571,7 +560,7 @@ func (f *flashTranslator) genDeleteSQL(schema string, table *model.TableInfo, pk
 	if err != nil {
 		return "", nil, nil, errors.Trace(err)
 	}
-	columnList := f.genColumnList(oldColumns)
+	columnList := genColumnList(oldColumns)
 	columnPlaceholders := dml.GenColumnPlaceholders(len(oldColumns) + 2)
 
 	key, err := f.generateDispatchKey(table, columnValues)
@@ -622,7 +611,7 @@ func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 	}
 }
 
-func (f *flashTranslator) genColumnList(columns []*model.ColumnInfo) string {
+func genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for _, column := range columns {
 		name := fmt.Sprintf("`%s`", column.Name.L)
@@ -639,15 +628,7 @@ func (f *flashTranslator) genColumnList(columns []*model.ColumnInfo) string {
 	return string(columnList)
 }
 
-func (f *flashTranslator) genColumnPlaceholders(length int) string {
-	values := make([]string, length, length)
-	for i := 0; i < length; i++ {
-		values[i] = "?"
-	}
-	return strings.Join(values, ",")
-}
-
-func (f *flashTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
+func pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
 		if isPKHandleColumn(table, col) {
 			return col
@@ -657,8 +638,8 @@ func (f *flashTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 	return nil
 }
 
-func (f *flashTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
-	col := f.pkHandleColumn(table)
+func pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
+	col := pkHandleColumn(table)
 	if col != nil {
 		return []*model.ColumnInfo{col}, nil
 	}
@@ -999,7 +980,7 @@ func escapeString(s string) string {
 
 func (f *flashTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
 	var columnsValues []string
-	columns, err := f.pkIndexColumns(table)
+	columns, err := pkIndexColumns(table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -12,11 +13,11 @@ type flashExecutor struct {
 }
 
 func newFlash(cfg *DBConfig) (Executor, error) {
-	hostAndPorts, err := pkgsql.ParseCHHosts(cfg.Host)
+	hostAndPorts, err := pkgsql.ParseCHAddr(cfg.Host)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	dbs := make([]*sql.DB, 0)
+	dbs := make([]*sql.DB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
 		db, err := pkgsql.OpenCH("clickhouse", hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password)
 		if err != nil {
@@ -68,11 +69,16 @@ func (m *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 }
 
 func (m *flashExecutor) Close() error {
+	hasError := false
 	for _, db := range m.dbs {
 		err := db.Close()
 		if err != nil {
-			return errors.Trace(err)
+			hasError = true
+			log.Error(err)
 		}
+	}
+	if hasError {
+		return errors.New("error in closing some flash connector, check log for details")
 	}
 	return nil
 }

@@ -28,8 +28,36 @@ type FlashCheckPoint struct {
 	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
 }
 
+func checkFlashConfig(cfg *Config) error {
+	if cfg == nil {
+		cfg = new(Config)
+	}
+	if cfg.Db == nil {
+		cfg.Db = new(DBConfig)
+	}
+	if cfg.Db.Host == "" {
+		cfg.Db.Host = "127.0.0.1"
+	}
+	if cfg.Db.Port == 0 {
+		cfg.Db.Port = 9000
+	}
+	if cfg.Schema == "" {
+		cfg.Schema = "tidb_binlog"
+	}
+	if cfg.Table == "" {
+		cfg.Table = "checkpoint"
+	}
+
+	return nil
+}
+
 func newFlash(cfg *Config) (CheckPoint, error) {
-	hostAndPorts, err := pkgsql.ParseCHHosts(cfg.Db.Host)
+	if err := checkFlashConfig(cfg); err != nil {
+		log.Errorf("Checkpoint config is invaild %v", err)
+		return nil, errors.Trace(err)
+	}
+
+	hostAndPorts, err := pkgsql.ParseCHAddr(cfg.Db.Host)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -44,8 +72,8 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		db:              db,
 		clusterID:       cfg.ClusterID,
 		initialCommitTS: cfg.InitialCommitTS,
-		schema:          "tidbbinlog",
-		table:           "checkpoint",
+		schema:          cfg.Schema,
+		table:           cfg.Table,
 		Positions:       make(map[string]pb.Pos),
 	}
 

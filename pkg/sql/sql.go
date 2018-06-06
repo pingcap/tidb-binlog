@@ -3,6 +3,9 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -14,8 +17,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
-	"strconv"
-	"strings"
 )
 
 var (
@@ -125,18 +126,17 @@ type CHHostAndPort struct {
 	Port int
 }
 
-// ParseCHHosts parses a host config string to CHHostAndPort pairs.
-func ParseCHHosts(hostStrs string) ([]CHHostAndPort, error) {
-	hostParts := strings.Split(hostStrs, ",")
-	result := make([]CHHostAndPort, 0)
+// ParseCHAddr parses an address config string to CHHostAndPort pairs.
+func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
+	hostParts := strings.Split(addr, ",")
+	result := make([]CHHostAndPort, 0, len(hostParts))
 	for _, hostStr := range hostParts {
 		trimedHostStr := strings.TrimSpace(hostStr)
-		hostAndPortStr := strings.Split(trimedHostStr, ":")
-		if len(hostAndPortStr) != 2 {
-			return nil, errors.New("wrong host format")
+		host, portStr, err := net.SplitHostPort(trimedHostStr)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-		host := strings.TrimSpace(hostAndPortStr[0])
-		port, err := strconv.Atoi(strings.TrimSpace(hostAndPortStr[1]))
+		port, err := strconv.Atoi(strings.TrimSpace(portStr))
 		if err != nil {
 			return nil, errors.Annotate(err, "port is not number")
 		}
