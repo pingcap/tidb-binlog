@@ -124,7 +124,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.StringValue = proto.String(str)
 
 	case "json":
-		col.BytesValue = datum.GetBytes()
+		col.BytesValue = []byte(datum.GetMysqlJSON().String())
 
 	default:
 		log.Warn("unknow mysql type: ", colInfo.Tp)
