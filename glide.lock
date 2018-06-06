@@ -1,5 +1,5 @@
-hash: 55b61a97e916af2cd5fe5614ae4672d415f52acd8eaeb05067b1dc821c3b2ff7
-updated: 2018-05-31T18:55:42.550037439+08:00
+hash: e4b4a8fa7468ee4b93540699f70823bc68db178f0c57c2a6757af3d22698d1c8
+updated: 2018-06-07T00:44:35.100396223+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -110,7 +110,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: ca4c9f2c136954238c3158b92de72078c7672ecc
+  version: c90ba19bea8927552cef4560ab888231566f049d
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -130,7 +130,7 @@ imports:
 - name: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - name: github.com/go-sql-driver/mysql
-  version: dbc3fe23a4aced10a53834106e288b155d17e2ee
+  version: d523deb1b23d913de5bdada721a6071e71283618
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -165,7 +165,7 @@ imports:
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: 39de4380c2e0353a115b80b1c730719c79bfb771
+  version: c225b8c3b01faf2899099b768856a9e916e5087b
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -379,7 +379,7 @@ imports:
   - thrift-gen/zipkincore
   - utils
 - name: github.com/uber/jaeger-lib
-  version: ac31d434ba1061771d338557e4ec2d80d0a960b9
+  version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -441,6 +441,10 @@ imports:
   version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
+- name: google.golang.org/appengine
+  version: b1f26356af11148e710935ed1ac8a7f5702c7612
+  subpackages:
+  - cloudsql
 - name: google.golang.org/genproto
   version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
   subpackages:
@@ -479,4 +483,4 @@ imports:
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
