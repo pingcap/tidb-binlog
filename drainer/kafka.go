@@ -14,7 +14,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/obinlog/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
