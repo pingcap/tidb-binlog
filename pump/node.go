@@ -265,15 +265,15 @@ func checkExclusive(dataDir string) error {
 
 // checkNodeID check NodeID's format is legal or not.
 func checkNodeID(nodeID string) bool {
-	hostPort := strings.Split(nodeID, ":")
-	if len(hostPort) != 2 {
-		log.Errorf("node id %s is illegal", nodeID)
+	_, port, err := net.SplitHostPort(nodeID)
+	if err != nil {
+		log.Errorf("node id %s is illegal, error %v", nodeID, err)
 		return false
 	}
 
-	_, err := strconv.Atoi(hostPort[1])
+	_, err = strconv.Atoi(port)
 	if err != nil {
-		log.Errorf("node id %s is illegal", nodeID)
+		log.Errorf("node id %s is illegal, error %v", nodeID, err)
 		return false
 	}
 
