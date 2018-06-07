@@ -83,7 +83,7 @@ import:
 - package: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - package: github.com/go-sql-driver/mysql
-  version: dbc3fe23a4aced10a53834106e288b155d17e2ee
+  version: ^1.4.0
 - package: github.com/gogo/protobuf
   version: ^0.3.0
   subpackages:
