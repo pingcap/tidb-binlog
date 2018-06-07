@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -270,7 +271,7 @@ func checkNodeID(nodeID string) bool {
 		return false
 	}
 
-	port, err := strconv.Atoi(hostPort[1])
+	_, err := strconv.Atoi(hostPort[1])
 	if err != nil {
 		log.Errorf("node id %s is illegal", nodeID)
 		return false
