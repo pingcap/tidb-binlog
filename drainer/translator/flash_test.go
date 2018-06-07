@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -408,6 +409,61 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("alter table Test add column C varchar(255) default 100 after I",
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `c` Nullable(String) DEFAULT '100' AFTER `i`;")
+}
+
+func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
+	check := func(tp byte, data types.Datum, expected interface{}) {
+		data, err := formatFlashData(data, types.FieldType{Tp: tp})
+		c.Assert(err, IsNil)
+		c.Assert(data.GetValue(), DeepEquals, expected)
+	}
+	var datum types.Datum
+	// Int types.
+	check(mysql.TypeTiny, types.NewIntDatum(101), int64(101))
+	check(mysql.TypeShort, types.NewIntDatum(101), int64(101))
+	check(mysql.TypeInt24, types.NewIntDatum(101), int64(101))
+	check(mysql.TypeLong, types.NewIntDatum(101), int64(101))
+	check(mysql.TypeLonglong, types.NewIntDatum(101), int64(101))
+	check(mysql.TypeFloat, types.NewFloat32Datum(101.101), float32(101.101))
+	check(mysql.TypeDouble, types.NewFloat64Datum(101.101), float64(101.101))
+	// Bit.
+	bl, err := types.ParseBitStr("b101")
+	c.Assert(err, IsNil)
+	check(mysql.TypeBit, types.NewMysqlBitDatum(bl), uint64(5))
+	// Duration.
+	d, err := types.ParseDuration("101:10:11", 1)
+	c.Assert(err, IsNil)
+	check(mysql.TypeDuration, types.NewDurationDatum(d), int64(1011011))
+	// Time types.
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
+	dt, err := types.ParseDate(sc, "0000-00-00")
+	c.Assert(err, IsNil)
+	check(mysql.TypeDate, types.NewTimeDatum(dt), int64(0))
+	check(mysql.TypeDatetime, types.NewTimeDatum(dt), int64(0))
+	check(mysql.TypeNewDate, types.NewTimeDatum(dt), int64(0))
+	check(mysql.TypeTimestamp, types.NewTimeDatum(dt), int64(0))
+	now := time.Now()
+	utc := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
+	check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	check(mysql.TypeDatetime, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
+	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	check(mysql.TypeTimestamp, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
+	// Decimal.
+	check(mysql.TypeDecimal, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
+	check(mysql.TypeNewDecimal, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
+	// Enum.
+	en, err := types.ParseEnumValue([]string{"a", "b"}, 1)
+	c.Assert(err, IsNil)
+	datum.SetMysqlEnum(en)
+	check(mysql.TypeEnum, datum, "a")
+	// Set.
+	s, err := types.ParseSetName([]string{"a", "b"}, "a")
+	c.Assert(err, IsNil)
+	datum.SetMysqlSet(s)
+	check(mysql.TypeSet, datum, "a")
+	// JSON.
+	datum.SetMysqlJSON(json.CreateBinary(uint64(101)))
+	check(mysql.TypeJSON, datum, "101")
 }
 
 func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag int) ([]types.Datum, []interface{}) {
