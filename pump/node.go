@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
