@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -334,7 +335,7 @@ type Kafka struct {
 	addr   []string
 	schema *Schema
 
-	stop          chan struct{}
+	stop          int64
 	items         chan *binlogItem
 	topic         string
 	clusterID     string
@@ -364,8 +365,14 @@ func NewKafka(kafkaAddr string, clusterID string, schema *Schema, checkPoint che
 
 // Stop stop the kafka syncker
 func (k *Kafka) Stop() {
+	log.Debug("stop run kafka syncer")
+	atomic.StoreInt64(&k.stop, 1)
 	close(k.items)
 	k.wg.Wait()
+}
+
+func (k *Kafka) isStop() bool {
+	return atomic.LoadInt64(&k.stop) == 1
 }
 
 func (k *Kafka) binlogToBinlog(item *binlogItem) (binlog *obinlog.Binlog, err error) {
@@ -433,7 +440,6 @@ func (k *Kafka) filter(binlog *obinlog.Binlog) *obinlog.Binlog {
 func (k *Kafka) Run() error {
 	log.Debug("start run...")
 	k.wg.Add(1)
-	defer k.wg.Done()
 
 	config := sarama.NewConfig()
 	config.Producer.MaxMessageBytes = 1 << 30 // 1G
@@ -449,17 +455,23 @@ func (k *Kafka) Run() error {
 		if err := producer.Close(); err != nil {
 			log.Error(err)
 		}
+
+		log.Debug("exit run sync kafka, save checkpoint")
+		k.checkPoint.Save(k.commitTs, k.positions)
+
+		k.wg.Done()
 	}()
 
 	for {
 		saveCheckPoint := time.Tick(time.Second * 10)
 		select {
-		case <-k.stop:
-			k.checkPoint.Save(k.commitTs, k.positions)
-			return nil
 		case <-saveCheckPoint:
 			k.checkPoint.Save(k.commitTs, k.positions)
-		case item := <-k.items:
+		case item, ok := <-k.items:
+			if !ok {
+				return nil
+			}
+
 			log.Debugf("job id: %v handle %v item : %+v", item.binlog.DdlJobId, item.binlog.Tp, *item)
 			binlog, err := k.binlogToBinlog(item)
 			if err != nil {
@@ -480,12 +492,10 @@ func (k *Kafka) Run() error {
 				_, _, err := producer.SendMessage(msg)
 				if err != nil {
 					log.Error(err)
-					select {
-					case <-k.stop:
-						k.checkPoint.Save(k.commitTs, k.positions)
+					if k.isStop() {
 						return nil
-					case <-time.After(time.Second):
 					}
+					time.Sleep(time.Second)
 				} else {
 					if pos, ok := k.positions[item.nodeID]; !ok || ComparePos(item.pos, pos) > 0 {
 						k.positions[item.nodeID] = item.pos
@@ -505,6 +515,10 @@ func (k *Kafka) Run() error {
 }
 
 func (k *Kafka) pushPBBinlog(item *binlogItem) {
+	if k.isStop() {
+		log.Warn("push item after stop")
+		return
+	}
 	log.Debug("push item: ", *item)
 	k.items <- item
 }

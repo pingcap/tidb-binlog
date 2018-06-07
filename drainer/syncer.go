@@ -563,6 +563,9 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 }
 
 func (s *Syncer) runKafka(b *binlogItem) error {
+	s.wg.Add(1)
+	defer s.wg.Done()
+
 	kafka := NewKafka(s.kafkaAddr, s.clusterID, s.schema, s.cp, s.ignoreSchemaNames)
 
 	go func() {
@@ -577,6 +580,7 @@ func (s *Syncer) runKafka(b *binlogItem) error {
 
 		select {
 		case <-s.ctx.Done():
+			log.Debug("stop runKafka...")
 			kafka.Stop()
 			return nil
 		case b = <-s.input:
@@ -770,9 +774,11 @@ func (s *Syncer) Add(b *binlogItem) {
 
 // Close closes syncer.
 func (s *Syncer) Close() {
+	log.Debug("closing syncer")
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
+	log.Debug("done close syncer")
 }
 
 // GetLastSyncTime returns lastSyncTime

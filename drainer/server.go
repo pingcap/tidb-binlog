@@ -178,7 +178,7 @@ func (s *Server) StartCollect() {
 		defer func() {
 			log.Info("collect goroutine exited")
 			s.wg.Done()
-			s.Close()
+			// s.Close()
 		}()
 		s.collector.Start(s.ctx)
 	}()
@@ -206,7 +206,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 		defer func() {
 			log.Info("syncer goroutine exited")
 			s.wg.Done()
-			s.Close()
+			// s.Close()
 		}()
 		err := s.syncer.Start(jobs)
 		if err != nil {
@@ -227,7 +227,7 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			close(errc)
 			log.Info("heartbeat goroutine exited")
 			s.wg.Done()
-			s.Close()
+			// s.Close()
 		}()
 
 		for {
