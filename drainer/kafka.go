@@ -495,7 +495,7 @@ func (k *Kafka) Run() error {
 					if k.isStop() {
 						return nil
 					}
-					time.Sleep(time.Second)
+					time.Sleep(time.Second * 10)
 				} else {
 					if pos, ok := k.positions[item.nodeID]; !ok || ComparePos(item.pos, pos) > 0 {
 						k.positions[item.nodeID] = item.pos

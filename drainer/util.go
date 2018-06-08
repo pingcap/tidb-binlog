@@ -79,6 +79,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 
 func initializeSaramaGlobalConfig() {
 	sarama.MaxResponseSize = int32(maxMsgSize)
+	sarama.MaxRequestSize = int32(maxMsgSize)
 }
 
 func getSafeTS(ts int64, forwardTime int64) int64 {
