@@ -114,7 +114,7 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 	// unsplit binlog, just return
 	if len(msg.Headers) == 0 {
 		if len(a.bms) != 0 {
-			log.Error("[assembler] meet corruption binlog, pop corrpution binlog and skip it")
+			log.Errorf("[assembler] meet corruption binlog, pop corrpution binlog and skip it. len(a.bms): %d", len(a.bms))
 			a.errCounter.Add(1)
 			a.popBinlogSlices()
 		}
@@ -189,7 +189,7 @@ func (a *Assembler) assemble(msg *sarama.ConsumerMessage) *AssembledBinlog {
 		// meet incontinuity binlogs slices
 		// pump must have sent duplicate binlog slices or lose some binlog in kafka
 		// just ingnore all slices before it and issue an alert
-		log.Error("[assembler] meet corruption binlog, pop corrpution binlog and skip it")
+		log.Errorf("[assembler] meet corruption binlog, pop corrpution binlog and skip it. len(a.bms): %d", len(a.bms))
 		a.errCounter.Add(1)
 		a.popBinlogSlices()
 	}
