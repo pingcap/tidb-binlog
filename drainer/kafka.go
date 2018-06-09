@@ -24,43 +24,6 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-func updateRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, changedRows []*obinlog.Row, err error) {
-	for _, raw := range rawRows {
-		row, changedRow, err := updateRowToRow(table, raw)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-
-		rows = append(rows, row)
-		changedRows = append(changedRows, changedRow)
-	}
-	return
-}
-
-func insertRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, err error) {
-	for _, raw := range rawRows {
-		row, err := insertRowToRow(table, raw)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		rows = append(rows, row)
-	}
-	return
-}
-
-func deleteRowsToRows(table *model.TableInfo, rawRows [][]byte) (rows []*obinlog.Row, err error) {
-	for _, raw := range rawRows {
-		row, err := deleteRowToRow(table, raw)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		rows = append(rows, row)
-	}
-	return
-}
-
 func nullColumn() (col *obinlog.Column) {
 	col = new(obinlog.Column)
 	col.IsNull = proto.Bool(true)
@@ -288,39 +251,42 @@ func mutationsToBinlog(schema *Schema, commitTs int64, mutations []pb.TableMutat
 			columnInfos = append(columnInfos, info)
 		}
 
+		table := new(obinlog.Table)
+		binlog.DmlData.Tables = append(binlog.DmlData.Tables, table)
+		table.ColumnInfo = columnInfos
+		table.SchemaName = proto.String(dbName)
+		table.TableName = proto.String(tableName)
+
+		var insertIndex int
+		var updateIndex int
+		var deleteIndex int
 		for _, mtype := range mutation.Sequence {
-			table := new(obinlog.Table)
-			table.ColumnInfo = columnInfos
-			table.SchemaName = proto.String(dbName)
-			table.TableName = proto.String(tableName)
+			tableMutation := new(obinlog.TableMutation)
+			table.Mutations = append(table.Mutations, tableMutation)
+			var err error
 
 			switch mtype {
 			case pb.MutationType_Insert:
-				table.Type = obinlog.MutationType_Insert.Enum()
-				rows, err := insertRowsToRows(tableInfo, mutation.InsertedRows)
+				tableMutation.Type = obinlog.MutationType_Insert.Enum()
+				tableMutation.Row, err = insertRowToRow(tableInfo, mutation.InsertedRows[insertIndex])
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
-				table.Rows = rows
-				binlog.DmlData.Tables = append(binlog.DmlData.Tables, table)
-
+				insertIndex++
 			case pb.MutationType_Update:
-				table.Type = obinlog.MutationType_Update.Enum()
-				rows, changedRow, err := updateRowsToRows(tableInfo, mutation.UpdatedRows)
+				tableMutation.Type = obinlog.MutationType_Update.Enum()
+				tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(tableInfo, mutation.UpdatedRows[updateIndex])
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
-				table.Rows = rows
-				table.ChangedRows = changedRow
-				binlog.DmlData.Tables = append(binlog.DmlData.Tables, table)
+				updateIndex++
 			case pb.MutationType_DeleteRow:
-				table.Type = obinlog.MutationType_Delete.Enum()
-				rows, err := deleteRowsToRows(tableInfo, mutation.DeletedRows)
+				tableMutation.Type = obinlog.MutationType_Delete.Enum()
+				tableMutation.Row, err = deleteRowToRow(tableInfo, mutation.DeletedRows[deleteIndex])
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
-				table.Rows = rows
-				binlog.DmlData.Tables = append(binlog.DmlData.Tables, table)
+				deleteIndex++
 			default:
 				log.Warn("unknow sequecne type: ", mtype)
 			}
@@ -392,13 +358,14 @@ func (k *Kafka) binlogToBinlog(item *binlogItem) (binlog *obinlog.Binlog, err er
 		binlog.Type = obinlog.BinlogType_DDL
 		binlog.CommitTs = pbBinlog.CommitTs
 
-		var database, sql string
-		database, _, sql, err = k.schema.handleDDL(item.job, nil)
+		var database, tableName, sql string
+		database, tableName, sql, err = k.schema.handleDDL(item.job, nil)
 		if err != nil {
 			return
 		}
 		binlog.DdlData = new(obinlog.DDLData)
 		binlog.DdlData.SchemaName = &database
+		binlog.DdlData.TableName = &tableName
 		binlog.DdlData.DdlQuery = []byte(sql)
 	}
 
