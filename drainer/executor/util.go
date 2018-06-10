@@ -13,4 +13,6 @@ type DBConfig struct {
 	Port          int    `toml:"port" json:"port"`
 	BinlogFileDir string `toml:"dir" json:"dir"`
 	Compression   string `toml:"compression" json:"compression"`
+	TimeLimit     string `toml:"time_limit" json:"time_limit"`
+	SizeLimit     string `toml:"size_limit" json:"size_limit"`
 }
