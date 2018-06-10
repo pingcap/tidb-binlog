@@ -47,7 +47,7 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 	return errors.Trace(p.saveBinlog(binlog))
 }
 
-func (m *pbExecutor) ShowPosition() (int64, error) {
+func (p *pbExecutor) ShowPosition() (int64, error) {
 	return 0, nil
 }
 

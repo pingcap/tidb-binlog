@@ -145,8 +145,7 @@ func GetSlavePosition(db *sql.DB) (int64, error) {
 		}
 		return ts, nil
 	}
-
-	return 0, errors.New("get slave cluster's ts failed!")
+	return 0, errors.New("get slave cluster's ts failed")
 }
 
 // ScanRow scans rows into a map.
