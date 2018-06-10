@@ -3,6 +3,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -113,4 +114,63 @@ func IgnoreDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// GetSlavePosition gets slave cluster's position.
+func GetSlavePosition(db *sql.DB) (int64, error) {
+	/*
+		example in tidb:
+		mysql> SHOW MASTER STATUS;
+		+-------------+--------------------+--------------+------------------+-------------------+
+		| File        | Position           | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
+		+-------------+--------------------+--------------+------------------+-------------------+
+		| tidb-binlog | 400718757701615617 |              |                  |                   |
+		+-------------+--------------------+--------------+------------------+-------------------+
+	*/
+	rows, err := db.Query("SHOW MASTER STATUS")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		fields, err1 := ScanRow(rows)
+		if err1 != nil {
+			return 0, errors.Trace(err1)
+		}
+
+		ts, err1 := strconv.ParseInt(string(fields["Position"]), 10, 64)
+		if err1 != nil {
+			return 0, errors.Trace(err1)
+		}
+		return ts, nil
+	}
+
+	return 0, errors.New("get slave cluster's ts failed!")
+}
+
+// ScanRow scans rows into a map.
+func ScanRow(rows *sql.Rows) (map[string][]byte, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	colVals := make([][]byte, len(cols))
+	colValsI := make([]interface{}, len(colVals))
+	for i := range colValsI {
+		colValsI[i] = &colVals[i]
+	}
+
+	err = rows.Scan(colValsI...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := make(map[string][]byte)
+	for i := range colVals {
+		result[cols[i]] = colVals[i]
+	}
+
+	return result, nil
 }
