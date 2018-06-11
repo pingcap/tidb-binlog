@@ -2,30 +2,41 @@ package executor
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/dml"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
 type flashRowBatch struct {
 	sql string
-	rows []string
+	rows []interface{}
 }
 
 func newFlashRowBatch(sql string, sizeLimit int) *flashRowBatch {
 	return &flashRowBatch{
 		sql:           sql,
-		rows: make([]string, 0, sizeLimit + 1024), // Loosing the space to tolerant a little more rows being added.
+		rows: make([]interface{}, 0, sizeLimit + 1024), // Loosing the space to tolerant a little more rows being added.
 	}
 }
 
 // AddRow adds some rows into this row batch.
 func (batch *flashRowBatch) AddRow(args []interface{}) error {
-	// TODO: really adding rows.
+	// Append place holders for new rows.
+	if batch.Size() > 0 {
+		placeHolders := dml.GenColumnPlaceholders(len(args))
+		deColoned := batch.sql
+		if deColoned[len(deColoned)-1] == ';' {
+			deColoned = deColoned[0:len(deColoned)-1]
+		}
+		batch.sql = fmt.Sprintf("%s, (%s);", deColoned, placeHolders)
+	}
+	batch.rows = append(batch.rows, args...)
 	return nil
 }
 
@@ -35,8 +46,8 @@ func (batch *flashRowBatch) Size() int {
 }
 
 func (batch *flashRowBatch) Flush(db *sql.DB) error {
-	// TODO: really flushing rows.
-	return nil
+	// TODO: could use columnar write to boost performance, see columnar.go in clickhouse driver example.
+	return pkgsql.ExecuteSQLs(db, []string{batch.sql}, [][]interface{}{batch.rows}, false)
 }
 
 type flashExecutor struct {
@@ -71,8 +82,9 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 	}
 
 	dbs := make([]*sql.DB, 0, len(hostAndPorts))
-	for i, hostAndPort := range hostAndPorts {
-		dbs[i], err = pkgsql.OpenCH("clickhouse", hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password)
+	for _, hostAndPort := range hostAndPorts {
+		db, err := pkgsql.OpenCH("clickhouse", hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password)
+		dbs = append(dbs, db)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -168,7 +180,7 @@ func (e *flashExecutor) Close() error {
 
 func (e *flashExecutor) flushRoutine() {
 	for {
-		time.Sleep(e.timeLimit * time.Second)
+		time.Sleep(e.timeLimit)
 		select {
 		case <- e.close:
 			return
