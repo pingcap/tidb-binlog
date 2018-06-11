@@ -3,10 +3,15 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
+	// Importing ClickHouse sql driver.
+	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -113,4 +118,44 @@ func IgnoreDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// CHHostAndPort is a CH host:port pair.
+type CHHostAndPort struct {
+	Host string
+	Port int
+}
+
+// ParseCHAddr parses an address config string to CHHostAndPort pairs.
+func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
+	hostParts := strings.Split(addr, ",")
+	result := make([]CHHostAndPort, 0, len(hostParts))
+	for _, hostStr := range hostParts {
+		trimedHostStr := strings.TrimSpace(hostStr)
+		host, portStr, err := net.SplitHostPort(trimedHostStr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		port, err := strconv.Atoi(strings.TrimSpace(portStr))
+		if err != nil {
+			return nil, errors.Annotate(err, "port is not number")
+		}
+		result = append(result, CHHostAndPort{
+			Host: host,
+			Port: port,
+		})
+	}
+	return result, nil
+}
+
+// OpenCH opens a connection to ClickHouse.
+func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
+	log.Infof("Connecting to %s", dbDSN)
+	db, err := sql.Open(proto, dbDSN)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return db, nil
 }
