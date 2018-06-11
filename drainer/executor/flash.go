@@ -9,45 +9,71 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/dml"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"strings"
+	"github.com/pingcap/tidb-binlog/pkg/dml"
 )
 
+// flashRowBatch is an in-memory row batch caching rows about to passed to flash.
+// It's not thread-safe, so callers must take care of the synchronizing.
 type flashRowBatch struct {
-	sql string
+	sqlHead string
+	columnSize int
+	sizeLimit int
 	rows []interface{}
 }
 
 func newFlashRowBatch(sql string, sizeLimit int) *flashRowBatch {
+	pos := strings.LastIndex(sql, "(")
+	sqlHead := sql[0:pos]
+	values := sql[pos:]
+	columnSize := strings.Count(values, "?")
 	return &flashRowBatch{
-		sql:           sql,
-		rows: make([]interface{}, 0, sizeLimit + 1024), // Loosing the space to tolerant a little more rows being added.
+		sqlHead:           sqlHead,
+		columnSize: columnSize,
+		sizeLimit: sizeLimit,
+		rows: make([]interface{}, 0, (sizeLimit + 1024) * columnSize), // Loosing the space to tolerant a little more rows being added.
 	}
 }
 
 // AddRow adds some rows into this row batch.
 func (batch *flashRowBatch) AddRow(args []interface{}) error {
-	// Append place holders for new rows.
-	if batch.Size() > 0 {
-		placeHolders := dml.GenColumnPlaceholders(len(args))
-		deColoned := batch.sql
-		if deColoned[len(deColoned)-1] == ';' {
-			deColoned = deColoned[0:len(deColoned)-1]
-		}
-		batch.sql = fmt.Sprintf("%s, (%s);", deColoned, placeHolders)
+	if len(args) != batch.columnSize {
+		return errors.Errorf("Row %v column size %d mismatches the row batch column size %d", args, len(args), batch.columnSize)
 	}
 	batch.rows = append(batch.rows, args...)
+	log.Debug(fmt.Sprintf("Added row %v.", args))
 	return nil
 }
 
 // Size returns the number of rows stored in this batch.
 func (batch *flashRowBatch) Size() int {
-	return len(batch.rows)
+	return len(batch.rows) / batch.columnSize
 }
 
 func (batch *flashRowBatch) Flush(db *sql.DB) error {
 	// TODO: could use columnar write to boost performance, see columnar.go in clickhouse driver example.
-	return pkgsql.ExecuteSQLs(db, []string{batch.sql}, [][]interface{}{batch.rows}, false)
+	log.Debug(fmt.Sprintf("Flushing %d rows for \"%s\".", batch.Size(), batch.sqlHead))
+	if batch.Size() == 0 {
+		return nil
+	}
+	sql := batch.genSql()
+	err := pkgsql.ExecuteSQLs(db, []string{sql}, [][]interface{}{batch.rows}, false)
+	if err != nil {
+		return err
+	}
+	batch.rows = make([]interface{}, 0, (batch.sizeLimit + 1024) * batch.columnSize)
+	return nil
+}
+
+func (batch *flashRowBatch) genSql() string {
+	placeHolders := fmt.Sprintf("(%s)", dml.GenColumnPlaceholders(batch.columnSize))
+	values := make([]string, batch.Size())
+	for i := range values {
+		values[i] = placeHolders
+	}
+	valuesStr := strings.Join(values, ",")
+	return fmt.Sprintf("%s %s;", batch.sqlHead, valuesStr)
 }
 
 type flashExecutor struct {
@@ -108,6 +134,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 	defer e.Unlock()
 
 	if e.err != nil {
+		log.Error("Executor seeing error %v from the flush thread, exiting.", e.err)
 		return errors.Trace(e.err)
 	}
 
@@ -115,6 +142,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		// Flush all row batches.
 		e.flushAll()
 		if e.err != nil {
+			log.Error("Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
 		}
 		for _, db := range e.dbs {
@@ -129,7 +157,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			sql := sqls[i]
 			args := row[1:]
 			if _, ok := e.rowBatches[sql]; !ok {
-				e.rowBatches[sql] = make([]*flashRowBatch, 0, len(e.dbs))
+				e.rowBatches[sql] = make([]*flashRowBatch, len(e.dbs), len(e.dbs))
 			}
 			if e.rowBatches[sql][hashKey] == nil {
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)
@@ -162,6 +190,7 @@ func (e *flashExecutor) Close() error {
 	e.Unlock()
 
 	// Wait for async flush goroutine to exit.
+	log.Info("Waiting for flush thread to close.")
 	e.close <- true
 
 	hasError := false
@@ -179,20 +208,25 @@ func (e *flashExecutor) Close() error {
 }
 
 func (e *flashExecutor) flushRoutine() {
+	log.Info("Flush thread started.")
 	for {
 		time.Sleep(e.timeLimit)
 		select {
 		case <- e.close:
+			log.Info("Flush thread closing.")
 			return
 		default:
 			e.Lock()
+			log.Debug("Flush thread reached time limit, flushing.")
 			if e.err != nil {
 				e.Unlock()
+				log.Error("Flush thread seeing error %v from the executor, exiting.", e.err)
 				return
 			}
 			e.flushAll()
 			if e.err != nil {
 				e.Unlock()
+				log.Error("Flush thread seeing error %v when flushing, exiting.", e.err)
 				return
 			}
 			// TODO: save checkpoint.
@@ -207,6 +241,7 @@ func (e *flashExecutor) partition(key int64) int {
 }
 
 func (e *flashExecutor) flushAll() {
+	log.Debug(fmt.Sprintf("Flushing all row batches."))
 	for _, rbs := range e.rowBatches {
 		for i, rb := range rbs {
 			e.err = rb.Flush(e.dbs[i])
