@@ -27,7 +27,7 @@ func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 }
 
 func (m *mysqlExecutor) ShowPosition() (int64, error) {
-	return pkgsql.GetSlavePosition(m.db)
+	return pkgsql.GetTidbPosition(m.db)
 }
 
 func (m *mysqlExecutor) Close() error {

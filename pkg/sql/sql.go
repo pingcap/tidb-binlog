@@ -116,8 +116,8 @@ func IgnoreDDLError(err error) bool {
 	}
 }
 
-// GetSlavePosition gets slave cluster's position.
-func GetSlavePosition(db *sql.DB) (int64, error) {
+// GetTidbPosition gets tidb's position.
+func GetTidbPosition(db *sql.DB) (int64, error) {
 	/*
 		example in tidb:
 		mysql> SHOW MASTER STATUS;
