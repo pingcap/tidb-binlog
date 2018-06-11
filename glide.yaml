@@ -300,3 +300,6 @@ testImports:
 
 - package: github.com/onsi/gomega
   version: v1.4.0
+
+- package: github.com/rcrowley/go-metrics
+  version: e2704e165165ec55d062f5919b4b29494e9fa790
