@@ -282,16 +282,10 @@ func checkNodeID(nodeID string) bool {
 
 // FormatNodeID formats the nodeID
 func FormatNodeID(nodeID string) (string, error) {
-	legal := checkNodeID(nodeID)
-	if legal {
-		return nodeID, nil
-	}
-
 	newNodeID := strings.TrimSpace(nodeID)
-	legal = checkNodeID(newNodeID)
+	legal := checkNodeID(newNodeID)
 	if !legal {
-		log.Errorf("node id %s is illegal, and format failed", nodeID)
-		return "", errors.Errorf("node id %s is illegal, and format failed", nodeID)
+		return "", errors.Errorf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
 	}
 
 	return newNodeID, nil
