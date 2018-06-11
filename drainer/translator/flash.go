@@ -124,7 +124,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var newValues []interface{}
 
 		// TODO: Make updating pk working
-		_, newColumnValues, err := decodeFlashOldAndNewRow(row, colsTypeMap, gotime.Local)
+		oldColumnValues, newColumnValues, err := decodeFlashOldAndNewRow(row, colsTypeMap, gotime.Local)
 		newPkValue := newColumnValues[pkID]
 
 		if err != nil {
@@ -151,13 +151,19 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		// generate dispatching key
 		// find primary keys
-		key, err := genDispatchKey(table, newColumnValues)
+		// generate dispatching key
+		// find primary keys
+		oldKey, err := genDispatchKey(table, oldColumnValues)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+		newKey, err := genDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
+		key := append(newKey, oldKey...)
 		keys = append(keys, key)
-
 	}
 
 	return sqls, keys, totalValues, nil
