@@ -8,8 +8,6 @@ import (
 type Executor interface {
 	// Execute executes TiDB binlogs
 	Execute([]string, [][]interface{}, []int64, bool) error
-	// ShowPosition show destination's position
-	ShowPosition() (int64, error)
 	// Close closes the executor
 	Close() error
 }

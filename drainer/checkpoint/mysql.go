@@ -25,12 +25,17 @@ type MysqlCheckPoint struct {
 	schema   string
 	table    string
 	saveTime time.Time
+	// type, tidb or mysql
+	tp string
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
 	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
+	TsMap     string            `toml:"ts-map" json:"ts-map"`
+
+	tsMapUpdateTime time.Time
 }
 
-func newMysql(cfg *Config) (CheckPoint, error) {
+func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	if res := checkConfig(cfg); res != nil {
 		log.Errorf("Argument cfg is Invaild %v", res)
 		return &MysqlCheckPoint{}, errors.Trace(res)
@@ -49,6 +54,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		Positions:       make(map[string]pb.Pos),
+		tp:              tp,
 	}
 
 	sql := genCreateSchema(sp)
@@ -125,6 +131,16 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
+
+	if sp.tp == "tidb" && time.Since(sp.tsMapUpdateTime) > time.Minute {
+		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
+		if err != nil {
+			log.Errorf("get ts from slave cluster error %v", err)
+			return errors.Trace(err)
+		}
+		sp.TsMap = fmt.Sprintf("%d:%d", ts, slaveTS)
+		sp.tsMapUpdateTime = time.Now()
+	}
 
 	b, err := json.Marshal(sp)
 	if err != nil {

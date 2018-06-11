@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -57,9 +56,6 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
-
-	// tsMap saves the master cluster and slave cluster's correspondences for ts.
-	tsMap string
 }
 
 // NewSyncer returns a Drainer instance
@@ -426,7 +422,6 @@ func (s *Syncer) addJob(job *job) {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
 		s.savePoint(job.commitTS, s.positions)
-		s.updateTsMap(job.commitTS)
 	}
 }
 
@@ -479,17 +474,6 @@ func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
 	}
 
 	positionGauge.Set(float64(ts))
-}
-
-func (s *Syncer) updateTsMap(masterTS int64) {
-	if s.cfg.DestDBType == "tidb" {
-		slaveTS, err := s.executors[0].ShowPosition()
-		if err != nil {
-			log.Errorf("update ts map error %v", errors.Trace(err))
-			return
-		}
-		s.tsMap = fmt.Sprintf("%d:%d", masterTS, slaveTS)
-	}
 }
 
 func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
@@ -760,9 +744,4 @@ func (s *Syncer) Close() {
 // GetLastSyncTime returns lastSyncTime
 func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
-}
-
-// GetTsMap returns tsMap
-func (s *Syncer) GetTsMap() string {
-	return s.tsMap
 }

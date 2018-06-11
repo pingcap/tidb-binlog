@@ -393,8 +393,6 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 		status.Synced = true
 	}
 
-	status.TsMap = c.syncer.GetTsMap()
-
 	c.mu.Unlock()
 	return status
 }
