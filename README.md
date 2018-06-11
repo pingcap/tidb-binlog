@@ -1,6 +1,8 @@
-## TiDB-Binlog
+# TiDB-Binlog
 
-A commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
+## TiDB-Binlog introduction
+
+TiDB-Binlog is a commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
 
 - Data replication
     
