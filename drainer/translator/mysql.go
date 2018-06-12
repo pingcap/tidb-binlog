@@ -38,7 +38,7 @@ func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
 	m.hasImplicitCol = hasImplicitCol
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -105,9 +105,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	if m.safeMode {
-		return m.genUpdateSQLsSafeMode(schema, table, rows)
+		return m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
 	}
 
 	columns := table.Columns
@@ -173,7 +173,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -226,7 +226,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -280,7 +280,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 	return sql, value, key, nil
 }
 
-func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
+func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)

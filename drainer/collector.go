@@ -198,6 +198,12 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	c.latestTS = c.queryLatestTsFromPD()
 
 	for _, n := range nodes {
+		// format and check the nodeID
+		n.NodeID, err = pump.FormatNodeID(n.NodeID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it

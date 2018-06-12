@@ -29,7 +29,7 @@ const (
 	defaultHeartbeatInterval       = 2
 	defaultGC                      = 7
 	defaultDataDir                 = "data.pump"
-	defaultKafkaVersion            = "1.0.0"
+	defaultKafkaVersion            = "0.8.2.0"
 	defaultBinlogSliceSize         = 10 * 1024 * 1024
 	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
 	defaultSendKafKaRetryNum int   = 10

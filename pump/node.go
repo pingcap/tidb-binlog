@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/juju/errors"
@@ -206,7 +208,12 @@ func readLocalNodeID(dataDir string) (string, error) {
 		return "", errors.Annotate(err, "local nodeID file is collapsed")
 	}
 
-	return string(data), nil
+	nodeID, err := FormatNodeID(string(data))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return nodeID, nil
 }
 
 func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
@@ -230,8 +237,13 @@ func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	}
 
 	id := fmt.Sprintf("%s:%s", hostname, port)
+	nodeID, err := FormatNodeID(id)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
 	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
-	if err := ioutil.WriteFile(nodeIDPath, []byte(id), file.PrivateFileMode); err != nil {
+	if err := ioutil.WriteFile(nodeIDPath, []byte(nodeID), file.PrivateFileMode); err != nil {
 		return "", errors.Trace(err)
 	}
 	return id, nil
@@ -249,4 +261,32 @@ func checkExclusive(dataDir string) error {
 	// and automatically release the lock
 	_, err = file.TryLockFile(lockPath, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	return errors.Trace(err)
+}
+
+// checkNodeID check NodeID's format is legal or not.
+func checkNodeID(nodeID string) bool {
+	_, port, err := net.SplitHostPort(nodeID)
+	if err != nil {
+		log.Errorf("node id %s is illegal, error %v", nodeID, err)
+		return false
+	}
+
+	_, err = strconv.Atoi(port)
+	if err != nil {
+		log.Errorf("node id %s is illegal, error %v", nodeID, err)
+		return false
+	}
+
+	return true
+}
+
+// FormatNodeID formats the nodeID
+func FormatNodeID(nodeID string) (string, error) {
+	newNodeID := strings.TrimSpace(nodeID)
+	legal := checkNodeID(newNodeID)
+	if !legal {
+		return "", errors.Errorf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
+	}
+
+	return newNodeID, nil
 }
