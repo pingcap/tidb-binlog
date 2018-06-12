@@ -29,7 +29,7 @@ const (
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
-	defaultKafkaVersion      = "1.0.0"
+	defaultKafkaVersion      = "0.8.2.0"
 
 	// default interval time to generate fake binlog, the unit is second
 	defaultGenFakeBinlogInterval = 3
