@@ -10,8 +10,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	// Importing ClickHouse sql driver.
-	_ "github.com/kshvakov/clickhouse"
+	"github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -148,7 +147,7 @@ func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
 	return result, nil
 }
 
-// OpenCH opens a connection to ClickHouse.
+// OpenCH opens a connection to CH and returns the standard SQL driver's DB interface.
 func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
 	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
 	log.Infof("Connecting to %s", dbDSN)
@@ -158,4 +157,11 @@ func OpenCH(proto string, host string, port int, username string, password strin
 	}
 
 	return db, nil
+}
+
+// OpenCHDirect opens a connection to CH and returns the raw CH driver's connection interface.
+// It is mainly used for batch inserting which uses CH's block interface.
+func OpenCHDirect(host string, port int, username string, password string) (clickhouse.Clickhouse, error) {
+	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
+	return clickhouse.OpenDirect(dbDSN)
 }

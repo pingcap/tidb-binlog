@@ -38,7 +38,8 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	delFlag := 0
+	version := makeInternalVersionValue(uint64(commitTS))
+	delFlag := makeInternalDelmarkValue(false)
 
 	colsTypeMap := toFlashColumnTypeMap(columns)
 	columnList := genColumnList(columns)
@@ -68,7 +69,11 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		for _, col := range columns {
 			if isPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
-				vals = append(vals, pk.GetValue())
+				pkVal, err := formatFlashData(pk, col.FieldType)
+				if err != nil {
+					return nil, nil, nil, errors.Trace(err)
+				}
+				vals = append(vals, pkVal)
 				continue
 			}
 
@@ -81,10 +86,10 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 					return nil, nil, nil, errors.Trace(err)
 				}
 
-				vals = append(vals, value.GetValue())
+				vals = append(vals, value)
 			}
 		}
-		vals = append(vals, commitTS)
+		vals = append(vals, version)
 		vals = append(vals, delFlag)
 
 		if columnValues == nil {
@@ -118,6 +123,8 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	keys := make([][]string, 0, len(rows))
 	totalValues := make([][]interface{}, 0, len(rows))
 	colsTypeMap := toColumnTypeMap(table.Columns)
+	version := makeInternalVersionValue(uint64(commitTS))
+	delFlag := makeInternalDelmarkValue(false)
 
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
@@ -147,7 +154,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 
 		sqls = append(sqls, sql)
-		totalValues = append(totalValues, makeRow(newPkValue.GetInt64(), newValues, 0, commitTS))
+		totalValues = append(totalValues, makeRow(newPkValue.GetInt64(), newValues, version, delFlag))
 
 		// generate dispatching key
 		// find primary keys
@@ -242,7 +249,8 @@ func genDeleteSQL(schema string, table *model.TableInfo, pkID int64, columnValue
 	columns := table.Columns
 	pk := columnValues[pkID]
 	hashKey := pk.GetInt64()
-	delFlag := 1
+	version := makeInternalVersionValue(uint64(commitTS))
+	delFlag := makeInternalDelmarkValue(true)
 	oldColumns, value, err := genColumnAndValue(columns, columnValues)
 	var pkValue []interface{}
 	pkValue = append(pkValue, hashKey)
@@ -260,7 +268,7 @@ func genDeleteSQL(schema string, table *model.TableInfo, pkID int64, columnValue
 
 	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 
-	value = append(value, commitTS)
+	value = append(value, version)
 	value = append(value, delFlag)
 	return sql, value, key, nil
 }
@@ -490,11 +498,8 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
 		typeStr = fmt.Sprintf(typeStrFormat, "Date")
-	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
+	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")
-	case mysql.TypeString:
-		fs := fmt.Sprintf("FixedString(%d)", tp.Flen)
-		typeStr = fmt.Sprintf(typeStrFormat, fs)
 	case mysql.TypeEnum:
 		enumStr := ""
 		format := "Enum16(''=0,%s)"
@@ -557,10 +562,10 @@ func genColumnList(columns []*model.ColumnInfo) string {
 
 		columnList = append(columnList, ',')
 	}
-	colVersion := fmt.Sprintf("`%s`,", "_INTERNAL_VERSION")
+	colVersion := fmt.Sprintf("`%s`,", internalVersionColName)
 	columnList = append(columnList, []byte(colVersion)...)
 
-	colDelFlag := fmt.Sprintf("`%s`", "_INTERNAL_DELMARK")
+	colDelFlag := fmt.Sprintf("`%s`", internalDelmarkColName)
 	columnList = append(columnList, []byte(colDelFlag)...)
 
 	return string(columnList)
@@ -579,7 +584,7 @@ func genColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types
 				return nil, nil, errors.Trace(err)
 			}
 
-			newColumnsValues = append(newColumnsValues, value.GetValue())
+			newColumnsValues = append(newColumnsValues, value)
 		}
 	}
 
@@ -599,7 +604,7 @@ func genDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) 
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", value.GetValue()))
+			columnsValues = append(columnsValues, fmt.Sprintf("%s", value))
 		} else {
 			columnsValues = append(columnsValues, fmt.Sprintf("%s", col.DefaultValue))
 		}
