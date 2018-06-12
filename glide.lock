@@ -1,5 +1,5 @@
 hash: e4b4a8fa7468ee4b93540699f70823bc68db178f0c57c2a6757af3d22698d1c8
-updated: 2018-06-07T00:44:35.100396223+08:00
+updated: 2018-06-11T12:43:07.392836+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -110,11 +110,11 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: c90ba19bea8927552cef4560ab888231566f049d
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: 87df7c60d5820d0f8ae11afede5aa52325c09717
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -189,7 +189,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: 62bff4df71bdbc266561a0caee19f0594b17c240
+  version: 41673fd8f03bf7bab82cf50741d447064926bb84
   subpackages:
   - format
   - internal/assertion
@@ -212,11 +212,9 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: ed8d4cc3b461464e69798080a0092bd028910298
-- name: github.com/pierrec/xxHash
-  version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
+  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
   subpackages:
-  - xxHash32
+  - internal/xxh32
 - name: github.com/pingcap/goleveldb
   version: 158edde5a354460121af007d02a00b01c8d03443
   subpackages:
@@ -323,6 +321,10 @@ imports:
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
+- name: github.com/pingcap/tidb-tools
+  version: 72a5cbd698e54e1245a022c73120cf7dcf1e93e1
+  subpackages:
+  - binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
   subpackages:
@@ -359,7 +361,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: ea8897e79973357ba785ac2533559a6297e83c44
+  version: c155da19408a8799da419ed3eeb0cb5db0ad5dbc
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -442,7 +444,7 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/appengine
-  version: b1f26356af11148e710935ed1ac8a7f5702c7612
+  version: 5bee14b453b4c71be47ec1781b0fa61c2ea182db
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
@@ -483,4 +485,4 @@ imports:
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
