@@ -14,6 +14,8 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+// TODO: re-engineer flash checkpoint to co-work with executor's batch write.
+
 // FlashCheckPoint is a local savepoint struct for flash
 type FlashCheckPoint struct {
 	sync.RWMutex
