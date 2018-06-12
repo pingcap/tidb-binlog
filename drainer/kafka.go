@@ -298,8 +298,9 @@ func mutationsToBinlog(schema *Schema, commitTs int64, mutations []pb.TableMutat
 
 // Kafka is the syncer to kafka
 type Kafka struct {
-	addr   []string
-	schema *Schema
+	addr    []string
+	version string
+	schema  *Schema
 
 	stop          int64
 	items         chan *binlogItem
@@ -314,10 +315,11 @@ type Kafka struct {
 }
 
 // NewKafka return a instance of Kafka
-func NewKafka(kafkaAddr string, clusterID string, schema *Schema, checkPoint checkpoint.CheckPoint, ignoreSchemas map[string]struct{}) *Kafka {
+func NewKafka(kafkaAddr string, kafkaVersion string, clusterID string, schema *Schema, checkPoint checkpoint.CheckPoint, ignoreSchemas map[string]struct{}) *Kafka {
 	commitTs, pos := checkPoint.Pos()
 	return &Kafka{
 		addr:          strings.Split(kafkaAddr, ","),
+		version:       kafkaVersion,
 		schema:        schema,
 		clusterID:     clusterID,
 		topic:         clusterID + "_obinlog",
@@ -408,12 +410,7 @@ func (k *Kafka) Run() error {
 	log.Debug("start run...")
 	k.wg.Add(1)
 
-	config := sarama.NewConfig()
-	config.Producer.MaxMessageBytes = 1 << 30 // 1G
-	config.Producer.Return.Successes = true
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-
-	producer, err := sarama.NewSyncProducer(k.addr, config)
+	producer, err := util.CreateKafkaProducer(k.addr, k.version, 1<<30)
 	if err != nil {
 		log.Fatal(err)
 	}

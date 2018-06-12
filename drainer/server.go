@@ -85,7 +85,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, cfg.KafkaAddrs, strconv.FormatUint(clusterID, 10))
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, cfg.KafkaAddrs, cfg.KafkaVersion, strconv.FormatUint(clusterID, 10))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
