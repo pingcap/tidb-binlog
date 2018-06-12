@@ -132,14 +132,16 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
 
+	// we don't need update tsMap every time.
 	if sp.tp == "tidb" && time.Since(sp.tsMapUpdateTime) > time.Minute {
+		sp.tsMapUpdateTime = time.Now()
 		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
 		if err != nil {
-			log.Errorf("get ts from slave cluster error %v", err)
-			return errors.Trace(err)
+			// don't need return error, only tidb v2.0.4 and above support get position by executing `show master status`.
+			log.Warnf("get ts from slave cluster error %v", err)
+		} else {
+			sp.TsMap = fmt.Sprintf("%d:%d", ts, slaveTS)
 		}
-		sp.TsMap = fmt.Sprintf("%d:%d", ts, slaveTS)
-		sp.tsMapUpdateTime = time.Now()
 	}
 
 	b, err := json.Marshal(sp)
