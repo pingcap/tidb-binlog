@@ -42,7 +42,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
 	node := fmt.Sprintf("%s:%d", host, port)
-	sp, err := newMysql(cfg)
+	sp, err := newMysql("mysql", cfg)
 	c.Assert(err, IsNil)
 
 	testTs := int64(1)
