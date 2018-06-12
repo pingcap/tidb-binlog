@@ -72,6 +72,11 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		return nil, errors.Trace(err)
 	}
 
+	nodeID, err = pump.FormatNodeID(nodeID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &Pump{
 		nodeID:     nodeID,
 		clusterID:  clusterID,
