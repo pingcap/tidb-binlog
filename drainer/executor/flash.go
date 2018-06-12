@@ -15,6 +15,9 @@ import (
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
+// TODO: save batch write flush status to co-work with flash checkpoint.
+// TODO: make dispatch key to a single executor.
+
 var extraRowSize = 1024
 
 // flashRowBatch is an in-memory row batch caching rows about to passed to flash.
