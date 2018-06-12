@@ -59,7 +59,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	c.Assert(poss, HasLen, 1)
 	c.Assert(poss[node], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 
-	sp1, ero := newMysql(cfg)
+	sp1, ero := newMysql("mysql", cfg)
 	c.Assert(ero, IsNil)
 	err = sp1.Load()
 	c.Assert(err, IsNil)
