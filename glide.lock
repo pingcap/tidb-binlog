@@ -1,5 +1,5 @@
 hash: e4b4a8fa7468ee4b93540699f70823bc68db178f0c57c2a6757af3d22698d1c8
-updated: 2018-06-11T16:17:04.150919+08:00
+updated: 2018-06-11T12:43:07.392836+08:00
 imports:
 - name: github.com/apache/thrift
   version: b2a4d4ae21c789b689dd162deb819665567f481c
@@ -321,6 +321,10 @@ imports:
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
+- name: github.com/pingcap/tidb-tools
+  version: 72a5cbd698e54e1245a022c73120cf7dcf1e93e1
+  subpackages:
+  - binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
   subpackages:

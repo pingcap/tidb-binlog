@@ -26,16 +26,16 @@ type SQLTranslator interface {
 	SetConfig(bool, bool)
 
 	// GenInsertSQLs generates the insert sqls
-	GenInsertSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenInsertSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)
 
 	// GenUpdateSQLs generates the update sqls
-	GenUpdateSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenUpdateSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)
 
 	// GenDeleteSQLs generates the delete sqls by cols values
-	GenDeleteSQLs(string, *model.TableInfo, [][]byte) ([]string, [][]string, [][]interface{}, error)
+	GenDeleteSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)
 
 	// GenDDLSQL generates the ddl sql by query string
-	GenDDLSQL(string, string) (string, error)
+	GenDDLSQL(string, string, int64) (string, error)
 }
 
 // Register registers the SQLTranslator into the providers
