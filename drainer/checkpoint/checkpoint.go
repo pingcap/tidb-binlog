@@ -36,6 +36,8 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 		cp, err = newMysql(cfg)
 	case "pb", "kafka":
 		cp, err = newPb(cfg)
+	case "flash":
+		cp, err = newFlash(cfg)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", name)
 	}
