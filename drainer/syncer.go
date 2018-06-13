@@ -363,7 +363,7 @@ func (s *Syncer) checkWait(job *job) bool {
 	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
 		return true
 	}
-	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.cp.Check() {
+	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.cp.Check(job.commitTS, s.positions) {
 		return true
 	}
 	return false

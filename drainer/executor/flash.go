@@ -12,20 +12,20 @@ import (
 	"github.com/juju/errors"
 	"github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
-
-// TODO: save batch write flush status to co-work with flash checkpoint.
 
 var extraRowSize = 1024
 
 // flashRowBatch is an in-memory row batch caching rows about to passed to flash.
 // It's not thread-safe, so callers must take care of the synchronizing.
 type flashRowBatch struct {
-	sql        string
-	columnSize int
-	capacity   int
-	rows       [][]driver.Value
+	sql            string
+	columnSize     int
+	capacity       int
+	rows           [][]driver.Value
+	latestCommitTS int64
 }
 
 func newFlashRowBatch(sql string, capacity int) *flashRowBatch {
@@ -35,15 +35,16 @@ func newFlashRowBatch(sql string, capacity int) *flashRowBatch {
 	// Loosing the space to tolerant a little more rows being added.
 	rows := make([][]driver.Value, 0, capacity+extraRowSize)
 	return &flashRowBatch{
-		sql:        sql,
-		columnSize: columnSize,
-		capacity:   capacity,
-		rows:       rows,
+		sql:            sql,
+		columnSize:     columnSize,
+		capacity:       capacity,
+		rows:           rows,
+		latestCommitTS: 0,
 	}
 }
 
 // AddRow appends single row into this row batch.
-func (batch *flashRowBatch) AddRow(args []interface{}) error {
+func (batch *flashRowBatch) AddRow(args []interface{}, commitTS int64) error {
 	if len(args) != batch.columnSize {
 		return errors.Errorf("Row %v column size %d mismatches the row batch column size %d", args, len(args), batch.columnSize)
 	}
@@ -52,6 +53,11 @@ func (batch *flashRowBatch) AddRow(args []interface{}) error {
 		dargs = append(dargs, c)
 	}
 	batch.rows = append(batch.rows, dargs)
+
+	if batch.latestCommitTS < commitTS {
+		batch.latestCommitTS = commitTS
+	}
+
 	log.Debug(fmt.Sprintf("Added row %v.", args))
 	return nil
 }
@@ -62,7 +68,7 @@ func (batch *flashRowBatch) Size() int {
 }
 
 // Flush writes all the rows in this row batch into CH.
-func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (err error) {
+func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (_ int64, err error) {
 	log.Debug(fmt.Sprintf("Flushing %d rows for \"%s\".", batch.Size(), batch.sql))
 	defer func() {
 		if err != nil {
@@ -73,31 +79,31 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (err error) {
 	}()
 
 	if batch.Size() == 0 {
-		return nil
+		return batch.latestCommitTS, nil
 	}
 
 	tx, err := conn.Begin()
 	if err != nil {
-		return errors.Trace(err)
+		return batch.latestCommitTS, errors.Trace(err)
 	}
 	stmt, err := conn.Prepare(batch.sql)
 	if err != nil {
-		return errors.Trace(err)
+		return batch.latestCommitTS, errors.Trace(err)
 	}
 	defer stmt.Close()
 	block, err := conn.Block()
 	if err != nil {
-		return errors.Trace(err)
+		return batch.latestCommitTS, errors.Trace(err)
 	}
 	for _, row := range batch.rows {
 		err = block.AppendRow(row)
 		if err != nil {
-			return errors.Trace(err)
+			return batch.latestCommitTS, errors.Trace(err)
 		}
 	}
 	err = conn.WriteBlock(block)
 	if err != nil {
-		return errors.Trace(err)
+		return batch.latestCommitTS, errors.Trace(err)
 	}
 	err = tx.Commit()
 	if err != nil {
@@ -106,13 +112,13 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (err error) {
 			// Stack trace from server side could be very helpful for triaging problems.
 			log.Error(ce.StackTrace)
 		}
-		return errors.Trace(err)
+		return batch.latestCommitTS, errors.Trace(err)
 	}
 	// Clearing all rows.
 	// Loosing the space to tolerant a little more rows being added.
 	batch.rows = make([][]driver.Value, 0, batch.capacity+extraRowSize)
 
-	return nil
+	return batch.latestCommitTS, nil
 }
 
 // chDB keeps two connection to CH:
@@ -133,6 +139,7 @@ type flashExecutor struct {
 
 	chDBs      []chDB
 	rowBatches map[string][]*flashRowBatch
+	metaCP     *flash.MetaCheckpoint
 
 	err error
 }
@@ -175,6 +182,7 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 		sizeLimit:  sizeLimit,
 		chDBs:      chDBs,
 		rowBatches: make(map[string][]*flashRowBatch),
+		metaCP:     flash.GetInstance(),
 	}
 
 	go e.flushRoutine()
@@ -216,14 +224,14 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)
 			}
 			rb := e.rowBatches[sql][hashKey]
-			e.err = rb.AddRow(args)
+			e.err = rb.AddRow(args, commitTSs[i])
 			if e.err != nil {
 				return errors.Trace(e.err)
 			}
 
 			// Check if size limit exceeded.
 			if rb.Size() >= e.sizeLimit {
-				e.err = rb.Flush(e.chDBs[hashKey].Conn)
+				_, e.err = rb.Flush(e.chDBs[hashKey].Conn)
 				if e.err != nil {
 					return errors.Trace(e.err)
 				}
@@ -300,13 +308,22 @@ func (e *flashExecutor) partition(key int64) int {
 
 func (e *flashExecutor) flushAll() {
 	log.Debug(fmt.Sprintf("Flushing all row batches."))
+
+	// Pick the latest commitTS among all row batches.
+	// TODO: consider if it's safe enough.
+	maxCommitTS := int64(0)
 	for _, rbs := range e.rowBatches {
 		for i, rb := range rbs {
-			err := rb.Flush(e.chDBs[i].Conn)
+			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
 			if err != nil {
 				e.err = errors.Trace(err)
 				return
 			}
+			if maxCommitTS < lastestCommitTS {
+				maxCommitTS = lastestCommitTS
+			}
 		}
 	}
+
+	e.metaCP.Flush(maxCommitTS)
 }

@@ -9,11 +9,10 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
-
-// TODO: re-engineer flash checkpoint to co-work with executor's batch write.
 
 // FlashCheckPoint is a local savepoint struct for flash
 type FlashCheckPoint struct {
@@ -24,6 +23,7 @@ type FlashCheckPoint struct {
 	db       *sql.DB
 	schema   string
 	table    string
+	metaCP   *flash.MetaCheckpoint
 	saveTime time.Time
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
@@ -76,6 +76,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		initialCommitTS: cfg.InitialCommitTS,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
+		metaCP:          flash.GetInstance(),
 		Positions:       make(map[string]pb.Pos),
 	}
 
@@ -136,9 +137,14 @@ func (sp *FlashCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
+func (sp *FlashCheckPoint) Save(int64, map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
+
+	ok, ts, poss := sp.metaCP.PopSafeCP()
+	if !ok {
+		return nil
+	}
 
 	for nodeID, pos := range poss {
 		newPos := pb.Pos{}
@@ -152,24 +158,26 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
 
-	_, err := json.Marshal(sp)
-	//if err != nil {
-	//	log.Errorf("Json Marshal error %v", err)
-	//	return errors.Trace(err)
-	//}
-	//
-	//sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (`clusterid`, `checkpoint`) VALUES(?, ?)", sp.schema, sp.table)
-	//sqls := []string{sql}
-	//args := [][]interface{}{{sp.clusterID, b}}
-	//err = pkgsql.ExecuteSQLs(sp.db, sqls, args, false)
+	b, err := json.Marshal(sp)
+	if err != nil {
+		log.Errorf("Json Marshal error %v", err)
+		return errors.Trace(err)
+	}
+
+	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (`clusterid`, `checkpoint`) VALUES(?, ?)", sp.schema, sp.table)
+	sqls := []string{sql}
+	args := [][]interface{}{{sp.clusterID, b}}
+	err = pkgsql.ExecuteSQLs(sp.db, sqls, args, false)
 
 	return errors.Trace(err)
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *FlashCheckPoint) Check() bool {
+func (sp *FlashCheckPoint) Check(ts int64, poss map[string]pb.Pos) bool {
 	sp.RLock()
 	defer sp.RUnlock()
+
+	sp.metaCP.PushPastCP(ts, poss)
 
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
