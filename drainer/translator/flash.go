@@ -592,26 +592,5 @@ func genColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types
 }
 
 func genDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
-	var columnsValues []string
-	columns, err := pkIndexColumns(table)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for _, col := range columns {
-		val, ok := columnValues[col.ID]
-		if ok {
-			value, err := formatFlashData(val, col.FieldType)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", value))
-		} else {
-			columnsValues = append(columnsValues, fmt.Sprintf("%s", col.DefaultValue))
-		}
-	}
-
-	if len(columnsValues) == 0 {
-		columnsValues = append(columnsValues, table.Name.O)
-	}
-	return columnsValues, nil
+	return make([]string, 0), nil
 }

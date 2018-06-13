@@ -24,7 +24,6 @@ func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 	f := testGenFlashTranslator(c)
 	schema := "T"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	expectedKeys := []int{3, 3, 0}
 	expectedValCounts := []int{7, 7, 6}
 	expectedSQLs := []string{
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + implicitColName + "`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?,?);",
@@ -36,7 +35,7 @@ func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 		binlog := testFlashGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := f.GenInsertSQLs(schema, table, [][]byte{binlog}, genCommitTS(i))
 		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", expected[expectedKeys[i]+1]))
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
 		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
@@ -62,7 +61,6 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 		// TODO: Will add this table back when update supports changing primary key.
 		// testGenTable("hasID"),
 	}
-	expectedKeys := []int{3, 3, 0}
 	expectedValCounts := []int{7, 7, 6}
 	expectedSQLs := []string{
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + implicitColName + "`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?,?);",
@@ -70,12 +68,12 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?);",
 	}
 	for i, table := range tables {
-		oldRowDatas, oldExpected := testFlashGenRowData(c, table, 1, false)
+		oldRowDatas, _ := testFlashGenRowData(c, table, 1, false)
 		newRowDatas, newExpected := testFlashGenRowData(c, table, i, false)
 		binlog := testFlashGenUpdateBinlog(c, table, oldRowDatas, newRowDatas)
 		sqls, keys, vals, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog}, genCommitTS(i))
 		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s %s]", oldExpected[expectedKeys[i]+1], newExpected[expectedKeys[i]+1]))
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
 		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
@@ -96,7 +94,6 @@ func (t *testTranslatorSuite) TestFlashGenDeleteSQLs(c *C) {
 	f := testGenFlashTranslator(c)
 	schema := "T"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	expectedKeys := []int{3, 3, 0}
 	expectedValCounts := []int{7, 7, 6}
 	expectedSQLs := []string{
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + implicitColName + "`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?,?);",
@@ -108,7 +105,7 @@ func (t *testTranslatorSuite) TestFlashGenDeleteSQLs(c *C) {
 		binlog := testFlashGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := f.GenDeleteSQLs(schema, t, [][]byte{binlog}, genCommitTS(i))
 		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", t.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", expected[expectedKeys[i]+1]))
+			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
 		}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
