@@ -4,8 +4,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/net/context"
 )
 
 type seekOperator struct{}
@@ -35,21 +38,38 @@ func (s *seekOperator) Compare(exceptedPos interface{}, currentPos interface{}) 
 }
 
 // Decode implements Operator.Decode interface
-func (s *seekOperator) Decode(message *sarama.ConsumerMessage) (interface{}, error) {
-	bg := new(pb.Binlog)
+func (s *seekOperator) Decode(ctx context.Context, messages <-chan *sarama.ConsumerMessage) (interface{}, int64, error) {
+	errCounter := prometheus.NewCounter(prometheus.CounterOpts{})
+	asm := assemble.NewAssembler(errCounter)
+	defer asm.Close()
 
-	err := bg.Unmarshal(message.Value)
+	var binlog *assemble.AssembledBinlog
+	for {
+		select {
+		case <-ctx.Done():
+			log.Warningf("offset seeker was canceled: %v", ctx.Err())
+			return nil, 0, errors.New("offset seeker was canceled")
+		case msg := <-messages:
+			asm.Append(msg)
+		case binlog = <-asm.Messages():
+		}
+		if binlog != nil {
+			break
+		}
+	}
+
+	bg := new(pb.Binlog)
+	err := bg.Unmarshal(binlog.Entity.Payload)
 	if err != nil {
 		log.Errorf("json umarshal error %v", err)
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 
 	ts := bg.GetCommitTs()
 	if ts == 0 {
 		ts = bg.GetStartTs()
 	}
-
-	return ts, nil
+	return ts, binlog.Entity.Pos.Offset, nil
 }
 
 func createOffsetSeeker(addrs []string, kafkaVersion string) (offsets.Seeker, error) {

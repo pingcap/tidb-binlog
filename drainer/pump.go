@@ -13,6 +13,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -59,6 +60,7 @@ type Pump struct {
 		commitItems   map[int64]*binlogItem
 	}
 
+	asm        *assemble.Assembler
 	wg         sync.WaitGroup
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -88,6 +90,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
+		asm:        assemble.NewAssembler(errorBinlogCount),
 	}, nil
 }
 
@@ -111,7 +114,7 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 }
 
 // match is responsible for match p+c binlog.
-func (p *Pump) match(ent pb.Entity) *pb.Binlog {
+func (p *Pump) match(ent *pb.Entity) *pb.Binlog {
 	b := new(pb.Binlog)
 	err := b.Unmarshal(ent.Payload)
 	if err != nil {
@@ -399,7 +402,10 @@ func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
-	defer p.wg.Done()
+	defer func() {
+		p.asm.Close()
+		p.wg.Done()
+	}()
 	var err error
 	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
@@ -435,8 +441,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 
 	for {
 		var (
-			payload   []byte
 			beginTime = time.Now()
+			binlog    *assemble.AssembledBinlog
 		)
 		select {
 		case <-p.ctx.Done():
@@ -444,30 +450,34 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("consumer %v", consumerErr)
 		case msg := <-stream.Messages():
-			pos.Offset = msg.Offset
-			payload = msg.Value
-		}
-		readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
-		readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(payload)))
+			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 
-		entity := pb.Entity{
-			Pos:     pos,
-			Payload: payload,
+			pos.Offset = msg.Offset
+			p.asm.Append(msg)
+		case binlog = <-p.asm.Messages():
 		}
-		b := p.match(entity)
+		if binlog == nil {
+			continue
+		}
+
+		b := p.match(binlog.Entity)
 		if b != nil {
 			binlogEnt := &binlogEntity{
 				tp:       b.Tp,
 				startTS:  b.StartTs,
 				commitTS: b.CommitTs,
-				pos:      pos,
+				pos:      binlog.Entity.Pos,
 			}
+			assemble.DestructAssembledBinlog(binlog)
 			// send to publish goroutinue
 			select {
 			case <-p.ctx.Done():
 				return pos, errors.Trace(p.ctx.Err())
 			case p.binlogChan <- binlogEnt:
 			}
+		} else {
+			assemble.DestructAssembledBinlog(binlog)
 		}
 	}
 }

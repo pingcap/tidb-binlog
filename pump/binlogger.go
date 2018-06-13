@@ -18,10 +18,6 @@ import (
 )
 
 var (
-	// SegmentSizeBytes is the max threshold of binlog segment file size
-	// as an exported variable, you can define a different size
-	SegmentSizeBytes int64 = 512 * 1024 * 1024
-
 	// ErrFileContentCorruption represents file or directory's content is curruption for some season
 	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
 
@@ -40,10 +36,10 @@ type Binlogger interface {
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// batch write binlog event, and returns current offset(if have).
-	WriteTail(payload []byte) (int64, error)
+	WriteTail(entity *binlog.Entity) (int64, error)
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
-	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error
+	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error
 
 	// close the binlogger
 	Close() error
@@ -252,7 +248,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity binlog.Entity) error) error {
+func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
 	log.Infof("[binlogger] walk from position %+v", from)
 	var (
 		ent     = &binlog.Entity{}
@@ -334,16 +330,11 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
 			from.Offset = ent.Pos.Offset
-			newEnt := binlog.Entity{
-				Pos:     ent.Pos,
-				Payload: ent.Payload,
-			}
-			err := sendBinlog(newEnt)
+			err := sendBinlog(ent)
+			binlogBufferPool.Put(buf)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			binlogBufferPool.Put(buf)
 		}
 
 		if err != nil && err != io.EOF {
@@ -400,21 +391,21 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(payload []byte) (int64, error) {
+func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	beginTime := time.Now()
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
-		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
+		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(entity.Payload)))
 	}()
 
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if len(payload) == 0 {
+	if len(entity.Payload) == 0 {
 		return 0, nil
 	}
 
-	curOffset, err := b.encoder.Encode(payload)
+	curOffset, err := b.encoder.Encode(entity)
 	if err != nil {
 		writeErrorCounter.WithLabelValues("local").Add(1)
 		log.Errorf("write local binlog file %d error %v", latestFilePos.Suffix, err)
@@ -424,7 +415,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 	latestFilePos.Offset = curOffset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	if curOffset < SegmentSizeBytes {
+	if curOffset < GlobalConfig.segmentSizeBytes {
 		return curOffset, nil
 	}
 

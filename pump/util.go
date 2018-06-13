@@ -22,10 +22,6 @@ const (
 	physicalShiftBits = 18
 	maxRetry          = 12
 	retryInterval     = 5 * time.Second
-
-	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
-	// SegmentSizeBytes = 512 * 1024 * 1024
-	segmentSizeLevel int64 = 1000 * 1000 * 1000
 )
 
 // AtomicBool is bool type that support atomic operator
@@ -131,7 +127,7 @@ func ComparePos(left, right binlog.Pos) int {
 }
 
 func initializeSaramaGlobalConfig() {
-	sarama.MaxRequestSize = int32(maxMsgSize)
+	sarama.MaxRequestSize = int32(GlobalConfig.maxMsgSize)
 }
 
 func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
@@ -143,7 +139,7 @@ func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProduce
 	// initial kafka client to use manual partitioner
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = maxMsgSize
+	config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
@@ -168,7 +164,7 @@ func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProduce
 
 // combine suffix offset in one float
 func posToFloat(pos *binlog.Pos) float64 {
-	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
+	return float64(pos.Suffix)*float64(GlobalConfig.segmentSizeBytes*10) + float64(pos.Offset)
 }
 
 // use magic code to find next binlog and skips corruption data
