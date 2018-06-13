@@ -152,16 +152,16 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
 
-	b, err := json.Marshal(sp)
-	if err != nil {
-		log.Errorf("Json Marshal error %v", err)
-		return errors.Trace(err)
-	}
-
-	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (`clusterid`, `checkpoint`) VALUES(?, ?)", sp.schema, sp.table)
-	sqls := []string{sql}
-	args := [][]interface{}{{sp.clusterID, b}}
-	err = pkgsql.ExecuteSQLs(sp.db, sqls, args, false)
+	_, err := json.Marshal(sp)
+	//if err != nil {
+	//	log.Errorf("Json Marshal error %v", err)
+	//	return errors.Trace(err)
+	//}
+	//
+	//sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (`clusterid`, `checkpoint`) VALUES(?, ?)", sp.schema, sp.table)
+	//sqls := []string{sql}
+	//args := [][]interface{}{{sp.clusterID, b}}
+	//err = pkgsql.ExecuteSQLs(sp.db, sqls, args, false)
 
 	return errors.Trace(err)
 }
