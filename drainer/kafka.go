@@ -315,14 +315,15 @@ type Kafka struct {
 }
 
 // NewKafka return a instance of Kafka
-func NewKafka(kafkaAddr string, kafkaVersion string, clusterID string, schema *Schema, checkPoint checkpoint.CheckPoint, ignoreSchemas map[string]struct{}) *Kafka {
+func NewKafka(kafkaAddr string, kafkaVersion string, clusterID uint64, schema *Schema, checkPoint checkpoint.CheckPoint, ignoreSchemas map[string]struct{}) *Kafka {
 	commitTs, pos := checkPoint.Pos()
+	clusterIDStr := strconv.FormatUint(clusterID, 10)
 	return &Kafka{
 		addr:          strings.Split(kafkaAddr, ","),
 		version:       kafkaVersion,
 		schema:        schema,
-		clusterID:     clusterID,
-		topic:         clusterID + "_obinlog",
+		clusterID:     clusterIDStr,
+		topic:         clusterIDStr + "_obinlog",
 		items:         make(chan *binlogItem, 1024),
 		checkPoint:    checkPoint,
 		commitTs:      commitTs,

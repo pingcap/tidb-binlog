@@ -74,3 +74,8 @@ port = 3306
 #dir = "data.drainer"
 #compression = "gzip"
 
+
+# when db-type is kafka, you can uncomment this to config the down stream kafka, it will be the globle config kafka default
+#[syncer.to]
+# kafka-addrs = "127.0.0.1:9092"
+# kafka-version = "0.8.2.0"

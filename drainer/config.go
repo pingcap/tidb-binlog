@@ -204,9 +204,17 @@ func (cfg *Config) Parse(args []string) error {
 			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
 		} else if cfg.SyncerCfg.DestDBType == "kafka" {
 
-		} else {
+		} else if cfg.SyncerCfg.DestDBType == "pb" {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	}
+
+	// set default value even has the to config part
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
+			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
+			cfg.SyncerCfg.To.KafkaVersion = cfg.KafkaVersion
 		}
 	}
 

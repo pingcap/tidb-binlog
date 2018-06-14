@@ -30,10 +30,7 @@ type Syncer struct {
 	schema *Schema
 	cp     checkpoint.CheckPoint
 
-	cfg          *SyncerConfig
-	clusterID    string
-	kafkaAddr    string
-	kafkaVersion string
+	cfg *SyncerConfig
 
 	translator translator.SQLTranslator
 
@@ -62,12 +59,9 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig, kafkaAddr string, kafkaVersion string, clusterID string) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
 	syncer := new(Syncer)
-	syncer.clusterID = clusterID
 	syncer.cfg = cfg
-	syncer.kafkaAddr = kafkaAddr
-	syncer.kafkaVersion = kafkaVersion
 	syncer.ignoreSchemaNames = formatIgnoreSchemas(cfg.IgnoreSchemas)
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
@@ -568,7 +562,8 @@ func (s *Syncer) runKafka(b *binlogItem) error {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
-	kafka := NewKafka(s.kafkaAddr, s.kafkaVersion, s.clusterID, s.schema, s.cp, s.ignoreSchemaNames)
+	to := s.cfg.To
+	kafka := NewKafka(to.KafkaAddrs, to.KafkaVersion, to.ClusterID, s.schema, s.cp, s.ignoreSchemaNames)
 
 	go func() {
 		err := kafka.Run()

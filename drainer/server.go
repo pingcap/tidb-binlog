@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -46,6 +46,7 @@ type Server struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	syncer    *Syncer
+	isClosed  int32
 }
 
 func init() {
@@ -74,6 +75,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	clusterID = pdCli.GetClusterID(ctx)
+	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
@@ -85,7 +87,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg, cfg.KafkaAddrs, cfg.KafkaVersion, strconv.FormatUint(clusterID, 10))
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -178,7 +180,7 @@ func (s *Server) StartCollect() {
 		defer func() {
 			log.Info("collect goroutine exited")
 			s.wg.Done()
-			// s.Close()
+			s.Close()
 		}()
 		s.collector.Start(s.ctx)
 	}()
@@ -206,7 +208,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 		defer func() {
 			log.Info("syncer goroutine exited")
 			s.wg.Done()
-			// s.Close()
+			s.Close()
 		}()
 		err := s.syncer.Start(jobs)
 		if err != nil {
@@ -227,7 +229,7 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			close(errc)
 			log.Info("heartbeat goroutine exited")
 			s.wg.Done()
-			// s.Close()
+			s.Close()
 		}()
 
 		for {
@@ -304,6 +306,11 @@ func (s *Server) Start() error {
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
+	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+		log.Debug("server has close")
+		return
+	}
+
 	// unregister drainer
 	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
