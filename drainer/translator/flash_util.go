@@ -223,10 +223,12 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 			return uint8(data.GetInt64()), nil
 		}
 		return int8(data.GetInt64()), nil
-	case mysql.TypeShort, mysql.TypeYear: // UInt16/Int16
+	case mysql.TypeShort: // UInt16/Int16
 		if mysql.HasUnsignedFlag(ft.Flag) {
 			return uint16(data.GetInt64()), nil
 		}
+		return int16(data.GetInt64()), nil
+	case mysql.TypeYear: // Int16
 		return int16(data.GetInt64()), nil
 	case mysql.TypeLong, mysql.TypeInt24: // UInt32/Int32
 		if mysql.HasUnsignedFlag(ft.Flag) {
@@ -245,7 +247,7 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 			f = 0
 		}
 		return f, nil
-	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // UInt16/UInt32
+	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
 		var unix = int64(0)
 		// TiDB won't accept invalid date/time EXCEPT "0000-00-00", which is default value for not-null columns. So leave it zero.
 		if mysqlTime := data.GetMysqlTime(); !mysqlTime.IsZero() {
@@ -261,13 +263,11 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 			unix = goTime.Unix()
 			// Zero the negative unix time to prevent overflow in CH.
 			if unix < 0 {
+				log.Warnf("Date/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
 				unix = 0
 			}
 		}
-		if ft.Tp == mysql.TypeDate || ft.Tp == mysql.TypeNewDate {
-			return uint16(unix / 24 / 3600), nil
-		}
-		return uint32(unix), nil
+		return unix, nil
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
 		if err != nil {
@@ -283,7 +283,7 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString: // String
 		return data.GetString(), nil
 	case mysql.TypeEnum: // UInt16
-		return uint16(data.GetMysqlEnum().Value), nil
+		return int16(data.GetMysqlEnum().Value), nil
 	case mysql.TypeSet: // String
 		return data.GetMysqlSet().String(), nil
 	case mysql.TypeJSON: // String

@@ -10,8 +10,8 @@ import (
 	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/test/util"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
+	"github.com/pingcap/tidb-binlog/test/util"
 )
 
 func main() {
@@ -47,20 +47,6 @@ create table itest(
 create table ntest(
 	a int, 
 	b double NOT NULL DEFAULT 2.0, 
-	c varchar(10) NOT NULL, 
-	d time unique
-);
-`,
-		`
-create table ttest(
-	bt bit, 
-	i int,
-    t tiny,
-    m mediumint unsigned,
-    bi bigint,
-    f float,
-    db double,
-    dec decimal,
 	c varchar(10) NOT NULL, 
 	d time unique
 );
