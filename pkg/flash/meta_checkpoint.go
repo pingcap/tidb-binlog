@@ -13,7 +13,7 @@ type checkpoint struct {
 }
 
 // MetaCheckpoint is used to connect flash executor (FE) and flash checkpoint (FC) to come to an agreement about the safe point to save the checkpoint.
-// FE write rows kind of asynchronously. That means at some point that FC thinks it's saved, FE may have not written the rows yet.
+// FE writes rows kind of asynchronously. That means at some point that FC thinks it's saved, FE may have not written the rows yet.
 // MetaCheckpoint keeps track of all past checkpoints. So that when FE finished a flush at CT, we'll suggest FC to save the latest checkpoint before CT.
 type MetaCheckpoint struct {
 	sync.Mutex
@@ -24,7 +24,7 @@ type MetaCheckpoint struct {
 var instance *MetaCheckpoint
 var once sync.Once
 
-// GetInstance uses singleton pattern for MetaCheckpoint.
+// GetInstance endows singleton pattern to MetaCheckpoint.
 func GetInstance() *MetaCheckpoint {
 	once.Do(func() {
 		instance = &MetaCheckpoint{
@@ -35,7 +35,7 @@ func GetInstance() *MetaCheckpoint {
 	return instance
 }
 
-// Flush picks the safe checkpoint according to flush time, and removes all checkpoints before
+// Flush picks the safe checkpoint according to flushed commit timestamp, then removes all past checkpoints until it.
 func (f *MetaCheckpoint) Flush(commitTS int64) {
 	f.Lock()
 	defer f.Unlock()
@@ -70,7 +70,7 @@ func (f *MetaCheckpoint) PushPastCP(commitTS int64, pos map[string]pb.Pos) {
 	log.Debugf("FMC pushed a passing checkpoint %v.", f.pastCPs[len(f.pastCPs)-1])
 }
 
-// PopSafeCP pops the safe checkpoint.
+// PopSafeCP pops the safe checkpoint, after popping the safe checkpoint will be nil.
 func (f *MetaCheckpoint) PopSafeCP() (bool, int64, map[string]pb.Pos) {
 	f.Lock()
 	defer f.Unlock()
