@@ -153,10 +153,9 @@ func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProduce
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	appMetricRegistry := metrics.NewRegistry()
-	config.MetricRegistry = metrics.NewPrefixedChildRegistry(appMetricRegistry, "pump.")
+	config.MetricRegistry = metrics.NewPrefixedRegistry("pump.")
 
-	exp.Exp(appMetricRegistry)
+	exp.Exp(config.MetricRegistry)
 
 	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {

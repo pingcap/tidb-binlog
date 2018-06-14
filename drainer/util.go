@@ -184,10 +184,9 @@ func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 	kafkaCfg.Version = version
 	log.Infof("kafka consumer version %v", version)
 
-	appMetricRegistry := metrics.NewRegistry()
-	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(appMetricRegistry, "drainer.")
+	kafkaCfg.MetricRegistry = metrics.NewPrefixedRegistry("drainer.")
 
-	exp.Exp(appMetricRegistry)
+	exp.Exp(kafkaCfg.MetricRegistry)
 
 	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }
