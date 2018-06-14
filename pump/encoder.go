@@ -4,12 +4,14 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"math"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var magic uint32 = 471532804
@@ -20,7 +22,7 @@ var magic uint32 = 471532804
 
 // Encoder is an interface wraps basic Encode method which encodes payload and write it, and returns offset.
 type Encoder interface {
-	Encode(payload []byte) (int64, error)
+	Encode(entity *binlog.Entity) (int64, error)
 }
 
 type encoder struct {
@@ -35,8 +37,8 @@ func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
 	}
 }
 
-func (e *encoder) Encode(payload []byte) (int64, error) {
-	data := encode(payload)
+func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
+	data := encode(entity.Payload)
 
 	data, err := compress.Compress(data, e.codec)
 	if err != nil {
@@ -62,6 +64,7 @@ type kafkaEncoder struct {
 	topic     string
 	partition int32
 	producer  sarama.SyncProducer
+	slicer    *KafkaSlicer
 }
 
 func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
@@ -69,18 +72,53 @@ func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32
 		producer:  producer,
 		topic:     topic,
 		partition: partition,
+		slicer:    NewKafkaSlicer(topic, partition),
 	}
 }
 
-func (k *kafkaEncoder) Encode(payload []byte) (int64, error) {
-	msg := &sarama.ProducerMessage{Topic: k.topic, Partition: k.partition, Value: sarama.ByteEncoder(payload)}
-	partition, offset, err := k.producer.SendMessage(msg)
+func (k *kafkaEncoder) Encode(entity *binlog.Entity) (int64, error) {
+	var (
+		messages    []*sarama.ProducerMessage
+		errMessages []*sarama.ProducerMessage
+		err         error
+		retry       int
+		offset      int64 = math.MaxInt64
+	)
+
+	messages, err = k.slicer.Generate(entity)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	if partition != k.partition {
-		return 0, errors.Errorf("produce message to wrong partition %d, not specified partition %d", partition, k.partition)
+	err = k.producer.SendMessages(messages)
+	for err != nil && retry < GlobalConfig.sendKafKaRetryNum {
+		producerErrors, ok := err.(sarama.ProducerErrors)
+		if !ok {
+			return 0, errors.Trace(err)
+		}
+		retry++
+
+		log.Errorf("[encoder] produce meesage error %v", producerErrors.Error())
+
+		errMessages = errMessages[:0]
+		for _, errMessage := range producerErrors {
+			log.Errorf("[encode] produce message %s, now retry No. %d", errMessage.Error(), retry)
+			errMessages = append(errMessages, errMessage.Msg)
+		}
+		err = k.producer.SendMessages(errMessages)
+	}
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	for _, message := range messages {
+		if offset > message.Offset {
+			offset = message.Offset
+		}
+
+		if message.Partition != k.partition {
+			return 0, errors.Errorf("produce message to wrong partition %d, not specified partition %d", message.Partition, k.partition)
+		}
 	}
 
 	return offset, nil
