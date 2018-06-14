@@ -147,11 +147,25 @@ func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
 	return result, nil
 }
 
+func composeCHDSN(host string, port int, username string, password string, dbName string) string {
+	dbDSN := fmt.Sprintf("tcp://%s:%d?database=test&", host, port)
+	if len(username) > 0 {
+		dbDSN = fmt.Sprintf("%susername=%s&", dbDSN, username)
+	}
+	if len(password) > 0 {
+		dbDSN = fmt.Sprintf("%spassword=%s&", dbDSN, password)
+	}
+	if len(dbName) > 0 {
+		dbDSN = fmt.Sprintf("%sdatabase=%s&", dbDSN, dbName)
+	}
+	return dbDSN
+}
+
 // OpenCH opens a connection to CH and returns the standard SQL driver's DB interface.
-func OpenCH(proto string, host string, port int, username string, password string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
+func OpenCH(host string, port int, username string, password string, dbName string) (*sql.DB, error) {
+	dbDSN := composeCHDSN(host, port, username, password, dbName)
 	log.Infof("Connecting to %s", dbDSN)
-	db, err := sql.Open(proto, dbDSN)
+	db, err := sql.Open("clickhouse", dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -161,7 +175,7 @@ func OpenCH(proto string, host string, port int, username string, password strin
 
 // OpenCHDirect opens a connection to CH and returns the raw CH driver's connection interface.
 // It is mainly used for batch inserting which uses CH's block interface.
-func OpenCHDirect(host string, port int, username string, password string) (clickhouse.Clickhouse, error) {
-	dbDSN := fmt.Sprintf("tcp://%s:%d", host, port)
+func OpenCHDirect(host string, port int, username string, password string, dbName string) (clickhouse.Clickhouse, error) {
+	dbDSN := composeCHDSN(host, port, username, password, dbName)
 	return clickhouse.OpenDirect(dbDSN)
 }

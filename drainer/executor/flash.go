@@ -164,11 +164,11 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 
 	chDBs := make([]chDB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
-		db, err := pkgsql.OpenCH("clickhouse", hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password)
+		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		conn, err := pkgsql.OpenCHDirect(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password)
+		conn, err := pkgsql.OpenCHDirect(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
 		db.Driver()
 		if err != nil {
 			return nil, errors.Trace(err)
