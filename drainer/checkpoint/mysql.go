@@ -30,9 +30,9 @@ type MysqlCheckPoint struct {
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
 	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
-	TsMap     string            `toml:"ts-map" json:"ts-map"`
+	TsMap     map[string]int64  `toml:"ts-map" json:"ts-map"`
 
-	tsMapUpdateTime time.Time
+	snapshot time.Time
 }
 
 func newMysql(tp string, cfg *Config) (CheckPoint, error) {
@@ -55,6 +55,7 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		table:           cfg.Table,
 		Positions:       make(map[string]pb.Pos),
 		tp:              tp,
+		TsMap:           make(map[string]int64),
 	}
 
 	sql := genCreateSchema(sp)
@@ -133,14 +134,15 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.saveTime = time.Now()
 
 	// we don't need update tsMap every time.
-	if sp.tp == "tidb" && time.Since(sp.tsMapUpdateTime) > time.Minute {
-		sp.tsMapUpdateTime = time.Now()
+	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
+		sp.snapshot = time.Now()
 		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
 		if err != nil {
 			// don't need return error, only tidb v2.0.4 and above support get position by executing `show master status`.
 			log.Warnf("get ts from slave cluster error %v", err)
 		} else {
-			sp.TsMap = fmt.Sprintf("%d:%d", ts, slaveTS)
+			sp.TsMap["master-ts"] = ts
+			sp.TsMap["slave-ts"] = slaveTS
 		}
 	}
 
