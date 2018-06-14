@@ -5,6 +5,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
+	tb "github.com/pingcap/tipb/go-binlog"
 )
 
 type pbExecutor struct {
@@ -57,6 +58,8 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
-	_, err = p.binlogger.WriteTail(data)
+	_, err = p.binlogger.WriteTail(&tb.Entity{
+		Payload: data,
+	})
 	return errors.Trace(err)
 }

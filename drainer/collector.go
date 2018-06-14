@@ -218,7 +218,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			// initial pump
-			pos, err := c.getSavePoints(n.NodeID)
+			pos, err := c.getSavePoints(ctx, n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -353,7 +353,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
-func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+func (c *Collector) getSavePoints(ctx context.Context, nodeID string) (binlog.Pos, error) {
 	commitTS, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
 	if ok {
@@ -363,7 +363,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-	offsets, err := c.offsetSeeker.Do(topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
+	offsets, err := c.offsetSeeker.Do(ctx, topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
 		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
 	}
