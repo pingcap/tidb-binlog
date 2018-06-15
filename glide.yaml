@@ -300,5 +300,7 @@ testImports:
 
 - package: github.com/onsi/gomega
   version: v1.4.0
+- package: github.com/rcrowley/go-metrics
+  version: e2704e165165ec55d062f5919b4b29494e9fa790
 - package: github.com/pingcap/tidb-tools/binlog_proto
   version: 72a5cbd698e54e1245a022c73120cf7dcf1e93e1
