@@ -301,4 +301,4 @@ testImports:
 - package: github.com/onsi/gomega
   version: v1.4.0
 - package: github.com/pingcap/tidb-tools/binlog_proto
-  version: 72a5cbd698e54e1245a022c73120cf7dcf1e93e1
+  version: 4228f233ba25f6091d9ab85c8828cd87ac5e52cf
