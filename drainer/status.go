@@ -15,6 +15,7 @@ type HTTPStatus struct {
 		Upper int64 `json:"Upper"`
 		Lower int64 `json:"Lower"`
 	}
+	TsMap string `json:"TsMap"`
 }
 
 // Status implements http.ServeHTTP interface
