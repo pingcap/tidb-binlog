@@ -140,7 +140,7 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
 		if err != nil {
 			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
-			errCode, ok := pkgsql.GetSqlErrCode(err)
+			errCode, ok := pkgsql.GetSQLErrCode(err)
 			if !ok || int(errCode) != tmysql.ErrUnknown {
 				log.Warnf("get ts from slave cluster error %v", err)
 			}

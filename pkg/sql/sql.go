@@ -99,7 +99,7 @@ func OpenDB(proto string, host string, port int, username string, password strin
 
 // IgnoreDDLError checks the error can be ignored or not.
 func IgnoreDDLError(err error) bool {
-	errCode, ok := GetSqlErrCode(err)
+	errCode, ok := GetSQLErrCode(err)
 	if !ok {
 		return false
 	}
@@ -118,8 +118,8 @@ func IgnoreDDLError(err error) bool {
 	}
 }
 
-// GetSqlErrCode returns error code if err is a mysql error
-func GetSqlErrCode(err error) (terror.ErrCode, bool) {
+// GetSQLErrCode returns error code if err is a mysql error
+func GetSQLErrCode(err error) (terror.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 	if !ok {
 		return -1, false
