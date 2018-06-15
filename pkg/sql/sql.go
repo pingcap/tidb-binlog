@@ -99,12 +99,10 @@ func OpenDB(proto string, host string, port int, username string, password strin
 
 // IgnoreDDLError checks the error can be ignored or not.
 func IgnoreDDLError(err error) bool {
-	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	errCode, ok := GetSqlErrCode(err)
 	if !ok {
 		return false
 	}
-
-	errCode := terror.ErrCode(mysqlErr.Number)
 	// we can get error code from:
 	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
 	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
@@ -118,6 +116,16 @@ func IgnoreDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// GetSqlErrCode returns error code if err is a mysql error
+func GetSqlErrCode(err error) (terror.ErrCode, bool) {
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return -1, false
+	}
+
+	return terror.ErrCode(mysqlErr.Number), true
 }
 
 // GetTidbPosition gets tidb's position.

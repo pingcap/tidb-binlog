@@ -12,6 +12,7 @@ import (
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	tmysql "github.com/pingcap/tidb/mysql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -138,8 +139,11 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 		sp.snapshot = time.Now()
 		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
 		if err != nil {
-			// don't need return error, only tidb v2.0.4 and above support get position by executing `show master status`.
-			log.Warnf("get ts from slave cluster error %v", err)
+			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
+			errCode, ok := pkgsql.GetSqlErrCode(err)
+			if !ok || int(errCode) != tmysql.ErrUnknown {
+				log.Warnf("get ts from slave cluster error %v", err)
+			}
 		} else {
 			sp.TsMap["master-ts"] = ts
 			sp.TsMap["slave-ts"] = slaveTS
