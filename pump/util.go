@@ -16,6 +16,8 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
+	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
 )
 
 const (
@@ -147,6 +149,9 @@ func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProduce
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
+	config.MetricRegistry = metrics.NewPrefixedRegistry("pump.")
+
+	exp.Exp(config.MetricRegistry)
 
 	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {
