@@ -27,7 +27,8 @@ import (
 
 var pullBinlogInterval = 50 * time.Millisecond
 
-var maxMsgSize = 1024 * 1024 * 1024
+// GlobalConfig is global config of pump
+var GlobalConfig *globalConfig
 
 const (
 	slowDist      = 30 * time.Millisecond
@@ -98,6 +99,12 @@ func init() {
 	// tracing has suspicious leak problem, so disable it here.
 	// it must be set before any real grpc operation.
 	grpc.EnableTracing = false
+	GlobalConfig = &globalConfig{
+		maxMsgSize:        defautMaxKafkaSize,
+		segmentSizeBytes:  defaultSegmentSizeBytes,
+		SlicesSize:        defaultBinlogSliceSize,
+		sendKafKaRetryNum: defaultSendKafKaRetryNum,
+	}
 }
 
 // NewServer returns a instance of pump server
@@ -124,7 +131,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
-	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(maxMsgSize)}
+	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(GlobalConfig.maxMsgSize)}
 	if cfg.tls != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
@@ -269,7 +276,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+	if _, err1 := binlogger.WriteTail(&binlog.Entity{Payload: in.Payload}); err1 != nil {
 		lossBinlogCacheCounter.Add(1)
 		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 
@@ -296,10 +303,10 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 
 	pos := in.StartFrom
-	sendBinlog := func(entity binlog.Entity) error {
+	sendBinlog := func(entity *binlog.Entity) error {
 		pos.Suffix = entity.Pos.Suffix
 		pos.Offset = entity.Pos.Offset
-		resp := &binlog.PullBinlogResp{Entity: entity}
+		resp := &binlog.PullBinlogResp{Entity: *entity}
 		return errors.Trace(stream.Send(resp))
 	}
 
@@ -423,7 +430,7 @@ func (s *Server) writeFakeBinlog() {
 			return
 		}
 
-		_, err = binlogger.WriteTail(payload)
+		_, err = binlogger.WriteTail(&binlog.Entity{Payload: payload})
 		if err != nil {
 			log.Errorf("generate forward binlog, write binlog err %v", err)
 			return
