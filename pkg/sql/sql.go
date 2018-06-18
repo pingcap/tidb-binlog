@@ -245,4 +245,3 @@ func OpenCHDirect(host string, port int, username string, password string, dbNam
 	dbDSN := composeCHDSN(host, port, username, password, dbName)
 	return clickhouse.OpenDirect(dbDSN)
 }
-
