@@ -205,6 +205,14 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 	return rows, nil
 }
 
+func getTableRowCount(db *sql.DB, tblName string) (*sql.Rows, error) {
+	rows, err := querySQL(db, fmt.Sprintf("select count(*) from %s", tblName))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return rows, nil
+}
+
 func getTableIndex(db *sql.DB, tblName string) (*sql.Rows, error) {
 	rows, err := querySQL(db, fmt.Sprintf("show index from %s;", tblName))
 	if err != nil {

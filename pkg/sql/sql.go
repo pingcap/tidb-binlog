@@ -148,7 +148,7 @@ func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
 }
 
 func composeCHDSN(host string, port int, username string, password string, dbName string) string {
-	dbDSN := fmt.Sprintf("tcp://%s:%d?database=test&", host, port)
+	dbDSN := fmt.Sprintf("tcp://%s:%d?", host, port)
 	if len(username) > 0 {
 		dbDSN = fmt.Sprintf("%susername=%s&", dbDSN, username)
 	}

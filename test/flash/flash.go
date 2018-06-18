@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
 	"time"
@@ -9,7 +10,8 @@ import (
 	"github.com/juju/errors"
 	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/diff"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
 )
@@ -58,14 +60,14 @@ create table ntest(
 	}
 	defer util.CloseDB(sourceDB)
 
-	targetAddr, err := sql.ParseCHAddr(cfg.TargetDBCfg.Host)
+	targetAddr, err := pkgsql.ParseCHAddr(cfg.TargetDBCfg.Host)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if len(targetAddr) != 1 {
 		log.Fatal("only support 1 flash node so far.")
 	}
-	targetDB, err := sql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
+	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,18 +78,18 @@ create table ntest(
 
 	// wait for sync to downstream sql server
 	time.Sleep(60 * time.Second)
-	// if !util.CheckSyncState(sourceDB, targetDB) {
-	// 	log.Fatal("src don't equal dst")
-	// }
+	if !CheckSyncState(sourceDB, targetDB) {
+		log.Fatal("src don't equal dst")
+	}
 
 	// clear the simple test case
 	dailytest.ClearSimpleCase(sourceDB)
 
 	// wait for sync to downstream sql server
 	time.Sleep(60 * time.Second)
-	// if !util.CheckSyncState(sourceDB, targetDB) {
-	// 	log.Fatal("src don't equal dst")
-	// }
+	if !CheckSyncState(sourceDB, targetDB) {
+		log.Fatal("src don't equal dst")
+	}
 
 	// generate insert/update/delete sqls and execute
 	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
@@ -96,9 +98,9 @@ create table ntest(
 	time.Sleep(90 * time.Second)
 
 	// diff the test schema
-	// if !util.CheckSyncState(sourceDB, targetDB) {
-	// 	log.Fatal("sourceDB don't equal targetDB")
-	// }
+	if !CheckSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
 
 	// truncate test data
 	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
@@ -107,9 +109,9 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	// if !util.CheckSyncState(sourceDB, targetDB) {
-	// 	log.Fatal("sourceDB don't equal targetDB")
-	// }
+	if !CheckSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
 
 	// drop test table
 	dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
@@ -118,9 +120,20 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	// if !util.CheckSyncState(sourceDB, targetDB) {
-	// 	log.Fatal("sourceDB don't equal targetDB")
-	// }
+	if !CheckSyncState(sourceDB, targetDB) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
 
 	log.Info("test pass!!!")
+}
+
+// CheckSyncState check if srouceDB and targetDB has the same table and data
+func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
+	d := diff.NewFlash(sourceDB, targetDB)
+	ok, err := d.FlashEqual()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return ok
 }
