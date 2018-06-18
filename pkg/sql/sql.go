@@ -98,12 +98,10 @@ func OpenDB(proto string, host string, port int, username string, password strin
 
 // IgnoreDDLError checks the error can be ignored or not.
 func IgnoreDDLError(err error) bool {
-	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	errCode, ok := GetSQLErrCode(err)
 	if !ok {
 		return false
 	}
-
-	errCode := terror.ErrCode(mysqlErr.Number)
 	// we can get error code from:
 	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
 	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
@@ -117,6 +115,74 @@ func IgnoreDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// GetSQLErrCode returns error code if err is a mysql error
+func GetSQLErrCode(err error) (terror.ErrCode, bool) {
+	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+	if !ok {
+		return -1, false
+	}
+
+	return terror.ErrCode(mysqlErr.Number), true
+}
+
+// GetTidbPosition gets tidb's position.
+func GetTidbPosition(db *sql.DB) (int64, error) {
+	/*
+		example in tidb:
+		mysql> SHOW MASTER STATUS;
+		+-------------+--------------------+--------------+------------------+-------------------+
+		| File        | Position           | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
+		+-------------+--------------------+--------------+------------------+-------------------+
+		| tidb-binlog | 400718757701615617 |              |                  |                   |
+		+-------------+--------------------+--------------+------------------+-------------------+
+	*/
+	rows, err := db.Query("SHOW MASTER STATUS")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		fields, err1 := ScanRow(rows)
+		if err1 != nil {
+			return 0, errors.Trace(err1)
+		}
+
+		ts, err1 := strconv.ParseInt(string(fields["Position"]), 10, 64)
+		if err1 != nil {
+			return 0, errors.Trace(err1)
+		}
+		return ts, nil
+	}
+	return 0, errors.New("get slave cluster's ts failed")
+}
+
+// ScanRow scans rows into a map.
+func ScanRow(rows *sql.Rows) (map[string][]byte, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	colVals := make([][]byte, len(cols))
+	colValsI := make([]interface{}, len(colVals))
+	for i := range colValsI {
+		colValsI[i] = &colVals[i]
+	}
+
+	err = rows.Scan(colValsI...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := make(map[string][]byte)
+	for i := range colVals {
+		result[cols[i]] = colVals[i]
+	}
+
+	return result, nil
 }
 
 // CHHostAndPort is a CH host:port pair.
@@ -179,3 +245,4 @@ func OpenCHDirect(host string, port int, username string, password string, dbNam
 	dbDSN := composeCHDSN(host, port, username, password, dbName)
 	return clickhouse.OpenDirect(dbDSN)
 }
+

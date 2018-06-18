@@ -18,6 +18,8 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
+	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
 )
 
 const (
@@ -181,6 +183,10 @@ func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 	}
 	kafkaCfg.Version = version
 	log.Infof("kafka consumer version %v", version)
+
+	kafkaCfg.MetricRegistry = metrics.NewPrefixedRegistry("drainer.")
+
+	exp.Exp(kafkaCfg.MetricRegistry)
 
 	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }

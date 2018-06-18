@@ -20,16 +20,19 @@ import (
 )
 
 const (
-	defaultEtcdDialTimeout   = 5 * time.Second
-	defaultEtcdURLs          = "http://127.0.0.1:2379"
-	defaultKafkaAddrs        = "127.0.0.1:9092"
-	defaultListenAddr        = "127.0.0.1:8250"
-	defaultSocket            = "unix:///tmp/pump.sock"
-	defautMaxKafkaSize       = 1024 * 1024 * 1024
-	defaultHeartbeatInterval = 2
-	defaultGC                = 7
-	defaultDataDir           = "data.pump"
-	defaultKafkaVersion      = "1.0.0"
+	defaultEtcdDialTimeout         = 5 * time.Second
+	defaultEtcdURLs                = "http://127.0.0.1:2379"
+	defaultKafkaAddrs              = "127.0.0.1:9092"
+	defaultListenAddr              = "127.0.0.1:8250"
+	defaultSocket                  = "unix:///tmp/pump.sock"
+	defautMaxKafkaSize             = 1024 * 1024 * 1024
+	defaultHeartbeatInterval       = 2
+	defaultGC                      = 7
+	defaultDataDir                 = "data.pump"
+	defaultKafkaVersion            = "0.8.2.0"
+	defaultBinlogSliceSize         = 10 * 1024 * 1024
+	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
+	defaultSendKafKaRetryNum int   = 10
 
 	// default interval time to generate fake binlog, the unit is second
 	defaultGenFakeBinlogInterval = 3
@@ -39,7 +42,23 @@ const (
 	mixedWriteMode = "mixed"
 )
 
-var enableDebug bool
+// globalConfig is global config of pump to be used in any where
+type globalConfig struct {
+	// enable online debug log output
+	enableDebug bool
+	// max binlog message size limit
+	maxMsgSize int
+
+	// enable binlogger to split large binlog into small binlog slices
+	EnableBinlogSlice bool
+	// size of one binlog slice
+	SlicesSize int
+	// retry to send to kafka
+	sendKafKaRetryNum int
+
+	// segmentSizeBytes is the max threshold of binlog segment file size
+	segmentSizeBytes int64
+}
 
 // Config holds the configuration of pump
 type Config struct {
@@ -99,7 +118,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
-	fs.IntVar(&maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
@@ -107,7 +125,13 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
-	fs.BoolVar(&enableDebug, "enable-debug", false, "enable print debug log")
+
+	// global config
+	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
+	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
+	fs.Int64Var(&GlobalConfig.segmentSizeBytes, "binlog-file-size", defaultSegmentSizeBytes, "binlog-file-size is the max threshold of binlog segment file size")
+	fs.BoolVar(&GlobalConfig.EnableBinlogSlice, "enable-binlog-slice", false, "enable pump to split large binlog into small binlog slices")
+	fs.IntVar(&GlobalConfig.SlicesSize, "binlog-slice-size", defaultBinlogSliceSize, "size of one binlog slice")
 
 	return cfg
 }
