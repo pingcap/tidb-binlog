@@ -360,10 +360,11 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
+	// Note: checkpoint's Save() must be called first.
+	if s.cp.Check(job.commitTS, s.positions) && (!s.cfg.DisableDispatch || job.isCompleteBinlog) {
 		return true
 	}
-	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.cp.Check(job.commitTS, s.positions) {
+	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
 		return true
 	}
 	return false

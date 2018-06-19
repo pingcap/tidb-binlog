@@ -141,7 +141,10 @@ func (sp *FlashCheckPoint) Save(int64, map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
 
-	ok, ts, poss := sp.metaCP.PopSafeCP()
+	ok, ts, poss, err := sp.metaCP.PopSafeCP()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	if !ok {
 		return nil
 	}
@@ -177,7 +180,7 @@ func (sp *FlashCheckPoint) Check(ts int64, poss map[string]pb.Pos) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	sp.metaCP.PushPastCP(ts, poss)
+	sp.metaCP.PushPendingCP(ts, poss)
 
 	return time.Since(sp.saveTime) >= maxSaveTime
 }

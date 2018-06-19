@@ -201,7 +201,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 
 	if isDDL {
 		// Flush all row batches.
-		e.flushAll()
+		e.flushAll(true)
 		if e.err != nil {
 			log.Errorf("Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
@@ -289,7 +289,7 @@ func (e *flashExecutor) flushRoutine() {
 				log.Errorf("Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
 				return
 			}
-			e.flushAll()
+			e.flushAll(false)
 			if e.err != nil {
 				e.Unlock()
 				log.Errorf("Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
@@ -306,7 +306,7 @@ func (e *flashExecutor) partition(key int64) int {
 	return int(key % int64(len(e.chDBs)))
 }
 
-func (e *flashExecutor) flushAll() {
+func (e *flashExecutor) flushAll(forceSaveCP bool) {
 	log.Debug(fmt.Sprintf("Flushing all row batches."))
 
 	// Pick the latest commitTS among all row batches.
@@ -325,5 +325,5 @@ func (e *flashExecutor) flushAll() {
 		}
 	}
 
-	e.metaCP.Flush(maxCommitTS)
+	e.metaCP.Flush(maxCommitTS, forceSaveCP)
 }
