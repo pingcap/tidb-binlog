@@ -53,8 +53,10 @@ func (f *MetaCheckpoint) Flush(commitTS int64) {
 	// Re-make past checkpoints and discards ones until the safe checkpoint.
 	if removeUntil >= 0 {
 		log.Debugf("FMC picks safe checkpoint %v.", f.safeCP)
-		newSafeCP := make([]*checkpoint, 0, len(f.pastCPs)-removeUntil-1)
-		copy(newSafeCP, f.pastCPs[removeUntil+1:])
+		newPastCP := make([]*checkpoint, 0, len(f.pastCPs)-removeUntil-1)
+		copy(newPastCP, f.pastCPs[removeUntil+1:])
+		f.pastCPs = newPastCP
+		f.safeCP = nil
 	} else {
 		log.Debug("FMC picks no safe checkpoint.")
 	}
