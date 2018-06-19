@@ -32,6 +32,7 @@ func (c *DBConfig) String() string {
 
 // CreateDB create a mysql fd
 func CreateDB(cfg DBConfig) (*sql.DB, error) {
+	// just set to the same timezone so the timestamp field of mysql will return the same value
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape("'+08:00'"))
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {

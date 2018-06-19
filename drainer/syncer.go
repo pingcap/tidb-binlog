@@ -100,11 +100,8 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	if s.cfg.DestDBType == DestKafka {
-		err = s.runKafka(b)
-	} else {
-		err = s.run(b)
-	}
+	err = s.run(b)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -558,34 +555,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	}
 }
 
-func (s *Syncer) runKafka(b *binlogItem) error {
-	s.wg.Add(1)
-	defer s.wg.Done()
-
-	to := s.cfg.To
-	kafka := NewKafka(to.KafkaAddrs, to.KafkaVersion, to.ClusterID, s.schema, s.cp, s.ignoreSchemaNames)
-
-	go func() {
-		err := kafka.Run()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	for {
-		kafka.pushPBBinlog(b)
-
-		select {
-		case <-s.ctx.Done():
-			log.Debug("stop runKafka...")
-			kafka.Stop()
-			return nil
-		case b = <-s.input:
-			log.Debugf("consume binlogItem: %+v", *b)
-		}
-	}
-}
-
 func (s *Syncer) run(b *binlogItem) error {
 	s.wg.Add(1)
 	defer func() {
@@ -649,7 +618,7 @@ func (s *Syncer) run(b *binlogItem) error {
 				}
 
 				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
-				job := newDDLJob(sql, nil, "", commitTS, b.pos, b.nodeID)
+				job := newDDLJob(sql, []interface{}{schema, table}, "", commitTS, b.pos, b.nodeID)
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
@@ -659,7 +628,7 @@ func (s *Syncer) run(b *binlogItem) error {
 		case <-s.ctx.Done():
 			return nil
 		case b = <-s.input:
-			log.Debug("consume binlogItem: %+v", *b)
+			log.Debugf("consume binlogItem: %s", b)
 		}
 	}
 }
@@ -765,7 +734,7 @@ func (s *Syncer) Add(b *binlogItem) {
 	select {
 	case <-s.ctx.Done():
 	case s.input <- b:
-		log.Debugf("receive binlogItem: %+v", *b)
+		log.Debugf("receive publish binlog item: %s", b)
 	}
 }
 

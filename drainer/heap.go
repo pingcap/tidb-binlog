@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"container/heap"
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,6 +23,10 @@ type binlogItem struct {
 	job    *model.Job
 	// close the channel to signal other goroutine that we had received it's matched commit/rollback binlog
 	commitOrRollback chan struct{}
+}
+
+func (item *binlogItem) String() string {
+	return fmt.Sprintf("{commitTS: %d, node: %s, pos: %v}", item.binlog.CommitTs, item.nodeID, item.pos)
 }
 
 func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {

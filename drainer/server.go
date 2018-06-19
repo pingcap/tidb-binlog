@@ -307,7 +307,7 @@ func (s *Server) Start() error {
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
 	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
-		log.Debug("server has close")
+		log.Debug("server had closed")
 		return
 	}
 

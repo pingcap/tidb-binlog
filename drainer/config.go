@@ -223,7 +223,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" {
+	if c.DestDBType == "pb" || c.DestDBType == DestKafka {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
