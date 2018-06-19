@@ -74,7 +74,7 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (_ int64, err erro
 		if err != nil {
 			log.Errorf("Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
 		} else {
-			log.Debug(fmt.Sprintf("Flushed %d rows for \"%s\".", batch.Size(), batch.sql))
+			log.Debugf("Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
 		}
 	}()
 
@@ -305,7 +305,7 @@ func (e *flashExecutor) partition(key int64) int {
 }
 
 func (e *flashExecutor) flushAll(forceSaveCP bool) {
-	log.Debug(fmt.Sprintf("Flushing all row batches."))
+	log.Debug("Flushing all row batches.")
 
 	// Pick the latest commitTS among all row batches.
 	// TODO: consider if it's safe enough.
