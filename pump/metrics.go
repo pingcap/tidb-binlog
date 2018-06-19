@@ -113,14 +113,12 @@ func (mc *metricClient) Start(closer chan struct{}, pumpID string) {
 			log.Info("metricClient exit Start")
 			return
 		case <-time.After(time.Duration(mc.interval) * time.Second):
-			log.Info("push metrics")
 			err := push.AddFromGatherer(
 				"binlog",
 				map[string]string{"instance": pumpID},
 				mc.addr,
 				prometheus.DefaultGatherer,
 			)
-			log.Info("end push metrics")
 			if err != nil {
 				log.Errorf("could not push metrics to Prometheus Pushgateway: %v", err)
 			}
