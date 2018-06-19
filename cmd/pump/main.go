@@ -56,6 +56,8 @@ func main() {
 	// Start will block until the server is closed
 	if err := p.Start(); err != nil {
 		log.Errorf("pump server error, %v", err)
+		// exit when start fail
+		return
 	}
 
 	wg.Wait()
