@@ -137,19 +137,20 @@ func (sp *FlashCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *FlashCheckPoint) Save(int64, map[string]pb.Pos) error {
+func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
 
-	ok, ts, poss, err := sp.metaCP.PopSafeCP()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !ok {
+	// Init CP using metaCP's safe CP.
+	forceSave, ok, safeTS, safePoss := sp.metaCP.PopSafeCP()
+	if forceSave {
+		// If force save, use the CP passed in.
+		safeTS, safePoss = ts, poss
+	} else if !ok {
 		return nil
 	}
 
-	for nodeID, pos := range poss {
+	for nodeID, pos := range safePoss {
 		newPos := pb.Pos{}
 		if pos.Offset > 5000 {
 			newPos.Suffix = pos.Suffix
@@ -158,7 +159,7 @@ func (sp *FlashCheckPoint) Save(int64, map[string]pb.Pos) error {
 		sp.Positions[nodeID] = newPos
 	}
 
-	sp.CommitTS = ts
+	sp.CommitTS = safeTS
 	sp.saveTime = time.Now()
 
 	b, err := json.Marshal(sp)

@@ -282,7 +282,7 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 		return data.GetInt64(), nil
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString: // String
 		return data.GetString(), nil
-	case mysql.TypeEnum: // UInt16
+	case mysql.TypeEnum: // Int16
 		return int16(data.GetMysqlEnum().Value), nil
 	case mysql.TypeSet: // String
 		return data.GetMysqlSet().String(), nil

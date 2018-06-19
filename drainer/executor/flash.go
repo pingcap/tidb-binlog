@@ -72,7 +72,7 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (_ int64, err erro
 	log.Debug(fmt.Sprintf("Flushing %d rows for \"%s\".", batch.Size(), batch.sql))
 	defer func() {
 		if err != nil {
-			log.Errorf("Flushing rows for \"%d\" failed due to error %v.", batch.sql, err)
+			log.Errorf("Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
 		} else {
 			log.Debug(fmt.Sprintf("Flushed %d rows for \"%s\".", batch.Size(), batch.sql))
 		}
@@ -169,7 +169,6 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 			return nil, errors.Trace(err)
 		}
 		conn, err := pkgsql.OpenCHDirect(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
-		db.Driver()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -276,12 +275,11 @@ func (e *flashExecutor) Close() error {
 func (e *flashExecutor) flushRoutine() {
 	log.Info("Flush thread started.")
 	for {
-		time.Sleep(e.timeLimit)
 		select {
 		case <-e.close:
 			log.Info("Flush thread closing.")
 			return
-		default:
+		case <-time.After(e.timeLimit):
 			e.Lock()
 			log.Debug("Flush thread reached time limit, flushing.")
 			if e.err != nil {
