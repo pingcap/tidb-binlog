@@ -6,6 +6,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -104,12 +105,12 @@ type metricClient struct {
 }
 
 // Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(closer chan struct{}, pumpID string) {
+func (mc *metricClient) Start(ctx context.Context, pumpID string) {
 	log.Debugf("start prometheus metrics client, addr=%s, internal=%ds", mc.addr, mc.interval)
 
 	for {
 		select {
-		case <-closer:
+		case <-ctx.Done():
 			log.Info("metricClient exit Start")
 			return
 		case <-time.After(time.Duration(mc.interval) * time.Second):

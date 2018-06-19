@@ -85,7 +85,8 @@ type Server struct {
 	tcpAddr  string
 	unixAddr string
 	gs       *grpc.Server
-	closer   chan struct{}
+	ctx      context.Context
+	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 	gc       time.Duration
 	metrics  *metricClient
@@ -129,7 +130,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	clusterID := pdCli.GetClusterID(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
 	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(GlobalConfig.maxMsgSize)}
@@ -144,11 +146,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		tcpAddr:   cfg.ListenAddr,
 		unixAddr:  cfg.Socket,
 		gs:        grpc.NewServer(grpcOpts...),
+		ctx:       ctx,
+		cancel:    cancel,
 		metrics:   metrics,
 		gc:        time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:     pdCli,
 		cfg:       cfg,
-		closer:    make(chan struct{}),
 	}, nil
 }
 
@@ -312,25 +315,30 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 
 	for {
-		err = binlogger.Walk(stream.Context(), pos, sendBinlog)
+		err = binlogger.Walk(s.ctx, pos, sendBinlog)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
+		select {
+		// walk return nil even if ctx is Done, so check and return here
+		case <-s.ctx.Done():
+			return nil
 		// sleep 50 ms to prevent cpu occupied
-		time.Sleep(pullBinlogInterval)
+		case <-time.After(pullBinlogInterval):
+		}
 	}
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	if err := s.node.Register(context.Background()); err != nil {
+	if err := s.node.Register(s.ctx); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
 	// notify all cisterns
-	if err := s.node.Notify(context.Background()); err != nil {
+	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, unregister this node
 		if err := s.node.Unregister(context.Background()); err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
@@ -338,13 +346,7 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
-	// start heartbeat loop
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-s.closer
-		cancel()
-	}()
-	errc := s.node.Heartbeat(ctx)
+	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
 			if err != context.Canceled {
@@ -467,7 +469,7 @@ func (s *Server) genForwardBinlog() {
 	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
-		case <-s.closer:
+		case <-s.ctx.Done():
 			log.Info("genFakeBinlog exit")
 			return
 		case <-time.After(genFakeBinlogInterval):
@@ -484,7 +486,7 @@ func (s *Server) gcBinlogFile() {
 
 	for {
 		select {
-		case <-s.closer:
+		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
 		case <-time.Tick(time.Hour):
@@ -502,7 +504,7 @@ func (s *Server) startMetrics() {
 		return
 	}
 	log.Info("start metricClient")
-	s.metrics.Start(s.closer, s.node.ID())
+	s.metrics.Start(s.ctx, s.node.ID())
 	log.Info("startMetrics exit")
 }
 
@@ -514,7 +516,7 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pumps, err := node.EtcdRegistry.Nodes(context.Background(), "cisterns")
+	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
 	if err != nil {
 		log.Errorf("get pumps error %v", err)
 	}
@@ -529,7 +531,7 @@ func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 
 // PumpStatus returns all pumps' status.
 func (s *Server) PumpStatus() *HTTPStatus {
-	status, err := s.node.NodesStatus(context.Background())
+	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {
 		log.Errorf("get pumps' status error %v", err)
 		return &HTTPStatus{
@@ -601,7 +603,7 @@ func (s *Server) Close() {
 	}
 	log.Info("has closed pdCli")
 	// notify other goroutines to exit
-	close(s.closer)
+	s.cancel()
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
