@@ -198,7 +198,7 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 	pk1 := orderbyKey(descs)
 
 	// TODO select all data out may OOM if table is huge
-	rows, err := querySQL(db, fmt.Sprintf("select * from %s order by %s", tblName, pk1))
+	rows, err := querySQL(db, fmt.Sprintf("select * from %s order by `%s`", tblName, pk1))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -206,7 +206,7 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 }
 
 func getTableRowCount(db *sql.DB, tblName string) (*sql.Rows, error) {
-	rows, err := querySQL(db, fmt.Sprintf("select count(*) from %s", tblName))
+	rows, err := querySQL(db, fmt.Sprintf("select count(*) from `%s`", tblName))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -214,7 +214,7 @@ func getTableRowCount(db *sql.DB, tblName string) (*sql.Rows, error) {
 }
 
 func getTableIndex(db *sql.DB, tblName string) (*sql.Rows, error) {
-	rows, err := querySQL(db, fmt.Sprintf("show index from %s;", tblName))
+	rows, err := querySQL(db, fmt.Sprintf("show index from `%s`;", tblName))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -241,7 +241,7 @@ func getTables(db *sql.DB) ([]string, error) {
 }
 
 func getCreateTable(db *sql.DB, tn string) (string, error) {
-	stmt := fmt.Sprintf("show create table %s;", tn)
+	stmt := fmt.Sprintf("show create table `%s`;", tn)
 	rs, err := querySQL(db, stmt)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -410,7 +410,7 @@ func (desc *describeTable) Scan(rows *sql.Rows) error {
 }
 
 func getTableSchema(db *sql.DB, tblName string) ([]describeTable, error) {
-	stmt := fmt.Sprintf("describe %s;", tblName)
+	stmt := fmt.Sprintf("describe `%s`;", tblName)
 	rows, err := querySQL(db, stmt)
 	if err != nil {
 		return nil, errors.Trace(err)
