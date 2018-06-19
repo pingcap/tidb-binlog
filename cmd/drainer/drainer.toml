@@ -66,8 +66,9 @@ host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
-time-limit = "30s"
-size-limit = "100000"
+# Time and size limits for flash batch write
+# time-limit = "30s"
+# size-limit = "100000"
 
 # Uncomment this if you want to use pb or sql as db-type.
 # Compress compresses output file, like pb and sql file. Now it supports "gzip" algorithm only. 
