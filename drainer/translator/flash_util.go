@@ -248,26 +248,23 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 		}
 		return f, nil
 	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
-		var unix = int64(0)
-		// TiDB won't accept invalid date/time EXCEPT "0000-00-00", which is default value for not-null columns. So leave it zero.
-		if mysqlTime := data.GetMysqlTime(); !mysqlTime.IsZero() {
-			// Calculate the go time.
-			time := mysqlTime.Time
-			// Using UTC timezone
-			timezone := gotime.UTC
-			// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
-			if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
-				timezone = gotime.Local
-			}
-			goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour(), time.Minute(), time.Second(), time.Microsecond()*1000, timezone)
-			unix = goTime.Unix()
-			// Zero the negative unix time to prevent overflow in CH.
-			if unix < 0 {
-				log.Warnf("Date/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
-				unix = 0
-			}
+		mysqlTime := data.GetMysqlTime()
+		// Using UTC timezone
+		timezone := gotime.UTC
+		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
+		if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
+			timezone = gotime.Local
 		}
-		return unix, nil
+		var result = getUnixTimeSafe(mysqlTime, timezone)
+		if ft.Tp == mysql.TypeDate || ft.Tp == mysql.TypeNewDate {
+			// Hacking around Date data, will recover after Date mapped to true CH Date.
+			result = hackDateData(result)
+		} else if result < 0 {
+			// For DateTime and Timestamp, zero the negative unix time to prevent overflow in CH.
+			log.Warnf("Timestamp/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
+			result = 0
+		}
+		return result, nil
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
 		if err != nil {
@@ -396,7 +393,13 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return fmt.Sprintf("'%v'", mysqlTime), nil
+		// Hacking around Date data, will recover after Date mapped to true CH Date.
+		// return fmt.Sprintf("'%v'", mysqlTime), nil
+
+		// Using UTC timezone
+		timezone := gotime.UTC
+		result := getUnixTimeSafe(mysqlTime, timezone)
+		return hackDateData(result), nil
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		// Towards time types, convert to string formatted as 'YYYY-MM-DD hh:mm:ss'
 		var mysqlTime types.Time
@@ -495,6 +498,15 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		}
 	}
 	return nil, errors.Errorf("Unable to convert data %v from type %s to type %s.", data, source.String(), target.String())
+}
+
+func getUnixTimeSafe(mysqlTime types.Time, tz *gotime.Location) int64 {
+	if mysqlTime.IsZero() {
+		return 0
+	}
+	time := mysqlTime.Time
+	goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour()%24, time.Minute()%60, time.Second()%60, time.Microsecond()*1000%1000, tz)
+	return goTime.Unix()
 }
 
 // Escape a string to CH string literal.

@@ -179,10 +179,12 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Date/time types, with default value attribute.
 	check("create table Test(DT Date not null, tM Time not null, dTTm DateTime not null, ts timestamp not null, y year not null)",
 		Equals,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`dt` Date,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`dt` Date,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`dt` Int32,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(DT Date not null default '0000-00-00', tM Time default -1, dTTm DateTime not null default \"2018-01-01 13:13:13\", ts timestamp not null default current_timestamp(), y year not null default +1984)",
 		Matches,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`dt` Date DEFAULT '0000-00-00',`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
+		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`dt` Date DEFAULT '0000-00-00',`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`dt` Int32 DEFAULT 0,`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
 	// Enum type, with default value attribute.
 	check("create table Test(E Enum('a', 'b') not null)",
 		Equals,
@@ -240,34 +242,44 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Date.
 	check("alter table Test add column dt date default NULL",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Nullable(Date) DEFAULT NULL;")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Nullable(Date) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Nullable(Int32) DEFAULT NULL;")
 	check("alter table Test add column dt date not null default 19980808",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default 19980808232323",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08 23:23:23';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08 23:23:23';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default 19980808235959.99",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-09';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-09';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10447;")
 	check("alter table Test add column dt date not null default 0",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '0000-00-00';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '0000-00-00';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 0;")
 	check("alter table Test add column dt date not null default '1998-08-08'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default '1998-08-08 13:13:13'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default '1998-08-08 13:13'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default '1998-08-08 155:13:13'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10446;")
 	check("alter table Test add column dt date not null default '19980808235959.99'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-09';")
+		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-09';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT 10447;")
 	// Datetime and timestamp.
 	check("alter table Test add column dt datetime not null default 19980101",
 		Equals,
@@ -449,9 +461,13 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	check(mysql.TypeTimestamp, types.NewTimeDatum(dt), int64(0))
 	now := time.Now()
 	utc := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
-	check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	// Hacking Date, will recover after Date mapped to true Date in CH.
+	// check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
 	check(mysql.TypeDatetime, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
-	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	// Hacking Date, will recover after Date mapped to true Date in CH.
+	// check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
+	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
 	check(mysql.TypeTimestamp, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
 	// Decimal.
 	check(mysql.TypeDecimal, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))

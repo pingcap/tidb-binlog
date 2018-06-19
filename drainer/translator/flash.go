@@ -497,7 +497,8 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 			typeStr = fmt.Sprintf(typeStrFormat, "Int64")
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		typeStr = fmt.Sprintf(typeStrFormat, "Date")
+		// Hacking around Date type, will recover after Date mapped to true CH Date.
+		typeStr = fmt.Sprintf(typeStrFormat, hackDateTypeMapping())
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")
 	case mysql.TypeEnum:
