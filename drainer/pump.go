@@ -98,6 +98,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 func (p *Pump) Close() {
 	p.cancel()
 	p.consumer.Close()
+	p.asm.Close()
 	p.wg.Wait()
 }
 
@@ -402,10 +403,8 @@ func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
 	p.wg.Add(1)
-	defer func() {
-		p.asm.Close()
-		p.wg.Done()
-	}()
+	defer p.wg.Done()
+
 	var err error
 	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
