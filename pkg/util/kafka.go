@@ -6,6 +6,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics/exp"
 )
 
 const (
@@ -14,14 +16,16 @@ const (
 )
 
 // CreateKafkaProducer create a sync producer
-func CreateKafkaProducer(addr []string, kafkaVersion string, maxMsgSize int) (sarama.SyncProducer, error) {
+func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion string, maxMsgSize int, metricsPrefix string) (sarama.SyncProducer, error) {
 	var (
 		client sarama.SyncProducer
 		err    error
 	)
 
 	// initial kafka client to use manual partitioner
-	config := sarama.NewConfig()
+	if config == nil {
+		config = sarama.NewConfig()
+	}
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = maxMsgSize
 	config.Producer.Return.Successes = true
@@ -31,6 +35,8 @@ func CreateKafkaProducer(addr []string, kafkaVersion string, maxMsgSize int) (sa
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
+	config.MetricRegistry = metrics.NewPrefixedRegistry(metricsPrefix)
+	exp.Exp(config.MetricRegistry)
 
 	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {

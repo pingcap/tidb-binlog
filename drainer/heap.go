@@ -25,8 +25,8 @@ type binlogItem struct {
 	commitOrRollback chan struct{}
 }
 
-func (item *binlogItem) String() string {
-	return fmt.Sprintf("{commitTS: %d, node: %s, pos: %v}", item.binlog.CommitTs, item.nodeID, item.pos)
+func (b *binlogItem) String() string {
+	return fmt.Sprintf("{commitTS: %d, node: %s, pos: %v}", b.binlog.CommitTs, b.nodeID, b.pos)
 }
 
 func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {

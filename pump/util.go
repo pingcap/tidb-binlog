@@ -131,7 +131,7 @@ func initializeSaramaGlobalConfig() {
 }
 
 func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
-	return util.CreateKafkaProducer(addr, kafkaVersion, GlobalConfig.maxMsgSize)
+	return util.CreateKafkaProducer(nil, addr, kafkaVersion, GlobalConfig.maxMsgSize, "pump.")
 }
 
 // combine suffix offset in one float

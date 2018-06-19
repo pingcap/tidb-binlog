@@ -33,7 +33,7 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	)
 	switch name {
 	case "mysql", "tidb":
-		cp, err = newMysql(cfg)
+		cp, err = newMysql(name, cfg)
 	case "pb", "kafka":
 		cp, err = newPb(cfg)
 	case "flash":
