@@ -299,12 +299,11 @@ func (s *Server) Start() error {
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
-	err = m.Serve()
-	if err != nil && strings.Contains(err.Error(), "use of closed network connection") {
-		return nil
+	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
+		return errors.Trace(err)
 	}
 
-	return err
+	return nil
 }
 
 // Close stops all goroutines started by drainer server gracefully
