@@ -309,7 +309,8 @@ func (s *Server) Start() error {
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
 	// unregister drainer
-	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
+	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
 	}
 

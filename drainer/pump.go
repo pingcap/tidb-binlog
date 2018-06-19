@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"fmt"
-	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -425,7 +424,7 @@ func (p *Pump) pullBinlogs() {
 
 			pos, err = p.receiveBinlog(stream, pos)
 			if err != nil {
-				if errors.Cause(err) != io.EOF {
+				if errors.Cause(err) != context.Canceled {
 					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
 				}
 				time.Sleep(waitTime)
