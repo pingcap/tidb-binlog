@@ -251,22 +251,36 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 			f = 0
 		}
 		return f, nil
-	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
+	case mysql.TypeDate, mysql.TypeNewDate: // Int64
 		mysqlTime := data.GetMysqlTime()
-		// Using UTC timezone
-		timezone := gotime.UTC
-		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
-		if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
-			timezone = gotime.Local
-		}
-		var result = getUnixTimeSafe(mysqlTime, timezone)
+		var result = getUnixTimeSafe(mysqlTime, gotime.UTC)
 		if ok, hackVal := hackFormatDateData(result, ft); ok {
 			return hackVal, nil
 		}
-		if result < 0 {
-			// For DateTime and Timestamp, zero the negative unix time to prevent overflow in CH.
-			log.Warnf("Timestamp/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
-			result = 0
+		// Though CH stores Date as Uint16, do not care about negative value,
+		// because Spark will load the unsigned value to signed value bit-wise.
+		// However need to check overflow.
+		if result < math.MinInt16 {
+			log.Warnf("Date data %v before min value, will set to min value.", mysqlTime.String())
+			result = math.MinInt16
+		} else if result > math.MaxInt16 {
+			log.Warnf("Date data %v after max value, will set to max value.", mysqlTime.String())
+			result = math.MaxInt16
+		}
+		return result, nil
+	case mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
+		mysqlTime := data.GetMysqlTime()
+		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
+		var result = getUnixTimeSafe(mysqlTime, gotime.Local)
+		// Though CH stores DateTime as Uint32, do not care about negative value,
+		// because Spark will load the unsigned value to signed value bit-wise.
+		// However need to check overflow.
+		if result < math.MinInt32 {
+			log.Warnf("DateTime/Timestamp data %v before min value, will set to min value.", mysqlTime.String())
+			result = math.MinInt32
+		} else if result > math.MaxInt32 {
+			log.Warnf("DateTime/Timestamp data %v after max value, will set to max value.", mysqlTime.String())
+			result = math.MaxInt32
 		}
 		return result, nil
 	case mysql.TypeDuration: // Int64
