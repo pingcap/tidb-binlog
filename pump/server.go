@@ -592,6 +592,11 @@ func (s *Server) Close() {
 		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
 	}
 
+	// notify other goroutines to exit
+	s.cancel()
+	s.wg.Wait()
+	log.Info("background goroutins are stopped")
+
 	// unregister this node
 	if err := s.node.Unregister(context.Background()); err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
@@ -602,10 +607,6 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
-	// notify other goroutines to exit
-	s.cancel()
-	s.wg.Wait()
-	log.Info("background goroutins are stopped")
 
 	// will write binlog to dispatcher if genFakeBinlog() is still running or the pump server is serving
 	// so close this at lastest
