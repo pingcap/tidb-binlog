@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -46,6 +47,7 @@ type Server struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	syncer    *Syncer
+	isClosed  int32
 }
 
 func init() {
@@ -308,6 +310,11 @@ func (s *Server) Start() error {
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
+	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+		log.Debug("server had closed")
+		return
+	}
+
 	// unregister drainer
 	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
 	if err != nil && errors.Cause(err) != context.Canceled {
