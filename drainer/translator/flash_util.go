@@ -21,10 +21,6 @@ const implicitColName = "_tidb_rowid"
 const internalVersionColName = "_INTERNAL_VERSION"
 const internalDelmarkColName = "_INTERNAL_DELMARK"
 
-// Hack: mark the column names for some types.
-const dateColNamePrefix = "_tidb_date_"
-const decimalColNamePrefix = "_tidb_decimal_"
-
 const emptySQL = "select 1"
 
 func genEmptySQL(reason string) string {
@@ -211,7 +207,7 @@ func decodeFlashOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *got
 }
 
 // Convert datum to CH raw data, data type must be strictly matching the rules in analyzeColumnDef.
-func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) {
+func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error) {
 	if data.GetValue() == nil {
 		return nil, nil
 	}
@@ -246,9 +242,8 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 		return data.GetFloat64(), nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal: // String/Float64
 		// TODO: map decimal to CH decimal.
-		if ft.Decimal == 0 {
-			// Hack: tidb decimal of scale 0 was mapped to String.
-			return data.GetMysqlDecimal().String(), nil
+		if ok, hackVal := hackFormatDecimalData(data, ft); ok {
+			return hackVal, nil
 		}
 		f, err := data.GetMysqlDecimal().ToFloat64()
 		if err != nil {
@@ -265,10 +260,10 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 			timezone = gotime.Local
 		}
 		var result = getUnixTimeSafe(mysqlTime, timezone)
-		if ft.Tp == mysql.TypeDate || ft.Tp == mysql.TypeNewDate {
-			// Hacking around Date data, will recover after Date mapped to true CH Date.
-			result = hackDateData(result)
-		} else if result < 0 {
+		if ok, hackVal := hackFormatDateData(result, ft); ok {
+			return hackVal, nil
+		}
+		if result < 0 {
 			// For DateTime and Timestamp, zero the negative unix time to prevent overflow in CH.
 			log.Warnf("Timestamp/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
 			result = 0
@@ -310,10 +305,9 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	switch ft.Tp {
 	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString, mysql.TypeSet:
 		shouldQuote = true
-	case mysql.TypeDecimal, mysql.TypeNewDecimal:
-		// Hack for decimal types of scale 0.
-		if ft.Decimal == 0 {
-			shouldQuote = true
+	default:
+		if hackShouldQuote := hackShouldQuote(ft); hackShouldQuote {
+			shouldQuote = hackShouldQuote
 		}
 	}
 	switch e := expr.(type) {
@@ -407,13 +401,10 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		// Hacking around Date data, will recover after Date mapped to true CH Date.
-		// return fmt.Sprintf("'%v'", mysqlTime), nil
-
-		// Using UTC timezone
-		timezone := gotime.UTC
-		result := getUnixTimeSafe(mysqlTime, timezone)
-		return hackDateData(result), nil
+		if ok, hackVal := hackFormatDateData(getUnixTimeSafe(mysqlTime, gotime.UTC), target); ok {
+			return hackVal, nil
+		}
+		return fmt.Sprintf("'%v'", mysqlTime), nil
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		// Towards time types, convert to string formatted as 'YYYY-MM-DD hh:mm:ss'
 		var mysqlTime types.Time
@@ -500,7 +491,10 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			return data.GetValue(), nil
 		}
-	case mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
+	case mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
+		if ok, hackVal := hackConvertDecimalType(data, source, target); ok {
+			return hackVal, nil
+		}
 		// Towards numeric types, do really conversion.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
@@ -509,28 +503,6 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 			return data.GetMysqlDecimal(), nil
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			return data.GetValue(), nil
-		}
-	case mysql.TypeDecimal, mysql.TypeNewDecimal:
-		if target.Decimal == 0 {
-			// Hack around decimal types of scale 0, get numeric value and convert to string.
-			switch source.Tp {
-			case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
-				return data.GetString(), nil
-			case mysql.TypeDecimal, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-				return data.GetMysqlDecimal().String(), nil
-			case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
-				return fmt.Sprintf("%v", data.GetValue()), nil
-			}
-		} else {
-			// Towards numeric types, do really conversion.
-			switch source.Tp {
-			case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
-				return data.GetString(), nil
-			case mysql.TypeDecimal, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-				return data.GetMysqlDecimal(), nil
-			case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
-				return data.GetValue(), nil
-			}
 		}
 	}
 	return nil, errors.Errorf("Unable to convert data %v from type %s to type %s.", data, source.String(), target.String())

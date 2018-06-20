@@ -70,7 +70,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		for _, col := range columns {
 			if IsPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
-				pkVal, err := formatFlashData(pk, col.FieldType)
+				pkVal, err := formatFlashData(&pk, &col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
@@ -82,7 +82,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			if !ok {
 				vals = append(vals, col.DefaultValue)
 			} else {
-				value, err := formatFlashData(val, col.FieldType)
+				value, err := formatFlashData(&val, &col.FieldType)
 				if err != nil {
 					return nil, nil, nil, errors.Trace(err)
 				}
@@ -484,13 +484,9 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		}
 	case mysql.TypeFloat:
 		typeStr = fmt.Sprintf(typeStrFormat, "Float32")
-	case mysql.TypeDouble:
-		typeStr = fmt.Sprintf(typeStrFormat, "Float64")
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
-		if tp.Decimal == 0 {
-			// Hack: map decimal of scale 0 to String.
-			cName = decimalColNamePrefix + cName
-			typeStr = fmt.Sprintf(typeStrFormat, "String")
+	case mysql.TypeDouble, mysql.TypeNewDecimal, mysql.TypeDecimal:
+		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
+			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
 		} else {
 			typeStr = fmt.Sprintf(typeStrFormat, "Float64")
 		}
@@ -505,9 +501,11 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 			typeStr = fmt.Sprintf(typeStrFormat, "Int64")
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		// Hacking around Date type, will recover after Date mapped to true CH Date.
-		cName = dateColNamePrefix + cName
-		typeStr = fmt.Sprintf(typeStrFormat, hackDateTypeMapping())
+		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
+			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
+		} else {
+			typeStr = fmt.Sprintf(typeStrFormat, "Date")
+		}
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")
 	case mysql.TypeEnum:
@@ -567,7 +565,13 @@ func analyzeColumnPosition(cp *ast.ColumnPosition) (string, error) {
 func genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for _, column := range columns {
-		name := fmt.Sprintf("`%s`", column.Name.L)
+		var colName string
+		if ok, hackName, _ := hackColumnNameAndType(column.Name.L, &column.FieldType); ok {
+			colName = hackName
+		} else {
+			colName = column.Name.L
+		}
+		name := fmt.Sprintf("`%s`", colName)
 		columnList = append(columnList, []byte(name)...)
 
 		columnList = append(columnList, ',')
@@ -589,7 +593,7 @@ func genColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types
 		val, ok := columnValues[col.ID]
 		if ok {
 			newColumn = append(newColumn, col)
-			value, err := formatFlashData(val, col.FieldType)
+			value, err := formatFlashData(&val, &col.FieldType)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}

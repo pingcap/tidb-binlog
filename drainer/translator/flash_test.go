@@ -466,7 +466,7 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 
 func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	checkWithFT := func(ft types.FieldType, data types.Datum, expected interface{}) {
-		value, err := formatFlashData(data, ft)
+		value, err := formatFlashData(&data, &ft)
 		c.Assert(err, IsNil)
 		c.Assert(value, DeepEquals, expected)
 	}
@@ -553,7 +553,7 @@ func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag bool) (
 
 func testFlashGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface{}) {
 	d, _ := testGenDatum(c, col, base)
-	e, err := formatFlashData(d, col.FieldType)
+	e, err := formatFlashData(&d, &col.FieldType)
 	c.Assert(err, IsNil)
 	return d, e
 }
