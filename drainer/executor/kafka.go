@@ -62,7 +62,6 @@ func (p *kafkaExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		var tables []*obinlog.Table
 		for i := range args {
 			table := args[i][0].(*obinlog.Table)
-			// TODO merge
 			var idx int
 			var preTable *obinlog.Table
 			for idx, preTable = range tables {
