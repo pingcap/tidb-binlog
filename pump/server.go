@@ -479,10 +479,10 @@ func (s *Server) genForwardBinlog() {
 }
 
 func (s *Server) gcBinlogFile() {
+	defer s.wg.Done()
 	if s.gc == 0 {
 		return
 	}
-	defer s.wg.Done()
 
 	for {
 		select {
