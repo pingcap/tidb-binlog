@@ -484,8 +484,16 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		}
 	case mysql.TypeFloat:
 		typeStr = fmt.Sprintf(typeStrFormat, "Float32")
-	case mysql.TypeDouble, mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeDouble:
 		typeStr = fmt.Sprintf(typeStrFormat, "Float64")
+	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+		if tp.Decimal == 0 {
+			// Hack: map decimal of scale 0 to String.
+			cName = decimalColNamePrefix + cName
+			typeStr = fmt.Sprintf(typeStrFormat, "String")
+		} else {
+			typeStr = fmt.Sprintf(typeStrFormat, "Float64")
+		}
 	case mysql.TypeTimestamp, mysql.TypeDatetime: // timestamp, datetime
 		typeStr = fmt.Sprintf(typeStrFormat, "DateTime")
 	case mysql.TypeDuration: // duration
@@ -498,6 +506,7 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
 		// Hacking around Date type, will recover after Date mapped to true CH Date.
+		cName = dateColNamePrefix + cName
 		typeStr = fmt.Sprintf(typeStrFormat, hackDateTypeMapping())
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")

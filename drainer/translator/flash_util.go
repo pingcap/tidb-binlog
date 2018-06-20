@@ -20,6 +20,11 @@ import (
 const implicitColName = "_tidb_rowid"
 const internalVersionColName = "_INTERNAL_VERSION"
 const internalDelmarkColName = "_INTERNAL_DELMARK"
+
+// Hack: mark the column names for some types.
+const dateColNamePrefix = "_tidb_date_"
+const decimalColNamePrefix = "_tidb_decimal_"
+
 const emptySQL = "select 1"
 
 func genEmptySQL(reason string) string {
@@ -239,8 +244,12 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 		return data.GetFloat32(), nil
 	case mysql.TypeDouble: // Float64
 		return data.GetFloat64(), nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal: // Float64
+	case mysql.TypeNewDecimal, mysql.TypeDecimal: // String/Float64
 		// TODO: map decimal to CH decimal.
+		if ft.Decimal == 0 {
+			// Hack: tidb decimal of scale 0 was mapped to String.
+			return data.GetMysqlDecimal().String(), nil
+		}
 		f, err := data.GetMysqlDecimal().ToFloat64()
 		if err != nil {
 			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
@@ -301,6 +310,11 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	switch ft.Tp {
 	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString, mysql.TypeSet:
 		shouldQuote = true
+	case mysql.TypeDecimal, mysql.TypeNewDecimal:
+		// Hack for decimal types of scale 0.
+		if ft.Decimal == 0 {
+			shouldQuote = true
+		}
 	}
 	switch e := expr.(type) {
 	case *ast.ValueExpr:
@@ -486,7 +500,7 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			return data.GetValue(), nil
 		}
-	case mysql.TypeFloat, mysql.TypeDecimal, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeNewDecimal:
+	case mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
 		// Towards numeric types, do really conversion.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
@@ -495,6 +509,28 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 			return data.GetMysqlDecimal(), nil
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			return data.GetValue(), nil
+		}
+	case mysql.TypeDecimal, mysql.TypeNewDecimal:
+		if target.Decimal == 0 {
+			// Hack around decimal types of scale 0, get numeric value and convert to string.
+			switch source.Tp {
+			case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
+				return data.GetString(), nil
+			case mysql.TypeDecimal, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
+				return data.GetMysqlDecimal().String(), nil
+			case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
+				return fmt.Sprintf("%v", data.GetValue()), nil
+			}
+		} else {
+			// Towards numeric types, do really conversion.
+			switch source.Tp {
+			case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
+				return data.GetString(), nil
+			case mysql.TypeDecimal, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
+				return data.GetMysqlDecimal(), nil
+			case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
+				return data.GetValue(), nil
+			}
 		}
 	}
 	return nil, errors.Errorf("Unable to convert data %v from type %s to type %s.", data, source.String(), target.String())
