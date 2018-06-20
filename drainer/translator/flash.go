@@ -313,8 +313,7 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 
 func extractTruncateTable(stmt *ast.TruncateTableStmt, schema string) string {
 	tableName := stmt.Table.Name.L
-	// TODO: Use the genuine TRUNCATE statement rather than DELETE, when CH supports it.
-	return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE 1", schema, tableName)
+	return fmt.Sprintf("TRUNCATE TABLE `%s`.`%s`", schema, tableName)
 }
 
 func extractRenameTable(stmt *ast.RenameTableStmt, schema string) (string, error) {
