@@ -2,7 +2,12 @@ package assemble
 
 import (
 	"encoding/binary"
+	"hash/crc32"
+	"math"
+	"sync"
+
 	"github.com/Shopify/sarama"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/bitmap"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
@@ -10,9 +15,6 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
-	"hash/crc32"
-	"math"
-	"sync"
 )
 
 // unsupported concurrency
@@ -94,7 +96,9 @@ func (a *Assembler) do() {
 	for {
 		select {
 		case <-a.ctx.Done():
-			log.Warnf("assembler was canceled: %v", a.ctx.Err())
+			if errors.Cause(a.ctx.Err()) != context.Canceled {
+				log.Warnf("assembler was canceled: %v", a.ctx.Err())
+			}
 			return
 		case msg = <-a.input:
 			binlog := a.assemble(msg)
