@@ -618,7 +618,13 @@ func (s *Syncer) run(b *binlogItem) error {
 				}
 
 				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
-				job := newDDLJob(sql, []interface{}{schema, table}, "", commitTS, b.pos, b.nodeID)
+				var args []interface{}
+				// for kafka, we want to know the relate schema and table, get it while args now
+				// in executor
+				if s.cfg.DestDBType == "kafka" {
+					args = []interface{}{schema, table}
+				}
+				job := newDDLJob(sql, args, "", commitTS, b.pos, b.nodeID)
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
