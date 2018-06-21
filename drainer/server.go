@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -301,7 +302,11 @@ func (s *Server) Start() error {
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
-	return m.Serve()
+	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // Close stops all goroutines started by drainer server gracefully
@@ -312,11 +317,11 @@ func (s *Server) Close() {
 	}
 
 	// unregister drainer
-	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
+	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
 	}
-	// stop syncer
-	s.syncer.Close()
+
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
