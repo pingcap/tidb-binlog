@@ -16,6 +16,7 @@ const (
 	retryInterval = 5 * time.Second
 )
 
+// don't use directly, call GetParentMetricsRegistry to get it
 var metricRegistry metrics.Registry
 var metricRegistryOnce sync.Once
 
@@ -51,7 +52,7 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	config.MetricRegistry = metrics.NewPrefixedChildRegistry(metricRegistry, metricsPrefix)
+	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
 
 	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {
