@@ -1,6 +1,7 @@
 package util
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -14,6 +15,20 @@ const (
 	maxRetry      = 12
 	retryInterval = 5 * time.Second
 )
+
+var metricRegistry metrics.Registry
+var metricRegistryOnce sync.Once
+
+func initMetrics() {
+	metricRegistry = metrics.NewRegistry()
+	// can't call Exp multi time
+	exp.Exp(metricRegistry)
+}
+
+func GetParentMetricsRegistry() metrics.Registry {
+	metricRegistryOnce.Do(initMetrics)
+	return metricRegistry
+}
 
 // CreateKafkaProducer create a sync producer
 func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion string, maxMsgSize int, metricsPrefix string) (sarama.SyncProducer, error) {
@@ -35,8 +50,7 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	config.MetricRegistry = metrics.NewPrefixedRegistry(metricsPrefix)
-	exp.Exp(config.MetricRegistry)
+	config.MetricRegistry = metrics.NewPrefixedChildRegistry(metricRegistry, metricsPrefix)
 
 	log.Infof("kafka producer version %v", version)
 	for i := 0; i < maxRetry; i++ {
