@@ -25,6 +25,7 @@ func initMetrics() {
 	exp.Exp(metricRegistry)
 }
 
+// GetParentMetricsRegistry get the metrics registry and expose the metrics while /debug/metrics
 func GetParentMetricsRegistry() metrics.Registry {
 	metricRegistryOnce.Do(initMetrics)
 	return metricRegistry
