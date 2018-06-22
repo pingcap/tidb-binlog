@@ -9,6 +9,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -66,7 +67,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		var vals []interface{}
 		vals = append(vals, hashKey)
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) {
+			if IsPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 				vals = append(vals, pk.GetValue())
 				continue
@@ -117,7 +118,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	totalValues := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(table.Columns)
+	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
@@ -179,7 +180,7 @@ func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, gotime.Local)

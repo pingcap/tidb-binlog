@@ -54,7 +54,7 @@ func isPrimaryKeyColumn(colDef *ast.ColumnDef) bool {
 
 func pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
-		if isPKHandleColumn(table, col) {
+		if IsPKHandleColumn(table, col) {
 			return col
 		}
 	}

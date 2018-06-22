@@ -45,7 +45,7 @@ disable-dispatch = false
 safe-mode = false
 
 # downstream storage, equal to --dest-db-type
-# valid values are "mysql", "pb", "tidb", "flash"
+# valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "mysql"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
@@ -74,3 +74,8 @@ port = 3306
 #dir = "data.drainer"
 #compression = "gzip"
 
+
+# when db-type is kafka, you can uncomment this to config the down stream kafka, it will be the globle config kafka default
+#[syncer.to]
+# kafka-addrs = "127.0.0.1:9092"
+# kafka-version = "0.8.2.0"
