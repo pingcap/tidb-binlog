@@ -76,6 +76,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	clusterID = pdCli.GetClusterID(ctx)
+	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 

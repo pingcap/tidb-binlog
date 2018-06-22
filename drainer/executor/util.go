@@ -13,4 +13,9 @@ type DBConfig struct {
 	Port          int    `toml:"port" json:"port"`
 	BinlogFileDir string `toml:"dir" json:"dir"`
 	Compression   string `toml:"compression" json:"compression"`
+
+	KafkaAddrs   string `toml:"kafka-addrs" json:"kafka-addrs"`
+	KafkaVersion string `toml:"kafka-version" json:"kafka-version"`
+	// get it from pd
+	ClusterID uint64 `toml:"-" json:"-"`
 }

@@ -16,8 +16,6 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
-	metrics "github.com/rcrowley/go-metrics"
-	"github.com/rcrowley/go-metrics/exp"
 )
 
 const (
@@ -133,38 +131,7 @@ func initializeSaramaGlobalConfig() {
 }
 
 func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
-	var (
-		client sarama.SyncProducer
-		err    error
-	)
-
-	// initial kafka client to use manual partitioner
-	config := sarama.NewConfig()
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
-	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	config.Version = version
-	config.MetricRegistry = metrics.NewPrefixedRegistry("pump.")
-
-	exp.Exp(config.MetricRegistry)
-
-	log.Infof("kafka producer version %v", version)
-	for i := 0; i < maxRetry; i++ {
-		client, err = sarama.NewSyncProducer(addr, config)
-		if err != nil {
-			log.Errorf("create kafka client error %v", err)
-			time.Sleep(retryInterval)
-			continue
-		}
-		return client, nil
-	}
-
-	return nil, errors.Trace(err)
+	return util.CreateKafkaProducer(nil, addr, kafkaVersion, GlobalConfig.maxMsgSize, "pump.")
 }
 
 // combine suffix offset in one float

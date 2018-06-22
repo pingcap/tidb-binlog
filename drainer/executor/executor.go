@@ -21,6 +21,8 @@ func New(name string, cfg *DBConfig) (Executor, error) {
 		return newPB(cfg)
 	case "flash":
 		return newFlash(cfg)
+	case "kafka":
+		return newKafka(cfg)
 	default:
 		return nil, errors.Errorf("unsupport executor type %s", name)
 	}

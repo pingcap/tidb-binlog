@@ -21,13 +21,13 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobStateCancelled}
-	_, _, sql, err := s.handleDDL(job)
+	_, _, sql, err := s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobStateDone}
-	_, _, sql, err = s.handleDDL(job)
+	_, _, sql, err = s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -124,7 +124,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 }
 
 func testDoDDLAndCheck(c *C, s *Syncer, job *model.Job, isErr bool, sql string, schema string, table string) {
-	schemaName, tableName, resSQL, err := s.handleDDL(job)
+	schemaName, tableName, resSQL, err := s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, resSQL)
 	c.Assert(schemaName, Equals, schema)
