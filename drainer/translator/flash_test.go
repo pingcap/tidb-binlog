@@ -409,6 +409,10 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("alter table Test add column C varchar(255) default 100 after I",
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `c` Nullable(String) DEFAULT '100' AFTER `i`;")
+
+	check("truncate table Test",
+		Equals,
+		"TRUNCATE TABLE `test_schema`.`test`")
 }
 
 func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
