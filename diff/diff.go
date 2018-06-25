@@ -12,13 +12,15 @@ import (
 
 // Diff contains two sql DB, used for comparing.
 type Diff struct {
+	cfg *Config
 	db1 *sql.DB
 	db2 *sql.DB
 }
 
 // New returns a Diff instance.
-func New(db1, db2 *sql.DB) *Diff {
+func New(cfg *Config, db1, db2 *sql.DB) *Diff {
 	return &Diff{
+		cfg: cfg,
 		db1: db1,
 		db2: db2,
 	}
@@ -45,14 +47,16 @@ func (df *Diff) Equal() (eq bool, err error) {
 	}
 
 	for _, tblName := range tbls1 {
-		eq, err = df.EqualIndex(tblName)
-		if err != nil {
-			err = errors.Trace(err)
-			return
-		}
-		if !eq {
-			log.Infof("table have different index: %s\n", tblName)
-			return
+		if df.cfg.EqualIndex {
+			eq, err = df.EqualIndex(tblName)
+			if err != nil {
+				err = errors.Trace(err)
+				return
+			}
+			if !eq {
+				log.Infof("table have different index: %s\n", tblName)
+				return
+			}
 		}
 
 		eq, err = df.EqualTable(tblName)
@@ -66,24 +70,39 @@ func (df *Diff) Equal() (eq bool, err error) {
 }
 
 // EqualTable tests whether two database table have same data and schema.
-func (df *Diff) EqualTable(tblName string) (bool, error) {
-	eq, err := df.equalCreateTable(tblName)
-	if err != nil {
-		return eq, errors.Trace(err)
-	}
-	if !eq {
-		log.Infof("table have different schema: %s\n", tblName)
-		return eq, err
+func (df *Diff) EqualTable(tblName string) (eq bool, err error) {
+	if df.cfg.EqualCreateTable {
+		eq, err = df.equalCreateTable(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table have different schema: %s\n", tblName)
+			return eq, err
+		}
 	}
 
-	eq, err = df.equalTableData(tblName)
-	if err != nil {
-		return eq, errors.Trace(err)
+	if df.cfg.EqualRowCount {
+		eq, err = df.equalTableRowCount(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table row count different: %s\n", tblName)
+		}
 	}
-	if !eq {
-		log.Infof("table data different: %s\n", tblName)
+
+	if df.cfg.EqualData {
+		eq, err = df.equalTableData(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table data different: %s\n", tblName)
+		}
 	}
-	return eq, err
+
+	return
 }
 
 // EqualIndex tests whether two database index are same.
@@ -123,6 +142,36 @@ func (df *Diff) equalCreateTable(tblName string) (bool, error) {
 	// TODO ignore table schema currently
 	// return table1 == table2, nil
 	return true, nil
+}
+
+func (df *Diff) equalTableRowCount(tblName string) (bool, error) {
+	rows1, err := getTableRowCount(df.db1, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer rows1.Close()
+
+	rows2, err := getTableRowCount(df.db2, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer rows2.Close()
+
+	cols1, err := rows1.ColumnTypes()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	cols2, err := rows2.ColumnTypes()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if len(cols1) != len(cols2) {
+		return false, nil
+	}
+
+	row1 := newRawBytesRow(cols1)
+	row2 := newRawBytesRow(cols2)
+	return equalRows(rows1, rows2, row1, row2)
 }
 
 func (df *Diff) equalTableData(tblName string) (bool, error) {

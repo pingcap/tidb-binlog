@@ -6,6 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // NewConfig creates a new config.
@@ -38,6 +39,8 @@ type Config struct {
 	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
 
 	TargetDBCfg DBConfig `toml:"target-db" json:"target-db"`
+
+	DiffConfig diff.Config `toml:"diff" json:"diff"`
 
 	configFile string
 }

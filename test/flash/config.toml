@@ -18,3 +18,9 @@ host = "127.0.0.1:9000"
 user = ""
 password = ""
 name = "test"
+
+[diff]
+equal-index = false
+equal-create-table = false
+equal-row-count = true
+equal-data = false

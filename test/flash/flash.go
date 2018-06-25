@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"os"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/juju/errors"
 	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
@@ -78,7 +76,7 @@ create table ntest(
 
 	// wait for sync to downstream sql server
 	time.Sleep(60 * time.Second)
-	if !CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
 
@@ -87,7 +85,7 @@ create table ntest(
 
 	// wait for sync to downstream sql server
 	time.Sleep(60 * time.Second)
-	if !CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
 
@@ -98,7 +96,7 @@ create table ntest(
 	time.Sleep(90 * time.Second)
 
 	// diff the test schema
-	if !CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -109,7 +107,7 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -120,20 +118,9 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
 	log.Info("test pass!!!")
-}
-
-// CheckSyncState check if srouceDB and targetDB has the same table and data
-func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
-	d := diff.NewFlash(sourceDB, targetDB)
-	ok, err := d.FlashEqual()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return ok
 }
