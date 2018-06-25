@@ -384,6 +384,11 @@ func (r rawBytesRow) Equal(data comparable) bool {
 		return false
 	}
 	for i := 0; i < r.Len(); i++ {
+		tname := r.colTypes[i].DatabaseTypeName()
+		if len(tname) == 0 {
+			log.Warn("empty type name: ", tname)
+		}
+
 		if r.colTypes[i].DatabaseTypeName() == "JSON" {
 			if !equalJSON(r.rawBytes[i], r2.rawBytes[i]) {
 				return false

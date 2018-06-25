@@ -15,4 +15,9 @@ type DBConfig struct {
 	Compression   string `toml:"compression" json:"compression"`
 	TimeLimit     string `toml:"time-limit" json:"time-limit"`
 	SizeLimit     string `toml:"size-limit" json:"size-limit"`
+
+	KafkaAddrs   string `toml:"kafka-addrs" json:"kafka-addrs"`
+	KafkaVersion string `toml:"kafka-version" json:"kafka-version"`
+	// get it from pd
+	ClusterID uint64 `toml:"-" json:"-"`
 }

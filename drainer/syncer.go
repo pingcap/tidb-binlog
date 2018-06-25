@@ -101,6 +101,7 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 	}
 
 	err = s.run(b)
+
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -175,7 +176,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
+func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}) (string, string, string, error) {
 	if job.State == model.JobStateCancelled {
 		return "", "", "", nil
 	}
@@ -190,12 +191,12 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 	case model.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
 		schema := job.BinlogInfo.DBInfo
-		if filterIgnoreSchema(schema, s.ignoreSchemaNames) {
-			s.schema.AddIgnoreSchema(schema)
+		if filterIgnoreSchema(schema, ignoreSchemaNames) {
+			s.AddIgnoreSchema(schema)
 			return "", "", "", nil
 		}
 
-		err := s.schema.CreateSchema(schema)
+		err := s.CreateSchema(schema)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -203,13 +204,13 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, "", sql, nil
 
 	case model.ActionDropSchema:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			s.schema.DropIgnoreSchema(job.SchemaID)
+			s.DropIgnoreSchema(job.SchemaID)
 			return "", "", "", nil
 		}
 
-		schemaName, err := s.schema.DropSchema(job.SchemaID)
+		schemaName, err := s.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -218,27 +219,27 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
-		_, ok := s.schema.SchemaByTableID(job.TableID)
+		_, ok := s.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
-		_, ok = s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok = s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 		// first drop the table
-		_, err := s.schema.DropTable(job.TableID)
+		_, err := s.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = s.schema.CreateTable(schema, table)
+		err = s.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -251,17 +252,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.CreateTable(schema, table)
+		err := s.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -269,17 +270,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	case model.ActionDropTable:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		tableName, err := s.schema.DropTable(job.TableID)
+		tableName, err := s.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -287,17 +288,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, tableName, sql, nil
 
 	case model.ActionTruncateTable:
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		_, err := s.schema.DropTable(job.TableID)
+		_, err := s.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -307,7 +308,7 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		err = s.schema.CreateTable(schema, table)
+		err = s.CreateTable(schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -325,17 +326,17 @@ func (s *Syncer) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		_, ok := s.schema.IgnoreSchemaByID(job.SchemaID)
+		_, ok := s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
 			return "", "", "", nil
 		}
 
-		schema, ok := s.schema.SchemaByID(job.SchemaID)
+		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.schema.ReplaceTable(tbInfo)
+		err := s.ReplaceTable(tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -565,6 +566,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	var err error
 
 	s.genRegexMap()
+
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
@@ -603,7 +605,7 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 
 		} else if jobID > 0 {
-			schema, table, sql, err := s.handleDDL(b.job)
+			schema, table, sql, err := s.schema.handleDDL(b.job, s.ignoreSchemaNames)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -617,7 +619,13 @@ func (s *Syncer) run(b *binlogItem) error {
 				}
 
 				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
-				job := newDDLJob(sql, nil, "", commitTS, b.pos, b.nodeID)
+				var args []interface{}
+				// for kafka, we want to know the relate schema and table, get it while args now
+				// in executor
+				if s.cfg.DestDBType == "kafka" {
+					args = []interface{}{schema, table}
+				}
+				job := newDDLJob(sql, args, "", commitTS, b.pos, b.nodeID)
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
@@ -627,6 +635,7 @@ func (s *Syncer) run(b *binlogItem) error {
 		case <-s.ctx.Done():
 			return nil
 		case b = <-s.input:
+			log.Debugf("consume binlogItem: %s", b)
 		}
 	}
 }
@@ -732,14 +741,17 @@ func (s *Syncer) Add(b *binlogItem) {
 	select {
 	case <-s.ctx.Done():
 	case s.input <- b:
+		log.Debugf("receive publish binlog item: %s", b)
 	}
 }
 
 // Close closes syncer.
 func (s *Syncer) Close() {
+	log.Debug("closing syncer")
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
+	log.Debug("done close syncer")
 }
 
 // GetLastSyncTime returns lastSyncTime

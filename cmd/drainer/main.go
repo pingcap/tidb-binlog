@@ -34,6 +34,7 @@ func main() {
 	}
 
 	sc := make(chan os.Signal, 1)
+
 	signal.Notify(sc,
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -51,4 +52,6 @@ func main() {
 		log.Errorf("start drainer server error, %s", errors.ErrorStack(err))
 		os.Exit(2)
 	}
+
+	log.Info("drainer exit")
 }

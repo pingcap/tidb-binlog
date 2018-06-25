@@ -9,6 +9,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -67,7 +68,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		var vals []interface{}
 		vals = append(vals, hashKey)
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) {
+			if IsPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 				pkVal, err := formatFlashData(pk, col.FieldType)
 				if err != nil {
@@ -122,7 +123,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	totalValues := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(table.Columns)
+	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
@@ -186,7 +187,7 @@ func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, gotime.Local)
@@ -321,8 +322,7 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 
 func extractTruncateTable(stmt *ast.TruncateTableStmt, schema string) string {
 	tableName := stmt.Table.Name.L
-	// TODO: Use the genuine TRUNCATE statement rather than DELETE, when CH supports it.
-	return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE 1", schema, tableName)
+	return fmt.Sprintf("TRUNCATE TABLE `%s`.`%s`", schema, tableName)
 }
 
 func extractRenameTable(stmt *ast.RenameTableStmt, schema string) (string, error) {

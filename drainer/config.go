@@ -123,7 +123,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or pb; see syncer section in conf/drainer.toml")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or pb or flash or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
@@ -199,9 +199,17 @@ func (cfg *Config) Parse(args []string) error {
 			cfg.SyncerCfg.To.User = "root"
 			cfg.SyncerCfg.To.Password = ""
 			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
-		} else {
+		} else if cfg.SyncerCfg.DestDBType == "pb" {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	}
+
+	// set default value even has the to config part
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
+			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
+			cfg.SyncerCfg.To.KafkaVersion = cfg.KafkaVersion
 		}
 	}
 
@@ -210,7 +218,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" {
+	if c.DestDBType == "pb" || c.DestDBType == "kafka" {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
