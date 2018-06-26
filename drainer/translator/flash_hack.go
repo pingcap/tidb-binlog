@@ -14,7 +14,8 @@ const decimalColNamePrefix = "_tidb_decimal_"
 func hackColumnNameAndType(colName string, colType *types.FieldType) (bool, string, string) {
 	if colType.Tp == mysql.TypeDate {
 		return true, dateColNamePrefix + colName, "Int32"
-	} else if (colType.Tp == mysql.TypeDecimal || colType.Tp == mysql.TypeNewDecimal) && colType.Decimal == 0 {
+	} else if (colType.Tp == mysql.TypeDecimal || colType.Tp == mysql.TypeNewDecimal) &&
+		(colType.Decimal == 0 || colType.Decimal == types.UnspecifiedLength) {
 		return true, decimalColNamePrefix + colName, "String"
 	}
 	return false, "", ""
