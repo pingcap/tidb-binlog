@@ -58,7 +58,7 @@ func (batch *flashRowBatch) AddRow(args []interface{}, commitTS int64) error {
 		batch.latestCommitTS = commitTS
 	}
 
-	log.Debug(fmt.Sprintf("Added row %v.", args))
+	log.Debug(fmt.Sprintf("[add_row] Added row %v.", args))
 	return nil
 }
 
@@ -67,14 +67,30 @@ func (batch *flashRowBatch) Size() int {
 	return len(batch.rows)
 }
 
-// Flush writes all the rows in this row batch into CH.
-func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (_ int64, err error) {
-	log.Debug(fmt.Sprintf("Flushing %d rows for \"%s\".", batch.Size(), batch.sql))
+// Flush writes all the rows in this row batch into CH, with retrying when failure.
+func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, err error) {
+	for i := 0; i < pkgsql.MaxDMLRetryCount; i++ {
+		if i > 0 {
+			log.Warnf("[flush] Retrying %d flushing row batch %v", i, batch.sql)
+			time.Sleep(pkgsql.RetryWaitTime)
+		}
+		commitTS, err = batch.flushInternal(conn)
+		if err == nil {
+			return commitTS, nil
+		}
+		log.Warnf("[flush] Error %v when flushing row batch %v", err, batch.sql)
+	}
+
+	return commitTS, errors.Trace(err)
+}
+
+func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, err error) {
+	log.Debug(fmt.Sprintf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql))
 	defer func() {
 		if err != nil {
-			log.Errorf("Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
+			log.Errorf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
 		} else {
-			log.Debugf("Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
+			log.Debugf("[flush] Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
 		}
 	}()
 
@@ -110,7 +126,7 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (_ int64, err erro
 		tx.Rollback()
 		if ce, ok := err.(*clickhouse.Exception); ok {
 			// Stack trace from server side could be very helpful for triaging problems.
-			log.Error(ce.StackTrace)
+			log.Error("[flush] ", ce.StackTrace)
 		}
 		return batch.latestCommitTS, errors.Trace(err)
 	}
@@ -194,7 +210,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 	defer e.Unlock()
 
 	if e.err != nil {
-		log.Errorf("Executor seeing error %v from the flush thread, exiting.", e.err)
+		log.Errorf("[execute] Executor seeing error %v from the flush thread, exiting.", e.err)
 		return errors.Trace(e.err)
 	}
 
@@ -202,7 +218,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		// Flush all row batches.
 		e.flushAll(true)
 		if e.err != nil {
-			log.Errorf("Executor seeing error %v when flushing, exiting.", e.err)
+			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
 		}
 		for _, chDB := range e.chDBs {
@@ -245,12 +261,12 @@ func (e *flashExecutor) Close() error {
 	// Could have had error in async flush goroutine, log it.
 	e.Lock()
 	if e.err != nil {
-		log.Error(e.err)
+		log.Error("[close] ", e.err)
 	}
 	e.Unlock()
 
 	// Wait for async flush goroutine to exit.
-	log.Info("Waiting for flush thread to close.")
+	log.Info("[close] Waiting for flush thread to close.")
 	e.close <- true
 
 	hasError := false
@@ -258,12 +274,12 @@ func (e *flashExecutor) Close() error {
 		err := chDB.DB.Close()
 		if err != nil {
 			hasError = true
-			log.Error(err)
+			log.Error("[close] ", err)
 		}
 		err = chDB.Conn.Close()
 		if err != nil {
 			hasError = true
-			log.Error(err)
+			log.Error("[close] ", err)
 		}
 	}
 	if hasError {
@@ -273,24 +289,24 @@ func (e *flashExecutor) Close() error {
 }
 
 func (e *flashExecutor) flushRoutine() {
-	log.Info("Flush thread started.")
+	log.Info("[flush_thread] Flush thread started.")
 	for {
 		select {
 		case <-e.close:
-			log.Info("Flush thread closing.")
+			log.Info("[flush_thread] Flush thread closing.")
 			return
 		case <-time.After(e.timeLimit):
 			e.Lock()
-			log.Debug("Flush thread reached time limit, flushing.")
+			log.Debug("[flush_thread] Flush thread reached time limit, flushing.")
 			if e.err != nil {
 				e.Unlock()
-				log.Errorf("Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
+				log.Errorf("[flush_thread] Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
 				return
 			}
 			e.flushAll(false)
 			if e.err != nil {
 				e.Unlock()
-				log.Errorf("Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
+				log.Errorf("[flush_thread] Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
 				return
 			}
 			// TODO: save checkpoint.
@@ -305,7 +321,7 @@ func (e *flashExecutor) partition(key int64) int {
 }
 
 func (e *flashExecutor) flushAll(forceSaveCP bool) {
-	log.Debug("Flushing all row batches.")
+	log.Debug("[flush_all] Flushing all row batches.")
 
 	// Pick the latest commitTS among all row batches.
 	// TODO: consider if it's safe enough.

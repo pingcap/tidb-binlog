@@ -43,16 +43,16 @@ func (f *MetaCheckpoint) Flush(commitTS int64, forceSave bool) {
 	defer f.Unlock()
 
 	if forceSave {
-		log.Debugf("FMC received a force save at %d.", commitTS)
+		log.Debugf("[flush] FMC received a force save at %d.", commitTS)
 		f.forceSave = forceSave
 		return
 	} else if f.forceSave {
 		// Now being called from flushing thread, ignore as we are about to force save right away.
-		log.Debugf("FMC received a flush during force save period at %d. Ignoring.", commitTS)
+		log.Debugf("[flush] FMC received a flush during force save period at %d. Ignoring.", commitTS)
 		return
 	}
 
-	log.Debug("FMC received a flush, updating safe checkpoint.")
+	log.Debug("[flush] FMC received a flush, updating safe checkpoint.")
 
 	// Find the latest cp before last flush time.
 	var removeUntil = -1
@@ -64,13 +64,13 @@ func (f *MetaCheckpoint) Flush(commitTS int64, forceSave bool) {
 	}
 	// Re-make pending checkpoints and discards ones until the safe checkpoint.
 	if removeUntil >= 0 {
-		log.Debugf("FMC picks safe checkpoint %v.", f.safeCP)
+		log.Debugf("[flush] FMC picks safe checkpoint %v.", f.safeCP)
 		f.removePendingCPs(removeUntil + 1)
 	} else {
-		log.Debug("FMC picks no safe checkpoint.")
+		log.Debug("[flush] FMC picks no safe checkpoint.")
 	}
 
-	log.Debugf("FMC remaining %d pending checkpoints.", len(f.pendingCPs))
+	log.Debugf("[flush] FMC remaining %d pending checkpoints.", len(f.pendingCPs))
 }
 
 // PushPendingCP pushes a pending checkpoint.
@@ -85,7 +85,7 @@ func (f *MetaCheckpoint) PushPendingCP(commitTS int64, pos map[string]pb.Pos) {
 	}
 	f.pendingCPs = append(f.pendingCPs, &checkpoint{commitTS, newPos})
 
-	log.Debugf("FMC pushed a pending checkpoint %v.", f.pendingCPs[len(f.pendingCPs)-1])
+	log.Debugf("[push] FMC pushed a pending checkpoint %v.", f.pendingCPs[len(f.pendingCPs)-1])
 }
 
 // PopSafeCP pops the safe checkpoint, after popping the safe checkpoint will be nil.
@@ -95,17 +95,17 @@ func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64, map[string]pb.Pos) {
 	defer f.Unlock()
 
 	if f.forceSave {
-		log.Debug("FMC has a force save, clearing all.")
+		log.Debug("[pop] FMC has a force save, clearing all.")
 		f.safeCP = nil
 		f.removePendingCPs(len(f.pendingCPs))
 		f.forceSave = false
 		return true, false, -1, nil
 	} else if f.safeCP == nil {
-		log.Debug("FMC has no safe checkpoint.")
+		log.Debug("[pop] FMC has no safe checkpoint.")
 		return false, false, -1, nil
 	}
 
-	log.Debugf("FMC popping safe checkpoint %v.", f.safeCP)
+	log.Debugf("[pop] FMC popping safe checkpoint %v.", f.safeCP)
 
 	commitTS, pos := f.safeCP.commitTS, f.safeCP.pos
 	f.safeCP = nil
