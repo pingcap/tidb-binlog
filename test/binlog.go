@@ -67,7 +67,7 @@ create table ntest(
 
 	// wait for sync to downstream sql server
 	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
 
@@ -76,7 +76,7 @@ create table ntest(
 
 	// wait for sync to downstream sql server
 	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
 
@@ -87,7 +87,7 @@ create table ntest(
 	time.Sleep(90 * time.Second)
 
 	// diff the test schema
-	if !util.CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -98,7 +98,7 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !util.CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
@@ -109,7 +109,7 @@ create table ntest(
 	time.Sleep(30 * time.Second)
 
 	// diff the test schema
-	if !util.CheckSyncState(sourceDB, targetDB) {
+	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
