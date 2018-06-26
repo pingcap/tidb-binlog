@@ -46,7 +46,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	columnList := genColumnList(columns)
 	// addition 2 holder is for del flag and version
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns) + 2)
-	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
 
 	for _, row := range rows {
 		//decode the pk value
@@ -136,7 +136,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		newPkValue := newColumnValues[pkID]
 
 		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
+			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name.L)
 		}
 
 		if len(newColumnValues) == 0 {
@@ -152,7 +152,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		// addition 2 holder is for del flag and version
 		columnPlaceholders := dml.GenColumnPlaceholders(len(table.Columns) + 2)
 
-		sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+		sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
 
 		sqls = append(sqls, sql)
 		totalValues = append(totalValues, makeRow(newPkValue.GetInt64(), newValues, version, delFlag))
@@ -267,7 +267,7 @@ func genDeleteSQL(schema string, table *model.TableInfo, pkID int64, columnValue
 		return "", nil, nil, errors.Trace(err)
 	}
 
-	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
 
 	value = append(value, version)
 	value = append(value, delFlag)
