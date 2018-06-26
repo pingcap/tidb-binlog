@@ -205,14 +205,6 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 
-	// set default value even has the to config part
-	if cfg.SyncerCfg.DestDBType == "kafka" {
-		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
-			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
-			cfg.SyncerCfg.To.KafkaVersion = cfg.KafkaVersion
-		}
-	}
-
 	initializeSaramaGlobalConfig()
 	return cfg.validate()
 }
@@ -304,6 +296,14 @@ func (cfg *Config) validate() error {
 		// use kafka address get from zookeeper to reset the config
 		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
+	}
+
+	// set default value
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
+			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
+			cfg.SyncerCfg.To.KafkaVersion = cfg.KafkaVersion
+		}
 	}
 
 	return nil
