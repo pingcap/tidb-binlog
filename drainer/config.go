@@ -182,27 +182,8 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
-	// adjust configuration
-	adjustString(&cfg.ListenAddr, defaultListenAddr())
-	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.SyncerCfg.adjustWorkCount()
-	cfg.SyncerCfg.adjustDoDBAndTable()
-
-	// add default syncer.to configuration if need
-	if cfg.SyncerCfg.To == nil {
-		cfg.SyncerCfg.To = new(executor.DBConfig)
-		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
-			cfg.SyncerCfg.To.Host = "localhost"
-			cfg.SyncerCfg.To.Port = 3306
-			cfg.SyncerCfg.To.User = "root"
-			cfg.SyncerCfg.To.Password = ""
-			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
-		} else if cfg.SyncerCfg.DestDBType == "pb" {
-			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
-		}
+	if err = cfg.adjustConfig(); err != nil {
+		return errors.Trace(err)
 	}
 
 	initializeSaramaGlobalConfig()
@@ -280,7 +261,34 @@ func (cfg *Config) validate() error {
 		}
 	}
 
-	// check zookeeper
+	return nil
+}
+
+func (cfg *Config) adjustConfig() error {
+	// adjust configuration
+	adjustString(&cfg.ListenAddr, defaultListenAddr())
+	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
+	adjustString(&cfg.DataDir, defaultDataDir)
+	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
+
+	// add default syncer.to configuration if need
+	if cfg.SyncerCfg.To == nil {
+		cfg.SyncerCfg.To = new(executor.DBConfig)
+		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
+			cfg.SyncerCfg.To.Host = "localhost"
+			cfg.SyncerCfg.To.Port = 3306
+			cfg.SyncerCfg.To.User = "root"
+			cfg.SyncerCfg.To.Password = ""
+			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
+		} else if cfg.SyncerCfg.DestDBType == "pb" {
+			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
+			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	}
+
+	// get cfg.KafkaAddrs from cfg.ZkAddrs if cfg.ZkAddrs is setted
 	if cfg.ZkAddrs != "" {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
@@ -298,7 +306,7 @@ func (cfg *Config) validate() error {
 		cfg.KafkaAddrs = kafkaUrls
 	}
 
-	// set default value
+	// set default kafka addr
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
 			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
