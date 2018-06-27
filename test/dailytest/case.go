@@ -2,10 +2,8 @@ package dailytest
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/test/util"
 )
 
 // test different data type of mysql
@@ -68,22 +66,19 @@ var case1Clean = []string{`
 
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB) {
-	err := execSQLs(src, case1)
-	if err != nil {
-		log.Fatal(err)
-	}
-	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(src, dst) {
-		log.Fatal("src don't equal dst")
-	}
-	// clean table
-	err = execSQLs(src, case1Clean)
-	if err != nil {
-		log.Fatal(err)
-	}
-	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(src, dst) {
-		log.Fatal("src don't equal dst")
-	}
 
+	RunTest(src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case1)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	// clean table
+	RunTest(src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case1Clean)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
 }

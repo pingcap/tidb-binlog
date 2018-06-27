@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -366,4 +367,67 @@ func closeDBs(dbs []*sql.DB) {
 			log.Errorf("close db failed - %v", err)
 		}
 	}
+}
+
+func createEndMark(db *sql.DB) (err error) {
+	_, err = db.Query("CREATE TABLE IF NOT EXISTS tidb_binlog_test_mark(id int);")
+	return
+}
+
+func cleanEndMark(db *sql.DB) (err error) {
+	_, err = db.Query("DROP TABLE IF EXISTS tidb_binlog_test_mark;")
+	return
+}
+
+// wait the mark table to be exist or not exist
+func waitForEndMark(db *sql.DB, exist bool, timeout time.Duration) bool {
+	for {
+		select {
+		case <-time.Tick(time.Millisecond * 100):
+			row, err := db.Query("SHOW TABLES LIKE 'tidb_binlog_test_mark';")
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			if exist {
+				if row.Next() {
+					return true
+				}
+			} else {
+				if !row.Next() {
+					return true
+				}
+			}
+		case <-time.After(timeout):
+			return false
+		}
+	}
+}
+
+// RunTest will call writeSrc and check if src is contisitent with dst
+func RunTest(src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
+	writeSrc(src)
+
+	err := createEndMark(src)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func() {
+		cleanEndMark(src)
+		reach := waitForEndMark(dst, false, time.Second*15)
+		if !reach {
+			log.Fatal("can't clean the mark table")
+		}
+	}()
+
+	reach := waitForEndMark(dst, true, time.Second*15)
+	if !reach {
+		log.Fatal("can see the mark table")
+	}
+
+	if !util.CheckSyncState(src, dst) {
+		log.Fatal("sourceDB don't equal targetDB")
+	}
+
 }
