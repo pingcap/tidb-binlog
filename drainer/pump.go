@@ -13,6 +13,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/assemble"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -68,7 +69,7 @@ type Pump struct {
 
 // NewPump returns an instance of Pump with opened gRPC connection
 func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	consumer, err := createKafkaConsumer(kafkaAddrs, kafkaVersion)
+	consumer, err := util.CreateKafkaConsumer(kafkaAddrs, kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -95,10 +96,12 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
+	log.Debug("closing pump")
 	p.cancel()
 	p.consumer.Close()
 	p.asm.Close()
 	p.wg.Wait()
+	log.Debug("pump is closed")
 }
 
 // StartCollect starts to process the pump's binlogs
@@ -447,13 +450,14 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			return pos, p.ctx.Err()
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("consumer %v", consumerErr)
+		case binlog = <-p.asm.Messages():
+			// should get binlog from p.asm.Messages() before p.asm.Append(msg), because p.asm.Append(msg) will be blocked if p.msg is full.
 		case msg := <-stream.Messages():
 			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
-		case binlog = <-p.asm.Messages():
 		}
 		if binlog == nil {
 			continue

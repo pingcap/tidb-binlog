@@ -316,7 +316,7 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
-
+		log.Infof("get unknow ddl type %v", job.Type)
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
@@ -750,7 +750,7 @@ func (s *Syncer) Close() {
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
-	log.Debug("done close syncer")
+	log.Debug("syncer is closed")
 }
 
 // GetLastSyncTime returns lastSyncTime

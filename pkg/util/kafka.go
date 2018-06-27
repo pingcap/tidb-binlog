@@ -67,3 +67,19 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 
 	return nil, errors.Trace(err)
 }
+
+func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Consumer.Return.Errors = true
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	kafkaCfg.Version = version
+	log.Infof("kafka consumer version %v", version)
+
+	registry := GetParentMetricsRegistry()
+	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
+
+	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+}
