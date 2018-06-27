@@ -68,6 +68,7 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 	return nil, errors.Trace(err)
 }
 
+// CreateKafkaConsumer creates a kafka consumer
 func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
