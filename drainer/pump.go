@@ -439,14 +439,18 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
-	defer stream.Close()
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		stream.Close()
+	}()
 
-	for {
-		beginTime := time.Now()
+	go func() {
+		defer wg.Done()
 
 		select {
 		case <-p.ctx.Done():
-			return pos, p.ctx.Err()
+			return
 		case binlog := <-p.asm.Messages():
 			b := p.match(binlog.Entity)
 			if b != nil {
@@ -460,16 +464,17 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 				// send to publish goroutinue
 				select {
 				case <-p.ctx.Done():
-					return pos, errors.Trace(p.ctx.Err())
+					return
 				case p.binlogChan <- binlogEnt:
 				}
 			} else {
 				assemble.DestructAssembledBinlog(binlog)
 			}
-		default:
-			// do nothing
 		}
+	}()
 
+	for {
+		beginTime := time.Now()
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
@@ -478,7 +483,6 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case msg := <-stream.Messages():
 			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
-
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
 		}
