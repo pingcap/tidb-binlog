@@ -85,7 +85,7 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, e
 }
 
 func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, err error) {
-	log.Debug(fmt.Sprintf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql))
+	log.Debugf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql)
 	defer func() {
 		if err != nil {
 			log.Errorf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
@@ -317,7 +317,7 @@ func (e *flashExecutor) flushRoutine() {
 
 // partition must be a index of dbs
 func (e *flashExecutor) partition(key int64) int {
-	return int(key % int64(len(e.chDBs)))
+	return int(key) % len(e.chDBs)
 }
 
 func (e *flashExecutor) flushAll(forceSaveCP bool) {
