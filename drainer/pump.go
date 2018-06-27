@@ -48,8 +48,6 @@ type Pump struct {
 	window  *DepositWindow
 	timeout time.Duration
 
-	// pullBinlogs sends the binlogs to publish function by this channel
-	binlogChan chan *binlogEntity
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -89,7 +87,6 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 		asm:        assemble.NewAssembler(errorBinlogCount),
 	}, nil
 }
@@ -164,13 +161,29 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	var (
 		maxCommitTs int64
 		entity      *binlogEntity
-		binlogs     map[int64]*binlogItem
+		binlogs     map[int64]*binlogItem   
 	)
 	for {
 		select {
 		case <-p.ctx.Done():
 			return
-		case entity = <-p.binlogChan:
+		case binlog := <-p.asm.Messages():
+			b := p.match(binlog.Entity)
+			if b != nil {
+				entity = &binlogEntity{
+					tp:       b.Tp,
+					startTS:  b.StartTs,
+					commitTS: b.CommitTs,
+					pos:      binlog.Entity.Pos,
+				}
+				assemble.DestructAssembledBinlog(binlog)
+			} else {
+				assemble.DestructAssembledBinlog(binlog)
+			}
+		}
+
+		if entity == nil {
+			continue
 		}
 
 		begin := time.Now()
@@ -441,45 +454,19 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	for {
-		var (
-			beginTime = time.Now()
-			binlog    *assemble.AssembledBinlog
-		)
+		beginTime := time.Now()
+
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("consumer %v", consumerErr)
-		case binlog = <-p.asm.Messages():
-			// should get binlog from p.asm.Messages() before p.asm.Append(msg), because p.asm.Append(msg) will be blocked if p.msg is full.
 		case msg := <-stream.Messages():
 			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
-		}
-		if binlog == nil {
-			continue
-		}
-
-		b := p.match(binlog.Entity)
-		if b != nil {
-			binlogEnt := &binlogEntity{
-				tp:       b.Tp,
-				startTS:  b.StartTs,
-				commitTS: b.CommitTs,
-				pos:      binlog.Entity.Pos,
-			}
-			assemble.DestructAssembledBinlog(binlog)
-			// send to publish goroutinue
-			select {
-			case <-p.ctx.Done():
-				return pos, errors.Trace(p.ctx.Err())
-			case p.binlogChan <- binlogEnt:
-			}
-		} else {
-			assemble.DestructAssembledBinlog(binlog)
 		}
 	}
 }
