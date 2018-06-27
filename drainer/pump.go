@@ -48,6 +48,9 @@ type Pump struct {
 	window  *DepositWindow
 	timeout time.Duration
 
+	// pullBinlogs sends the binlogs to publish function by this channel
+	binlogChan chan *binlogEntity
+
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
@@ -87,18 +90,19 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
+		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 		asm:        assemble.NewAssembler(errorBinlogCount),
 	}, nil
 }
 
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
-	log.Debug("closing pump")
+	log.Debugf("closing pump %s", p.nodeID)
 	p.cancel()
 	p.consumer.Close()
 	p.asm.Close()
 	p.wg.Wait()
-	log.Debug("pump is closed")
+	log.Debugf("pump %s is closed", p.nodeID)
 }
 
 // StartCollect starts to process the pump's binlogs
@@ -167,23 +171,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 		select {
 		case <-p.ctx.Done():
 			return
-		case binlog := <-p.asm.Messages():
-			b := p.match(binlog.Entity)
-			if b != nil {
-				entity = &binlogEntity{
-					tp:       b.Tp,
-					startTS:  b.StartTs,
-					commitTS: b.CommitTs,
-					pos:      binlog.Entity.Pos,
-				}
-				assemble.DestructAssembledBinlog(binlog)
-			} else {
-				assemble.DestructAssembledBinlog(binlog)
-			}
-		}
-
-		if entity == nil {
-			continue
+		case entity = <-p.binlogChan:
 		}
 
 		begin := time.Now()
@@ -455,6 +443,32 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 
 	for {
 		beginTime := time.Now()
+
+		select {
+		case <-p.ctx.Done():
+			return pos, p.ctx.Err()
+		case binlog := <-p.asm.Messages():
+			b := p.match(binlog.Entity)
+			if b != nil {
+				binlogEnt := &binlogEntity{
+					tp:       b.Tp,
+					startTS:  b.StartTs,
+					commitTS: b.CommitTs,
+					pos:      binlog.Entity.Pos,
+				}
+				assemble.DestructAssembledBinlog(binlog)
+				// send to publish goroutinue
+				select {
+				case <-p.ctx.Done():
+					return pos, errors.Trace(p.ctx.Err())
+				case p.binlogChan <- binlogEnt:
+				}
+			} else {
+				assemble.DestructAssembledBinlog(binlog)
+			}
+		default:
+			// do nothing
+		}
 
 		select {
 		case <-p.ctx.Done():
