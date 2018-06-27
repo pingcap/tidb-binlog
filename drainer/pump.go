@@ -439,15 +439,9 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
-	var wg sync.WaitGroup
-	defer func() {
-		wg.Wait()
-		stream.Close()
-	}()
+	defer stream.Close()
 
 	go func() {
-		defer wg.Done()
-
 		select {
 		case <-p.ctx.Done():
 			return
