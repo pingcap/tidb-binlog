@@ -161,7 +161,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	var (
 		maxCommitTs int64
 		entity      *binlogEntity
-		binlogs     map[int64]*binlogItem   
+		binlogs     map[int64]*binlogItem
 	)
 	for {
 		select {
