@@ -442,27 +442,29 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 	defer stream.Close()
 
 	go func() {
-		select {
-		case <-p.ctx.Done():
-			return
-		case binlog := <-p.asm.Messages():
-			b := p.match(binlog.Entity)
-			if b != nil {
-				binlogEnt := &binlogEntity{
-					tp:       b.Tp,
-					startTS:  b.StartTs,
-					commitTS: b.CommitTs,
-					pos:      binlog.Entity.Pos,
+		for {
+			select {
+			case <-p.ctx.Done():
+				return
+			case binlog := <-p.asm.Messages():
+				b := p.match(binlog.Entity)
+				if b != nil {
+					binlogEnt := &binlogEntity{
+						tp:       b.Tp,
+						startTS:  b.StartTs,
+						commitTS: b.CommitTs,
+						pos:      binlog.Entity.Pos,
+					}
+					assemble.DestructAssembledBinlog(binlog)
+					// send to publish goroutinue
+					select {
+					case <-p.ctx.Done():
+						return
+					case p.binlogChan <- binlogEnt:
+					}
+				} else {
+					assemble.DestructAssembledBinlog(binlog)
 				}
-				assemble.DestructAssembledBinlog(binlog)
-				// send to publish goroutinue
-				select {
-				case <-p.ctx.Done():
-					return
-				case p.binlogChan <- binlogEnt:
-				}
-			} else {
-				assemble.DestructAssembledBinlog(binlog)
 			}
 		}
 	}()
