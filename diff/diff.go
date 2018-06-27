@@ -247,7 +247,7 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 	pk1 := orderbyKey(descs)
 
 	// TODO select all data out may OOM if table is huge
-	rows, err := querySQL(db, fmt.Sprintf("select * from %s order by `%s`", tblName, pk1))
+	rows, err := querySQL(db, fmt.Sprintf("select * from `%s` order by %s", tblName, pk1))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -490,10 +490,10 @@ func orderbyKey(descs []describeTable) string {
 	for _, desc := range descs {
 		if desc.Key == "PRI" {
 			if firstTime {
-				fmt.Fprintf(&buf, "%s", desc.Field)
+				fmt.Fprintf(&buf, "`%s`", desc.Field)
 				firstTime = false
 			} else {
-				fmt.Fprintf(&buf, ",%s", desc.Field)
+				fmt.Fprintf(&buf, ",`%s`", desc.Field)
 			}
 		}
 	}
@@ -501,10 +501,10 @@ func orderbyKey(descs []describeTable) string {
 		// if no primary key found, use all fields as order by key
 		for _, desc := range descs {
 			if firstTime {
-				fmt.Fprintf(&buf, "%s", desc.Field)
+				fmt.Fprintf(&buf, "`%s`", desc.Field)
 				firstTime = false
 			} else {
-				fmt.Fprintf(&buf, ",%s", desc.Field)
+				fmt.Fprintf(&buf, ",`%s`", desc.Field)
 			}
 		}
 	}
