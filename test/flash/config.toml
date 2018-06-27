@@ -14,14 +14,13 @@ name = "test"
 port = 4000
 
 [target-db]
-host = "127.0.0.1"
-user = "root"
+host = "127.0.0.1:9000"
+user = ""
 password = ""
 name = "test"
-port = 3306
 
 [diff]
-equal-index = true
-equal-create-table = true
+equal-index = false
+equal-create-table = false
 equal-row-count = true
-equal-data = true
+equal-data = false

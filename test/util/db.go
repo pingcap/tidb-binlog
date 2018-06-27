@@ -48,8 +48,8 @@ func CloseDB(db *sql.DB) error {
 }
 
 // CheckSyncState check if srouceDB and targetDB has the same table and data
-func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
-	d := diff.New(sourceDB, targetDB)
+func CheckSyncState(cfg *diff.Config, sourceDB, targetDB *sql.DB) bool {
+	d := diff.New(cfg, sourceDB, targetDB)
 	ok, err := d.Equal()
 	if err != nil {
 		log.Fatal(err)
