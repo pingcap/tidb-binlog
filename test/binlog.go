@@ -62,9 +62,6 @@ create table ntest(
 	}
 	defer util.CloseDB(targetDB)
 
-	// run the simple test case
-	dailytest.RunCase(sourceDB, targetDB)
-
 	// generate insert/update/delete sqls and execute
 	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 
@@ -75,6 +72,9 @@ create table ntest(
 	if !util.CheckSyncState(sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
+
+	// run the simple test case
+	dailytest.RunCase(sourceDB, targetDB)
 
 	// truncate test data
 	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
