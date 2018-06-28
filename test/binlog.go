@@ -62,7 +62,6 @@ create table ntest(
 	}
 	defer util.CloseDB(targetDB)
 
-
 	// run the simple test case
 	dailytest.RunSimpleCase(sourceDB)
 
@@ -71,7 +70,7 @@ create table ntest(
 	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
-  
+
 	// clear the simple test case
 	dailytest.ClearSimpleCase(sourceDB)
 
@@ -80,7 +79,7 @@ create table ntest(
 	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
-  
+
 	// generate insert/update/delete sqls and execute
 	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 
