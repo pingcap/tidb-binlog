@@ -163,7 +163,7 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *MysqlCheckPoint) Check() bool {
+func (sp *MysqlCheckPoint) Check(int64, map[string]pb.Pos) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 

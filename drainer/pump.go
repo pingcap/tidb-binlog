@@ -439,12 +439,16 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
-	defer stream.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		stream.Close()
+	}()
 
 	go func() {
 		for {
 			select {
-			case <-p.ctx.Done():
+			case <-ctx.Done():
 				return
 			case binlog := <-p.asm.Messages():
 				b := p.match(binlog.Entity)
@@ -458,7 +462,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 					assemble.DestructAssembledBinlog(binlog)
 					// send to publish goroutinue
 					select {
-					case <-p.ctx.Done():
+					case <-ctx.Done():
 						return
 					case p.binlogChan <- binlogEnt:
 					}
