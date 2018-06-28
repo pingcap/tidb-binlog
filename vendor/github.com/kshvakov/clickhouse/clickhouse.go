@@ -54,7 +54,7 @@ func (ch *clickhouse) PrepareContext(ctx context.Context, query string) (driver.
 }
 
 func (ch *clickhouse) prepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	ch.logf("[prepare-new] %s", query)
+	ch.logf("[prepare] %s", query)
 	switch {
 	case ch.conn.closed:
 		return nil, driver.ErrBadConn
@@ -301,5 +301,5 @@ func (ch *clickhouse) watchCancel(ctx context.Context) func() {
 			}
 		}
 	}
-	return nil
+	return func() {}
 }
