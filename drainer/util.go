@@ -18,7 +18,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tipb/go-binlog"
-	metrics "github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -172,20 +171,4 @@ func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
-}
-
-func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Consumer.Return.Errors = true
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	kafkaCfg.Version = version
-	log.Infof("kafka consumer version %v", version)
-
-	registry := util.GetParentMetricsRegistry()
-	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
-
-	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }

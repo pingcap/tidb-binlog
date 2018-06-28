@@ -85,8 +85,10 @@ func (a *Assembler) Messages() chan *AssembledBinlog {
 
 // Close cancels assemble
 func (a *Assembler) Close() {
+	log.Debug("closing assembler")
 	a.cancel()
 	a.wg.Wait()
+	log.Debug("assembler is closed")
 }
 
 func (a *Assembler) do() {
