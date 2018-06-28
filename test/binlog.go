@@ -91,9 +91,6 @@ create table ntest(
 		log.Fatal("sourceDB don't equal targetDB")
 	}
 
-	// run the simple test case
-	dailytest.RunCase(sourceDB, targetDB)
-
 	// truncate test data
 	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
 
