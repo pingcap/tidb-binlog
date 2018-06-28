@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -76,7 +77,8 @@ func numInput(query string) int {
 				char == '>',
 				char == '(',
 				char == ',',
-				char == '%':
+				char == '%',
+				char == '[':
 				keyword = true
 			default:
 				keyword = keyword && (char == ' ' || char == '\t' || char == '\n')
@@ -109,13 +111,20 @@ var selectRe = regexp.MustCompile(`\s+SELECT\s+`)
 
 func isInsert(query string) bool {
 	if f := strings.Fields(query); len(f) > 2 {
-		return (strings.EqualFold("INSERT", f[0]) || strings.EqualFold("UPSERT", f[0]) || strings.EqualFold("IMPORT", f[0])) && 
-		strings.EqualFold("INTO", f[1]) && !selectRe.MatchString(strings.ToUpper(query))
+		return strings.EqualFold("INSERT", f[0]) && strings.EqualFold("INTO", f[1]) && !selectRe.MatchString(strings.ToUpper(query))
 	}
 	return false
 }
 
 func quote(v driver.Value) string {
+	switch v := reflect.ValueOf(v); v.Kind() {
+	case reflect.Slice:
+		values := make([]string, 0, v.Len())
+		for i := 0; i < v.Len(); i++ {
+			values = append(values, quote(v.Index(i).Interface()))
+		}
+		return strings.Join(values, ", ")
+	}
 	switch v := v.(type) {
 	case string:
 		return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(v) + "'"
