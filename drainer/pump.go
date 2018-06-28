@@ -183,6 +183,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 	for {
 		select {
 		case <-p.ctx.Done():
+			log.Infof("[pump %s] publish sorted binlogs exists, cause %v", p.nodeID, p.ctx.Err())
 			return
 		case entity = <-p.binlogChan:
 		}
@@ -474,7 +475,7 @@ func (p *Pump) sendBinlogsToSortingUnit() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			log.Infof("[pump %s] send binlogs to sorting unit, cause %v", p.nodeID, p.ctx.Err())
+			log.Infof("[pump %s] send binlogs to sorting unit exists, cause %v", p.nodeID, p.ctx.Err())
 			return
 		case binlog := <-p.asm.Messages():
 			b := p.match(binlog.Entity)
