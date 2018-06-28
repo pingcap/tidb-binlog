@@ -9,7 +9,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
