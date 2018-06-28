@@ -1,4 +1,4 @@
-package main
+package util
 
 import (
 	"flag"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // NewConfig creates a new config.
@@ -36,9 +36,11 @@ type Config struct {
 
 	Batch int `toml:"batch" json:"batch"`
 
-	SourceDBCfg util.DBConfig `toml:"source-db" json:"source-db"`
+	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
 
-	TargetDBCfg util.DBConfig `toml:"target-db" json:"target-db"`
+	TargetDBCfg DBConfig `toml:"target-db" json:"target-db"`
+
+	DiffConfig diff.Config `toml:"diff" json:"diff"`
 
 	configFile string
 }

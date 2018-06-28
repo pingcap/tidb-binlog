@@ -9,6 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -22,6 +23,7 @@ type FlashCheckPoint struct {
 	db       *sql.DB
 	schema   string
 	table    string
+	metaCP   *flash.MetaCheckpoint
 	saveTime time.Time
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
@@ -62,7 +64,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		return nil, errors.Trace(err)
 	}
 
-	db, err := pkgsql.OpenCH("clickhouse", hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password)
+	db, err := pkgsql.OpenCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "")
 	if err != nil {
 		log.Errorf("open database error %v", err)
 		return nil, errors.Trace(err)
@@ -74,6 +76,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		initialCommitTS: cfg.InitialCommitTS,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
+		metaCP:          flash.GetInstance(),
 		Positions:       make(map[string]pb.Pos),
 	}
 
@@ -138,7 +141,16 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
 
-	for nodeID, pos := range poss {
+	// Init CP using metaCP's safe CP.
+	forceSave, ok, safeTS, safePoss := sp.metaCP.PopSafeCP()
+	if forceSave {
+		// If force save, use the CP passed in.
+		safeTS, safePoss = ts, poss
+	} else if !ok {
+		return nil
+	}
+
+	for nodeID, pos := range safePoss {
 		newPos := pb.Pos{}
 		if pos.Offset > 5000 {
 			newPos.Suffix = pos.Suffix
@@ -147,7 +159,7 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 		sp.Positions[nodeID] = newPos
 	}
 
-	sp.CommitTS = ts
+	sp.CommitTS = safeTS
 	sp.saveTime = time.Now()
 
 	b, err := json.Marshal(sp)
@@ -165,9 +177,11 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *FlashCheckPoint) Check() bool {
+func (sp *FlashCheckPoint) Check(ts int64, poss map[string]pb.Pos) bool {
 	sp.RLock()
 	defer sp.RUnlock()
+
+	sp.metaCP.PushPendingCP(ts, poss)
 
 	return time.Since(sp.saveTime) >= maxSaveTime
 }

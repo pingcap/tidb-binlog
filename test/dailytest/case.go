@@ -2,10 +2,7 @@ package dailytest
 
 import (
 	"database/sql"
-	"time"
-
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/test/util"
 )
 
 // test different data type of mysql
@@ -66,24 +63,19 @@ var case1Clean = []string{`
 	drop table binlog_case1`,
 }
 
-// RunCase run some simple test case
-func RunCase(src *sql.DB, dst *sql.DB) {
+// RunSimpleCase run some simple test case
+func RunSimpleCase(src *sql.DB) {
 	err := execSQLs(src, case1)
 	if err != nil {
 		log.Fatal(err)
 	}
-	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(src, dst) {
-		log.Fatal("src don't equal dst")
-	}
+}
+
+// ClearSimpleCase clear the simple test case table and data
+func ClearSimpleCase(src *sql.DB) {
 	// clean table
-	err = execSQLs(src, case1Clean)
+	err := execSQLs(src, case1Clean)
 	if err != nil {
 		log.Fatal(err)
 	}
-	time.Sleep(15 * time.Second)
-	if !util.CheckSyncState(src, dst) {
-		log.Fatal("src don't equal dst")
-	}
-
 }
