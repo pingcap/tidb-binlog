@@ -18,6 +18,8 @@ import (
 )
 
 const implicitColName = "_tidb_rowid"
+const internalVersionColName = "_INTERNAL_VERSION"
+const internalDelmarkColName = "_INTERNAL_DELMARK"
 const emptySQL = "select 1"
 
 func genEmptySQL(reason string) string {
@@ -124,13 +126,24 @@ func toFlashColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldTyp
 	return colTypeMap
 }
 
-func makeRow(pk int64, values []interface{}, delFlag int, commitTS int64) []interface{} {
+func makeRow(pk int64, values []interface{}, version uint64, delFlag uint8) []interface{} {
 	var row []interface{}
 	row = append(row, pk)
 	row = append(row, values...)
-	row = append(row, commitTS)
+	row = append(row, version)
 	row = append(row, delFlag)
 	return row
+}
+
+func makeInternalVersionValue(ver uint64) uint64 {
+	return ver
+}
+
+func makeInternalDelmarkValue(del bool) uint8 {
+	if del {
+		return uint8(1)
+	}
+	return uint8(0)
 }
 
 func decodeFlashOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *gotime.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
@@ -192,62 +205,95 @@ func decodeFlashOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *got
 	return oldRow, newRow, nil
 }
 
-func formatFlashData(data types.Datum, ft types.FieldType) (types.Datum, error) {
+// Convert datum to CH raw data, data type must be strictly matching the rules in analyzeColumnDef.
+func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) {
 	if data.GetValue() == nil {
-		return data, nil
+		return nil, nil
 	}
 
 	switch ft.Tp {
-	case mysql.TypeBit:
+	case mysql.TypeBit: // UInt64
 		ui, err := data.GetMysqlBit().ToInt()
 		if err != nil {
 			return data, errors.Trace(err)
 		}
-		return types.NewDatum(ui), nil
-	case mysql.TypeDuration:
-		// Duration is represented as gotime.Duration(int64), store it directly into CH.
-		num, err := data.GetMysqlDuration().ToNumber().ToInt()
-		if err != nil {
-			log.Warnf("Corrupted Duration data: %v, will leave it zero.", data.GetMysqlDuration())
-			num = 0
+		return ui, nil
+	case mysql.TypeTiny: // UInt8/Int8
+		if mysql.HasUnsignedFlag(ft.Flag) {
+			return uint8(data.GetInt64()), nil
 		}
-		return types.NewDatum(num), nil
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		// TiDB won't accept invalid date/time EXCEPT "0000-00-00", which is default value for not-null columns. So deal with it specially.
-		if data.GetMysqlTime().IsZero() {
-			data = types.NewDatum(0)
-		} else {
-			// To be very safe, transform to go time first to normalize invalid date/time.
-			mysqlTime := data.GetMysqlTime().Time
+		return int8(data.GetInt64()), nil
+	case mysql.TypeShort: // UInt16/Int16
+		if mysql.HasUnsignedFlag(ft.Flag) {
+			return uint16(data.GetInt64()), nil
+		}
+		return int16(data.GetInt64()), nil
+	case mysql.TypeYear: // Int16
+		return int16(data.GetInt64()), nil
+	case mysql.TypeLong, mysql.TypeInt24: // UInt32/Int32
+		if mysql.HasUnsignedFlag(ft.Flag) {
+			return uint32(data.GetInt64()), nil
+		}
+		return int32(data.GetInt64()), nil
+	case mysql.TypeFloat: // Float32
+		return data.GetFloat32(), nil
+	case mysql.TypeDouble: // Float64
+		return data.GetFloat64(), nil
+	case mysql.TypeNewDecimal, mysql.TypeDecimal: // Float64
+		// TODO: map decimal to CH decimal.
+		f, err := data.GetMysqlDecimal().ToFloat64()
+		if err != nil {
+			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
+			f = 0
+		}
+		return f, nil
+	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
+		var unix = int64(0)
+		// TiDB won't accept invalid date/time EXCEPT "0000-00-00", which is default value for not-null columns. So leave it zero.
+		if mysqlTime := data.GetMysqlTime(); !mysqlTime.IsZero() {
+			// Calculate the go time.
+			time := mysqlTime.Time
 			// Using UTC timezone
 			timezone := gotime.UTC
 			// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
 			if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
 				timezone = gotime.Local
 			}
-			goTime := gotime.Date(mysqlTime.Year(), gotime.Month(mysqlTime.Month()), mysqlTime.Day(), mysqlTime.Hour(), mysqlTime.Minute(), mysqlTime.Second(), mysqlTime.Microsecond()*1000, timezone)
-			unixTime := goTime.Unix()
+			goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour(), time.Minute(), time.Second(), time.Microsecond()*1000, timezone)
+			unix = goTime.Unix()
 			// Zero the negative unix time to prevent overflow in CH.
-			if unixTime < 0 {
-				unixTime = 0
+			if unix < 0 {
+				log.Warnf("Date/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
+				unix = 0
 			}
-			data = types.NewDatum(unixTime)
 		}
-	case mysql.TypeDecimal, mysql.TypeNewDecimal:
-		// TODO: Map Decimal to CH Decimal once its support is done.
-		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
-	case mysql.TypeEnum:
-		data = types.NewDatum(data.GetMysqlEnum().Name)
-	case mysql.TypeSet:
-		data = types.NewDatum(data.GetMysqlSet().String())
-	case mysql.TypeJSON:
-		data = types.NewDatum(data.GetMysqlJSON().String())
+		return unix, nil
+	case mysql.TypeDuration: // Int64
+		num, err := data.GetMysqlDuration().ToNumber().ToInt()
+		if err != nil {
+			log.Warnf("Corrupted Duration data: %v, will leave it zero.", data.GetMysqlDuration())
+			num = 0
+		}
+		return num, nil
+	case mysql.TypeLonglong: // UInt64/Int64
+		if mysql.HasUnsignedFlag(ft.Flag) {
+			return data.GetUint64(), nil
+		}
+		return data.GetInt64(), nil
+	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString: // String
+		return data.GetString(), nil
+	case mysql.TypeEnum: // Int16
+		return int16(data.GetMysqlEnum().Value), nil
+	case mysql.TypeSet: // String
+		return data.GetMysqlSet().String(), nil
+	case mysql.TypeJSON: // String
+		return data.GetMysqlJSON().String(), nil
 	case mysql.TypeGeometry:
 		// TiDB doesn't have Geometry type, so put it null.
-		data = types.NewDatum(nil)
+		return nil, nil
 	}
 
-	return data, nil
+	return nil, nil
 }
 
 // Poor man's expression eval function, that is mostly used for DDL that refers constant expressions,

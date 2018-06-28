@@ -7,7 +7,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
+	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
 )
@@ -56,31 +58,37 @@ create table ntest(
 	}
 	defer util.CloseDB(sourceDB)
 
-	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
+	targetAddr, err := pkgsql.ParseCHAddr(cfg.TargetDBCfg.Host)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(targetAddr) != 1 {
+		log.Fatal("only support 1 flash node so far.")
+	}
+	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer util.CloseDB(targetDB)
 
-
 	// run the simple test case
 	dailytest.RunSimpleCase(sourceDB)
 
 	// wait for sync to downstream sql server
-	time.Sleep(15 * time.Second)
+	time.Sleep(60 * time.Second)
 	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
-  
+
 	// clear the simple test case
 	dailytest.ClearSimpleCase(sourceDB)
 
 	// wait for sync to downstream sql server
-	time.Sleep(15 * time.Second)
+	time.Sleep(60 * time.Second)
 	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("src don't equal dst")
 	}
-  
+
 	// generate insert/update/delete sqls and execute
 	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 
@@ -91,9 +99,6 @@ create table ntest(
 	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
 		log.Fatal("sourceDB don't equal targetDB")
 	}
-
-	// run the simple test case
-	dailytest.RunCase(sourceDB, targetDB)
 
 	// truncate test data
 	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
