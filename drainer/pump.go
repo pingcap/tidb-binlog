@@ -97,12 +97,12 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 
 // Close closes all process goroutine, publish + pullBinlogs
 func (p *Pump) Close() {
-	log.Debugf("closing pump %s", p.nodeID)
+	log.Debugf("[pump %s] closing", p.nodeID)
 	p.cancel()
 	p.consumer.Close()
 	p.asm.Close()
 	p.wg.Wait()
-	log.Debugf("pump %s is closed", p.nodeID)
+	log.Debugf("[pump %s] was closed", p.nodeID)
 }
 
 // StartCollect starts to process the pump's binlogs
@@ -113,8 +113,23 @@ func (p *Pump) StartCollect(pctx context.Context, t *tikv.LockResolver) {
 
 	p.mu.prewriteItems = make(map[int64]*binlogItem)
 	p.mu.commitItems = make(map[int64]*binlogItem)
-	go p.pullBinlogs()
-	go p.publish(t)
+
+	p.wg.Add(3)
+
+	go func() {
+		defer p.wg.Done()
+		p.pullBinlogs()
+	}()
+
+	go func() {
+		defer p.wg.Done()
+		p.publish(t)
+	}()
+
+	go func() {
+		defer p.wg.Done()
+		p.sendBinlogsToSortingUnit()
+	}()
 }
 
 // match is responsible for match p+c binlog.
@@ -124,7 +139,7 @@ func (p *Pump) match(ent *pb.Entity) *pb.Binlog {
 	if err != nil {
 		errorBinlogCount.Add(1)
 		// skip?
-		log.Errorf("unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.clusterID, ent.Pos, err)
+		log.Errorf("[pump %s] unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.nodeID, p.clusterID, ent.Pos, err)
 		return nil
 	}
 
@@ -144,7 +159,7 @@ func (p *Pump) match(ent *pb.Entity) *pb.Binlog {
 			}
 		}
 	default:
-		log.Errorf("unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", b.Tp, p.clusterID, ent.Pos)
+		log.Errorf("[pump %s] unrecognized binlog type(%d), clusterID(%d), Pos(%v) ", p.nodeID, b.Tp, p.clusterID, ent.Pos)
 	}
 	p.mu.Unlock()
 	return b
@@ -160,8 +175,6 @@ func (p *Pump) UpdateLatestTS(ts int64) {
 
 // publish finds the maxValidCommitts and blocks when it meets a preBinlog
 func (p *Pump) publish(t *tikv.LockResolver) {
-	p.wg.Add(1)
-	defer p.wg.Done()
 	var (
 		maxCommitTs int64
 		entity      *binlogEntity
@@ -190,7 +203,7 @@ func (p *Pump) publish(t *tikv.LockResolver) {
 				maxCommitTs = entity.commitTS
 				err := p.publishBinlogs(binlogs, maxCommitTs)
 				if err != nil {
-					log.Errorf("save binlogs and status error at ts(%v)", entity.commitTS)
+					log.Errorf("[pump %s] save binlogs and status error at ts(%v)", p.nodeID, entity.commitTS)
 				} else {
 					binlogs = make(map[int64]*binlogItem)
 				}
@@ -255,7 +268,7 @@ func (p *Pump) query(t *tikv.LockResolver, b *binlogItem) bool {
 			return true
 		}
 		// todo: get ddl from history job or continue waiting?
-		log.Errorf("some prewrite DDL items remain single after waiting for a long time, item(%v)", binlog)
+		log.Errorf("[pump %s] some prewrite DDL items remain single after waiting for a long time, item(%v)", p.nodeID, binlog)
 		return false
 	}
 	return false
@@ -313,7 +326,7 @@ func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
 	for commitTS, item := range items {
 		if commitTS < boundary {
 			errorBinlogs++
-			log.Errorf("FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", commitTS, boundary, item)
+			log.Errorf("[pump %s] FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", p.nodeID, commitTS, boundary, item)
 			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
 			continue
 		}
@@ -405,9 +418,6 @@ func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
 
 // pull binlogs in the streaming way, and match them
 func (p *Pump) pullBinlogs() {
-	p.wg.Add(1)
-	defer p.wg.Done()
-
 	var err error
 	var stream sarama.PartitionConsumer
 	topic := pump.TopicName(strconv.FormatUint(p.clusterID, 10), p.nodeID)
@@ -416,12 +426,13 @@ func (p *Pump) pullBinlogs() {
 	for {
 		select {
 		case <-p.ctx.Done():
+			log.Infof("[pump %s] pull binlogs exits, cause %v", p.nodeID, p.ctx.Err())
 			return
 		default:
-			log.Infof("consume from topic %s partition %d offset %d", topic, pump.DefaultTopicPartition(), pos.Offset)
+			log.Infof("[pump %s] consume from topic %s partition %d offset %d", p.nodeID, topic, pump.DefaultTopicPartition(), pos.Offset)
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
-				log.Warningf("[get consumer partition client error %s] %v", p.nodeID, err)
+				log.Warningf("[pump %s] get consumer partition client error %v", p.nodeID, err)
 				time.Sleep(waitTime)
 				continue
 			}
@@ -429,7 +440,7 @@ func (p *Pump) pullBinlogs() {
 			pos, err = p.receiveBinlog(stream, pos)
 			if err != nil {
 				if errors.Cause(err) != context.Canceled {
-					log.Warningf("[stream] node %s, pos %+v, error %v", p.nodeID, pos, err)
+					log.Warningf("[pump %s] stream was closed at pos %+v, error %v", p.nodeID, pos, err)
 				}
 				time.Sleep(waitTime)
 				continue
@@ -439,38 +450,8 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
-	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
-		cancel()
 		stream.Close()
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case binlog := <-p.asm.Messages():
-				b := p.match(binlog.Entity)
-				if b != nil {
-					binlogEnt := &binlogEntity{
-						tp:       b.Tp,
-						startTS:  b.StartTs,
-						commitTS: b.CommitTs,
-						pos:      binlog.Entity.Pos,
-					}
-					assemble.DestructAssembledBinlog(binlog)
-					// send to publish goroutinue
-					select {
-					case <-ctx.Done():
-						return
-					case p.binlogChan <- binlogEnt:
-					}
-				} else {
-					assemble.DestructAssembledBinlog(binlog)
-				}
-			}
-		}
 	}()
 
 	for {
@@ -479,12 +460,41 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
 		case consumerErr := <-stream.Errors():
-			return pos, errors.Errorf("consumer %v", consumerErr)
+			return pos, errors.Errorf("[pump %s] consumer %v", p.nodeID, consumerErr)
 		case msg := <-stream.Messages():
 			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
+		}
+	}
+}
+
+func (p *Pump) sendBinlogsToSortingUnit() {
+	for {
+		select {
+		case <-p.ctx.Done():
+			log.Infof("[pump %s] send binlogs to sorting unit, cause %v", p.nodeID, p.ctx.Err())
+			return
+		case binlog := <-p.asm.Messages():
+			b := p.match(binlog.Entity)
+			if b != nil {
+				binlogEnt := &binlogEntity{
+					tp:       b.Tp,
+					startTS:  b.StartTs,
+					commitTS: b.CommitTs,
+					pos:      binlog.Entity.Pos,
+				}
+				assemble.DestructAssembledBinlog(binlog)
+				// send to publish goroutinue
+				select {
+				case <-p.ctx.Done():
+					return
+				case p.binlogChan <- binlogEnt:
+				}
+			} else {
+				assemble.DestructAssembledBinlog(binlog)
+			}
 		}
 	}
 }
