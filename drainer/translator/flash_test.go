@@ -156,23 +156,19 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Numeric types, with unsigned, nullable and default value attributes.
 	check("create table Test(bT bit, I int, T tinyint, M mediumint, B bigint, F float, D double, DE decimal(38, 10))",
 		Equals,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64),`i` Nullable(Int32),`t` Nullable(Int8),`m` Nullable(Int32),`b` Nullable(Int64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Float64)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64),`i` Nullable(Int32),`t` Nullable(Int8),`m` Nullable(Int32),`b` Nullable(Int64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Decimal(38, 10))) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(I int unsigned, T tinyint unsigned, M mediumint unsigned, B bigint unsigned, F float unsigned, D double unsigned, DE decimal unsigned)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Float64)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`_tidb_decimal_de` Nullable(String)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Decimal(11, 0))) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(BT bit not null, I int not null, T tinyint not null, M mediumint not null, B bigint not null, F float not null, D double not null, DE decimal not null)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`de` Float64) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`_tidb_decimal_de` String) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`de` Decimal(11, 0)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(Bt bit default 255, I int default null, T tinyint unsigned default 1, M mediumint not null default -2.0, B bigint unsigned not null default 100, F float not null default 1234.56, D double not null default 8765.4321, DE decimal not null default 0)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '0') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`de` Decimal(11, 0) DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(F float not null default 1234, D double not null default '8765.4321', DE decimal not null default 42)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '42') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`de` Decimal(11, 0) DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	// String types, with default value attribute.
 	check("create table Test(C Char(10) not null, vC Varchar(255) not null, B BLOB not null, t tinyblob not null, m MediumBlob not null, L longblob not null)",
 		Equals,
@@ -197,9 +193,9 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 		Equals,
 		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`e` Enum16('a'=1,''=2,'b'=3)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	// Hack types tests.
-	check("create table Test(dt1 Date, Dt2 Date not null, D1 Decimal(38, 10) not null, d2 decimal(38, 0))",
+	check("create table Test(dt1 Date, Dt2 Date not null)",
 		Equals,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`"+dateColNamePrefix+"dt1` Nullable(Int32),`"+dateColNamePrefix+"dt2` Int32,`d1` Float64,`"+decimalColNamePrefix+"d2` Nullable(String)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`"+dateColNamePrefix+"dt1` Nullable(Int32),`"+dateColNamePrefix+"dt2` Int32) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 
 	// Default value conversions using alter table statement, as the result is relatively simpler.
 	// Bit.
@@ -221,40 +217,35 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Decimal.
 	check("alter table Test add column d decimal default null",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Float64) DEFAULT NULL;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` Nullable(String) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Decimal(11, 0)) DEFAULT NULL;")
 	check("alter table Test add column d decimal not null default 255.5",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255.5;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255.5';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT 255.5;")
 	check("alter table Test add column d decimal not null default -255",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT -255;")
 	check("alter table Test add column d decimal not null default '255'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT 255;")
 	check("alter table Test add column d decimal not null default '-255'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT -255;")
 	// Hacked decimal.
 	check("alter table Test add column d decimal(10, 0) default null",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` Nullable(String) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Decimal(10, 0)) DEFAULT NULL;")
 	check("alter table Test add column d decimal(10, 0) not null default 255.5",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '255.5';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT 255.5;")
 	check("alter table Test add column d decimal(10, 0) not null default -255",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT -255;")
 	check("alter table Test add column d decimal(10, 0) not null default '255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT 255;")
 	check("alter table Test add column d decimal(10, 0) not null default '-255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT -255;")
 	// Numeric.
 	check("alter table Test add column i int default null",
 		Equals,
@@ -518,9 +509,9 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
 	check(mysql.TypeTimestamp, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
 	// Decimal.
-	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
 	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
-	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
+	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
 	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
 	// Enum.
 	en, err := types.ParseEnumValue([]string{"a", "b"}, 1)

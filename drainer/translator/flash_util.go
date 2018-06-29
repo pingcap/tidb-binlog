@@ -242,9 +242,6 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 		return data.GetFloat64(), nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal: // String/Float64
 		// TODO: map decimal to CH decimal.
-		if ok, hackVal := hackFormatDecimalData(data, ft); ok {
-			return hackVal, nil
-		}
 		f, err := data.GetMysqlDecimal().ToFloat64()
 		if err != nil {
 			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
@@ -319,10 +316,6 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	switch ft.Tp {
 	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString, mysql.TypeSet:
 		shouldQuote = true
-	default:
-		if hackShouldQuote := hackShouldQuote(ft); hackShouldQuote {
-			shouldQuote = hackShouldQuote
-		}
 	}
 	switch e := expr.(type) {
 	case *ast.ValueExpr:
@@ -506,9 +499,6 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 			return data.GetValue(), nil
 		}
 	case mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
-		if ok, hackVal := hackConvertDecimalType(data, source, target); ok {
-			return hackVal, nil
-		}
 		// Towards numeric types, do really conversion.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:

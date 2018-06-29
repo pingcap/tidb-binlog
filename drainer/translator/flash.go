@@ -493,11 +493,8 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		if tp.Decimal == types.UnspecifiedLength {
 			_, tp.Decimal = mysql.GetDefaultFieldLengthAndDecimal(tp.Tp)
 		}
-		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
-			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
-		} else {
-			typeStr = fmt.Sprintf(typeStrFormat, "Float64")
-		}
+		decimalTypeStr := fmt.Sprintf("Decimal(%d, %d)", tp.Flen, tp.Decimal)
+		typeStr = fmt.Sprintf(typeStrFormat, decimalTypeStr)
 	case mysql.TypeTimestamp, mysql.TypeDatetime: // timestamp, datetime
 		typeStr = fmt.Sprintf(typeStrFormat, "DateTime")
 	case mysql.TypeDuration: // duration
