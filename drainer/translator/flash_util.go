@@ -20,6 +20,7 @@ import (
 const implicitColName = "_tidb_rowid"
 const internalVersionColName = "_INTERNAL_VERSION"
 const internalDelmarkColName = "_INTERNAL_DELMARK"
+
 const emptySQL = "select 1"
 
 func genEmptySQL(reason string) string {
@@ -206,7 +207,7 @@ func decodeFlashOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *got
 }
 
 // Convert datum to CH raw data, data type must be strictly matching the rules in analyzeColumnDef.
-func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) {
+func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error) {
 	if data.GetValue() == nil {
 		return nil, nil
 	}
@@ -239,35 +240,49 @@ func formatFlashData(data types.Datum, ft types.FieldType) (interface{}, error) 
 		return data.GetFloat32(), nil
 	case mysql.TypeDouble: // Float64
 		return data.GetFloat64(), nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal: // Float64
+	case mysql.TypeNewDecimal, mysql.TypeDecimal: // String/Float64
 		// TODO: map decimal to CH decimal.
+		if ok, hackVal := hackFormatDecimalData(data, ft); ok {
+			return hackVal, nil
+		}
 		f, err := data.GetMysqlDecimal().ToFloat64()
 		if err != nil {
 			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
 			f = 0
 		}
 		return f, nil
-	case mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
-		var unix = int64(0)
-		// TiDB won't accept invalid date/time EXCEPT "0000-00-00", which is default value for not-null columns. So leave it zero.
-		if mysqlTime := data.GetMysqlTime(); !mysqlTime.IsZero() {
-			// Calculate the go time.
-			time := mysqlTime.Time
-			// Using UTC timezone
-			timezone := gotime.UTC
-			// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
-			if ft.Tp == mysql.TypeDatetime || ft.Tp == mysql.TypeTimestamp {
-				timezone = gotime.Local
-			}
-			goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour(), time.Minute(), time.Second(), time.Microsecond()*1000, timezone)
-			unix = goTime.Unix()
-			// Zero the negative unix time to prevent overflow in CH.
-			if unix < 0 {
-				log.Warnf("Date/DateTime data before 1970-01-01 UTC: %v, will leave it zero.", mysqlTime.String())
-				unix = 0
-			}
+	case mysql.TypeDate, mysql.TypeNewDate: // Int64
+		mysqlTime := data.GetMysqlTime()
+		var result = getUnixTimeSafe(mysqlTime, gotime.UTC)
+		if ok, hackVal := hackFormatDateData(result, ft); ok {
+			return hackVal, nil
 		}
-		return unix, nil
+		// Though CH stores Date as Uint16, do not care about negative value,
+		// because Spark will load the unsigned value to signed value bit-wise.
+		// However need to check overflow.
+		if result < math.MinInt16 {
+			log.Warnf("Date data %v before min value, will set to min value.", mysqlTime.String())
+			result = math.MinInt16
+		} else if result > math.MaxInt16 {
+			log.Warnf("Date data %v after max value, will set to max value.", mysqlTime.String())
+			result = math.MaxInt16
+		}
+		return result, nil
+	case mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
+		mysqlTime := data.GetMysqlTime()
+		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
+		var result = getUnixTimeSafe(mysqlTime, gotime.Local)
+		// Though CH stores DateTime as Uint32, do not care about negative value,
+		// because Spark will load the unsigned value to signed value bit-wise.
+		// However need to check overflow.
+		if result < math.MinInt32 {
+			log.Warnf("DateTime/Timestamp data %v before min value, will set to min value.", mysqlTime.String())
+			result = math.MinInt32
+		} else if result > math.MaxInt32 {
+			log.Warnf("DateTime/Timestamp data %v after max value, will set to max value.", mysqlTime.String())
+			result = math.MaxInt32
+		}
+		return result, nil
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
 		if err != nil {
@@ -304,6 +319,10 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	switch ft.Tp {
 	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString, mysql.TypeSet:
 		shouldQuote = true
+	default:
+		if hackShouldQuote := hackShouldQuote(ft); hackShouldQuote {
+			shouldQuote = hackShouldQuote
+		}
 	}
 	switch e := expr.(type) {
 	case *ast.ValueExpr:
@@ -396,6 +415,9 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if ok, hackVal := hackFormatDateData(getUnixTimeSafe(mysqlTime, gotime.UTC), target); ok {
+			return hackVal, nil
+		}
 		return fmt.Sprintf("'%v'", mysqlTime), nil
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		// Towards time types, convert to string formatted as 'YYYY-MM-DD hh:mm:ss'
@@ -483,7 +505,10 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			return data.GetValue(), nil
 		}
-	case mysql.TypeFloat, mysql.TypeDecimal, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeNewDecimal:
+	case mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
+		if ok, hackVal := hackConvertDecimalType(data, source, target); ok {
+			return hackVal, nil
+		}
 		// Towards numeric types, do really conversion.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
@@ -495,6 +520,15 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		}
 	}
 	return nil, errors.Errorf("Unable to convert data %v from type %s to type %s.", data, source.String(), target.String())
+}
+
+func getUnixTimeSafe(mysqlTime types.Time, tz *gotime.Location) int64 {
+	if mysqlTime.IsZero() {
+		return 0
+	}
+	time := mysqlTime.Time
+	goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour(), time.Minute(), time.Second(), time.Microsecond()*1000, tz)
+	return goTime.Unix()
 }
 
 // Escape a string to CH string literal.
