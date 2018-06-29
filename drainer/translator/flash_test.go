@@ -168,11 +168,11 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("create table Test(Bt bit default 255, I int default null, T tinyint unsigned default 1, M mediumint not null default -2.0, B bigint unsigned not null default 100, F float not null default 1234.56, D double not null default 8765.4321, DE decimal not null default 0)",
 		Equals,
 		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '0') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(F float not null default 1234, D double not null default '8765.4321', DE decimal not null default 42)",
 		Equals,
 		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '42') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	// String types, with default value attribute.
 	check("create table Test(C Char(10) not null, vC Varchar(255) not null, B BLOB not null, t tinyblob not null, m MediumBlob not null, L longblob not null)",
 		Equals,
@@ -226,19 +226,19 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("alter table Test add column d decimal not null default 255.5",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255.5;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT 255.5;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255.5';")
 	check("alter table Test add column d decimal not null default -255",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT -255;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
 	check("alter table Test add column d decimal not null default '255'",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT 255;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255';")
 	check("alter table Test add column d decimal not null default '-255'",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT -255;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
 	// Hacked decimal.
 	check("alter table Test add column d decimal(10, 0) default null",
 		Equals,

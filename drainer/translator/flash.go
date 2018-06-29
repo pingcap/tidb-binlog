@@ -484,7 +484,15 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		}
 	case mysql.TypeFloat:
 		typeStr = fmt.Sprintf(typeStrFormat, "Float32")
-	case mysql.TypeDouble, mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeDouble:
+		typeStr = fmt.Sprintf(typeStrFormat, "Float64")
+	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+		if tp.Flen == types.UnspecifiedLength {
+			tp.Flen, _ = mysql.GetDefaultFieldLengthAndDecimal(tp.Tp)
+		}
+		if tp.Decimal == types.UnspecifiedLength {
+			_, tp.Decimal = mysql.GetDefaultFieldLengthAndDecimal(tp.Tp)
+		}
 		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
 			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
 		} else {
