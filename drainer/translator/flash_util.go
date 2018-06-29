@@ -527,7 +527,7 @@ func getUnixTimeSafe(mysqlTime types.Time, tz *gotime.Location) int64 {
 		return 0
 	}
 	time := mysqlTime.Time
-	goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour()%24, time.Minute()%60, time.Second()%60, time.Microsecond()*1000%1000, tz)
+	goTime := gotime.Date(time.Year(), gotime.Month(time.Month()), time.Day(), time.Hour(), time.Minute(), time.Second(), time.Microsecond()*1000, tz)
 	return goTime.Unix()
 }
 
