@@ -230,22 +230,21 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("alter table Test add column d decimal not null default '-255'",
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT -255;")
-	// Hacked decimal.
-	check("alter table Test add column d decimal(10, 0) default null",
+	check("alter table Test add column d decimal(10) default null",
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Decimal(10, 0)) DEFAULT NULL;")
 	check("alter table Test add column d decimal(10, 0) not null default 255.5",
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT 255.5;")
-	check("alter table Test add column d decimal(10, 0) not null default -255",
+	check("alter table Test add column d decimal(10, 5) not null default -255",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT -255;")
-	check("alter table Test add column d decimal(10, 0) not null default '255'",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT -255;")
+	check("alter table Test add column d decimal(10, 5) not null default '255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT 255;")
-	check("alter table Test add column d decimal(10, 0) not null default '-255'",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT 255;")
+	check("alter table Test add column d decimal(10, 5) not null default '-255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT -255;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT -255;")
 	// Numeric.
 	check("alter table Test add column i int default null",
 		Equals,
