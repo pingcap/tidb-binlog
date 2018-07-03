@@ -311,7 +311,7 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("alter table Test add column dt date not null default '1998-08-08 155:13:13'",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10452;")
 	check("alter table Test add column dt date not null default '19980808235959.99'",
 		Equals,
 		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-09';")
@@ -509,10 +509,26 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
 	check(mysql.TypeTimestamp, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
 	// Decimal.
-	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
-	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
-	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
-	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0)),
+		testPackCHDecimal(c, []byte{}, 0, 0, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0)),
+		testPackCHDecimal(c, []byte{}, 0, 0, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(1)),
+		testPackCHDecimal(c, []byte{1}, 1, 0, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0.1)),
+		testPackCHDecimal(c, []byte{1}, 1, 0, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-1)),
+		testPackCHDecimal(c, []byte{1}, 1, 1, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-0.1)),
+		testPackCHDecimal(c, []byte{1}, 1, 1, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 0, 65, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 10}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0.1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 0, 65, 10))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 1, 65, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 10}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-0.1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 1, 65, 10))
 	// Enum.
 	en, err := types.ParseEnumValue([]string{"a", "b"}, 1)
 	c.Assert(err, IsNil)
@@ -526,6 +542,15 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	// JSON.
 	datum.SetMysqlJSON(json.CreateBinary(uint64(101)))
 	check(mysql.TypeJSON, datum, "101")
+}
+
+func testPackCHDecimal(c *C, value []byte, limb, sign, precision, scale int) []byte {
+	chBin := append(value, make([]byte, 32-len(value))...)
+	chBin = append(chBin, byte(limb), byte(limb>>8), byte(sign), byte(sign>>8))
+	chBin = append(chBin, make([]byte, 12)...)
+	chBin = append(chBin, byte(precision), byte(precision>>8), byte(scale), byte(scale>>8))
+	chBin = append(chBin, make([]byte, 12)...)
+	return chBin
 }
 
 func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag bool) ([]types.Datum, []interface{}) {
