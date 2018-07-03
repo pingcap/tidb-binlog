@@ -623,9 +623,7 @@ func mysqlDecimalToCHDecimalBin(ft *types.FieldType, d *types.MyDecimal) ([]byte
 	// Get bytes and swap to little-endian.
 	bin := digitsGoInt.Bytes()
 	for i := 0; i < len(bin)/2; i++ {
-		tmp := bin[i]
-		bin[i] = bin[len(bin)-1-i]
-		bin[len(bin)-1-i] = tmp
+		bin[i], bin[len(bin)-1-i] = bin[len(bin)-1-i], bin[i]
 	}
 
 	// Pack 32-byte value part for CH Decimal.
