@@ -316,7 +316,7 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
-
+		log.Infof("get unknow ddl type %v", job.Type)
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
@@ -361,10 +361,11 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
+	// Note: checkpoint's Save() must be called first.
+	if s.cp.Check(job.commitTS, s.positions) && (!s.cfg.DisableDispatch || job.isCompleteBinlog) {
 		return true
 	}
-	if (!s.cfg.DisableDispatch || job.isCompleteBinlog) && s.cp.Check() {
+	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
 		return true
 	}
 	return false
@@ -750,7 +751,7 @@ func (s *Syncer) Close() {
 	s.cancel()
 	s.wg.Wait()
 	closeExecutors(s.executors...)
-	log.Debug("done close syncer")
+	log.Debug("syncer is closed")
 }
 
 // GetLastSyncTime returns lastSyncTime

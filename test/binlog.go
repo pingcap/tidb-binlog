@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	cfg := NewConfig()
+	cfg := util.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
 	case nil:
@@ -63,19 +63,19 @@ create table ntest(
 	defer util.CloseDB(targetDB)
 
 	// run the simple test case
-	dailytest.RunCase(sourceDB, targetDB)
+	dailytest.RunCase(&cfg.DiffConfig, sourceDB, targetDB)
 
-	dailytest.RunTest(sourceDB, targetDB, func(src *sql.DB) {
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
 		// generate insert/update/delete sqls and execute
 		dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 	})
 
-	dailytest.RunTest(sourceDB, targetDB, func(src *sql.DB) {
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
 		// truncate test data
 		dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
 	})
 
-	dailytest.RunTest(sourceDB, targetDB, func(src *sql.DB) {
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
 		// drop test table
 		dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
 	})

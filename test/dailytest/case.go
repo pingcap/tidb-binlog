@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // test different data type of mysql
@@ -65,9 +66,8 @@ var case1Clean = []string{`
 }
 
 // RunCase run some simple test case
-func RunCase(src *sql.DB, dst *sql.DB) {
-
-	RunTest(src, dst, func(src *sql.DB) {
+func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
+	RunTest(cfg, src, dst, func(src *sql.DB) {
 		err := execSQLs(src, case1)
 		if err != nil {
 			log.Fatal(err)
@@ -75,7 +75,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// clean table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(cfg, src, dst, func(src *sql.DB) {
 		err := execSQLs(src, case1Clean)
 		if err != nil {
 			log.Fatal(err)
