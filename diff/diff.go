@@ -19,6 +19,9 @@ type Diff struct {
 
 // New returns a Diff instance.
 func New(cfg *Config, db1, db2 *sql.DB) *Diff {
+	if cfg == nil {
+		cfg = defaultConfig
+	}
 	return &Diff{
 		cfg: cfg,
 		db1: db1,

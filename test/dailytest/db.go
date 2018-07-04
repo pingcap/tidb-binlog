@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/test/util"
 	"github.com/pingcap/tidb/mysql"
 )
@@ -369,65 +370,25 @@ func closeDBs(dbs []*sql.DB) {
 	}
 }
 
-func createEndMark(db *sql.DB) (err error) {
-	_, err = db.Query("CREATE TABLE IF NOT EXISTS tidb_binlog_test_mark(id int);")
-	return
-}
+// RunTest will call writeSrc and check if src is contisitent with dst
+func RunTest(cfg *diff.Config, src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
+	writeSrc(src)
 
-func cleanEndMark(db *sql.DB) (err error) {
-	_, err = db.Query("DROP TABLE IF EXISTS tidb_binlog_test_mark;")
-	return
-}
+	timeout := time.After(time.Second * 15)
 
-// wait the mark table to be exist or not exist
-func waitForEndMark(db *sql.DB, exist bool, timeout time.Duration) bool {
 	for {
 		select {
 		case <-time.Tick(time.Millisecond * 100):
-			row, err := db.Query("SHOW TABLES LIKE 'tidb_binlog_test_mark';")
-			if err != nil {
-				log.Error(err)
-				continue
+			if util.CheckSyncState(cfg, src, dst) {
+				return
 			}
-			if exist {
-				if row.Next() {
-					return true
-				}
+		case <-timeout:
+			// check last time
+			if !util.CheckSyncState(cfg, src, dst) {
+				log.Fatal("sourceDB don't equal targetDB")
 			} else {
-				if !row.Next() {
-					return true
-				}
+				return
 			}
-		case <-time.After(timeout):
-			return false
 		}
 	}
-}
-
-// RunTest will call writeSrc and check if src is contisitent with dst
-func RunTest(src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
-	writeSrc(src)
-
-	err := createEndMark(src)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer func() {
-		cleanEndMark(src)
-		reach := waitForEndMark(dst, false, time.Second*15)
-		if !reach {
-			log.Fatal("can't clean the mark table")
-		}
-	}()
-
-	reach := waitForEndMark(dst, true, time.Second*15)
-	if !reach {
-		log.Fatal("can see the mark table")
-	}
-
-	if !util.CheckSyncState(src, dst) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
-
 }

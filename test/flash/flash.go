@@ -1,9 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"os"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
@@ -72,55 +72,22 @@ create table ntest(
 	defer util.CloseDB(targetDB)
 
 	// run the simple test case
-	dailytest.RunSimpleCase(sourceDB)
+	dailytest.RunCase(&cfg.DiffConfig, sourceDB, targetDB)
 
-	// wait for sync to downstream sql server
-	time.Sleep(60 * time.Second)
-	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
-		log.Fatal("src don't equal dst")
-	}
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// generate insert/update/delete sqls and execute
+		dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	})
 
-	// clear the simple test case
-	dailytest.ClearSimpleCase(sourceDB)
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// truncate test data
+		dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
+	})
 
-	// wait for sync to downstream sql server
-	time.Sleep(60 * time.Second)
-	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
-		log.Fatal("src don't equal dst")
-	}
-
-	// generate insert/update/delete sqls and execute
-	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
-
-	// wait for sync to downstream sql server
-	time.Sleep(90 * time.Second)
-
-	// diff the test schema
-	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
-
-	// truncate test data
-	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
-
-	// wait for sync to downstream sql server
-	time.Sleep(30 * time.Second)
-
-	// diff the test schema
-	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
-
-	// drop test table
-	dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
-
-	// wait for sync to downstream sql server
-	time.Sleep(30 * time.Second)
-
-	// diff the test schema
-	if !util.CheckSyncState(&cfg.DiffConfig, sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// drop test table
+		dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
+	})
 
 	log.Info("test pass!!!")
 }
