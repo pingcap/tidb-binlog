@@ -7,11 +7,11 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	_ "github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
+	_ "github.com/zanmato1984/clickhouse"
 )
 
 func main() {
