@@ -176,8 +176,8 @@ imports:
   version: 2eee05ed794112d45db504eb05aa693efd2b8b09
 - name: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
-- name: github.com/kshvakov/clickhouse
-  version: aeedb7b9d0584f393905447021238b5c6e9c5154
+- name: github.com/zanmato1984/clickhouse
+  version: 5ac13fe952e775879cff8142e64310435b28fa67
   subpackages:
   - lib/binary
   - lib/column
