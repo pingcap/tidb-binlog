@@ -9,6 +9,7 @@ import (
 	"github.com/kshvakov/clickhouse/lib/binary"
 )
 
+// Column is Clickhouse column.
 type Column interface {
 	Name() string
 	CHType() string
@@ -18,6 +19,7 @@ type Column interface {
 	defaultValue() interface{}
 }
 
+// Factory is the factory method for Column.
 func Factory(name, chType string, timezone *time.Location) (Column, error) {
 	switch chType {
 	case "Int8":
@@ -137,6 +139,8 @@ func Factory(name, chType string, timezone *time.Location) (Column, error) {
 		return parseFixedString(name, chType)
 	case strings.HasPrefix(chType, "Enum8"), strings.HasPrefix(chType, "Enum16"):
 		return parseEnum(name, chType)
+	case strings.HasPrefix(chType, "Decimal"):
+		return parseDecimal(name, chType)
 	}
 	return nil, fmt.Errorf("column: unhandled type %v", chType)
 }
