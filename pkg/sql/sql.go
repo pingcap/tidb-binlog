@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
-	"github.com/kshvakov/clickhouse"
+	"github.com/zanmato1984/clickhouse"
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"

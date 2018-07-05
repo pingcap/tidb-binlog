@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/kshvakov/clickhouse"
+	"github.com/zanmato1984/clickhouse"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"

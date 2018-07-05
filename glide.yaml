@@ -111,15 +111,6 @@ import:
   version: v0.1.0
 - package: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
-- package: github.com/zanmato1984/clickhouse
-  version: 5ac13fe952e775879cff8142e64310435b28fa67
-  subpackages:
-  - lib/binary
-  - lib/column
-  - lib/data
-  - lib/protocol
-  - lib/types
-  - lib/writebuffer
 - package: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
