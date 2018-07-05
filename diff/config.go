@@ -10,6 +10,13 @@ type Config struct {
 	EqualData        bool `toml:"equal-data" json:"equal-data"`
 }
 
+var defaultConfig = &Config{
+	EqualIndex:       true,
+	EqualCreateTable: true,
+	EqualRowCount:    true,
+	EqualData:        true,
+}
+
 func (c *Config) String() string {
 	if c == nil {
 		return "<nil>"
