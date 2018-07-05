@@ -2,7 +2,9 @@ package dailytest
 
 import (
 	"database/sql"
+
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // test different data type of mysql
@@ -63,19 +65,20 @@ var case1Clean = []string{`
 	drop table binlog_case1`,
 }
 
-// RunSimpleCase run some simple test case
-func RunSimpleCase(src *sql.DB) {
-	err := execSQLs(src, case1)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
+// RunCase run some simple test case
+func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case1)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
 
-// ClearSimpleCase clear the simple test case table and data
-func ClearSimpleCase(src *sql.DB) {
 	// clean table
-	err := execSQLs(src, case1Clean)
-	if err != nil {
-		log.Fatal(err)
-	}
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case1Clean)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
 }
