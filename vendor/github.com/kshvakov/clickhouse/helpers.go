@@ -111,7 +111,7 @@ var selectRe = regexp.MustCompile(`\s+SELECT\s+`)
 
 func isInsert(query string) bool {
 	if f := strings.Fields(query); len(f) > 2 {
-		return strings.EqualFold("INSERT", f[0]) && strings.EqualFold("INTO", f[1]) && !selectRe.MatchString(strings.ToUpper(query))
+		return (strings.EqualFold("INSERT", f[0]) || strings.EqualFold("UPSERT", f[0]) || strings.EqualFold("IMPORT", f[0])) && strings.EqualFold("INTO", f[1]) && !selectRe.MatchString(strings.ToUpper(query))
 	}
 	return false
 }

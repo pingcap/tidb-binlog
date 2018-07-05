@@ -100,25 +100,30 @@ func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, 
 
 	tx, err := conn.Begin()
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	stmt, err := conn.Prepare(batch.sql)
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	defer stmt.Close()
 	block, err := conn.Block()
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	for _, row := range batch.rows {
 		err = block.AppendRow(row)
 		if err != nil {
+			tx.Rollback()
 			return batch.latestCommitTS, errors.Trace(err)
 		}
 	}
 	err = conn.WriteBlock(block)
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	err = tx.Commit()
