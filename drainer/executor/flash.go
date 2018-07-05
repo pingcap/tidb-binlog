@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/zanmato1984/clickhouse"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/zanmato1984/clickhouse"
 )
 
 var extraRowSize = 1024
