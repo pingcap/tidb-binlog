@@ -9,11 +9,11 @@ import (
 )
 
 func (block *Block) WriteDate(c int, v time.Time) error {
-	return block.buffers[c].Column.UInt16(uint16(v.Unix() / 24 / 3600))
+	return block.buffers[c].Column.UInt32(uint32(v.Unix() / 24 / 3600))
 }
 
 func (block *Block) WriteDateTime(c int, v time.Time) error {
-	return block.buffers[c].Column.UInt32(uint32(v.Unix()))
+	return block.buffers[c].Column.UInt64(uint64(v.Unix()))
 }
 
 func (block *Block) WriteInt8(c int, v int8) error {

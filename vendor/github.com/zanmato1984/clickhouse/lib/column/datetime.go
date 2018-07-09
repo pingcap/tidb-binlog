@@ -14,13 +14,13 @@ type DateTime struct {
 
 func (dt *DateTime) Read(decoder *binary.Decoder) (interface{}, error) {
 	if dt.IsFull {
-		sec, err := decoder.Int32()
+		sec, err := decoder.Int64()
 		if err != nil {
 			return nil, err
 		}
-		return time.Unix(int64(sec), 0).In(dt.Timezone), nil
+		return time.Unix(sec, 0).In(dt.Timezone), nil
 	}
-	sec, err := decoder.Int16()
+	sec, err := decoder.Int32()
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (dt *DateTime) Write(encoder *binary.Encoder, v interface{}) error {
 	}
 
 	if dt.IsFull {
-		return encoder.Int32(int32(timestamp))
+		return encoder.Int64(timestamp)
 	}
-	return encoder.Int16(int16(timestamp / 24 / 3600))
+	return encoder.Int32(int32(timestamp / 24 / 3600))
 }

@@ -506,11 +506,7 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 			typeStr = fmt.Sprintf(typeStrFormat, "Int64")
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
-			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
-		} else {
-			typeStr = fmt.Sprintf(typeStrFormat, "Date")
-		}
+		typeStr = fmt.Sprintf(typeStrFormat, "Date")
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")
 	case mysql.TypeEnum:
@@ -570,12 +566,7 @@ func analyzeColumnPosition(cp *ast.ColumnPosition) (string, error) {
 func genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for _, column := range columns {
-		var colName string
-		if ok, hackName, _ := hackColumnNameAndType(column.Name.L, &column.FieldType); ok {
-			colName = hackName
-		} else {
-			colName = column.Name.L
-		}
+		colName := column.Name.L
 		name := fmt.Sprintf("`%s`", colName)
 		columnList = append(columnList, []byte(name)...)
 

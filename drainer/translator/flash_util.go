@@ -252,34 +252,11 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 	case mysql.TypeDate, mysql.TypeNewDate: // Int64
 		mysqlTime := data.GetMysqlTime()
 		var result = getUnixTimeSafe(mysqlTime, gotime.UTC)
-		if ok, hackVal := hackFormatDateData(result, ft); ok {
-			return hackVal, nil
-		}
-		// Though CH stores Date as Uint16, do not care about negative value,
-		// because Spark will load the unsigned value to signed value bit-wise.
-		// However need to check overflow.
-		if result < math.MinInt16 {
-			log.Warnf("Date data %v before min value, will set to min value.", mysqlTime.String())
-			result = math.MinInt16
-		} else if result > math.MaxInt16 {
-			log.Warnf("Date data %v after max value, will set to max value.", mysqlTime.String())
-			result = math.MaxInt16
-		}
 		return result, nil
 	case mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
 		mysqlTime := data.GetMysqlTime()
 		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
 		var result = getUnixTimeSafe(mysqlTime, gotime.Local)
-		// Though CH stores DateTime as Uint32, do not care about negative value,
-		// because Spark will load the unsigned value to signed value bit-wise.
-		// However need to check overflow.
-		if result < math.MinInt32 {
-			log.Warnf("DateTime/Timestamp data %v before min value, will set to min value.", mysqlTime.String())
-			result = math.MinInt32
-		} else if result > math.MaxInt32 {
-			log.Warnf("DateTime/Timestamp data %v after max value, will set to max value.", mysqlTime.String())
-			result = math.MaxInt32
-		}
 		return result, nil
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
@@ -408,9 +385,6 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
-		}
-		if ok, hackVal := hackFormatDateData(getUnixTimeSafe(mysqlTime, gotime.UTC), target); ok {
-			return hackVal, nil
 		}
 		return fmt.Sprintf("'%v'", mysqlTime), nil
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
