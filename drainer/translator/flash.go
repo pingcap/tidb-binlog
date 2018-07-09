@@ -287,10 +287,17 @@ func extractDropDatabase(stmt *ast.DropDatabaseStmt) (string, error) {
 }
 
 func extractCreateTable(stmt *ast.CreateTableStmt, schema string) (string, error) {
+	tableName := stmt.Table.Name.L
+	// create table like
+	if stmt.ReferTable != nil {
+		referTableSchema, referTableName := stmt.ReferTable.Schema.L, stmt.ReferTable.Name.L
+		if len(referTableSchema) == 0 {
+			referTableSchema = schema
+		}
+		return fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`.`%s` AS `%s`.`%s`", schema, tableName, referTableSchema, referTableName), nil
+	}
 	// extract primary key
 	pkColumn, explicitHandle := extractRowHandle(stmt)
-	// var buffer bytes.Buffer
-	tableName := stmt.Table.Name.L
 	colStrs := make([]string, len(stmt.Cols))
 	for i, colDef := range stmt.Cols {
 		colStr, _ := analyzeColumnDef(colDef, pkColumn)

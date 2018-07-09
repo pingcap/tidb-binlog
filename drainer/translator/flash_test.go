@@ -445,6 +445,14 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("truncate table Test",
 		Equals,
 		"TRUNCATE TABLE `test_schema`.`test`")
+
+	check("create table T like T2",
+		Equals,
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`t` AS `test_schema`.`t2`")
+
+	check("create table T like D.T2",
+		Equals,
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`t` AS `d`.`t2`")
 }
 
 func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
