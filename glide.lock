@@ -393,7 +393,7 @@ imports:
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
 - name: github.com/zanmato1984/clickhouse
-  version: 80197d3951daeca2e7db6de903ba17b49b766934
+  version: cc03bd0a10107eecbed0f4a4b6ca595ac50d50d0
   subpackages:
   - lib/binary
   - lib/column

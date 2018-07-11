@@ -9,7 +9,7 @@ import (
 )
 
 func (block *Block) WriteDate(c int, v time.Time) error {
-	return block.buffers[c].Column.UInt32(uint32(v.Unix() / 24 / 3600))
+	return block.buffers[c].Column.UInt32(uint32(v.Unix()/24/3600 - column.DateEpochOffset))
 }
 
 func (block *Block) WriteDateTime(c int, v time.Time) error {

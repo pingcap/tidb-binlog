@@ -6,6 +6,9 @@ import (
 	"github.com/zanmato1984/clickhouse/lib/binary"
 )
 
+// DateEpochOffset is days from 1970-01-01 to 1000-01-01, as new Date type originates from the latter.
+const DateEpochOffset = -354285
+
 type DateTime struct {
 	base
 	IsFull   bool
@@ -24,7 +27,7 @@ func (dt *DateTime) Read(decoder *binary.Decoder) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return time.Unix(int64(sec)*24*3600, 0).In(dt.Timezone), nil
+	return time.Unix(int64(sec+DateEpochOffset)*24*3600, 0).In(dt.Timezone), nil
 }
 
 func (dt *DateTime) Write(encoder *binary.Encoder, v interface{}) error {
@@ -76,5 +79,5 @@ func (dt *DateTime) Write(encoder *binary.Encoder, v interface{}) error {
 	if dt.IsFull {
 		return encoder.Int64(timestamp)
 	}
-	return encoder.Int32(int32(timestamp / 24 / 3600))
+	return encoder.Int32(int32(timestamp/24/3600 - DateEpochOffset))
 }
