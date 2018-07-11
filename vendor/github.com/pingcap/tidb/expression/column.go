@@ -14,14 +14,14 @@
 package expression
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/codec"
@@ -46,7 +46,7 @@ func (col *CorrelatedColumn) Eval(row types.Row) (types.Datum, error) {
 }
 
 // EvalInt returns int representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalInt(ctx context.Context, row types.Row) (int64, bool, error) {
+func (col *CorrelatedColumn) EvalInt(ctx sessionctx.Context, row types.Row) (int64, bool, error) {
 	if col.Data.IsNull() {
 		return 0, true, nil
 	}
@@ -58,7 +58,7 @@ func (col *CorrelatedColumn) EvalInt(ctx context.Context, row types.Row) (int64,
 }
 
 // EvalReal returns real representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalReal(ctx context.Context, row types.Row) (float64, bool, error) {
+func (col *CorrelatedColumn) EvalReal(ctx sessionctx.Context, row types.Row) (float64, bool, error) {
 	if col.Data.IsNull() {
 		return 0, true, nil
 	}
@@ -66,7 +66,7 @@ func (col *CorrelatedColumn) EvalReal(ctx context.Context, row types.Row) (float
 }
 
 // EvalString returns string representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalString(ctx context.Context, row types.Row) (string, bool, error) {
+func (col *CorrelatedColumn) EvalString(ctx sessionctx.Context, row types.Row) (string, bool, error) {
 	if col.Data.IsNull() {
 		return "", true, nil
 	}
@@ -79,7 +79,7 @@ func (col *CorrelatedColumn) EvalString(ctx context.Context, row types.Row) (str
 }
 
 // EvalDecimal returns decimal representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalDecimal(ctx context.Context, row types.Row) (*types.MyDecimal, bool, error) {
+func (col *CorrelatedColumn) EvalDecimal(ctx sessionctx.Context, row types.Row) (*types.MyDecimal, bool, error) {
 	if col.Data.IsNull() {
 		return nil, true, nil
 	}
@@ -87,7 +87,7 @@ func (col *CorrelatedColumn) EvalDecimal(ctx context.Context, row types.Row) (*t
 }
 
 // EvalTime returns DATE/DATETIME/TIMESTAMP representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalTime(ctx context.Context, row types.Row) (types.Time, bool, error) {
+func (col *CorrelatedColumn) EvalTime(ctx sessionctx.Context, row types.Row) (types.Time, bool, error) {
 	if col.Data.IsNull() {
 		return types.Time{}, true, nil
 	}
@@ -95,7 +95,7 @@ func (col *CorrelatedColumn) EvalTime(ctx context.Context, row types.Row) (types
 }
 
 // EvalDuration returns Duration representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalDuration(ctx context.Context, row types.Row) (types.Duration, bool, error) {
+func (col *CorrelatedColumn) EvalDuration(ctx sessionctx.Context, row types.Row) (types.Duration, bool, error) {
 	if col.Data.IsNull() {
 		return types.Duration{}, true, nil
 	}
@@ -103,7 +103,7 @@ func (col *CorrelatedColumn) EvalDuration(ctx context.Context, row types.Row) (t
 }
 
 // EvalJSON returns JSON representation of CorrelatedColumn.
-func (col *CorrelatedColumn) EvalJSON(ctx context.Context, row types.Row) (json.BinaryJSON, bool, error) {
+func (col *CorrelatedColumn) EvalJSON(ctx sessionctx.Context, row types.Row) (json.BinaryJSON, bool, error) {
 	if col.Data.IsNull() {
 		return json.BinaryJSON{}, true, nil
 	}
@@ -111,9 +111,9 @@ func (col *CorrelatedColumn) EvalJSON(ctx context.Context, row types.Row) (json.
 }
 
 // Equal implements Expression interface.
-func (col *CorrelatedColumn) Equal(expr Expression, ctx context.Context) bool {
+func (col *CorrelatedColumn) Equal(ctx sessionctx.Context, expr Expression) bool {
 	if cc, ok := expr.(*CorrelatedColumn); ok {
-		return col.Column.Equal(&cc.Column, ctx)
+		return col.Column.Equal(ctx, &cc.Column)
 	}
 	return false
 }
@@ -132,7 +132,11 @@ func (col *CorrelatedColumn) Decorrelate(schema *Schema) Expression {
 }
 
 // ResolveIndices implements Expression interface.
-func (col *CorrelatedColumn) ResolveIndices(_ *Schema) {
+func (col *CorrelatedColumn) ResolveIndices(_ *Schema) Expression {
+	return col
+}
+
+func (col *CorrelatedColumn) resolveIndices(_ *Schema) {
 }
 
 // Column represents a column.
@@ -159,7 +163,7 @@ type Column struct {
 }
 
 // Equal implements Expression interface.
-func (col *Column) Equal(expr Expression, _ context.Context) bool {
+func (col *Column) Equal(_ sessionctx.Context, expr Expression) bool {
 	if newCol, ok := expr.(*Column); ok {
 		return newCol.FromID == col.FromID && newCol.Position == col.Position
 	}
@@ -180,8 +184,7 @@ func (col *Column) String() string {
 
 // MarshalJSON implements json.Marshaler interface.
 func (col *Column) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString(fmt.Sprintf("\"%s\"", col))
-	return buffer.Bytes(), nil
+	return []byte(fmt.Sprintf("\"%s\"", col)), nil
 }
 
 // GetType implements Expression interface.
@@ -195,7 +198,7 @@ func (col *Column) Eval(row types.Row) (types.Datum, error) {
 }
 
 // EvalInt returns int representation of Column.
-func (col *Column) EvalInt(ctx context.Context, row types.Row) (int64, bool, error) {
+func (col *Column) EvalInt(ctx sessionctx.Context, row types.Row) (int64, bool, error) {
 	if col.GetType().Hybrid() {
 		val := row.GetDatum(col.Index, col.RetType)
 		if val.IsNull() {
@@ -211,7 +214,7 @@ func (col *Column) EvalInt(ctx context.Context, row types.Row) (int64, bool, err
 }
 
 // EvalReal returns real representation of Column.
-func (col *Column) EvalReal(ctx context.Context, row types.Row) (float64, bool, error) {
+func (col *Column) EvalReal(ctx sessionctx.Context, row types.Row) (float64, bool, error) {
 	if row.IsNull(col.Index) {
 		return 0, true, nil
 	}
@@ -222,7 +225,7 @@ func (col *Column) EvalReal(ctx context.Context, row types.Row) (float64, bool, 
 }
 
 // EvalString returns string representation of Column.
-func (col *Column) EvalString(ctx context.Context, row types.Row) (string, bool, error) {
+func (col *Column) EvalString(ctx sessionctx.Context, row types.Row) (string, bool, error) {
 	if row.IsNull(col.Index) {
 		return "", true, nil
 	}
@@ -249,7 +252,7 @@ func (col *Column) EvalString(ctx context.Context, row types.Row) (string, bool,
 }
 
 // EvalDecimal returns decimal representation of Column.
-func (col *Column) EvalDecimal(ctx context.Context, row types.Row) (*types.MyDecimal, bool, error) {
+func (col *Column) EvalDecimal(ctx sessionctx.Context, row types.Row) (*types.MyDecimal, bool, error) {
 	if row.IsNull(col.Index) {
 		return nil, true, nil
 	}
@@ -257,7 +260,7 @@ func (col *Column) EvalDecimal(ctx context.Context, row types.Row) (*types.MyDec
 }
 
 // EvalTime returns DATE/DATETIME/TIMESTAMP representation of Column.
-func (col *Column) EvalTime(ctx context.Context, row types.Row) (types.Time, bool, error) {
+func (col *Column) EvalTime(ctx sessionctx.Context, row types.Row) (types.Time, bool, error) {
 	if row.IsNull(col.Index) {
 		return types.Time{}, true, nil
 	}
@@ -265,7 +268,7 @@ func (col *Column) EvalTime(ctx context.Context, row types.Row) (types.Time, boo
 }
 
 // EvalDuration returns Duration representation of Column.
-func (col *Column) EvalDuration(ctx context.Context, row types.Row) (types.Duration, bool, error) {
+func (col *Column) EvalDuration(ctx sessionctx.Context, row types.Row) (types.Duration, bool, error) {
 	if row.IsNull(col.Index) {
 		return types.Duration{}, true, nil
 	}
@@ -273,7 +276,7 @@ func (col *Column) EvalDuration(ctx context.Context, row types.Row) (types.Durat
 }
 
 // EvalJSON returns JSON representation of Column.
-func (col *Column) EvalJSON(ctx context.Context, row types.Row) (json.BinaryJSON, bool, error) {
+func (col *Column) EvalJSON(ctx sessionctx.Context, row types.Row) (json.BinaryJSON, bool, error) {
 	if row.IsNull(col.Index) {
 		return json.BinaryJSON{}, true, nil
 	}
@@ -297,20 +300,26 @@ func (col *Column) Decorrelate(_ *Schema) Expression {
 }
 
 // HashCode implements Expression interface.
-func (col *Column) HashCode() []byte {
+func (col *Column) HashCode(_ *stmtctx.StatementContext) []byte {
 	if len(col.hashcode) != 0 {
 		return col.hashcode
 	}
-	col.hashcode = make([]byte, 0, 16)
+	col.hashcode = make([]byte, 0, 17)
+	col.hashcode = append(col.hashcode, columnFlag)
 	col.hashcode = codec.EncodeInt(col.hashcode, int64(col.FromID))
 	col.hashcode = codec.EncodeInt(col.hashcode, int64(col.Position))
 	return col.hashcode
 }
 
 // ResolveIndices implements Expression interface.
-func (col *Column) ResolveIndices(schema *Schema) {
+func (col *Column) ResolveIndices(schema *Schema) Expression {
+	newCol := col.Clone()
+	newCol.resolveIndices(schema)
+	return newCol
+}
+
+func (col *Column) resolveIndices(schema *Schema) {
 	col.Index = schema.ColumnIndex(col)
-	// If col's index equals to -1, it means a internal logic error happens.
 	if col.Index == -1 {
 		log.Errorf("Can't find column %s in schema %s", col, schema)
 	}
@@ -320,7 +329,7 @@ func (col *Column) ResolveIndices(schema *Schema) {
 func Column2Exprs(cols []*Column) []Expression {
 	result := make([]Expression, 0, len(cols))
 	for _, col := range cols {
-		result = append(result, col.Clone())
+		result = append(result, col)
 	}
 	return result
 }

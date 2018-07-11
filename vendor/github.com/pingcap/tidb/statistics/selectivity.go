@@ -18,9 +18,9 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/ranger"
 )
 
@@ -34,7 +34,7 @@ type exprSet struct {
 	// mask is a bit pattern whose ith bit will indicate whether the ith expression is covered by this index/column.
 	mask int64
 	// ranges contains all the ranges we got.
-	ranges []*ranger.NewRange
+	ranges []*ranger.Range
 }
 
 // The type of the exprSet.
@@ -44,35 +44,100 @@ const (
 	colType
 )
 
-// checkColumnConstant receives two expressions and makes sure one of them is column and another is constant.
-func checkColumnConstant(e []expression.Expression) bool {
+const unknownColumnID = math.MinInt64
+
+// getConstantColumnID receives two expressions and if one of them is column and another is constant, it returns the
+// ID of the column.
+func getConstantColumnID(e []expression.Expression) int64 {
 	if len(e) != 2 {
-		return false
+		return unknownColumnID
 	}
-	_, ok1 := e[0].(*expression.Column)
+	col, ok1 := e[0].(*expression.Column)
 	_, ok2 := e[1].(*expression.Constant)
 	if ok1 && ok2 {
-		return true
+		return col.ID
 	}
-	_, ok1 = e[1].(*expression.Column)
+	col, ok1 = e[1].(*expression.Column)
 	_, ok2 = e[0].(*expression.Constant)
-	return ok1 && ok2
+	if ok1 && ok2 {
+		return col.ID
+	}
+	return unknownColumnID
 }
 
-func pseudoSelectivity(exprs []expression.Expression) float64 {
+func pseudoSelectivity(t *Table, exprs []expression.Expression) float64 {
 	minFactor := selectionFactor
+	uniqueCol := make(map[string]bool)
 	for _, expr := range exprs {
-		if fun, ok := expr.(*expression.ScalarFunction); ok && checkColumnConstant(fun.GetArgs()) {
-			switch fun.FuncName.L {
-			case ast.EQ, ast.NullEQ:
-				minFactor = math.Min(minFactor, 1.0/pseudoEqualRate)
-			case ast.GE, ast.GT, ast.LE, ast.LT:
-				minFactor = math.Min(minFactor, 1.0/pseudoLessRate)
-				// FIXME: To resolve the between case.
+		fun, ok := expr.(*expression.ScalarFunction)
+		if !ok {
+			continue
+		}
+		colID := getConstantColumnID(fun.GetArgs())
+		if colID == unknownColumnID {
+			continue
+		}
+		switch fun.FuncName.L {
+		case ast.EQ, ast.NullEQ, ast.In:
+			minFactor = math.Min(minFactor, 1.0/pseudoEqualRate)
+			col, ok := t.Columns[colID]
+			if !ok {
+				continue
 			}
+			if mysql.HasUniKeyFlag(col.Info.Flag) {
+				uniqueCol[col.Info.Name.L] = true
+			}
+			if mysql.HasPriKeyFlag(col.Info.Flag) {
+				if t.PKIsHandle {
+					return 1.0 / float64(t.Count)
+				}
+				uniqueCol[col.Info.Name.L] = true
+			}
+		case ast.GE, ast.GT, ast.LE, ast.LT:
+			minFactor = math.Min(minFactor, 1.0/pseudoLessRate)
+			// FIXME: To resolve the between case.
+		}
+	}
+	if len(uniqueCol) == 0 {
+		return minFactor
+	}
+	// use the unique key info
+	for _, idx := range t.Indices {
+		if !idx.Info.Unique {
+			continue
+		}
+		unique := true
+		for _, col := range idx.Info.Columns {
+			if !uniqueCol[col.Name.L] {
+				unique = false
+				break
+			}
+		}
+		if unique {
+			return 1.0 / float64(t.Count)
 		}
 	}
 	return minFactor
+}
+
+// isColEqCorCol checks if the expression is a eq function that one side is correlated column and another is column.
+// If so, it will return the column's reference. Otherwise return nil instead.
+func isColEqCorCol(filter expression.Expression) *expression.Column {
+	f, ok := filter.(*expression.ScalarFunction)
+	if !ok || f.FuncName.L != ast.EQ {
+		return nil
+	}
+	if c, ok := f.GetArgs()[0].(*expression.Column); ok {
+		if _, ok := f.GetArgs()[1].(*expression.CorrelatedColumn); ok {
+			return c
+		}
+	}
+	if c, ok := f.GetArgs()[1].(*expression.Column); ok {
+		if _, ok := f.GetArgs()[0].(*expression.CorrelatedColumn); ok {
+			return c
+		}
+	}
+	return nil
 }
 
 // Selectivity is a function calculate the selectivity of the expressions.
@@ -80,28 +145,40 @@ func pseudoSelectivity(exprs []expression.Expression) float64 {
 // And exprs must be CNF now, in other words, `exprs[0] and exprs[1] and ... and exprs[len - 1]` should be held when you call this.
 // TODO: support expressions that the top layer is a DNF.
 // Currently the time complexity is o(n^2).
-func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) (float64, error) {
-	if t.Count == 0 {
+func (t *Table) Selectivity(ctx sessionctx.Context, exprs []expression.Expression) (float64, error) {
+	// If table's count is zero or conditions are empty, we should return 100% selectivity.
+	if t.Count == 0 || len(exprs) == 0 {
 		return 1, nil
 	}
 	// TODO: If len(exprs) is bigger than 63, we could use bitset structure to replace the int64.
 	// This will simplify some code and speed up if we use this rather than a boolean slice.
-	if t.Pseudo || len(exprs) > 63 || (len(t.Columns) == 0 && len(t.Indices) == 0) {
-		return pseudoSelectivity(exprs), nil
+	if len(exprs) > 63 || (len(t.Columns) == 0 && len(t.Indices) == 0) {
+		return pseudoSelectivity(t, exprs), nil
 	}
-	if len(exprs) == 0 {
-		return 1.0, nil
-	}
+	ret := 1.0
 	var sets []*exprSet
 	sc := ctx.GetSessionVars().StmtCtx
 
+	remainedExprs := make([]expression.Expression, 0, len(exprs))
+
+	// Deal with the correlated column.
+	for _, expr := range exprs {
+		if c := isColEqCorCol(expr); c != nil && !t.ColumnIsInvalid(sc, c.ID) {
+			colHist := t.Columns[c.ID]
+			if colHist.NDV > 0 {
+				ret *= 1 / float64(colHist.NDV)
+			}
+		} else {
+			remainedExprs = append(remainedExprs, expr)
+		}
+	}
+
 	extractedCols := make([]*expression.Column, 0, len(t.Columns))
-	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, exprs, nil)
+	extractedCols = expression.ExtractColumnsFromExpressions(extractedCols, remainedExprs, nil)
 	for _, colInfo := range t.Columns {
 		col := expression.ColInfo2Col(extractedCols, colInfo.Info)
-		// This column should have histogram.
-		if col != nil && !t.ColumnIsInvalid(ctx.GetSessionVars().StmtCtx, col.ID) {
-			maskCovered, ranges, err := getMaskAndRanges(ctx, exprs, ranger.ColumnRangeType, nil, col)
+		if col != nil {
+			maskCovered, ranges, err := getMaskAndRanges(ctx, remainedExprs, ranger.ColumnRangeType, nil, col)
 			if err != nil {
 				return 0, errors.Trace(err)
 			}
@@ -113,9 +190,8 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 	}
 	for _, idxInfo := range t.Indices {
 		idxCols, lengths := expression.IndexInfo2Cols(extractedCols, idxInfo.Info)
-		// This index should have histogram.
-		if len(idxCols) > 0 && idxInfo.Histogram.Len() > 0 {
-			maskCovered, ranges, err := getMaskAndRanges(ctx, exprs, ranger.IndexRangeType, lengths, idxCols...)
+		if len(idxCols) > 0 {
+			maskCovered, ranges, err := getMaskAndRanges(ctx, remainedExprs, ranger.IndexRangeType, lengths, idxCols...)
 			if err != nil {
 				return 0, errors.Trace(err)
 			}
@@ -123,9 +199,8 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 		}
 	}
 	sets = getUsableSetsByGreedy(sets)
-	ret := 1.0
 	// Initialize the mask with the full set.
-	mask := (int64(1) << uint(len(exprs))) - 1
+	mask := (int64(1) << uint(len(remainedExprs))) - 1
 	for _, set := range sets {
 		mask ^= set.mask
 		var (
@@ -133,7 +208,9 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 			err      error
 		)
 		switch set.tp {
-		case pkType, colType:
+		case pkType:
+			rowCount, err = t.GetRowCountByIntColumnRanges(sc, set.ID, set.ranges)
+		case colType:
 			rowCount, err = t.GetRowCountByColumnRanges(sc, set.ID, set.ranges)
 		case indexType:
 			rowCount, err = t.GetRowCountByIndexRanges(sc, set.ID, set.ranges)
@@ -150,8 +227,8 @@ func (t *Table) Selectivity(ctx context.Context, exprs []expression.Expression) 
 	return ret, nil
 }
 
-func getMaskAndRanges(ctx context.Context, exprs []expression.Expression, rangeType ranger.RangeType,
-	lengths []int, cols ...*expression.Column) (mask int64, ranges []*ranger.NewRange, err error) {
+func getMaskAndRanges(ctx sessionctx.Context, exprs []expression.Expression, rangeType ranger.RangeType,
+	lengths []int, cols ...*expression.Column) (mask int64, ranges []*ranger.Range, err error) {
 	sc := ctx.GetSessionVars().StmtCtx
 	var accessConds []expression.Expression
 	switch rangeType {
@@ -159,7 +236,7 @@ func getMaskAndRanges(ctx context.Context, exprs []expression.Expression, rangeT
 		accessConds = ranger.ExtractAccessConditionsForColumn(exprs, cols[0].ColName)
 		ranges, err = ranger.BuildColumnRange(accessConds, sc, cols[0].RetType)
 	case ranger.IndexRangeType:
-		ranges, accessConds, err = ranger.DetachSimpleCondAndBuildRangeForIndex(sc, exprs, cols, lengths)
+		ranges, accessConds, err = ranger.DetachSimpleCondAndBuildRangeForIndex(ctx, exprs, cols, lengths)
 	default:
 		panic("should never be here")
 	}
@@ -168,7 +245,7 @@ func getMaskAndRanges(ctx context.Context, exprs []expression.Expression, rangeT
 	}
 	for i := range exprs {
 		for j := range accessConds {
-			if exprs[i].Equal(accessConds[j], ctx) {
+			if exprs[i].Equal(ctx, accessConds[j]) {
 				mask |= 1 << uint64(i)
 				break
 			}
@@ -186,6 +263,10 @@ func getUsableSetsByGreedy(sets []*exprSet) (newBlocks []*exprSet) {
 		for i, set := range sets {
 			set.mask &= mask
 			bits := popCount(set.mask)
+			// This set cannot cover any thing, just skip it.
+			if bits == 0 {
+				continue
+			}
 			if (bestTp == colType && set.tp < colType) || bestCount < bits {
 				bestID, bestCount, bestTp = i, bits, set.tp
 			}

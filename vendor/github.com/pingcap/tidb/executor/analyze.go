@@ -15,24 +15,22 @@ package executor
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/distsql"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/statistics"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/ranger"
 	"github.com/pingcap/tipb/go-tipb"
 	log "github.com/sirupsen/logrus"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 var _ Executor = &AnalyzeExec{}
@@ -53,16 +51,7 @@ const (
 )
 
 // Next implements the Executor Next interface.
-func (e *AnalyzeExec) Next(goCtx goctx.Context) (Row, error) {
-	return nil, errors.Trace(e.run(goCtx))
-}
-
-// NextChunk implements the Executor NextChunk interface.
-func (e *AnalyzeExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
-	return errors.Trace(e.run(goCtx))
-}
-
-func (e *AnalyzeExec) run(goCtx goctx.Context) error {
+func (e *AnalyzeExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	concurrency, err := getBuildStatsConcurrency(e.ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -76,53 +65,30 @@ func (e *AnalyzeExec) run(goCtx goctx.Context) error {
 		taskCh <- task
 	}
 	close(taskCh)
-	dom := domain.GetDomain(e.ctx)
-	lease := dom.StatsHandle().Lease
-	if lease > 0 {
-		var err1 error
-		for i := 0; i < len(e.tasks); i++ {
-			result := <-resultCh
-			if result.Err != nil {
-				err1 = result.Err
-				log.Error(errors.ErrorStack(err1))
-				continue
-			}
-			dom.StatsHandle().AnalyzeResultCh() <- &result
-		}
-		// We sleep two lease to make sure other tidb node has updated this node.
-		time.Sleep(lease * 2)
-		return errors.Trace(err1)
-	}
-	results := make([]statistics.AnalyzeResult, 0, len(e.tasks))
-	var err1 error
+	statsHandle := domain.GetDomain(e.ctx).StatsHandle()
 	for i := 0; i < len(e.tasks); i++ {
 		result := <-resultCh
 		if result.Err != nil {
-			err1 = result.Err
-			log.Error(errors.ErrorStack(err1))
+			err = result.Err
+			log.Error(errors.ErrorStack(err))
 			continue
 		}
-		results = append(results, result)
-	}
-	if err1 != nil {
-		return errors.Trace(err1)
-	}
-	for _, result := range results {
 		for i, hg := range result.Hist {
-			err = statistics.SaveStatsToStorage(e.ctx, result.TableID, result.Count, result.IsIndex, hg, result.Cms[i])
-			if err != nil {
-				return errors.Trace(err)
+			err1 := statsHandle.SaveStatsToStorage(result.TableID, result.Count, result.IsIndex, hg, result.Cms[i], 1)
+			if err1 != nil {
+				err = err1
+				log.Error(errors.ErrorStack(err))
+				continue
 			}
 		}
 	}
-	err = dom.StatsHandle().Update(GetInfoSchema(e.ctx))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return nil
+	return errors.Trace(statsHandle.Update(GetInfoSchema(e.ctx)))
 }
 
-func getBuildStatsConcurrency(ctx context.Context) (int, error) {
+func getBuildStatsConcurrency(ctx sessionctx.Context) (int, error) {
 	sessionVars := ctx.GetSessionVars()
 	concurrency, err := variable.GetSessionSystemVar(sessionVars, variable.TiDBBuildStatsConcurrency)
 	if err != nil {
@@ -175,7 +141,7 @@ func analyzeIndexPushdown(idxExec *AnalyzeIndexExec) statistics.AnalyzeResult {
 
 // AnalyzeIndexExec represents analyze index push down executor.
 type AnalyzeIndexExec struct {
-	ctx         context.Context
+	ctx         sessionctx.Context
 	tblInfo     *model.TableInfo
 	idxInfo     *model.IndexInfo
 	concurrency int
@@ -185,21 +151,19 @@ type AnalyzeIndexExec struct {
 }
 
 func (e *AnalyzeIndexExec) open() error {
-	idxRange := &ranger.NewRange{LowVal: []types.Datum{types.MinNotNullDatum()}, HighVal: []types.Datum{types.MaxValueDatum()}}
-	var builder requestBuilder
-	kvReq, err := builder.SetIndexRanges(e.ctx.GetSessionVars().StmtCtx, e.tblInfo.ID, e.idxInfo.ID, []*ranger.NewRange{idxRange}).
+	var builder distsql.RequestBuilder
+	kvReq, err := builder.SetIndexRanges(e.ctx.GetSessionVars().StmtCtx, e.tblInfo.ID, e.idxInfo.ID, ranger.FullRange()).
 		SetAnalyzeRequest(e.analyzePB).
 		SetKeepOrder(true).
-		SetPriority(e.priority).
 		Build()
 	kvReq.Concurrency = e.concurrency
 	kvReq.IsolationLevel = kv.RC
-	goCtx := goctx.TODO()
-	e.result, err = distsql.Analyze(goCtx, e.ctx.GetClient(), kvReq)
+	ctx := context.TODO()
+	e.result, err = distsql.Analyze(ctx, e.ctx.GetClient(), kvReq, e.ctx.GetSessionVars().KVVars)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	e.result.Fetch(goCtx)
+	e.result.Fetch(ctx)
 	return nil
 }
 
@@ -217,7 +181,7 @@ func (e *AnalyzeIndexExec) buildStats() (hist *statistics.Histogram, cms *statis
 	hist = &statistics.Histogram{}
 	cms = statistics.NewCMSketch(defaultCMSketchDepth, defaultCMSketchWidth)
 	for {
-		data, err := e.result.NextRaw(goctx.TODO())
+		data, err := e.result.NextRaw(context.TODO())
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
@@ -264,7 +228,7 @@ func analyzeColumnsPushdown(colExec *AnalyzeColumnsExec) statistics.AnalyzeResul
 
 // AnalyzeColumnsExec represents Analyze columns push down executor.
 type AnalyzeColumnsExec struct {
-	ctx           context.Context
+	ctx           sessionctx.Context
 	tblInfo       *model.TableInfo
 	colsInfo      []*model.ColumnInfo
 	pkInfo        *model.ColumnInfo
@@ -276,11 +240,11 @@ type AnalyzeColumnsExec struct {
 }
 
 func (e *AnalyzeColumnsExec) open() error {
-	var ranges []*ranger.NewRange
+	var ranges []*ranger.Range
 	if e.pkInfo != nil {
-		ranges = ranger.FullIntNewRange(mysql.HasUnsignedFlag(e.pkInfo.Flag))
+		ranges = ranger.FullIntRange(mysql.HasUnsignedFlag(e.pkInfo.Flag))
 	} else {
-		ranges = ranger.FullIntNewRange(false)
+		ranges = ranger.FullIntRange(false)
 	}
 	e.resultHandler = &tableResultHandler{}
 	firstPartRanges, secondPartRanges := splitRanges(ranges, e.keepOrder)
@@ -302,24 +266,23 @@ func (e *AnalyzeColumnsExec) open() error {
 	return nil
 }
 
-func (e *AnalyzeColumnsExec) buildResp(ranges []*ranger.NewRange) (distsql.SelectResult, error) {
-	var builder requestBuilder
-	kvReq, err := builder.SetTableRanges(e.tblInfo.ID, ranges).
+func (e *AnalyzeColumnsExec) buildResp(ranges []*ranger.Range) (distsql.SelectResult, error) {
+	var builder distsql.RequestBuilder
+	kvReq, err := builder.SetTableRanges(e.tblInfo.ID, ranges, nil).
 		SetAnalyzeRequest(e.analyzePB).
 		SetKeepOrder(e.keepOrder).
-		SetPriority(e.priority).
 		Build()
 	kvReq.IsolationLevel = kv.RC
 	kvReq.Concurrency = e.concurrency
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	goCtx := goctx.TODO()
-	result, err := distsql.Analyze(goCtx, e.ctx.GetClient(), kvReq)
+	ctx := context.TODO()
+	result, err := distsql.Analyze(ctx, e.ctx.GetClient(), kvReq, e.ctx.GetSessionVars().KVVars)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	result.Fetch(goCtx)
+	result.Fetch(ctx)
 	return result, nil
 }
 
@@ -345,7 +308,7 @@ func (e *AnalyzeColumnsExec) buildStats() (hists []*statistics.Histogram, cms []
 		}
 	}
 	for {
-		data, err1 := e.resultHandler.nextRaw(goctx.TODO())
+		data, err1 := e.resultHandler.nextRaw(context.TODO())
 		if err1 != nil {
 			return nil, nil, errors.Trace(err1)
 		}

@@ -147,7 +147,7 @@ import:
 - package: github.com/pingcap/pd
   version: 722081d662b31a334c0a24b7955c1ac4424609bc
 - package: github.com/pingcap/tidb
-  version: fc699c9b0d29f038e0a55702c9fd2e18e89373c4
+  version: cc722546ef306e789f65a674673582d906d6f586
   subpackages:
   - ast
   - context
@@ -201,7 +201,7 @@ import:
   - util/sqlexec
   - util/stringutil
 - package: github.com/pingcap/tipb
-  version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
+  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
   subpackages:
   - go-binlog
   - go-tipb

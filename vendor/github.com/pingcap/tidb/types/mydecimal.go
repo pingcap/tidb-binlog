@@ -391,23 +391,34 @@ func (d *MyDecimal) FromString(str []byte) error {
 	if innerIdx != 0 {
 		d.wordBuf[wordIdx] = word * powers10[digitsPerWord-innerIdx]
 	}
-	if endIdx+1 < len(str) && (str[endIdx] == 'e' || str[endIdx] == 'E') {
+	if endIdx+1 <= len(str) && (str[endIdx] == 'e' || str[endIdx] == 'E') {
 		exponent, err1 := strToInt(string(str[endIdx+1:]))
-		// TODO: need a way to check if there is at least one digit.
 		if err1 != nil {
-			*d = zeroMyDecimal
-			return ErrBadNumber
+			err = errors.Cause(err1)
+			if err != ErrTruncated {
+				*d = zeroMyDecimal
+			}
 		}
 		if exponent > math.MaxInt32/2 {
-			*d = zeroMyDecimal
-			return ErrOverflow
+			negative := d.negative
+			maxDecimal(wordBufLen*digitsPerWord, 0, d)
+			d.negative = negative
+			err = ErrOverflow
 		}
 		if exponent < math.MinInt32/2 && err != ErrOverflow {
 			*d = zeroMyDecimal
-			return ErrTruncated
+			err = ErrTruncated
 		}
 		if err != ErrOverflow {
-			err = d.Shift(int(exponent))
+			shiftErr := d.Shift(int(exponent))
+			if shiftErr != nil {
+				if shiftErr == ErrOverflow {
+					negative := d.negative
+					maxDecimal(wordBufLen*digitsPerWord, 0, d)
+					d.negative = negative
+				}
+				err = shiftErr
+			}
 		}
 	}
 	allZero := true
@@ -1235,7 +1246,8 @@ func (d *MyDecimal) FromBin(bin []byte, precision, frac int) (binSize int, err e
 		mask = 0
 	}
 	binSize = decimalBinSize(precision, frac)
-	dCopy := make([]byte, binSize)
+	dCopy := make([]byte, 40)
+	dCopy = dCopy[:binSize]
 	copy(dCopy, bin)
 	dCopy[0] ^= 0x80
 	bin = dCopy

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/privilege"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/terror"
@@ -37,7 +38,7 @@ import (
 	"github.com/pingcap/tidb/util/charset"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/format"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 // ShowExec represents a show executor.
@@ -57,51 +58,30 @@ type ShowExec struct {
 
 	is infoschema.InfoSchema
 
-	forChunk bool
-	fetched  bool
-	rows     []Row
-	result   *chunk.Chunk
-	cursor   int
+	result *chunk.Chunk
+	cursor int
 }
 
-// Next implements Execution Next interface.
-func (e *ShowExec) Next(goCtx goctx.Context) (Row, error) {
-	if e.rows == nil {
-		e.forChunk = false
-		err := e.fetchAll()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		for i := 0; e.rows != nil && i < len(e.rows); i++ {
-			for j, row := 0, e.rows[i]; j < len(row); j++ {
-				if row[j].Kind() != types.KindString {
-					continue
-				}
-				val := row[j].GetString()
-				retType := e.Schema().Columns[j].RetType
-				if valLen := len(val); retType.Flen < valLen {
-					retType.Flen = valLen
-				}
-			}
-		}
-	}
-	if e.cursor >= len(e.rows) {
-		return nil, nil
-	}
-	row := e.rows[e.cursor]
-	e.cursor++
-	return row, nil
-}
-
-// NextChunk implements the Executor NextChunk interface.
-func (e *ShowExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
+// Next implements the Executor Next interface.
+func (e *ShowExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	chk.Reset()
 	if e.result == nil {
 		e.result = e.newChunk()
-		e.forChunk = true
 		err := e.fetchAll()
 		if err != nil {
 			return errors.Trace(err)
+		}
+		iter := chunk.NewIterator4Chunk(e.result)
+		for colIdx := 0; colIdx < e.Schema().Len(); colIdx++ {
+			retType := e.Schema().Columns[colIdx].RetType
+			if !types.IsTypeVarchar(retType.Tp) {
+				continue
+			}
+			for row := iter.Begin(); row != iter.End(); row = iter.Next() {
+				if valLen := len(row.GetString(colIdx)); retType.Flen < valLen {
+					retType.Flen = valLen
+				}
+			}
 		}
 	}
 	if e.cursor >= e.result.NumRows() {
@@ -146,7 +126,9 @@ func (e *ShowExec) fetchAll() error {
 	case ast.ShowVariables:
 		return e.fetchShowVariables()
 	case ast.ShowWarnings:
-		return e.fetchShowWarnings()
+		return e.fetchShowWarnings(false)
+	case ast.ShowErrors:
+		return e.fetchShowWarnings(true)
 	case ast.ShowProcessList:
 		return e.fetchShowProcessList()
 	case ast.ShowEvents:
@@ -157,10 +139,17 @@ func (e *ShowExec) fetchAll() error {
 		return e.fetchShowStatsHistogram()
 	case ast.ShowStatsBuckets:
 		return e.fetchShowStatsBuckets()
+	case ast.ShowStatsHealthy:
+		e.fetchShowStatsHealthy()
+		return nil
 	case ast.ShowPlugins:
 		return e.fetchShowPlugins()
 	case ast.ShowProfiles:
 		// empty result
+	case ast.ShowMasterStatus:
+		return e.fetchShowMasterStatus()
+	case ast.ShowPrivileges:
+		return e.fetchShowPrivileges()
 	}
 	return nil
 }
@@ -222,6 +211,7 @@ func (e *ShowExec) fetchShowProcessList() error {
 			t,
 			fmt.Sprintf("%d", pi.State),
 			info,
+			pi.Mem,
 		})
 	}
 	return nil
@@ -345,7 +335,11 @@ func (e *ShowExec) fetchShowIndex() error {
 		})
 	}
 	for _, idx := range tb.Indices() {
-		for i, col := range idx.Meta().Columns {
+		idxInfo := idx.Meta()
+		if idxInfo.State != model.StatePublic {
+			continue
+		}
+		for i, col := range idxInfo.Columns {
 			nonUniq := 1
 			if idx.Meta().Unique {
 				nonUniq = 0
@@ -386,6 +380,12 @@ func (e *ShowExec) fetchShowCharset() error {
 			desc.Maxlen,
 		})
 	}
+	return nil
+}
+
+func (e *ShowExec) fetchShowMasterStatus() error {
+	tso := e.ctx.GetSessionVars().TxnCtx.StartTS
+	e.appendRow([]interface{}{"tidb-binlog", tso, "", "", ""})
 	return nil
 }
 
@@ -478,9 +478,6 @@ func (e *ShowExec) fetchShowCreateTable() error {
 	var pkCol *table.Column
 	var hasAutoIncID bool
 	for i, col := range tb.Cols() {
-		if col.State != model.StatePublic {
-			continue
-		}
 		buf.WriteString(fmt.Sprintf("  `%s` %s", col.Name.O, col.GetTypeDesc()))
 		if col.IsGenerated() {
 			// It's a generated column.
@@ -502,7 +499,7 @@ func (e *ShowExec) fetchShowCreateTable() error {
 				switch col.DefaultValue {
 				case nil:
 					if !mysql.HasNotNullFlag(col.Flag) {
-						if mysql.HasTimestampFlag(col.Flag) {
+						if col.Tp == mysql.TypeTimestamp {
 							buf.WriteString(" NULL")
 						}
 						buf.WriteString(" DEFAULT NULL")
@@ -540,15 +537,18 @@ func (e *ShowExec) fetchShowCreateTable() error {
 		buf.WriteString(fmt.Sprintf("  PRIMARY KEY (`%s`)", pkCol.Name.O))
 	}
 
-	if len(tb.Indices()) > 0 || len(tb.Meta().ForeignKeys) > 0 {
+	if len(tb.Indices()) > 0 {
 		buf.WriteString(",\n")
 	}
 
-	for i, idx := range tb.Indices() {
-		idxInfo := idx.Meta()
-		if idxInfo.State != model.StatePublic {
-			continue
+	publicIndices := make([]table.Index, 0, len(tb.Indices()))
+	for _, idx := range tb.Indices() {
+		if idx.Meta().State == model.StatePublic {
+			publicIndices = append(publicIndices, idx)
 		}
+	}
+	for i, idx := range publicIndices {
+		idxInfo := idx.Meta()
 		if idxInfo.Primary {
 			buf.WriteString("  PRIMARY KEY ")
 		} else if idxInfo.Unique {
@@ -566,45 +566,11 @@ func (e *ShowExec) fetchShowCreateTable() error {
 			cols = append(cols, colInfo)
 		}
 		buf.WriteString(fmt.Sprintf("(%s)", strings.Join(cols, ",")))
-		if i != len(tb.Indices())-1 {
+		if i != len(publicIndices)-1 {
 			buf.WriteString(",\n")
 		}
 	}
 
-	if len(tb.Indices()) > 0 && len(tb.Meta().ForeignKeys) > 0 {
-		buf.WriteString(",\n")
-	}
-
-	firstFK := true
-	for _, fk := range tb.Meta().ForeignKeys {
-		if fk.State != model.StatePublic {
-			continue
-		}
-		if !firstFK {
-			buf.WriteString(",\n")
-		}
-		firstFK = false
-		cols := make([]string, 0, len(fk.Cols))
-		for _, c := range fk.Cols {
-			cols = append(cols, c.O)
-		}
-
-		refCols := make([]string, 0, len(fk.RefCols))
-		for _, c := range fk.RefCols {
-			refCols = append(refCols, c.O)
-		}
-
-		buf.WriteString(fmt.Sprintf("  CONSTRAINT `%s` FOREIGN KEY (`%s`)", fk.Name.O, strings.Join(cols, "`,`")))
-		buf.WriteString(fmt.Sprintf(" REFERENCES `%s` (`%s`)", fk.RefTable.O, strings.Join(refCols, "`,`")))
-
-		if ast.ReferOptionType(fk.OnDelete) != ast.ReferOptionNoOption {
-			buf.WriteString(fmt.Sprintf(" ON DELETE %s", ast.ReferOptionType(fk.OnDelete)))
-		}
-
-		if ast.ReferOptionType(fk.OnUpdate) != ast.ReferOptionNoOption {
-			buf.WriteString(fmt.Sprintf(" ON UPDATE %s", ast.ReferOptionType(fk.OnUpdate)))
-		}
-	}
 	buf.WriteString("\n")
 
 	buf.WriteString(") ENGINE=InnoDB")
@@ -625,6 +591,39 @@ func (e *ShowExec) fetchShowCreateTable() error {
 		buf.WriteString(fmt.Sprintf(" DEFAULT CHARSET=%s", charsetName))
 	} else {
 		buf.WriteString(fmt.Sprintf(" DEFAULT CHARSET=%s COLLATE=%s", charsetName, collate))
+	}
+
+	// add partition info here.
+	partitionInfo := tb.Meta().Partition
+	if partitionInfo != nil {
+		// this if statement takes care of range columns case
+		if partitionInfo.Columns != nil && partitionInfo.Type == model.PartitionTypeRange {
+			buf.WriteString(fmt.Sprintf("\nPARTITION BY RANGE COLUMNS("))
+			for i, col := range partitionInfo.Columns {
+				buf.WriteString(col.L)
+				if i < len(partitionInfo.Columns)-1 {
+					buf.WriteString(",")
+				}
+			}
+			buf.WriteString(") (\n")
+		} else {
+			buf.WriteString(fmt.Sprintf("\nPARTITION BY %s ( %s ) (\n", partitionInfo.Type.String(), partitionInfo.Expr))
+		}
+		for i, def := range partitionInfo.Definitions {
+			lessThans := ""
+			lessThans = strings.Join(def.LessThan, ",")
+
+			var parDef string
+			parDef = fmt.Sprintf("  PARTITION %s VALUES LESS THAN (%s)", def.Name, lessThans)
+			if i < len(partitionInfo.Definitions)-1 {
+				buf.WriteString(parDef)
+				buf.WriteString(",\n")
+			} else {
+				buf.WriteString(parDef)
+				buf.WriteString("\n")
+			}
+		}
+		buf.WriteString(")")
 	}
 
 	if hasAutoIncID {
@@ -702,6 +701,42 @@ func (e *ShowExec) fetchShowGrants() error {
 	return nil
 }
 
+func (e *ShowExec) fetchShowPrivileges() error {
+	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
+	e.appendRow([]interface{}{"Alter", "Tables", "To alter the table"})
+	e.appendRow([]interface{}{"Alter routine", "Functions,Procedures", "To alter or drop stored functions/procedures"})
+	e.appendRow([]interface{}{"Create", "Databases,Tables,Indexes", "To create new databases and tables"})
+	e.appendRow([]interface{}{"Create routine", "Databases", "To use CREATE FUNCTION/PROCEDURE"})
+	e.appendRow([]interface{}{"Create temporary tables", "Databases", "To use CREATE TEMPORARY TABLE"})
+	e.appendRow([]interface{}{"Create view", "Tables", "To create new views"})
+	e.appendRow([]interface{}{"Create user", "Server Admin", "To create new users"})
+	e.appendRow([]interface{}{"Delete", "Tables", "To delete existing rows"})
+	e.appendRow([]interface{}{"Drop", "Databases,Tables", "To drop databases, tables, and views"})
+	e.appendRow([]interface{}{"Event", "Server Admin", "To create, alter, drop and execute events"})
+	e.appendRow([]interface{}{"Execute", "Functions,Procedures", "To execute stored routines"})
+	e.appendRow([]interface{}{"File", "File access on server", "To read and write files on the server"})
+	e.appendRow([]interface{}{"Grant option", "Databases,Tables,Functions,Procedures", "To give to other users those privileges you possess"})
+	e.appendRow([]interface{}{"Index", "Tables", "To create or drop indexes"})
+	e.appendRow([]interface{}{"Insert", "Tables", "To insert data into tables"})
+	e.appendRow([]interface{}{"Lock tables", "Databases", "To use LOCK TABLES (together with SELECT privilege)"})
+	e.appendRow([]interface{}{"Process", "Server Admin", "To view the plain text of currently executing queries"})
+	e.appendRow([]interface{}{"Proxy", "Server Admin", "To make proxy user possible"})
+	e.appendRow([]interface{}{"References", "Databases,Tables", "To have references on tables"})
+	e.appendRow([]interface{}{"Reload", "Server Admin", "To reload or refresh tables, logs and privileges"})
+	e.appendRow([]interface{}{"Replication client", "Server Admin", "To ask where the slave or master servers are"})
+	e.appendRow([]interface{}{"Replication slave", "Server Admin", "To read binary log events from the master"})
+	e.appendRow([]interface{}{"Select", "Tables", "To retrieve rows from table"})
+	e.appendRow([]interface{}{"Show databases", "Server Admin", "To see all databases with SHOW DATABASES"})
+	e.appendRow([]interface{}{"Show view", "Tables", "To see views with SHOW CREATE VIEW"})
+	e.appendRow([]interface{}{"Shutdown", "Server Admin", "To shut down the server"})
+	e.appendRow([]interface{}{"Super", "Server Admin", "To use KILL thread, SET GLOBAL, CHANGE MASTER, etc."})
+	e.appendRow([]interface{}{"Trigger", "Tables", "To use triggers"})
+	e.appendRow([]interface{}{"Create tablespace", "Server Admin", "To create/alter/drop tablespaces"})
+	e.appendRow([]interface{}{"Update", "Tables", "To update existing rows"})
+	e.appendRow([]interface{}{"Usage", "Server Admin", "No privileges - allow connect only"})
+	return nil
+}
+
 func (e *ShowExec) fetchShowTriggers() error {
 	return nil
 }
@@ -714,16 +749,19 @@ func (e *ShowExec) fetchShowPlugins() error {
 	return nil
 }
 
-func (e *ShowExec) fetchShowWarnings() error {
+func (e *ShowExec) fetchShowWarnings(errOnly bool) error {
 	warns := e.ctx.GetSessionVars().StmtCtx.GetWarnings()
-	for _, warn := range warns {
-		warn = errors.Cause(warn)
+	for _, w := range warns {
+		if errOnly && w.Level != stmtctx.WarnLevelError {
+			continue
+		}
+		warn := errors.Cause(w.Err)
 		switch x := warn.(type) {
 		case *terror.Error:
 			sqlErr := x.ToSQLError()
-			e.appendRow([]interface{}{"Warning", int64(sqlErr.Code), sqlErr.Message})
+			e.appendRow([]interface{}{w.Level, int64(sqlErr.Code), sqlErr.Message})
 		default:
-			e.appendRow([]interface{}{"Warning", int64(mysql.ErrUnknown), warn.Error()})
+			e.appendRow([]interface{}{w.Level, int64(mysql.ErrUnknown), warn.Error()})
 		}
 	}
 	return nil
@@ -741,10 +779,6 @@ func (e *ShowExec) getTable() (table.Table, error) {
 }
 
 func (e *ShowExec) appendRow(row []interface{}) {
-	if !e.forChunk {
-		e.rows = append(e.rows, types.MakeDatums(row...))
-		return
-	}
 	for i, col := range row {
 		if col == nil {
 			e.result.AppendNull(i)

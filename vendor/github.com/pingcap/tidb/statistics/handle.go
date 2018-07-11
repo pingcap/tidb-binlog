@@ -15,13 +15,16 @@ package statistics
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/ddl/util"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/sqlexec"
 	log "github.com/sirupsen/logrus"
 )
@@ -30,21 +33,21 @@ type statsCache map[int64]*Table
 
 // Handle can update stats info periodically.
 type Handle struct {
-	ctx context.Context
-	// LastVersion is the latest update version before last lease. Exported for test.
-	LastVersion uint64
-	// PrevLastVersion is the latest update version before two lease. Exported for test.
-	// We need this because for two tables, the smaller version may write later than the one with larger version.
-	// We can read the version with lastTwoVersion if the diff between commit time and version is less than one lease.
-	// PrevLastVersion will be assigned by LastVersion every time Update is called.
-	PrevLastVersion uint64
-	statsCache      atomic.Value
+	mu struct {
+		sync.Mutex
+		ctx sessionctx.Context
+		// lastVersion is the latest update version before last lease.
+		lastVersion uint64
+		// rateMap contains the error rate delta from feedback.
+		rateMap errorRateDeltaMap
+	}
+
+	restrictedExec sqlexec.RestrictedSQLExecutor
+
+	statsCache atomic.Value
 	// ddlEventCh is a channel to notify a ddl operation has happened.
 	// It is sent only by owner or the drop stats executor, and read by stats handle.
 	ddlEventCh chan *util.Event
-	// analyzeResultCh is a channel to notify an analyze index or column operation has ended.
-	// We need this to avoid updating the stats simultaneously.
-	analyzeResultCh chan *AnalyzeResult
 	// listHead contains all the stats collector required by session.
 	listHead *SessionStatsCollector
 	// globalMap contains all the delta map from collectors when we dump them to KV.
@@ -57,34 +60,37 @@ type Handle struct {
 
 // Clear the statsCache, only for test.
 func (h *Handle) Clear() {
+	h.mu.Lock()
 	h.statsCache.Store(statsCache{})
-	h.LastVersion = 0
-	h.PrevLastVersion = 0
+	h.mu.lastVersion = 0
 	for len(h.ddlEventCh) > 0 {
 		<-h.ddlEventCh
 	}
-	for len(h.analyzeResultCh) > 0 {
-		<-h.analyzeResultCh
-	}
-	h.ctx.GetSessionVars().MaxChunkSize = 1
-	h.listHead = &SessionStatsCollector{mapper: make(tableDeltaMap)}
+	h.mu.ctx.GetSessionVars().MaxChunkSize = 1
+	h.listHead = &SessionStatsCollector{mapper: make(tableDeltaMap), rateMap: make(errorRateDeltaMap)}
 	h.globalMap = make(tableDeltaMap)
+	h.mu.rateMap = make(errorRateDeltaMap)
+	h.mu.Unlock()
 }
 
-// For now, we do not use the query feedback, so just set it to 1.
-const maxQueryFeedBackCount = 1
+// MaxQueryFeedbackCount is the max number of feedback that cache in memory.
+var MaxQueryFeedbackCount = 1 << 10
 
 // NewHandle creates a Handle for update stats.
-func NewHandle(ctx context.Context, lease time.Duration) *Handle {
+func NewHandle(ctx sessionctx.Context, lease time.Duration) *Handle {
 	handle := &Handle{
-		ctx:             ctx,
-		ddlEventCh:      make(chan *util.Event, 100),
-		analyzeResultCh: make(chan *AnalyzeResult, 100),
-		listHead:        &SessionStatsCollector{mapper: make(tableDeltaMap)},
-		globalMap:       make(tableDeltaMap),
-		Lease:           lease,
-		feedback:        make([]*QueryFeedback, 0, maxQueryFeedBackCount),
+		ddlEventCh: make(chan *util.Event, 100),
+		listHead:   &SessionStatsCollector{mapper: make(tableDeltaMap), rateMap: make(errorRateDeltaMap)},
+		globalMap:  make(tableDeltaMap),
+		Lease:      lease,
+		feedback:   make([]*QueryFeedback, 0, MaxQueryFeedbackCount),
 	}
+	// It is safe to use it concurrently because the exec won't touch the ctx.
+	if exec, ok := ctx.(sqlexec.RestrictedSQLExecutor); ok {
+		handle.restrictedExec = exec
+	}
+	handle.mu.ctx = ctx
+	handle.mu.rateMap = make(errorRateDeltaMap)
 	handle.statsCache.Store(statsCache{})
 	return handle
 }
@@ -97,19 +103,26 @@ func (h *Handle) GetQueryFeedback() []*QueryFeedback {
 	return h.feedback
 }
 
-// AnalyzeResultCh returns analyze result channel in handle.
-func (h *Handle) AnalyzeResultCh() chan *AnalyzeResult {
-	return h.analyzeResultCh
-}
-
 // Update reads stats meta from store and updates the stats map.
 func (h *Handle) Update(is infoschema.InfoSchema) error {
-	sql := fmt.Sprintf("SELECT version, table_id, modify_count, count from mysql.stats_meta where version > %d order by version", h.PrevLastVersion)
-	rows, _, err := h.ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(h.ctx, sql)
+	lastVersion := h.LastUpdateVersion()
+	// We need this because for two tables, the smaller version may write later than the one with larger version.
+	// Consider the case that there are two tables A and B, their version and commit time is (A0, A1) and (B0, B1),
+	// and A0 < B0 < B1 < A1. We will first read the stats of B, and update the lastVersion to B0, but we cannot read
+	// the table stats of A0 if we read stats that greater than lastVersion which is B0.
+	// We can read the stats if the diff between commit time and version is less than three lease.
+	offset := oracle.ComposeTS(3*int64(h.Lease), 0)
+	if lastVersion >= offset {
+		lastVersion = lastVersion - offset
+	} else {
+		lastVersion = 0
+	}
+	sql := fmt.Sprintf("SELECT version, table_id, modify_count, count from mysql.stats_meta where version > %d order by version", lastVersion)
+	rows, _, err := h.restrictedExec.ExecRestrictedSQL(nil, sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	h.PrevLastVersion = h.LastVersion
+
 	tables := make([]*Table, 0, len(rows))
 	deletedTableIDs := make([]int64, 0, len(rows))
 	for _, row := range rows {
@@ -117,7 +130,7 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 		tableID := row.GetInt64(1)
 		modifyCount := row.GetInt64(2)
 		count := row.GetInt64(3)
-		h.LastVersion = version
+		lastVersion = version
 		table, ok := is.TableByID(tableID)
 		if !ok {
 			log.Debugf("Unknown table ID %d in stats meta table, maybe it has been dropped", tableID)
@@ -128,7 +141,7 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 		tbl, err := h.tableStatsFromStorage(tableInfo, false)
 		// Error is not nil may mean that there are some ddl changes on this table, we will not update it.
 		if err != nil {
-			log.Errorf("Error occurred when read table stats for table id %d. The error message is %s.", tableID, errors.ErrorStack(err))
+			log.Debugf("Error occurred when read table stats for table %s. The error message is %s.", tableInfo.Name.O, errors.ErrorStack(err))
 			continue
 		}
 		if tbl == nil {
@@ -140,15 +153,20 @@ func (h *Handle) Update(is infoschema.InfoSchema) error {
 		tbl.ModifyCount = modifyCount
 		tables = append(tables, tbl)
 	}
+	h.mu.Lock()
+	h.mu.lastVersion = lastVersion
 	h.UpdateTableStats(tables, deletedTableIDs)
+	h.mu.Unlock()
 	return nil
 }
 
 // GetTableStats retrieves the statistics table from cache, and the cache will be updated by a goroutine.
-func (h *Handle) GetTableStats(tblID int64) *Table {
-	tbl, ok := h.statsCache.Load().(statsCache)[tblID]
+func (h *Handle) GetTableStats(tblInfo *model.TableInfo) *Table {
+	tbl, ok := h.statsCache.Load().(statsCache)[tblInfo.ID]
 	if !ok {
-		return PseudoTable(tblID)
+		tbl = PseudoTable(tblInfo)
+		h.UpdateTableStats([]*Table{tbl}, nil)
+		return tbl
 	}
 	return tbl
 }
@@ -179,13 +197,17 @@ func (h *Handle) UpdateTableStats(tables []*Table, deletedIDs []int64) {
 func (h *Handle) LoadNeededHistograms() error {
 	cols := histogramNeededColumns.allCols()
 	for _, col := range cols {
-		tbl := h.GetTableStats(col.tableID).copy()
+		tbl, ok := h.statsCache.Load().(statsCache)[col.tableID]
+		if !ok {
+			continue
+		}
+		tbl = tbl.copy()
 		c, ok := tbl.Columns[col.columnID]
 		if !ok || c.Len() > 0 {
 			histogramNeededColumns.delete(col)
 			continue
 		}
-		hg, err := histogramFromStorage(h.ctx, col.tableID, c.ID, &c.Info.FieldType, c.NDV, 0, c.LastUpdateVersion, c.NullCount)
+		hg, err := h.histogramFromStorage(col.tableID, c.ID, &c.Info.FieldType, c.NDV, 0, c.LastUpdateVersion, c.NullCount, c.TotColSize)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -198,4 +220,34 @@ func (h *Handle) LoadNeededHistograms() error {
 		histogramNeededColumns.delete(col)
 	}
 	return nil
+}
+
+// LastUpdateVersion gets the last update version.
+func (h *Handle) LastUpdateVersion() uint64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.lastVersion
+}
+
+// SetLastUpdateVersion sets the last update version.
+func (h *Handle) SetLastUpdateVersion(version uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.lastVersion = version
+}
+
+// FlushStats flushes the cached stats update into store.
+func (h *Handle) FlushStats() {
+	for len(h.ddlEventCh) > 0 {
+		e := <-h.ddlEventCh
+		if err := h.HandleDDLEvent(e); err != nil {
+			log.Debug("[stats] handle ddl event fail: ", errors.ErrorStack(err))
+		}
+	}
+	if err := h.DumpStatsDeltaToKV(DumpAll); err != nil {
+		log.Debug("[stats] dump stats delta fail: ", errors.ErrorStack(err))
+	}
+	if err := h.DumpStatsFeedbackToKV(); err != nil {
+		log.Debug("[stats] dump stats feedback fail: ", errors.ErrorStack(err))
+	}
 }

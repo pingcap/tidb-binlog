@@ -34,15 +34,6 @@ func (af *avgFunction) updateAvg(sc *stmtctx.StatementContext, evalCtx *AggEvalu
 	if value.IsNull() {
 		return nil
 	}
-	if af.HasDistinct {
-		d, err1 := evalCtx.DistinctChecker.Check([]types.Datum{value})
-		if err1 != nil {
-			return errors.Trace(err1)
-		}
-		if !d {
-			return nil
-		}
-	}
 	evalCtx.Value, err = calculateSum(sc, evalCtx.Value, value)
 	if err != nil {
 		return errors.Trace(err)
@@ -55,44 +46,48 @@ func (af *avgFunction) updateAvg(sc *stmtctx.StatementContext, evalCtx *AggEvalu
 	return nil
 }
 
-// Update implements Aggregation interface.
-func (af *avgFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.StatementContext, row types.Row) error {
-	if af.Mode == FinalMode {
-		return af.updateAvg(sc, evalCtx, row)
+func (af *avgFunction) ResetContext(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext) {
+	if af.HasDistinct {
+		evalCtx.DistinctChecker = createDistinctChecker(sc)
 	}
-	return af.updateSum(sc, evalCtx, row)
+	evalCtx.Value.SetNull()
+	evalCtx.Count = 0
+}
+
+// Update implements Aggregation interface.
+func (af *avgFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.StatementContext, row types.Row) (err error) {
+	switch af.Mode {
+	case Partial1Mode, CompleteMode:
+		err = af.updateSum(sc, evalCtx, row)
+	case Partial2Mode, FinalMode:
+		err = af.updateAvg(sc, evalCtx, row)
+	case DedupMode:
+		panic("DedupMode is not supported now.")
+	}
+	return errors.Trace(err)
 }
 
 // GetResult implements Aggregation interface.
 func (af *avgFunction) GetResult(evalCtx *AggEvaluateContext) (d types.Datum) {
-	var x *types.MyDecimal
 	switch evalCtx.Value.Kind() {
 	case types.KindFloat64:
-		x = new(types.MyDecimal)
-		err := x.FromFloat64(evalCtx.Value.GetFloat64())
-		terror.Log(errors.Trace(err))
+		sum := evalCtx.Value.GetFloat64()
+		d.SetFloat64(sum / float64(evalCtx.Count))
+		return
 	case types.KindMysqlDecimal:
-		x = evalCtx.Value.GetMysqlDecimal()
-	default:
-		return
-	}
-	y := types.NewDecFromInt(evalCtx.Count)
-	to := new(types.MyDecimal)
-	err := types.DecimalDiv(x, y, to, types.DivFracIncr)
-	terror.Log(errors.Trace(err))
-	frac := af.RetTp.Decimal
-	if frac == -1 {
-		frac = mysql.MaxDecimalScale
-	}
-	err = to.Round(to, frac, types.ModeHalfEven)
-	terror.Log(errors.Trace(err))
-	if evalCtx.Value.Kind() == types.KindFloat64 {
-		f, err := to.ToFloat64()
+		x := evalCtx.Value.GetMysqlDecimal()
+		y := types.NewDecFromInt(evalCtx.Count)
+		to := new(types.MyDecimal)
+		err := types.DecimalDiv(x, y, to, types.DivFracIncr)
 		terror.Log(errors.Trace(err))
-		d.SetFloat64(f)
-		return
+		frac := af.RetTp.Decimal
+		if frac == -1 {
+			frac = mysql.MaxDecimalScale
+		}
+		err = to.Round(to, frac, types.ModeHalfEven)
+		terror.Log(errors.Trace(err))
+		d.SetMysqlDecimal(to)
 	}
-	d.SetMysqlDecimal(to)
 	return
 }
 

@@ -17,19 +17,21 @@ import (
 	"math"
 	"sort"
 
+	"fmt"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
+	"github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/plan"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/sqlexec"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -83,26 +85,16 @@ type PrepareExec struct {
 }
 
 // NewPrepareExec creates a new PrepareExec.
-func NewPrepareExec(ctx context.Context, is infoschema.InfoSchema, sqlTxt string) *PrepareExec {
+func NewPrepareExec(ctx sessionctx.Context, is infoschema.InfoSchema, sqlTxt string) *PrepareExec {
 	return &PrepareExec{
-		baseExecutor: newBaseExecutor(nil, ctx),
+		baseExecutor: newBaseExecutor(ctx, nil, "PrepareStmt"),
 		is:           is,
 		sqlText:      sqlTxt,
 	}
 }
 
 // Next implements the Executor Next interface.
-func (e *PrepareExec) Next(goCtx goctx.Context) (Row, error) {
-	return nil, errors.Trace(e.DoPrepare())
-}
-
-// NextChunk implements the Executor NextChunk interface.
-func (e *PrepareExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
-	return errors.Trace(e.DoPrepare())
-}
-
-// DoPrepare prepares the statement, it can be called multiple times without side effect.
-func (e *PrepareExec) DoPrepare() error {
+func (e *PrepareExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	vars := e.ctx.GetSessionVars()
 	if e.ID != 0 {
 		// Must be the case when we retry a prepare.
@@ -193,13 +185,7 @@ type ExecuteExec struct {
 }
 
 // Next implements the Executor Next interface.
-// It will never be called.
-func (e *ExecuteExec) Next(goCtx goctx.Context) (Row, error) {
-	return nil, nil
-}
-
-// NextChunk implements the Executor NextChunk interface.
-func (e *ExecuteExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
+func (e *ExecuteExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	return nil
 }
 
@@ -215,14 +201,17 @@ func (e *ExecuteExec) Build() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	b := newExecutorBuilder(e.ctx, e.is, kv.PriorityNormal)
+	b := newExecutorBuilder(e.ctx, e.is)
 	stmtExec := b.build(e.plan)
 	if b.err != nil {
 		return errors.Trace(b.err)
 	}
 	e.stmtExec = stmtExec
-	ResetStmtCtx(e.ctx, e.stmt)
-	stmtCount(e.stmt, e.plan, e.ctx.GetSessionVars().InRestrictedSQL)
+	if err = ResetStmtCtx(e.ctx, e.stmt); err != nil {
+		return err
+	}
+	CountStmtNode(e.stmt, e.ctx.GetSessionVars().InRestrictedSQL)
+	logExpensiveQuery(e.stmt, e.plan)
 	return nil
 }
 
@@ -234,16 +223,7 @@ type DeallocateExec struct {
 }
 
 // Next implements the Executor Next interface.
-func (e *DeallocateExec) Next(goCtx goctx.Context) (Row, error) {
-	return nil, errors.Trace(e.run(goCtx))
-}
-
-// NextChunk implements the Executor NextChunk interface.
-func (e *DeallocateExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
-	return errors.Trace(e.run(goCtx))
-}
-
-func (e *DeallocateExec) run(goCtx goctx.Context) error {
+func (e *DeallocateExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	vars := e.ctx.GetSessionVars()
 	id, ok := vars.PreparedStmtNameToID[e.Name]
 	if !ok {
@@ -255,7 +235,7 @@ func (e *DeallocateExec) run(goCtx goctx.Context) error {
 }
 
 // CompileExecutePreparedStmt compiles a session Execute command to a stmt.Statement.
-func CompileExecutePreparedStmt(ctx context.Context, ID uint32, args ...interface{}) (ast.Statement, error) {
+func CompileExecutePreparedStmt(ctx sessionctx.Context, ID uint32, args ...interface{}) (ast.Statement, error) {
 	execStmt := &ast.ExecuteStmt{ExecID: ID}
 	execStmt.UsingVars = make([]ast.ExprNode, len(args))
 	for i, val := range args {
@@ -281,40 +261,54 @@ func CompileExecutePreparedStmt(ctx context.Context, ID uint32, args ...interfac
 
 // ResetStmtCtx resets the StmtContext.
 // Before every execution, we must clear statement context.
-func ResetStmtCtx(ctx context.Context, s ast.StmtNode) {
+func ResetStmtCtx(ctx sessionctx.Context, s ast.StmtNode) (err error) {
 	sessVars := ctx.GetSessionVars()
 	sc := new(stmtctx.StatementContext)
 	sc.TimeZone = sessVars.GetTimeZone()
+	sc.MemTracker = memory.NewTracker(s.Text(), sessVars.MemQuotaQuery)
+	switch config.GetGlobalConfig().OOMAction {
+	case config.OOMActionCancel:
+		sc.MemTracker.SetActionOnExceed(&memory.PanicOnExceed{})
+	case config.OOMActionLog:
+		sc.MemTracker.SetActionOnExceed(&memory.LogOnExceed{})
+	default:
+		sc.MemTracker.SetActionOnExceed(&memory.LogOnExceed{})
+	}
 
+	// TODO: Many same bool variables here.
+	// We should set only two variables (
+	// IgnoreErr and StrictSQLMode) to avoid setting the same bool variables and
+	// pushing them down to TiKV as flags.
 	switch stmt := s.(type) {
 	case *ast.UpdateStmt:
-		sc.IgnoreTruncate = false
-		sc.OverflowAsWarning = false
-		sc.TruncateAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
 		sc.InUpdateOrDeleteStmt = true
-		sc.DividedByZeroAsWarning = stmt.IgnoreErr
+		sc.DupKeyAsWarning = stmt.IgnoreErr
+		sc.BadNullAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.TruncateAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.DividedByZeroAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
 		sc.IgnoreZeroInDate = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.Priority = stmt.Priority
 	case *ast.DeleteStmt:
-		sc.IgnoreTruncate = false
-		sc.OverflowAsWarning = false
-		sc.TruncateAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
 		sc.InUpdateOrDeleteStmt = true
-		sc.DividedByZeroAsWarning = stmt.IgnoreErr
-		sc.IgnoreZeroInDate = !sessVars.StrictSQLMode || stmt.IgnoreErr
-	case *ast.InsertStmt:
-		sc.IgnoreTruncate = false
+		sc.DupKeyAsWarning = stmt.IgnoreErr
+		sc.BadNullAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
 		sc.TruncateAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
-		sc.InInsertStmt = true
-		sc.DividedByZeroAsWarning = stmt.IgnoreErr
+		sc.DividedByZeroAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
 		sc.IgnoreZeroInDate = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.Priority = stmt.Priority
+	case *ast.InsertStmt:
+		sc.InInsertStmt = true
+		sc.DupKeyAsWarning = stmt.IgnoreErr
+		sc.BadNullAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.TruncateAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.DividedByZeroAsWarning = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.IgnoreZeroInDate = !sessVars.StrictSQLMode || stmt.IgnoreErr
+		sc.Priority = stmt.Priority
 	case *ast.CreateTableStmt, *ast.AlterTableStmt:
 		// Make sure the sql_mode is strict when checking column default value.
-		sc.IgnoreTruncate = false
-		sc.OverflowAsWarning = false
-		sc.TruncateAsWarning = false
 	case *ast.LoadDataStmt:
-		sc.IgnoreTruncate = false
-		sc.OverflowAsWarning = false
+		sc.DupKeyAsWarning = true
+		sc.BadNullAsWarning = true
 		sc.TruncateAsWarning = !sessVars.StrictSQLMode
 	case *ast.SelectStmt:
 		sc.InSelectStmt = true
@@ -326,7 +320,6 @@ func ResetStmtCtx(ctx context.Context, s ast.StmtNode) {
 		sc.OverflowAsWarning = true
 
 		// Return warning for truncate error in selection.
-		sc.IgnoreTruncate = false
 		sc.TruncateAsWarning = true
 		sc.IgnoreZeroInDate = true
 		if opts := stmt.SelectStmtOpts; opts != nil {
@@ -334,15 +327,15 @@ func ResetStmtCtx(ctx context.Context, s ast.StmtNode) {
 			sc.NotFillCache = !opts.SQLCache
 		}
 		sc.PadCharToFullLength = ctx.GetSessionVars().SQLMode.HasPadCharToFullLengthMode()
+	case *ast.ShowStmt:
+		sc.IgnoreTruncate = true
+		sc.IgnoreZeroInDate = true
+		if stmt.Tp == ast.ShowWarnings || stmt.Tp == ast.ShowErrors {
+			sc.InShowWarning = true
+			sc.SetWarnings(sessVars.StmtCtx.GetWarnings())
+		}
 	default:
 		sc.IgnoreTruncate = true
-		sc.OverflowAsWarning = false
-		if show, ok := s.(*ast.ShowStmt); ok {
-			if show.Tp == ast.ShowWarnings {
-				sc.InShowWarning = true
-				sc.SetWarnings(sessVars.StmtCtx.GetWarnings())
-			}
-		}
 		sc.IgnoreZeroInDate = true
 	}
 	if sessVars.LastInsertID > 0 {
@@ -350,6 +343,15 @@ func ResetStmtCtx(ctx context.Context, s ast.StmtNode) {
 		sessVars.LastInsertID = 0
 	}
 	sessVars.ResetPrevAffectedRows()
+	err = sessVars.SetSystemVar("warning_count", fmt.Sprintf("%d", sessVars.StmtCtx.NumWarnings(false)))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = sessVars.SetSystemVar("error_count", fmt.Sprintf("%d", sessVars.StmtCtx.NumWarnings(true)))
+	if err != nil {
+		return errors.Trace(err)
+	}
 	sessVars.InsertID = 0
 	sessVars.StmtCtx = sc
+	return
 }

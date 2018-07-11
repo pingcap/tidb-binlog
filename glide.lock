@@ -1,5 +1,5 @@
-hash: 06e5852b7250e97b4b6aef346c65fc84cf48b5300bfa4e0259d6da36c9887314
-updated: 2018-07-11T16:34:28.743523121+08:00
+hash: 50a6470ed0011d7b82875698130d92038b03c5940e1dcf3d37e87acb0a85ccc4
+updated: 2018-07-11T20:55:36.076094028+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -251,7 +251,7 @@ imports:
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: fc699c9b0d29f038e0a55702c9fd2e18e89373c4
+  version: cc722546ef306e789f65a674673582d906d6f586
   subpackages:
   - ast
   - config
@@ -263,6 +263,7 @@ imports:
   - domain
   - evaluator
   - executor
+  - executor/aggfuncs
   - expression
   - expression/aggregation
   - infoschema
@@ -281,6 +282,7 @@ imports:
   - plan/statistics
   - privilege
   - privilege/privileges
+  - session
   - sessionctx
   - sessionctx/autocommit
   - sessionctx/binloginfo
@@ -293,8 +295,8 @@ imports:
   - store/localstore/engine
   - store/localstore/goleveldb
   - store/tikv
+  - store/tikv/latch
   - store/tikv/mock-tikv
-  - store/tikv/mocktikv
   - store/tikv/oracle
   - store/tikv/oracle/oracles
   - store/tikv/tikvrpc
@@ -317,8 +319,10 @@ imports:
   - util/format
   - util/goroutine_pool
   - util/hack
+  - util/israce
   - util/kvcache
   - util/logutil
+  - util/memory
   - util/mock
   - util/mvmap
   - util/printer
@@ -331,7 +335,7 @@ imports:
   subpackages:
   - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
-  version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
+  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
   subpackages:
   - go-binlog
   - go-tipb
