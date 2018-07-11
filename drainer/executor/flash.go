@@ -333,6 +333,9 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) {
 	maxCommitTS := int64(0)
 	for _, rbs := range e.rowBatches {
 		for i, rb := range rbs {
+			if rb == nil {
+				continue
+			}
 			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
 			if err != nil {
 				e.err = errors.Trace(err)
