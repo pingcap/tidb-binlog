@@ -156,23 +156,19 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Numeric types, with unsigned, nullable and default value attributes.
 	check("create table Test(bT bit, I int, T tinyint, M mediumint, B bigint, F float, D double, DE decimal(38, 10))",
 		Equals,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64),`i` Nullable(Int32),`t` Nullable(Int8),`m` Nullable(Int32),`b` Nullable(Int64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Float64)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64),`i` Nullable(Int32),`t` Nullable(Int8),`m` Nullable(Int32),`b` Nullable(Int64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Decimal(38, 10))) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(I int unsigned, T tinyint unsigned, M mediumint unsigned, B bigint unsigned, F float unsigned, D double unsigned, DE decimal unsigned)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Float64)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`_tidb_decimal_de` Nullable(String)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`i` Nullable(UInt32),`t` Nullable(UInt8),`m` Nullable(UInt32),`b` Nullable(UInt64),`f` Nullable(Float32),`d` Nullable(Float64),`de` Nullable(Decimal(11, 0))) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(BT bit not null, I int not null, T tinyint not null, M mediumint not null, B bigint not null, F float not null, D double not null, DE decimal not null)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`de` Float64) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`_tidb_decimal_de` String) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` UInt64,`i` Int32,`t` Int8,`m` Int32,`b` Int64,`f` Float32,`d` Float64,`de` Decimal(11, 0)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(Bt bit default 255, I int default null, T tinyint unsigned default 1, M mediumint not null default -2.0, B bigint unsigned not null default 100, F float not null default 1234.56, D double not null default 8765.4321, DE decimal not null default 0)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '0') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`bt` Nullable(UInt64) DEFAULT 255,`i` Nullable(Int32) DEFAULT NULL,`t` Nullable(UInt8) DEFAULT 1,`m` Int32 DEFAULT -2.0,`b` UInt64 DEFAULT 100,`f` Float32 DEFAULT 1234.56,`d` Float64 DEFAULT 8765.4321,`de` Decimal(11, 0) DEFAULT 0) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(F float not null default 1234, D double not null default '8765.4321', DE decimal not null default 42)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`de` Float64 DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`_tidb_decimal_de` String DEFAULT '42') ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`f` Float32 DEFAULT 1234,`d` Float64 DEFAULT 8765.4321,`de` Decimal(11, 0) DEFAULT 42) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	// String types, with default value attribute.
 	check("create table Test(C Char(10) not null, vC Varchar(255) not null, B BLOB not null, t tinyblob not null, m MediumBlob not null, L longblob not null)",
 		Equals,
@@ -183,12 +179,10 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Date/time types, with default value attribute.
 	check("create table Test(DT Date not null, tM Time not null, dTTm DateTime not null, ts timestamp not null, y year not null)",
 		Equals,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`dt` Date,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`"+dateColNamePrefix+"dt` Int32,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`dt` Date,`tm` Int64,`dttm` DateTime,`ts` DateTime,`y` Int16) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 	check("create table Test(DT Date not null default '0000-00-00', tM Time default -1, dTTm DateTime not null default \"2018-01-01 13:13:13\", ts timestamp not null default current_timestamp(), y year not null default +1984)",
 		Matches,
-		// "CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`dt` Date DEFAULT '0000-00-00',`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`"+dateColNamePrefix+"dt` Int32 DEFAULT 0,`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` \\(`"+implicitColName+"` Int64,`dt` Date DEFAULT '0000-00-00',`tm` Nullable\\(Int64\\) DEFAULT -1,`dttm` DateTime DEFAULT '2018-01-01 13:13:13',`ts` DateTime DEFAULT '"+dtRegex+"',`y` Int16 DEFAULT 1984\\) ENGINE MutableMergeTree\\(\\(`"+implicitColName+"`\\), 8192\\);")
 	// Enum type, with default value attribute.
 	check("create table Test(E Enum('a', 'b') not null)",
 		Equals,
@@ -196,10 +190,6 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("create table Test(E Enum('a', '', 'b') not null)",
 		Equals,
 		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`e` Enum16('a'=1,''=2,'b'=3)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
-	// Hack types tests.
-	check("create table Test(dt1 Date, Dt2 Date not null, D1 Decimal(38, 10) not null, d2 decimal(38, 0))",
-		Equals,
-		"CREATE TABLE IF NOT EXISTS `test_schema`.`test` (`"+implicitColName+"` Int64,`"+dateColNamePrefix+"dt1` Nullable(Int32),`"+dateColNamePrefix+"dt2` Int32,`d1` Float64,`"+decimalColNamePrefix+"d2` Nullable(String)) ENGINE MutableMergeTree((`"+implicitColName+"`), 8192);")
 
 	// Default value conversions using alter table statement, as the result is relatively simpler.
 	// Bit.
@@ -221,40 +211,34 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Decimal.
 	check("alter table Test add column d decimal default null",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Float64) DEFAULT NULL;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` Nullable(String) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Decimal(11, 0)) DEFAULT NULL;")
 	check("alter table Test add column d decimal not null default 255.5",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255.5;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255.5';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT 255.5;")
 	check("alter table Test add column d decimal not null default -255",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT -255;")
 	check("alter table Test add column d decimal not null default '255'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT 255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT 255;")
 	check("alter table Test add column d decimal not null default '-255'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Float64 DEFAULT -255;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `_tidb_decimal_d` String DEFAULT '-255';")
-	// Hacked decimal.
-	check("alter table Test add column d decimal(10, 0) default null",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(11, 0) DEFAULT -255;")
+	check("alter table Test add column d decimal(10) default null",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` Nullable(String) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Nullable(Decimal(10, 0)) DEFAULT NULL;")
 	check("alter table Test add column d decimal(10, 0) not null default 255.5",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '255.5';")
-	check("alter table Test add column d decimal(10, 0) not null default -255",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 0) DEFAULT 255.5;")
+	check("alter table Test add column d decimal(10, 5) not null default -255",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '-255';")
-	check("alter table Test add column d decimal(10, 0) not null default '255'",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT -255;")
+	check("alter table Test add column d decimal(10, 5) not null default '255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '255';")
-	check("alter table Test add column d decimal(10, 0) not null default '-255'",
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT 255;")
+	check("alter table Test add column d decimal(10, 5) not null default '-255'",
 		Equals,
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+decimalColNamePrefix+"d` String DEFAULT '-255';")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `d` Decimal(10, 5) DEFAULT -255;")
 	// Numeric.
 	check("alter table Test add column i int default null",
 		Equals,
@@ -287,44 +271,34 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	// Date.
 	check("alter table Test add column dt date default NULL",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Nullable(Date) DEFAULT NULL;")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Nullable(Int32) DEFAULT NULL;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Nullable(Date) DEFAULT NULL;")
 	check("alter table Test add column dt date not null default 19980808",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
 	check("alter table Test add column dt date not null default 19980808232323",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08 23:23:23';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08 23:23:23';")
 	check("alter table Test add column dt date not null default 19980808235959.99",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-09';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10447;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-09';")
 	check("alter table Test add column dt date not null default 0",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '0000-00-00';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 0;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '0000-00-00';")
 	check("alter table Test add column dt date not null default '1998-08-08'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
 	check("alter table Test add column dt date not null default '1998-08-08 13:13:13'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
 	check("alter table Test add column dt date not null default '1998-08-08 13:13'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
 	check("alter table Test add column dt date not null default '1998-08-08 155:13:13'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-08';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10446;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-08';")
 	check("alter table Test add column dt date not null default '19980808235959.99'",
 		Equals,
-		// "ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Int32 DEFAULT '1998-08-09';")
-		"ALTER TABLE `test_schema`.`test` ADD COLUMN `"+dateColNamePrefix+"dt` Int32 DEFAULT 10447;")
+		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` Date DEFAULT '1998-08-09';")
 	// Datetime and timestamp.
 	check("alter table Test add column dt datetime not null default 19980101",
 		Equals,
@@ -471,6 +445,14 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 	check("truncate table Test",
 		Equals,
 		"TRUNCATE TABLE `test_schema`.`test`")
+
+	check("create table T like T2",
+		Equals,
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`t` AS `test_schema`.`t2`")
+
+	check("create table T like D.T2",
+		Equals,
+		"CREATE TABLE IF NOT EXISTS `test_schema`.`t` AS `d`.`t2`")
 }
 
 func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
@@ -509,19 +491,31 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	check(mysql.TypeTimestamp, types.NewTimeDatum(dt), int64(0))
 	now := time.Now()
 	utc := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
-	// Hacking Date, will recover after Date mapped to true Date in CH.
-	// check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
-	check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
+	check(mysql.TypeDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
 	check(mysql.TypeDatetime, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
-	// Hacking Date, will recover after Date mapped to true Date in CH.
-	// check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
-	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix()/24/3600)
+	check(mysql.TypeNewDate, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), utc.Unix())
 	check(mysql.TypeTimestamp, types.NewTimeDatum(types.Time{Time: types.FromGoTime(now)}), now.Unix())
 	// Decimal.
-	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
-	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
-	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), "101.101")
-	checkWithFT(types.FieldType{Tp: mysql.TypeNewDecimal, Decimal: 2}, types.NewDecimalDatum(types.NewDecFromFloatForTest(101.101)), float64(101.101))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0)),
+		testPackCHDecimal(c, []byte{}, 0, 0, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0)),
+		testPackCHDecimal(c, []byte{}, 0, 0, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(1)),
+		testPackCHDecimal(c, []byte{1}, 1, 0, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0.1)),
+		testPackCHDecimal(c, []byte{1}, 1, 0, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-1)),
+		testPackCHDecimal(c, []byte{1}, 1, 1, 1, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 1, Decimal: 1}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-0.1)),
+		testPackCHDecimal(c, []byte{1}, 1, 1, 1, 1))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 0, 65, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 10}, types.NewDecimalDatum(types.NewDecFromFloatForTest(0.1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 0, 65, 10))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 0}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 1, 65, 0))
+	checkWithFT(types.FieldType{Tp: mysql.TypeDecimal, Flen: 65, Decimal: 10}, types.NewDecimalDatum(types.NewDecFromFloatForTest(-0.1000000001)),
+		testPackCHDecimal(c, []byte{byte(1000000001 & 0xFF), byte(1000000001 >> 8 & 0xFF), byte(1000000001 >> 16 & 0xFF), byte(1000000001 >> 24 & 0xFF)}, 1, 1, 65, 10))
 	// Enum.
 	en, err := types.ParseEnumValue([]string{"a", "b"}, 1)
 	c.Assert(err, IsNil)
@@ -535,6 +529,15 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	// JSON.
 	datum.SetMysqlJSON(json.CreateBinary(uint64(101)))
 	check(mysql.TypeJSON, datum, "101")
+}
+
+func testPackCHDecimal(c *C, value []byte, limb, sign, precision, scale int) []byte {
+	chBin := append(value, make([]byte, 32-len(value))...)
+	chBin = append(chBin, byte(limb), byte(limb>>8), byte(sign), byte(sign>>8))
+	chBin = append(chBin, make([]byte, 12)...)
+	chBin = append(chBin, byte(precision), byte(precision>>8), byte(scale), byte(scale>>8))
+	chBin = append(chBin, make([]byte, 12)...)
+	return chBin
 }
 
 func testFlashGenRowData(c *C, table *model.TableInfo, base int, delFlag bool) ([]types.Datum, []interface{}) {
