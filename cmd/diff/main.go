@@ -157,7 +157,7 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 		return false, errors.Trace(err1)
 	}
 
-	df := diff.New(db1, db2)
+	df := diff.New(nil, db1, db2)
 	eq, err := df.Equal()
 	if err != nil {
 		return false, errors.Trace(err)

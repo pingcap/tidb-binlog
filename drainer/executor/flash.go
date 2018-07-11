@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/kshvakov/clickhouse"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/zanmato1984/clickhouse"
 )
 
 var extraRowSize = 1024
@@ -100,25 +100,30 @@ func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, 
 
 	tx, err := conn.Begin()
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	stmt, err := conn.Prepare(batch.sql)
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	defer stmt.Close()
 	block, err := conn.Block()
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	for _, row := range batch.rows {
 		err = block.AppendRow(row)
 		if err != nil {
+			tx.Rollback()
 			return batch.latestCommitTS, errors.Trace(err)
 		}
 	}
 	err = conn.WriteBlock(block)
 	if err != nil {
+		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	err = tx.Commit()
@@ -328,6 +333,9 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) {
 	maxCommitTS := int64(0)
 	for _, rbs := range e.rowBatches {
 		for i, rb := range rbs {
+			if rb == nil {
+				continue
+			}
 			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
 			if err != nil {
 				e.err = errors.Trace(err)

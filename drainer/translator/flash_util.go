@@ -3,6 +3,7 @@ package translator
 import (
 	"fmt"
 	"math"
+	"math/big"
 	gotime "time"
 
 	"github.com/juju/errors"
@@ -240,48 +241,22 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 		return data.GetFloat32(), nil
 	case mysql.TypeDouble: // Float64
 		return data.GetFloat64(), nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal: // String/Float64
-		// TODO: map decimal to CH decimal.
-		if ok, hackVal := hackFormatDecimalData(data, ft); ok {
-			return hackVal, nil
-		}
-		f, err := data.GetMysqlDecimal().ToFloat64()
+	case mysql.TypeNewDecimal, mysql.TypeDecimal: // Decimal
+		dec := data.GetMysqlDecimal()
+		bin, err := mysqlDecimalToCHDecimalBin(ft, dec)
 		if err != nil {
 			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
-			f = 0
+			bin = make([]byte, 64)
 		}
-		return f, nil
+		return bin, nil
 	case mysql.TypeDate, mysql.TypeNewDate: // Int64
 		mysqlTime := data.GetMysqlTime()
 		var result = getUnixTimeSafe(mysqlTime, gotime.UTC)
-		if ok, hackVal := hackFormatDateData(result, ft); ok {
-			return hackVal, nil
-		}
-		// Though CH stores Date as Uint16, do not care about negative value,
-		// because Spark will load the unsigned value to signed value bit-wise.
-		// However need to check overflow.
-		if result < math.MinInt16 {
-			log.Warnf("Date data %v before min value, will set to min value.", mysqlTime.String())
-			result = math.MinInt16
-		} else if result > math.MaxInt16 {
-			log.Warnf("Date data %v after max value, will set to max value.", mysqlTime.String())
-			result = math.MaxInt16
-		}
 		return result, nil
 	case mysql.TypeDatetime, mysql.TypeTimestamp: // Int64
 		mysqlTime := data.GetMysqlTime()
 		// Need to consider timezone for DateTime and Timestamp, which are mapped to timezone-sensitive DateTime in CH.
 		var result = getUnixTimeSafe(mysqlTime, gotime.Local)
-		// Though CH stores DateTime as Uint32, do not care about negative value,
-		// because Spark will load the unsigned value to signed value bit-wise.
-		// However need to check overflow.
-		if result < math.MinInt32 {
-			log.Warnf("DateTime/Timestamp data %v before min value, will set to min value.", mysqlTime.String())
-			result = math.MinInt32
-		} else if result > math.MaxInt32 {
-			log.Warnf("DateTime/Timestamp data %v after max value, will set to max value.", mysqlTime.String())
-			result = math.MaxInt32
-		}
 		return result, nil
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
@@ -319,10 +294,6 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 	switch ft.Tp {
 	case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString, mysql.TypeSet:
 		shouldQuote = true
-	default:
-		if hackShouldQuote := hackShouldQuote(ft); hackShouldQuote {
-			shouldQuote = hackShouldQuote
-		}
 	}
 	switch e := expr.(type) {
 	case *ast.ValueExpr:
@@ -415,9 +386,6 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if ok, hackVal := hackFormatDateData(getUnixTimeSafe(mysqlTime, gotime.UTC), target); ok {
-			return hackVal, nil
-		}
 		return fmt.Sprintf("'%v'", mysqlTime), nil
 	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		// Towards time types, convert to string formatted as 'YYYY-MM-DD hh:mm:ss'
@@ -506,9 +474,6 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 			return data.GetValue(), nil
 		}
 	case mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeFloat, mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeDouble, mysql.TypeLonglong, mysql.TypeInt24:
-		if ok, hackVal := hackConvertDecimalType(data, source, target); ok {
-			return hackVal, nil
-		}
 		// Towards numeric types, do really conversion.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
@@ -558,4 +523,112 @@ func escapeString(s string) string {
 		}
 	}
 	return escaped
+}
+
+// Transform a MyDecimal to CH Decimal binary.
+func mysqlDecimalToCHDecimalBin(ft *types.FieldType, d *types.MyDecimal) ([]byte, error) {
+	const (
+		ten0 = 1
+		ten1 = 10
+		ten2 = 100
+		ten3 = 1000
+		ten4 = 10000
+		ten5 = 100000
+		ten6 = 1000000
+		ten7 = 10000000
+		ten8 = 100000000
+		ten9 = 1000000000
+
+		digitsPerWord = 9 // A word holds 9 digits.
+		wordSize      = 4 // A word is 4 bytes int32.
+		wordBase      = ten9
+	)
+
+	var (
+		powers10  = [10]int64{ten0, ten1, ten2, ten3, ten4, ten5, ten6, ten7, ten8, ten9}
+		dig2bytes = [10]int{0, 1, 1, 2, 2, 3, 3, 4, 4, 4}
+	)
+
+	precision, frac, intdigits := ft.Flen, ft.Decimal, ft.Flen-ft.Decimal
+	myBytes, err := d.ToBin(precision, frac)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// Calculate offsets.
+	leadingBytes := dig2bytes[intdigits%digitsPerWord]
+	alignedFrom, alignedTo := leadingBytes, leadingBytes+intdigits/digitsPerWord*wordSize+frac/digitsPerWord*wordSize
+	trailingDigits := frac % digitsPerWord
+	trailingBytes := dig2bytes[trailingDigits]
+
+	// Get mask.
+	mask := int32(-1)
+	if myBytes[0]&0x80 > 0 {
+		mask = 0
+	}
+
+	// Flip the very first bit.
+	myBytes[0] ^= 0x80
+
+	// Accumulate the word value into big.Int.
+	var digitsGoInt, baseGoInt = big.NewInt(0), big.NewInt(wordBase)
+	if leadingBytes > 0 {
+		leadingInt := int64(0)
+		for i := 0; i < leadingBytes; i++ {
+			leadingInt = leadingInt<<8 + int64(myBytes[i]^byte(mask))
+		}
+		digitsGoInt.Add(digitsGoInt, big.NewInt(leadingInt))
+	}
+	for i := alignedFrom; i < alignedTo; i += wordSize {
+		word := int32(myBytes[i])<<24 + int32(myBytes[i+1])<<16 + int32(myBytes[i+2])<<8 + int32(myBytes[i+3])
+		word ^= mask
+		digitsGoInt.Mul(digitsGoInt, baseGoInt)
+		digitsGoInt.Add(digitsGoInt, big.NewInt(int64(word)))
+	}
+	if trailingBytes > 0 {
+		trailingFrac := int64(0)
+		for i := 0; i < trailingBytes; i++ {
+			trailingFrac = trailingFrac<<8 + int64(myBytes[alignedTo+i]^byte(mask))
+		}
+		digitsGoInt.Mul(digitsGoInt, big.NewInt(powers10[trailingDigits]))
+		digitsGoInt.Add(digitsGoInt, big.NewInt(trailingFrac))
+	}
+
+	// Get bytes and swap to little-endian.
+	bin := digitsGoInt.Bytes()
+	for i := 0; i < len(bin)/2; i++ {
+		bin[i], bin[len(bin)-1-i] = bin[len(bin)-1-i], bin[i]
+	}
+
+	// Pack 32-byte value part for CH Decimal.
+	if len(bin) > 32 {
+		return nil, errors.Errorf("Decimal out of range.")
+	}
+	chBin := append(bin, make([]byte, 32-len(bin))...)
+
+	// Append limbs.
+	limbs := int16(math.Ceil(float64(len(bin)) / 8.0))
+	chBin = append(chBin, byte(limbs), byte(limbs>>8))
+
+	// Append sign.
+	if d.IsNegative() {
+		chBin = append(chBin, byte(1))
+	} else {
+		chBin = append(chBin, byte(0))
+	}
+	chBin = append(chBin, byte(0))
+
+	// Padding to 48 bytes.
+	chBin = append(chBin, make([]byte, 12)...)
+
+	// Append precision.
+	chBin = append(chBin, byte(precision), byte(precision>>8))
+
+	// Append scale.
+	chBin = append(chBin, byte(frac), byte(frac>>8))
+
+	// Padding to 64 bytes.
+	chBin = append(chBin, make([]byte, 12)...)
+
+	return chBin, nil
 }

@@ -287,10 +287,17 @@ func extractDropDatabase(stmt *ast.DropDatabaseStmt) (string, error) {
 }
 
 func extractCreateTable(stmt *ast.CreateTableStmt, schema string) (string, error) {
+	tableName := stmt.Table.Name.L
+	// create table like
+	if stmt.ReferTable != nil {
+		referTableSchema, referTableName := stmt.ReferTable.Schema.L, stmt.ReferTable.Name.L
+		if len(referTableSchema) == 0 {
+			referTableSchema = schema
+		}
+		return fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%s`.`%s` AS `%s`.`%s`", schema, tableName, referTableSchema, referTableName), nil
+	}
 	// extract primary key
 	pkColumn, explicitHandle := extractRowHandle(stmt)
-	// var buffer bytes.Buffer
-	tableName := stmt.Table.Name.L
 	colStrs := make([]string, len(stmt.Cols))
 	for i, colDef := range stmt.Cols {
 		colStr, _ := analyzeColumnDef(colDef, pkColumn)
@@ -493,11 +500,8 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 		if tp.Decimal == types.UnspecifiedLength {
 			_, tp.Decimal = mysql.GetDefaultFieldLengthAndDecimal(tp.Tp)
 		}
-		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
-			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
-		} else {
-			typeStr = fmt.Sprintf(typeStrFormat, "Float64")
-		}
+		decimalTypeStr := fmt.Sprintf("Decimal(%d, %d)", tp.Flen, tp.Decimal)
+		typeStr = fmt.Sprintf(typeStrFormat, decimalTypeStr)
 	case mysql.TypeTimestamp, mysql.TypeDatetime: // timestamp, datetime
 		typeStr = fmt.Sprintf(typeStrFormat, "DateTime")
 	case mysql.TypeDuration: // duration
@@ -509,11 +513,7 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 			typeStr = fmt.Sprintf(typeStrFormat, "Int64")
 		}
 	case mysql.TypeDate, mysql.TypeNewDate:
-		if ok, hackName, hackType := hackColumnNameAndType(cName, tp); ok {
-			cName, typeStr = hackName, fmt.Sprintf(typeStrFormat, hackType)
-		} else {
-			typeStr = fmt.Sprintf(typeStrFormat, "Date")
-		}
+		typeStr = fmt.Sprintf(typeStrFormat, "Date")
 	case mysql.TypeString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString:
 		typeStr = fmt.Sprintf(typeStrFormat, "String")
 	case mysql.TypeEnum:
@@ -573,12 +573,7 @@ func analyzeColumnPosition(cp *ast.ColumnPosition) (string, error) {
 func genColumnList(columns []*model.ColumnInfo) string {
 	var columnList []byte
 	for _, column := range columns {
-		var colName string
-		if ok, hackName, _ := hackColumnNameAndType(column.Name.L, &column.FieldType); ok {
-			colName = hackName
-		} else {
-			colName = column.Name.L
-		}
+		colName := column.Name.L
 		name := fmt.Sprintf("`%s`", colName)
 		columnList = append(columnList, []byte(name)...)
 

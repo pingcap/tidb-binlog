@@ -172,15 +172,6 @@ imports:
   version: 2eee05ed794112d45db504eb05aa693efd2b8b09
 - name: github.com/juju/errors
   version: 6f54ff6318409d31ff16261533ce2c8381a4fd5d
-- name: github.com/kshvakov/clickhouse
-  version: aeedb7b9d0584f393905447021238b5c6e9c5154
-  subpackages:
-  - lib/binary
-  - lib/column
-  - lib/data
-  - lib/protocol
-  - lib/types
-  - lib/writebuffer
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -409,6 +400,15 @@ imports:
   - codec
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
+- name: github.com/zanmato1984/clickhouse
+  version: cc03bd0a10107eecbed0f4a4b6ca595ac50d50d0
+  subpackages:
+  - lib/binary
+  - lib/column
+  - lib/data
+  - lib/protocol
+  - lib/types
+  - lib/writebuffer
 - name: golang.org/x/crypto
   version: 1351f936d976c60a0a48d728281922cf63eafb8d
   subpackages:
