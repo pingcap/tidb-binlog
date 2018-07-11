@@ -1,5 +1,5 @@
-hash: f90a2987da265ac47ffae53a8db8889dbb75d508e728833c0477f75a9322c3b5
-updated: 2018-07-11T16:22:05.352077577+08:00
+hash: 06e5852b7250e97b4b6aef346c65fc84cf48b5300bfa4e0259d6da36c9887314
+updated: 2018-07-11T16:34:28.743523121+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -236,7 +236,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 7b013aefd7210f4f4dbfca3330b462ddce5dd496
+  version: 4647096953d282e989b79c6e9b325aec3312b8ac
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -396,7 +396,7 @@ imports:
   - thrift-gen/zipkincore
   - utils
 - name: github.com/uber/jaeger-lib
-  version: ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5
+  version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -463,7 +463,7 @@ imports:
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
-  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
+  version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
   subpackages:
   - googleapis/api/annotations
   - googleapis/rpc/status

@@ -143,7 +143,7 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 7b013aefd7210f4f4dbfca3330b462ddce5dd496
+  version: 4647096953d282e989b79c6e9b325aec3312b8ac
 - package: github.com/pingcap/pd
   version: 722081d662b31a334c0a24b7955c1ac4424609bc
 - package: github.com/pingcap/tidb
