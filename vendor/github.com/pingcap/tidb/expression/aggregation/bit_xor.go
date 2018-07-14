@@ -23,6 +23,16 @@ type bitXorFunction struct {
 	aggFunction
 }
 
+func (bf *bitXorFunction) CreateContext(sc *stmtctx.StatementContext) *AggEvaluateContext {
+	evalCtx := bf.aggFunction.CreateContext(sc)
+	evalCtx.Value.SetUint64(0)
+	return evalCtx
+}
+
+func (bf *bitXorFunction) ResetContext(sc *stmtctx.StatementContext, evalCtx *AggEvaluateContext) {
+	evalCtx.Value.SetUint64(0)
+}
+
 // Update implements Aggregation interface.
 func (bf *bitXorFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.StatementContext, row types.Row) error {
 	a := bf.Args[0]
@@ -30,11 +40,16 @@ func (bf *bitXorFunction) Update(evalCtx *AggEvaluateContext, sc *stmtctx.Statem
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if evalCtx.Value.IsNull() {
-		evalCtx.Value.SetUint64(0)
-	}
 	if !value.IsNull() {
-		evalCtx.Value.SetUint64(evalCtx.Value.GetUint64() ^ value.GetUint64())
+		if value.Kind() == types.KindUint64 {
+			evalCtx.Value.SetUint64(evalCtx.Value.GetUint64() ^ value.GetUint64())
+		} else {
+			int64Value, err := value.ToInt64(sc)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			evalCtx.Value.SetUint64(evalCtx.Value.GetUint64() ^ uint64(int64Value))
+		}
 	}
 	return nil
 }

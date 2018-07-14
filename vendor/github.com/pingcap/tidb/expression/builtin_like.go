@@ -17,7 +17,7 @@ import (
 	"regexp"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/context"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tipb/go-tipb"
@@ -38,7 +38,7 @@ type likeFunctionClass struct {
 	baseFunctionClass
 }
 
-func (c *likeFunctionClass) getFunction(ctx context.Context, args []Expression) (builtinFunc, error) {
+func (c *likeFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
 	if err := c.verifyArgs(args); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -52,6 +52,12 @@ func (c *likeFunctionClass) getFunction(ctx context.Context, args []Expression) 
 
 type builtinLikeSig struct {
 	baseBuiltinFunc
+}
+
+func (b *builtinLikeSig) Clone() builtinFunc {
+	newSig := &builtinLikeSig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
 }
 
 // evalInt evals a builtinLikeSig.
@@ -82,7 +88,7 @@ type regexpFunctionClass struct {
 	baseFunctionClass
 }
 
-func (c *regexpFunctionClass) getFunction(ctx context.Context, args []Expression) (builtinFunc, error) {
+func (c *regexpFunctionClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
 	if err := c.verifyArgs(args); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -101,6 +107,12 @@ type builtinRegexpBinarySig struct {
 	baseBuiltinFunc
 }
 
+func (b *builtinRegexpBinarySig) Clone() builtinFunc {
+	newSig := &builtinRegexpBinarySig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
+}
+
 func (b *builtinRegexpBinarySig) evalInt(row types.Row) (int64, bool, error) {
 	expr, isNull, err := b.args[0].EvalString(b.ctx, row)
 	if isNull || err != nil {
@@ -115,13 +127,19 @@ func (b *builtinRegexpBinarySig) evalInt(row types.Row) (int64, bool, error) {
 	// TODO: We don't need to compile pattern if it has been compiled or it is static.
 	re, err := regexp.Compile(pat)
 	if err != nil {
-		return 0, true, errors.Trace(err)
+		return 0, true, ErrRegexp.GenByArgs(err.Error())
 	}
 	return boolToInt64(re.MatchString(expr)), false, nil
 }
 
 type builtinRegexpSig struct {
 	baseBuiltinFunc
+}
+
+func (b *builtinRegexpSig) Clone() builtinFunc {
+	newSig := &builtinRegexpSig{}
+	newSig.cloneFrom(&b.baseBuiltinFunc)
+	return newSig
 }
 
 // evalInt evals `expr REGEXP pat`, or `expr RLIKE pat`.
@@ -140,7 +158,7 @@ func (b *builtinRegexpSig) evalInt(row types.Row) (int64, bool, error) {
 	// TODO: We don't need to compile pattern if it has been compiled or it is static.
 	re, err := regexp.Compile("(?i)" + pat)
 	if err != nil {
-		return 0, true, errors.Trace(err)
+		return 0, true, ErrRegexp.GenByArgs(err.Error())
 	}
 	return boolToInt64(re.MatchString(expr)), false, nil
 }

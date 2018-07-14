@@ -28,7 +28,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		ID:         3,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
+		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil, 123},
 	}
 	jobs = append(jobs, job)
 	// `createIgnoreSchema` job
@@ -36,7 +36,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		ID:         4,
 		SchemaID:   2,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil},
+		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil, 123},
 	}
 	jobs = append(jobs, job1)
 	// construct a cancelled job
@@ -117,7 +117,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		ID:         5,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil},
+		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil, 123},
 	}
 	jobs = append(jobs, job)
 
@@ -127,7 +127,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
 	}
 	jobs = append(jobs, job)
 
@@ -138,7 +138,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
 	}
 	jobs = append(jobs, job)
 
@@ -149,7 +149,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo},
+		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
 	}
 	jobs = append(jobs, job)
 
@@ -173,7 +173,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1}})
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1, 123}})
 	schema1, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	table, ok = schema1.TableByID(tblInfo1.ID)

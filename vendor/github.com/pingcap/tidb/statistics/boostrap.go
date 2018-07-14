@@ -15,16 +15,16 @@ package statistics
 
 import (
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/sqlexec"
 	log "github.com/sirupsen/logrus"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 func initStatsMeta4Chunk(is infoschema.InfoSchema, tables statsCache, iter *chunk.Iterator4Chunk) {
@@ -40,6 +40,8 @@ func initStatsMeta4Chunk(is infoschema.InfoSchema, tables statsCache, iter *chun
 			TableID:     tableID,
 			Columns:     make(map[int64]*Column, len(tableInfo.Columns)),
 			Indices:     make(map[int64]*Index, len(tableInfo.Indices)),
+			colName2Idx: make(map[string]int64, len(tableInfo.Columns)),
+			colName2ID:  make(map[string]int64, len(tableInfo.Columns)),
 			Count:       row.GetInt64(3),
 			ModifyCount: row.GetInt64(2),
 			Version:     row.GetUint64(0),
@@ -49,8 +51,10 @@ func initStatsMeta4Chunk(is infoschema.InfoSchema, tables statsCache, iter *chun
 }
 
 func (h *Handle) initStatsMeta(is infoschema.InfoSchema) (statsCache, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	sql := "select version, table_id, modify_count, count from mysql.stats_meta"
-	rc, err := h.ctx.(sqlexec.SQLExecutor).Execute(goctx.TODO(), sql)
+	rc, err := h.mu.ctx.(sqlexec.SQLExecutor).Execute(context.TODO(), sql)
 	if len(rc) > 0 {
 		defer terror.Call(rc[0].Close)
 	}
@@ -61,7 +65,7 @@ func (h *Handle) initStatsMeta(is infoschema.InfoSchema) (statsCache, error) {
 	chk := rc[0].NewChunk()
 	iter := chunk.NewIterator4Chunk(chk)
 	for {
-		err := rc[0].NextChunk(goctx.TODO(), chk)
+		err := rc[0].Next(context.TODO(), chk)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -79,7 +83,7 @@ func initStatsHistograms4Chunk(is infoschema.InfoSchema, tables statsCache, iter
 		if !ok {
 			continue
 		}
-		id, ndv, nullCount, version := row.GetInt64(2), row.GetInt64(3), row.GetInt64(5), row.GetUint64(4)
+		id, ndv, nullCount, version, totColSize := row.GetInt64(2), row.GetInt64(3), row.GetInt64(5), row.GetUint64(4), row.GetInt64(7)
 		tbl, _ := is.TableByID(table.TableID)
 		if row.GetInt64(1) > 0 {
 			var idxInfo *model.IndexInfo
@@ -97,8 +101,8 @@ func initStatsHistograms4Chunk(is infoschema.InfoSchema, tables statsCache, iter
 				cms = nil
 				terror.Log(errors.Trace(err))
 			}
-			hist := NewHistogram(id, ndv, nullCount, version, types.NewFieldType(mysql.TypeBlob), chunk.InitialCapacity)
-			table.Indices[hist.ID] = &Index{Histogram: *hist, CMSketch: cms, Info: idxInfo}
+			hist := NewHistogram(id, ndv, nullCount, version, types.NewFieldType(mysql.TypeBlob), chunk.InitialCapacity, 0)
+			table.Indices[hist.ID] = &Index{Histogram: *hist, CMSketch: cms, Info: idxInfo, statsVer: row.GetInt64(8)}
 		} else {
 			var colInfo *model.ColumnInfo
 			for _, col := range tbl.Meta().Columns {
@@ -110,15 +114,17 @@ func initStatsHistograms4Chunk(is infoschema.InfoSchema, tables statsCache, iter
 			if colInfo == nil {
 				continue
 			}
-			hist := NewHistogram(id, ndv, nullCount, version, &colInfo.FieldType, 0)
-			table.Columns[hist.ID] = &Column{Histogram: *hist, Info: colInfo}
+			hist := NewHistogram(id, ndv, nullCount, version, &colInfo.FieldType, 0, totColSize)
+			table.Columns[hist.ID] = &Column{Histogram: *hist, Info: colInfo, Count: nullCount}
 		}
 	}
 }
 
 func (h *Handle) initStatsHistograms(is infoschema.InfoSchema, tables statsCache) error {
-	sql := "select table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch from mysql.stats_histograms"
-	rc, err := h.ctx.(sqlexec.SQLExecutor).Execute(goctx.TODO(), sql)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	sql := "select table_id, is_index, hist_id, distinct_count, version, null_count, cm_sketch, tot_col_size, stats_ver from mysql.stats_histograms"
+	rc, err := h.mu.ctx.(sqlexec.SQLExecutor).Execute(context.TODO(), sql)
 	if len(rc) > 0 {
 		defer terror.Call(rc[0].Close)
 	}
@@ -128,7 +134,7 @@ func (h *Handle) initStatsHistograms(is infoschema.InfoSchema, tables statsCache
 	chk := rc[0].NewChunk()
 	iter := chunk.NewIterator4Chunk(chk)
 	for {
-		err := rc[0].NextChunk(goctx.TODO(), chk)
+		err := rc[0].Next(context.TODO(), chk)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -140,7 +146,7 @@ func (h *Handle) initStatsHistograms(is infoschema.InfoSchema, tables statsCache
 	return nil
 }
 
-func initStatsBuckets4Chunk(ctx context.Context, tables statsCache, iter *chunk.Iterator4Chunk) {
+func initStatsBuckets4Chunk(ctx sessionctx.Context, tables statsCache, iter *chunk.Iterator4Chunk) {
 	for row := iter.Begin(); row != iter.End(); row = iter.Next() {
 		tableID, isIndex, histID := row.GetInt64(0), row.GetInt64(1), row.GetInt64(2)
 		table, ok := tables[tableID]
@@ -187,8 +193,10 @@ func initStatsBuckets4Chunk(ctx context.Context, tables statsCache, iter *chunk.
 }
 
 func (h *Handle) initStatsBuckets(tables statsCache) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	sql := "select table_id, is_index, hist_id, count, repeats, lower_bound, upper_bound from mysql.stats_buckets order by table_id, is_index, hist_id, bucket_id"
-	rc, err := h.ctx.(sqlexec.SQLExecutor).Execute(goctx.TODO(), sql)
+	rc, err := h.mu.ctx.(sqlexec.SQLExecutor).Execute(context.TODO(), sql)
 	if len(rc) > 0 {
 		defer terror.Call(rc[0].Close)
 	}
@@ -198,18 +206,18 @@ func (h *Handle) initStatsBuckets(tables statsCache) error {
 	chk := rc[0].NewChunk()
 	iter := chunk.NewIterator4Chunk(chk)
 	for {
-		err := rc[0].NextChunk(goctx.TODO(), chk)
+		err := rc[0].Next(context.TODO(), chk)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if chk.NumRows() == 0 {
 			break
 		}
-		initStatsBuckets4Chunk(h.ctx, tables, iter)
+		initStatsBuckets4Chunk(h.mu.ctx, tables, iter)
 	}
 	for _, table := range tables {
-		if h.LastVersion < table.Version {
-			h.LastVersion = table.Version
+		if h.mu.lastVersion < table.Version {
+			h.mu.lastVersion = table.Version
 		}
 		for _, idx := range table.Indices {
 			for i := 1; i < idx.Len(); i++ {
@@ -223,6 +231,7 @@ func (h *Handle) initStatsBuckets(tables statsCache) error {
 			}
 			col.PreCalculateScalar()
 		}
+		table.buildColNameMapper()
 	}
 	return nil
 }

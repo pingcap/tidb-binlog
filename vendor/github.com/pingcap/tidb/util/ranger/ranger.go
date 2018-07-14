@@ -28,10 +28,28 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 )
 
-// points2NewRanges build index ranges from range points.
-// Only one column is built there. If there're multiple columns, use appendPoints2NewRanges.
-func points2NewRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *types.FieldType) ([]*NewRange, error) {
-	ranges := make([]*NewRange, 0, len(rangePoints)/2)
+func validInterval(sc *stmtctx.StatementContext, low, high point) (bool, error) {
+	l, err := codec.EncodeKey(sc, nil, low.value)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if low.excl {
+		l = []byte(kv.Key(l).PrefixNext())
+	}
+	r, err := codec.EncodeKey(sc, nil, high.value)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if !high.excl {
+		r = []byte(kv.Key(r).PrefixNext())
+	}
+	return bytes.Compare(l, r) < 0, nil
+}
+
+// points2Ranges build index ranges from range points.
+// Only one column is built there. If there're multiple columns, use appendPoints2Ranges.
+func points2Ranges(sc *stmtctx.StatementContext, rangePoints []point, tp *types.FieldType) ([]*Range, error) {
+	ranges := make([]*Range, 0, len(rangePoints)/2)
 	for i := 0; i < len(rangePoints); i += 2 {
 		startPoint, err := convertPoint(sc, rangePoints[i], tp)
 		if err != nil {
@@ -41,7 +59,7 @@ func points2NewRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *typ
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		less, err := rangePointLess(sc, startPoint, endPoint)
+		less, err := validInterval(sc, startPoint, endPoint)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -52,7 +70,7 @@ func points2NewRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *typ
 		if mysql.HasNotNullFlag(tp.Flag) && endPoint.value.Kind() == types.KindNull {
 			continue
 		}
-		ran := &NewRange{
+		ran := &Range{
 			LowVal:      []types.Datum{startPoint.value},
 			LowExclude:  startPoint.excl,
 			HighVal:     []types.Datum{endPoint.value},
@@ -108,13 +126,13 @@ func convertPoint(sc *stmtctx.StatementContext, point point, tp *types.FieldType
 	return point, nil
 }
 
-// appendPoints2NewRanges appends additional column ranges for multi-column index.
+// appendPoints2Ranges appends additional column ranges for multi-column index.
 // The additional column ranges can only be appended to point ranges.
 // for example we have an index (a, b), if the condition is (a > 1 and b = 2)
 // then we can not build a conjunctive ranges for this index.
-func appendPoints2NewRanges(sc *stmtctx.StatementContext, origin []*NewRange, rangePoints []point,
-	ft *types.FieldType) ([]*NewRange, error) {
-	var newIndexRanges []*NewRange
+func appendPoints2Ranges(sc *stmtctx.StatementContext, origin []*Range, rangePoints []point,
+	ft *types.FieldType) ([]*Range, error) {
+	var newIndexRanges []*Range
 	for i := 0; i < len(origin); i++ {
 		oRange := origin[i]
 		if !oRange.IsPoint(sc) {
@@ -130,9 +148,9 @@ func appendPoints2NewRanges(sc *stmtctx.StatementContext, origin []*NewRange, ra
 	return newIndexRanges, nil
 }
 
-func appendPoints2IndexRange(sc *stmtctx.StatementContext, origin *NewRange, rangePoints []point,
-	ft *types.FieldType) ([]*NewRange, error) {
-	newRanges := make([]*NewRange, 0, len(rangePoints)/2)
+func appendPoints2IndexRange(sc *stmtctx.StatementContext, origin *Range, rangePoints []point,
+	ft *types.FieldType) ([]*Range, error) {
+	newRanges := make([]*Range, 0, len(rangePoints)/2)
 	for i := 0; i < len(rangePoints); i += 2 {
 		startPoint, err := convertPoint(sc, rangePoints[i], ft)
 		if err != nil {
@@ -142,7 +160,7 @@ func appendPoints2IndexRange(sc *stmtctx.StatementContext, origin *NewRange, ran
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		less, err := rangePointLess(sc, startPoint, endPoint)
+		less, err := validInterval(sc, startPoint, endPoint)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -158,7 +176,7 @@ func appendPoints2IndexRange(sc *stmtctx.StatementContext, origin *NewRange, ran
 		copy(highVal, origin.HighVal)
 		highVal[len(origin.HighVal)] = endPoint.value
 
-		ir := &NewRange{
+		ir := &Range{
 			LowVal:      lowVal,
 			LowExclude:  startPoint.excl,
 			HighVal:     highVal,
@@ -171,8 +189,8 @@ func appendPoints2IndexRange(sc *stmtctx.StatementContext, origin *NewRange, ran
 
 // points2TableRanges build ranges for table scan from range points.
 // It will remove the nil and convert MinNotNull and MaxValue to MinInt64 or MinUint64 and MaxInt64 or MaxUint64.
-func points2TableRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *types.FieldType) ([]*NewRange, error) {
-	ranges := make([]*NewRange, 0, len(rangePoints)/2)
+func points2TableRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *types.FieldType) ([]*Range, error) {
+	ranges := make([]*Range, 0, len(rangePoints)/2)
 	var minValueDatum, maxValueDatum types.Datum
 	// Currently, table's kv range cannot accept encoded value of MaxValueDatum. we need to convert it.
 	if mysql.HasUnsignedFlag(tp.Flag) {
@@ -202,14 +220,14 @@ func points2TableRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *t
 		} else if endPoint.value.Kind() == types.KindNull {
 			continue
 		}
-		less, err := rangePointLess(sc, startPoint, endPoint)
+		less, err := validInterval(sc, startPoint, endPoint)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		if !less {
 			continue
 		}
-		ran := &NewRange{
+		ran := &Range{
 			LowVal:      []types.Datum{startPoint.value},
 			LowExclude:  startPoint.excl,
 			HighVal:     []types.Datum{endPoint.value},
@@ -221,7 +239,7 @@ func points2TableRanges(sc *stmtctx.StatementContext, rangePoints []point, tp *t
 }
 
 // BuildTableRange will build range of pk for PhysicalTableScan
-func BuildTableRange(accessConditions []expression.Expression, sc *stmtctx.StatementContext, tp *types.FieldType) ([]*NewRange, error) {
+func BuildTableRange(accessConditions []expression.Expression, sc *stmtctx.StatementContext, tp *types.FieldType) ([]*Range, error) {
 	rb := builder{sc: sc}
 	rangePoints := fullRange
 	for _, cond := range accessConditions {
@@ -239,9 +257,9 @@ func BuildTableRange(accessConditions []expression.Expression, sc *stmtctx.State
 }
 
 // BuildColumnRange builds the range for sampling histogram to calculate the row count.
-func BuildColumnRange(conds []expression.Expression, sc *stmtctx.StatementContext, tp *types.FieldType) ([]*NewRange, error) {
+func BuildColumnRange(conds []expression.Expression, sc *stmtctx.StatementContext, tp *types.FieldType) ([]*Range, error) {
 	if len(conds) == 0 {
-		return []*NewRange{{LowVal: []types.Datum{{}}, HighVal: []types.Datum{types.MaxValueDatum()}}}, nil
+		return []*Range{{LowVal: []types.Datum{{}}, HighVal: []types.Datum{types.MaxValueDatum()}}}, nil
 	}
 
 	rb := builder{sc: sc}
@@ -253,7 +271,7 @@ func BuildColumnRange(conds []expression.Expression, sc *stmtctx.StatementContex
 		}
 	}
 	newTp := newFieldType(tp)
-	ranges, err := points2NewRanges(sc, rangePoints, newTp)
+	ranges, err := points2Ranges(sc, rangePoints, newTp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -262,10 +280,10 @@ func BuildColumnRange(conds []expression.Expression, sc *stmtctx.StatementContex
 
 // buildCNFIndexRange builds the range for index where the top layer is CNF.
 func buildCNFIndexRange(sc *stmtctx.StatementContext, cols []*expression.Column, newTp []*types.FieldType, lengths []int,
-	eqAndInCount int, accessCondition []expression.Expression) ([]*NewRange, error) {
+	eqAndInCount int, accessCondition []expression.Expression) ([]*Range, error) {
 	rb := builder{sc: sc}
 	var (
-		ranges []*NewRange
+		ranges []*Range
 		err    error
 	)
 	for _, col := range cols {
@@ -281,9 +299,9 @@ func buildCNFIndexRange(sc *stmtctx.StatementContext, cols []*expression.Column,
 			return nil, errors.Trace(rb.err)
 		}
 		if i == 0 {
-			ranges, err = points2NewRanges(sc, point, newTp[i])
+			ranges, err = points2Ranges(sc, point, newTp[i])
 		} else {
-			ranges, err = appendPoints2NewRanges(sc, ranges, point, newTp[i])
+			ranges, err = appendPoints2Ranges(sc, ranges, point, newTp[i])
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -298,9 +316,9 @@ func buildCNFIndexRange(sc *stmtctx.StatementContext, cols []*expression.Column,
 		}
 	}
 	if eqAndInCount == 0 {
-		ranges, err = points2NewRanges(sc, rangePoints, newTp[0])
+		ranges, err = points2Ranges(sc, rangePoints, newTp[0])
 	} else if eqAndInCount < len(accessCondition) {
-		ranges, err = appendPoints2NewRanges(sc, ranges, rangePoints, newTp[eqAndInCount])
+		ranges, err = appendPoints2Ranges(sc, ranges, rangePoints, newTp[eqAndInCount])
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -331,12 +349,12 @@ func buildCNFIndexRange(sc *stmtctx.StatementContext, cols []*expression.Column,
 }
 
 type sortRange struct {
-	originalValue *NewRange
+	originalValue *Range
 	encodedStart  []byte
 	encodedEnd    []byte
 }
 
-func unionNewRanges(sc *stmtctx.StatementContext, ranges []*NewRange) ([]*NewRange, error) {
+func unionRanges(sc *stmtctx.StatementContext, ranges []*Range) ([]*Range, error) {
 	if len(ranges) == 0 {
 		return nil, nil
 	}
@@ -391,7 +409,7 @@ func hasPrefix(lengths []int) bool {
 	return false
 }
 
-func fixPrefixColRange(ranges []*NewRange, lengths []int) {
+func fixPrefixColRange(ranges []*Range, lengths []int) {
 	for _, ran := range ranges {
 		for i := 0; i < len(ran.LowVal); i++ {
 			fixRangeDatum(&ran.LowVal[i], lengths[i])

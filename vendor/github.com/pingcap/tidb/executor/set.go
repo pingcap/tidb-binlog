@@ -20,10 +20,10 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/terror"
 	"github.com/pingcap/tidb/types"
@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/sqlexec"
 	log "github.com/sirupsen/logrus"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 // SetExecutor executes set statement.
@@ -43,25 +43,60 @@ type SetExecutor struct {
 }
 
 // Next implements the Executor Next interface.
-func (e *SetExecutor) Next(goCtx goctx.Context) (Row, error) {
+func (e *SetExecutor) Next(ctx context.Context, chk *chunk.Chunk) error {
+	chk.Reset()
 	if e.done {
-		return nil, nil
-	}
-	err := e.executeSet()
-	if err != nil {
-		return nil, errors.Trace(err)
+		return nil
 	}
 	e.done = true
-	return nil, nil
-}
+	sessionVars := e.ctx.GetSessionVars()
+	for _, v := range e.vars {
+		// Variable is case insensitive, we use lower case.
+		if v.Name == ast.SetNames {
+			// This is set charset stmt.
+			dt, err := v.Expr.(*expression.Constant).Eval(nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			cs := dt.GetString()
+			var co string
+			if v.ExtendValue != nil {
+				co = v.ExtendValue.Value.GetString()
+			}
+			err = e.setCharset(cs, co)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			continue
+		}
+		name := strings.ToLower(v.Name)
+		if !v.IsSystem {
+			// Set user variable.
+			value, err := v.Expr.Eval(nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-// NextChunk implements the Executor NextChunk interface.
-func (e *SetExecutor) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
-	chk.Reset()
-	if !e.done {
-		e.done = true
-		err := e.executeSet()
-		return errors.Trace(err)
+			if value.IsNull() {
+				delete(sessionVars.Users, name)
+			} else {
+				svalue, err1 := value.ToString()
+				if err1 != nil {
+					return errors.Trace(err1)
+				}
+				sessionVars.Users[name] = fmt.Sprintf("%v", svalue)
+			}
+			continue
+		}
+
+		syns := e.getSynonyms(name)
+		// Set system variable
+		for _, n := range syns {
+			err := e.setSysVariable(n, v)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
 	}
 	return nil
 }
@@ -115,6 +150,9 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 			return errors.Trace(err)
 		}
 		oldSnapshotTS := sessionVars.SnapshotTS
+		if name == variable.TxnIsolationOneShot && sessionVars.InTxn() {
+			return errors.Trace(ErrCantChangeTxCharacteristics)
+		}
 		err = variable.SetSessionSystemVar(sessionVars, name, value)
 		if err != nil {
 			return errors.Trace(err)
@@ -140,7 +178,7 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 			valStr, err = value.ToString()
 			terror.Log(errors.Trace(err))
 		}
-		log.Infof("[%d] set system variable %s = %s", sessionVars.ConnectionID, name, valStr)
+		log.Infof("con:%d %s=%s", sessionVars.ConnectionID, name, valStr)
 	}
 
 	if name == variable.TxnIsolation {
@@ -153,61 +191,8 @@ func (e *SetExecutor) setSysVariable(name string, v *expression.VarAssignment) e
 	return nil
 }
 
-func (e *SetExecutor) executeSet() error {
-	sessionVars := e.ctx.GetSessionVars()
-	for _, v := range e.vars {
-		// Variable is case insensitive, we use lower case.
-		if v.Name == ast.SetNames {
-			// This is set charset stmt.
-			dt, err := v.Expr.(*expression.Constant).Eval(nil)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			cs := dt.GetString()
-			var co string
-			if v.ExtendValue != nil {
-				co = v.ExtendValue.Value.GetString()
-			}
-			err = e.setCharset(cs, co)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			continue
-		}
-		name := strings.ToLower(v.Name)
-		if !v.IsSystem {
-			// Set user variable.
-			value, err := v.Expr.Eval(nil)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			if value.IsNull() {
-				delete(sessionVars.Users, name)
-			} else {
-				svalue, err1 := value.ToString()
-				if err1 != nil {
-					return errors.Trace(err1)
-				}
-				sessionVars.Users[name] = fmt.Sprintf("%v", svalue)
-			}
-			continue
-		}
-
-		syns := e.getSynonyms(name)
-		// Set system variable
-		for _, n := range syns {
-			err := e.setSysVariable(n, v)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	return nil
-}
-
 // validateSnapshot checks that the newly set snapshot time is after GC safe point time.
-func validateSnapshot(ctx context.Context, snapshotTS uint64) error {
+func validateSnapshot(ctx sessionctx.Context, snapshotTS uint64) error {
 	sql := "SELECT variable_value FROM mysql.tidb WHERE variable_name = 'tikv_gc_safe_point'"
 	rows, _, err := ctx.(sqlexec.RestrictedSQLExecutor).ExecRestrictedSQL(ctx, sql)
 	if err != nil {
@@ -274,7 +259,7 @@ func (e *SetExecutor) loadSnapshotInfoSchemaIfNeeded(name string) error {
 		vars.SnapshotInfoschema = nil
 		return nil
 	}
-	log.Infof("[%d] loadSnapshotInfoSchema, SnapshotTS:%d", vars.ConnectionID, vars.SnapshotTS)
+	log.Infof("con:%d loadSnapshotInfoSchema, SnapshotTS:%d", vars.ConnectionID, vars.SnapshotTS)
 	dom := domain.GetDomain(e.ctx)
 	snapInfo, err := dom.GetSnapshotInfoSchema(vars.SnapshotTS)
 	if err != nil {

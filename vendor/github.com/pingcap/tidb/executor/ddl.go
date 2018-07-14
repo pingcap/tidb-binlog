@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
-	goctx "golang.org/x/net/context"
+	"golang.org/x/net/context"
 )
 
 // DDLExec represents a DDL executor.
@@ -38,27 +38,33 @@ type DDLExec struct {
 	done bool
 }
 
-// Next implements Execution Next interface.
-func (e *DDLExec) Next(goCtx goctx.Context) (Row, error) {
-	if e.done {
-		return nil, nil
+// toErr converts the error to the ErrInfoSchemaChanged when the schema is outdated.
+func (e *DDLExec) toErr(err error) error {
+	if e.ctx.GetSessionVars().StmtCtx.IsDDLJobInQueue {
+		return errors.Trace(err)
 	}
-	err := e.run(goCtx)
-	e.done = true
-	return nil, errors.Trace(err)
-}
 
-// NextChunk implements the Executor NextChunk interface.
-func (e *DDLExec) NextChunk(goCtx goctx.Context, chk *chunk.Chunk) error {
-	if e.done {
-		return nil
+	// Before the DDL job is ready, it encouters an error that may be due to the outdated schema information.
+	// After the DDL job is ready, the ErrInfoSchemaChanged error won't happen because we are getting the schema directly from storage.
+	// So we needn't to consider this condition.
+	// Here we distinguish the ErrInfoSchemaChanged error from other errors.
+	dom := domain.GetDomain(e.ctx)
+	checker := domain.NewSchemaChecker(dom, e.is.SchemaMetaVersion(), nil)
+	schemaInfoErr := checker.Check(e.ctx.Txn().StartTS())
+	if schemaInfoErr != nil {
+		return errors.Trace(schemaInfoErr)
 	}
-	err := e.run(goCtx)
-	e.done = true
 	return errors.Trace(err)
 }
 
-func (e *DDLExec) run(goCtx goctx.Context) (err error) {
+// Next implements the Executor Next interface.
+func (e *DDLExec) Next(ctx context.Context, chk *chunk.Chunk) (err error) {
+	if e.done {
+		return nil
+	}
+	e.done = true
+	defer func() { e.ctx.GetSessionVars().StmtCtx.IsDDLJobInQueue = false }()
+
 	switch x := e.stmt.(type) {
 	case *ast.TruncateTableStmt:
 		err = e.executeTruncateTable(x)
@@ -80,7 +86,7 @@ func (e *DDLExec) run(goCtx goctx.Context) (err error) {
 		err = e.executeRenameTable(x)
 	}
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(e.toErr(err))
 	}
 
 	dom := domain.GetDomain(e.ctx)
@@ -134,20 +140,7 @@ func (e *DDLExec) executeCreateDatabase(s *ast.CreateDatabaseStmt) error {
 }
 
 func (e *DDLExec) executeCreateTable(s *ast.CreateTableStmt) error {
-	ident := ast.Ident{Schema: s.Table.Schema, Name: s.Table.Name}
-	var err error
-	if s.ReferTable == nil {
-		err = domain.GetDomain(e.ctx).DDL().CreateTable(e.ctx, ident, s.Cols, s.Constraints, s.Options)
-	} else {
-		referIdent := ast.Ident{Schema: s.ReferTable.Schema, Name: s.ReferTable.Name}
-		err = domain.GetDomain(e.ctx).DDL().CreateTableWithLike(e.ctx, ident, referIdent)
-	}
-	if infoschema.ErrTableExists.Equal(err) {
-		if s.IfNotExists {
-			return nil
-		}
-		return err
-	}
+	err := domain.GetDomain(e.ctx).DDL().CreateTable(e.ctx, s)
 	return errors.Trace(err)
 }
 

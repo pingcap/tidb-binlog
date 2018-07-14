@@ -12,7 +12,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -22,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -84,9 +84,9 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tidb.RegisterStore("tikv", tikv.Driver{})
+	session.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := tidb.NewStore(tiPath)
+	tiStore, err := session.NewStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

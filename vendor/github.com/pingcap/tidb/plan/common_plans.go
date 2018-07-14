@@ -17,16 +17,14 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/util/auth"
 	"github.com/pingcap/tidb/util/kvcache"
@@ -43,8 +41,57 @@ type ShowDDLJobs struct {
 	baseSchemaProducer
 }
 
+// ShowDDLJobQueries is for showing DDL job queries sql.
+type ShowDDLJobQueries struct {
+	baseSchemaProducer
+
+	JobIDs []int64
+}
+
 // CheckTable is used for checking table data, built from the 'admin check table' statement.
 type CheckTable struct {
+	baseSchemaProducer
+
+	Tables []*ast.TableName
+}
+
+// RecoverIndex is used for backfilling corrupted index data.
+type RecoverIndex struct {
+	baseSchemaProducer
+
+	Table     *ast.TableName
+	IndexName string
+}
+
+// CleanupIndex is used to delete dangling index data.
+type CleanupIndex struct {
+	baseSchemaProducer
+
+	Table     *ast.TableName
+	IndexName string
+}
+
+// CheckIndex is used for checking index data, built from the 'admin check index' statement.
+type CheckIndex struct {
+	baseSchemaProducer
+
+	IndexLookUpReader *PhysicalIndexLookUpReader
+	DBName            string
+	IdxName           string
+}
+
+// CheckIndexRange is used for checking index data, output the index values that handle within begin and end.
+type CheckIndexRange struct {
+	baseSchemaProducer
+
+	Table     *ast.TableName
+	IndexName string
+
+	HandleRanges []ast.HandleRange
+}
+
+// ChecksumTable is used for calculating table checksum, built from the `admin checksum table` statement.
+type ChecksumTable struct {
 	baseSchemaProducer
 
 	Tables []*ast.TableName
@@ -84,7 +131,7 @@ type Execute struct {
 	Plan      Plan
 }
 
-func (e *Execute) optimizePreparedPlan(ctx context.Context, is infoschema.InfoSchema) error {
+func (e *Execute) optimizePreparedPlan(ctx sessionctx.Context, is infoschema.InfoSchema) error {
 	vars := ctx.GetSessionVars()
 	if e.Name != "" {
 		e.ExecID = vars.PreparedStmtNameToID[e.Name]
@@ -128,13 +175,14 @@ func (e *Execute) optimizePreparedPlan(ctx context.Context, is infoschema.InfoSc
 	return nil
 }
 
-func (e *Execute) getPhysicalPlan(ctx context.Context, is infoschema.InfoSchema, prepared *Prepared) (Plan, error) {
+func (e *Execute) getPhysicalPlan(ctx sessionctx.Context, is infoschema.InfoSchema, prepared *Prepared) (Plan, error) {
 	var cacheKey kvcache.Key
 	sessionVars := ctx.GetSessionVars()
 	sessionVars.StmtCtx.UseCache = prepared.UseCache
 	if prepared.UseCache {
 		cacheKey = NewPSTMTPlanCacheKey(sessionVars, e.ExecID, prepared.SchemaVersion)
 		if cacheValue, exists := ctx.PreparedPlanCache().Get(cacheKey); exists {
+			metrics.PlanCacheCounter.WithLabelValues("prepare").Inc()
 			plan := cacheValue.(*PSTMTPlanCacheValue).Plan
 			err := e.rebuildRange(plan)
 			if err != nil {
@@ -154,15 +202,15 @@ func (e *Execute) getPhysicalPlan(ctx context.Context, is infoschema.InfoSchema,
 }
 
 func (e *Execute) rebuildRange(p Plan) error {
+	sctx := p.context()
 	sc := p.context().GetSessionVars().StmtCtx
 	switch x := p.(type) {
 	case *PhysicalTableReader:
 		ts := x.TablePlans[0].(*PhysicalTableScan)
-		cols := expression.ColumnInfos2ColumnsWithDBName(ts.DBName, ts.Table.Name, ts.Columns)
 		var pkCol *expression.Column
 		if ts.Table.PKIsHandle {
 			if pkColInfo := ts.Table.GetPkColInfo(); pkColInfo != nil {
-				pkCol = expression.ColInfo2Col(cols, pkColInfo)
+				pkCol = expression.ColInfo2Col(x.schema.Columns, pkColInfo)
 			}
 		}
 		if pkCol != nil {
@@ -172,19 +220,19 @@ func (e *Execute) rebuildRange(p Plan) error {
 				return errors.Trace(err)
 			}
 		} else {
-			ts.Ranges = ranger.FullIntNewRange(false)
+			ts.Ranges = ranger.FullIntRange(false)
 		}
 	case *PhysicalIndexReader:
 		is := x.IndexPlans[0].(*PhysicalIndexScan)
 		var err error
-		is.Ranges, err = e.buildRangeForIndexScan(sc, is)
+		is.Ranges, err = e.buildRangeForIndexScan(sctx, is, x.schema)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case *PhysicalIndexLookUpReader:
 		is := x.IndexPlans[0].(*PhysicalIndexScan)
 		var err error
-		is.Ranges, err = e.buildRangeForIndexScan(sc, is)
+		is.Ranges, err = e.buildRangeForIndexScan(sctx, is, x.schema)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -200,13 +248,12 @@ func (e *Execute) rebuildRange(p Plan) error {
 	return nil
 }
 
-func (e *Execute) buildRangeForIndexScan(sc *stmtctx.StatementContext, is *PhysicalIndexScan) ([]*ranger.NewRange, error) {
-	cols := expression.ColumnInfos2ColumnsWithDBName(is.DBName, is.Table.Name, is.Columns)
-	idxCols, colLengths := expression.IndexInfo2Cols(cols, is.Index)
-	ranges := ranger.FullNewRange()
+func (e *Execute) buildRangeForIndexScan(sctx sessionctx.Context, is *PhysicalIndexScan, schema *expression.Schema) ([]*ranger.Range, error) {
+	idxCols, colLengths := expression.IndexInfo2Cols(schema.Columns, is.Index)
+	ranges := ranger.FullRange()
 	if len(idxCols) > 0 {
 		var err error
-		ranges, _, _, _, err = ranger.DetachCondAndBuildRangeForIndex(sc, is.conditions, idxCols, colLengths)
+		ranges, _, _, _, err = ranger.DetachCondAndBuildRangeForIndex(sctx, is.AccessCondition, idxCols, colLengths)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -269,12 +316,12 @@ type Insert struct {
 	tableSchema *expression.Schema
 	Columns     []*ast.ColumnName
 	Lists       [][]expression.Expression
-	Setlist     []*expression.Assignment
-	OnDuplicate []*expression.Assignment
+	SetList     []*expression.Assignment
+
+	OnDuplicate        []*expression.Assignment
+	Schema4OnDuplicate *expression.Schema
 
 	IsReplace bool
-	Priority  mysql.PriorityEnum
-	IgnoreErr bool
 
 	// NeedFillDefaultValue is true when expr in value list reference other column.
 	NeedFillDefaultValue bool
@@ -289,7 +336,6 @@ type Update struct {
 	baseSchemaProducer
 
 	OrderedList []*expression.Assignment
-	IgnoreErr   bool
 
 	SelectPlan PhysicalPlan
 }
@@ -362,51 +408,102 @@ type Explain struct {
 	explainedPlans map[int]bool
 }
 
-// prepareExplainInfo4DAGTask generates the following information for every plan:
-// ["id", "parents", "task", "operator info"].
-func (e *Explain) prepareExplainInfo4DAGTask(p PhysicalPlan, taskType string, parentID string) {
-	childrenIDs := make([]string, 0, len(p.Children()))
-	for _, ch := range p.Children() {
-		childrenIDs = append(childrenIDs, ch.ExplainID())
-	}
-	childrenInfo := strings.Join(childrenIDs, ",")
-	operatorInfo := p.ExplainInfo()
-	count := string(strconv.AppendFloat([]byte{}, p.StatsInfo().count, 'f', -1, 64))
-	row := []string{p.ExplainID(), parentID, childrenInfo, taskType, operatorInfo, count}
-	e.Rows = append(e.Rows, row)
-}
-
-// prepareCopTaskInfo generates explain information for cop-tasks.
-// Only PhysicalTableReader, PhysicalIndexReader and PhysicalIndexLookUpReader have cop-tasks currently.
-func (e *Explain) prepareCopTaskInfo(plans []PhysicalPlan) {
-	for i, p := range plans {
-		var parentID string
-		if i+1 < len(plans) {
-			parentID = plans[i+1].ExplainID()
-		}
-		e.prepareExplainInfo4DAGTask(p, "cop", parentID)
-	}
-}
-
-// prepareRootTaskInfo generates explain information for root-tasks.
-func (e *Explain) prepareRootTaskInfo(p PhysicalPlan, parentID string) {
+// explainPlanInRowFormat generates explain information for root-tasks.
+func (e *Explain) explainPlanInRowFormat(p PhysicalPlan, taskType, indent string, isLastChild bool) {
+	e.prepareOperatorInfo(p, taskType, indent, isLastChild)
 	e.explainedPlans[p.ID()] = true
-	for _, child := range p.Children() {
+
+	// For every child we create a new sub-tree rooted by it.
+	childIndent := e.getIndent4Child(indent, isLastChild)
+	for i, child := range p.Children() {
 		if e.explainedPlans[child.ID()] {
 			continue
 		}
-		e.prepareRootTaskInfo(child.(PhysicalPlan), p.ExplainID())
+		e.explainPlanInRowFormat(child.(PhysicalPlan), taskType, childIndent, i == len(p.Children())-1)
 	}
+
 	switch copPlan := p.(type) {
 	case *PhysicalTableReader:
-		e.prepareCopTaskInfo(copPlan.TablePlans)
+		e.explainPlanInRowFormat(copPlan.tablePlan, "cop", childIndent, true)
 	case *PhysicalIndexReader:
-		e.prepareCopTaskInfo(copPlan.IndexPlans)
+		e.explainPlanInRowFormat(copPlan.indexPlan, "cop", childIndent, true)
 	case *PhysicalIndexLookUpReader:
-		e.prepareCopTaskInfo(copPlan.IndexPlans)
-		e.prepareCopTaskInfo(copPlan.TablePlans)
+		e.explainPlanInRowFormat(copPlan.indexPlan, "cop", childIndent, false)
+		e.explainPlanInRowFormat(copPlan.tablePlan, "cop", childIndent, true)
 	}
-	e.prepareExplainInfo4DAGTask(p, "root", parentID)
+}
+
+// prepareOperatorInfo generates the following information for every plan:
+// operator id, task type, operator info, and the estemated row count.
+func (e *Explain) prepareOperatorInfo(p PhysicalPlan, taskType string, indent string, isLastChild bool) {
+	operatorInfo := p.ExplainInfo()
+	count := string(strconv.AppendFloat([]byte{}, p.StatsInfo().count, 'f', 2, 64))
+	row := []string{e.prettyIdentifier(p.ExplainID(), indent, isLastChild), count, taskType, operatorInfo}
+	e.Rows = append(e.Rows, row)
+}
+
+const (
+	// treeBody indicates the current operator sub-tree is not finished, still
+	// has child operators to be attached on.
+	treeBody = '│'
+	// treeMiddleNode indicates this operator is not the last child of the
+	// current sub-tree rooted by its parent.
+	treeMiddleNode = '├'
+	// treeLastNode indicates this operator is the last child of the current
+	// sub-tree rooted by its parent.
+	treeLastNode = '└'
+	// treeGap is used to represent the gap between the branches of the tree.
+	treeGap = ' '
+	// treeNodeIdentifier is used to replace the treeGap once we need to attach
+	// a node to a sub-tree.
+	treeNodeIdentifier = '─'
+)
+
+func (e *Explain) prettyIdentifier(id, indent string, isLastChild bool) string {
+	if len(indent) == 0 {
+		return id
+	}
+
+	indentBytes := []rune(indent)
+	for i := len(indentBytes) - 1; i >= 0; i-- {
+		if indentBytes[i] != treeBody {
+			continue
+		}
+
+		// Here we attach a new node to the current sub-tree by changing
+		// the closest treeBody to a:
+		// 1. treeLastNode, if this operator is the last child.
+		// 2. treeMiddleNode, if this operator is not the last child..
+		if isLastChild {
+			indentBytes[i] = treeLastNode
+		} else {
+			indentBytes[i] = treeMiddleNode
+		}
+		break
+	}
+
+	// Replace the treeGap between the treeBody and the node to a
+	// treeNodeIdentifier.
+	indentBytes[len(indentBytes)-1] = treeNodeIdentifier
+	return string(indentBytes) + id
+}
+
+func (e *Explain) getIndent4Child(indent string, isLastChild bool) string {
+	if !isLastChild {
+		return string(append([]rune(indent), treeBody, treeGap))
+	}
+
+	// If the current node is the last node of the current operator tree, we
+	// need to end this sub-tree by changing the closest treeBody to a treeGap.
+	indentBytes := []rune(indent)
+	for i := len(indentBytes) - 1; i >= 0; i-- {
+		if indentBytes[i] == treeBody {
+			indentBytes[i] = treeGap
+			break
+		}
+	}
+
+	return string(append(indentBytes, treeBody, treeGap))
 }
 
 func (e *Explain) prepareDotInfo(p PhysicalPlan) {

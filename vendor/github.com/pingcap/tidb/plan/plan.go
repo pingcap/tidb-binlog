@@ -15,11 +15,12 @@ package plan
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tipb/go-tipb"
 )
@@ -37,7 +38,7 @@ type Plan interface {
 	// replaceExprColumns replace all the column reference in the plan's expression node.
 	replaceExprColumns(replace map[string]*expression.Column)
 
-	context() context.Context
+	context() sessionctx.Context
 }
 
 // taskType is the type of execution task.
@@ -77,6 +78,21 @@ type requiredProp struct {
 	expectedCnt float64
 	// hashcode stores the hash code of a requiredProp, will be lazily calculated when function "hashCode()" being called.
 	hashcode []byte
+	// whether need to enforce property.
+	enforced bool
+}
+
+func (p *requiredProp) enforceProperty(tsk task, ctx sessionctx.Context) task {
+	if p.isEmpty() || tsk.plan() == nil {
+		return tsk
+	}
+	tsk = finishCopTask(ctx, tsk)
+	sortReqProp := &requiredProp{taskTp: rootTaskType, cols: p.cols, expectedCnt: math.MaxFloat64}
+	sort := PhysicalSort{ByItems: make([]*ByItems, 0, len(p.cols))}.init(ctx, tsk.plan().StatsInfo(), sortReqProp)
+	for _, col := range p.cols {
+		sort.ByItems = append(sort.ByItems, &ByItems{col, p.desc})
+	}
+	return sort.attach2Task(tsk)
 }
 
 func (p *requiredProp) allColsFromSchema(schema *expression.Schema) bool {
@@ -88,7 +104,7 @@ func (p *requiredProp) isPrefix(prop *requiredProp) bool {
 		return false
 	}
 	for i := range p.cols {
-		if !p.cols[i].Equal(prop.cols[i], nil) {
+		if !p.cols[i].Equal(nil, prop.cols[i]) {
 			return false
 		}
 	}
@@ -99,7 +115,7 @@ func (p *requiredProp) isPrefix(prop *requiredProp) bool {
 func (p *requiredProp) matchItems(items []*ByItems) bool {
 	for i, col := range p.cols {
 		sortItem := items[i]
-		if sortItem.Desc != p.desc || !sortItem.Expr.Equal(col, nil) {
+		if sortItem.Desc != p.desc || !sortItem.Expr.Equal(nil, col) {
 			return false
 		}
 	}
@@ -115,9 +131,14 @@ func (p *requiredProp) hashCode() []byte {
 	if p.hashcode != nil {
 		return p.hashcode
 	}
-	hashcodeSize := 8 + 8 + 8 + 16*len(p.cols)
+	hashcodeSize := 8 + 8 + 8 + 16*len(p.cols) + 8
 	p.hashcode = make([]byte, 0, hashcodeSize)
 	if p.desc {
+		p.hashcode = codec.EncodeInt(p.hashcode, 1)
+	} else {
+		p.hashcode = codec.EncodeInt(p.hashcode, 0)
+	}
+	if p.enforced {
 		p.hashcode = codec.EncodeInt(p.hashcode, 1)
 	} else {
 		p.hashcode = codec.EncodeInt(p.hashcode, 0)
@@ -125,7 +146,7 @@ func (p *requiredProp) hashCode() []byte {
 	p.hashcode = codec.EncodeInt(p.hashcode, int64(p.taskTp))
 	p.hashcode = codec.EncodeFloat(p.hashcode, p.expectedCnt)
 	for i, length := 0, len(p.cols); i < length; i++ {
-		p.hashcode = append(p.hashcode, p.cols[i].HashCode()...)
+		p.hashcode = append(p.hashcode, p.cols[i].HashCode(nil)...)
 	}
 	return p.hashcode
 }
@@ -148,11 +169,11 @@ type LogicalPlan interface {
 	// PruneColumns prunes the unused columns.
 	PruneColumns([]*expression.Column)
 
-	// convert2PhysicalPlan converts the logical plan to the physical plan. It's a new interface.
+	// findBestTask converts the logical plan to the physical plan. It's a new interface.
 	// It is called recursively from the parent to the children to create the result physical plan.
 	// Some logical plans will convert the children to the physical plans in different ways, and return the one
 	// with the lowest cost.
-	convert2PhysicalPlan(prop *requiredProp) (task, error)
+	findBestTask(prop *requiredProp) (task, error)
 
 	// buildKeyInfo will collect the information of unique keys into schema.
 	buildKeyInfo()
@@ -161,14 +182,16 @@ type LogicalPlan interface {
 	pushDownTopN(topN *LogicalTopN) LogicalPlan
 
 	// deriveStats derives statistic info between plans.
-	deriveStats() *statsInfo
+	deriveStats() (*statsInfo, error)
 
 	// preparePossibleProperties is only used for join and aggregation. Like group by a,b,c, all permutation of (a,b,c) is
 	// valid, but the ordered indices in leaf plan is limited. So we can get all possible order properties by a pre-walking.
+	// Please make sure that children's method is called though we may not need its return value,
+	// so we can prepare possible properties for every LogicalPlan node.
 	preparePossibleProperties() [][]*expression.Column
 
-	// genPhysPlansByReqProp generates all possible plans that can match the required property.
-	genPhysPlansByReqProp(*requiredProp) []PhysicalPlan
+	// exhaustPhysicalPlans generates all possible plans that can match the required property.
+	exhaustPhysicalPlans(*requiredProp) []PhysicalPlan
 
 	extractCorrelatedCols() []*expression.CorrelatedColumn
 
@@ -195,7 +218,7 @@ type PhysicalPlan interface {
 	attach2Task(...task) task
 
 	// ToPB converts physical plan to tipb executor.
-	ToPB(ctx context.Context) (*tipb.Executor, error)
+	ToPB(ctx sessionctx.Context) (*tipb.Executor, error)
 
 	// ExplainInfo returns operator information to be explained.
 	ExplainInfo() string
@@ -268,7 +291,7 @@ func (p *baseLogicalPlan) buildKeyInfo() {
 	}
 }
 
-func newBasePlan(tp string, ctx context.Context) basePlan {
+func newBasePlan(ctx sessionctx.Context, tp string) basePlan {
 	ctx.GetSessionVars().PlanID++
 	id := ctx.GetSessionVars().PlanID
 	return basePlan{
@@ -278,17 +301,17 @@ func newBasePlan(tp string, ctx context.Context) basePlan {
 	}
 }
 
-func newBaseLogicalPlan(tp string, ctx context.Context, self LogicalPlan) baseLogicalPlan {
+func newBaseLogicalPlan(ctx sessionctx.Context, tp string, self LogicalPlan) baseLogicalPlan {
 	return baseLogicalPlan{
 		taskMap:  make(map[string]task),
-		basePlan: newBasePlan(tp, ctx),
+		basePlan: newBasePlan(ctx, tp),
 		self:     self,
 	}
 }
 
-func newBasePhysicalPlan(tp string, ctx context.Context, self PhysicalPlan) basePhysicalPlan {
+func newBasePhysicalPlan(ctx sessionctx.Context, tp string, self PhysicalPlan) basePhysicalPlan {
 	return basePhysicalPlan{
-		basePlan: newBasePlan(tp, ctx),
+		basePlan: newBasePlan(ctx, tp),
 		self:     self,
 	}
 }
@@ -314,7 +337,7 @@ func (p *baseLogicalPlan) PruneColumns(parentUsedCols []*expression.Column) {
 type basePlan struct {
 	tp    string
 	id    int
-	ctx   context.Context
+	ctx   sessionctx.Context
 	stats *statsInfo
 }
 
@@ -360,7 +383,7 @@ func (p *basePhysicalPlan) SetChildren(children ...PhysicalPlan) {
 	p.children = children
 }
 
-func (p *basePlan) context() context.Context {
+func (p *basePlan) context() sessionctx.Context {
 	return p.ctx
 }
 

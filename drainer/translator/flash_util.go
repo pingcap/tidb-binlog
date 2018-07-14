@@ -215,7 +215,7 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 
 	switch ft.Tp {
 	case mysql.TypeBit: // UInt64
-		ui, err := data.GetMysqlBit().ToInt()
+		ui, err := data.GetMysqlBit().ToInt(nil)
 		if err != nil {
 			return data, errors.Trace(err)
 		}
@@ -461,7 +461,7 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		// Towards bit, convert to raw bytes and return as uint64.
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
-			return data.GetMysqlBit().ToInt()
+			return data.GetMysqlBit().ToInt(nil)
 		case mysql.TypeFloat, mysql.TypeDecimal, mysql.TypeDouble, mysql.TypeNewDecimal:
 			// TiDB rounds float to uint for bit.
 			f, err := data.GetMysqlDecimal().ToFloat64()

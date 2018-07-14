@@ -18,76 +18,15 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tipb/go-tipb"
 )
-
-var distFuncs = map[tipb.ExprType]string{
-	// compare op
-	tipb.ExprType_LT:     ast.LT,
-	tipb.ExprType_LE:     ast.LE,
-	tipb.ExprType_GT:     ast.GT,
-	tipb.ExprType_GE:     ast.GE,
-	tipb.ExprType_EQ:     ast.EQ,
-	tipb.ExprType_NE:     ast.NE,
-	tipb.ExprType_NullEQ: ast.NullEQ,
-
-	// bit op
-	tipb.ExprType_BitAnd:    ast.And,
-	tipb.ExprType_BitOr:     ast.Or,
-	tipb.ExprType_BitXor:    ast.Xor,
-	tipb.ExprType_RighShift: ast.RightShift,
-	tipb.ExprType_LeftShift: ast.LeftShift,
-	tipb.ExprType_BitNeg:    ast.BitNeg,
-
-	// logical op
-	tipb.ExprType_And: ast.LogicAnd,
-	tipb.ExprType_Or:  ast.LogicOr,
-	tipb.ExprType_Xor: ast.LogicXor,
-	tipb.ExprType_Not: ast.UnaryNot,
-
-	// arithmetic operator
-	tipb.ExprType_Plus:   ast.Plus,
-	tipb.ExprType_Minus:  ast.Minus,
-	tipb.ExprType_Mul:    ast.Mul,
-	tipb.ExprType_Div:    ast.Div,
-	tipb.ExprType_IntDiv: ast.IntDiv,
-	tipb.ExprType_Mod:    ast.Mod,
-
-	// control operator
-	tipb.ExprType_Case:   ast.Case,
-	tipb.ExprType_If:     ast.If,
-	tipb.ExprType_IfNull: ast.Ifnull,
-	tipb.ExprType_NullIf: ast.Nullif,
-
-	// other operator
-	tipb.ExprType_Like:     ast.Like,
-	tipb.ExprType_In:       ast.In,
-	tipb.ExprType_IsNull:   ast.IsNull,
-	tipb.ExprType_Coalesce: ast.Coalesce,
-
-	// for json functions.
-	tipb.ExprType_JsonType:    ast.JSONType,
-	tipb.ExprType_JsonExtract: ast.JSONExtract,
-	tipb.ExprType_JsonUnquote: ast.JSONUnquote,
-	tipb.ExprType_JsonMerge:   ast.JSONMerge,
-	tipb.ExprType_JsonSet:     ast.JSONSet,
-	tipb.ExprType_JsonInsert:  ast.JSONInsert,
-	tipb.ExprType_JsonReplace: ast.JSONReplace,
-	tipb.ExprType_JsonRemove:  ast.JSONRemove,
-	tipb.ExprType_JsonArray:   ast.JSONArray,
-	tipb.ExprType_JsonObject:  ast.JSONObject,
-
-	// date functions.
-	tipb.ExprType_DateFormat: ast.DateFormat,
-}
 
 func pbTypeToFieldType(tp *tipb.FieldType) *types.FieldType {
 	return &types.FieldType{
@@ -100,7 +39,7 @@ func pbTypeToFieldType(tp *tipb.FieldType) *types.FieldType {
 	}
 }
 
-func getSignatureByPB(ctx context.Context, sigCode tipb.ScalarFuncSig, tp *tipb.FieldType, args []Expression) (f builtinFunc, e error) {
+func getSignatureByPB(ctx sessionctx.Context, sigCode tipb.ScalarFuncSig, tp *tipb.FieldType, args []Expression) (f builtinFunc, e error) {
 	fieldTp := pbTypeToFieldType(tp)
 	base := newBaseBuiltinFunc(ctx, args)
 	base.tp = fieldTp
@@ -339,6 +278,8 @@ func getSignatureByPB(ctx context.Context, sigCode tipb.ScalarFuncSig, tp *tipb.
 		f = &builtinArithmeticDivideRealSig{base}
 	case tipb.ScalarFuncSig_AbsInt:
 		f = &builtinAbsIntSig{base}
+	case tipb.ScalarFuncSig_AbsUInt:
+		f = &builtinAbsUIntSig{base}
 	case tipb.ScalarFuncSig_AbsReal:
 		f = &builtinAbsRealSig{base}
 	case tipb.ScalarFuncSig_AbsDecimal:
@@ -349,6 +290,8 @@ func getSignatureByPB(ctx context.Context, sigCode tipb.ScalarFuncSig, tp *tipb.
 		f = &builtinCeilIntToDecSig{base}
 	case tipb.ScalarFuncSig_CeilDecToInt:
 		f = &builtinCeilDecToIntSig{base}
+	case tipb.ScalarFuncSig_CeilDecToDec:
+		f = &builtinCeilDecToDecSig{base}
 	case tipb.ScalarFuncSig_CeilReal:
 		f = &builtinCeilRealSig{base}
 	case tipb.ScalarFuncSig_FloorIntToInt:
@@ -357,6 +300,8 @@ func getSignatureByPB(ctx context.Context, sigCode tipb.ScalarFuncSig, tp *tipb.
 		f = &builtinFloorIntToDecSig{base}
 	case tipb.ScalarFuncSig_FloorDecToInt:
 		f = &builtinFloorDecToIntSig{base}
+	case tipb.ScalarFuncSig_FloorDecToDec:
+		f = &builtinFloorDecToDecSig{base}
 	case tipb.ScalarFuncSig_FloorReal:
 		f = &builtinFloorRealSig{base}
 
@@ -527,18 +472,6 @@ func newDistSQLFunctionBySig(sc *stmtctx.StatementContext, sigCode tipb.ScalarFu
 	}, nil
 }
 
-// newDistSQLFunction only creates function for mocktikv.
-func newDistSQLFunction(sc *stmtctx.StatementContext, exprType tipb.ExprType, args []Expression) (Expression, error) {
-	name, ok := distFuncs[exprType]
-	if !ok {
-		return nil, errFunctionNotExists.GenByArgs("FUNCTION", exprType)
-	}
-	// TODO: Too ugly...
-	ctx := mock.NewContext()
-	ctx.GetSessionVars().StmtCtx = sc
-	return NewFunction(ctx, name, types.NewFieldType(mysql.TypeUnspecified), args...)
-}
-
 // PBToExpr converts pb structure to expression.
 func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementContext) (Expression, error) {
 	switch expr.Tp {
@@ -569,6 +502,9 @@ func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementCont
 	case tipb.ExprType_MysqlTime:
 		return convertTime(expr.Val, expr.FieldType, sc.TimeZone)
 	}
+	if expr.Tp != tipb.ExprType_ScalarFunc {
+		panic("should be a tipb.ExprType_ScalarFunc")
+	}
 	// Then it must be a scalar function.
 	args := make([]Expression, 0, len(expr.Children))
 	for _, child := range expr.Children {
@@ -589,10 +525,7 @@ func PBToExpr(expr *tipb.Expr, tps []*types.FieldType, sc *stmtctx.StatementCont
 		}
 		args = append(args, arg)
 	}
-	if expr.Tp == tipb.ExprType_ScalarFunc {
-		return newDistSQLFunctionBySig(sc, expr.Sig, expr.FieldType, args)
-	}
-	return newDistSQLFunction(sc, expr.Tp, args)
+	return newDistSQLFunctionBySig(sc, expr.Sig, expr.FieldType, args)
 }
 
 func fieldTypeFromPB(ft *tipb.FieldType) *types.FieldType {
@@ -659,7 +592,7 @@ func convertUint(val []byte) (*Constant, error) {
 		return nil, errors.Errorf("invalid uint % x", val)
 	}
 	d.SetUint64(u)
-	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeLonglong)}, nil
+	return &Constant{Value: d, RetType: &types.FieldType{Tp: mysql.TypeLonglong, Flag: mysql.UnsignedFlag}}, nil
 }
 
 func convertString(val []byte) (*Constant, error) {
@@ -683,11 +616,15 @@ func convertFloat(val []byte, f32 bool) (*Constant, error) {
 }
 
 func convertDecimal(val []byte) (*Constant, error) {
-	_, dec, err := codec.DecodeDecimal(val)
+	_, dec, precision, frac, err := codec.DecodeDecimal(val)
+	var d types.Datum
+	d.SetMysqlDecimal(dec)
+	d.SetLength(precision)
+	d.SetFrac(frac)
 	if err != nil {
 		return nil, errors.Errorf("invalid decimal % x", val)
 	}
-	return &Constant{Value: dec, RetType: types.NewFieldType(mysql.TypeNewDecimal)}, nil
+	return &Constant{Value: d, RetType: types.NewFieldType(mysql.TypeNewDecimal)}, nil
 }
 
 func convertDuration(val []byte) (*Constant, error) {

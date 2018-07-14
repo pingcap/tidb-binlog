@@ -20,10 +20,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/parser/opcode"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -324,7 +324,7 @@ type SubqueryExec interface {
 	// rowCount < 0 means no limit.
 	// If the ColumnCount is 1, we will return a column result like {1, 2, 3},
 	// otherwise, we will return a table result like {{1, 1}, {2, 2}}.
-	EvalRows(ctx context.Context, rowCount int) ([]types.Datum, error)
+	EvalRows(ctx sessionctx.Context, rowCount int) ([]types.Datum, error)
 
 	// ColumnCount returns column count for the sub query.
 	ColumnCount() (int, error)
@@ -944,6 +944,8 @@ type VariableExpr struct {
 	IsGlobal bool
 	// IsSystem indicates whether this variable is a system variable in current session.
 	IsSystem bool
+	// ExplicitScope indicates whether this variable scope is set explicitly.
+	ExplicitScope bool
 	// Value is the variable value.
 	Value ExprNode
 }
@@ -969,5 +971,24 @@ func (n *VariableExpr) Accept(v Visitor) (Node, bool) {
 		return n, false
 	}
 	n.Value = node.(ExprNode)
+	return v.Leave(n)
+}
+
+// MaxValueExpr is the expression for "maxvalue" used in partition.
+type MaxValueExpr struct {
+	exprNode
+}
+
+// Format the ExprNode into a Writer.
+func (n *MaxValueExpr) Format(w io.Writer) {
+	fmt.Fprint(w, "MAXVALUE")
+}
+
+// Accept implements Node Accept interface.
+func (n *MaxValueExpr) Accept(v Visitor) (Node, bool) {
+	newNode, skipChildren := v.Enter(n)
+	if skipChildren {
+		return v.Leave(newNode)
+	}
 	return v.Leave(n)
 }
