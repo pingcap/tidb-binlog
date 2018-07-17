@@ -141,6 +141,8 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.Lock()
 	defer sp.Unlock()
 
+	sp.saveTime = time.Now()
+
 	// Init CP using metaCP's safe CP.
 	forceSave, ok, safeTS, safePoss := sp.metaCP.PopSafeCP()
 	if forceSave {
@@ -160,7 +162,6 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	}
 
 	sp.CommitTS = safeTS
-	sp.saveTime = time.Now()
 
 	b, err := json.Marshal(sp)
 	if err != nil {
