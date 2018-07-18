@@ -233,7 +233,14 @@ func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 		return extractCreateTable(createTableStmt, schema)
 	case *ast.AlterTableStmt:
 		alterTableStmt, _ := stmt.(*ast.AlterTableStmt)
-		return extractAlterTable(alterTableStmt, schema)
+		alterSQL, err := extractAlterTable(alterTableStmt, schema)
+		if err != nil {
+			return alterSQL, err
+		}
+		if len(alterSQL) == 0 {
+			return genEmptySQL(sql), nil
+		}
+		return alterSQL, nil
 	case *ast.RenameTableStmt:
 		renameTableStmt, _ := stmt.(*ast.RenameTableStmt)
 		return extractRenameTable(renameTableStmt, schema)
@@ -314,16 +321,23 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 	if stmt.Specs[0].Tp == ast.AlterTableRenameTable {
 		return makeRenameTableStmt(schema, stmt.Table, stmt.Specs[0].NewTable), nil
 	}
-	specStrs := make([]string, len(stmt.Specs))
-	for i, spec := range stmt.Specs {
+	specStrs := make([]string, 0, len(stmt.Specs))
+	allEmpty := true
+	for _, spec := range stmt.Specs {
 		specStr, err := analyzeAlterSpec(spec)
 		if err != nil {
 			return "", errors.Trace(err)
 		}
-		specStrs[i] = specStr
+		if len(specStr) != 0 {
+			specStrs = append(specStrs, specStr)
+			allEmpty = false
+		}
 	}
 
 	tableName := stmt.Table.Name.L
+	if allEmpty {
+		return "", nil
+	}
 	return fmt.Sprintf("ALTER TABLE `%s`.`%s` %s;", schema, tableName, strings.Join(specStrs, ", ")), nil
 }
 
@@ -388,7 +402,7 @@ func extractRowHandle(stmt *ast.CreateTableStmt) (colName string, explicitHandle
 func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 	switch alterSpec.Tp {
 	case ast.AlterTableOption:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableAddColumns:
 		var colDefStr = ""
 		var colPosStr = ""
@@ -407,16 +421,16 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 		}
 		return fmt.Sprintf("ADD COLUMN %s", colDefStr+colPosStr), nil
 	case ast.AlterTableAddConstraint:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableDropColumn:
 		col := alterSpec.OldColumnName.Name.L
 		return fmt.Sprintf("DROP COLUMN `%s`", col), nil
 	case ast.AlterTableDropPrimaryKey:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableDropIndex:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableDropForeignKey:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableChangeColumn:
 		oldColName := alterSpec.OldColumnName.Name.L
 		newColName := alterSpec.NewColumns[0].Name.Name.L
@@ -427,9 +441,9 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 	case ast.AlterTableModifyColumn:
 		return analyzeModifyColumn(alterSpec)
 	case ast.AlterTableAlterColumn:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	case ast.AlterTableLock:
-		return genEmptySQL(strconv.Itoa(int(alterSpec.Tp))), nil
+		return "", nil
 	default:
 		return "", errors.New("Invalid alter table spec type code: " + strconv.Itoa(int(alterSpec.Tp)))
 	}
