@@ -322,7 +322,6 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 		return makeRenameTableStmt(schema, stmt.Table, stmt.Specs[0].NewTable), nil
 	}
 	specStrs := make([]string, 0, len(stmt.Specs))
-	allEmpty := true
 	for _, spec := range stmt.Specs {
 		specStr, err := analyzeAlterSpec(spec)
 		if err != nil {
@@ -330,12 +329,11 @@ func extractAlterTable(stmt *ast.AlterTableStmt, schema string) (string, error) 
 		}
 		if len(specStr) != 0 {
 			specStrs = append(specStrs, specStr)
-			allEmpty = false
 		}
 	}
 
 	tableName := stmt.Table.Name.L
-	if allEmpty {
+	if len(specStrs) == 0 {
 		return "", nil
 	}
 	return fmt.Sprintf("ALTER TABLE `%s`.`%s` %s;", schema, tableName, strings.Join(specStrs, ", ")), nil
