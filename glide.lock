@@ -1,5 +1,5 @@
 hash: 50a6470ed0011d7b82875698130d92038b03c5940e1dcf3d37e87acb0a85ccc4
-updated: 2018-07-11T20:55:36.076094028+08:00
+updated: 2018-07-20T11:45:06.814368+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -106,7 +106,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: c90ba19bea8927552cef4560ab888231566f049d
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -185,7 +185,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: 9be84105672ba4433a3b61f1b4d7f9ff8b022293
+  version: b6ea1ea48f981d0f615a154a45eabb9dd466556d
   subpackages:
   - format
   - internal/assertion
@@ -199,7 +199,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/opentracing/opentracing-go
-  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
   subpackages:
   - ext
   - log
@@ -322,7 +322,7 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 4f029e8618f84b92a8e0fe2e1af1ff94b40c5ca2
+  version: 3d8cef8f6cb7ab458832227bd42af90b00759f13
   subpackages:
   - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
@@ -334,7 +334,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: 967789050ba94deca04a5e84cce8ad472ce313c1
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/push
@@ -365,15 +365,30 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: e54a77765aca7bbdd8e56c1c54f60579968b2dc9
+  version: 92052687f8ec598ff0da626d2909478cfd1e3a3c
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
   version: f09979ecbc725b9e6d41a297405f65e7e8804acc
+- name: github.com/syndtr/goleveldb
+  version: c4c61651e9e37fa117f53c5a906d3b63090d8445
+  subpackages:
+  - leveldb
+  - leveldb/cache
+  - leveldb/comparer
+  - leveldb/errors
+  - leveldb/filter
+  - leveldb/iterator
+  - leveldb/journal
+  - leveldb/memdb
+  - leveldb/opt
+  - leveldb/storage
+  - leveldb/table
+  - leveldb/util
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: f7e0d4744fa6d5287c53b8ac8d4f83089ce07ce8
+  version: 252d853b2a4f3cfc98bb89c3a8bb3d3aa50ed4d6
   subpackages:
   - config
   - internal/baggage
@@ -389,9 +404,10 @@ imports:
   - thrift-gen/jaeger
   - thrift-gen/sampling
   - thrift-gen/zipkincore
+  - transport
   - utils
 - name: github.com/uber/jaeger-lib
-  version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
+  version: ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -467,7 +483,7 @@ imports:
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
-  version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
+  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
   subpackages:
   - googleapis/api/annotations
   - googleapis/rpc/status
@@ -503,5 +519,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
+- name: github.com/google/gofuzz
+  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/pingcap/check
-  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
+  version: 1c287c953996ab3a0bf535dba9d53d809d3dc0b6
