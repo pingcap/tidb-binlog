@@ -488,6 +488,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
 	tpCnt := make(map[pb.MutationType]int)
+	lastSyncTime := time.Now()
 
 	clearF := func() {
 		for i := 0; i < idx; i++ {
@@ -499,6 +500,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		args = args[0:0]
 		commitTSs = commitTSs[0:0]
 		s.lastSyncTime = time.Now()
+		lastSyncTime = time.Now()
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
@@ -543,7 +545,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 
 		default:
 			now := time.Now()
-			if now.Sub(s.lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
