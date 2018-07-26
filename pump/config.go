@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -24,7 +23,6 @@ const (
 	defaultEtcdURLs                = "http://127.0.0.1:2379"
 	defaultKafkaAddrs              = "127.0.0.1:9092"
 	defaultListenAddr              = "127.0.0.1:8250"
-	defaultSocket                  = "unix:///tmp/pump.sock"
 	defautMaxKafkaSize             = 1024 * 1024 * 1024
 	defaultHeartbeatInterval       = 2
 	defaultGC                      = 7
@@ -67,7 +65,6 @@ type Config struct {
 	NodeID            string `toml:"node-id" json:"node-id"`
 	ListenAddr        string `toml:"addr" json:"addr"`
 	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
-	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion      string `toml:"kafka-version" json:"kafka-version"`
@@ -107,7 +104,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of pump node; if not specify, we will generate one from hostname and the listening port")
 	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
-	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
 	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
@@ -183,7 +179,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 	initializeSaramaGlobalConfig()
 
@@ -235,15 +230,6 @@ func (cfg *Config) validate() error {
 	}
 	if host == "0.0.0.0" {
 		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
-	}
-
-	// check socketAddr
-	urlsock, err := url.Parse(cfg.Socket)
-	if err != nil {
-		return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
-	}
-	if len(strings.Split(urlsock.Path, "/")) < 2 {
-		return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
 	}
 
 	// check EtcdEndpoints

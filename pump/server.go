@@ -144,7 +144,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		clusterID: fmt.Sprintf("%d", clusterID),
 		node:      n,
 		tcpAddr:   cfg.ListenAddr,
-		unixAddr:  cfg.Socket,
 		gs:        grpc.NewServer(grpcOpts...),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -370,15 +369,6 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
 
-	// start a UNIX listener
-	unixURL, err := url.Parse(s.unixAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
-	}
-	unixLis, err := net.Listen("unix", unixURL.Path)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
-	}
 	// start generate binlog if pump doesn't receive new binlogs
 	s.wg.Add(1)
 	go s.genForwardBinlog()
@@ -393,7 +383,7 @@ func (s *Server) Start() error {
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
-	go s.gs.Serve(unixLis)
+	go s.gs.Serve(tcpLis)
 
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
