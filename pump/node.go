@@ -57,6 +57,70 @@ type pumpNode struct {
 	heartbeatInterval time.Duration
 }
 
+var (
+	// DefaultRootPath is the root path of the keys stored in etcd.
+	DefaultRootPath = "/tidb_binlog"
+
+	// PumpNode is the name of pump.
+	PumpNode = "pump"
+
+	// DrainerNode is the name of drainer.
+	DrainerNode = "drainer"
+
+	// NodePrefix is the map (node => it's prefix in storage)
+	NodePrefix = map[string]string{
+		PumpNode:    "pumps",
+		DrainerNode: "drainers",
+	}
+)
+
+// State is the state of node.
+type State string
+
+const (
+	// Online means the node can receive request.
+	Online State = "online"
+
+	// Pausing means the node is pausing.
+	Pausing State = "pausing"
+
+	// Paused means the node is already paused.
+	Paused State = "paused"
+
+	// Closing means the node is closing, and the state will be Offline when closed.
+	Closing State = "closing"
+
+	// Offline means the node is offline, and will not provide service.
+	Offline State = "offline"
+
+	// Unknow means the node's state is unkonw.
+	Unknow State = "unknow"
+)
+
+// Status describes the status information of a tidb-binlog node in etcd.
+type NodeStatus struct {
+	// the id of node.
+	NodeID string
+
+	// the host of pump or node.
+	Host string
+
+	// the state of pump.
+	State State
+
+	// the score of node, it is report by node, calculated by node's qps, disk usage and binlog's data size.
+	// if Score is less than 0, means this node is useless. Now only used for pump.
+	Score int64
+
+	// the label of this node. Now only used for pump.
+	// pump client will only send to a pump which label is matched.
+	Label string
+
+	// UpdateTime is the last update time of node's status.
+	UpdateTime time.Time
+}
+
+/*
 // NodeStatus describes the status information of a node in etcd
 type NodeStatus struct {
 	NodeID         string
@@ -67,6 +131,7 @@ type NodeStatus struct {
 	LatestKafkaPos pb.Pos
 	OfflineTS      int64
 }
+*/
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (Node, error) {
@@ -139,7 +204,7 @@ func (p *pumpNode) Unregister(ctx context.Context) error {
 }
 
 func (p *pumpNode) Notify(ctx context.Context) error {
-	cisterns, err := p.Nodes(ctx, "cisterns")
+	drainers, err := p.Nodes(ctx, "drainers")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -147,8 +212,8 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 		return net.DialTimeout("tcp", addr, timeout)
 	})
 
-	for _, c := range cisterns {
-		if c.IsAlive {
+	for _, c := range drainers {
+		if c.State == Online {
 			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
 			if err != nil {
 				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)

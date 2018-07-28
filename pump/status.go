@@ -9,7 +9,6 @@ import (
 
 // HTTPStatus exposes current status of all pumps via HTTP
 type HTTPStatus struct {
-	BinlogPos  map[string]*LatestPos `json:"LatestBinlog"`
 	CommitTS   int64                 `json:"CommitTS"`
 	CheckPoint pb.Pos                `json:"Checkpoint"`
 	ErrMsg     string                `json:"ErrMsg"`

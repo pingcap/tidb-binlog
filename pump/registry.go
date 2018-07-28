@@ -8,15 +8,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
-
-// LatestPos is the latest position in pump
-type LatestPos struct {
-	FilePos  pb.Pos `json:"file-position"`
-	KafkaPos pb.Pos `json:"kafka-position"`
-}
 
 // EtcdRegistry wraps the reactions with etcd
 type EtcdRegistry struct {
