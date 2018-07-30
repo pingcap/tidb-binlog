@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
@@ -80,7 +82,7 @@ type Server struct {
 	clusterID string
 
 	// node maintains the status of this pump and interact with etcd registry
-	node Node
+	node node.Node
 
 	tcpAddr  string
 	unixAddr string
@@ -529,7 +531,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	statusMap := make(map[string]*NodeStatus)
+	statusMap := make(map[string]*node.Status)
 	for _, st := range status {
 		statusMap[st.NodeID] = st
 	}

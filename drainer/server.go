@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -49,6 +50,9 @@ type Server struct {
 	wg        sync.WaitGroup
 	syncer    *Syncer
 	isClosed  int32
+
+	// TODO
+	node      node.Node
 }
 
 func init() {
@@ -231,10 +235,10 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 	}()
 }
 
-func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
+func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	// must refresh node firstly
-	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id); err != nil {
+	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, s.node.NodeStatus()); err != nil {
 		errc <- errors.Trace(err)
 	}
 	s.wg.Add(1)
@@ -251,7 +255,7 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id); err != nil {
+				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, s.node.NodeStatus()); err != nil {
 					errc <- errors.Trace(err)
 				}
 			}
@@ -273,7 +277,7 @@ func (s *Server) Start() error {
 	}
 
 	// start heartbeat
-	errc := s.heartbeat(s.ctx, s.ID)
+	errc := s.heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
 			log.Errorf("send heart error %v", err)

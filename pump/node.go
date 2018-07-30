@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"sync"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -29,123 +31,20 @@ const (
 
 var nodePrefix = "pumps"
 
-// Node defines pump node
-type Node interface {
-	// ID returns the uuid representing of this pump node
-	ID() string
-	// a short ID as 8 bytes length
-	ShortID() string
-	// Register registers this pump node to Etcd
-	// creates new one if nodeID not exist, otherwise update it
-	Register(ctx context.Context) error
-	// Unregister unregisters this pump node from etcd
-	Unregister(ctx context.Context) error
-	// Heartbeat refreshes the state of this pump node in etcd periodically
-	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
-	Heartbeat(ctx context.Context) <-chan error
-	// Notify queries all living drainer from etcd, and notifies them
-	Notify(ctx context.Context) error
-	// Nodes returns all pump nodes
-	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
-}
+
 
 type pumpNode struct {
-	*EtcdRegistry
-	status *NodeStatus
+	sync.RWMutex
+	*node.EtcdRegistry
+	status *node.Status
 	//id                string
 	//host              string
 	//heartbeatTTL      int64
 	heartbeatInterval time.Duration
 }
 
-var (
-	// DefaultRootPath is the root path of the keys stored in etcd, the `2.1` is the tidb-binlog's version.
-	DefaultRootPath = "/tidb-binlog/2.1"
-
-	// PumpNode is the name of pump.
-	PumpNode = "pump"
-
-	// DrainerNode is the name of drainer.
-	DrainerNode = "drainer"
-
-	// NodePrefix is the map (node => it's prefix in storage)
-	NodePrefix = map[string]string{
-		PumpNode:    "pumps",
-		DrainerNode: "drainers",
-	}
-)
-
-// State is the state of node.
-type State string
-
-const (
-	// Online means the node can receive request.
-	Online State = "online"
-
-	// Pausing means the node is pausing.
-	Pausing State = "pausing"
-
-	// Paused means the node is already paused.
-	Paused State = "paused"
-
-	// Closing means the node is closing, and the state will be Offline when closed.
-	Closing State = "closing"
-
-	// Offline means the node is offline, and will not provide service.
-	Offline State = "offline"
-)
-
-// GetState returns a state by state name.
-func GetState(state string) (State, error) {
-	switch state {
-	case "online":
-		return Online, nil
-	case "pausing":
-		return Pausing, nil
-	case "paused":
-		return Paused, nil
-	case "closing":
-		return Closing, nil
-	case "offline":
-		return Offline, nil
-	default:
-		return Offline, errors.NotFoundf("state %s", state)
-	}
-}
-
-// Label is key/value pairs that are attached to objects
-type Label struct {
-	Labels map[string]string
-}
-
-// Status describes the status information of a tidb-binlog node in etcd.
-type NodeStatus struct {
-	// the id of node.
-	NodeID string
-
-	// the host of pump or node.
-	Host string
-
-	// the state of pump.
-	State State
-
-	// the node is alive or not.
-	IsAlive bool
-
-	// the score of node, it is report by node, calculated by node's qps, disk usage and binlog's data size.
-	// if Score is less than 0, means this node is useless. Now only used for pump.
-	Score int64
-
-	// the label of this node. Now only used for pump.
-	// pump client will only send to a pump which label is matched.
-	Label *Label
-
-	// UpdateTS is the last update ts of node's status.
-	UpdateTS int64
-}
-
 // NewPumpNode returns a pumpNode obj that initialized by server config
-func NewPumpNode(cfg *Config) (Node, error) {
+func NewPumpNode(cfg *Config) (node.Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -180,15 +79,15 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
-	status := &NodeStatus{
+	status := &node.Status{
 		NodeID:  nodeID,
 		Host:    advURL.Host,
-		State:   Online,
+		State:   node.Online,
 		IsAlive: true,
 	}
 
 	node := &pumpNode{
-		EtcdRegistry: NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		EtcdRegistry: node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		status:       status,
 		//id:                nodeID,
 		//host:              advURL.Host,
@@ -214,12 +113,18 @@ func (p *pumpNode) Register(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return p.RefreshNode(ctx, nodePrefix, p.status.NodeID)
+	return p.RefreshNode(ctx, nodePrefix, p.status)
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
 	err := p.MarkOfflineNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
 	return errors.Trace(err)
+}
+
+func (p *pumpNode) UpdateStatus(ctx context.Context, status *node.Status) {
+	p.Lock()
+	p.status = status
+	p.Unlock()
 }
 
 func (p *pumpNode) Notify(ctx context.Context) error {
@@ -232,7 +137,7 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	})
 
 	for _, c := range drainers {
-		if c.State == Online {
+		if c.State == node.Online {
 			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
 			if err != nil {
 				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
@@ -249,7 +154,11 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	return nil
 }
 
-func (p *pumpNode) NodesStatus(ctx context.Context) ([]*NodeStatus, error) {
+func (p *pumpNode) NodeStatus() *node.Status {
+	return p.status
+}
+
+func (p *pumpNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
 	return p.Nodes(ctx, nodePrefix)
 }
 
@@ -270,7 +179,10 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				return
 			case <-time.After(p.heartbeatInterval):
 				// RefreshNode would carry lastBinlogFile infomation
-				if err := p.RefreshNode(ctx, nodePrefix, p.status.NodeID); err != nil {
+				p.RLock()
+				err := p.RefreshNode(ctx, nodePrefix, p.status)
+				p.RUnlock()
+				if err != nil {
 					errc <- errors.Trace(err)
 				}
 			}

@@ -1,4 +1,4 @@
-package pump
+package node
 
 import (
 	"encoding/json"
@@ -36,7 +36,7 @@ func (r *EtcdRegistry) prefixed(p ...string) string {
 }
 
 // Node returns the nodeStatus that matchs nodeID in the etcd
-func (r *EtcdRegistry) Node(pctx context.Context, prefix, nodeID string) (*NodeStatus, error) {
+func (r *EtcdRegistry) Node(pctx context.Context, prefix, nodeID string) (*Status, error) {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
@@ -51,8 +51,8 @@ func (r *EtcdRegistry) Node(pctx context.Context, prefix, nodeID string) (*NodeS
 	return status, nil
 }
 
-// Nodes retruns all the nodeStatuses in the etcd
-func (r *EtcdRegistry) Nodes(pctx context.Context, prefix string) ([]*NodeStatus, error) {
+// Nodes retruns all the node statuses in the etcd
+func (r *EtcdRegistry) Nodes(pctx context.Context, prefix string) ([]*Status, error) {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
@@ -88,7 +88,7 @@ func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, hos
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	obj := &NodeStatus{
+	obj := &Status{
 		NodeID: nodeID,
 		Host:   host,
 		//IsOffline:      true,
@@ -100,7 +100,7 @@ func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, hos
 	log.Infof("[pump] %s mark offline information %+v", nodeID, obj)
 	objstr, err := json.Marshal(obj)
 	if err != nil {
-		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
+		return errors.Annotatef(err, "error marshal node status(%v)", obj)
 	}
 
 	key := r.prefixed(prefix, nodeID, "object")
@@ -138,13 +138,13 @@ func (r *EtcdRegistry) UpdateNode(pctx context.Context, prefix, nodeID, host str
 }
 
 func (r *EtcdRegistry) updateNode(ctx context.Context, prefix, nodeID, host string) error {
-	obj := &NodeStatus{
+	obj := &Status{
 		NodeID: nodeID,
 		Host:   host,
 	}
 	objstr, err := json.Marshal(obj)
 	if err != nil {
-		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
+		return errors.Annotatef(err, "error marshal node status(%v)", obj)
 	}
 	key := r.prefixed(prefix, nodeID, "object")
 	err = r.client.Update(ctx, key, string(objstr), 0)
@@ -152,13 +152,13 @@ func (r *EtcdRegistry) updateNode(ctx context.Context, prefix, nodeID, host stri
 }
 
 func (r *EtcdRegistry) createNode(ctx context.Context, prefix, nodeID, host string) error {
-	obj := &NodeStatus{
+	obj := &Status{
 		NodeID: nodeID,
 		Host:   host,
 	}
 	objstr, err := json.Marshal(obj)
 	if err != nil {
-		return errors.Annotatef(err, "error marshal NodeStatus(%v)", obj)
+		return errors.Annotatef(err, "error marshal node status(%v)", obj)
 	}
 	key := r.prefixed(prefix, nodeID, "object")
 	err = r.client.Create(ctx, key, string(objstr), nil)
@@ -166,39 +166,34 @@ func (r *EtcdRegistry) createNode(ctx context.Context, prefix, nodeID, host stri
 }
 
 // RefreshNode keeps the heartbeats with etcd
-func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string) error {
+func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix string, status *Status) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	key := r.prefixed(prefix, nodeID)
+	key := r.prefixed(prefix, status.NodeID)
 
-	//latestPos := &LatestPos{
-	//	FilePos:  latestFilePos,
-	//	KafkaPos: latestKafkaPos,
-	//}
-	//latestPosBytes, err := json.Marshal(latestPos)
-	//if err != nil {
-	//	return errors.Trace(err)
-	//}
+	statusBytes, err := json.Marshal(status)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	// try to touch alive state of node, update ttl
-	//err = r.client.UpdateOrCreate(ctx, aliveKey, string(latestPosBytes), ttl)
-	err := r.client.UpdateOrCreate(ctx, key, "", 0)
+	err = r.client.UpdateOrCreate(ctx, key, string(statusBytes), 0)
 	return errors.Trace(err)
 }
 
-func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
-	status := &NodeStatus{}
+func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*Status, error) {
+	status := &Status{}
 
 	if err := json.Unmarshal(node.Value, &status); err != nil {
-		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
+		return nil, errors.Annotatef(err, "error unmarshal node status with nodeID(%s)", id)
 	}
 
 	return status, nil
 }
 
-func nodesStatusFromEtcdNode(root *etcd.Node) ([]*NodeStatus, error) {
-	var statuses []*NodeStatus
+func nodesStatusFromEtcdNode(root *etcd.Node) ([]*Status, error) {
+	var statuses []*Status
 	for id, n := range root.Childs {
 		status, err := nodeStatusFromEtcdNode(id, n)
 		if err != nil {

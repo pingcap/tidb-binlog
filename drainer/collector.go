@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -39,7 +40,7 @@ type Collector struct {
 	kafkaAddrs   []string
 	kafkaVersion string
 	interval     time.Duration
-	reg          *pump.EtcdRegistry
+	reg          *node.EtcdRegistry
 	timeout      time.Duration
 	window       *DepositWindow
 	tiClient     *tikv.LockResolver
@@ -101,7 +102,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
 		kafkaAddrs:      kafkaAddrs,
 		kafkaVersion:    cfg.KafkaVersion,
-		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
 		offlines:        make(map[string]struct{}),
@@ -207,7 +208,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
-			if n.State == pump.Offline {
+			if n.State == node.Offline {
 				if n.UpdateTS <= safeTS {
 					continue
 				}
@@ -234,7 +235,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
-			if n.State == pump.Offline {
+			if n.State == node.Offline {
 				if !p.hadFinished(c.window.LoadLower()) {
 					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
 					continue
