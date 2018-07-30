@@ -82,15 +82,6 @@ type Config struct {
 	tls             *tls.Config
 }
 
-func defaultListenAddr() string {
-	defaultIP, err := util.DefaultIP()
-	if err != nil {
-		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
-	}
-	return defaultIP + ":8249"
-
-}
-
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
 
@@ -105,7 +96,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
 	}
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr(), "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8249), "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
@@ -226,13 +217,6 @@ func adjustInt(v *int, defValue int) {
 	}
 }
 
-func isValidateListenHost(host string) bool {
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
-		return false
-	}
-	return true
-}
-
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -246,7 +230,7 @@ func (cfg *Config) validate() error {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 
-	if !isValidateListenHost(host) {
+	if !util.IsValidateListenHost(host) {
 		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
 	}
 

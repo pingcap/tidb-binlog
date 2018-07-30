@@ -55,6 +55,23 @@ func DefaultIP() (ip string, err error) {
 	return
 }
 
+// DefaultListenAddr returns default listen address with appointed port.
+func DefaultListenAddr(port int32) string {
+	defaultIP, err := DefaultIP()
+	if err != nil {
+		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+	}
+	return defaultIP + ":8249"
+}
+
+// IsValidateListenHost judge the host is validate listen host or not.
+func IsValidateListenHost(host string) bool {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		return false
+	}
+	return true
+}
+
 // StdLogger implements samara.StdLogger
 type StdLogger struct {
 	prefix string
