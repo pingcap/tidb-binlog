@@ -91,10 +91,10 @@ func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, hos
 	obj := &NodeStatus{
 		NodeID:         nodeID,
 		Host:           host,
-		IsOffline:      true,
-		LatestKafkaPos: latestKafkaPos,
-		LatestFilePos:  latestFilePos,
-		OfflineTS:      latestTS,
+		//IsOffline:      true,
+		//LatestKafkaPos: latestKafkaPos,
+		//LatestFilePos:  latestFilePos,
+		//OfflineTS:      latestTS,
 	}
 
 	log.Infof("[pump] %s mark offline information %+v", nodeID, obj)
@@ -172,52 +172,28 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 
 	aliveKey := r.prefixed(prefix, nodeID, "alive")
 
-	latestPos := &LatestPos{
-		FilePos:  latestFilePos,
-		KafkaPos: latestKafkaPos,
-	}
-	latestPosBytes, err := json.Marshal(latestPos)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	//latestPos := &LatestPos{
+	//	FilePos:  latestFilePos,
+	//	KafkaPos: latestKafkaPos,
+	//}
+	//latestPosBytes, err := json.Marshal(latestPos)
+	//if err != nil {
+	//	return errors.Trace(err)
+	//}
 
 	// try to touch alive state of node, update ttl
-	err = r.client.UpdateOrCreate(ctx, aliveKey, string(latestPosBytes), ttl)
+	//err = r.client.UpdateOrCreate(ctx, aliveKey, string(latestPosBytes), ttl)
+	err := r.client.UpdateOrCreate(ctx, aliveKey, "", ttl)
 	return errors.Trace(err)
 }
 
 func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*NodeStatus, error) {
-	var (
-		isAlive       bool
-		status        = &NodeStatus{}
-		latestPos     = &LatestPos{}
-		isObjectExist bool
-	)
-	for key, n := range node.Childs {
-		switch key {
-		case "object":
-			isObjectExist = true
-			if err := json.Unmarshal(n.Value, &status); err != nil {
-				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
-			}
-		case "alive":
-			isAlive = true
-			if err := json.Unmarshal(n.Value, &latestPos); err != nil {
-				return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
-			}
-		}
+	status := &NodeStatus{}
+
+	if err := json.Unmarshal(node.Value, &status); err != nil {
+		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
 	}
 
-	if !isObjectExist {
-		log.Errorf("node %s doesn't exist", id)
-		return nil, nil
-	}
-
-	status.IsAlive = isAlive
-	if isAlive {
-		status.LatestFilePos = latestPos.FilePos
-		status.LatestKafkaPos = latestPos.KafkaPos
-	}
 	return status, nil
 }
 

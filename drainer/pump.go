@@ -410,8 +410,8 @@ func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
 	return bs
 }
 
-func (p *Pump) hadFinished(pos pb.Pos, windowLower int64) bool {
-	if ComparePos(p.latestPos, pos) >= 0 && p.latestValidCommitTS <= windowLower {
+func (p *Pump) hadFinished(windowLower int64) bool {
+	if p.latestValidCommitTS <= windowLower {
 		return true
 	}
 	return false

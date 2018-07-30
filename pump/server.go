@@ -529,14 +529,11 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	// get all pumps' latest binlog position
-	binlogPos := make(map[string]*LatestPos)
+	statusMap := make(map[string]*NodeStatus)
 	for _, st := range status {
-		binlogPos[st.NodeID] = &LatestPos{
-			FilePos:  st.LatestFilePos,
-			KafkaPos: st.LatestKafkaPos,
-		}
+		statusMap[st.NodeID] = st
 	}
+
 	// get ts from pd
 	commitTS, err := s.getTSO()
 	if err != nil {
@@ -547,7 +544,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	return &HTTPStatus{
-		BinlogPos:  binlogPos,
+		StatusMap:  statusMap,
 		CommitTS:   commitTS,
 		CheckPoint: s.cp.pos(),
 	}

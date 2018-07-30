@@ -250,7 +250,7 @@ func (cfg *Config) validate() error {
 
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, defaultListenAddr())
+	adjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)

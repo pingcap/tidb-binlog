@@ -207,8 +207,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
-			if n.IsOffline {
-				if n.OfflineTS <= safeTS {
+			if n.State == pump.Offline {
+				if n.UpdateTS <= safeTS {
 					continue
 				}
 
@@ -234,8 +234,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
-			if n.IsOffline {
-				if !p.hadFinished(n.LatestKafkaPos, c.window.LoadLower()) {
+			if n.State == pump.Offline {
+				if !p.hadFinished(c.window.LoadLower()) {
 					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
 					continue
 				}

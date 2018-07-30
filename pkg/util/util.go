@@ -61,7 +61,7 @@ func DefaultListenAddr(port int32) string {
 	if err != nil {
 		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
 	}
-	return defaultIP + ":8249"
+	return fmt.Sprintf("%s:%d", defaultIP, port)
 }
 
 // IsValidateListenHost judge the host is validate listen host or not.

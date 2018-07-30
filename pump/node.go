@@ -58,8 +58,8 @@ type pumpNode struct {
 }
 
 var (
-	// DefaultRootPath is the root path of the keys stored in etcd.
-	DefaultRootPath = "/tidb_binlog"
+	// DefaultRootPath is the root path of the keys stored in etcd, the `2.1` is the tidb-binlog's version.
+	DefaultRootPath = "/tidb-binlog/2.1"
 
 	// PumpNode is the name of pump.
 	PumpNode = "pump"
@@ -92,10 +92,30 @@ const (
 
 	// Offline means the node is offline, and will not provide service.
 	Offline State = "offline"
-
-	// Unknow means the node's state is unkonw.
-	Unknow State = "unknow"
 )
+
+// GetState returns a state by state name.
+func GetState(state string) (State, error) {
+	switch state {
+	case "online":
+		return Online, nil
+	case "pausing":
+		return Pausing, nil
+	case "paused":
+		return Paused, nil
+	case "closing":
+		return Closing, nil
+	case "offline":
+		return Offline, nil
+	default:
+		return Offline, errors.NotFoundf("state %s", state)
+	}
+}
+
+// Label is key/value pairs that are attached to objects
+type Label struct {
+	Labels map[string]string
+}
 
 // Status describes the status information of a tidb-binlog node in etcd.
 type NodeStatus struct {
@@ -108,30 +128,20 @@ type NodeStatus struct {
 	// the state of pump.
 	State State
 
+	// the node is alive or not.
+	IsAlive bool
+
 	// the score of node, it is report by node, calculated by node's qps, disk usage and binlog's data size.
 	// if Score is less than 0, means this node is useless. Now only used for pump.
 	Score int64
 
 	// the label of this node. Now only used for pump.
 	// pump client will only send to a pump which label is matched.
-	Label string
+	Label *Label
 
-	// UpdateTime is the last update time of node's status.
-	UpdateTime time.Time
+	// UpdateTS is the last update ts of node's status.
+	UpdateTS int64
 }
-
-/*
-// NodeStatus describes the status information of a node in etcd
-type NodeStatus struct {
-	NodeID         string
-	Host           string
-	IsAlive        bool
-	IsOffline      bool
-	LatestFilePos  pb.Pos
-	LatestKafkaPos pb.Pos
-	OfflineTS      int64
-}
-*/
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (Node, error) {
