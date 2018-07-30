@@ -234,7 +234,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 	errc := make(chan error, 1)
 	// must refresh node firstly
-	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id); err != nil {
 		errc <- errors.Trace(err)
 	}
 	s.wg.Add(1)
@@ -251,7 +251,7 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id); err != nil {
 					errc <- errors.Trace(err)
 				}
 			}

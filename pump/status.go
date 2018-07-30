@@ -10,9 +10,9 @@ import (
 // HTTPStatus exposes current status of all pumps via HTTP
 type HTTPStatus struct {
 	StatusMap  map[string]*NodeStatus `json:"status"`
-	CommitTS   int64      `json:"CommitTS"`
-	CheckPoint pb.Pos     `json:"Checkpoint"`
-	ErrMsg     string     `json:"ErrMsg"`
+	CommitTS   int64                  `json:"CommitTS"`
+	CheckPoint pb.Pos                 `json:"Checkpoint"`
+	ErrMsg     string                 `json:"ErrMsg"`
 }
 
 // Status implements http.ServeHTTP interface

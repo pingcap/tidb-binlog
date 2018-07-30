@@ -51,9 +51,10 @@ type Node interface {
 
 type pumpNode struct {
 	*EtcdRegistry
-	id                string
-	host              string
-	heartbeatTTL      int64
+	status *NodeStatus
+	//id                string
+	//host              string
+	//heartbeatTTL      int64
 	heartbeatInterval time.Duration
 }
 
@@ -179,37 +180,45 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
+	status := &NodeStatus{
+		NodeID:  nodeID,
+		Host:    advURL.Host,
+		State:   Online,
+		IsAlive: true,
+	}
+
 	node := &pumpNode{
-		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
-		id:                nodeID,
-		host:              advURL.Host,
+		EtcdRegistry: NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		status:       status,
+		//id:                nodeID,
+		//host:              advURL.Host,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
-		heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
+		//heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
 }
 
 func (p *pumpNode) ID() string {
-	return p.id
+	return p.status.NodeID
 }
 
 func (p *pumpNode) ShortID() string {
-	if len(p.id) <= shortIDLen {
-		return p.id
+	if len(p.status.NodeID) <= shortIDLen {
+		return p.status.NodeID
 	}
-	return p.id[0:shortIDLen]
+	return p.status.NodeID[0:shortIDLen]
 }
 
 func (p *pumpNode) Register(ctx context.Context) error {
-	err := p.RegisterNode(ctx, nodePrefix, p.id, p.host)
+	err := p.RegisterNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL)
+	return p.RefreshNode(ctx, nodePrefix, p.status.NodeID)
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.MarkOfflineNode(ctx, nodePrefix, p.id, p.host)
+	err := p.MarkOfflineNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
 	return errors.Trace(err)
 }
 
@@ -261,7 +270,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				return
 			case <-time.After(p.heartbeatInterval):
 				// RefreshNode would carry lastBinlogFile infomation
-				if err := p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL); err != nil {
+				if err := p.RefreshNode(ctx, nodePrefix, p.status.NodeID); err != nil {
 					errc <- errors.Trace(err)
 				}
 			}

@@ -89,8 +89,8 @@ func (r *EtcdRegistry) MarkOfflineNode(pctx context.Context, prefix, nodeID, hos
 	defer cancel()
 
 	obj := &NodeStatus{
-		NodeID:         nodeID,
-		Host:           host,
+		NodeID: nodeID,
+		Host:   host,
 		//IsOffline:      true,
 		//LatestKafkaPos: latestKafkaPos,
 		//LatestFilePos:  latestFilePos,
@@ -166,11 +166,11 @@ func (r *EtcdRegistry) createNode(ctx context.Context, prefix, nodeID, host stri
 }
 
 // RefreshNode keeps the heartbeats with etcd
-func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, ttl int64) error {
+func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string) error {
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	aliveKey := r.prefixed(prefix, nodeID, "alive")
+	key := r.prefixed(prefix, nodeID)
 
 	//latestPos := &LatestPos{
 	//	FilePos:  latestFilePos,
@@ -183,7 +183,7 @@ func (r *EtcdRegistry) RefreshNode(pctx context.Context, prefix, nodeID string, 
 
 	// try to touch alive state of node, update ttl
 	//err = r.client.UpdateOrCreate(ctx, aliveKey, string(latestPosBytes), ttl)
-	err := r.client.UpdateOrCreate(ctx, aliveKey, "", ttl)
+	err := r.client.UpdateOrCreate(ctx, key, "", 0)
 	return errors.Trace(err)
 }
 
