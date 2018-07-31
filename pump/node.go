@@ -30,14 +30,9 @@ const (
 
 var nodePrefix = "pumps"
 
-
-
 type pumpNode struct {
 	*node.EtcdRegistry
 	status *node.Status
-	//id                string
-	//host              string
-	//heartbeatTTL      int64
 	heartbeatInterval time.Duration
 }
 
@@ -79,7 +74,7 @@ func NewPumpNode(cfg *Config) (node.Node, error) {
 
 	status := &node.Status{
 		NodeID:  nodeID,
-		Host:    advURL.Host,
+		Addr:    advURL.Host,
 		State:   node.Online,
 		IsAlive: true,
 	}
@@ -103,18 +98,42 @@ func (p *pumpNode) ShortID() string {
 	return p.status.NodeID[0:shortIDLen]
 }
 
+/*
 func (p *pumpNode) Register(ctx context.Context) error {
-	err := p.RegisterNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
+	err := p.UpdateNode(ctx, nodePrefix, p.status.NodeID, p.status.Addr, "online")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return p.RefreshNode(ctx, nodePrefix, p.status)
+	return nil
 }
 
 func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.MarkOfflineNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
-	return errors.Trace(err)
+	return nil
 }
+*/
+
+func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
+	p.status = status
+
+	err := p.UpdateNode(ctx, nodePrefix, status)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+/*
+func (p *pumpNode) Refresh(ctx context.Context, status *Status) error {
+	p.status = status
+
+	err := p.UpdateNode(ctx, nodePrefix, status)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+
+}
+*/
 
 func (p *pumpNode) Notify(ctx context.Context) error {
 	drainers, err := p.Nodes(ctx, "drainers")
@@ -127,15 +146,15 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 
 	for _, c := range drainers {
 		if c.State == node.Online {
-			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
+			clientConn, err := grpc.Dial(c.Addr, dialerOpt, grpc.WithInsecure())
 			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
 			}
 			drainer := pb.NewCisternClient(clientConn)
 			_, err = drainer.Notify(ctx, nil)
 			clientConn.Close()
 			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
 			}
 		}
 	}
@@ -168,10 +187,12 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				return
 			case <-time.After(p.heartbeatInterval):
 				// RefreshNode would carry lastBinlogFile infomation
+				/*
 				err := p.RefreshNode(ctx, nodePrefix, p.status)
 				if err != nil {
 					errc <- errors.Trace(err)
 				}
+				*/
 			}
 		}
 	}()

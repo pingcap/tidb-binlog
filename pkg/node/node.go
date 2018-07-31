@@ -13,9 +13,11 @@ type Node interface {
 	ShortID() string
 	// Register registers this pump node to Etcd
 	// creates new one if nodeID not exist, otherwise update it
-	Register(ctx context.Context) error
+	//Register(ctx context.Context) error
 	// Unregister unregisters this pump node from etcd
-	Unregister(ctx context.Context) error
+	//Unregister(ctx context.Context) error
+	// Refresh refreshes the pump's status to Etcd.
+	//Refresh(ctx context.Context) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
 	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
 	Heartbeat(ctx context.Context) <-chan error
@@ -23,6 +25,8 @@ type Node interface {
 	Notify(ctx context.Context) error
 	// NodeStatus returns this node's status
 	NodeStatus() *Status
+	// UpdateStatus update node's status.
+	RefreshStatus(ctx context.Context, status *Status) error
 	// NodesStatus returns all pump nodes
 	NodesStatus(ctx context.Context) ([]*Status, error)
 }
@@ -93,7 +97,7 @@ type Status struct {
 	NodeID string `json:"nodeId"`
 
 	// the host of pump or node.
-	Host string `json:"host"`
+	Addr string `json:"host"`
 
 	// the state of pump.
 	State State `json:"state"`
@@ -111,4 +115,19 @@ type Status struct {
 
 	// UpdateTS is the last update ts of node's status.
 	UpdateTS int64 `json:"updateTS"`
+}
+
+func NewStatus(nodeID, addr, state string, score int64, ts int64) (*Status, error) {
+	s, err := GetState(state)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Status{
+		NodeID:   nodeID,
+		Addr:     addr,
+		State:    s,
+		Score:    score,
+		UpdateTS: ts,
+	}, nil
 }

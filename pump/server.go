@@ -335,14 +335,20 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	if err := s.node.Register(s.ctx); err != nil {
+	nodeStatus := s.node.NodeStatus()
+	status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, "online", 0, 0)
+	err := s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, unregister this node
-		if err := s.node.Unregister(context.Background()); err != nil {
+		nodeStatus := s.node.NodeStatus()
+		status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, "paused", 0, 0)
+		err := s.node.RefreshStatus(context.Background(), status)
+		if err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
@@ -575,24 +581,30 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	})
 
 	nodeID := mux.Vars(r)["nodeID"]
-	state := mux.Vars(r)["action"]
+	action := mux.Vars(r)["action"]
 
 	if nodeID != s.node.NodeStatus().NodeID {
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
 		return
 	}
 
-	switch state {
+	if s.node.NodeStatus().State != "online" {
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		return
+	}
+	switch action {
 	case "pause":
+		s.node.NodeStatus().State = node.Pausing
 		// TODO: pump's state will be paused
 	case "close":
+		s.node.NodeStatus().State = node.Closing
 		// TODO: pump's state will be closing
 	default:
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide state %s", state))
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
 		return
 	}
 
-	rd.JSON(w, http.StatusOK, fmt.Sprintf("change state to %s success", state))
+	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
 	return
 }
 
@@ -615,13 +627,17 @@ func (s *Server) getTSO() (int64, error) {
 }
 
 // Close gracefully releases resource of pump server
-func (s *Server) Close() {
+func (s *Server) Close(action string) {
 	// stop the gRPC server
 	s.gs.GracefulStop()
 	log.Info("grpc is stopped")
+	var (
+		ts  int64
+		err error
+	)
 
 	// update latest for offline ts in unregister process
-	if _, err := s.getTSO(); err != nil {
+	if ts, err = s.getTSO(); err != nil {
 		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
 	}
 
@@ -630,8 +646,19 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
-	// unregister this node
-	if err := s.node.Unregister(context.Background()); err != nil {
+	// update this node
+	state := "paused"
+	switch action {
+	case "pause":
+		// do nothing
+	case "close":
+		state = "offline"
+	}
+	nodeStatus := s.node.NodeStatus()
+	status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, state, 0, ts)
+	err = s.node.RefreshStatus(context.Background(), status)
+	//if err := s.node.Unregister(context.Background()); err != nil {
+	if err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	log.Info(s.node.ID, " has unregister")
