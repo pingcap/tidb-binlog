@@ -304,3 +304,7 @@ testImports:
   version: e2704e165165ec55d062f5919b4b29494e9fa790
 - package: github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto
   version: 347725a566f4a7d897aa0d6addb710c77395c640
+- package: github.com/google/gofuzz
+  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
+- package: github.com/syndtr/goleveldb/leveldb
+  version: c4c61651e9e37fa117f53c5a906d3b63090d8445
