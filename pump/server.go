@@ -20,13 +20,14 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
+	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"github.com/unrolled/render"
 )
 
 var pullBinlogInterval = 50 * time.Millisecond
@@ -393,9 +394,13 @@ func (s *Server) Start() error {
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
 
-	http.HandleFunc("/status", s.Status)
-	http.HandleFunc("/drainers", s.AllDrainers)
-	http.Handle("/metrics", prometheus.Handler())
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.Status).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router.HandleFunc("/drainers", s.AllDrainers).Methods("PUT")
+	router.Handle("/metrics", prometheus.Handler())
+	http.Handle("/", router)
+	
 	go http.Serve(httpL, nil)
 
 	err = m.Serve()
@@ -523,6 +528,7 @@ func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 
 // PumpStatus returns all pumps' status.
 func (s *Server) PumpStatus() *HTTPStatus {
+
 	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {
 		log.Errorf("get pumps' status error %v", err)
@@ -544,12 +550,50 @@ func (s *Server) PumpStatus() *HTTPStatus {
 			ErrMsg: err.Error(),
 		}
 	}
-
+	
+	var cp binlog.Pos
+	if s.cp != nil {
+		cp = s.cp.pos()
+	}
 	return &HTTPStatus{
 		StatusMap:  statusMap,
 		CommitTS:   commitTS,
-		CheckPoint: s.cp.pos(),
+		CheckPoint: cp,
 	}
+}
+
+// ChangeStateReq is the request struct for change state.
+type ChangeStateReq struct {
+	NodeID string `json:"nodeID"`
+	State  string `json:"state"`
+}
+
+// ApplyAction change the pump's state.
+func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	nodeID := mux.Vars(r)["nodeID"]
+	state := mux.Vars(r)["action"]
+
+	if nodeID != s.node.NodeStatus().NodeID {
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		return
+	}
+
+	switch state {
+	case "pause":
+		// TODO: pump's state will be paused
+	case "close":
+		// TODO: pump's state will be closing
+	default:
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide state %s", state))
+		return
+	}
+
+	rd.JSON(w, http.StatusOK, fmt.Sprintf("change state to %s success", state))
+	return
 }
 
 func (s *Server) getTSO() (int64, error) {

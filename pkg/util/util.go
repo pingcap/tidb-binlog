@@ -1,10 +1,10 @@
 package util
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/types"

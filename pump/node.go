@@ -1,7 +1,6 @@
 package pump
 
 import (
-	"sync"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -34,7 +33,6 @@ var nodePrefix = "pumps"
 
 
 type pumpNode struct {
-	sync.RWMutex
 	*node.EtcdRegistry
 	status *node.Status
 	//id                string
@@ -89,10 +87,7 @@ func NewPumpNode(cfg *Config) (node.Node, error) {
 	node := &pumpNode{
 		EtcdRegistry: node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		status:       status,
-		//id:                nodeID,
-		//host:              advURL.Host,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
-		//heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
 }
@@ -119,12 +114,6 @@ func (p *pumpNode) Register(ctx context.Context) error {
 func (p *pumpNode) Unregister(ctx context.Context) error {
 	err := p.MarkOfflineNode(ctx, nodePrefix, p.status.NodeID, p.status.Host)
 	return errors.Trace(err)
-}
-
-func (p *pumpNode) UpdateStatus(ctx context.Context, status *node.Status) {
-	p.Lock()
-	p.status = status
-	p.Unlock()
 }
 
 func (p *pumpNode) Notify(ctx context.Context) error {
@@ -179,9 +168,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				return
 			case <-time.After(p.heartbeatInterval):
 				// RefreshNode would carry lastBinlogFile infomation
-				p.RLock()
 				err := p.RefreshNode(ctx, nodePrefix, p.status)
-				p.RUnlock()
 				if err != nil {
 					errc <- errors.Trace(err)
 				}
