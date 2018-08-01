@@ -349,6 +349,7 @@ func (vlog *valueLog) sortedFids() []uint32 {
 	return ret
 }
 
+// currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's ok to hold the vlog.filesLock lock
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
 	vlog.filesLock.Lock()
 	defer vlog.filesLock.Unlock()

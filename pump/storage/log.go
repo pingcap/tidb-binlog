@@ -189,6 +189,8 @@ func (lf *logFile) finalize() error {
 		return errors.Trace(err)
 	}
 
+	lf.end = true
+
 	return errors.Trace(lf.sync())
 }
 

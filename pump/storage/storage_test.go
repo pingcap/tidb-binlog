@@ -209,6 +209,6 @@ func TestNoSpace(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
-	// TODO test the case we query tikv to know weather a txt a commit
+	// TODO test the case we query tikv to know weather a txn a commit
 	// is there a fake or mock kv.Storage and tikv.LockResolver to easy the test?
 }
