@@ -8,18 +8,18 @@ import (
 
 var tsKeyPrefix = []byte("ts:")
 
-func isTsKey(key []byte) bool {
+func isTSKey(key []byte) bool {
 	return bytes.HasPrefix(key, tsKeyPrefix)
 }
 
-func decodeTs(key []byte) int64 {
+func decodeTSKey(key []byte) int64 {
 	// check bound
 	_ = key[len(tsKeyPrefix)+8-1]
 
 	return int64(binary.BigEndian.Uint64(key[len(tsKeyPrefix):]))
 }
 
-func encodeTs(ts int64) []byte {
+func encodeTSKey(ts int64) []byte {
 	buf := make([]byte, 8+len(tsKeyPrefix))
 	copy(buf, tsKeyPrefix)
 

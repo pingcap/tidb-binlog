@@ -78,8 +78,8 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 			// write P binlog
 			binlog := new(pb.Binlog)
 			binlog.Tp = pb.BinlogType_Prewrite
-			startTs := getTS()
-			binlog.StartTs = startTs
+			startTS := getTS()
+			binlog.StartTs = startTS
 			binlog.PrewriteValue = prewriteValue
 
 			err := append.WriteBinlog(binlog)
@@ -90,7 +90,7 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 			// write C binlog
 			binlog = new(pb.Binlog)
 			binlog.Tp = pb.BinlogType_Commit
-			binlog.StartTs = startTs
+			binlog.StartTs = startTS
 			binlog.CommitTs = getTS()
 			err = append.WriteBinlog(binlog)
 			if err != nil {
@@ -143,8 +143,8 @@ func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync b
 			// write P binlog
 			binlog := new(pb.Binlog)
 			binlog.Tp = pb.BinlogType_Prewrite
-			startTs := getTS()
-			binlog.StartTs = startTs
+			startTS := getTS()
+			binlog.StartTs = startTS
 			binlog.PrewriteValue = prewriteValue
 
 			err := append.WriteBinlog(binlog)
@@ -155,7 +155,7 @@ func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync b
 			// write C binlog
 			binlog = new(pb.Binlog)
 			binlog.Tp = pb.BinlogType_Commit
-			binlog.StartTs = startTs
+			binlog.StartTs = startTS
 			binlog.CommitTs = getTS()
 			err = append.WriteBinlog(binlog)
 			if err != nil {

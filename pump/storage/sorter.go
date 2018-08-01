@@ -68,8 +68,8 @@ type sortItem struct {
 type sorter struct {
 	maxTSItemCB func(item sortItem)
 	// if resolver return true, we can skip the P binlog, don't need to wait for the C binlog
-	resolver func(startTs int64) bool
-	// save the startTs of txt which we need to wait for the C binlog
+	resolver func(startTS int64) bool
+	// save the startTS of txt which we need to wait for the C binlog
 	waitStarts map[int64]struct{}
 
 	lock     sync.Mutex
@@ -91,7 +91,7 @@ func newSorter(fn func(item sortItem)) *sorter {
 	return sorter
 }
 
-func (s *sorter) setResolver(resolver func(startTs int64) bool) {
+func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 	s.resolver = resolver
 }
 

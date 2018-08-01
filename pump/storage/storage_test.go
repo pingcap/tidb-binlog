@@ -123,7 +123,7 @@ func TestDoGCTS(t *testing.T) {
 	var i int64
 	var n int64 = 1 << 11
 	for i = 1; i < n; i++ {
-		err := append.db.Put(encodeTs(i), value, nil)
+		err := append.db.Put(encodeTSKey(i), value, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +133,7 @@ func TestDoGCTS(t *testing.T) {
 	append.doGCTS(gcTS)
 
 	for i = 1; i < n; i++ {
-		_, err := append.db.Get(encodeTs(i), nil)
+		_, err := append.db.Get(encodeTSKey(i), nil)
 		if i <= gcTS {
 			if err != leveldb.ErrNotFound {
 				t.Errorf("after gc still found ts: %v", i)

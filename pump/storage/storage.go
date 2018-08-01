@@ -133,7 +133,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 	sorter := newSorter(func(item sortItem) {
 		log.Debugf("sorter get item: %+v", item)
 
-		tsKey := encodeTs(item.commit)
+		tsKey := encodeTSKey(item.commit)
 		pointer, err := db.Get(tsKey, nil)
 		if err != nil {
 			panic(err)
@@ -209,9 +209,9 @@ func (a *Append) updateStatus() {
 		case <-a.close:
 			return
 		case <-updateLatest:
-			ts, err := a.queryLatestTsFromPD()
+			ts, err := a.queryLatestTSFromPD()
 			if err != nil {
-				log.Errorf("queryLatestTsFromPD err: %v", err)
+				log.Errorf("queryLatestTSFromPD err: %v", err)
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
@@ -219,7 +219,7 @@ func (a *Append) updateStatus() {
 	}
 }
 
-func (a *Append) queryLatestTsFromPD() (int64, error) {
+func (a *Append) queryLatestTSFromPD() (int64, error) {
 	version, err := a.tiStore.CurrentVersion()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -228,17 +228,17 @@ func (a *Append) queryLatestTsFromPD() (int64, error) {
 	return int64(version.Ver), nil
 }
 
-func (a *Append) resolve(startTs int64) bool {
-	latestTs := atomic.LoadInt64(&a.latestTS)
+func (a *Append) resolve(startTS int64) bool {
+	latestTS := atomic.LoadInt64(&a.latestTS)
 
-	startSecond := oracle.ExtractPhysical(uint64(startTs)) / int64(time.Second/time.Millisecond)
-	maxSecond := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
+	startSecond := oracle.ExtractPhysical(uint64(startTS)) / int64(time.Second/time.Millisecond)
+	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
 
 	if maxSecond-startSecond <= maxTxnTimeoutSecond {
 		return false
 	}
 
-	pbinlog, err := a.readBinlogByTs(startTs)
+	pbinlog, err := a.readBinlogByTS(startTS)
 	if err != nil {
 		log.Error(err)
 		return false
@@ -274,7 +274,7 @@ func (a *Append) resolve(startTs int64) bool {
 				panic(err)
 			}
 
-			err = a.db.Put(encodeTs(req.ts()), pointer, nil)
+			err = a.db.Put(encodeTSKey(req.ts()), pointer, nil)
 			if err != nil {
 				log.Error(err)
 				return false
@@ -286,14 +286,14 @@ func (a *Append) resolve(startTs int64) bool {
 		return true
 	}
 
-	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTs)
+	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTS)
 	return false
 }
 
-func (a *Append) readBinlogByTs(ts int64) (*pb.Binlog, error) {
+func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
 	var vp valuePointer
 
-	vpData, err := a.db.Get(encodeTs(ts), nil)
+	vpData, err := a.db.Get(encodeTSKey(ts), nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -375,8 +375,8 @@ func (a *Append) GCTS(ts int64) {
 
 func (a *Append) doGCTS(ts int64) {
 	irange := &util.Range{
-		Start: encodeTs(0),
-		Limit: encodeTs(ts + 1),
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
 	}
 	iter := a.db.NewIterator(irange, nil)
 	batch := new(leveldb.Batch)
@@ -459,7 +459,7 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 				panic(err)
 			}
 
-			batch.Put(encodeTs(req.ts()), pointer)
+			batch.Put(encodeTSKey(req.ts()), pointer)
 			batch.Put(headPointerKey, pointer)
 
 			for {
@@ -587,7 +587,7 @@ func (a *Append) savePointer(key []byte, vp valuePointer) error {
 func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 	var vp valuePointer
 
-	vpData, err := a.db.Get(encodeTs(cbinlog.StartTs), nil)
+	vpData, err := a.db.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
 		errors.Trace(err)
 	}
@@ -627,8 +627,8 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 	values := make(chan []byte, 5)
 
 	irange := &util.Range{
-		Start: encodeTs(0),
-		Limit: encodeTs(math.MaxInt64),
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(math.MaxInt64),
 	}
 
 	go func() {
@@ -637,13 +637,13 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		for {
 			startTS := last + 1
 
-			irange.Start = encodeTs(startTS)
-			irange.Limit = encodeTs(atomic.LoadInt64(&a.maxCommitTS) + 1)
+			irange.Start = encodeTSKey(startTS)
+			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
 			iter := a.db.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
-			for ok := iter.Seek(encodeTs(startTS)); ok; ok = iter.Next() {
+			for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
@@ -651,7 +651,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					panic(err)
 				}
 
-				log.Debugf("get ts: %d, pointer: %v", decodeTs(iter.Key()), vp)
+				log.Debugf("get ts: %d, pointer: %v", decodeTSKey(iter.Key()), vp)
 
 				value, err := a.vlog.readValue(vp)
 				if err != nil {
@@ -700,7 +700,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					return
 				}
 
-				last = decodeTs(iter.Key())
+				last = decodeTSKey(iter.Key())
 			}
 			iter.Release()
 
