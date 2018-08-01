@@ -21,9 +21,7 @@ func decodeTs(key []byte) int64 {
 
 func encodeTs(ts int64) []byte {
 	buf := make([]byte, 8+len(tsKeyPrefix))
-	for i, c := range tsKeyPrefix {
-		buf[i] = c
-	}
+	copy(buf, tsKeyPrefix)
 
 	b := buf[len(tsKeyPrefix):]
 

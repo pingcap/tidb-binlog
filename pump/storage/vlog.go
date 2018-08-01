@@ -161,6 +161,7 @@ func (vlog *valueLog) openOrCreateFiles() error {
 	}
 
 	// open all files at start, or we can lazyly open it to quick start time
+	// the vlog file name <fid>.vlog will be like "000001.vlog"
 	for _, file := range files {
 		if file.IsDir() {
 			continue
@@ -190,7 +191,7 @@ func (vlog *valueLog) openOrCreateFiles() error {
 		}
 	}
 
-	// no files, thne create the first file with fid = 0
+	// no files, then create the first file with fid = 0
 	if len(vlog.filesMap) == 0 {
 		_, err := vlog.createLogFile(0)
 		if err != nil {

@@ -46,7 +46,7 @@ type Storage interface {
 
 var _ Storage = &Append{}
 
-// Append inplement the Storage interface
+// Append implement the Storage interface
 type Append struct {
 	dir  string
 	vlog *valueLog
@@ -70,12 +70,12 @@ type Append struct {
 	wg    sync.WaitGroup
 }
 
-// NewAppend return a instance of Append
+// NewAppend returns a instance of Append
 func NewAppend(dir string, options *Options) (append *Append, err error) {
 	return NewAppendWithResolver(dir, options, nil, nil)
 }
 
-// NewAppendWithResolver return a instance of Append
+// NewAppendWithResolver returns a instance of Append
 // if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txt is committed
 func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
@@ -331,10 +331,10 @@ func (a *Append) Close() error {
 	close(a.close)
 	close(a.writeCh)
 
-	a.sorter.close()
-
+	// wait for all binlog write to vlog -> KV -> sorter
 	a.wg.Wait()
 
+	a.sorter.close()
 	err := a.db.Close()
 	if err != nil {
 		log.Error(err)
@@ -342,7 +342,7 @@ func (a *Append) Close() error {
 	return err
 }
 
-// GCTS inplement Storage.GCTS
+// GCTS implement Storage.GCTS
 func (a *Append) GCTS(ts int64) {
 	a.gcTS = ts
 	a.saveGCTSToDB(ts)
@@ -368,7 +368,6 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	if batch.Len() > 0 {
-		a.db.Write(batch, nil)
 		err := a.db.Write(batch, nil)
 		if err != nil {
 			log.Error(err)
@@ -378,7 +377,7 @@ func (a *Append) doGCTS(ts int64) {
 	a.vlog.gcTS(ts)
 }
 
-// WriteBinlog inplement Storage.WriteBinlog
+// WriteBinlog implement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 	return errors.Trace(a.writeBinlog(binlog).err)
 }
