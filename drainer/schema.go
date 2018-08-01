@@ -1,8 +1,8 @@
 package drainer
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/model"
@@ -36,7 +36,7 @@ type TableName struct {
 }
 
 // String returns the string for TableName.
-func (t *TableName)String() string {
+func (t *TableName) String() string {
 	return getTableName(t.Schema, t.Table)
 }
 
@@ -327,7 +327,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 		delete(s.tableNameToID, tableName.String())
 	}
 	delete(s.tableIDToName, id)
-	
+
 	return table.Name.O, nil
 }
 
