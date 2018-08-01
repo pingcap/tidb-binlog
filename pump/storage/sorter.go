@@ -13,7 +13,7 @@ import (
 // a test helper, generate n pair item
 func newItemGenerator(txnNum int32) <-chan sortItem {
 	items := make(chan sortItem)
-	oracle := newOracle()
+	oracle := newMemOracle()
 
 	threadNum := 10
 	var maxLatency int64 = 10
@@ -67,7 +67,10 @@ type sortItem struct {
 
 type sorter struct {
 	maxTSItemCB func(item sortItem)
-	waitStarts  map[int64]struct{}
+	// if resolver return true, we can skip the P binlog, don't need to wait for the C binlog
+	resolver func(startTs int64) bool
+	// save the startTs of txt which we need to wait for the C binlog
+	waitStarts map[int64]struct{}
 
 	lock     sync.Mutex
 	cond     *sync.Cond
@@ -86,6 +89,10 @@ func newSorter(fn func(item sortItem)) *sorter {
 	go sorter.run()
 
 	return sorter
+}
+
+func (s *sorter) setResolver(resolver func(startTs int64) bool) {
+	s.resolver = resolver
 }
 
 func (s *sorter) pushTSItem(item sortItem) {
@@ -124,6 +131,9 @@ func (s *sorter) run() {
 			for {
 				_, ok := s.waitStarts[item.start]
 				if ok == false {
+					break
+				}
+				if s.resolver != nil && s.resolver(item.start) {
 					break
 				}
 				s.cond.Wait()

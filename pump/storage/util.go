@@ -37,7 +37,7 @@ type memOracle struct {
 	ts int64
 }
 
-func newOracle() *memOracle {
+func newMemOracle() *memOracle {
 	return &memOracle{
 		ts: 0,
 	}

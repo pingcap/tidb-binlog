@@ -18,8 +18,6 @@ func init() {
 	log.SetLevel(log.LOG_LEVEL_DEBUG)
 }
 
-var oracle = newOracle()
-
 type Log interface {
 	Fatal(args ...interface{})
 	Log(args ...interface{})
@@ -208,4 +206,9 @@ func TestReadWriteGCTS(t *testing.T) {
 
 func TestNoSpace(t *testing.T) {
 	// TODO test when no space left
+}
+
+func TestResolve(t *testing.T) {
+	// TODO test the case we query tikv to know weather a txt a commit
+	// is there a fake or mock kv.Storage and tikv.LockResolver to easy the test?
 }

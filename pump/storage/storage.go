@@ -12,9 +12,16 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+)
+
+const (
+	maxTxnTimeoutSecond int64 = 600
 )
 
 var (
@@ -44,8 +51,11 @@ type Append struct {
 	dir  string
 	vlog *valueLog
 
-	db     *leveldb.DB
-	sorter *sorter
+	db             *leveldb.DB
+	sorter         *sorter
+	tiStore        kv.Storage
+	tiLockResolver *tikv.LockResolver
+	latestTS       int64
 
 	gcTS          int64
 	maxCommitTS   int64
@@ -55,11 +65,19 @@ type Append struct {
 	writeCh chan *request
 
 	options *Options
-	wg      sync.WaitGroup
+
+	close chan struct{}
+	wg    sync.WaitGroup
 }
 
 // NewAppend return a instance of Append
 func NewAppend(dir string, options *Options) (append *Append, err error) {
+	return NewAppendWithResolver(dir, options, nil, nil)
+}
+
+// NewAppendWithResolver return a instance of Append
+// if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txt is committed
+func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
 	}
@@ -84,11 +102,15 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 
 	writeCh := make(chan *request, 1<<10)
 	append = &Append{
-		dir:     dir,
-		vlog:    vlog,
-		db:      db,
-		writeCh: writeCh,
-		options: options,
+		dir:            dir,
+		vlog:           vlog,
+		db:             db,
+		writeCh:        writeCh,
+		options:        options,
+		tiStore:        tiStore,
+		tiLockResolver: tiLockResolver,
+
+		close: make(chan struct{}),
 	}
 
 	append.gcTS = append.readGCTSFromDB()
@@ -118,6 +140,10 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 
 		atomic.StoreInt64(&append.maxCommitTS, item.commit)
 	})
+
+	if tiStore != nil {
+		sorter.setResolver(append.resolve)
+	}
 
 	append.sorter = sorter
 
@@ -150,7 +176,130 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 		return nil, errors.Trace(err)
 	}
 
+	go append.updateStatus()
+
 	return
+}
+
+func (a *Append) updateStatus() {
+	a.wg.Add(1)
+	defer a.wg.Done()
+
+	var updateLatest <-chan time.Time
+	if a.tiStore != nil {
+		updateLatest = time.Tick(time.Second)
+	}
+	for {
+		select {
+		case <-a.close:
+			return
+		case <-updateLatest:
+			ts, err := a.queryLatestTsFromPD()
+			if err != nil {
+				log.Errorf("queryLatestTsFromPD err: %v", err)
+			} else {
+				atomic.StoreInt64(&a.latestTS, ts)
+			}
+		}
+	}
+}
+
+func (a *Append) queryLatestTsFromPD() (int64, error) {
+	version, err := a.tiStore.CurrentVersion()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return int64(version.Ver), nil
+}
+
+func (a *Append) resolve(startTs int64) bool {
+	latestTs := atomic.LoadInt64(&a.latestTS)
+
+	startSecond := oracle.ExtractPhysical(uint64(startTs)) / int64(time.Second/time.Millisecond)
+	maxSecond := oracle.ExtractPhysical(uint64(latestTs)) / int64(time.Second/time.Millisecond)
+
+	if maxSecond-startSecond <= maxTxnTimeoutSecond {
+		return false
+	}
+
+	pbinlog, err := a.readBinlogByTs(startTs)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	if pbinlog.GetDdlJobId() == 0 {
+		primaryKey := pbinlog.GetPrewriteKey()
+		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
+		if err != nil {
+			log.Error(err)
+			return false
+		}
+
+		if status.IsCommitted() {
+			// write the commit binlog myself
+			cbinlog := new(pb.Binlog)
+			cbinlog.Tp = pb.BinlogType_Commit
+			cbinlog.StartTs = pbinlog.StartTs
+			cbinlog.CommitTs = int64(status.CommitTS())
+
+			req := a.writeBinlog(cbinlog)
+			if req.err != nil {
+				log.Error(req.err)
+				return false
+			}
+
+			// when writeBinlog return success, the pointer will be write to kv async,
+			// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
+			// we update maxCommitTS
+			// write the ts -> pointer to KV here to make sure it.
+			pointer, err := req.valuePointer.MarshalBinary()
+			if err != nil {
+				panic(err)
+			}
+
+			err = a.db.Put(encodeTs(req.ts()), pointer, nil)
+			if err != nil {
+				log.Error(err)
+				return false
+			}
+
+		} else { // rollback
+			// we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+		}
+		return true
+	}
+
+	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTs)
+	return false
+}
+
+func (a *Append) readBinlogByTs(ts int64) (*pb.Binlog, error) {
+	var vp valuePointer
+
+	vpData, err := a.db.Get(encodeTs(ts), nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	err = vp.UnmarshalBinary(vpData)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	pvalue, err := a.vlog.readValue(vp)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	binlog := new(pb.Binlog)
+	err = binlog.Unmarshal(pvalue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return binlog, nil
 }
 
 // if the key not exist, return 0, or panic on err
@@ -179,6 +328,7 @@ func (a *Append) saveGCTSToDB(ts int64) error {
 
 // Close release resource of Append
 func (a *Append) Close() error {
+	close(a.close)
 	close(a.writeCh)
 
 	a.sorter.close()
@@ -230,9 +380,15 @@ func (a *Append) doGCTS(ts int64) {
 
 // WriteBinlog inplement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
+	return errors.Trace(a.writeBinlog(binlog).err)
+}
+
+func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 	payload, err := binlog.Marshal()
 	if err != nil {
-		return err
+		return &request{
+			err: errors.Trace(err),
+		}
 	}
 
 	request := new(request)
@@ -246,7 +402,7 @@ func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 
 	request.wg.Wait()
 
-	return errors.Trace(request.err)
+	return request
 }
 
 func (a *Append) writeToSorter(reqs chan *request) {
