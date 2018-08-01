@@ -157,11 +157,6 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 	return
 }
 
-func (lf *logFile) sync() error {
-	return lf.fd.Sync()
-	// return syscall.Fdatasync(int(lf.fd.Fd()))
-}
-
 func (lf *logFile) updateMaxTS(ts int64) {
 	if ts > lf.maxTS {
 		lf.maxTS = ts
