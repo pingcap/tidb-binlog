@@ -29,7 +29,7 @@ import (
 var waitTime = 3 * time.Second
 var maxTxnTimeout int64 = 600
 var heartbeatTTL int64 = 60
-var nodePrefix = "cisterns"
+var nodePrefix = "pumps"
 var heartbeatInterval = 10 * time.Second
 var clusterID uint64
 var pdReconnTimes = 30
@@ -39,6 +39,7 @@ var maxMsgSize = 1024 * 1024 * 1024
 // and maintains the runtime status
 type Server struct {
 	ID        string
+	host      string
 	cfg       *Config
 	window    *DepositWindow
 	collector *Collector
@@ -238,9 +239,12 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	// must refresh node firstly
-	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, s.node.NodeStatus()); err != nil {
+	status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+	if err != nil {
 		errc <- errors.Trace(err)
 	}
+	
 	s.wg.Add(1)
 	go func() {
 		defer func() {
@@ -255,7 +259,9 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, s.node.NodeStatus()); err != nil {
+				status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+				err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+				if err != nil {
 					errc <- errors.Trace(err)
 				}
 			}
@@ -271,7 +277,9 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
 	}
-	err = s.collector.reg.RegisterNode(s.ctx, nodePrefix, s.ID, advURL.Host)
+	s.host = advURL.Host
+	status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+	err = s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -336,7 +344,8 @@ func (s *Server) Close() {
 	}
 
 	// unregister drainer
-	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
+	status, _ := node.NewStatus(s.ID, s.host, "offline", 0, 0)
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
 	}
