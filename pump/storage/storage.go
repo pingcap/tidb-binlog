@@ -113,10 +113,22 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		close: make(chan struct{}),
 	}
 
-	append.gcTS = append.readGCTSFromDB()
-	append.maxCommitTS = append.readInt64OrPanic(maxCommitTSKey)
-	append.headPointer = append.readPointerOrPanic(headPointerKey)
-	append.handlePointer = append.readPointerOrPanic(handlePointerKey)
+	append.gcTS, err = append.readGCTSFromDB()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	append.headPointer, err = append.readPointer(headPointerKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	append.handlePointer, err = append.readPointer(handlePointerKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	sorter := newSorter(func(item sortItem) {
 		log.Debugf("sorter get item: %+v", item)
@@ -134,8 +146,11 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 
 		batch.Put(handlePointerKey, pointer)
 		err = db.Write(&batch, nil)
+		// extremely case write fail when no disk space at this time, it's saft to don't save the maxCommitTS to DB
+		// because we can recalculate it when restart, so just log and ignore it
+		// better just panic?
 		if err != nil {
-			panic(err)
+			log.Error(err)
 		}
 
 		atomic.StoreInt64(&append.maxCommitTS, item.commit)
@@ -302,21 +317,21 @@ func (a *Append) readBinlogByTs(ts int64) (*pb.Binlog, error) {
 	return binlog, nil
 }
 
-// if the key not exist, return 0, or panic on err
-func (a *Append) readInt64OrPanic(key []byte) int64 {
+// if the key not exist, return 0, nil
+func (a *Append) readInt64(key []byte) (int64, error) {
 	value, err := a.db.Get(gcTSKey, nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
-			return 0
+			return 0, nil
 		}
-		panic("unreachable err: " + err.Error())
+		return 0, errors.Trace(err)
 	}
 
-	return int64(binary.LittleEndian.Uint64(value))
+	return int64(binary.LittleEndian.Uint64(value)), nil
 }
 
-func (a *Append) readGCTSFromDB() int64 {
-	return a.readInt64OrPanic(gcTSKey)
+func (a *Append) readGCTSFromDB() (int64, error) {
+	return a.readInt64(gcTSKey)
 }
 
 func (a *Append) saveGCTSToDB(ts int64) error {
@@ -324,6 +339,15 @@ func (a *Append) saveGCTSToDB(ts int64) error {
 	binary.LittleEndian.PutUint64(value, uint64(ts))
 
 	return a.db.Put(gcTSKey, value, nil)
+}
+
+func (a *Append) isClosed() bool {
+	select {
+	case <-a.close:
+		return true
+	default:
+		return false
+	}
 }
 
 // Close release resource of Append
@@ -438,14 +462,24 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 			batch.Put(encodeTs(req.ts()), pointer)
 			batch.Put(headPointerKey, pointer)
 
-			err = a.db.Write(&batch, nil)
-			batch.Reset()
+			for {
+				err = a.db.Write(&batch, nil)
+				batch.Reset()
 
-			if err != nil {
-				panic(err)
+				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
+				// we just retry of quit when Append is closed
+				if err != nil {
+					log.Error(err)
+					if a.isClosed() {
+						return
+					}
+					time.Sleep(time.Second)
+					continue
+				}
+
+				done <- req
+				break
 			}
-
-			done <- req
 		}
 	}()
 
@@ -518,22 +552,23 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	return done
 }
 
-func (a *Append) readPointerOrPanic(key []byte) valuePointer {
+func (a *Append) readPointer(key []byte) (valuePointer, error) {
 	var vp valuePointer
 	value, err := a.db.Get(key, nil)
 	if err != nil {
 		// return zero value when not found
 		if err == leveldb.ErrNotFound {
-			return vp
+			return vp, nil
 		}
-		panic("unreachable err: " + err.Error())
+
+		return vp, errors.Trace(err)
 	}
 	err = vp.UnmarshalBinary(value)
 	if err != nil {
-		panic("unreachable err: " + err.Error())
+		return vp, errors.Trace(err)
 	}
 
-	return vp
+	return vp, nil
 }
 
 func (a *Append) savePointer(key []byte, vp valuePointer) error {

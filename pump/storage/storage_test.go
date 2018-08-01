@@ -154,7 +154,7 @@ func TestReadWritePointer(t *testing.T) {
 	var key = []byte("testK")
 
 	var readVP valuePointer
-	readVP = append.readPointerOrPanic(key)
+	readVP, _ = append.readPointer(key)
 	if readVP != vp {
 		t.Fatal("wrong vp: ", readVP)
 	}
@@ -167,7 +167,7 @@ func TestReadWritePointer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readVP = append.readPointerOrPanic(key)
+	readVP, _ = append.readPointer(key)
 	if readVP != vp {
 		t.Fatal("wrong vp: ", readVP)
 	}
@@ -177,7 +177,7 @@ func TestReadWriteGCTS(t *testing.T) {
 	append := newAppend(t)
 	defer os.RemoveAll(append.dir)
 
-	ts := append.readGCTSFromDB()
+	ts, _ := append.readGCTSFromDB()
 	if ts != 0 {
 		t.Fatalf("get: %v, want: %v", ts, 0)
 	}
@@ -187,7 +187,7 @@ func TestReadWriteGCTS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts = append.readGCTSFromDB()
+	ts, _ = append.readGCTSFromDB()
 	if ts != 100 {
 		t.Fatalf("get: %v, want: %v", ts, 0)
 	}
