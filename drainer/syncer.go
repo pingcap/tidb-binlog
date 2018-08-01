@@ -298,14 +298,16 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		_, err := s.DropTable(job.TableID)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
+		}
+
+		// truncate ddl will drop the table and then create a new one. 
+		// the tableID is the new table's ID, so can't drop table by tableID.
+		err := s.DropTableByName(schema.Name.O, table.Name.O)
+		if err != nil {
+			return "", "", "", errors.Trace(err)
 		}
 
 		err = s.CreateTable(schema, table)

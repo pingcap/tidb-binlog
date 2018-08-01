@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"encoding/json"
 
 	"github.com/juju/errors"
@@ -14,7 +15,8 @@ const implicitColID = -1
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
-	tableIDToName  map[int64]TableName
+	tableIDToName  map[int64]*TableName
+	tableNameToID  map[string]int64
 	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
@@ -31,6 +33,11 @@ type Schema struct {
 type TableName struct {
 	Schema string `toml:"db-name" json:"db-name"`
 	Table  string `toml:"tbl-name" json:"tbl-name"`
+}
+
+// String returns the string for TableName.
+func (t *TableName)String() string {
+	return getTableName(t.Schema, t.Table)
 }
 
 // NewSchema returns the Schema object
@@ -51,6 +58,7 @@ func (s *Schema) String() string {
 	mp := map[string]interface{}{
 		"tableIDToName":  s.tableIDToName,
 		"schemaNameToID": s.schemaNameToID,
+		"tableNameToID":  s.tableNameToID,
 		// "schemas":           s.schemas,
 		// "tables":            s.tables,
 		"ignoreSchema":      s.ignoreSchema,
@@ -65,7 +73,8 @@ func (s *Schema) String() string {
 
 // reconstructSchema reconstruct the schema infomations by history jobs
 func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[string]struct{}) error {
-	s.tableIDToName = make(map[int64]TableName)
+	s.tableIDToName = make(map[int64]*TableName)
+	s.tableNameToID = make(map[string]int64)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*model.TableInfo)
@@ -277,7 +286,11 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 
 	for _, table := range schema.Tables {
 		delete(s.tables, table.ID)
+		if tableName, ok := s.tableIDToName[table.ID]; ok {
+			delete(s.tableNameToID, tableName.String())
+		}
 		delete(s.tableIDToName, table.ID)
+
 	}
 
 	delete(s.schemas, id)
@@ -310,8 +323,23 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	}
 
 	delete(s.tables, id)
+	if tableName, ok := s.tableIDToName[id]; ok {
+		delete(s.tableNameToID, tableName.String())
+	}
 	delete(s.tableIDToName, id)
+	
 	return table.Name.O, nil
+}
+
+// DropTableByName deletes table by name.
+func (s *Schema) DropTableByName(schemaName, tableName string) error {
+	tableId, ok := s.tableNameToID[getTableName(schemaName, tableName)]
+	if !ok {
+		return errors.NotFoundf("table %s.%s", schemaName, tableName)
+	}
+
+	_, err := s.DropTable(tableId)
+	return err
 }
 
 // CreateTable creates new TableInfo
@@ -327,7 +355,9 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
-	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+	tableName := &TableName{Schema: schema.Name.O, Table: table.Name.O}
+	s.tableIDToName[table.ID] = tableName
+	s.tableNameToID[tableName.String()] = table.ID
 
 	return nil
 }
@@ -377,4 +407,8 @@ func addImplicitColumn(table *model.TableInfo) {
 		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
 	}
 	table.Indices = []*model.IndexInfo{newIndex}
+}
+
+func getTableName(schemaName, tableName string) string {
+	return fmt.Sprintf("%s:%s", schemaName, tableName)
 }
