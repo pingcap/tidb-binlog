@@ -123,7 +123,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	var i int64
 	var n int64 = 1 << 11
 	for i = 1; i < n; i++ {
-		err := append.db.Put(encodeTSKey(i), value, nil)
+		err := append.metadata.Put(encodeTSKey(i), value, nil)
 		c.Assert(err, check.IsNil)
 	}
 
@@ -131,7 +131,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	append.doGCTS(gcTS)
 
 	for i = 1; i < n; i++ {
-		_, err := append.db.Get(encodeTSKey(i), nil)
+		_, err := append.metadata.Get(encodeTSKey(i), nil)
 		if i <= gcTS {
 			c.Assert(err, check.Equals, leveldb.ErrNotFound, check.Commentf("after gc still found ts: %v", i))
 		} else {

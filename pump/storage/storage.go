@@ -51,7 +51,7 @@ type Append struct {
 	dir  string
 	vlog *valueLog
 
-	db             *leveldb.DB
+	metadata       *leveldb.DB
 	sorter         *sorter
 	tiStore        kv.Storage
 	tiLockResolver *tikv.LockResolver
@@ -95,7 +95,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		return nil, errors.Trace(err)
 	}
 
-	db, err := leveldb.OpenFile(kvDir, nil)
+	metadata, err := leveldb.OpenFile(kvDir, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -104,7 +104,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 	append = &Append{
 		dir:            dir,
 		vlog:           vlog,
-		db:             db,
+		metadata:       metadata,
 		writeCh:        writeCh,
 		options:        options,
 		tiStore:        tiStore,
@@ -141,7 +141,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		}
 
 		tsKey := encodeTSKey(item.commit)
-		pointer, err := db.Get(tsKey, nil)
+		pointer, err := metadata.Get(tsKey, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -152,7 +152,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		batch.Put(maxCommitTSKey, maxCommitTS)
 
 		batch.Put(handlePointerKey, pointer)
-		err = db.Write(&batch, nil)
+		err = metadata.Write(&batch, nil)
 		// extremely case write fail when no disk space at this time, it's saft to don't save the maxCommitTS to DB
 		// because we can recalculate it when restart, so just log and ignore it
 		// better just panic?
@@ -281,7 +281,7 @@ func (a *Append) resolve(startTS int64) bool {
 				panic(err)
 			}
 
-			err = a.db.Put(encodeTSKey(req.ts()), pointer, nil)
+			err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
 			if err != nil {
 				log.Error(err)
 				return false
@@ -300,7 +300,7 @@ func (a *Append) resolve(startTS int64) bool {
 func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
 	var vp valuePointer
 
-	vpData, err := a.db.Get(encodeTSKey(ts), nil)
+	vpData, err := a.metadata.Get(encodeTSKey(ts), nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -326,7 +326,7 @@ func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
 
 // if the key not exist, return 0, nil
 func (a *Append) readInt64(key []byte) (int64, error) {
-	value, err := a.db.Get(gcTSKey, nil)
+	value, err := a.metadata.Get(gcTSKey, nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return 0, nil
@@ -345,7 +345,7 @@ func (a *Append) saveGCTSToDB(ts int64) error {
 	var value = make([]byte, 8)
 	binary.LittleEndian.PutUint64(value, uint64(ts))
 
-	return a.db.Put(gcTSKey, value, nil)
+	return a.metadata.Put(gcTSKey, value, nil)
 }
 
 func (a *Append) isClosed() bool {
@@ -366,7 +366,7 @@ func (a *Append) Close() error {
 	a.wg.Wait()
 
 	a.sorter.close()
-	err := a.db.Close()
+	err := a.metadata.Close()
 	if err != nil {
 		log.Error(err)
 	}
@@ -385,12 +385,12 @@ func (a *Append) doGCTS(ts int64) {
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
 	}
-	iter := a.db.NewIterator(irange, nil)
+	iter := a.metadata.NewIterator(irange, nil)
 	batch := new(leveldb.Batch)
 	for iter.Next() {
 		batch.Delete(iter.Key())
 		if batch.Len() == 1024 {
-			err := a.db.Write(batch, nil)
+			err := a.metadata.Write(batch, nil)
 			if err != nil {
 				log.Error(err)
 			}
@@ -399,7 +399,7 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	if batch.Len() > 0 {
-		err := a.db.Write(batch, nil)
+		err := a.metadata.Write(batch, nil)
 		if err != nil {
 			log.Error(err)
 		}
@@ -470,7 +470,7 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 			batch.Put(headPointerKey, pointer)
 
 			for {
-				err = a.db.Write(&batch, nil)
+				err = a.metadata.Write(&batch, nil)
 				batch.Reset()
 
 				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
@@ -562,7 +562,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 
 func (a *Append) readPointer(key []byte) (valuePointer, error) {
 	var vp valuePointer
-	value, err := a.db.Get(key, nil)
+	value, err := a.metadata.Get(key, nil)
 	if err != nil {
 		// return zero value when not found
 		if err == leveldb.ErrNotFound {
@@ -584,7 +584,7 @@ func (a *Append) savePointer(key []byte, vp valuePointer) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = a.db.Put(key, value, nil)
+	err = a.metadata.Put(key, value, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -595,7 +595,7 @@ func (a *Append) savePointer(key []byte, vp valuePointer) error {
 func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 	var vp valuePointer
 
-	vpData, err := a.db.Get(encodeTSKey(cbinlog.StartTs), nil)
+	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
 		errors.Trace(err)
 	}
@@ -647,7 +647,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 			irange.Start = encodeTSKey(startTS)
 			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
-			iter := a.db.NewIterator(irange, nil)
+			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
