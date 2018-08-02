@@ -53,7 +53,7 @@ type Server struct {
 	isClosed  int32
 
 	// TODO
-	node      node.Node
+	node node.Node
 }
 
 func init() {
@@ -244,7 +244,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	if err != nil {
 		errc <- errors.Trace(err)
 	}
-	
+
 	s.wg.Add(1)
 	go func() {
 		defer func() {

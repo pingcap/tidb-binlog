@@ -92,8 +92,6 @@ func (r *EtcdRegistry) UpdateNode(pctx context.Context, prefix string, status *S
 	}
 }
 
-
-
 func (r *EtcdRegistry) checkNodeExists(ctx context.Context, prefix, nodeID string) (bool, error) {
 	_, err := r.client.Get(ctx, r.prefixed(prefix, nodeID))
 	if err != nil {

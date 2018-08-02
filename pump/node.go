@@ -15,8 +15,9 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -32,8 +33,10 @@ var nodePrefix = "pumps"
 
 type pumpNode struct {
 	*node.EtcdRegistry
-	status *node.Status
+	status            *node.Status
 	heartbeatInterval time.Duration
+	lastUpdateTs      int64
+	lastUpdateTime    time.Time
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
@@ -80,8 +83,8 @@ func NewPumpNode(cfg *Config) (node.Node, error) {
 	}
 
 	node := &pumpNode{
-		EtcdRegistry: node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
-		status:       status,
+		EtcdRegistry:      node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		status:            status,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
 	}
 	return node, nil
@@ -98,22 +101,12 @@ func (p *pumpNode) ShortID() string {
 	return p.status.NodeID[0:shortIDLen]
 }
 
-/*
-func (p *pumpNode) Register(ctx context.Context) error {
-	err := p.UpdateNode(ctx, nodePrefix, p.status.NodeID, p.status.Addr, "online")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (p *pumpNode) Unregister(ctx context.Context) error {
-	return nil
-}
-*/
-
 func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
 	p.status = status
+	if p.status.UpdateTS != 0 {
+		p.lastUpdateTs = p.status.UpdateTS
+		p.lastUpdateTime = time.Now()
+	}
 
 	err := p.UpdateNode(ctx, nodePrefix, status)
 	if err != nil {
@@ -121,19 +114,6 @@ func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error
 	}
 	return nil
 }
-
-/*
-func (p *pumpNode) Refresh(ctx context.Context, status *Status) error {
-	p.status = status
-
-	err := p.UpdateNode(ctx, nodePrefix, status)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-
-}
-*/
 
 func (p *pumpNode) Notify(ctx context.Context) error {
 	drainers, err := p.Nodes(ctx, "drainers")
@@ -186,17 +166,21 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
-				// RefreshNode would carry lastBinlogFile infomation
-				/*
-				err := p.RefreshNode(ctx, nodePrefix, p.status)
+				p.updateTS()
+				err := p.UpdateNode(ctx, nodePrefix, p.status)
 				if err != nil {
 					errc <- errors.Trace(err)
 				}
-				*/
 			}
 		}
 	}()
 	return errc
+}
+
+func (p *pumpNode) updateTS() {
+	if p.lastUpdateTs != 0 {
+		p.status.UpdateTS = util.GetApproachTs(p.lastUpdateTs, p.lastUpdateTime)
+	}
 }
 
 // readLocalNodeID reads nodeID from a local file

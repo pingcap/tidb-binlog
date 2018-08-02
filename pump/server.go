@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
@@ -23,11 +24,10 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
-	"github.com/gorilla/mux"
+	"github.com/unrolled/render"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"github.com/unrolled/render"
 )
 
 var pullBinlogInterval = 50 * time.Millisecond
@@ -335,19 +335,25 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	nodeStatus := s.node.NodeStatus()
-	status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, "online", 0, 0)
-	err := s.node.RefreshStatus(context.Background(), status)
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	status, _ := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, "online", 0, ts)
+	err = s.node.RefreshStatus(context.Background(), status)
 	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
-		// if fail, unregister this node
-		nodeStatus := s.node.NodeStatus()
-		status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, "paused", 0, 0)
-		err := s.node.RefreshStatus(context.Background(), status)
+		// if fail, refresh this node's state to paused
+		ts, err := s.getTSO()
+		if err != nil {
+			return errors.Annotate(err, "fail to get tso from pd")
+		}
+		status, _ := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, "paused", 0, ts)
+		err = s.node.RefreshStatus(context.Background(), status)
 		if err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
@@ -406,7 +412,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("PUT")
 	router.Handle("/metrics", prometheus.Handler())
 	http.Handle("/", router)
-	
+
 	go http.Serve(httpL, nil)
 
 	err = m.Serve()
@@ -556,7 +562,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 			ErrMsg: err.Error(),
 		}
 	}
-	
+
 	var cp binlog.Pos
 	if s.cp != nil {
 		cp = s.cp.pos()
@@ -657,7 +663,6 @@ func (s *Server) Close(action string) {
 	nodeStatus := s.node.NodeStatus()
 	status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, state, 0, ts)
 	err = s.node.RefreshStatus(context.Background(), status)
-	//if err := s.node.Unregister(context.Background()); err != nil {
 	if err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}

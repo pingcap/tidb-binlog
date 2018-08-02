@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -13,6 +14,12 @@ import (
 // TsToTimestamp translate ts to timestamp
 func TsToTimestamp(ts int64) int64 {
 	return ts >> 18 / 1000
+}
+
+// GetApproachTs get a approach ts by ts and time
+func GetApproachTs(ts int64, tm time.Time) int64 {
+	second := int64(time.Since(tm).Seconds())
+	return ts + (second*1000)<<18
 }
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
