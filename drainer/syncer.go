@@ -303,11 +303,15 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		// truncate ddl will drop the table and then create a new one.
-		// and the table id will be changed, drop table by name is better.
-		err := s.DropTableByName(schema.Name.O, table.Name.O)
+		_, err := s.DropTable(job.TableID)
 		if err != nil {
-			return "", "", "", errors.Trace(err)
+			log.Warnf("drop table error %v", errors.Trace(err))
+
+			// try to drop table by table's name.
+			err := s.DropTableByName(schema.Name.O, table.Name.O)
+			if err != nil {
+				return "", "", "", errors.Trace(err)
+			}
 		}
 
 		err = s.CreateTable(schema, table)
