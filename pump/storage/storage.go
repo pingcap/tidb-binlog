@@ -503,6 +503,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				for _, req := range reqs {
 					req.err = err
 				}
+				return
 			}
 
 			for _, req := range reqs {
