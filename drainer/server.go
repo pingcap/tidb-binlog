@@ -390,6 +390,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// commitStatus commit the node's last status to pd when close the server.
 func (s *Server) commitStatus() {
 	// update this node
 	var state string

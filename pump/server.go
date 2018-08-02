@@ -625,11 +625,12 @@ func (s *Server) getTSO() (int64, error) {
 	return ts, nil
 }
 
+// commitStatus commit the node's last status to pd when close the server.
 func (s *Server) commitStatus() {
 	// update this node
 	var state string
 	switch s.node.NodeStatus().State {
-	case node.Pausing:
+	case node.Pausing, node.Online:
 		state = node.Paused
 	case node.Closing:
 		state = node.Offline
