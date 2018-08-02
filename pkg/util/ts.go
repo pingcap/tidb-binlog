@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	slowDist      = 30 * time.Millisecond
+	slowDist               = 30 * time.Millisecond
 	physicalShiftBits uint = 18
 )
 

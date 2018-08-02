@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	maxRetry          = 12
-	retryInterval     = 5 * time.Second
+	maxRetry      = 12
+	retryInterval = 5 * time.Second
 )
 
 // AtomicBool is bool type that support atomic operator

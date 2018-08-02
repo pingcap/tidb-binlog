@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/errors"
@@ -32,6 +33,7 @@ const (
 var nodePrefix = "pumps"
 
 type pumpNode struct {
+	sync.RWMutex
 	*node.EtcdRegistry
 	status            *node.Status
 	heartbeatInterval time.Duration
@@ -51,7 +53,7 @@ func NewPumpNode(cfg *Config) (node.Node, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdDialTimeout, etcd.DefaultRootPath, cfg.tls)
+	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdDialTimeout, node.DefaultRootPath, cfg.tls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -104,10 +106,15 @@ func (p *pumpNode) ShortID() string {
 }
 
 func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
+	p.Lock()
+	defer p.Unlock()
+
 	p.status = status
 	if p.status.UpdateTS != 0 {
 		p.latestTS = p.status.UpdateTS
 		p.latestTime = time.Now()
+	} else {
+		p.updateTS()
 	}
 
 	err := p.UpdateNode(ctx, nodePrefix, status)
@@ -156,9 +163,6 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
 		defer func() {
-			if err := p.Close(); err != nil {
-				errc <- errors.Trace(err)
-			}
 			close(errc)
 			log.Info("Heartbeat goroutine exited")
 		}()
@@ -168,11 +172,13 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
+				p.Lock()
 				p.updateTS()
 				err := p.UpdateNode(ctx, nodePrefix, p.status)
 				if err != nil {
 					errc <- errors.Trace(err)
 				}
+				p.Unlock()
 			}
 		}
 	}()
@@ -181,6 +187,10 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 
 func (p *pumpNode) updateTS() {
 	p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
+}
+
+func (p *pumpNode) Quit() error {
+	return errors.Trace(p.Close())
 }
 
 // readLocalNodeID reads nodeID from a local file

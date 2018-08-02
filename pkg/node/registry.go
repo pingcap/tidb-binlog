@@ -82,12 +82,7 @@ func (r *EtcdRegistry) UpdateNode(pctx context.Context, prefix string, status *S
 		log.Warnf("node %s dosen't exist!", status.NodeID)
 		return r.createNode(ctx, prefix, status)
 	} else {
-		//status, err := r.Node(ctx, prefix, nodeID)
-		//if err != nil {
-		//	return errors.Trace(err)
-		//}
 		// found it, update status infomation of the node
-		//status.State = state
 		return r.updateNode(ctx, prefix, status)
 	}
 }

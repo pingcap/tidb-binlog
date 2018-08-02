@@ -48,7 +48,7 @@ func main() {
 		sig := <-sc
 		log.Infof("got signal [%d] to exit.", sig)
 		wg.Add(1)
-		p.Close("pause")
+		p.Close()
 		log.Info("pump is closed")
 		wg.Done()
 	}()

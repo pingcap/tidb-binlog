@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
@@ -23,19 +25,20 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
+	"github.com/unrolled/render"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
 var (
-	waitTime = 3 * time.Second
-	maxTxnTimeout int64 = 600
-	heartbeatTTL int64 = 60
-	nodePrefix = "pumps"
-	heartbeatInterval = 10 * time.Second
-	clusterID uint64
-	pdReconnTimes = 30
-	maxMsgSize = 1024 * 1024 * 1024
+	waitTime                = 3 * time.Second
+	maxTxnTimeout     int64 = 600
+	heartbeatTTL      int64 = 60
+	nodePrefix              = "drainers"
+	heartbeatInterval       = 10 * time.Second
+	clusterID         uint64
+	pdReconnTimes     = 30
+	maxMsgSize        = 1024 * 1024 * 1024
 
 	// latestTS and latestTime is used for get approach ts
 	latestTS   int64 = 0
@@ -58,6 +61,8 @@ type Server struct {
 	wg        sync.WaitGroup
 	syncer    *Syncer
 	isClosed  int32
+
+	state string
 }
 
 func init() {
@@ -93,7 +98,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	latestTS = ts
 	latestTime = time.Now()
-	
+
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
@@ -135,6 +140,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:       ctx,
 		cancel:    cancel,
 		syncer:    syncer,
+		state:     node.Online,
 	}, nil
 }
 
@@ -251,7 +257,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	// must refresh node firstly
-	status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		errc <- errors.Trace(err)
@@ -271,7 +277,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
+				status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
 				err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 				if err != nil {
 					errc <- errors.Trace(err)
@@ -290,7 +296,7 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
 	}
 	s.host = advURL.Host
-	status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
 	err = s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
@@ -335,8 +341,12 @@ func (s *Server) Start() error {
 	binlog.RegisterCisternServer(s.gs, s)
 	go s.gs.Serve(grpcL)
 
-	http.HandleFunc("/status", s.collector.Status)
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())
+
 	go http.Serve(httpL, nil)
 
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
@@ -344,6 +354,60 @@ func (s *Server) Start() error {
 	}
 
 	return nil
+}
+
+// ApplyAction change the pump's state, now can be pause or close.
+func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	nodeID := mux.Vars(r)["nodeID"]
+	action := mux.Vars(r)["action"]
+
+	if nodeID != s.ID {
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		return
+	}
+
+	if s.state != "online" {
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.state, action))
+		return
+	}
+
+	switch action {
+	case "pause":
+		s.state = node.Pausing
+	case "close":
+		s.state = node.Closing
+	default:
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
+		return
+	}
+
+	go s.Close()
+	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
+	return
+}
+
+func (s *Server) commitStatus() {
+	// update this node
+	var state string
+	switch s.state {
+	case node.Pausing, node.Online:
+		state = node.Paused
+	case node.Closing:
+		state = node.Offline
+	}
+
+	// update drainer node's status
+	status := node.NewStatus(s.ID, s.host, state, 0, util.GetApproachTS(latestTS, latestTime))
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
+	}
+
+	log.Infof("%s has update status to %s", s.ID, state)
 }
 
 // Close stops all goroutines started by drainer server gracefully
@@ -355,12 +419,7 @@ func (s *Server) Close() {
 		return
 	}
 
-	// unregister drainer
-	status, _ := node.NewStatus(s.ID, s.host, "offline", 0, util.GetApproachTS(latestTS, latestTime))
-	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
-	}
+	s.commitStatus()
 
 	// notify all goroutines to exit
 	s.cancel()

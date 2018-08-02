@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -100,6 +101,8 @@ type Server struct {
 	cfg           *Config
 
 	cp *checkPoint
+
+	isClosed int32
 }
 
 func init() {
@@ -340,7 +343,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotate(err, "fail to get tso from pd")
 	}
-	status, _ := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, "online", 0, ts)
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, ts)
 	err = s.node.RefreshStatus(context.Background(), status)
 	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
@@ -349,11 +352,7 @@ func (s *Server) Start() error {
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, refresh this node's state to paused
-		ts, err := s.getTSO()
-		if err != nil {
-			return errors.Annotate(err, "fail to get tso from pd")
-		}
-		status, _ := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, "paused", 0, ts)
+		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, 0)
 		err = s.node.RefreshStatus(context.Background(), status)
 		if err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
@@ -411,8 +410,8 @@ func (s *Server) Start() error {
 	router.HandleFunc("/status", s.Status).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("PUT")
-	router.Handle("/metrics", prometheus.Handler())
 	http.Handle("/", router)
+	http.Handle("/metrics", prometheus.Handler())
 
 	go http.Serve(httpL, nil)
 
@@ -581,7 +580,7 @@ type ChangeStateReq struct {
 	State  string `json:"state"`
 }
 
-// ApplyAction change the pump's state.
+// ApplyAction change the pump's state, now can be pause or close.
 func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	rd := render.New(render.Options{
 		IndentJSON: true,
@@ -599,18 +598,18 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
 		return
 	}
+
 	switch action {
 	case "pause":
 		s.node.NodeStatus().State = node.Pausing
-		// TODO: pump's state will be paused
 	case "close":
 		s.node.NodeStatus().State = node.Closing
-		// TODO: pump's state will be closing
 	default:
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
 		return
 	}
 
+	go s.Close()
 	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
 	return
 }
@@ -626,19 +625,29 @@ func (s *Server) getTSO() (int64, error) {
 	return ts, nil
 }
 
-// Close gracefully releases resource of pump server
-func (s *Server) Close(action string) {
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
-	var (
-		ts  int64
-		err error
-	)
+func (s *Server) commitStatus() {
+	// update this node
+	var state string
+	switch s.node.NodeStatus().State {
+	case node.Pausing:
+		state = node.Paused
+	case node.Closing:
+		state = node.Offline
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, 0)
+	err := s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
+		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
+	}
+	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)
+}
 
-	// update latest for offline ts in unregister process
-	if ts, err = s.getTSO(); err != nil {
-		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
+// Close gracefully releases resource of pump server
+func (s *Server) Close() {
+	log.Info("begin to close drainer server")
+	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+		log.Debug("server had closed")
+		return
 	}
 
 	// notify other goroutines to exit
@@ -646,21 +655,6 @@ func (s *Server) Close(action string) {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
-	// update this node
-	state := "paused"
-	switch action {
-	case "pause":
-		// do nothing
-	case "close":
-		state = "offline"
-	}
-	nodeStatus := s.node.NodeStatus()
-	status, _ := node.NewStatus(nodeStatus.NodeID, nodeStatus.Addr, state, 0, ts)
-	err = s.node.RefreshStatus(context.Background(), status)
-	if err != nil {
-		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
-	}
-	log.Info(s.node.ID, " has unregister")
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
@@ -674,4 +668,13 @@ func (s *Server) Close(action string) {
 			log.Errorf("close binlogger error %v", err)
 		}
 	}
+
+	s.commitStatus()
+	if err := s.node.Quit(); err != nil {
+		log.Errorf("close pump node error %s", errors.Trace(err))
+	}
+
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
 }
