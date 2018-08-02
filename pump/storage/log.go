@@ -275,8 +275,8 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 		if err != nil {
 			return err
 		}
-		offset += r.recordLength()
 		err = fn(valuePointer{Fid: lf.fid, Offset: offset}, r)
+		offset += r.recordLength()
 		if err != nil {
 			return err
 		}

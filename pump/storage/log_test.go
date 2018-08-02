@@ -57,12 +57,16 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	}
 
 	var readRecords = make([]*Record, len(records))
+	// save to check weather the call back valuePointer'offset is right
+	var recordOffsets = make([]int64, len(records))
 
 	// read it back by specify offset and check if it's equal
 	var offset int64
 	for i := range records {
 		readRecords[i], err = lf.readRecord(offset)
 		c.Assert(err, check.IsNil)
+
+		recordOffsets[i] = offset
 
 		c.Assert(readRecords[i].payload, check.DeepEquals, records[i].payload)
 		offset += readRecords[i].recordLength()
@@ -72,6 +76,7 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	idx := 0
 	lf.scan(0, func(vp valuePointer, r *Record) error {
 		c.Assert(r.payload, check.DeepEquals, records[idx].payload)
+		c.Assert(recordOffsets[idx], check.Equals, vp.Offset)
 		idx++
 
 		return nil

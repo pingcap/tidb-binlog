@@ -71,6 +71,28 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 
 	append, err = NewAppend(append.dir, append.options)
 	c.Assert(err, check.IsNil)
+
+	// populate some data and close open back to check the status
+	populateBinlog(c, append, 128, 1)
+	time.Sleep(time.Second * 3)
+
+	gcTS := append.gcTS
+	maxCommitTS := append.maxCommitTS
+	headPointer := append.headPointer
+	handlePointer := append.handlePointer
+
+	c.Log(gcTS, maxCommitTS, headPointer, handlePointer)
+
+	err = append.Close()
+	c.Assert(err, check.IsNil)
+
+	append, err = NewAppend(append.dir, append.options)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(gcTS, check.Equals, append.gcTS)
+	c.Assert(maxCommitTS, check.Equals, append.maxCommitTS)
+	c.Assert(headPointer, check.Equals, append.headPointer)
+	c.Assert(handlePointer, check.Equals, append.handlePointer)
 }
 
 func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
@@ -87,32 +109,44 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 
 	populateBinlog(c, appendStorage, prewriteValueSize, binlogNum)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	values := appendStorage.PullCommitBinlog(ctx, 0)
-
-	// pull the binlogs back and check sorted
-	var binlogs []*pb.Binlog
-PullLoop:
-	for {
-		select {
-		case value := <-values:
-			getBinlog := new(pb.Binlog)
-			err := getBinlog.Unmarshal(value)
+	for i := 0; i < 2; i++ {
+		// close and open the check again
+		if i == 1 {
+			err := appendStorage.Close()
 			c.Assert(err, check.IsNil)
-			binlogs = append(binlogs, getBinlog)
-			if len(binlogs) == binlogNum {
-				break PullLoop
-			}
-		case <-time.After(time.Second * 5):
-			c.Fatal("get value timeout")
-		}
-	}
 
-	// check commitTS increasing
-	for i := 1; i < len(binlogs); i++ {
-		c.Assert(binlogs[i].CommitTs, check.Greater, binlogs[i-1].CommitTs)
+			appendStorage, err = NewAppend(appendStorage.dir, appendStorage.options)
+			c.Assert(err, check.IsNil)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		values := appendStorage.PullCommitBinlog(ctx, 0)
+
+		// pull the binlogs back and check sorted
+		var binlogs []*pb.Binlog
+	PullLoop:
+		for {
+			select {
+			case value := <-values:
+				getBinlog := new(pb.Binlog)
+				err := getBinlog.Unmarshal(value)
+				c.Assert(err, check.IsNil)
+				binlogs = append(binlogs, getBinlog)
+				if len(binlogs) == binlogNum {
+					break PullLoop
+				}
+			case <-time.After(time.Second * 5):
+				c.Fatal("get value timeout")
+			}
+		}
+
+		// check commitTS increasing
+		for i := 1; i < len(binlogs); i++ {
+			c.Assert(binlogs[i].CommitTs, check.Greater, binlogs[i-1].CommitTs)
+		}
+
+		cancel()
 	}
-	cancel()
 }
 
 func (as *AppendSuit) TestDoGCTS(c *check.C) {

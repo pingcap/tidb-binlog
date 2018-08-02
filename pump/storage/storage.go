@@ -25,10 +25,15 @@ const (
 )
 
 var (
-	gcTSKey          = []byte("!binlog!gcts")
-	maxCommitTSKey   = []byte("!binlog!maxCommitTS")
+	// save gcTS, the max TS we have gc, for binlog not greater than gcTS, we can delete it from storage
+	gcTSKey = []byte("!binlog!gcts")
+	// save maxCommitTS, we can get binlog in range [gcTS, maxCommitTS]  from PullCommitBinlog
+	maxCommitTSKey = []byte("!binlog!maxCommitTS")
+	// save the valuePointer we should start push binlog item to sorter when restart
 	handlePointerKey = []byte("!binlog!handlePointer")
-	headPointerKey   = []byte("!binlog!headPointer")
+	// save valuePointer headPointer, for binlog in vlog not after headPointer, we have save it in metadata db
+	// at start up, we can scan the vlog from headPointer and save the ts -> valuePointer to metadata db
+	headPointerKey = []byte("!binlog!headPointer")
 )
 
 // Storage is the interface to handle binlog storage
@@ -141,9 +146,16 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		}
 
 		tsKey := encodeTSKey(item.commit)
-		pointer, err := metadata.Get(tsKey, nil)
+		pointerData, err := metadata.Get(tsKey, nil)
 		if err != nil {
 			panic(err)
+		}
+
+		var pointer valuePointer
+		err = pointer.UnmarshalBinary(pointerData)
+		if err != nil {
+			log.Error(err)
+			return
 		}
 
 		var batch leveldb.Batch
@@ -151,15 +163,16 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		binary.LittleEndian.PutUint64(maxCommitTS, uint64(item.commit))
 		batch.Put(maxCommitTSKey, maxCommitTS)
 
-		batch.Put(handlePointerKey, pointer)
+		batch.Put(handlePointerKey, pointerData)
 		err = metadata.Write(&batch, nil)
-		// extremely case write fail when no disk space at this time, it's saft to don't save the maxCommitTS to DB
+		// extremely case write fail when no disk space at this time, it's safe to don't save the maxCommitTS to DB
 		// because we can recalculate it when restart, so just log and ignore it
 		// better just panic?
 		if err != nil {
 			log.Error(err)
 		}
 
+		append.handlePointer = pointer
 		atomic.StoreInt64(&append.maxCommitTS, item.commit)
 	})
 
@@ -174,6 +187,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		minPointer = append.handlePointer
 	}
 
+	log.Infof("gcTS: %v, maxCommitTS: %v, headPointer: %+v, handlePointer: %+v", append.gcTS, append.maxCommitTS, append.headPointer, append.handlePointer)
+
 	toKV := append.writeToValueLog(writeCh)
 
 	go append.writeToSorter(append.writeToKV(toKV))
@@ -185,10 +200,11 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 			return errors.Trace(err)
 		}
 		request := &request{
-			startTS:  binlog.StartTs,
-			commitTS: binlog.CommitTs,
-			tp:       binlog.Tp,
-			payload:  record.payload,
+			startTS:      binlog.StartTs,
+			commitTS:     binlog.CommitTs,
+			tp:           binlog.Tp,
+			payload:      record.payload,
+			valuePointer: vp,
 		}
 		toKV <- request
 		return nil
@@ -326,7 +342,7 @@ func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
 
 // if the key not exist, return 0, nil
 func (a *Append) readInt64(key []byte) (int64, error) {
-	value, err := a.metadata.Get(gcTSKey, nil)
+	value, err := a.metadata.Get(key, nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
 			return 0, nil
@@ -359,6 +375,8 @@ func (a *Append) isClosed() bool {
 
 // Close release resource of Append
 func (a *Append) Close() error {
+	log.Debug("close Append")
+
 	close(a.close)
 	close(a.writeCh)
 
@@ -466,12 +484,12 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 				panic(err)
 			}
 
+			batch.Reset()
 			batch.Put(encodeTSKey(req.ts()), pointer)
 			batch.Put(headPointerKey, pointer)
 
 			for {
 				err = a.metadata.Write(&batch, nil)
-				batch.Reset()
 
 				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 				// we just retry of quit when Append is closed
@@ -483,6 +501,7 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 					time.Sleep(time.Second)
 					continue
 				}
+				a.headPointer = req.valuePointer
 
 				done <- req
 				break
