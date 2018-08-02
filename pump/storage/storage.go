@@ -514,7 +514,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			}
 
 			for _, req := range reqs {
-				log.Debug(req.commitTS, req.startTS, " done")
+				log.Debug(req.startTS, req.commitTS, " done")
 				req.wg.Done()
 				done <- req
 			}

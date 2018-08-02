@@ -6,9 +6,12 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	fuzz "github.com/google/gofuzz"
 	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -70,43 +73,45 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-func (as *AppendSuit) TestWriteBinlog(c *check.C) {
-	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
+	as.testWriteBinlogAndPullBack(c, 128, 1)
 
-	binlog := new(pb.Binlog)
-	binlog.Tp = pb.BinlogType_Prewrite
-	binlog.StartTs = 10
+	as.testWriteBinlogAndPullBack(c, 128, 1024)
 
-	// write P binlog
-	err := append.WriteBinlog(binlog)
-	c.Assert(err, check.IsNil)
+	as.testWriteBinlogAndPullBack(c, 1<<20, 1024)
+}
 
-	// write C binlog
-	binlog = new(pb.Binlog)
-	binlog.Tp = pb.BinlogType_Commit
-	binlog.StartTs = 10
-	binlog.CommitTs = 11
-	err = append.WriteBinlog(binlog)
-	c.Assert(err, check.IsNil)
+func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int) {
+	appendStorage := newAppend(c)
+	defer os.RemoveAll(appendStorage.dir)
+
+	populateBinlog(c, appendStorage, prewriteValueSize, binlogNum)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	values := append.PullCommitBinlog(ctx, 0)
+	values := appendStorage.PullCommitBinlog(ctx, 0)
 
-	var value []byte
-	select {
-	case value = <-values:
-	case <-time.After(time.Second * 5):
-		c.Fatal("get value timeout")
+	// pull the binlogs back and check sorted
+	var binlogs []*pb.Binlog
+PullLoop:
+	for {
+		select {
+		case value := <-values:
+			getBinlog := new(pb.Binlog)
+			err := getBinlog.Unmarshal(value)
+			c.Assert(err, check.IsNil)
+			binlogs = append(binlogs, getBinlog)
+			if len(binlogs) == binlogNum {
+				break PullLoop
+			}
+		case <-time.After(time.Second * 5):
+			c.Fatal("get value timeout")
+		}
 	}
 
-	getBinlog := new(pb.Binlog)
-	err = getBinlog.Unmarshal(value)
-	c.Assert(err, check.IsNil)
-
-	c.Assert(getBinlog.Tp, check.Equals, binlog.Tp)
-	c.Assert(getBinlog.StartTs, check.Equals, binlog.StartTs)
-
+	// check commitTS increasing
+	for i := 1; i < len(binlogs); i++ {
+		c.Assert(binlogs[i].CommitTs, check.Greater, binlogs[i-1].CommitTs)
+	}
 	cancel()
 }
 
@@ -139,24 +144,32 @@ func (as *AppendSuit) TestReadWritePointer(c *check.C) {
 	append := newAppend(c)
 	defer os.RemoveAll(append.dir)
 
-	var vp valuePointer
-	var key = []byte("testK")
-
+	// check return zero valuePointer when the key not exist
 	var readVP valuePointer
 	var err error
-	readVP, err = append.readPointer(key)
+	readVP, err = append.readPointer([]byte("no_exist_key"))
 	c.Assert(err, check.IsNil)
-	c.Assert(readVP, check.Equals, vp)
+	c.Assert(readVP, check.Equals, valuePointer{})
 
-	vp.Fid = 10
-	vp.Offset = 100
+	// test with random key and valuePointer value
+	fuzz := fuzz.New().NilChance(0)
+	for i := 0; i < 100; i++ {
+		var vp valuePointer
+		var key []byte
+		fuzz.Fuzz(&vp)
+		// offset should >= 0, so just take abs(vp.Offset), when the random value is negative
+		if vp.Offset < 0 {
+			vp.Offset = -vp.Offset
+		}
+		fuzz.Fuzz(&key)
 
-	err = append.savePointer(key, vp)
-	c.Assert(err, check.IsNil)
+		err = append.savePointer(key, vp)
+		c.Assert(err, check.IsNil)
 
-	readVP, err = append.readPointer(key)
-	c.Assert(err, check.IsNil)
-	c.Assert(readVP, check.Equals, vp)
+		readVP, err = append.readPointer(key)
+		c.Assert(err, check.IsNil)
+		c.Assert(readVP, check.Equals, vp)
+	}
 }
 
 func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
@@ -180,6 +193,47 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(append.gcTS, check.Equals, int64(100))
+}
+
+// test helper to write binlogNum binlog to append
+func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int) {
+	prewriteValue := make([]byte, prewriteValueSize)
+	var ts int64
+	getTS := func() int64 {
+		return atomic.AddInt64(&ts, 1)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < binlogNum; i++ {
+		wg.Add(1)
+		func() {
+			defer wg.Done()
+			// write P binlog
+			binlog := new(pb.Binlog)
+			binlog.Tp = pb.BinlogType_Prewrite
+			startTS := getTS()
+			binlog.StartTs = startTS
+			binlog.PrewriteValue = prewriteValue
+
+			err := append.WriteBinlog(binlog)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// write C binlog
+			binlog = new(pb.Binlog)
+			binlog.Tp = pb.BinlogType_Commit
+			binlog.StartTs = startTS
+			binlog.CommitTs = getTS()
+			err = append.WriteBinlog(binlog)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}()
+	}
+
+	// wait finish populate data
+	wg.Wait()
 }
 
 func (as *AppendSuit) TestNoSpace(c *check.C) {

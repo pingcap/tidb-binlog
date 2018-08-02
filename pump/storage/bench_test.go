@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -63,44 +62,7 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 	append := newAppend(b)
 	defer os.RemoveAll(append.dir)
 
-	// populate data
-	prewriteValue := make([]byte, prewriteValueSize)
-	var ts int64
-	getTS := func() int64 {
-		return atomic.AddInt64(&ts, 1)
-	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < binlogNum; i++ {
-		wg.Add(1)
-		func() {
-			defer wg.Done()
-			// write P binlog
-			binlog := new(pb.Binlog)
-			binlog.Tp = pb.BinlogType_Prewrite
-			startTS := getTS()
-			binlog.StartTs = startTS
-			binlog.PrewriteValue = prewriteValue
-
-			err := append.WriteBinlog(binlog)
-			if err != nil {
-				b.Fatal(err)
-			}
-
-			// write C binlog
-			binlog = new(pb.Binlog)
-			binlog.Tp = pb.BinlogType_Commit
-			binlog.StartTs = startTS
-			binlog.CommitTs = getTS()
-			err = append.WriteBinlog(binlog)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}()
-	}
-
-	// wait finish populate data
-	wg.Wait()
+	populateBinlog(b, append, prewriteValueSize, binlogNum)
 
 	runtime.GC()
 	b.ResetTimer()
