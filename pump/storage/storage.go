@@ -393,7 +393,7 @@ func (a *Append) Close() error {
 
 // GCTS implement Storage.GCTS
 func (a *Append) GCTS(ts int64) {
-	a.gcTS = ts
+	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
 	a.doGCTS(ts)
 }
