@@ -1,11 +1,10 @@
 package storage
 
 import (
-	"reflect"
-	"testing"
 	"time"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -13,7 +12,11 @@ func init() {
 	log.SetLevel(log.LOG_LEVEL_ERROR)
 }
 
-func testSorter(t *testing.T, items []sortItem, expectMaxCommitTS []int64) {
+type SorterSuite struct{}
+
+var _ = check.Suite(&SorterSuite{})
+
+func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 	var maxCommitTS []int64
 	var maxTS int64
 
@@ -31,21 +34,16 @@ func testSorter(t *testing.T, items []sortItem, expectMaxCommitTS []int64) {
 	time.Sleep(time.Millisecond * 50)
 	sorter.close()
 
-	t.Logf("testSorter: %v, get maxCommitTS: %v", items, maxCommitTS)
+	c.Logf("testSorter: %v, get maxCommitTS: %v", items, maxCommitTS)
 
 	if expectMaxCommitTS != nil {
-		if reflect.DeepEqual(maxCommitTS, expectMaxCommitTS) == false {
-			t.Fatalf("want: %v, but get: %v", expectMaxCommitTS, maxCommitTS)
-		}
+		c.Assert(maxCommitTS, check.DeepEquals, expectMaxCommitTS)
 	}
 
-	if maxCommitTS[len(maxCommitTS)-1] != maxTS {
-		t.Errorf("last maxCommitTS should be: %d, got: %d", maxTS, maxCommitTS[len(maxCommitTS)-1])
-	}
-
+	c.Assert(maxTS, check.Equals, maxCommitTS[len(maxCommitTS)-1])
 }
 
-func TestSorter(t *testing.T) {
+func (s *SorterSuite) TestSorter(c *check.C) {
 	var items []sortItem
 
 	items = []sortItem{
@@ -59,7 +57,7 @@ func TestSorter(t *testing.T) {
 			tp:     pb.BinlogType_Commit,
 		},
 	}
-	testSorter(t, items, []int64{2})
+	testSorter(c, items, []int64{2})
 
 	items = []sortItem{
 		{
@@ -81,7 +79,7 @@ func TestSorter(t *testing.T) {
 			tp:     pb.BinlogType_Commit,
 		},
 	}
-	testSorter(t, items, []int64{3, 10})
+	testSorter(c, items, []int64{3, 10})
 
 	items = []sortItem{
 		{
@@ -103,7 +101,7 @@ func TestSorter(t *testing.T) {
 			tp:     pb.BinlogType_Commit,
 		},
 	}
-	testSorter(t, items, []int64{10})
+	testSorter(c, items, []int64{10})
 
 	items = append(items, []sortItem{
 		{
@@ -116,12 +114,12 @@ func TestSorter(t *testing.T) {
 			tp:     pb.BinlogType_Commit,
 		},
 	}...)
-	testSorter(t, items, []int64{10, 200})
+	testSorter(c, items, []int64{10, 200})
 
 	// test random data
 	items = items[:0]
 	for item := range newItemGenerator(5000) {
 		items = append(items, item)
 	}
-	testSorter(t, items, nil)
+	testSorter(c, items, nil)
 }

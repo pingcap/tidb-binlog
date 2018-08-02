@@ -4,9 +4,18 @@ import (
 	"bytes"
 	"sort"
 	"testing"
+
+	"github.com/pingcap/check"
 )
 
-func TestEncodeTSKey(t *testing.T) {
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { check.TestingT(t) }
+
+type EncodeTSKeySuite struct{}
+
+var _ = check.Suite(&EncodeTSKeySuite{})
+
+func (e *EncodeTSKeySuite) TestEncodeTSKey(c *check.C) {
 	var tsSlice = []int64{401603357443358721, 40160311937754726, 401605694141759490, 401605694129438725}
 
 	sort.Slice(tsSlice, func(i int, j int) bool {
@@ -20,9 +29,7 @@ func TestEncodeTSKey(t *testing.T) {
 		encodes = append(encodes, data)
 
 		decodedTS := decodeTSKey(data)
-		if decodedTS != ts {
-			t.Fatalf("want: %d, get: %d", ts, decodedTS)
-		}
+		c.Assert(ts, check.Equals, decodedTS)
 	}
 
 	// the encode way must be sorted like origin integer ts
@@ -30,8 +37,5 @@ func TestEncodeTSKey(t *testing.T) {
 		return bytes.Compare(encodes[i], encodes[j]) < 0
 	})
 
-	if !sorted {
-		t.Fatal("not sorted")
-	}
-
+	c.Assert(sorted, check.IsTrue)
 }

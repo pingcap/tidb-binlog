@@ -1,15 +1,14 @@
 package storage
 
 import (
-	"bytes"
 	"hash/crc32"
 	"os"
 	"path"
 	"strconv"
-	"testing"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/ngaut/log"
+	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -17,10 +16,14 @@ func init() {
 	log.SetLevel(log.LOG_LEVEL_ERROR)
 }
 
-func TestLogFile(t *testing.T) {
+type LogFileSuit struct{}
+
+var _ = check.Suite(&LogFileSuit{})
+
+func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	// max ts binlog save in file
 	var maxTS int64
-	fuzz := fuzz.New().NumElements(200, 200).Funcs(
+	fuzz := fuzz.New().NilChance(0).NumElements(200, 200).Funcs(
 		func(r *Record, c fuzz.Continue) {
 			r.magic = recordMagic
 			binlog := new(pb.Binlog)
@@ -40,20 +43,17 @@ func TestLogFile(t *testing.T) {
 	defer os.Remove(name)
 
 	lf, err := newLogFile(uint32(fid), name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	// wirte some random records
 	var records []*Record
 	fuzz.Fuzz(&records)
-	t.Logf("fuzz %d records", len(records))
+	c.Logf("fuzz %d records", len(records))
+	c.Check(len(records), check.Greater, 0)
 
 	for _, r := range records {
 		_, err := encodeRecord(lf.fd, r.payload)
-		if err != nil {
-			t.Fatal(err)
-		}
+		c.Assert(err, check.IsNil)
 	}
 
 	var readRecords = make([]*Record, len(records))
@@ -62,42 +62,29 @@ func TestLogFile(t *testing.T) {
 	var offset int64
 	for i := range records {
 		readRecords[i], err = lf.readRecord(offset)
-		if err != nil {
-			t.Fatal()
-		}
-		if bytes.Equal(readRecords[i].payload, records[i].payload) == false {
-			t.Fatalf("read back record not equal, get: %v, want: %v", readRecords[i].payload, records[i].payload)
-		}
+		c.Assert(err, check.IsNil)
+
+		c.Assert(readRecords[i].payload, check.DeepEquals, records[i].payload)
 		offset += readRecords[i].recordLength()
 	}
 
 	// read by scan and check if if's equal
 	idx := 0
 	lf.scan(0, func(vp valuePointer, r *Record) error {
-		if bytes.Equal(r.payload, records[idx].payload) == false {
-			t.Fatalf("read back record not equal, get: %v, want: %v", r.payload, records[idx].payload)
-		}
+		c.Assert(r.payload, check.DeepEquals, records[idx].payload)
 		idx++
 
 		return nil
 	})
 
-	if idx != len(records) {
-		t.Fatalf("should have %d records but get: %d", len(records), idx)
-	}
+	c.Assert(idx, check.Equals, len(records))
 
-	// test recover
-	if lf.maxTS != 0 {
-		t.Fatal("lf.maxTS should be 0, we did't update it")
-	}
+	// test recover lf.maxTS
+	c.Assert(int(lf.maxTS), check.Equals, 0, check.Commentf("lf.maxTS should be 0, we did't update it"))
 
 	lf.close()
 	lf, err = newLogFile(lf.fid, lf.path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, check.IsNil)
 
-	if lf.maxTS != maxTS {
-		t.Fatalf("get: %d, want: %d", lf.maxTS, maxTS)
-	}
+	c.Assert(lf.maxTS, check.Equals, maxTS)
 }

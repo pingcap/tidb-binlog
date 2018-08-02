@@ -1,17 +1,15 @@
 package storage
 
 import (
-	"bytes"
 	"math/rand"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
-	"testing"
 	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/ngaut/log"
+	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -19,6 +17,10 @@ func init() {
 	rand.Seed(time.Now().Unix())
 	log.SetLevel(log.LOG_LEVEL_ERROR)
 }
+
+type VlogSuit struct{}
+
+var _ = check.Suite(VlogSuit{})
 
 func randRequest() *request {
 	var payload []byte
@@ -33,65 +35,55 @@ func randRequest() *request {
 	}
 }
 
-func newVlog(t *testing.T) *valueLog {
-	return newVlogWithOptions(t, DefaultOptions())
+func newVlog(c *check.C) *valueLog {
+	return newVlogWithOptions(c, DefaultOptions())
 }
 
-func newVlogWithOptions(t *testing.T, options *Options) *valueLog {
+func newVlogWithOptions(c *check.C, options *Options) *valueLog {
 	var err error
 
 	dir := path.Join(os.TempDir(), strconv.Itoa(rand.Int()))
-	t.Log("use dir: ", dir)
+	c.Log("use dir: ", dir)
 	err = os.Mkdir(dir, 0777)
-	if err != nil {
-		t.Error(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	vlog := new(valueLog)
 	err = vlog.open(dir, options)
-	if err != nil {
-		t.Error("open fail: ", err)
-	}
+	c.Assert(err, check.IsNil)
 
 	return vlog
 }
 
-func TestOpenEmpty(t *testing.T) {
-	vlog := newVlog(t)
+func (vs *VlogSuit) TestOpenEmpty(c *check.C) {
+	vlog := newVlog(c)
 	defer os.RemoveAll(vlog.dirPath)
 }
 
-func TestSingleWriteRead(t *testing.T) {
-	vlog := newVlog(t)
+func (vs *VlogSuit) TestSingleWriteRead(c *check.C) {
+	vlog := newVlog(c)
 	defer os.RemoveAll(vlog.dirPath)
 
 	req := randRequest()
 	err := vlog.write([]*request{req})
-	if err != nil {
-		t.Error(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	payload, err := vlog.readValue(req.valuePointer)
-	if err != nil {
-		t.Error(err)
-	}
+	c.Assert(err, check.IsNil)
 
-	if bytes.Equal(req.payload, payload) == false {
-		t.Errorf("data read back not equal")
-	}
+	c.Assert(req.payload, check.DeepEquals, payload, check.Commentf("data read back not equal"))
 }
 
-func TestBatchWriteRead(t *testing.T) {
-	testBatchWriteRead(t, 1, DefaultOptions())
+func (vs *VlogSuit) TestBatchWriteRead(c *check.C) {
+	testBatchWriteRead(c, 1, DefaultOptions())
 
-	testBatchWriteRead(t, 1024, DefaultOptions())
+	testBatchWriteRead(c, 1024, DefaultOptions())
 
 	// set small valueLogFileSize, so we can test multi log file case
-	testBatchWriteRead(t, 4096, DefaultOptions().WithValueLogFileSize(500))
+	testBatchWriteRead(c, 4096, DefaultOptions().WithValueLogFileSize(500))
 }
 
-func testBatchWriteRead(t *testing.T, reqNum int, options *Options) {
-	vlog := newVlogWithOptions(t, options)
+func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
+	vlog := newVlogWithOptions(c, options)
 	defer os.RemoveAll(vlog.dirPath)
 
 	n := reqNum
@@ -101,34 +93,26 @@ func testBatchWriteRead(t *testing.T, reqNum int, options *Options) {
 	}
 
 	err := vlog.write(reqs)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	for _, req := range reqs {
 		payload, err := vlog.readValue(req.valuePointer)
-		if err != nil {
-			t.Fatal(err)
-		}
+		c.Assert(err, check.IsNil)
 
-		if bytes.Equal(req.payload, payload) == false {
-			t.Fatal("data read back not equal")
-		}
+		c.Assert(req.payload, check.DeepEquals, payload, check.Commentf("data read back not equal"))
 	}
 
 	// test scan start at the middle point of request
 	idx := len(reqs) / 2
 	vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
-		if bytes.Equal(record.payload, reqs[idx].payload) == false {
-			t.Fatal("data read back not equal")
-		}
+		c.Assert(record.payload, check.DeepEquals, reqs[idx].payload, check.Commentf("data read back not equal"))
 		idx++
 		return nil
 	})
 }
 
-func TestCloseAndOpen(t *testing.T) {
-	vlog := newVlog(t)
+func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
+	vlog := newVlog(c)
 	defer os.RemoveAll(vlog.dirPath)
 
 	n := 100
@@ -137,37 +121,28 @@ func TestCloseAndOpen(t *testing.T) {
 		// close and open back every time
 		var err error
 		err = vlog.close()
-		if err != nil {
-			t.Error(err)
-		}
+		c.Assert(err, check.IsNil)
+
 		err = vlog.open(vlog.dirPath, vlog.opt)
-		if err != nil {
-			t.Error(err)
-		}
+		c.Assert(err, check.IsNil)
 
 		req := randRequest()
 		reqs = append(reqs, req)
 		err = vlog.write([]*request{req})
-		if err != nil {
-			t.Error(err)
-		}
+		c.Assert(err, check.IsNil)
 	}
 
 	for _, req := range reqs {
 		payload, err := vlog.readValue(req.valuePointer)
-		if err != nil {
-			t.Error(err)
-		}
+		c.Assert(err, check.IsNil)
 
-		if bytes.Equal(req.payload, payload) == false {
-			t.Errorf("data read back not equal")
-		}
+		c.Assert(req.payload, check.DeepEquals, payload, check.Commentf("data read back not equal"))
 	}
 
 }
 
-func TestGCTS(t *testing.T) {
-	vlog := newVlog(t)
+func (vs *VlogSuit) TestGCTS(c *check.C) {
+	vlog := newVlog(c)
 	defer os.RemoveAll(vlog.dirPath)
 
 	var pointers []valuePointer
@@ -179,53 +154,44 @@ func TestGCTS(t *testing.T) {
 			payload: make([]byte, 10*(1<<20)),
 		}
 		err := vlog.write([]*request{req})
-		if err != nil {
-			t.Error(err)
-		}
+		c.Assert(err, check.IsNil)
 		pointers = append(pointers, req.valuePointer)
 	}
 
 	before := len(vlog.filesMap)
-	t.Logf("before log file num: %d", before)
+	c.Logf("before log file num: %d", before)
 	vlog.gcTS(90)
 	after := len(vlog.filesMap)
-	t.Logf("after log file num: %d", after)
+	c.Logf("after log file num: %d", after)
 
-	if after >= before {
-		t.Error("no file is deleted")
-	}
+	c.Assert(after, check.Less, before, check.Commentf("no file is deleted"))
 
 	var err error
 	// ts 0 has been gc
 	_, err = vlog.readValue(pointers[0])
-	if err == nil {
-		t.Error(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	// ts 91 should not be gc
 	_, err = vlog.readValue(pointers[91])
-	if err != nil {
-		t.Error(err)
-	}
+	c.Assert(err, check.IsNil)
 }
 
-func TestValuePointerMarshalBinary(t *testing.T) {
+type ValuePointerSuite struct {
+}
+
+var _ = check.Suite(&ValuePointerSuite{})
+
+func (vps *ValuePointerSuite) TestValuePointerMarshalBinary(c *check.C) {
 	var vp valuePointer
 	fuzz := fuzz.New()
 	fuzz.Fuzz(&vp)
 
 	var expect valuePointer
 	data, err := vp.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, check.IsNil)
 
 	err = expect.UnmarshalBinary(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, check.IsNil)
 
-	if reflect.DeepEqual(vp, expect) == false {
-		t.Fatalf("want: %v, get: %v\n", vp, expect)
-	}
+	c.Assert(vp, check.Equals, expect)
 }
