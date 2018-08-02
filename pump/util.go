@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	physicalShiftBits = 18
 	maxRetry          = 12
 	retryInterval     = 5 * time.Second
 )
@@ -92,10 +91,6 @@ func Exist(dirpath string) bool {
 	}
 
 	return len(names) != 0
-}
-
-func composeTS(physical, logical int64) uint64 {
-	return uint64((physical << physicalShiftBits) + logical)
 }
 
 // TopicName returns topic name

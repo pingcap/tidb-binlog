@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
@@ -615,17 +616,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getTSO() (int64, error) {
-	now := time.Now()
-	physical, logical, err := s.pdCli.GetTS(context.Background())
+	ts, err := util.GetTSO(s.pdCli)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	dist := time.Since(now)
-	if dist > slowDist {
-		log.Warnf("get timestamp too slow: %s", dist)
-	}
-
-	ts := int64(composeTS(physical, logical))
 	// update latestTS by the way
 	latestTS = ts
 

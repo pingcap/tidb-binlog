@@ -35,8 +35,10 @@ type pumpNode struct {
 	*node.EtcdRegistry
 	status            *node.Status
 	heartbeatInterval time.Duration
-	lastUpdateTs      int64
-	lastUpdateTime    time.Time
+
+	// latestTS and latestTime is used for get approach ts
+	latestTS   int64
+	latestTime time.Time
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
@@ -104,8 +106,8 @@ func (p *pumpNode) ShortID() string {
 func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
 	p.status = status
 	if p.status.UpdateTS != 0 {
-		p.lastUpdateTs = p.status.UpdateTS
-		p.lastUpdateTime = time.Now()
+		p.latestTS = p.status.UpdateTS
+		p.latestTime = time.Now()
 	}
 
 	err := p.UpdateNode(ctx, nodePrefix, status)
@@ -178,8 +180,8 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 }
 
 func (p *pumpNode) updateTS() {
-	if p.lastUpdateTs != 0 {
-		p.status.UpdateTS = util.GetApproachTs(p.lastUpdateTs, p.lastUpdateTime)
+	if p.latestTS != 0 {
+		p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
 	}
 }
 

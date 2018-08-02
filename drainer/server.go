@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -26,14 +27,20 @@ import (
 	"google.golang.org/grpc"
 )
 
-var waitTime = 3 * time.Second
-var maxTxnTimeout int64 = 600
-var heartbeatTTL int64 = 60
-var nodePrefix = "pumps"
-var heartbeatInterval = 10 * time.Second
-var clusterID uint64
-var pdReconnTimes = 30
-var maxMsgSize = 1024 * 1024 * 1024
+var (
+	waitTime = 3 * time.Second
+	maxTxnTimeout int64 = 600
+	heartbeatTTL int64 = 60
+	nodePrefix = "pumps"
+	heartbeatInterval = 10 * time.Second
+	clusterID uint64
+	pdReconnTimes = 30
+	maxMsgSize = 1024 * 1024 * 1024
+
+	// latestTS and latestTime is used for get approach ts
+	latestTS   int64 = 0
+	latestTime time.Time
+)
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
@@ -51,9 +58,6 @@ type Server struct {
 	wg        sync.WaitGroup
 	syncer    *Syncer
 	isClosed  int32
-
-	// TODO
-	node node.Node
 }
 
 func init() {
@@ -82,6 +86,14 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	clusterID = pdCli.GetClusterID(ctx)
+	// update latestTS and latestTime
+	ts, err := util.GetTSO(pdCli)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	latestTS = ts
+	latestTime = time.Now()
+	
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
@@ -239,7 +251,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	// must refresh node firstly
-	status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+	status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		errc <- errors.Trace(err)
@@ -259,7 +271,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+				status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
 				err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 				if err != nil {
 					errc <- errors.Trace(err)
@@ -278,7 +290,7 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
 	}
 	s.host = advURL.Host
-	status, _ := node.NewStatus(s.ID, s.host, "online", 0, 0)
+	status, _ := node.NewStatus(s.ID, s.host, "online", 0, util.GetApproachTS(latestTS, latestTime))
 	err = s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
@@ -344,7 +356,7 @@ func (s *Server) Close() {
 	}
 
 	// unregister drainer
-	status, _ := node.NewStatus(s.ID, s.host, "offline", 0, 0)
+	status, _ := node.NewStatus(s.ID, s.host, "offline", 0, util.GetApproachTS(latestTS, latestTime))
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
