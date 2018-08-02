@@ -21,6 +21,9 @@ func TsToTimestamp(ts int64) int64 {
 
 // GetApproachTs get a approach ts by ts and time
 func GetApproachTS(ts int64, tm time.Time) int64 {
+	if ts == 0 {
+		return 0
+	}
 	second := int64(time.Since(tm).Seconds())
 	return ts + (second*1000)<<18
 }

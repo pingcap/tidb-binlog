@@ -180,9 +180,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 }
 
 func (p *pumpNode) updateTS() {
-	if p.latestTS != 0 {
-		p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
-	}
+	p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
 }
 
 // readLocalNodeID reads nodeID from a local file
