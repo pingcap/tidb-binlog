@@ -133,6 +133,13 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 	sorter := newSorter(func(item sortItem) {
 		log.Debugf("sorter get item: %+v", item)
 
+		// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
+		// or this should never happend
+		if item.commit < append.maxCommitTS {
+			log.Debugf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, append.maxCommitTS)
+			return
+		}
+
 		tsKey := encodeTSKey(item.commit)
 		pointer, err := db.Get(tsKey, nil)
 		if err != nil {
