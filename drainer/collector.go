@@ -40,7 +40,6 @@ type Collector struct {
 	tiStore      kv.Storage
 	pumps        map[string]*Pump
 	offlines     map[string]struct{}
-	bh           *binlogHeap
 	syncer       *Syncer
 	latestTS     int64
 	cp           checkpoint.CheckPoint
@@ -89,7 +88,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
 		offlines:        make(map[string]struct{}),
-		bh:              newBinlogHeap(maxBinlogItemCount),
 		window:          w,
 		syncer:          s,
 		cp:              cpt,
@@ -211,7 +209,7 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	windowUpper := c.latestTS
 	windowLower := c.getLatestValidCommitTS()
-	c.publish(ctx, windowUpper, windowLower)
+	//c.publish(ctx, windowUpper, windowLower)
 	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
@@ -223,8 +221,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	}
 
 	// get current binlog's commit ts which in process
-	currentCommitTS := c.cp.Pos()
-	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
+	//currentCommitTS := c.cp.Pos()
+	//safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
 
@@ -237,15 +235,18 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
-			// if pump is offline and last binlog ts <= safeTS, ignore it
-			if n.State == node.Offline {
+			// if pump is offline, ignore it
+			if n.State == node.Offline || n.State == node.Paused {
+			//if n.State == node.Offline {
+				/*
 				if n.UpdateTS <= safeTS {
 					continue
 				}
 
 				if _, exist := c.offlines[n.NodeID]; exist {
 					continue
-				}
+				}*/
+				continue
 			}
 
 			// initial pump
@@ -268,10 +269,10 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
 			if n.State == node.Offline {
-				if !p.hadFinished(c.window.LoadLower()) {
-					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
-					continue
-				}
+				//if !p.hadFinished(c.window.LoadLower()) {
+				//	log.Errorf("pump %s has messages that is not consumed", p.nodeID)
+				//	continue
+				//}
 
 				// release invalid connection
 				p.Close()
@@ -293,22 +294,6 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	}
 
 	return int64(version.Ver)
-}
-
-func (c *Collector) publish(ctx context.Context, upper, lower int64) {
-	oldLower := c.window.LoadLower()
-	oldUpper := c.window.LoadUpper()
-
-	if lower > oldLower {
-		c.publishBinlogs(ctx, oldLower, lower)
-		// we should update window after publishing binlogs
-		c.window.SaveLower(lower)
-		windowGauge.WithLabelValues("lower").Set(float64(lower))
-	}
-	if upper > oldUpper {
-		c.window.SaveUpper(upper)
-		windowGauge.WithLabelValues("upper").Set(float64(upper))
-	}
 }
 
 // select min of all pumps' latestValidCommitTS
@@ -343,47 +328,6 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	return jobs, nil
-}
-
-// publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
-func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
-	begin := time.Now()
-	// multiple ways sort:
-	// 1. get multiple way sorted binlogs
-	// 2. use heap to merge sort
-	// todo: use multiple goroutines to collect sorted binlogs
-	total := 0
-	bss := make(map[string]binlogItems)
-	binlogOffsets := make(map[string]int)
-	for id, p := range c.pumps {
-		bs := p.collectBinlogs(minTS, maxTS)
-		if bs.Len() > 0 {
-			bss[id] = bs
-			binlogOffsets[id] = 1
-			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0], false)
-		}
-		total += bs.Len()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_collector").Observe(time.Since(begin).Seconds())
-
-	begin = time.Now()
-	item := c.bh.pop()
-	for item != nil {
-		c.syncer.Add(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
-		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
-			delete(bss, item.nodeID)
-		} else {
-			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]], false)
-			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
-		}
-		item = c.bh.pop()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_merge_sort").Observe(time.Since(begin).Seconds())
-
-	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
 func (c *Collector) getSavePoints(ctx context.Context, nodeID string) int64 {
