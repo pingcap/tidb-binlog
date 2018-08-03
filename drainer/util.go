@@ -16,10 +16,9 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/model"
 )
 
 const (
@@ -93,11 +92,6 @@ func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	return job, nil
-}
-
-// combine suffix offset in one float
-func posToFloat(pos *binlog.Pos) float64 {
-	return float64(pos.Suffix)*float64(segmentSizeLevel) + float64(pos.Offset)
 }
 
 func genDrainerID(listenAddr string) (string, error) {

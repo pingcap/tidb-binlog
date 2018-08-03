@@ -1,132 +1,144 @@
 package drainer
 
- import (
- 	"math"
- 	"sync"
- 	"sync/atomic"
- 	"time"
+import (
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
 
- 	"github.com/ngaut/log"
- )
+	"github.com/ngaut/log"
+)
 
- // MergeItem is the item in Merger
- type MergeItem interface {
- 	GetCommitTs() int64
- }
+// MergeItem is the item in Merger
+type MergeItem interface {
+	GetCommitTs() int64
+}
 
- // Merger do merge sort of binlog
- type Merger struct {
- 	binlogs map[string]MergeItem
- 	chans   map[string]chan MergeItem
+// Merger do merge sort of binlog
+type Merger struct {
+	binlogs map[string]MergeItem
+	chans   map[string]chan MergeItem
 
- 	minBinlog MergeItem
- 	mindID    string
+	minBinlog MergeItem
+	mindID    string
 
- 	output chan MergeItem
+	output chan MergeItem
 
- 	toBeAddMu sync.Mutex
- 	toBeAdd   []MergeSource
+	newSourceMu sync.Mutex
+	newSource   []MergeSource
 
- 	// when close, close the output chan once chans is empty
- 	close int32
- }
+	// when close, close the output chan once chans is empty
+	close int32
 
- // MergeSource contains a source info about binlog
- type MergeSource struct {
- 	ID     string
- 	Source chan MergeItem
- }
+	window *DepositWindow
+}
 
- // NewMerger create a instance of Merger
- func NewMerger(sources ...MergeSource) *Merger {
- 	m := &Merger{
- 		binlogs: make(map[string]MergeItem),
- 		chans:   make(map[string]chan MergeItem),
- 		output:  make(chan MergeItem, 10),
- 	}
+// MergeSource contains a source info about binlog
+type MergeSource struct {
+	ID     string
+	Source chan MergeItem
+}
 
- 	for i := 0; i < len(sources); i++ {
- 		m.chans[sources[i].ID] = sources[i].Source
- 	}
+// NewMerger create a instance of Merger
+func NewMerger(sources ...MergeSource) *Merger {
+	m := &Merger{
+		binlogs: make(map[string]MergeItem),
+		chans:   make(map[string]chan MergeItem),
+		output:  make(chan MergeItem, 10),
+		window:  &DepositWindow{},
+	}
 
- 	go m.run()
+	for i := 0; i < len(sources); i++ {
+		m.chans[sources[i].ID] = sources[i].Source
+	}
 
- 	return m
- }
+	go m.run()
 
- // Close close the outpu chan when all the source id drained
- func (m *Merger) Close() {
- 	log.Debug("close merger")
- 	atomic.StoreInt32(&m.close, 1)
- }
+	return m
+}
 
- func (m *Merger) isClosed() bool {
- 	return atomic.LoadInt32(&m.close) == 1
- }
+// Close close the outpu chan when all the source id drained
+func (m *Merger) Close() {
+	log.Debug("close merger")
+	atomic.StoreInt32(&m.close, 1)
+}
 
- // AddSource add a source to Merger
- func (m *Merger) AddSource(source MergeSource) {
- 	m.toBeAddMu.Lock()
- 	m.toBeAdd = append(m.toBeAdd, source)
- 	m.toBeAddMu.Unlock()
- }
+func (m *Merger) isClosed() bool {
+	return atomic.LoadInt32(&m.close) == 1
+}
 
- func (m *Merger) run() {
- 	defer close(m.output)
+// AddSource add a source to Merger
+func (m *Merger) AddSource(source MergeSource) {
+	m.newSourceMu.Lock()
+	m.newSource = append(m.newSource, source)
+	m.newSourceMu.Unlock()
+}
 
- 	for {
- 		var lastTS int64
- 		lastTS = math.MinInt64
+func (m *Merger) run() {
+	defer close(m.output)
 
- 		m.toBeAddMu.Lock()
- 		for _, source := range m.toBeAdd {
- 			m.chans[source.ID] = source.Source
- 		}
- 		m.toBeAdd = m.toBeAdd[:0]
- 		m.toBeAddMu.Unlock()
+	for {
+		var lastTS int64
+		lastTS = math.MinInt64
 
- 		var minBinlog MergeItem
- 		var minID string
+		m.newSourceMu.Lock()
+		for _, source := range m.newSource {
+			m.chans[source.ID] = source.Source
+		}
+		m.newSource = m.newSource[:0]
+		m.newSourceMu.Unlock()
 
- 		for id, c := range m.chans {
- 			if _, ok := m.binlogs[id]; ok {
- 				continue
- 			}
+		var minBinlog MergeItem
+		var maxBinlog MergeItem
+		var minID string
 
- 			binlog, ok := <-c
- 			if ok == false {
- 				delete(m.chans, id)
- 			} else {
- 				m.binlogs[id] = binlog
- 			}
- 		}
+		for id, c := range m.chans {
+			if _, ok := m.binlogs[id]; ok {
+				continue
+			}
 
- 		if len(m.chans) == 0 {
- 			if m.isClosed() {
- 				return
- 			}
- 			time.Sleep(time.Second)
- 			continue
- 		}
+			// TODO: add cache save binlog
+			binlog, ok := <-c
+			if ok == false {
+				delete(m.chans, id)
+			} else {
+				m.binlogs[id] = binlog
+			}
+		}
 
- 		for id, binlog := range m.binlogs {
- 			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
- 				minBinlog = binlog
- 				minID = id
- 			}
- 		}
+		if len(m.chans) == 0 {
+			if m.isClosed() {
+				return
+			}
+			time.Sleep(time.Second)
+			continue
+		}
 
- 		delete(m.binlogs, minID)
- 		if minBinlog.GetCommitTs() <= lastTS {
- 			continue
- 		} else {
- 			m.output <- minBinlog
- 			lastTS = minBinlog.GetCommitTs()
- 		}
- 	}
- }
+		for id, binlog := range m.binlogs {
+			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
+				minBinlog = binlog
+				minID = id
+			}
 
- // Output get the output chan of binlog
- func (m *Merger) Output() chan MergeItem {
- 	return m.output
- }
+			if maxBinlog == nil || binlog.GetCommitTs() > maxBinlog.GetCommitTs() {
+				maxBinlog = binlog
+			}
+		}
+
+		m.window.SaveUpper(maxBinlog.GetCommitTs())
+		m.window.SaveLower(minBinlog.GetCommitTs())
+
+		delete(m.binlogs, minID)
+		if minBinlog.GetCommitTs() <= lastTS {
+			continue
+		} else {
+			m.output <- minBinlog
+			lastTS = minBinlog.GetCommitTs()
+		}
+	}
+}
+
+// Output get the output chan of binlog
+func (m *Merger) Output() chan MergeItem {
+	return m.output
+}

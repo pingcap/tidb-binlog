@@ -68,7 +68,6 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	if err != nil {
 		log.Errorf("Create table error %v", err)
 		return sp, errors.Trace(err)
-
 	}
 
 	err = sp.Load()

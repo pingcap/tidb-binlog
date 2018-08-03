@@ -391,7 +391,7 @@ func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeI
 }
 
 // binlog bounadary job is used to group jobs, like a barrier
-func newBinlogBoundaryJob(commitTS int64, pos int64, nodeID string) *job {
+func newBinlogBoundaryJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.DML, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
@@ -596,13 +596,13 @@ func (s *Syncer) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
+			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// send binlog boundary job for dml binlog, disdispatch also disables batch
 			if s.cfg.DisableDispatch {
-				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
+				s.addJob(newBinlogBoundaryJob(commitTS, b.nodeID))
 			}
 
 		} else if jobID > 0 {
@@ -612,14 +612,14 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 
 			if s.skipSchemaAndTable(schema, table) {
-				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
+				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d", schema, table, sql, commitTS)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema, commitTS)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
 				var args []interface{}
 				// for kafka, we want to know the relate schema and table, get it while args now
 				// in executor
@@ -628,7 +628,7 @@ func (s *Syncer) run(b *binlogItem) error {
 				}
 				job := newDDLJob(sql, args, "", commitTS, b.nodeID)
 				s.addJob(job)
-				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][end]%s[commit ts]%v", sql, commitTS)
 			}
 		}
 
@@ -641,7 +641,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	}
 }
 
-func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos int64, nodeID string) error {
+func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
 	for _, mutation := range mutations {

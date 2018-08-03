@@ -1,19 +1,18 @@
 package drainer
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 // we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
@@ -35,24 +34,14 @@ type Pump struct {
 	currentPos int64
 	// the latest binlog position that pump had handled
 	latestPos int64
-	// store binlogs in a heap
-	bh      *binlogHeap
-	tiStore kv.Storage
-	window  *DepositWindow
-	timeout time.Duration
-
-	// pullBinlogs sends the binlogs to publish function by this channel
-	//binlogChan chan *binlogEntity
+	tiStore   kv.Storage
+	window    *DepositWindow
+	timeout   time.Duration
 
 	// the latestTS from tso
 	latestTS int64
 	// binlogs are complete before this latestValidCommitTS
 	latestValidCommitTS int64
-	mu                  struct {
-		sync.Mutex
-		prewriteItems map[int64]*binlogItem
-		commitItems   map[int64]*binlogItem
-	}
 
 	wg         sync.WaitGroup
 	ctx        context.Context
@@ -72,7 +61,6 @@ func NewPump(nodeID string, clusterID uint64, timeout time.Duration, w *DepositW
 		clusterID:  clusterID,
 		currentPos: startTs,
 		latestPos:  startTs,
-		bh:         newBinlogHeap(maxBinlogItemCount),
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
@@ -145,7 +133,6 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				item := &binlogItem{
 					binlog: binlog,
 					nodeID: p.nodeID,
-					pos: 	binlog.CommitTs,
 				}
 				select {
 				case ret <- item:
@@ -168,68 +155,6 @@ func (p *Pump) UpdateLatestTS(ts int64) {
 	}
 }
 
-// get all commit binlog items
-func (p *Pump) getCommitBinlogs(binlogs map[int64]*binlogItem) map[int64]*binlogItem {
-	var tmpBinlogs map[int64]*binlogItem
-
-	p.mu.Lock()
-	tmpBinlogs = p.mu.commitItems
-	p.mu.commitItems = make(map[int64]*binlogItem)
-	p.mu.Unlock()
-
-	if binlogs == nil {
-		return tmpBinlogs
-	}
-	for ts, b := range tmpBinlogs {
-		binlogs[ts] = b
-	}
-	return binlogs
-}
-
-func (p *Pump) publishBinlogs(items map[int64]*binlogItem, lastValidCommitTS int64) error {
-	err := p.publishItems(items)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	// this judgment seems to be unnecessary, but to ensure safety
-	latest := atomic.LoadInt64(&p.latestValidCommitTS)
-	if latest < lastValidCommitTS {
-		atomic.StoreInt64(&p.latestValidCommitTS, lastValidCommitTS)
-	}
-
-	return nil
-}
-
-func (p *Pump) publishItems(items map[int64]*binlogItem) error {
-	err := p.grabDDLJobs(items)
-	if err != nil {
-		log.Errorf("grabDDLJobs error %v", errors.Trace(err))
-		return errors.Trace(err)
-	}
-
-	p.putIntoHeap(items)
-	publishBinlogCounter.WithLabelValues(p.nodeID).Add(float64(len(items)))
-	return nil
-}
-
-func (p *Pump) putIntoHeap(items map[int64]*binlogItem) {
-	boundary := p.window.LoadLower()
-	var errorBinlogs int
-
-	for commitTS, item := range items {
-		if commitTS < boundary {
-			errorBinlogs++
-			log.Errorf("[pump %s] FATAL ERROR: commitTs(%d) of binlog exceeds the lower boundary of window %d, may miss processing, ITEM(%v)", p.nodeID, commitTS, boundary, item)
-			// if we meet a smaller binlog, we should ignore it. because we have published binlogs that before window low boundary
-			continue
-		}
-		p.bh.push(p.ctx, item, true)
-	}
-
-	errorBinlogCount.Add(float64(errorBinlogs))
-}
-
 func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	var count int
 	for ts, item := range items {
@@ -244,7 +169,7 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 				case <-p.ctx.Done():
 					return errors.Trace(p.ctx.Err())
 				case <-time.After(p.timeout):
-					job, err = getDDLJob(p.tiStore ,b.DdlJobId)
+					job, err = getDDLJob(p.tiStore, b.DdlJobId)
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -260,30 +185,6 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	}
 	ddlJobsCounter.Add(float64(count))
 	return nil
-}
-
-func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
-	begin := time.Now()
-	var bs binlogItems
-	item := p.bh.pop()
-	for item != nil && item.binlog.CommitTs <= windowUpper {
-		// make sure to discard old binlogs whose commitTS is earlier or equal minTS
-		if item.binlog.CommitTs > windowLower {
-			bs = append(bs, item)
-		}
-		// update pump's current position
-		if p.currentPos < item.pos {
-			p.currentPos = item.pos
-		}
-		item = p.bh.pop()
-	}
-	if item != nil {
-		p.bh.push(p.ctx, item, false)
-	}
-
-	publishBinlogHistogram.WithLabelValues(fmt.Sprintf("%s_collect_binlogs", p.nodeID)).Observe(time.Since(begin).Seconds())
-
-	return bs
 }
 
 func (p *Pump) hadFinished(windowLower int64) bool {

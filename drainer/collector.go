@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"fmt"
-	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -30,19 +29,19 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	clusterID    uint64
-	batch        int32
-	interval     time.Duration
-	reg          *node.EtcdRegistry
-	timeout      time.Duration
-	window       *DepositWindow
-	tiClient     *tikv.LockResolver
-	tiStore      kv.Storage
-	pumps        map[string]*Pump
-	offlines     map[string]struct{}
-	syncer       *Syncer
-	latestTS     int64
-	cp           checkpoint.CheckPoint
+	clusterID uint64
+	batch     int32
+	interval  time.Duration
+	reg       *node.EtcdRegistry
+	timeout   time.Duration
+	window    *DepositWindow
+	tiClient  *tikv.LockResolver
+	tiStore   kv.Storage
+	pumps     map[string]*Pump
+	offlines  map[string]struct{}
+	syncer    *Syncer
+	latestTS  int64
+	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
@@ -203,14 +202,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
-		c.updateCollectStatus(false)
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.latestTS
-	windowLower := c.getLatestValidCommitTS()
-	//c.publish(ctx, windowUpper, windowLower)
-	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
@@ -237,15 +231,15 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		if !ok {
 			// if pump is offline, ignore it
 			if n.State == node.Offline || n.State == node.Paused {
-			//if n.State == node.Offline {
+				//if n.State == node.Offline {
 				/*
-				if n.UpdateTS <= safeTS {
-					continue
-				}
+					if n.UpdateTS <= safeTS {
+						continue
+					}
 
-				if _, exist := c.offlines[n.NodeID]; exist {
-					continue
-				}*/
+					if _, exist := c.offlines[n.NodeID]; exist {
+						continue
+					}*/
 				continue
 			}
 
@@ -255,7 +249,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			log.Infof("node %s get save point %v", n.NodeID, safeTS)
 			p, err := NewPump(n.NodeID, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
 			//p.addr = n.Host
- 			//log.Debug("get pump addr: ", n.Host)
+			//log.Debug("get pump addr: ", n.Host)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -296,22 +290,6 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	return int64(version.Ver)
 }
 
-// select min of all pumps' latestValidCommitTS
-func (c *Collector) getLatestValidCommitTS() int64 {
-	var latest int64 = math.MaxInt64
-	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestValidCommitTS()
-		if latestCommitTS < latest {
-			latest = latestCommitTS
-		}
-	}
-	if latest == math.MaxInt64 {
-		latest = 0
-	}
-
-	return latest
-}
-
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
 func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	version, err := c.tiStore.CurrentVersion()
@@ -332,8 +310,6 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 
 func (c *Collector) getSavePoints(ctx context.Context, nodeID string) int64 {
 	commitTS := c.cp.Pos()
-
-	//topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
 
