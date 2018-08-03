@@ -9,6 +9,12 @@ import (
 	"github.com/ngaut/log"
 )
 
+
+const (
+	// DefaultCacheSize is the default cache size for every source.
+	DefaultCacheSize = 1024
+)
+
 // MergeItem is the item in Merger
 type MergeItem interface {
 	GetCommitTs() int64
@@ -16,40 +22,45 @@ type MergeItem interface {
 
 // Merger do merge sort of binlog
 type Merger struct {
-	binlogs map[string]MergeItem
-	chans   map[string]chan MergeItem
+	sync.RWMutex
 
-	minBinlog MergeItem
-	mindID    string
+	//Binlogs map[string]MergeItem
+	//chans   map[string]chan MergeItem
+	
+	sources map[string]MergeSource
 
 	output chan MergeItem
 
-	newSourceMu sync.Mutex
-	newSource   []MergeSource
+	newSource []MergeSource
+	removeSource []string
+	pauseSource []string
+	continueSource []string
 
 	// when close, close the output chan once chans is empty
 	close int32
 
+	// TODO: save the max and min binlog
 	window *DepositWindow
 }
 
 // MergeSource contains a source info about binlog
 type MergeSource struct {
-	ID     string
-	Source chan MergeItem
+	ID      string
+	Source  chan MergeItem
+	Pause   bool
+	Binlogs []MergeItem
 }
 
 // NewMerger create a instance of Merger
 func NewMerger(sources ...MergeSource) *Merger {
 	m := &Merger{
-		binlogs: make(map[string]MergeItem),
-		chans:   make(map[string]chan MergeItem),
+		sources: make(map[string]MergeSource),
 		output:  make(chan MergeItem, 10),
 		window:  &DepositWindow{},
 	}
 
 	for i := 0; i < len(sources); i++ {
-		m.chans[sources[i].ID] = sources[i].Source
+		m.sources[sources[i].ID] = sources[i]
 	}
 
 	go m.run()
@@ -69,71 +80,135 @@ func (m *Merger) isClosed() bool {
 
 // AddSource add a source to Merger
 func (m *Merger) AddSource(source MergeSource) {
-	m.newSourceMu.Lock()
+	m.Lock()
 	m.newSource = append(m.newSource, source)
-	m.newSourceMu.Unlock()
+	m.Unlock()
+}
+
+// RemoveSource remove a source from Merger
+func (m *Merger) RemoveSource(sourceID string) {
+	m.Lock()
+	m.removeSource = append(m.removeSource, sourceID)
+	m.Unlock()
+}
+
+// PauseSource sets the source to pause
+func (m *Merger) PauseSource(sourceID string) {
+	m.Lock()
+	m.pauseSource = append(m.pauseSource, sourceID)
+	m.Unlock()
+}
+
+// ContinueSource restart the source
+func (m *Merger) ContinueSource(sourceID string) {
+	m.Lock()
+	m.continueSource = append(m.continueSource, sourceID)
+	m.Unlock()
+}
+
+func (m *Merger) UpdateSource() {
+	m.Lock()
+	defer m.Unlock()
+
+	// add new source
+	for _, source := range m.newSource {
+		m.sources[source.ID] = source
+	}
+
+	// remove source
+	for _, sourceID := range m.removeSource {
+		delete(m.sources, sourceID)
+	}
+
+	// pause source
+	for _, sourceID := range m.pauseSource {
+		if source, ok := m.sources[sourceID]; ok {
+			source.Pause = true
+		}
+	}
+
+	// continue source
+	for _, sourceID := range m.continueSource {
+		if source, ok := m.sources[sourceID]; ok {
+			source.Pause = false
+		}
+	}
 }
 
 func (m *Merger) run() {
 	defer close(m.output)
 
 	for {
+		m.UpdateSource()
+
 		var lastTS int64
 		lastTS = math.MinInt64
 
-		m.newSourceMu.Lock()
-		for _, source := range m.newSource {
-			m.chans[source.ID] = source.Source
-		}
-		m.newSource = m.newSource[:0]
-		m.newSourceMu.Unlock()
+		binlogNum := 0
 
-		var minBinlog MergeItem
-		var maxBinlog MergeItem
-		var minID string
-
-		for id, c := range m.chans {
-			if _, ok := m.binlogs[id]; ok {
-				continue
-			}
-
-			// TODO: add cache save binlog
-			binlog, ok := <-c
-			if ok == false {
-				delete(m.chans, id)
-			} else {
-				m.binlogs[id] = binlog
+		for _, source := range m.sources {
+			for len(source.Binlogs) < DefaultCacheSize {
+				binlog, ok := <-source.Source
+				if ok {
+					binlogNum++
+					source.Binlogs = append(source.Binlogs, binlog)
+				} else {
+					break
+				}
 			}
 		}
 
-		if len(m.chans) == 0 {
+		if binlogNum == 0 {
 			if m.isClosed() {
 				return
 			}
+
 			time.Sleep(time.Second)
 			continue
 		}
 
-		for id, binlog := range m.binlogs {
-			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
-				minBinlog = binlog
-				minID = id
-			}
-
-			if maxBinlog == nil || binlog.GetCommitTs() > maxBinlog.GetCommitTs() {
-				maxBinlog = binlog
-			}
+		finish := false
+		offset := make(map[string]int)
+		for id := range m.sources {
+			offset[id] = 0
 		}
 
-		m.window.SaveUpper(maxBinlog.GetCommitTs())
-		m.window.SaveLower(minBinlog.GetCommitTs())
+		for {
+			if finish {
+				break
+			}
 
-		delete(m.binlogs, minID)
-		if minBinlog.GetCommitTs() <= lastTS {
-			continue
-		} else {
+			var minBinlog MergeItem
+			var minID string
+
+			for id, source := range m.sources {
+				if offset[id]+1 > len(source.Binlogs) {
+					finish = true
+					break
+				}
+
+				if minBinlog == nil || source.Binlogs[offset[id]].GetCommitTs() < minBinlog.GetCommitTs() {
+					minBinlog = source.Binlogs[offset[id]]
+					minID = id
+				}
+			}
+
+			if minBinlog == nil {
+				break
+			}
+
+			offset[minID]++
+
+			if minBinlog.GetCommitTs() <= lastTS {
+				break
+			}
 			m.output <- minBinlog
 			lastTS = minBinlog.GetCommitTs()
+		}
+
+		// delete Binlogs
+		for id, source := range m.sources {
+			source.Binlogs = source.Binlogs[offset[id]:]
 		}
 	}
 }

@@ -230,7 +230,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline, ignore it
-			if n.State == node.Offline || n.State == node.Paused {
+			if n.State == node.Offline {
 				//if n.State == node.Offline {
 				/*
 					if n.UpdateTS <= safeTS {
@@ -247,8 +247,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			safeTS := c.getSavePoints(ctx, n.NodeID)
 
 			log.Infof("node %s get save point %v", n.NodeID, safeTS)
-			p, err := NewPump(n.NodeID, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
-			//p.addr = n.Host
+			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
 			//log.Debug("get pump addr: ", n.Host)
 			if err != nil {
 				return errors.Trace(err)
@@ -258,11 +257,15 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			c.merger.AddSource(MergeSource{
 				ID:     p.nodeID,
 				Source: p.PullBinlog(ctx, p.latestPos),
+				Pause:  n.State == node.Paused || n.State == node.Pausing,
+				Binlogs: make([]MergeItem, 0, DefaultCacheSize),
 			})
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
-			if n.State == node.Offline {
+
+			switch n.State {
+			case node.Offline:
 				//if !p.hadFinished(c.window.LoadLower()) {
 				//	log.Errorf("pump %s has messages that is not consumed", p.nodeID)
 				//	continue
@@ -274,6 +277,10 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				c.offlines[n.NodeID] = struct{}{}
 				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
+			case node.Paused:
+				c.merger.PauseSource(n.NodeID)
+			case node.Online:
+				c.merger.ContinueSource(n.NodeID)
 			}
 		}
 	}
