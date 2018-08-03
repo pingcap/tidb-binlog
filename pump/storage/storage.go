@@ -191,6 +191,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 
 	toKV := append.writeToValueLog(writeCh)
 
+	append.wg.Add(1)
 	go append.writeToSorter(append.writeToKV(toKV))
 
 	err = append.vlog.scan(minPointer, func(vp valuePointer, record *Record) error {
@@ -214,13 +215,13 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		return nil, errors.Trace(err)
 	}
 
+	append.wg.Add(1)
 	go append.updateStatus()
 
 	return
 }
 
 func (a *Append) updateStatus() {
-	a.wg.Add(1)
 	defer a.wg.Done()
 
 	var updateLatest <-chan time.Time
@@ -388,6 +389,12 @@ func (a *Append) Close() error {
 	if err != nil {
 		log.Error(err)
 	}
+
+	err = a.vlog.close()
+	if err != nil {
+		log.Error(err)
+	}
+
 	return err
 }
 
@@ -454,7 +461,6 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 }
 
 func (a *Append) writeToSorter(reqs chan *request) {
-	a.wg.Add(1)
 	defer a.wg.Done()
 
 	for req := range reqs {

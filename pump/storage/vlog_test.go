@@ -20,14 +20,20 @@ func init() {
 
 type VlogSuit struct{}
 
-var _ = check.Suite(VlogSuit{})
+var _ = check.Suite(&VlogSuit{})
 
 func randRequest() *request {
 	var payload []byte
 	var ts int64
-	f := fuzz.New().NumElements(1, 20)
+	f := fuzz.New().NumElements(1, 20).NilChance(0)
 	f.Fuzz(&ts)
-	f.Fuzz(&payload)
+	binlog := new(pb.Binlog)
+	binlog.StartTs = ts
+	binlog.Tp = pb.BinlogType_Prewrite
+	payload, err := binlog.Marshal()
+	if err != nil {
+		panic(err)
+	}
 	return &request{
 		startTS: ts,
 		payload: payload,
@@ -112,8 +118,11 @@ func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 }
 
 func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
-	vlog := newVlog(c)
+	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(100))
 	defer os.RemoveAll(vlog.dirPath)
+
+	dirPath := vlog.dirPath
+	opt := vlog.opt
 
 	n := 100
 	var reqs []*request
@@ -123,14 +132,20 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		err = vlog.close()
 		c.Assert(err, check.IsNil)
 
-		err = vlog.open(vlog.dirPath, vlog.opt)
+		vlog = new(valueLog)
+		err = vlog.open(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
-		req := randRequest()
-		reqs = append(reqs, req)
-		err = vlog.write([]*request{req})
-		c.Assert(err, check.IsNil)
+		// write a few request
+		for j := 0; j < 3; j++ {
+			req := randRequest()
+			reqs = append(reqs, req)
+			err = vlog.write([]*request{req})
+			c.Assert(err, check.IsNil)
+		}
 	}
+
+	c.Log("reqs len: ", len(reqs))
 
 	for _, req := range reqs {
 		payload, err := vlog.readValue(req.valuePointer)
@@ -169,7 +184,7 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 	var err error
 	// ts 0 has been gc
 	_, err = vlog.readValue(pointers[0])
-	c.Assert(err, check.IsNil)
+	c.Assert(err, check.NotNil)
 
 	// ts 91 should not be gc
 	_, err = vlog.readValue(pointers[91])

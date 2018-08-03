@@ -18,6 +18,11 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+const (
+	// we finalize the curFile when size >= finalizeFileSizeAtClose when closing the vlog, we don't need to scan the too big curFile to recover the maxTS of the file when reopen the vlog
+	finalizeFileSizeAtClose = 50 * 1024 * 1024 // 50M
+)
+
 // Options is the config options of Append and vlog
 type Options struct {
 	ValueLogFileSize int64
@@ -109,6 +114,7 @@ func (vp *valuePointer) UnmarshalBinary(data []byte) error {
 type valueLog struct {
 	buf *bytes.Buffer // buf to write to the current log file
 
+	// writable offset of the curFile(the max fid file)
 	writableLogOffset int64
 
 	dirPath   string
@@ -205,6 +211,13 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			if err != nil {
 				return errors.Annotatef(err, "error create new file")
 			}
+		} else {
+			info, err := curFile.fd.Stat()
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			vlog.writableLogOffset = info.Size()
 		}
 	}
 
@@ -231,12 +244,15 @@ func (vlog *valueLog) close() error {
 	vlog.filesLock.Lock()
 	defer vlog.filesLock.Unlock()
 
+	var err error
 	curFile := vlog.filesMap[vlog.maxFid]
 
-	// away finalize the curFile, we when restart, we don't need to scan the curFile to recover the maxTS of the file
-	err := curFile.finalize()
-	if err != nil {
-		return errors.Trace(err)
+	// finalize the curFile when it's tool big, so when restart, we don't need to scan the too big curFile to recover the maxTS of the file
+	if vlog.writableOffset() >= finalizeFileSizeAtClose {
+		err = curFile.finalize()
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	for _, logFile := range vlog.filesMap {
