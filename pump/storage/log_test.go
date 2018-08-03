@@ -45,7 +45,7 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	lf, err := newLogFile(uint32(fid), name)
 	c.Assert(err, check.IsNil)
 
-	// wirte some random records
+	// write some random records
 	var records []*Record
 	fuzz.Fuzz(&records)
 	c.Logf("fuzz %d records", len(records))
@@ -85,7 +85,7 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	c.Assert(idx, check.Equals, len(records))
 
 	// test recover lf.maxTS
-	c.Assert(int(lf.maxTS), check.Equals, 0, check.Commentf("lf.maxTS should be 0, we did't update it"))
+	c.Assert(int(lf.maxTS), check.Equals, 0, check.Commentf("lf.maxTS should be 0, we didn't update it"))
 
 	lf.close()
 	lf, err = newLogFile(lf.fid, lf.path)

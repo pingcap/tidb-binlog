@@ -166,7 +166,7 @@ func (vlog *valueLog) openOrCreateFiles() error {
 		return errors.Annotatef(err, "error while read dir: %s", vlog.dirPath)
 	}
 
-	// open all files at start, or we can lazyly open it to quick start time
+	// open all files at start, or we can lazily open it to quick start time
 	// the vlog file name <fid>.vlog will be like "000001.vlog"
 	for _, file := range files {
 		if file.IsDir() {
@@ -180,7 +180,7 @@ func (vlog *valueLog) openOrCreateFiles() error {
 		len := len(file.Name())
 		fid64, err := strconv.ParseUint(file.Name()[:len-5], 10, 32)
 		if err != nil {
-			return errors.Annotatef(err, "parese file %s err", file.Name())
+			return errors.Annotatef(err, "parse file %s err", file.Name())
 		}
 
 		fid := uint32(fid64)
@@ -365,7 +365,7 @@ func (vlog *valueLog) sortedFids() []uint32 {
 	return ret
 }
 
-// currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's ok to hold the vlog.filesLock lock
+// currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's OK to hold the vlog.filesLock lock
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
 	vlog.filesLock.Lock()
 	defer vlog.filesLock.Unlock()

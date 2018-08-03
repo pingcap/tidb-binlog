@@ -155,7 +155,7 @@ func (s *sorter) run() {
 				s.cond.Wait()
 			}
 		} else {
-			// commit is greater than zero, it's ok when we get the first item and maxTSItem.commit = 0
+			// commit is greater than zero, it's OK when we get the first item and maxTSItem.commit = 0
 			if item.commit > maxTSItem.commit {
 				maxTSItem = item
 				s.maxTSItemCB(maxTSItem)
