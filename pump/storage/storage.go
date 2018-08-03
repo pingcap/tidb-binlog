@@ -541,6 +541,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			if err != nil {
 				for _, req := range reqs {
 					req.err = err
+					req.wg.Done()
 				}
 				return
 			}
