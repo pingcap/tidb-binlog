@@ -194,6 +194,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 	append.wg.Add(1)
 	go append.writeToSorter(append.writeToKV(toKV))
 
+	// for handlePointer and headPointer, it's safe to start at a forward point, so we just chose a min point between handlePointer and headPointer, and wirte to KV, will push to sorter after write to KV too
 	err = append.vlog.scan(minPointer, func(vp valuePointer, record *Record) error {
 		binlog := new(pb.Binlog)
 		err := binlog.Unmarshal(record.payload)
@@ -254,6 +255,9 @@ func (a *Append) queryLatestTSFromPD() (int64, error) {
 
 func (a *Append) resolve(startTS int64) bool {
 	latestTS := atomic.LoadInt64(&a.latestTS)
+	if latestTS <= 0 {
+		return false
+	}
 
 	startSecond := oracle.ExtractPhysical(uint64(startTS)) / int64(time.Second/time.Millisecond)
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
@@ -382,9 +386,12 @@ func (a *Append) Close() error {
 	close(a.writeCh)
 
 	// wait for all binlog write to vlog -> KV -> sorter
+	// after this, writeToValueLog, writeToKV, writeToSorter has quit sequently
 	a.wg.Wait()
 
+	// note the call back func will use a.metadata, so we should close sorter before a.metadata
 	a.sorter.close()
+
 	err := a.metadata.Close()
 	if err != nil {
 		log.Error(err)

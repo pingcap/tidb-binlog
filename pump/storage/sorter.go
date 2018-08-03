@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ngaut/log"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -75,6 +76,7 @@ type sorter struct {
 	lock     sync.Mutex
 	cond     *sync.Cond
 	items    *list.List
+	wg       sync.WaitGroup
 	isClosed int32
 }
 
@@ -86,6 +88,7 @@ func newSorter(fn func(item sortItem)) *sorter {
 	}
 
 	sorter.cond = sync.NewCond(&sorter.lock)
+	sorter.wg.Add(1)
 	go sorter.run()
 
 	return sorter
@@ -96,6 +99,11 @@ func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 }
 
 func (s *sorter) pushTSItem(item sortItem) {
+	if atomic.LoadInt32(&s.isClosed) == 1 {
+		// i think we can just panic
+		log.Error("sorter is closed but still push item, this should never happen")
+	}
+
 	s.lock.Lock()
 
 	if item.tp == pb.BinlogType_Prewrite {
@@ -113,6 +121,8 @@ func (s *sorter) pushTSItem(item sortItem) {
 }
 
 func (s *sorter) run() {
+	defer s.wg.Done()
+
 	var maxTSItem sortItem
 	for {
 		s.cond.L.Lock()
@@ -136,9 +146,16 @@ func (s *sorter) run() {
 				if s.resolver != nil && s.resolver(item.start) {
 					break
 				}
+
+				// quit if sorter is closed and still not get the according C binlog
+				// or continue to handle the items
+				if atomic.LoadInt32(&s.isClosed) == 1 {
+					return
+				}
 				s.cond.Wait()
 			}
 		} else {
+			// commit is greater than zero, it's ok when we get the first item and maxTSItem.commit = 0
 			if item.commit > maxTSItem.commit {
 				maxTSItem = item
 				s.maxTSItemCB(maxTSItem)
@@ -151,5 +168,9 @@ func (s *sorter) run() {
 func (s *sorter) close() {
 	atomic.StoreInt32(&s.isClosed, 1)
 	// let run() await and quit when items.Len() = 0
+	s.cond.L.Lock()
 	s.cond.Broadcast()
+	s.cond.L.Unlock()
+
+	s.wg.Wait()
 }
