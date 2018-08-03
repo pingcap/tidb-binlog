@@ -10,7 +10,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/siddontang/go/ioutil2"
 )
 
@@ -27,13 +26,11 @@ type PbCheckPoint struct {
 	saveTime time.Time
 
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
-	// drainer only stores the binlog file suffix
-	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
 }
 
 // NewPb creates a new Pb.
 func newPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, Positions: make(map[string]pb.Pos)}
+	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile}
 	err := pb.Load()
 	if err != nil {
 		return pb, errors.Trace(err)
@@ -70,18 +67,9 @@ func (sp *PbCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *PbCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
+func (sp *PbCheckPoint) Save(ts int64) error {
 	sp.Lock()
 	defer sp.Unlock()
-
-	for nodeID, pos := range poss {
-		newPos := pb.Pos{}
-		if pos.Offset > 5000 {
-			newPos.Suffix = pos.Suffix
-			newPos.Offset = pos.Offset - 5000
-		}
-		sp.Positions[nodeID] = newPos
-	}
 
 	sp.CommitTS = ts
 
@@ -104,7 +92,7 @@ func (sp *PbCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *PbCheckPoint) Check(int64, map[string]pb.Pos) bool {
+func (sp *PbCheckPoint) Check(int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
@@ -112,22 +100,15 @@ func (sp *PbCheckPoint) Check(int64, map[string]pb.Pos) bool {
 }
 
 // Pos implements CheckPoint.Pos interface
-func (sp *PbCheckPoint) Pos() (int64, map[string]pb.Pos) {
+func (sp *PbCheckPoint) Pos() (int64) {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	poss := make(map[string]pb.Pos)
-	for nodeID, pos := range sp.Positions {
-		poss[nodeID] = pb.Pos{
-			Suffix: pos.Suffix,
-			Offset: pos.Offset,
-		}
-	}
-	return sp.CommitTS, poss
+	return sp.CommitTS
 }
 
 // String implements CheckPoint.String interface
 func (sp *PbCheckPoint) String() string {
-	ts, poss := sp.Pos()
-	return fmt.Sprintf("binlog commitTS = %d and positions = %+v", ts, poss)
+	ts := sp.Pos()
+	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

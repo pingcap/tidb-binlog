@@ -13,7 +13,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
@@ -21,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -34,15 +32,12 @@ type notifyResult struct {
 type Collector struct {
 	clusterID    uint64
 	batch        int32
-	kafkaAddrs   []string
-	kafkaVersion string
 	interval     time.Duration
 	reg          *node.EtcdRegistry
 	timeout      time.Duration
 	window       *DepositWindow
 	tiClient     *tikv.LockResolver
 	tiStore      kv.Storage
-	jobGetter    *jobGetter
 	pumps        map[string]*Pump
 	offlines     map[string]struct{}
 	bh           *binlogHeap
@@ -53,7 +48,6 @@ type Collector struct {
 	syncedCheckTime int
 	safeForwardTime int
 
-	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -68,15 +62,6 @@ type Collector struct {
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	kafkaAddrs, err := flags.ParseHostPortAddr(cfg.KafkaAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	offsetSeeker, err := createOffsetSeeker(kafkaAddrs, cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -100,8 +85,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	c := &Collector{
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:      kafkaAddrs,
-		kafkaVersion:    cfg.KafkaVersion,
 		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
@@ -113,7 +96,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiClient:        tiClient,
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
-		offsetSeeker:    offsetSeeker,
 		syncedCheckTime: cfg.SyncedCheckTime,
 		safeForwardTime: cfg.SafeForwardTime,
 		merger:          NewMerger(),
@@ -137,7 +119,7 @@ func (c *Collector) startAddToSyncer() {
 		// TODO when will fail, handle it in better way
 		if binlog.DdlJobId > 0 {
 			for {
-				job, err := c.jobGetter.getDDLJob(binlog.DdlJobId)
+				job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
 				if err != nil {
 					log.Error(err)
 					time.Sleep(time.Second)
@@ -198,12 +180,12 @@ func (c *Collector) Start(ctx context.Context) {
 func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
-		PumpPos: make(map[string]binlog.Pos),
+		PumpPos: make(map[string]int64),
 	}
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		offsetGauge.WithLabelValues(nodeID).Set(float64(pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -241,7 +223,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	}
 
 	// get current binlog's commit ts which in process
-	currentCommitTS, _ := c.cp.Pos()
+	currentCommitTS := c.cp.Pos()
 	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
@@ -267,13 +249,10 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			// initial pump
-			pos, err := c.getSavePoints(ctx, n.NodeID)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			safeTS := c.getSavePoints(ctx, n.NodeID)
 
-			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.kafkaVersion, c.timeout, c.window, c.tiStore, pos)
+			log.Infof("node %s get save point %v", n.NodeID, safeTS)
+			p, err := NewPump(n.NodeID, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
 			//p.addr = n.Host
  			//log.Debug("get pump addr: ", n.Host)
 			if err != nil {
@@ -281,10 +260,9 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 			delete(c.offlines, n.NodeID)
-			//p.StartCollect(ctx, c.tiClient)
 			c.merger.AddSource(MergeSource{
 				ID:     p.nodeID,
-				Source: p.PullBinlog(ctx, p.latestPos.Offset),
+				Source: p.PullBinlog(ctx, p.latestPos),
 			})
 		} else {
 			// update pumps' latestTS
@@ -408,25 +386,14 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
-func (c *Collector) getSavePoints(ctx context.Context, nodeID string) (binlog.Pos, error) {
-	commitTS, poss := c.cp.Pos()
-	pos, ok := poss[nodeID]
-	if ok {
-		return pos, nil
-	}
+func (c *Collector) getSavePoints(ctx context.Context, nodeID string) int64 {
+	commitTS := c.cp.Pos()
 
 	//topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-	//offsets, err := c.offsetSeeker.Do(ctx, topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
-	//if err == nil {
-	//	return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
-	//}
 
-	//log.Errorf("seek offset %s error %v", nodeID, err)
-	//return binlog.Pos{Offset: sarama.OffsetOldest}, nil
-
-	return binlog.Pos{Offset: safeCommitTS}, nil
+	return safeCommitTS
 }
 
 // Notify notifies to detcet pumps

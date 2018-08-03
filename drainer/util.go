@@ -17,6 +17,8 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tipb/go-binlog"
 )
 
@@ -43,22 +45,6 @@ func InitLogger(cfg *Config) {
 	}
 
 	sarama.Logger = util.NewStdLogger("[sarama] ")
-}
-
-// ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
-// return -1 if the left is ahead of the right, oppositely return 1.
-func ComparePos(left, right binlog.Pos) int {
-	if left.Suffix < right.Suffix {
-		return -1
-	} else if left.Suffix > right.Suffix {
-		return 1
-	} else if left.Offset < right.Offset {
-		return -1
-	} else if left.Offset > right.Offset {
-		return 1
-	} else {
-		return 0
-	}
 }
 
 // GenCheckPointCfg returns an CheckPoint config instance
@@ -90,6 +76,23 @@ func getSafeTS(ts int64, forwardTime int64) int64 {
 	}
 
 	return ts
+}
+
+func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	job, err := snapMeta.GetHistoryDDLJob(id)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return job, nil
 }
 
 // combine suffix offset in one float

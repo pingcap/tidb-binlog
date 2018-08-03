@@ -4,12 +4,10 @@ import (
 	"sync"
 
 	"github.com/ngaut/log"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 type checkpoint struct {
 	commitTS int64
-	pos      map[string]pb.Pos
 }
 
 // MetaCheckpoint is used to connect flash executor (FE) and flash checkpoint (FC) to come to an agreement about the safe point to save the checkpoint.
@@ -74,23 +72,18 @@ func (f *MetaCheckpoint) Flush(commitTS int64, forceSave bool) {
 }
 
 // PushPendingCP pushes a pending checkpoint.
-func (f *MetaCheckpoint) PushPendingCP(commitTS int64, pos map[string]pb.Pos) {
+func (f *MetaCheckpoint) PushPendingCP(commitTS int64) {
 	f.Lock()
 	defer f.Unlock()
 
-	// Deep copy the pos.
-	newPos := make(map[string]pb.Pos)
-	for node, poss := range pos {
-		newPos[node] = pb.Pos{poss.Suffix, poss.Offset}
-	}
-	f.pendingCPs = append(f.pendingCPs, &checkpoint{commitTS, newPos})
+	f.pendingCPs = append(f.pendingCPs, &checkpoint{commitTS})
 
 	log.Debugf("[push] FMC pushed a pending checkpoint %v.", f.pendingCPs[len(f.pendingCPs)-1])
 }
 
 // PopSafeCP pops the safe checkpoint, after popping the safe checkpoint will be nil.
 // Returns forceSave, ok, commitTS, pos
-func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64, map[string]pb.Pos) {
+func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64) {
 	f.Lock()
 	defer f.Unlock()
 
@@ -99,17 +92,17 @@ func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64, map[string]pb.Pos) {
 		f.safeCP = nil
 		f.removePendingCPs(len(f.pendingCPs))
 		f.forceSave = false
-		return true, false, -1, nil
+		return true, false, -1
 	} else if f.safeCP == nil {
 		log.Debug("[pop] FMC has no safe checkpoint.")
-		return false, false, -1, nil
+		return false, false, -1
 	}
 
 	log.Debugf("[pop] FMC popping safe checkpoint %v.", f.safeCP)
 
-	commitTS, pos := f.safeCP.commitTS, f.safeCP.pos
+	commitTS := f.safeCP.commitTS
 	f.safeCP = nil
-	return false, true, commitTS, pos
+	return false, true, commitTS
 }
 
 func (f *MetaCheckpoint) removePendingCPs(to int) {

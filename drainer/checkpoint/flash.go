@@ -11,7 +11,6 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 // FlashCheckPoint is a local savepoint struct for flash
@@ -27,7 +26,6 @@ type FlashCheckPoint struct {
 	saveTime time.Time
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
-	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
 }
 
 func checkFlashConfig(cfg *Config) error {
@@ -77,7 +75,6 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		metaCP:          flash.GetInstance(),
-		Positions:       make(map[string]pb.Pos),
 	}
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)
@@ -137,28 +134,19 @@ func (sp *FlashCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
+func (sp *FlashCheckPoint) Save(ts int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
 	sp.saveTime = time.Now()
 
 	// Init CP using metaCP's safe CP.
-	forceSave, ok, safeTS, safePoss := sp.metaCP.PopSafeCP()
+	forceSave, ok, safeTS := sp.metaCP.PopSafeCP()
 	if forceSave {
 		// If force save, use the CP passed in.
-		safeTS, safePoss = ts, poss
+		safeTS = ts
 	} else if !ok {
 		return nil
-	}
-
-	for nodeID, pos := range safePoss {
-		newPos := pb.Pos{}
-		if pos.Offset > 5000 {
-			newPos.Suffix = pos.Suffix
-			newPos.Offset = pos.Offset - 5000
-		}
-		sp.Positions[nodeID] = newPos
 	}
 
 	sp.CommitTS = safeTS
@@ -178,33 +166,25 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *FlashCheckPoint) Check(ts int64, poss map[string]pb.Pos) bool {
+func (sp *FlashCheckPoint) Check(ts int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	sp.metaCP.PushPendingCP(ts, poss)
+	sp.metaCP.PushPendingCP(ts)
 
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
 // Pos implements CheckPoint.Pos interface
-func (sp *FlashCheckPoint) Pos() (int64, map[string]pb.Pos) {
+func (sp *FlashCheckPoint) Pos() (int64) {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	poss := make(map[string]pb.Pos)
-	for nodeID, pos := range sp.Positions {
-		poss[nodeID] = pb.Pos{
-			Suffix: pos.Suffix,
-			Offset: pos.Offset,
-		}
-	}
-
-	return sp.CommitTS, poss
+	return sp.CommitTS
 }
 
 // String inplements CheckPoint.String interface
 func (sp *FlashCheckPoint) String() string {
-	ts, poss := sp.Pos()
-	return fmt.Sprintf("binlog commitTS = %d and positions = %+v", ts, poss)
+	ts := sp.Pos()
+	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

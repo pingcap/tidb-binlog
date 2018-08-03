@@ -18,7 +18,7 @@ var (
 
 type binlogItem struct {
 	binlog *pb.Binlog
-	pos    pb.Pos
+	pos    int64
 	nodeID string
 	job    *model.Job
 	// close the channel to signal other goroutine that we had received it's matched commit/rollback binlog
@@ -34,10 +34,10 @@ func (b *binlogItem) String() string {
 	return fmt.Sprintf("{commitTS: %d, node: %s, pos: %v}", b.binlog.CommitTs, b.nodeID, b.pos)
 }
 
-func newBinlogItem(b *pb.Binlog, p pb.Pos, nodeID string) *binlogItem {
+func newBinlogItem(b *pb.Binlog, ts int64, nodeID string) *binlogItem {
 	itemp := &binlogItem{
 		binlog:           b,
-		pos:              p,
+		pos:              ts,
 		nodeID:           nodeID,
 		commitOrRollback: make(chan struct{}),
 	}
