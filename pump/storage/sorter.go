@@ -69,8 +69,8 @@ type sorter struct {
 	maxTSItemCB func(item sortItem)
 	// if resolver return true, we can skip the P binlog, don't need to wait for the C binlog
 	resolver func(startTS int64) bool
-	// save the startTS of txt which we need to wait for the C binlog
-	waitStarts map[int64]struct{}
+	// save the startTS of txn which we need to wait for the C binlog
+	waitStartTS map[int64]struct{}
 
 	lock     sync.Mutex
 	cond     *sync.Cond
@@ -82,7 +82,7 @@ func newSorter(fn func(item sortItem)) *sorter {
 	sorter := &sorter{
 		maxTSItemCB: fn,
 		items:       list.New(),
-		waitStarts:  make(map[int64]struct{}),
+		waitStartTS: make(map[int64]struct{}),
 	}
 
 	sorter.cond = sync.NewCond(&sorter.lock)
@@ -99,9 +99,9 @@ func (s *sorter) pushTSItem(item sortItem) {
 	s.lock.Lock()
 
 	if item.tp == pb.BinlogType_Prewrite {
-		s.waitStarts[item.start] = struct{}{}
+		s.waitStartTS[item.start] = struct{}{}
 	} else {
-		delete(s.waitStarts, item.start)
+		delete(s.waitStartTS, item.start)
 		s.cond.Signal()
 	}
 
@@ -129,7 +129,7 @@ func (s *sorter) run() {
 
 		if item.tp == pb.BinlogType_Prewrite {
 			for {
-				_, ok := s.waitStarts[item.start]
+				_, ok := s.waitStartTS[item.start]
 				if ok == false {
 					break
 				}
