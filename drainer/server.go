@@ -343,6 +343,7 @@ func (s *Server) Start() error {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/committs", s.GetLatestTS).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())
@@ -393,6 +394,16 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	go s.Close()
 	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
+	return
+}
+
+// GetLatestTS returns the last binlog's commit ts which synced to downstream.
+func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+	ts := s.syncer.GetLatestCommitTS()
+	rd.JSON(w, http.StatusOK, map[string]int64{"ts": ts})
 	return
 }
 

@@ -422,7 +422,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
-		s.savePoint(job.commitTS, s.positions)
+		s.savePoint(job.commitTS)
 	}
 }
 
@@ -467,11 +467,11 @@ func (s *Syncer) flushJobs() error {
 	return nil
 }
 
-func (s *Syncer) savePoint(ts int64, positions map[string]int64) {
-	log.Infof("[write save point]%d[positions]%v", ts, positions)
+func (s *Syncer) savePoint(ts int64) {
+	log.Infof("[write save point]%d", ts)
 	err := s.cp.Save(ts)
 	if err != nil {
-		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
+		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
 
 	positionGauge.Set(float64(ts))
@@ -758,4 +758,10 @@ func (s *Syncer) Close() {
 // GetLastSyncTime returns lastSyncTime
 func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
+}
+
+
+// GetLatestCommitTS returns the latest commit ts.
+func (s *Syncer) GetLatestCommitTS() int64 {
+	return s.cp.Pos()
 }

@@ -38,7 +38,6 @@ type Collector struct {
 	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
-	offlines  map[string]struct{}
 	syncer    *Syncer
 	latestTS  int64
 	cp        checkpoint.CheckPoint
@@ -86,7 +85,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
-		offlines:        make(map[string]struct{}),
 		window:          w,
 		syncer:          s,
 		cp:              cpt,
@@ -214,9 +212,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// get current binlog's commit ts which in process
-	//currentCommitTS := c.cp.Pos()
-	//safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
 
@@ -231,15 +226,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		if !ok {
 			// if pump is offline, ignore it
 			if n.State == node.Offline {
-				//if n.State == node.Offline {
-				/*
-					if n.UpdateTS <= safeTS {
-						continue
-					}
-
-					if _, exist := c.offlines[n.NodeID]; exist {
-						continue
-					}*/
 				continue
 			}
 
@@ -248,12 +234,10 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 			log.Infof("node %s get save point %v", n.NodeID, safeTS)
 			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
-			//log.Debug("get pump addr: ", n.Host)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
-			delete(c.offlines, n.NodeID)
 			c.merger.AddSource(MergeSource{
 				ID:     p.nodeID,
 				Source: p.PullBinlog(ctx, p.latestPos),
@@ -265,22 +249,19 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			p.UpdateLatestTS(c.latestTS)
 
 			switch n.State {
-			case node.Offline:
-				//if !p.hadFinished(c.window.LoadLower()) {
-				//	log.Errorf("pump %s has messages that is not consumed", p.nodeID)
-				//	continue
-				//}
-
-				// release invalid connection
-				p.Close()
-				delete(c.pumps, n.NodeID)
-				c.offlines[n.NodeID] = struct{}{}
-				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
-					p.nodeID, p.clusterID)
-			case node.Paused:
+			case node.Paused, node.Pausing:
 				c.merger.PauseSource(n.NodeID)
 			case node.Online:
 				c.merger.ContinueSource(n.NodeID)
+			case node.Closing:
+				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
+			case node.Offline:
+				// release invalid connection
+				p.Close()
+				delete(c.pumps, n.NodeID)
+				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+					p.nodeID, p.clusterID)
+			
 			}
 		}
 	}

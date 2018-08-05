@@ -22,7 +22,6 @@ type binlogEntity struct {
 	tp       pb.BinlogType
 	startTS  int64
 	commitTS int64
-	//pos      pb.Pos
 }
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
@@ -65,7 +64,6 @@ func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, w *De
 		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
-		//binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
 	}, nil
 }
 
