@@ -42,7 +42,7 @@ type Syncer struct {
 
 	executors []executor.Executor
 
-	positions    map[string]pb.Pos
+	positions    map[string]int64
 	initCommitTS int64
 
 	// because TiDB is case-insensitive, only lower-case here.
@@ -68,8 +68,8 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS, _ = cp.Pos()
-	syncer.positions = make(map[string]pb.Pos)
+	syncer.initCommitTS = cp.Pos()
+	syncer.positions = make(map[string]int64)
 	syncer.c = newCausality()
 	syncer.lastSyncTime = time.Now()
 
@@ -362,7 +362,7 @@ func (s *Syncer) addDDLCount() {
 
 func (s *Syncer) checkWait(job *job) bool {
 	// Note: checkpoint's Save() must be called first.
-	if s.cp.Check(job.commitTS, s.positions) && (!s.cfg.DisableDispatch || job.isCompleteBinlog) {
+	if s.cp.Check(job.commitTS) && (!s.cfg.DisableDispatch || job.isCompleteBinlog) {
 		return true
 	}
 	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
@@ -378,22 +378,21 @@ type job struct {
 	args             []interface{}
 	key              string
 	commitTS         int64
-	pos              pb.Pos
 	nodeID           string
 	isCompleteBinlog bool
 }
 
-func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
-func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
 // binlog bounadary job is used to group jobs, like a barrier
-func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DML, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
+func newBinlogBoundaryJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.DML, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
 func (s *Syncer) addJob(job *job) {
@@ -415,25 +414,25 @@ func (s *Syncer) addJob(job *job) {
 	s.jobCh[idx] <- job
 	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 
-	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
-		s.positions[job.nodeID] = job.pos
+	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
+		s.positions[job.nodeID] = job.commitTS
 	}
 
 	wait := s.checkWait(job)
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
-		s.savePoint(job.commitTS, s.positions)
+		s.savePoint(job.commitTS)
 	}
 }
 
-func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string) error {
+func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, nodeID string) error {
 	key, err := s.resolveCasuality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
 
-	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
+	job := newDMLJob(tp, sql, args, key, commitTS, nodeID)
 	s.addJob(job)
 	return nil
 }
@@ -468,11 +467,11 @@ func (s *Syncer) flushJobs() error {
 	return nil
 }
 
-func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
-	log.Infof("[write save point]%d[positions]%v", ts, positions)
-	err := s.cp.Save(ts, positions)
+func (s *Syncer) savePoint(ts int64) {
+	log.Infof("[write save point]%d", ts)
+	err := s.cp.Save(ts)
 	if err != nil {
-		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
+		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
 
 	positionGauge.Set(float64(ts))
@@ -597,13 +596,13 @@ func (s *Syncer) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
+			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// send binlog boundary job for dml binlog, disdispatch also disables batch
 			if s.cfg.DisableDispatch {
-				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
+				s.addJob(newBinlogBoundaryJob(commitTS, b.nodeID))
 			}
 
 		} else if jobID > 0 {
@@ -613,23 +612,23 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 
 			if s.skipSchemaAndTable(schema, table) {
-				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
+				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d", schema, table, sql, commitTS)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema, commitTS)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
 				var args []interface{}
 				// for kafka, we want to know the relate schema and table, get it while args now
 				// in executor
 				if s.cfg.DestDBType == "kafka" {
 					args = []interface{}{schema, table}
 				}
-				job := newDDLJob(sql, args, "", commitTS, b.pos, b.nodeID)
+				job := newDDLJob(sql, args, "", commitTS, b.nodeID)
 				s.addJob(job)
-				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][end]%s[commit ts]%v", sql, commitTS)
 			}
 		}
 
@@ -642,7 +641,7 @@ func (s *Syncer) run(b *binlogItem) error {
 	}
 }
 
-func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
+func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
 	for _, mutation := range mutations {
@@ -709,18 +708,18 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
-				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
+				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -759,4 +758,10 @@ func (s *Syncer) Close() {
 // GetLastSyncTime returns lastSyncTime
 func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
+}
+
+
+// GetLatestCommitTS returns the latest commit ts.
+func (s *Syncer) GetLatestCommitTS() int64 {
+	return s.cp.Pos()
 }

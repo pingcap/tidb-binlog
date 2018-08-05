@@ -3,7 +3,6 @@ package checkpoint
 import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 // CheckPoint is the binlog sync pos meta.
@@ -13,13 +12,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(int64, map[string]pb.Pos) error
+	Save(int64) error
 
 	// Check checks whether we should save checkpoint.
-	Check(int64, map[string]pb.Pos) bool
+	Check(int64) bool
 
 	// Pos gets position information.
-	Pos() (int64, map[string]pb.Pos)
+	Pos() (int64)
 
 	// String returns CommitTS and Offset
 	String() string

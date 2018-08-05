@@ -2,20 +2,16 @@ package drainer
 
 import (
 	"fmt"
-	"math"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
-
-	"github.com/Shopify/sarama"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/offsets"
+	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
@@ -23,7 +19,6 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
 
@@ -34,27 +29,22 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	clusterID    uint64
-	batch        int32
-	kafkaAddrs   []string
-	kafkaVersion string
-	interval     time.Duration
-	reg          *pump.EtcdRegistry
-	timeout      time.Duration
-	window       *DepositWindow
-	tiClient     *tikv.LockResolver
-	tiStore      kv.Storage
-	pumps        map[string]*Pump
-	offlines     map[string]struct{}
-	bh           *binlogHeap
-	syncer       *Syncer
-	latestTS     int64
-	cp           checkpoint.CheckPoint
+	clusterID uint64
+	batch     int32
+	interval  time.Duration
+	reg       *node.EtcdRegistry
+	timeout   time.Duration
+	window    *DepositWindow
+	tiClient  *tikv.LockResolver
+	tiStore   kv.Storage
+	pumps     map[string]*Pump
+	syncer    *Syncer
+	latestTS  int64
+	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
 
-	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -62,20 +52,13 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+
+	merger *Merger
 }
 
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	kafkaAddrs, err := flags.ParseHostPortAddr(cfg.KafkaAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	offsetSeeker, err := createOffsetSeeker(kafkaAddrs, cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -91,31 +74,74 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, etcd.DefaultRootPath, cfg.tls)
+	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, node.DefaultRootPath, cfg.tls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	return &Collector{
+	c := &Collector{
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:      kafkaAddrs,
-		kafkaVersion:    cfg.KafkaVersion,
-		reg:             pump.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
-		offlines:        make(map[string]struct{}),
-		bh:              newBinlogHeap(maxBinlogItemCount),
 		window:          w,
 		syncer:          s,
 		cp:              cpt,
 		tiClient:        tiClient,
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
-		offsetSeeker:    offsetSeeker,
 		syncedCheckTime: cfg.SyncedCheckTime,
 		safeForwardTime: cfg.SafeForwardTime,
-	}, nil
+		merger:          NewMerger(),
+	}
+
+	go c.startAddToSyncer()
+
+	return c, nil
+}
+
+func (c *Collector) startAddToSyncer() {
+	for mergeItem := range c.merger.Output() {
+		item := mergeItem.(*binlogItem)
+		binlog := item.binlog
+
+		if binlog.CommitTs == binlog.StartTs {
+			log.Debug("fake binlog ts: ", binlog.CommitTs)
+			continue
+		}
+
+		// TODO when will fail, handle it in better way
+		if binlog.DdlJobId > 0 {
+			for {
+				job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
+				if err != nil {
+					log.Error(err)
+					time.Sleep(time.Second)
+					continue
+				}
+
+				if job == nil {
+					time.Sleep(time.Second)
+					continue
+				}
+
+				if job.State == model.JobStateCancelled {
+					break
+				} else {
+					item.SetJob(job)
+					c.syncer.Add(item)
+					ddlJobsCounter.Add(float64(1))
+					break
+				}
+			}
+		} else {
+			c.syncer.Add(item)
+		}
+
+	}
+
+	log.Debug("startAddToSyncer quit")
 }
 
 // Start run a loop of collecting binlog from pumps online
@@ -149,12 +175,12 @@ func (c *Collector) Start(ctx context.Context) {
 func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
-		PumpPos: make(map[string]binlog.Pos),
+		PumpPos: make(map[string]int64),
 	}
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		offsetGauge.WithLabelValues(nodeID).Set(float64(pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -174,14 +200,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
-		c.updateCollectStatus(false)
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.latestTS
-	windowLower := c.getLatestValidCommitTS()
-	c.publish(ctx, windowUpper, windowLower)
-	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
@@ -191,9 +212,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// get current binlog's commit ts which in process
-	currentCommitTS, _ := c.cp.Pos()
-	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
 	c.latestTS = c.queryLatestTsFromPD()
 
@@ -206,46 +224,44 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
-			// if pump is offline and last binlog ts <= safeTS, ignore it
-			if n.IsOffline {
-				if n.OfflineTS <= safeTS {
-					continue
-				}
-
-				if _, exist := c.offlines[n.NodeID]; exist {
-					continue
-				}
+			// if pump is offline, ignore it
+			if n.State == node.Offline {
+				continue
 			}
 
 			// initial pump
-			pos, err := c.getSavePoints(ctx, n.NodeID)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			safeTS := c.getSavePoints(ctx, n.NodeID)
 
-			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.kafkaVersion, c.timeout, c.window, c.tiStore, pos)
+			log.Infof("node %s get save point %v", n.NodeID, safeTS)
+			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
-			delete(c.offlines, n.NodeID)
-			p.StartCollect(ctx, c.tiClient)
+			c.merger.AddSource(MergeSource{
+				ID:     p.nodeID,
+				Source: p.PullBinlog(ctx, p.latestPos),
+				Pause:  n.State == node.Paused || n.State == node.Pausing,
+				Binlogs: make([]MergeItem, 0, DefaultCacheSize),
+			})
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
-			if n.IsOffline {
-				if !p.hadFinished(n.LatestKafkaPos, c.window.LoadLower()) {
-					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
-					continue
-				}
 
+			switch n.State {
+			case node.Paused, node.Pausing:
+				c.merger.PauseSource(n.NodeID)
+			case node.Online:
+				c.merger.ContinueSource(n.NodeID)
+			case node.Closing:
+				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
+			case node.Offline:
 				// release invalid connection
 				p.Close()
 				delete(c.pumps, n.NodeID)
-				c.offlines[n.NodeID] = struct{}{}
 				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
+			
 			}
 		}
 	}
@@ -260,38 +276,6 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	}
 
 	return int64(version.Ver)
-}
-
-func (c *Collector) publish(ctx context.Context, upper, lower int64) {
-	oldLower := c.window.LoadLower()
-	oldUpper := c.window.LoadUpper()
-
-	if lower > oldLower {
-		c.publishBinlogs(ctx, oldLower, lower)
-		// we should update window after publishing binlogs
-		c.window.SaveLower(lower)
-		windowGauge.WithLabelValues("lower").Set(float64(lower))
-	}
-	if upper > oldUpper {
-		c.window.SaveUpper(upper)
-		windowGauge.WithLabelValues("upper").Set(float64(upper))
-	}
-}
-
-// select min of all pumps' latestValidCommitTS
-func (c *Collector) getLatestValidCommitTS() int64 {
-	var latest int64 = math.MaxInt64
-	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestValidCommitTS()
-		if latestCommitTS < latest {
-			latest = latestCommitTS
-		}
-	}
-	if latest == math.MaxInt64 {
-		latest = 0
-	}
-
-	return latest
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
@@ -312,64 +296,12 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	return jobs, nil
 }
 
-// publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
-func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
-	begin := time.Now()
-	// multiple ways sort:
-	// 1. get multiple way sorted binlogs
-	// 2. use heap to merge sort
-	// todo: use multiple goroutines to collect sorted binlogs
-	total := 0
-	bss := make(map[string]binlogItems)
-	binlogOffsets := make(map[string]int)
-	for id, p := range c.pumps {
-		bs := p.collectBinlogs(minTS, maxTS)
-		if bs.Len() > 0 {
-			bss[id] = bs
-			binlogOffsets[id] = 1
-			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0], false)
-		}
-		total += bs.Len()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_collector").Observe(time.Since(begin).Seconds())
-
-	begin = time.Now()
-	item := c.bh.pop()
-	for item != nil {
-		c.syncer.Add(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
-		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
-			delete(bss, item.nodeID)
-		} else {
-			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]], false)
-			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
-		}
-		item = c.bh.pop()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_merge_sort").Observe(time.Since(begin).Seconds())
-
-	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
-}
-
-func (c *Collector) getSavePoints(ctx context.Context, nodeID string) (binlog.Pos, error) {
-	commitTS, poss := c.cp.Pos()
-	pos, ok := poss[nodeID]
-	if ok {
-		return pos, nil
-	}
-
-	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
+func (c *Collector) getSavePoints(ctx context.Context, nodeID string) int64 {
+	commitTS := c.cp.Pos()
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-	offsets, err := c.offsetSeeker.Do(ctx, topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
-	if err == nil {
-		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
-	}
 
-	log.Errorf("seek offset %s error %v", nodeID, err)
-	return binlog.Pos{Offset: sarama.OffsetOldest}, nil
+	return safeCommitTS
 }
 
 // Notify notifies to detcet pumps

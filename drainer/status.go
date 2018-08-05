@@ -3,14 +3,12 @@ package drainer
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/pingcap/tipb/go-binlog"
 )
 
 // HTTPStatus exposes current status of the collector via HTTP
 type HTTPStatus struct {
-	PumpPos       map[string]binlog.Pos `json:"PumpPos"`
-	Synced        bool                  `json:"Synced"`
+	PumpPos       map[string]int64 `json:"PumpPos"`
+	Synced        bool             `json:"Synced"`
 	DepositWindow struct {
 		Upper int64 `json:"Upper"`
 		Lower int64 `json:"Lower"`
