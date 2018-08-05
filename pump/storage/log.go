@@ -186,7 +186,7 @@ func (lf *logFile) finalize() error {
 
 	lf.end = true
 
-	return errors.Trace(lf.sync())
+	return errors.Trace(lf.fdatasync())
 }
 
 func (lf *logFile) close() {

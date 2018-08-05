@@ -300,7 +300,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 			return errors.Annotatef(err, "unable to write to log file: %s", curFile.path)
 		}
 		if vlog.sync {
-			err = curFile.sync()
+			err = curFile.fdatasync()
 			if err != nil {
 				return errors.Trace(err)
 			}

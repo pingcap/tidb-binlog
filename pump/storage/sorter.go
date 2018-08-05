@@ -73,11 +73,11 @@ type sorter struct {
 	// save the startTS of txn which we need to wait for the C binlog
 	waitStartTS map[int64]struct{}
 
-	lock     sync.Mutex
-	cond     *sync.Cond
-	items    *list.List
-	wg       sync.WaitGroup
-	isClosed int32
+	lock   sync.Mutex
+	cond   *sync.Cond
+	items  *list.List
+	wg     sync.WaitGroup
+	closed int32
 }
 
 func newSorter(fn func(item sortItem)) *sorter {
@@ -99,7 +99,7 @@ func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 }
 
 func (s *sorter) pushTSItem(item sortItem) {
-	if atomic.LoadInt32(&s.isClosed) == 1 {
+	if s.isClosed() {
 		// i think we can just panic
 		log.Error("sorter is closed but still push item, this should never happen")
 	}
@@ -127,7 +127,7 @@ func (s *sorter) run() {
 	for {
 		s.cond.L.Lock()
 		for s.items.Len() == 0 {
-			if atomic.LoadInt32(&s.isClosed) == 1 {
+			if s.isClosed() {
 				return
 			}
 			s.cond.Wait()
@@ -149,7 +149,7 @@ func (s *sorter) run() {
 
 				// quit if sorter is closed and still not get the according C binlog
 				// or continue to handle the items
-				if atomic.LoadInt32(&s.isClosed) == 1 {
+				if s.isClosed() {
 					return
 				}
 				s.cond.Wait()
@@ -165,8 +165,12 @@ func (s *sorter) run() {
 	}
 }
 
+func (s *sorter) isClosed() bool {
+	return atomic.LoadInt32(&s.closed) == 1
+}
+
 func (s *sorter) close() {
-	atomic.StoreInt32(&s.isClosed, 1)
+	atomic.StoreInt32(&s.closed, 1)
 	// let run() await and quit when items.Len() = 0
 	s.cond.L.Lock()
 	s.cond.Broadcast()

@@ -81,7 +81,7 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 }
 
 // NewAppendWithResolver returns a instance of Append
-// if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txt is committed
+// if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txn is committed
 func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
@@ -141,7 +141,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
 		// or this should never happend
 		if item.commit < append.maxCommitTS {
-			log.Debugf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, append.maxCommitTS)
+			log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, append.maxCommitTS)
 			return
 		}
 

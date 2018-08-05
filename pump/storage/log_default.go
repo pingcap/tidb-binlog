@@ -2,6 +2,6 @@
 
 package storage
 
-func (lf *logFile) sync() error {
+func (lf *logFile) fdatasync() error {
 	return lf.fd.Sync()
 }
