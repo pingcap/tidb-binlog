@@ -62,7 +62,8 @@ type Server struct {
 	syncer    *Syncer
 	isClosed  int32
 
-	state string
+	statusMu sync.RWMutex
+	status   *node.Status
 }
 
 func init() {
@@ -129,8 +130,16 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
+	advURL, err := url.Parse(cfg.ListenAddr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
+	}
+
+	status := node.NewStatus(ID, advURL.Host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
+
 	return &Server{
 		ID:        ID,
+		host:      advURL.Host,
 		cfg:       cfg,
 		window:    win,
 		collector: c,
@@ -140,7 +149,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:       ctx,
 		cancel:    cancel,
 		syncer:    syncer,
-		state:     node.Online,
+		status:    status,
 	}, nil
 }
 
@@ -256,9 +265,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 
 func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
-	// must refresh node firstly
-	status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
-	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+	err := s.updateStatus()
 	if err != nil {
 		errc <- errors.Trace(err)
 	}
@@ -277,8 +284,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
-				err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+				err := s.updateStatus()
 				if err != nil {
 					errc <- errors.Trace(err)
 				}
@@ -291,13 +297,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// register drainer
-	advURL, err := url.Parse(s.cfg.ListenAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
-	}
-	s.host = advURL.Host
-	status := node.NewStatus(s.ID, s.host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
-	err = s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+	err := s.updateStatus()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -370,20 +370,26 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.state != "online" {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.state, action))
+	s.statusMu.RLock()
+	if s.status.State != node.Online {
+		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.status.State, action))
+		s.statusMu.RUnlock()
 		return
 	}
+	s.statusMu.RUnlock()
 
+	s.statusMu.Lock()
 	switch action {
 	case "pause":
-		s.state = node.Pausing
+		s.status.State = node.Pausing
 	case "close":
-		s.state = node.Closing
+		s.status.State = node.Closing
 	default:
+		s.statusMu.Unlock()
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
 		return
 	}
+	s.statusMu.Unlock()
 
 	go s.Close()
 	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
@@ -393,22 +399,34 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 // commitStatus commit the node's last status to pd when close the server.
 func (s *Server) commitStatus() {
 	// update this node
-	var state string
-	switch s.state {
+	s.statusMu.Lock()
+	switch s.status.State {
 	case node.Pausing, node.Online:
-		state = node.Paused
+		s.status.State = node.Paused
 	case node.Closing:
-		state = node.Offline
+		s.status.State = node.Offline
+	}
+	s.statusMu.Unlock()
+
+	err := s.updateStatus()
+	if err != nil {
+		log.Errorf("%s failed to update status", s.ID)
+		return
 	}
 
-	// update drainer node's status
-	status := node.NewStatus(s.ID, s.host, state, 0, util.GetApproachTS(latestTS, latestTime))
-	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
+	log.Infof("%s has already update status ", s.ID)
+}
+
+func (s *Server) updateStatus() error {
+	s.statusMu.Lock()
+	s.status.UpdateTS = util.GetApproachTS(latestTS, latestTime)
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
+	s.statusMu.Unlock()
+	if err != nil {
+		return errors.Trace(err)
 	}
 
-	log.Infof("%s has update status to %s", s.ID, state)
+	return nil
 }
 
 // Close stops all goroutines started by drainer server gracefully
