@@ -147,6 +147,10 @@ func (m *Merger) run() {
 		binlogNum := 0
 
 		for _, source := range m.sources {
+			if source.Pause {
+				continue
+			}
+			
 			for len(source.Binlogs) < DefaultCacheSize {
 				binlog, ok := <-source.Source
 				if ok {
