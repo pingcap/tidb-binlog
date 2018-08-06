@@ -1,6 +1,10 @@
-hash: 50a6470ed0011d7b82875698130d92038b03c5940e1dcf3d37e87acb0a85ccc4
-updated: 2018-07-11T20:55:36.076094028+08:00
+hash: 5716461fd40f6978b65b72b42399601174bba360f46eb033334021cb48559a16
+updated: 2018-08-06T18:20:59.662852735+08:00
 imports:
+- name: github.com/apache/thrift
+  version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
+  subpackages:
+  - lib/go/thrift
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
@@ -106,7 +110,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: c90ba19bea8927552cef4560ab888231566f049d
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -154,6 +158,10 @@ imports:
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
+- name: github.com/google/gofuzz
+  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
+- name: github.com/gorilla/mux
+  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
   version: e9c5d9645c437ab1b204cff969a2c0fb16cd4276
   subpackages:
@@ -185,7 +193,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: 9be84105672ba4433a3b61f1b4d7f9ff8b022293
+  version: 62bff4df71bdbc266561a0caee19f0594b17c240
   subpackages:
   - format
   - internal/assertion
@@ -199,7 +207,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/opentracing/opentracing-go
-  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
   subpackages:
   - ext
   - log
@@ -322,8 +330,9 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 4f029e8618f84b92a8e0fe2e1af1ff94b40c5ca2
+  version: 347725a566f4a7d897aa0d6addb710c77395c640
   subpackages:
+  - tidb_binlog/slave_binlog_proto
   - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 4141907f6909f62af0378aa1c891c46f34aed0a7
@@ -365,15 +374,30 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: e54a77765aca7bbdd8e56c1c54f60579968b2dc9
+  version: d329d24db4313262a3b0a24d8aeb1dc4bd294fb0
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
   version: f09979ecbc725b9e6d41a297405f65e7e8804acc
+- name: github.com/syndtr/goleveldb
+  version: c4c61651e9e37fa117f53c5a906d3b63090d8445
+  subpackages:
+  - leveldb
+  - leveldb/cache
+  - leveldb/comparer
+  - leveldb/errors
+  - leveldb/filter
+  - leveldb/iterator
+  - leveldb/journal
+  - leveldb/memdb
+  - leveldb/opt
+  - leveldb/storage
+  - leveldb/table
+  - leveldb/util
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: f7e0d4744fa6d5287c53b8ac8d4f83089ce07ce8
+  version: 252d853b2a4f3cfc98bb89c3a8bb3d3aa50ed4d6
   subpackages:
   - config
   - internal/baggage
@@ -389,6 +413,7 @@ imports:
   - thrift-gen/jaeger
   - thrift-gen/sampling
   - thrift-gen/zipkincore
+  - transport
   - utils
 - name: github.com/uber/jaeger-lib
   version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
@@ -398,6 +423,8 @@ imports:
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
   - codec
+- name: github.com/unrolled/render
+  version: 65450fb6b2d3595beca39f969c411db8f8d5c806
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
 - name: github.com/zanmato1984/clickhouse
@@ -463,7 +490,7 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/appengine
-  version: b1f26356af11148e710935ed1ac8a7f5702c7612
+  version: 4216e58b9158e5f1c906f1aca75162a46a2ec88a
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
