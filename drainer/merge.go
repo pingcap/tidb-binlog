@@ -9,7 +9,6 @@ import (
 	"github.com/ngaut/log"
 )
 
-
 const (
 	// DefaultCacheSize is the default cache size for every source.
 	DefaultCacheSize = 1024
@@ -26,14 +25,14 @@ type Merger struct {
 
 	//Binlogs map[string]MergeItem
 	//chans   map[string]chan MergeItem
-	
+
 	sources map[string]MergeSource
 
 	output chan MergeItem
 
-	newSource []MergeSource
-	removeSource []string
-	pauseSource []string
+	newSource      []MergeSource
+	removeSource   []string
+	pauseSource    []string
 	continueSource []string
 
 	// when close, close the output chan once chans is empty
@@ -150,7 +149,7 @@ func (m *Merger) run() {
 			if source.Pause {
 				continue
 			}
-			
+
 			for len(source.Binlogs) < DefaultCacheSize {
 				binlog, ok := <-source.Source
 				if ok {

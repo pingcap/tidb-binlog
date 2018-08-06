@@ -100,7 +100,7 @@ func (sp *PbCheckPoint) Check(int64) bool {
 }
 
 // Pos implements CheckPoint.Pos interface
-func (sp *PbCheckPoint) Pos() (int64) {
+func (sp *PbCheckPoint) Pos() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 

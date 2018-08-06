@@ -41,7 +41,7 @@ var (
 	maxMsgSize        = 1024 * 1024 * 1024
 
 	// latestTS and latestTime is used for get approach ts
-	latestTS   int64 = 0
+	latestTS   int64
 	latestTime time.Time
 )
 

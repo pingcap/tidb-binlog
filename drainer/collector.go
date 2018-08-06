@@ -239,9 +239,9 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{
-				ID:     p.nodeID,
-				Source: p.PullBinlog(ctx, p.latestPos),
-				Pause:  n.State == node.Paused || n.State == node.Pausing,
+				ID:      p.nodeID,
+				Source:  p.PullBinlog(ctx, p.latestPos),
+				Pause:   n.State == node.Paused || n.State == node.Pausing,
 				Binlogs: make([]MergeItem, 0, DefaultCacheSize),
 			})
 		} else {
@@ -261,7 +261,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				delete(c.pumps, n.NodeID)
 				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
-			
+
 			}
 		}
 	}

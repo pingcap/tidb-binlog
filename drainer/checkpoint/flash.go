@@ -25,7 +25,7 @@ type FlashCheckPoint struct {
 	metaCP   *flash.MetaCheckpoint
 	saveTime time.Time
 
-	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
+	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
 
 func checkFlashConfig(cfg *Config) error {
@@ -176,7 +176,7 @@ func (sp *FlashCheckPoint) Check(ts int64) bool {
 }
 
 // Pos implements CheckPoint.Pos interface
-func (sp *FlashCheckPoint) Pos() (int64) {
+func (sp *FlashCheckPoint) Pos() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 

@@ -19,7 +19,7 @@ func TsToTimestamp(ts int64) int64 {
 	return ts >> 18 / 1000
 }
 
-// GetApproachTs get a approach ts by ts and time
+// GetApproachTS get a approach ts by ts and time
 func GetApproachTS(ts int64, tm time.Time) int64 {
 	if ts == 0 {
 		return 0
@@ -28,6 +28,7 @@ func GetApproachTS(ts int64, tm time.Time) int64 {
 	return ts + (second*1000)<<18
 }
 
+// GetTSO get ts from pd
 func GetTSO(pdCli pd.Client) (int64, error) {
 	now := time.Now()
 	physical, logical, err := pdCli.GetTS(context.Background())

@@ -28,8 +28,8 @@ type MysqlCheckPoint struct {
 	// type, tidb or mysql
 	tp string
 
-	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
-	TsMap     map[string]int64  `toml:"ts-map" json:"ts-map"`
+	CommitTS int64            `toml:"commitTS" json:"commitTS"`
+	TsMap    map[string]int64 `toml:"ts-map" json:"ts-map"`
 
 	snapshot time.Time
 }
@@ -158,7 +158,7 @@ func (sp *MysqlCheckPoint) Check(int64) bool {
 }
 
 // Pos implements CheckPoint.Pos interface
-func (sp *MysqlCheckPoint) Pos() (int64) {
+func (sp *MysqlCheckPoint) Pos() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 

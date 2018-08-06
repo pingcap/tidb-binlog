@@ -760,7 +760,6 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
 }
 
-
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
 	return s.cp.Pos()

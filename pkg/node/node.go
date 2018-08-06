@@ -90,6 +90,7 @@ type Status struct {
 	UpdateTS int64 `json:"updateTS"`
 }
 
+// NewStatus returns a new status.
 func NewStatus(nodeID, addr, state string, score int64, ts int64) *Status {
 	return &Status{
 		NodeID:   nodeID,

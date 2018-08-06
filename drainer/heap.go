@@ -29,8 +29,8 @@ func (b *binlogItem) String() string {
 
 func newBinlogItem(b *pb.Binlog, ts int64, nodeID string) *binlogItem {
 	itemp := &binlogItem{
-		binlog:           b,
-		nodeID:           nodeID,
+		binlog: b,
+		nodeID: nodeID,
 	}
 
 	return itemp
