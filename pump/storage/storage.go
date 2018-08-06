@@ -82,7 +82,7 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 
 // NewAppendWithResolver returns a instance of Append
 // if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txn is committed
-func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
+func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
 	}
