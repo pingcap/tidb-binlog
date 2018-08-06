@@ -25,6 +25,11 @@ type binlogItem struct {
 	commitOrRollback chan struct{}
 }
 
+// GetCommitTs inplement Item interface in merger.go
+func (b *binlogItem) GetCommitTs() int64 {
+	return b.binlog.CommitTs
+}
+
 func (b *binlogItem) String() string {
 	return fmt.Sprintf("{commitTS: %d, node: %s, pos: %v}", b.binlog.CommitTs, b.nodeID, b.pos)
 }
