@@ -127,21 +127,19 @@ func (entry Entry) log(level Level, msg string) {
 	}
 }
 
-// This function is not declared with a pointer value because otherwise
-// race conditions will occur when using multiple goroutines
-func (entry Entry) fireHooks() {
+func (entry *Entry) fireHooks() {
 	entry.Logger.mu.Lock()
 	defer entry.Logger.mu.Unlock()
-	err := entry.Logger.Hooks.Fire(entry.Level, &entry)
+	err := entry.Logger.Hooks.Fire(entry.Level, entry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to fire hook: %v\n", err)
 	}
 }
 
 func (entry *Entry) write() {
-	serialized, err := entry.Logger.Formatter.Format(entry)
 	entry.Logger.mu.Lock()
 	defer entry.Logger.mu.Unlock()
+	serialized, err := entry.Logger.Formatter.Format(entry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to obtain reader, %v\n", err)
 	} else {
