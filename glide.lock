@@ -1,5 +1,5 @@
 hash: a8f17f8995c858d65f4f82e1172ec2f5a70e392104bce6f8c377cbb88a973212
-updated: 2018-08-06T16:22:55.315807011+08:00
+updated: 2018-08-06T17:55:51.066671876+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -16,7 +16,7 @@ imports:
 - name: github.com/cockroachdb/cmux
   version: 112f0506e7743d64a6eb8fedbcff13d9979bbf92
 - name: github.com/codahale/hdrhistogram
-  version: f8ad88b59a584afeee9d334eff879b104439117b
+  version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/bbolt
   version: 32c383e75ce054674c53b5a07e55de85332aee14
 - name: github.com/coreos/etcd
@@ -110,7 +110,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: 78ad7f262603437f0ecfebc835d80094f89c8f54
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -161,13 +161,13 @@ imports:
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
-  version: 82921fcf811d228d2fa202bc31238b356bf9f8d5
+  version: e9c5d9645c437ab1b204cff969a2c0fb16cd4276
   subpackages:
   - tags
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: 6b7015e65d366bf3f19b2b2a000a831940f0f7e0
+  version: c225b8c3b01faf2899099b768856a9e916e5087b
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -205,7 +205,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/opentracing/opentracing-go
-  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
   subpackages:
   - ext
   - log
@@ -337,6 +337,8 @@ imports:
   - go-binlog
   - go-tipb
   - sharedbytes
+- name: github.com/pkg/errors
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
   version: 967789050ba94deca04a5e84cce8ad472ce313c1
   subpackages:
@@ -373,7 +375,7 @@ imports:
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
-  version: 0d12bf811670bf6a1a63828dfbd003eded177fce
+  version: f09979ecbc725b9e6d41a297405f65e7e8804acc
 - name: github.com/syndtr/goleveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
   subpackages:
@@ -392,16 +394,23 @@ imports:
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: d021e646f5187d77b55592c3efee1a2810e895d7
+  version: 252d853b2a4f3cfc98bb89c3a8bb3d3aa50ed4d6
   subpackages:
   - config
+  - internal/baggage
+  - internal/baggage/remote
   - internal/spanlog
+  - internal/throttler
+  - internal/throttler/remote
   - log
   - rpcmetrics
+  - thrift
   - thrift-gen/agent
+  - thrift-gen/baggage
   - thrift-gen/jaeger
   - thrift-gen/sampling
   - thrift-gen/zipkincore
+  - transport
   - utils
 - name: github.com/uber/jaeger-lib
   version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
@@ -514,11 +523,11 @@ imports:
   - tap
   - transport
 - name: gopkg.in/natefinch/lumberjack.v2
-  version: dd45e6a67c53f673bb49ca8a001fd3a63ceb640e
+  version: a96e63847dc3c67d17befa69c303767e2f84e54f
 - name: gopkg.in/yaml.v2
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/google/gofuzz
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
