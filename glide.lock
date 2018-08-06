@@ -1,5 +1,5 @@
-hash: a8f17f8995c858d65f4f82e1172ec2f5a70e392104bce6f8c377cbb88a973212
-updated: 2018-08-06T17:55:51.066671876+08:00
+hash: 5716461fd40f6978b65b72b42399601174bba360f46eb033334021cb48559a16
+updated: 2018-08-06T18:20:59.662852735+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -158,6 +158,8 @@ imports:
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
+- name: github.com/google/gofuzz
+  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
@@ -191,7 +193,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: b6ea1ea48f981d0f615a154a45eabb9dd466556d
+  version: 62bff4df71bdbc266561a0caee19f0594b17c240
   subpackages:
   - format
   - internal/assertion
@@ -328,8 +330,9 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: b605dbc412c4ffb8082d4e21829c60e68533f576
+  version: 347725a566f4a7d897aa0d6addb710c77395c640
   subpackages:
+  - tidb_binlog/slave_binlog_proto
   - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 4141907f6909f62af0378aa1c891c46f34aed0a7
@@ -527,7 +530,5 @@ imports:
 - name: gopkg.in/yaml.v2
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
-- name: github.com/google/gofuzz
-  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/pingcap/check
   version: 9b266636177e249ec28b0aeffe8e86bc272bb481
