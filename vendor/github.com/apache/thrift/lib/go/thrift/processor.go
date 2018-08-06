@@ -1,3 +1,5 @@
+// +build !go1.7
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
@@ -19,33 +21,14 @@
 
 package thrift
 
-import (
-	"compress/gzip"
-	"io"
-	"net/http"
-	"strings"
-)
+import "golang.org/x/net/context"
 
-// gz transparently compresses the HTTP response if the client supports it.
-func gz(handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			handler(w, r)
-			return
-		}
-		w.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(w)
-		defer gz.Close()
-		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
-		handler(gzw, r)
-	}
+// A processor is a generic object which operates upon an input stream and
+// writes to some output stream.
+type TProcessor interface {
+	Process(ctx context.Context, in, out TProtocol) (bool, TException)
 }
 
-type gzipResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
+type TProcessorFunction interface {
+	Process(ctx context.Context, seqId int32, in, out TProtocol) (bool, TException)
 }

@@ -1,3 +1,5 @@
+// +build go1.7
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
@@ -19,6 +21,18 @@
 
 package thrift
 
-import "context"
+import (
+	"net/http"
+)
 
-var defaultCtx = context.Background()
+// NewThriftHandlerFunc is a function that create a ready to use Apache Thrift Handler function
+func NewThriftHandlerFunc(processor TProcessor,
+	inPfactory, outPfactory TProtocolFactory) func(w http.ResponseWriter, r *http.Request) {
+
+	return gz(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/x-thrift")
+
+		transport := NewStreamTransport(r.Body, w)
+		processor.Process(r.Context(), inPfactory.GetProtocol(transport), outPfactory.GetProtocol(transport))
+	})
+}

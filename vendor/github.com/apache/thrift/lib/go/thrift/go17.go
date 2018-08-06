@@ -1,3 +1,5 @@
+// +build go1.7
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
@@ -19,33 +21,6 @@
 
 package thrift
 
-import (
-	"compress/gzip"
-	"io"
-	"net/http"
-	"strings"
-)
+import "context"
 
-// gz transparently compresses the HTTP response if the client supports it.
-func gz(handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			handler(w, r)
-			return
-		}
-		w.Header().Set("Content-Encoding", "gzip")
-		gz := gzip.NewWriter(w)
-		defer gz.Close()
-		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
-		handler(gzw, r)
-	}
-}
-
-type gzipResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
+var defaultCtx = context.Background()

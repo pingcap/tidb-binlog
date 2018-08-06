@@ -297,3 +297,7 @@ import:
 - package: github.com/gorilla/mux
   version: ~1.6.2
 - package: github.com/unrolled/render
+- package: github.com/apache/thrift
+  version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
+  subpackages:
+  - lib/go/thrift
