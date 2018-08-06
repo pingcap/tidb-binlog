@@ -6,6 +6,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/net/context"
 )
 
@@ -16,7 +17,7 @@ var (
 
 // TsToTimestamp translate ts to timestamp
 func TsToTimestamp(ts int64) int64 {
-	return ts >> 18 / 1000
+	return ts >> physicalShiftBits / 1000
 }
 
 // GetApproachTS get a approach ts by ts and time
@@ -40,11 +41,7 @@ func GetTSO(pdCli pd.Client) (int64, error) {
 		log.Warnf("get timestamp too slow: %s", dist)
 	}
 
-	ts := int64(composeTS(physical, logical))
+	ts := int64(oracle.ComposeTS(physical, logical))
 
 	return ts, nil
-}
-
-func composeTS(physical, logical int64) uint64 {
-	return uint64((physical << physicalShiftBits) + logical)
 }

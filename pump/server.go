@@ -151,6 +151,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		clusterID: fmt.Sprintf("%d", clusterID),
 		node:      n,
 		tcpAddr:   cfg.ListenAddr,
+		unixAddr:  cfg.Socket,
 		gs:        grpc.NewServer(grpcOpts...),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -373,6 +374,15 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return errors.Annotate(err, "fail to initialize pump server")
 	}
+	// start a UNIX listener
+	unixURL, err := url.Parse(s.unixAddr)
+	if err != nil {
+		return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
+	}
+	unixLis, err := net.Listen("unix", unixURL.Path)
+	if err != nil {
+		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
+	}
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -398,7 +408,7 @@ func (s *Server) Start() error {
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
-	go s.gs.Serve(tcpLis)
+	go s.gs.Serve(unixLis)
 
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
@@ -588,6 +598,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := mux.Vars(r)["nodeID"]
 	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
 
 	if nodeID != s.node.NodeStatus().NodeID {
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))

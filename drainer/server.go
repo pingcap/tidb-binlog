@@ -364,6 +364,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := mux.Vars(r)["nodeID"]
 	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
 
 	if nodeID != s.ID {
 		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
