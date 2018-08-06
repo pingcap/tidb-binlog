@@ -258,21 +258,13 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				return nil
 			}
 			resp := new(binlog.PullBinlogResp)
-			blog := new(binlog.Binlog)
-			err := blog.Unmarshal(data)
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-			log.Debug("PullBinlogs get commitTS: ", blog.CommitTs)
 
-			resp.Entity.Pos.Offset = blog.CommitTs
 			resp.Entity.Payload = data
-			err = stream.Send(resp)
+			err := stream.Send(resp)
 			if err != nil {
 				return err
 			}
-			log.Debug("PullBinlogs send binlog commitTS: ", blog.CommitTs, "success")
+			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
 		case <-s.ctx.Done():
 			return nil
 		}
