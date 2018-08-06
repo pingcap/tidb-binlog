@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -16,7 +17,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -35,6 +35,7 @@ type binlogEntity struct {
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
 type Pump struct {
+	addr      string
 	nodeID    string
 	clusterID uint64
 	consumer  sarama.Consumer
@@ -43,8 +44,8 @@ type Pump struct {
 	// the latest binlog position that pump had handled
 	latestPos pb.Pos
 	// store binlogs in a heap
-	bh      *binlogHeap
-	tiStore kv.Storage
+	bh *binlogHeap
+	*jobGetter
 	window  *DepositWindow
 	timeout time.Duration
 
@@ -87,7 +88,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		currentPos: pos,
 		latestPos:  pos,
 		bh:         newBinlogHeap(maxBinlogItemCount),
-		tiStore:    tiStore,
+		jobGetter:  newJobGetter(tiStore),
 		window:     w,
 		timeout:    timeout,
 		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
@@ -103,6 +104,80 @@ func (p *Pump) Close() {
 	p.asm.Close()
 	p.wg.Wait()
 	log.Debugf("[pump %s] was closed", p.nodeID)
+}
+
+// PullBinlog return the chan to get item from pump
+func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
+	p.ctx, p.cancel = context.WithCancel(pctx)
+	ret := make(chan MergeItem)
+
+	go func() {
+		log.Debug("start PullBinlog pump: ", p.nodeID)
+		defer func() {
+			close(ret)
+			log.Debug("start PullBinlog pump leave: ", p.nodeID)
+		}()
+
+		for {
+			select {
+			case <-p.ctx.Done():
+				return
+			default:
+			}
+
+			conn, err := grpc.Dial(p.addr, grpc.WithInsecure())
+			if err != nil {
+				log.Error(err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			defer conn.Close()
+			cli := pb.NewPumpClient(conn)
+
+			in := &pb.PullBinlogReq{
+				ClusterID: p.clusterID,
+				StartFrom: pb.Pos{Offset: last},
+			}
+			pullCli, err := cli.PullBinlogs(p.ctx, in)
+			if err != nil {
+				log.Error(err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			for {
+				resp, err := pullCli.Recv()
+				if err != nil {
+					time.Sleep(time.Second)
+					break
+				}
+
+				binlog := new(pb.Binlog)
+				err = binlog.Unmarshal(resp.Entity.Payload)
+				if err != nil {
+					log.Error(err)
+					continue
+				}
+
+				item := &binlogItem{
+					binlog: binlog,
+					nodeID: p.nodeID,
+					pos: pb.Pos{
+						Offset: resp.Entity.Pos.Offset,
+					},
+				}
+				select {
+				case ret <- item:
+					last = resp.Entity.Pos.Offset
+				case <-p.ctx.Done():
+				}
+			}
+
+		}
+	}()
+
+	return ret
 }
 
 // StartCollect starts to process the pump's binlogs
@@ -367,23 +442,6 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	}
 	ddlJobsCounter.Add(float64(count))
 	return nil
-}
-
-func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
-	version, err := p.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := p.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	job, err := snapMeta.GetHistoryDDLJob(id)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return job, nil
 }
 
 func (p *Pump) collectBinlogs(windowLower, windowUpper int64) binlogItems {
