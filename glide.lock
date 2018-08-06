@@ -1,6 +1,10 @@
-hash: 50a6470ed0011d7b82875698130d92038b03c5940e1dcf3d37e87acb0a85ccc4
-updated: 2018-07-20T11:45:06.814368+08:00
+hash: 5716461fd40f6978b65b72b42399601174bba360f46eb033334021cb48559a16
+updated: 2018-08-06T18:20:59.662852735+08:00
 imports:
+- name: github.com/apache/thrift
+  version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
+  subpackages:
+  - lib/go/thrift
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
@@ -154,6 +158,10 @@ imports:
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
+- name: github.com/google/gofuzz
+  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
+- name: github.com/gorilla/mux
+  version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
   version: e9c5d9645c437ab1b204cff969a2c0fb16cd4276
   subpackages:
@@ -185,7 +193,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: b6ea1ea48f981d0f615a154a45eabb9dd466556d
+  version: 62bff4df71bdbc266561a0caee19f0594b17c240
   subpackages:
   - format
   - internal/assertion
@@ -322,8 +330,9 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 3d8cef8f6cb7ab458832227bd42af90b00759f13
+  version: 347725a566f4a7d897aa0d6addb710c77395c640
   subpackages:
+  - tidb_binlog/slave_binlog_proto
   - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 4141907f6909f62af0378aa1c891c46f34aed0a7
@@ -334,7 +343,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: 967789050ba94deca04a5e84cce8ad472ce313c1
   subpackages:
   - prometheus
   - prometheus/push
@@ -365,7 +374,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: 92052687f8ec598ff0da626d2909478cfd1e3a3c
+  version: d329d24db4313262a3b0a24d8aeb1dc4bd294fb0
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -407,13 +416,15 @@ imports:
   - transport
   - utils
 - name: github.com/uber/jaeger-lib
-  version: ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5
+  version: 34d9cc24e47ab70783050b52f79c06eb3ac850ba
   subpackages:
   - metrics
 - name: github.com/ugorji/go
   version: f1f1a805ed361a0e078bb537e4ea78cd37dcf065
   subpackages:
   - codec
+- name: github.com/unrolled/render
+  version: 65450fb6b2d3595beca39f969c411db8f8d5c806
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
 - name: github.com/zanmato1984/clickhouse
@@ -479,11 +490,11 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/appengine
-  version: b1f26356af11148e710935ed1ac8a7f5702c7612
+  version: 4216e58b9158e5f1c906f1aca75162a46a2ec88a
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
-  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
+  version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
   subpackages:
   - googleapis/api/annotations
   - googleapis/rpc/status
@@ -519,7 +530,5 @@ imports:
 - name: gopkg.in/yaml.v2
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
-- name: github.com/google/gofuzz
-  version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/pingcap/check
-  version: 1c287c953996ab3a0bf535dba9d53d809d3dc0b6
+  version: 9b266636177e249ec28b0aeffe8e86bc272bb481
