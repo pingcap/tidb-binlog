@@ -575,5 +575,7 @@ func (s *Server) Close() {
 	}
 	log.Info("has closed pdCli")
 
-	s.storage.Close()
+	if err := s.storage.Close(); err != nil {
+		log.Errorf("close storage error %v", errors.ErrorStack(err))
+	}
 }
