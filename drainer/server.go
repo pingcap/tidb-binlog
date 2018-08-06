@@ -439,12 +439,14 @@ func (s *Server) Close() {
 		return
 	}
 
-	s.commitStatus()
-
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-	//  stop gRPC server
+
+	// update drainer's status
+	s.commitStatus()
+
+	// stop gRPC server
 	s.gs.Stop()
 }
