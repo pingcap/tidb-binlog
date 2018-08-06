@@ -308,3 +308,7 @@ testImports:
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - package: github.com/syndtr/goleveldb/leveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
+- package: github.com/gorilla/mux
+  version: v1.6.2
+- package: github.com/unrolled/render
+  version: v1
