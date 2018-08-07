@@ -247,6 +247,12 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
+			if n.State == node.Offline {
+				if !p.hadFinished(c.window.LoadLower()) {
+					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
+					continue
+				}
+			}
 
 			switch n.State {
 			case node.Paused, node.Pausing:

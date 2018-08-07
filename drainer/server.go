@@ -64,6 +64,9 @@ type Server struct {
 
 	statusMu sync.RWMutex
 	status   *node.Status
+
+	latestTS   int64
+	latestTime time.Time
 }
 
 func init() {
@@ -93,12 +96,11 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	clusterID = pdCli.GetClusterID(ctx)
 	// update latestTS and latestTime
-	ts, err := util.GetTSO(pdCli)
+	latestTS, err := util.GetTSO(pdCli)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	latestTS = ts
-	latestTime = time.Now()
+	latestTime := time.Now()
 
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
@@ -150,6 +152,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:    cancel,
 		syncer:    syncer,
 		status:    status,
+
+		latestTS:   latestTS,
+		latestTime: latestTime,
 	}, nil
 }
 
@@ -365,6 +370,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := mux.Vars(r)["nodeID"]
 	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
 
 	if nodeID != s.ID {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
@@ -430,7 +436,7 @@ func (s *Server) commitStatus() {
 
 func (s *Server) updateStatus() error {
 	s.statusMu.Lock()
-	s.status.UpdateTS = util.GetApproachTS(latestTS, latestTime)
+	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
 	s.statusMu.Unlock()
 	if err != nil {
@@ -449,12 +455,14 @@ func (s *Server) Close() {
 		return
 	}
 
-	s.commitStatus()
-
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-	//  stop gRPC server
+
+	// update drainer's status
+	s.commitStatus()
+
+	// stop gRPC server
 	s.gs.Stop()
 }
