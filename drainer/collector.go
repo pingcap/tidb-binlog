@@ -224,8 +224,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
-			// if pump is offline, ignore it
-			if n.State == node.Offline {
+			// if pump is not online, ignore it
+			if n.State != node.Online {
 				continue
 			}
 
@@ -247,15 +247,11 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		} else {
 			// update pumps' latestTS
 			p.UpdateLatestTS(c.latestTS)
-			if n.State == node.Offline {
-				if !p.hadFinished(c.window.LoadLower()) {
-					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
-					continue
-				}
-			}
 
 			switch n.State {
-			case node.Paused, node.Pausing:
+			case node.Pausing:
+				// do nothing
+			case node.Paused:
 				c.merger.PauseSource(n.NodeID)
 			case node.Online:
 				c.merger.ContinueSource(n.NodeID)
@@ -265,9 +261,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				// release invalid connection
 				p.Close()
 				delete(c.pumps, n.NodeID)
-				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+				log.Infof("node(%s) of cluster(%d) has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
-
 			}
 		}
 	}

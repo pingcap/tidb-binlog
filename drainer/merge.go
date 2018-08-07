@@ -80,28 +80,40 @@ func (m *Merger) isClosed() bool {
 // AddSource add a source to Merger
 func (m *Merger) AddSource(source MergeSource) {
 	m.Lock()
-	m.newSource = append(m.newSource, source)
+	if _, ok := m.sources[source.ID]; !ok {
+		m.newSource = append(m.newSource, source)
+	}
 	m.Unlock()
 }
 
 // RemoveSource remove a source from Merger
 func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
-	m.removeSource = append(m.removeSource, sourceID)
+	if _, ok := m.sources[sourceID]; ok {
+		m.removeSource = append(m.removeSource, sourceID)
+	}
 	m.Unlock()
 }
 
 // PauseSource sets the source to pause
 func (m *Merger) PauseSource(sourceID string) {
 	m.Lock()
-	m.pauseSource = append(m.pauseSource, sourceID)
+	if source, ok := m.sources[sourceID]; ok {
+		if !source.Pause {
+			m.pauseSource = append(m.pauseSource, sourceID)
+		}
+	}
 	m.Unlock()
 }
 
 // ContinueSource restart the source
 func (m *Merger) ContinueSource(sourceID string) {
 	m.Lock()
-	m.continueSource = append(m.continueSource, sourceID)
+	if source, ok := m.sources[sourceID]; ok {
+		if source.Pause {
+			m.continueSource = append(m.continueSource, sourceID)
+		}
+	}
 	m.Unlock()
 }
 
@@ -112,17 +124,20 @@ func (m *Merger) updateSource() {
 	// add new source
 	for _, source := range m.newSource {
 		m.sources[source.ID] = source
+		log.Infof("merger add source %s", source.ID)
 	}
 
 	// remove source
 	for _, sourceID := range m.removeSource {
 		delete(m.sources, sourceID)
+		log.Infof("merger remove source %s", sourceID)
 	}
 
 	// pause source
 	for _, sourceID := range m.pauseSource {
 		if source, ok := m.sources[sourceID]; ok {
 			source.Pause = true
+			log.Infof("merger pause source %s", sourceID)
 		}
 	}
 
@@ -130,6 +145,7 @@ func (m *Merger) updateSource() {
 	for _, sourceID := range m.continueSource {
 		if source, ok := m.sources[sourceID]; ok {
 			source.Pause = false
+			log.Infof("merger continue source %s", sourceID)
 		}
 	}
 }
