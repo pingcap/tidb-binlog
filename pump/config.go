@@ -24,7 +24,6 @@ const (
 	defaultEtcdURLs                = "http://127.0.0.1:2379"
 	defaultKafkaAddrs              = "127.0.0.1:9092"
 	defaultListenAddr              = "127.0.0.1:8250"
-	defaultSocket                  = "unix:///tmp/pump.sock"
 	defautMaxKafkaSize             = 1024 * 1024 * 1024
 	defaultHeartbeatInterval       = 2
 	defaultGC                      = 7
@@ -183,7 +182,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 	initializeSaramaGlobalConfig()
 

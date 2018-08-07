@@ -39,10 +39,6 @@ var (
 	clusterID         uint64
 	pdReconnTimes     = 30
 	maxMsgSize        = 1024 * 1024 * 1024
-
-	// latestTS and latestTime is used for get approach ts
-	latestTS   int64
-	latestTime time.Time
 )
 
 // Server implements the gRPC interface,
@@ -64,6 +60,10 @@ type Server struct {
 
 	statusMu sync.RWMutex
 	status   *node.Status
+
+	// latestTS and latestTime is used for get approach ts
+	latestTS   int64
+	latestTime time.Time
 }
 
 func init() {
@@ -93,12 +93,11 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	clusterID = pdCli.GetClusterID(ctx)
 	// update latestTS and latestTime
-	ts, err := util.GetTSO(pdCli)
+	latestTS, err := util.GetTSO(pdCli)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	latestTS = ts
-	latestTime = time.Now()
+	latestTime := time.Now()
 
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
@@ -150,6 +149,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:    cancel,
 		syncer:    syncer,
 		status:    status,
+
+		latestTS:   latestTS,
+		latestTime: latestTime,
 	}, nil
 }
 
@@ -367,13 +369,13 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	log.Infof("node %s receive action %s", nodeID, action)
 
 	if nodeID != s.ID {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
 		return
 	}
 
 	s.statusMu.RLock()
 	if s.status.State != node.Online {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.status.State, action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.status.State, action))
 		s.statusMu.RUnlock()
 		return
 	}
@@ -387,13 +389,13 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		s.status.State = node.Closing
 	default:
 		s.statusMu.Unlock()
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
 		return
 	}
 	s.statusMu.Unlock()
 
 	go s.Close()
-	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
 	return
 }
 
@@ -420,7 +422,7 @@ func (s *Server) commitStatus() {
 
 func (s *Server) updateStatus() error {
 	s.statusMu.Lock()
-	s.status.UpdateTS = util.GetApproachTS(latestTS, latestTime)
+	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
 	s.statusMu.Unlock()
 	if err != nil {
