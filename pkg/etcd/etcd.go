@@ -11,11 +11,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const (
-	// DefaultRootPath is the root path of the keys stored in etcd
-	DefaultRootPath = "/tidb-binlog"
-)
-
 // Node organizes the ectd query result as a Trie tree
 type Node struct {
 	Value  []byte

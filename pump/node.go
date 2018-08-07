@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/errors"
@@ -16,6 +17,8 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -29,47 +32,19 @@ const (
 
 var nodePrefix = "pumps"
 
-// Node defines pump node
-type Node interface {
-	// ID returns the uuid representing of this pump node
-	ID() string
-	// a short ID as 8 bytes length
-	ShortID() string
-	// Register registers this pump node to Etcd
-	// creates new one if nodeID not exist, otherwise update it
-	Register(ctx context.Context) error
-	// Unregister unregisters this pump node from etcd
-	Unregister(ctx context.Context) error
-	// Heartbeat refreshes the state of this pump node in etcd periodically
-	// if the pump is dead, the key 'root/nodes/<nodeID>/alive' will dissolve after a TTL time passed
-	Heartbeat(ctx context.Context) <-chan error
-	// Notify queries all living drainer from etcd, and notifies them
-	Notify(ctx context.Context) error
-	// Nodes returns all pump nodes
-	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
-}
-
 type pumpNode struct {
-	*EtcdRegistry
-	id                string
-	host              string
-	heartbeatTTL      int64
+	sync.RWMutex
+	*node.EtcdRegistry
+	status            *node.Status
 	heartbeatInterval time.Duration
-}
 
-// NodeStatus describes the status information of a node in etcd
-type NodeStatus struct {
-	NodeID         string
-	Host           string
-	IsAlive        bool
-	IsOffline      bool
-	LatestFilePos  pb.Pos
-	LatestKafkaPos pb.Pos
-	OfflineTS      int64
+	// latestTS and latestTime is used for get approach ts
+	latestTS   int64
+	latestTime time.Time
 }
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
-func NewPumpNode(cfg *Config) (Node, error) {
+func NewPumpNode(cfg *Config) (node.Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -78,7 +53,7 @@ func NewPumpNode(cfg *Config) (Node, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdDialTimeout, etcd.DefaultRootPath, cfg.tls)
+	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdDialTimeout, node.DefaultRootPath, cfg.tls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -104,42 +79,53 @@ func NewPumpNode(cfg *Config) (Node, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
+	status := &node.Status{
+		NodeID:  nodeID,
+		Addr:    advURL.Host,
+		State:   node.Online,
+		IsAlive: true,
+	}
+
 	node := &pumpNode{
-		EtcdRegistry:      NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
-		id:                nodeID,
-		host:              advURL.Host,
+		EtcdRegistry:      node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		status:            status,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
-		heartbeatTTL:      int64(cfg.HeartbeatInterval) * 3 / 2,
 	}
 	return node, nil
 }
 
 func (p *pumpNode) ID() string {
-	return p.id
+	return p.status.NodeID
 }
 
 func (p *pumpNode) ShortID() string {
-	if len(p.id) <= shortIDLen {
-		return p.id
+	if len(p.status.NodeID) <= shortIDLen {
+		return p.status.NodeID
 	}
-	return p.id[0:shortIDLen]
+	return p.status.NodeID[0:shortIDLen]
 }
 
-func (p *pumpNode) Register(ctx context.Context) error {
-	err := p.RegisterNode(ctx, nodePrefix, p.id, p.host)
+func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
+	p.Lock()
+	defer p.Unlock()
+
+	p.status = status
+	if p.status.UpdateTS != 0 {
+		p.latestTS = p.status.UpdateTS
+		p.latestTime = time.Now()
+	} else {
+		p.updateTS()
+	}
+
+	err := p.UpdateNode(ctx, nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL)
-}
-
-func (p *pumpNode) Unregister(ctx context.Context) error {
-	err := p.MarkOfflineNode(ctx, nodePrefix, p.id, p.host)
-	return errors.Trace(err)
+	return nil
 }
 
 func (p *pumpNode) Notify(ctx context.Context) error {
-	cisterns, err := p.Nodes(ctx, "cisterns")
+	drainers, err := p.Nodes(ctx, "drainers")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -147,17 +133,17 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 		return net.DialTimeout("tcp", addr, timeout)
 	})
 
-	for _, c := range cisterns {
-		if c.IsAlive {
-			clientConn, err := grpc.Dial(c.Host, dialerOpt, grpc.WithInsecure())
+	for _, c := range drainers {
+		if c.State == node.Online {
+			clientConn, err := grpc.Dial(c.Addr, dialerOpt, grpc.WithInsecure())
 			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
 			}
 			drainer := pb.NewCisternClient(clientConn)
 			_, err = drainer.Notify(ctx, nil)
 			clientConn.Close()
 			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Host, err)
+				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
 			}
 		}
 	}
@@ -165,7 +151,11 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	return nil
 }
 
-func (p *pumpNode) NodesStatus(ctx context.Context) ([]*NodeStatus, error) {
+func (p *pumpNode) NodeStatus() *node.Status {
+	return p.status
+}
+
+func (p *pumpNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
 	return p.Nodes(ctx, nodePrefix)
 }
 
@@ -173,9 +163,6 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
 		defer func() {
-			if err := p.Close(); err != nil {
-				errc <- errors.Trace(err)
-			}
 			close(errc)
 			log.Info("Heartbeat goroutine exited")
 		}()
@@ -185,14 +172,25 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(p.heartbeatInterval):
-				// RefreshNode would carry lastBinlogFile infomation
-				if err := p.RefreshNode(ctx, nodePrefix, p.id, p.heartbeatTTL); err != nil {
+				p.Lock()
+				p.updateTS()
+				err := p.UpdateNode(ctx, nodePrefix, p.status)
+				if err != nil {
 					errc <- errors.Trace(err)
 				}
+				p.Unlock()
 			}
 		}
 	}()
 	return errc
+}
+
+func (p *pumpNode) updateTS() {
+	p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
+}
+
+func (p *pumpNode) Quit() error {
+	return errors.Trace(p.Close())
 }
 
 // readLocalNodeID reads nodeID from a local file

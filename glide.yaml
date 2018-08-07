@@ -274,7 +274,7 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
-  version: "1.12.0"
+  version: 1.12.0
   subpackages:
   - codes
   - credentials
@@ -294,10 +294,13 @@ import:
   version: 604e922904d35e97f98a774db7881f049cd8d970
   subpackages:
   - queue
-testImports:
-- package: github.com/pingcap/check
-  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
-
+- package: github.com/gorilla/mux
+  version: ~1.6.2
+- package: github.com/unrolled/render
+- package: github.com/apache/thrift
+  version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
+  subpackages:
+  - lib/go/thrift
 - package: github.com/onsi/gomega
   version: v1.4.0
 - package: github.com/rcrowley/go-metrics
@@ -308,3 +311,6 @@ testImports:
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - package: github.com/syndtr/goleveldb/leveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
+testImports:
+- package: github.com/pingcap/check
+  version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689

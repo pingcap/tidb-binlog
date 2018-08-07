@@ -12,10 +12,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
@@ -24,6 +27,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
+	"github.com/unrolled/render"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -56,7 +60,7 @@ type Server struct {
 	clusterID string
 
 	// node maintains the status of this pump and interact with etcd registry
-	node Node
+	node node.Node
 
 	tcpAddr                 string
 	unixAddr                string
@@ -72,6 +76,8 @@ type Server struct {
 	cfg                     *Config
 
 	cp *checkPoint
+
+	isClosed int32
 }
 
 func init() {
@@ -274,7 +280,13 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	if err := s.node.Register(s.ctx); err != nil {
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, ts)
+	err = s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
@@ -282,8 +294,10 @@ func (s *Server) Start() error {
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
-		// if fail, unregister this node
-		if err := s.node.Unregister(context.Background()); err != nil {
+		// if fail, refresh this node's state to paused
+		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, 0)
+		err = s.node.RefreshStatus(context.Background(), status)
+		if err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
@@ -304,6 +318,18 @@ func (s *Server) Start() error {
 	if err := s.init(); err != nil {
 		return errors.Annotate(err, "fail to initialize pump server")
 	}
+	// start a UNIX listener
+	var unixLis net.Listener
+	if s.unixAddr != "" {
+		unixURL, err := url.Parse(s.unixAddr)
+		if err != nil {
+			return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
+		}
+		unixLis, err = net.Listen("unix", unixURL.Path)
+		if err != nil {
+			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
+		}
+	}
 
 	log.Debug("init success")
 
@@ -317,15 +343,6 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
 
-	// start a UNIX listener
-	unixURL, err := url.Parse(s.unixAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
-	}
-	unixLis, err := net.Listen("unix", unixURL.Path)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
-	}
 	// start generate binlog if pump doesn't receive new binlogs
 	s.wg.Add(1)
 	go s.genForwardBinlog()
@@ -340,7 +357,10 @@ func (s *Server) Start() error {
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
-	go s.gs.Serve(unixLis)
+
+	if s.unixAddr != "" {
+		go s.gs.Serve(unixLis)
+	}
 
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
@@ -348,9 +368,13 @@ func (s *Server) Start() error {
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
 
-	http.HandleFunc("/status", s.Status)
-	http.HandleFunc("/drainers", s.AllDrainers)
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.Status).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router.HandleFunc("/drainers", s.AllDrainers).Methods("PUT")
+	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())
+
 	go http.Serve(httpL, nil)
 
 	log.Debug("start to server request")
@@ -490,6 +514,7 @@ func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 
 // PumpStatus returns all pumps' status.
 func (s *Server) PumpStatus() *HTTPStatus {
+
 	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {
 		log.Errorf("get pumps' status error %v", err)
@@ -498,14 +523,11 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	// get all pumps' latest binlog position
-	binlogPos := make(map[string]*LatestPos)
+	statusMap := make(map[string]*node.Status)
 	for _, st := range status {
-		binlogPos[st.NodeID] = &LatestPos{
-			FilePos:  st.LatestFilePos,
-			KafkaPos: st.LatestKafkaPos,
-		}
+		statusMap[st.NodeID] = st
 	}
+
 	// get ts from pd
 	commitTS, err := s.getTSO()
 	if err != nil {
@@ -515,40 +537,93 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
+	var cp binlog.Pos
+	if s.cp != nil {
+		cp = s.cp.pos()
+	}
 	return &HTTPStatus{
-		BinlogPos:  binlogPos,
+		StatusMap:  statusMap,
 		CommitTS:   commitTS,
-		CheckPoint: s.cp.pos(),
+		CheckPoint: cp,
 	}
 }
 
+// ChangeStateReq is the request struct for change state.
+type ChangeStateReq struct {
+	NodeID string `json:"nodeID"`
+	State  string `json:"state"`
+}
+
+// ApplyAction change the pump's state, now can be pause or close.
+func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	nodeID := mux.Vars(r)["nodeID"]
+	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
+
+	if nodeID != s.node.NodeStatus().NodeID {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		return
+	}
+
+	if s.node.NodeStatus().State != "online" {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		return
+	}
+
+	switch action {
+	case "pause":
+		s.node.NodeStatus().State = node.Pausing
+	case "close":
+		s.node.NodeStatus().State = node.Closing
+	default:
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		return
+	}
+
+	go s.Close()
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+	return
+}
+
 func (s *Server) getTSO() (int64, error) {
-	now := time.Now()
-	physical, logical, err := s.pdCli.GetTS(context.Background())
+	ts, err := util.GetTSO(s.pdCli)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	dist := time.Since(now)
-	if dist > slowDist {
-		log.Warnf("get timestamp too slow: %s", dist)
-	}
-
-	ts := int64(composeTS(physical, logical))
 	// update latestTS by the way
 	latestTS = ts
 
 	return ts, nil
 }
 
+// commitStatus commit the node's last status to pd when close the server.
+func (s *Server) commitStatus() {
+	// update this node
+	var state string
+	switch s.node.NodeStatus().State {
+	case node.Pausing, node.Online:
+		state = node.Paused
+	case node.Closing:
+		state = node.Offline
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, 0)
+	err := s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
+		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
+	}
+	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)
+}
+
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
-
-	// update latest for offline ts in unregister process
-	if _, err := s.getTSO(); err != nil {
-		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
+	log.Info("begin to close drainer server")
+	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+		log.Debug("server had closed")
+		return
 	}
 
 	// notify other goroutines to exit
@@ -556,11 +631,6 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
-	// unregister this node
-	if err := s.node.Unregister(context.Background()); err != nil {
-		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
-	}
-	log.Info(s.node.ID, " has unregister")
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
@@ -570,4 +640,13 @@ func (s *Server) Close() {
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
+
+	s.commitStatus()
+	if err := s.node.Quit(); err != nil {
+		log.Errorf("close pump node error %s", errors.Trace(err))
+	}
+
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
 }
