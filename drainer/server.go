@@ -367,13 +367,13 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	action := mux.Vars(r)["action"]
 
 	if nodeID != s.ID {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
 		return
 	}
 
 	s.statusMu.RLock()
 	if s.status.State != node.Online {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.status.State, action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.status.State, action))
 		s.statusMu.RUnlock()
 		return
 	}
@@ -387,13 +387,13 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		s.status.State = node.Closing
 	default:
 		s.statusMu.Unlock()
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
 		return
 	}
 	s.statusMu.Unlock()
 
 	go s.Close()
-	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
 	return
 }
 
@@ -403,7 +403,7 @@ func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
 		IndentJSON: true,
 	})
 	ts := s.syncer.GetLatestCommitTS()
-	rd.JSON(w, http.StatusOK, map[string]int64{"ts": ts})
+	rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
 	return
 }
 

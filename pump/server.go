@@ -590,12 +590,12 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	action := mux.Vars(r)["action"]
 
 	if nodeID != s.node.NodeStatus().NodeID {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
 		return
 	}
 
 	if s.node.NodeStatus().State != "online" {
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
 		return
 	}
 
@@ -605,12 +605,12 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		s.node.NodeStatus().State = node.Closing
 	default:
-		rd.JSON(w, http.StatusOK, fmt.Sprintf("invalide action %s", action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
 		return
 	}
 
 	go s.Close()
-	rd.JSON(w, http.StatusOK, fmt.Sprintf("apply action %s success!", action))
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
 	return
 }
 
