@@ -105,7 +105,7 @@ func (m *Merger) ContinueSource(sourceID string) {
 	m.Unlock()
 }
 
-func (m *Merger) UpdateSource() {
+func (m *Merger) updateSource() {
 	m.Lock()
 	defer m.Unlock()
 
@@ -138,7 +138,7 @@ func (m *Merger) run() {
 	defer close(m.output)
 
 	for {
-		m.UpdateSource()
+		m.updateSource()
 
 		var lastTS int64
 		lastTS = math.MinInt64
