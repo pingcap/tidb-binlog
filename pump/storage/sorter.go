@@ -128,6 +128,7 @@ func (s *sorter) run() {
 		s.cond.L.Lock()
 		for s.items.Len() == 0 {
 			if s.isClosed() {
+				s.cond.L.Unlock()
 				return
 			}
 			s.cond.Wait()

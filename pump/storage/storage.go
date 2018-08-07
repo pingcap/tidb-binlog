@@ -388,9 +388,11 @@ func (a *Append) Close() error {
 	// wait for all binlog write to vlog -> KV -> sorter
 	// after this, writeToValueLog, writeToKV, writeToSorter has quit sequently
 	a.wg.Wait()
+	log.Debug("wait group done")
 
 	// note the call back func will use a.metadata, so we should close sorter before a.metadata
 	a.sorter.close()
+	log.Debug("sorter is closed")
 
 	err := a.metadata.Close()
 	if err != nil {
@@ -484,25 +486,31 @@ func (a *Append) writeToSorter(reqs chan *request) {
 func (a *Append) writeToKV(reqs chan *request) chan *request {
 	done := make(chan *request, 1024)
 
+	batchReqs := a.batchRequest(reqs, 128)
+
 	go func() {
 		defer close(done)
 
 		var batch leveldb.Batch
-		for req := range reqs {
-			log.Debugf("write request to kv: %s", req)
-			var err error
-
-			pointer, err := req.valuePointer.MarshalBinary()
-			if err != nil {
-				panic(err)
-			}
-
+		for bufReqs := range batchReqs {
 			batch.Reset()
-			batch.Put(encodeTSKey(req.ts()), pointer)
-			batch.Put(headPointerKey, pointer)
+			var lastPointer []byte
+			for _, req := range bufReqs {
+				log.Debugf("write request to kv: %s", req)
+				var err error
+
+				pointer, err := req.valuePointer.MarshalBinary()
+				if err != nil {
+					panic(err)
+				}
+
+				lastPointer = pointer
+				batch.Put(encodeTSKey(req.ts()), pointer)
+			}
+			batch.Put(headPointerKey, lastPointer)
 
 			for {
-				err = a.metadata.Write(&batch, nil)
+				err := a.metadata.Write(&batch, nil)
 
 				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 				// we just retry of quit when Append is closed
@@ -514,10 +522,52 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 					time.Sleep(time.Second)
 					continue
 				}
-				a.headPointer = req.valuePointer
+				a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
 
-				done <- req
+				for _, req := range bufReqs {
+					done <- req
+				}
 				break
+			}
+		}
+	}()
+
+	return done
+}
+
+func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*request {
+	done := make(chan []*request, 1024)
+	var bufReqs []*request
+
+	go func() {
+		defer close(done)
+
+		for {
+			if len(bufReqs) >= maxBatchNum {
+				done <- bufReqs
+				bufReqs = make([]*request, 0, maxBatchNum)
+			}
+
+			select {
+			case req, ok := <-reqs:
+				if !ok {
+					if len(bufReqs) > 0 {
+						done <- bufReqs
+					}
+					return
+				}
+				bufReqs = append(bufReqs, req)
+			default:
+				if len(bufReqs) > 0 {
+					done <- bufReqs
+					bufReqs = make([]*request, 0, maxBatchNum)
+				} else { // get first req
+					req, ok := <-reqs
+					if !ok {
+						return
+					}
+					bufReqs = append(bufReqs, req)
+				}
 			}
 		}
 	}()

@@ -82,8 +82,11 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 		b.Fatalf("only get %d binlog, should has %d", cnt, binlogNum)
 	}
 
+	b.StopTimer()
+
 	// just count the prewriteValueSize
 	b.SetBytes(int64(prewriteValueSize))
+	b.ReportAllocs()
 }
 
 func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync bool) {
@@ -126,6 +129,11 @@ func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync b
 		}
 	})
 
+	append.Close()
+
+	b.StopTimer()
+
 	// just count the prewriteValueSize
 	b.SetBytes(int64(prewriteValueSize))
+	b.ReportAllocs()
 }
