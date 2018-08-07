@@ -1,19 +1,14 @@
 package util
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/types"
 )
-
-// TsToTimestamp translate ts to timestamp
-func TsToTimestamp(ts int64) int64 {
-	return ts >> 18 / 1000
-}
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
 func DefaultIP() (ip string, err error) {
@@ -53,6 +48,23 @@ func DefaultIP() (ip string, err error) {
 
 	err = errors.New("no ip found")
 	return
+}
+
+// DefaultListenAddr returns default listen address with appointed port.
+func DefaultListenAddr(port int32) string {
+	defaultIP, err := DefaultIP()
+	if err != nil {
+		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+	}
+	return fmt.Sprintf("%s:%d", defaultIP, port)
+}
+
+// IsValidateListenHost judge the host is validate listen host or not.
+func IsValidateListenHost(host string) bool {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		return false
+	}
+	return true
 }
 
 // StdLogger implements samara.StdLogger

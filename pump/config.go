@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -15,6 +14,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
@@ -24,7 +24,6 @@ const (
 	defaultEtcdURLs                = "http://127.0.0.1:2379"
 	defaultKafkaAddrs              = "127.0.0.1:9092"
 	defaultListenAddr              = "127.0.0.1:8250"
-	defaultSocket                  = "unix:///tmp/pump.sock"
 	defautMaxKafkaSize             = 1024 * 1024 * 1024
 	defaultHeartbeatInterval       = 2
 	defaultGC                      = 7
@@ -105,7 +104,7 @@ func NewConfig() *Config {
 	}
 
 	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of pump node; if not specify, we will generate one from hostname and the listening port")
-	fs.StringVar(&cfg.ListenAddr, "addr", defaultListenAddr, "addr(i.e. 'host:port') to listen on for client traffic")
+	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8250), "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
@@ -183,7 +182,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 	initializeSaramaGlobalConfig()
 
@@ -220,8 +218,14 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
 	}
-	if _, _, err := net.SplitHostPort(urllis.Host); err != nil {
+
+	var host string
+	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
+	}
+
+	if !util.IsValidateListenHost(host) {
+		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
 	}
 
 	// check AdvertiseAddr
@@ -229,21 +233,12 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("parse AdvertiseAddr error: %s, %v", cfg.AdvertiseAddr, err)
 	}
-	host, _, err := net.SplitHostPort(urladv.Host)
+	host, _, err = net.SplitHostPort(urladv.Host)
 	if err != nil {
 		return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
 	}
 	if host == "0.0.0.0" {
 		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
-	}
-
-	// check socketAddr
-	urlsock, err := url.Parse(cfg.Socket)
-	if err != nil {
-		return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
-	}
-	if len(strings.Split(urlsock.Path, "/")) < 2 {
-		return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
 	}
 
 	// check EtcdEndpoints
