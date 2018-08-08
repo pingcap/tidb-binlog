@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -57,19 +56,21 @@ type Server struct {
 	dataDir string
 	storage storage.Storage
 
-	clusterID string
+	clusterID uint64
 
 	// node maintains the status of this pump and interact with etcd registry
 	node node.Node
 
-	tcpAddr                 string
-	unixAddr                string
-	gs                      *grpc.Server
-	ctx                     context.Context
-	cancel                  context.CancelFunc
-	wg                      sync.WaitGroup
-	gc                      time.Duration
-	metrics                 *metricClient
+	tcpAddr  string
+	unixAddr string
+	gs       *grpc.Server
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	gc       time.Duration
+	metrics  *metricClient
+	// save the last time we write binlog to Storage
+	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
 	needGenBinlog           AtomicBool
 	pdCli                   pd.Client
@@ -146,7 +147,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	return &Server{
 		dataDir:   cfg.DataDir,
 		storage:   storage,
-		clusterID: fmt.Sprintf("%d", clusterID),
+		clusterID: clusterID,
 		node:      n,
 		tcpAddr:   cfg.ListenAddr,
 		unixAddr:  cfg.Socket,
@@ -184,11 +185,6 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 	return pdCli, errors.Trace(err)
 }
 
-func (s *Server) init() error {
-
-	return nil
-}
-
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
 	var err error
@@ -206,9 +202,8 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		err = errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	if in.ClusterID != s.clusterID {
+		err = errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
 		return nil, err
 	}
 
@@ -245,9 +240,8 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		log.Debug("PullBinlogs req: ", in, " quit")
 	}()
 
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		return errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	if in.ClusterID != s.clusterID {
+		return errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
 	}
 
 	// don't use pos.Suffix now, use offset like last commitTS
@@ -314,10 +308,6 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	// init the server
-	if err := s.init(); err != nil {
-		return errors.Annotate(err, "fail to initialize pump server")
-	}
 	// start a UNIX listener
 	var unixLis net.Listener
 	if s.unixAddr != "" {
@@ -415,10 +405,7 @@ func (s *Server) writeFakeBinlog() {
 	req := new(pb.WriteBinlogReq)
 	req.Payload = payload
 
-	req.ClusterID, err = strconv.ParseUint(s.clusterID, 10, 64)
-	if err != nil {
-		panic("unreachable wrong clusterID: " + s.clusterID)
-	}
+	req.ClusterID = s.clusterID
 
 	resp, err := s.WriteBinlog(s.ctx, req)
 
