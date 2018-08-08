@@ -6,8 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,13 +15,15 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
-	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump/storage"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
@@ -53,36 +53,10 @@ var (
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
-	// dispatcher keeps all opened binloggers which is indexed by clusterID.
-	dispatcher Binlogger
-
-	// dataDir is the root directory of all pump data
-	// |
-	// +-- .node
-	// |   |
-	// |   +-- nodeID
-	// |
-	// +-- clusters
-	//     |
-	//     +-- 100
-	//     |   |
-	//     |   +-- binlog.000001
-	//     |   |
-	//     |   +-- binlog.000002
-	//     |   |
-	//     |   +-- ...
-	//     |
-	//     +-- 200
-	//         |
-	//         +-- binlog.000001
-	//         |
-	//         +-- binlog.000002
-	//         |
-	//         +-- ...
-	//
 	dataDir string
+	storage storage.Storage
 
-	clusterID string
+	clusterID uint64
 
 	// node maintains the status of this pump and interact with etcd registry
 	node node.Node
@@ -95,10 +69,12 @@ type Server struct {
 	wg       sync.WaitGroup
 	gc       time.Duration
 	metrics  *metricClient
-	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
-	needGenBinlog AtomicBool
-	pdCli         pd.Client
-	cfg           *Config
+	// save the last time we write binlog to Storage
+	// if long time not write, we can write a fake binlog
+	lastWriteBinlogUnixNano int64
+	needGenBinlog           AtomicBool
+	pdCli                   pd.Client
+	cfg                     *Config
 
 	cp *checkPoint
 
@@ -146,9 +122,32 @@ func NewServer(cfg *Config) (*Server, error) {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
 
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	lockResolver, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	session.RegisterStore("tikv", tikv.Driver{})
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := session.NewStore(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	storage, err := storage.NewAppendWithResolver(cfg.DataDir, nil, tiStore, lockResolver)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &Server{
 		dataDir:   cfg.DataDir,
-		clusterID: fmt.Sprintf("%d", clusterID),
+		storage:   storage,
+		clusterID: clusterID,
 		node:      n,
 		tcpAddr:   cfg.ListenAddr,
 		unixAddr:  cfg.Socket,
@@ -186,80 +185,12 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 	return pdCli, errors.Trace(err)
 }
 
-// inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
-// then adds them to dispathcer map
-func (s *Server) init() error {
-	// init cluster data dir if not exist
-	var err error
-	clusterDir := path.Join(s.dataDir, "clusters")
-	if !bf.Exist(clusterDir) {
-		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	s.dispatcher, err = s.getBinloggerToWrite()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
-func (s *Server) getBinloggerToWrite() (Binlogger, error) {
-	if s.dispatcher != nil {
-		return s.dispatcher, nil
-	}
-
-	// use tiStore's currentVersion method to get the ts from tso
-	addrs, err := flags.ParseHostPortAddr(s.cfg.KafkaAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs, s.cfg.KafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	switch s.cfg.WriteMode {
-	case kafkaWriteMode:
-		log.Debug("send binlog to kafka directly")
-		s.dispatcher = kb
-		return kb, nil
-	case mixedWriteMode:
-		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
-
-		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		s.cp = cp
-		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp)
-		return s.dispatcher, nil
-
-	default:
-		return nil, errors.New("unsupport write mode")
-	}
-}
-
-func (s *Server) getBinloggerToRead() (Binlogger, error) {
-	if s.dispatcher != nil {
-		return s.dispatcher, nil
-	}
-	return nil, errors.NotFoundf("no binlogger of clusterID: %s", s.clusterID)
-}
-
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
 	var err error
 	beginTime := time.Now()
+	atomic.StoreInt64(&s.lastWriteBinlogUnixNano, beginTime.UnixNano())
+
 	defer func() {
 		var label string
 		if err != nil {
@@ -271,68 +202,71 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
-	s.needGenBinlog.Set(false)
-
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		return nil, errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	if in.ClusterID != s.clusterID {
+		err = errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
+		return nil, err
 	}
 
-	ret := &binlog.WriteBinlogResp{}
-	binlogger, err1 := s.getBinloggerToWrite()
-	if err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
+	ret := new(binlog.WriteBinlogResp)
+
+	blog := new(binlog.Binlog)
+	err = blog.Unmarshal(in.Payload)
+	if err != nil {
+		goto errHandle
+	}
+
+	err = s.storage.WriteBinlog(blog)
+	if err != nil {
+		goto errHandle
+	}
+
+	return ret, nil
+
+errHandle:
+	lossBinlogCacheCounter.Add(1)
+	log.Errorf("write binlog error %v in %s mode", err, s.cfg.WriteMode)
+	if !s.cfg.EnableTolerant {
+		ret.Errmsg = err.Error()
 		return ret, err
-	}
-
-	if _, err1 := binlogger.WriteTail(&binlog.Entity{Payload: in.Payload}); err1 != nil {
-		lossBinlogCacheCounter.Add(1)
-		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
-
-		if !s.cfg.EnableTolerant {
-			ret.Errmsg = err1.Error()
-			err = errors.Trace(err1)
-			return ret, err
-		}
 	}
 
 	return ret, nil
 }
 
 // PullBinlogs sends binlogs in the streaming way
-// the rpc looks no use now, drainer read from kafka directly
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		return errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	log.Debug("get PullBinlogs req: ", in)
+	defer func() {
+		log.Debug("PullBinlogs req: ", in, " quit")
+	}()
+
+	if in.ClusterID != s.clusterID {
+		return errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
 	}
 
-	binlogger, err := s.getBinloggerToRead()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	// don't use pos.Suffix now, use offset like last commitTS
+	last := in.StartFrom.Offset
 
-	pos := in.StartFrom
-	sendBinlog := func(entity *binlog.Entity) error {
-		pos.Suffix = entity.Pos.Suffix
-		pos.Offset = entity.Pos.Offset
-		resp := &binlog.PullBinlogResp{Entity: *entity}
-		return errors.Trace(stream.Send(resp))
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
-		err = binlogger.Walk(s.ctx, pos, sendBinlog)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
 		select {
-		// walk return nil even if ctx is Done, so check and return here
+		case data, ok := <-binlogs:
+			if !ok {
+				return nil
+			}
+			resp := new(binlog.PullBinlogResp)
+
+			resp.Entity.Payload = data
+			err := stream.Send(resp)
+			if err != nil {
+				return err
+			}
+			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
 		case <-s.ctx.Done():
 			return nil
-		// sleep 50 ms to prevent cpu occupied
-		case <-time.After(pullBinlogInterval):
 		}
 	}
 }
@@ -350,6 +284,8 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
+	log.Debug("register success")
+
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, refresh this node's state to paused
@@ -361,6 +297,8 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
+	log.Debug("notify success")
+
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
@@ -370,10 +308,6 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	// init the server
-	if err := s.init(); err != nil {
-		return errors.Annotate(err, "fail to initialize pump server")
-	}
 	// start a UNIX listener
 	var unixLis net.Listener
 	if s.unixAddr != "" {
@@ -386,6 +320,8 @@ func (s *Server) Start() error {
 			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
 		}
 	}
+
+	log.Debug("init success")
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -431,6 +367,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
+	log.Debug("start to server request")
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
@@ -459,46 +396,50 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 }
 
 func (s *Server) writeFakeBinlog() {
-	// there are only one binlogger for the specified cluster
-	// so we can use only one needGenBinlog flag
-	if s.needGenBinlog.Get() {
-		binlogger, err := s.getBinloggerToWrite()
-		if err != nil {
-			log.Errorf("generate forward binlog, get binlogger err %v", err)
-			return
-		}
-		payload, err := s.genFakeBinlog()
-		if err != nil {
-			log.Errorf("generate forward binlog, generate binlog err %v", err)
-			return
-		}
-
-		_, err = binlogger.WriteTail(&binlog.Entity{Payload: payload})
-		if err != nil {
-			log.Errorf("generate forward binlog, write binlog err %v", err)
-			return
-		}
-
-		log.Infof("generate fake binlog successfully")
-
+	payload, err := s.genFakeBinlog()
+	if err != nil {
+		log.Error("gennerate fake binlog err: ", err)
+		return
 	}
 
-	s.needGenBinlog.Set(true)
+	req := new(pb.WriteBinlogReq)
+	req.Payload = payload
+
+	req.ClusterID = s.clusterID
+
+	resp, err := s.WriteBinlog(s.ctx, req)
+
+	if err != nil {
+		log.Error("write fake binlog err: ", err)
+		return
+	}
+
+	if len(resp.Errmsg) > 0 {
+		log.Error("write fake binlog err: ", resp.Errmsg)
+		return
+	}
+
+	log.Debug("write fake binlog successful")
+	return
 }
 
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	defer s.wg.Done()
 
-	s.needGenBinlog.Set(true)
 	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
+	lastWriteBinlogUnixNano := atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
 	for {
 		select {
 		case <-s.ctx.Done():
 			log.Info("genFakeBinlog exit")
 			return
 		case <-time.After(genFakeBinlogInterval):
-			s.writeFakeBinlog()
+			// if no WriteBinlogReq, we write a fake binlog
+			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
+				s.writeFakeBinlog()
+			}
+			lastWriteBinlogUnixNano = atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
 		}
 	}
 }
@@ -515,9 +456,13 @@ func (s *Server) gcBinlogFile() {
 			log.Info("gcBinlogFile exit")
 			return
 		case <-time.Tick(time.Hour):
-			if s.dispatcher != nil {
-				s.dispatcher.GC(s.gc, binlog.Pos{})
+			if s.gc == 0 {
+				continue
 			}
+			// TODO check safe to gc for drainer
+			millisecond := time.Now().Add(-time.Hour*s.gc).UnixNano() / 1000
+			gcTS := int64(oracle.EncodeTSO(millisecond))
+			s.storage.GCTS(gcTS)
 		}
 	}
 }
@@ -679,12 +624,8 @@ func (s *Server) Close() {
 	}
 	log.Info("has closed pdCli")
 
-	// will write binlog to dispatcher if genFakeBinlog() is still running or the pump server is serving
-	// so close this at lastest
-	if s.dispatcher != nil {
-		if err := s.dispatcher.Close(); err != nil {
-			log.Errorf("close binlogger error %v", err)
-		}
+	if err := s.storage.Close(); err != nil {
+		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
 
 	s.commitStatus()
