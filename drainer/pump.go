@@ -139,7 +139,6 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				case <-p.ctx.Done():
 				}
 			}
-
 		}
 	}()
 

@@ -39,10 +39,6 @@ var (
 	clusterID         uint64
 	pdReconnTimes     = 30
 	maxMsgSize        = 1024 * 1024 * 1024
-
-	// latestTS and latestTime is used for get approach ts
-	latestTS   int64
-	latestTime time.Time
 )
 
 // Server implements the gRPC interface,

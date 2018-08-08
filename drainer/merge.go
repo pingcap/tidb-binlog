@@ -23,9 +23,6 @@ type MergeItem interface {
 type Merger struct {
 	sync.RWMutex
 
-	//Binlogs map[string]MergeItem
-	//chans   map[string]chan MergeItem
-
 	sources map[string]MergeSource
 
 	output chan MergeItem
@@ -168,7 +165,7 @@ func (m *Merger) run() {
 				continue
 			}
 
-			for len(source.Binlogs) >= DefaultCacheSize {
+			for len(source.Binlogs) < DefaultCacheSize {
 				select {
 				case binlog, ok := <-source.Source:
 					if ok {
@@ -204,6 +201,7 @@ func (m *Merger) run() {
 
 			for id, source := range m.sources {
 				if offset[id]+1 > len(source.Binlogs) {
+					// if one source don't have item, merge sort should be finish this time
 					finish = true
 					break
 				}

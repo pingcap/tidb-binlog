@@ -230,10 +230,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			// initial pump
-			safeTS := c.getSavePoints(ctx, n.NodeID)
-
-			log.Infof("node %s get save point %v", n.NodeID, safeTS)
-			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, safeTS)
+			commitTS := c.cp.Pos()
+			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, commitTS)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -295,14 +293,6 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	return jobs, nil
-}
-
-func (c *Collector) getSavePoints(ctx context.Context, nodeID string) int64 {
-	commitTS := c.cp.Pos()
-	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
-	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-
-	return safeCommitTS
 }
 
 // Notify notifies to detcet pumps
