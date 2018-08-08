@@ -38,7 +38,7 @@ type Merger struct {
 	// when close, close the output chan once chans is empty
 	close int32
 
-	// TODO: save the max and min binlog
+	// TODO: save the max and min binlog's ts
 	window *DepositWindow
 }
 
@@ -157,11 +157,9 @@ func (m *Merger) updateSource() {
 func (m *Merger) run() {
 	defer close(m.output)
 
+	lastTS := math.MinInt64
 	for {
 		m.updateSource()
-
-		var lastTS int64
-		lastTS = math.MinInt64
 
 		binlogNum := 0
 
@@ -223,7 +221,8 @@ func (m *Merger) run() {
 			offset[minID]++
 
 			if minBinlog.GetCommitTs() <= lastTS {
-				break
+				log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), lastTS)
+				continue
 			}
 			m.output <- minBinlog
 			lastTS = minBinlog.GetCommitTs()
