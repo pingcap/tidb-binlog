@@ -255,6 +255,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			case node.Closing:
 				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
 			case node.Offline:
+				c.merger.RemoveSource(n.NodeID)
 				// release invalid connection
 				p.Close()
 				delete(c.pumps, n.NodeID)

@@ -178,7 +178,7 @@ func (m *Merger) run() {
 			if ok {
 				m.binlogs[sourceID] = binlog
 			} else {
-				// the channel is close, maybe the drainer is closing.
+				// the channel is close, maybe the source is closing.
 				skip = true
 			}
 		}
