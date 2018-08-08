@@ -126,12 +126,14 @@ func (m *Merger) updateSource() {
 		m.sources[source.ID] = source
 		log.Infof("merger add source %s", source.ID)
 	}
+	m.newSource = m.newSource[:0]
 
 	// remove source
 	for _, sourceID := range m.removeSource {
 		delete(m.sources, sourceID)
 		log.Infof("merger remove source %s", sourceID)
 	}
+	m.removeSource = m.removeSource[:0]
 
 	// pause source
 	for _, sourceID := range m.pauseSource {
@@ -140,6 +142,7 @@ func (m *Merger) updateSource() {
 			log.Infof("merger pause source %s", sourceID)
 		}
 	}
+	m.pauseSource = m.pauseSource[:0]
 
 	// continue source
 	for _, sourceID := range m.continueSource {
@@ -148,6 +151,7 @@ func (m *Merger) updateSource() {
 			log.Infof("merger continue source %s", sourceID)
 		}
 	}
+	m.continueSource = m.continueSource[:0]
 }
 
 func (m *Merger) run() {
