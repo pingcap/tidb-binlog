@@ -157,7 +157,7 @@ func (m *Merger) updateSource() {
 func (m *Merger) run() {
 	defer close(m.output)
 
-	lastTS := math.MinInt64
+	var lastTS int64 = math.MinInt64
 	for {
 		m.updateSource()
 
