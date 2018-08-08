@@ -25,6 +25,8 @@ type Merger struct {
 
 	sources map[string]MergeSource
 
+	binlogs map[string]MergeItem
+
 	output chan MergeItem
 
 	newSource      []MergeSource
@@ -41,10 +43,9 @@ type Merger struct {
 
 // MergeSource contains a source info about binlog
 type MergeSource struct {
-	ID      string
-	Source  chan MergeItem
-	Pause   bool
-	Binlogs []MergeItem
+	ID     string
+	Source chan MergeItem
+	Pause  bool
 }
 
 // NewMerger create a instance of Merger
@@ -156,80 +157,60 @@ func (m *Merger) run() {
 
 	var lastTS int64 = math.MinInt64
 	for {
+		if m.isClosed() {
+			return
+		}
+
 		m.updateSource()
 
-		binlogNum := 0
-
-		for _, source := range m.sources {
+		skip := false
+		for sourceID, source := range m.sources {
 			if source.Pause {
+				skip = true
 				continue
 			}
 
-			for len(source.Binlogs) < DefaultCacheSize {
-				select {
-				case binlog, ok := <-source.Source:
-					if ok {
-						binlogNum++
-						source.Binlogs = append(source.Binlogs, binlog)
-					} else {
-						break
-					}
-				default:
-					break
-				}
+			if _, ok := m.binlogs[sourceID]; ok {
+				continue
+			}
+
+			binlog, ok := <-source.Source
+			if ok {
+				m.binlogs[sourceID] = binlog
+			} else {
+				// the channel is close, maybe the drainer is closing.
+				skip = true
 			}
 		}
 
-		if binlogNum == 0 {
-			if m.isClosed() {
-				return
-			}
-
+		if skip {
+			// has paused source, or can't get binlog, so can't run merge sort.
 			time.Sleep(time.Second)
 			continue
 		}
 
-		finish := false
-		offset := make(map[string]int)
-		for id := range m.sources {
-			offset[id] = 0
+		var minBinlog MergeItem
+		var minID string
+
+		for sourceID, binlog := range m.binlogs {
+			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
+				minBinlog = binlog
+				minID = sourceID
+			}
 		}
 
-		for {
-			var minBinlog MergeItem
-			var minID string
-
-			for id, source := range m.sources {
-				if offset[id]+1 > len(source.Binlogs) {
-					// if one source don't have item, merge sort should be finish this time
-					finish = true
-					break
-				}
-
-				if minBinlog == nil || source.Binlogs[offset[id]].GetCommitTs() < minBinlog.GetCommitTs() {
-					minBinlog = source.Binlogs[offset[id]]
-					minID = id
-				}
-			}
-
-			if minBinlog == nil || finish {
-				break
-			}
-
-			offset[minID]++
-
-			if minBinlog.GetCommitTs() <= lastTS {
-				log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), lastTS)
-				continue
-			}
-			m.output <- minBinlog
-			lastTS = minBinlog.GetCommitTs()
+		if minBinlog == nil {
+			continue
 		}
 
-		// delete Binlogs
-		for id, source := range m.sources {
-			source.Binlogs = source.Binlogs[offset[id]:]
+		if minBinlog.GetCommitTs() <= lastTS {
+			log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), lastTS)
+			continue
 		}
+
+		m.output <- minBinlog
+		delete(m.binlogs, minID)
+		lastTS = minBinlog.GetCommitTs()
 	}
 }
 

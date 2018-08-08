@@ -237,10 +237,9 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{
-				ID:      p.nodeID,
-				Source:  p.PullBinlog(ctx, p.latestPos),
-				Pause:   n.State == node.Paused || n.State == node.Pausing,
-				Binlogs: make([]MergeItem, 0, DefaultCacheSize),
+				ID:     p.nodeID,
+				Source: p.PullBinlog(ctx, p.latestPos),
+				Pause:  false,
 			})
 		} else {
 			// update pumps' latestTS
