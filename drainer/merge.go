@@ -168,17 +168,16 @@ func (m *Merger) run() {
 				continue
 			}
 
-			chanSize := len(source.Source)
-			for i:=0; i<chanSize; i++ { 
-				if len(source.Binlogs) >= DefaultCacheSize {
-					break
-				}
-				
-				binlog, ok := <-source.Source
-				if ok {
-					binlogNum++
-					source.Binlogs = append(source.Binlogs, binlog)
-				} else {
+			for len(source.Binlogs) >= DefaultCacheSize {
+				select {
+				case binlog, ok := <-source.Source:
+					if ok {
+						binlogNum++
+						source.Binlogs = append(source.Binlogs, binlog)
+					} else {
+						break
+					}
+				default:
 					break
 				}
 			}

@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 	defaultPumpTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5  // 5 minute
 	defaultSafeForwardTime = 20 // 20 minute
+	defaultKafkaAddrs      = "127.0.0.1:9092"
 	defaultKafkaVersion    = "0.8.2.0"
 )
 
@@ -259,7 +261,28 @@ func (cfg *Config) adjustConfig() error {
 		} else if cfg.SyncerCfg.DestDBType == "pb" {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		} else if cfg.SyncerCfg.DestDBType == "kafka" {
+			cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
+			cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
 		}
+	}
+
+	// get KafkaAddrs from zookeeper if ZkAddrs is setted
+	if cfg.SyncerCfg.To.ZKAddrs != "" {
+		zkClient, err := zk.NewFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
+		defer zkClient.Close()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		kafkaUrls, err := zkClient.KafkaUrls()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// use kafka address get from zookeeper to reset the config
+		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+		cfg.SyncerCfg.To.KafkaAddrs = kafkaUrls
 	}
 
 	return nil
