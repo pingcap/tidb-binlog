@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/ngaut/log"
@@ -20,12 +21,20 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 	var maxCommitTS []int64
 	var maxTS int64
 
+	var lastGetSortItemTS int64
 	sorter := newSorter(func(item sortItem) {
 		maxCommitTS = append(maxCommitTS, item.commit)
+		atomic.StoreInt64(&lastGetSortItemTS, item.commit)
 	})
 
 	for _, item := range items {
 		sorter.pushTSItem(item)
+
+		// we should never push item with commit ts less than lastGetSortItemTS, or something go wrong
+		if item.tp == pb.BinlogType_Commit {
+			c.Assert(item.commit, check.Greater, atomic.LoadInt64(&lastGetSortItemTS))
+		}
+
 		if item.commit > maxTS {
 			maxTS = item.commit
 		}
@@ -34,7 +43,8 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 	time.Sleep(time.Millisecond * 50)
 	sorter.close()
 
-	c.Logf("testSorter: %v, get maxCommitTS: %v", items, maxCommitTS)
+	c.Logf("testSorter items: %v, get maxCommitTS: %v", items, maxCommitTS)
+	c.Logf("items num: %d, get sort item num: %d", len(items), len(maxCommitTS))
 
 	if expectMaxCommitTS != nil {
 		c.Assert(maxCommitTS, check.DeepEquals, expectMaxCommitTS)
@@ -118,7 +128,25 @@ func (s *SorterSuite) TestSorter(c *check.C) {
 
 	// test random data
 	items = items[:0]
-	for item := range newItemGenerator(5000) {
+	for item := range newItemGenerator(5000, 10, 0) {
+		items = append(items, item)
+	}
+	testSorter(c, items, nil)
+
+	items = items[:0]
+	for item := range newItemGenerator(50000, 1, 0) {
+		items = append(items, item)
+	}
+	testSorter(c, items, nil)
+
+	items = items[:0]
+	for item := range newItemGenerator(5000, 10, 10) {
+		items = append(items, item)
+	}
+	testSorter(c, items, nil)
+
+	items = items[:0]
+	for item := range newItemGenerator(50000, 1, 10) {
 		items = append(items, item)
 	}
 	testSorter(c, items, nil)

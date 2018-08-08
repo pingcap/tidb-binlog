@@ -12,12 +12,11 @@ import (
 )
 
 // a test helper, generate n pair item
-func newItemGenerator(txnNum int32) <-chan sortItem {
+func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-chan sortItem {
 	items := make(chan sortItem)
 	oracle := newMemOracle()
 
 	threadNum := 10
-	var maxLatency int64 = 10
 
 	var wg sync.WaitGroup
 
@@ -26,8 +25,22 @@ func newItemGenerator(txnNum int32) <-chan sortItem {
 		go func() {
 			defer wg.Done()
 			for {
-				if atomic.AddInt32(&txnNum, -1) < 0 {
+				num := atomic.AddInt32(&txnNum, -1)
+				if num < 0 {
 					return
+				}
+
+				if fakeTxnPerNum > 0 && num%fakeTxnPerNum == 0 {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						ts := oracle.getTS()
+						items <- sortItem{
+							start:  ts,
+							commit: ts,
+							tp:     pb.BinlogType_Rollback,
+						}
+					}()
 				}
 
 				start := oracle.getTS()
