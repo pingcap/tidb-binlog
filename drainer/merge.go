@@ -199,10 +199,6 @@ func (m *Merger) run() {
 		}
 
 		for {
-			if finish {
-				break
-			}
-
 			var minBinlog MergeItem
 			var minID string
 
@@ -218,7 +214,7 @@ func (m *Merger) run() {
 				}
 			}
 
-			if minBinlog == nil {
+			if minBinlog == nil || finish {
 				break
 			}
 
