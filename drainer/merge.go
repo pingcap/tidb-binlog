@@ -11,7 +11,7 @@ import (
 
 const (
 	// DefaultCacheSize is the default cache size for every source.
-	DefaultCacheSize = 1024
+	DefaultCacheSize = 10
 )
 
 // MergeItem is the item in Merger

@@ -78,7 +78,7 @@ func (p *Pump) Close() {
 // PullBinlog return the chan to get item from pump
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	p.ctx, p.cancel = context.WithCancel(pctx)
-	ret := make(chan MergeItem)
+	ret := make(chan MergeItem, 10)
 
 	go func() {
 		log.Debug("start PullBinlog pump: ", p.nodeID)
