@@ -67,6 +67,9 @@ type Append struct {
 	headPointer   valuePointer
 	handlePointer valuePointer
 
+	sortItems          chan sortItem
+	handleSortItemQuit chan struct{}
+
 	writeCh chan *request
 
 	options *Options
@@ -115,7 +118,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		tiStore:        tiStore,
 		tiLockResolver: tiLockResolver,
 
-		close: make(chan struct{}),
+		close:     make(chan struct{}),
+		sortItems: make(chan sortItem, 1024),
 	}
 
 	append.gcTS, err = append.readGCTSFromDB()
@@ -135,45 +139,10 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 		return nil, errors.Trace(err)
 	}
 
+	append.handleSortItemQuit = append.handleSortItem(append.sortItems)
 	sorter := newSorter(func(item sortItem) {
 		log.Debugf("sorter get item: %+v", item)
-
-		// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
-		// or this should never happend
-		if item.commit < append.maxCommitTS {
-			log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, append.maxCommitTS)
-			return
-		}
-
-		tsKey := encodeTSKey(item.commit)
-		pointerData, err := metadata.Get(tsKey, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		var pointer valuePointer
-		err = pointer.UnmarshalBinary(pointerData)
-		if err != nil {
-			log.Error(err)
-			return
-		}
-
-		var batch leveldb.Batch
-		maxCommitTS := make([]byte, 8)
-		binary.LittleEndian.PutUint64(maxCommitTS, uint64(item.commit))
-		batch.Put(maxCommitTSKey, maxCommitTS)
-
-		batch.Put(handlePointerKey, pointerData)
-		err = metadata.Write(&batch, nil)
-		// extremely case write fail when no disk space at this time, it's safe to don't save the maxCommitTS to DB
-		// because we can recalculate it when restart, so just log and ignore it
-		// better just panic?
-		if err != nil {
-			log.Error(err)
-		}
-
-		append.handlePointer = pointer
-		atomic.StoreInt64(&append.maxCommitTS, item.commit)
+		append.sortItems <- item
 	})
 
 	if tiStore != nil {
@@ -220,6 +189,82 @@ func NewAppendWithResolver(dir string, options *Options, tiStore tikv.Storage, t
 	go append.updateStatus()
 
 	return
+}
+
+func (a *Append) persistHandlePointer(item sortItem) error {
+	log.Debug("persist item: ", item)
+	tsKey := encodeTSKey(item.commit)
+	pointerData, err := a.metadata.Get(tsKey, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var pointer valuePointer
+	err = pointer.UnmarshalBinary(pointerData)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var batch leveldb.Batch
+	maxCommitTS := make([]byte, 8)
+	binary.LittleEndian.PutUint64(maxCommitTS, uint64(item.commit))
+	batch.Put(maxCommitTSKey, maxCommitTS)
+
+	batch.Put(handlePointerKey, pointerData)
+	err = a.metadata.Write(&batch, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.handlePointer = pointer
+
+	return nil
+}
+
+func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
+	quit = make(chan struct{})
+
+	go func() {
+		defer close(quit)
+
+		// we save the handlePointer and maxCommitTS to metadata at most once in persistAtLeastTime
+		persistAtLeastTime := time.Second
+		var toSaveItem sortItem
+		var toSave <-chan time.Time
+		for {
+			select {
+			case item, ok := <-items:
+				if !ok {
+					if toSave != nil {
+						err := a.persistHandlePointer(toSaveItem)
+						if err != nil {
+							log.Error(err)
+						}
+					}
+					return
+				}
+				// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
+				// or this should never happen
+				if item.commit < atomic.LoadInt64(&a.maxCommitTS) {
+					log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, a.maxCommitTS)
+					continue
+				}
+				atomic.StoreInt64(&a.maxCommitTS, item.commit)
+				toSaveItem = item
+				if toSave == nil {
+					toSave = time.After(persistAtLeastTime)
+				}
+				log.Info("item: ", item)
+			case <-toSave:
+				err := a.persistHandlePointer(toSaveItem)
+				if err != nil {
+					log.Error(err)
+				}
+				toSave = nil
+			}
+
+		}
+	}()
+
+	return quit
 }
 
 func (a *Append) updateStatus() {
@@ -393,6 +438,10 @@ func (a *Append) Close() error {
 	// note the call back func will use a.metadata, so we should close sorter before a.metadata
 	a.sorter.close()
 	log.Debug("sorter is closed")
+
+	close(a.sortItems)
+	<-a.handleSortItemQuit
+	log.Debug("handle sort item  quit")
 
 	err := a.metadata.Close()
 	if err != nil {
