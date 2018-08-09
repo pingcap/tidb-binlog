@@ -648,6 +648,8 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			for _, req := range reqs {
 				log.Debug(req.startTS, req.commitTS, " done")
 				req.wg.Done()
+				// payload is useless anymore, let it GC ASAP
+				req.payload = nil
 				done <- req
 			}
 		}
