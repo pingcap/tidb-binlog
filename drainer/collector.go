@@ -239,7 +239,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			c.merger.AddSource(MergeSource{
 				ID:     p.nodeID,
 				Source: p.PullBinlog(ctx, p.latestPos),
-				Pause:  false,
 			})
 		} else {
 			// update pumps' latestTS
@@ -249,9 +248,9 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			case node.Pausing:
 				// do nothing
 			case node.Paused:
-				c.merger.PauseSource(n.NodeID)
+				p.Pause()
 			case node.Online:
-				c.merger.ContinueSource(n.NodeID)
+				p.Continue()
 			case node.Closing:
 				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
 			case node.Offline:

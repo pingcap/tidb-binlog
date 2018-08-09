@@ -42,10 +42,11 @@ type Pump struct {
 	// binlogs are complete before this latestValidCommitTS
 	latestValidCommitTS int64
 
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
-	isFinished int64
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	isPaused int32
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
@@ -75,6 +76,20 @@ func (p *Pump) Close() {
 	log.Debugf("[pump %s] was closed", p.nodeID)
 }
 
+// Pause sets isPaused to 1, and stop pull binlog from pump.
+func (p *Pump) Pause() {
+	if atomic.CompareAndSwapInt32(&p.isPaused, 0, 1) == false {
+		log.Debug("[pump %s] was paused", p.nodeID)
+	}
+}
+
+// Continue sets isPaused to 0, and continue pull binlog from pump.
+func (p *Pump) Continue() {
+	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) == false {
+		log.Debug("[pump %s] was normal", p.nodeID)
+	}
+}
+
 // PullBinlog return the chan to get item from pump
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	p.ctx, p.cancel = context.WithCancel(pctx)
@@ -92,6 +107,12 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			case <-p.ctx.Done():
 				return
 			default:
+			}
+
+			if atomic.LoadInt32(&p.isPaused) == 1 {
+				log.Debugf("[pump %s] is paused", p.nodeID)
+				time.Sleep(time.Second)
+				continue
 			}
 
 			conn, err := grpc.Dial(p.addr, grpc.WithInsecure())

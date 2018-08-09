@@ -93,28 +93,6 @@ func (m *Merger) RemoveSource(sourceID string) {
 	m.Unlock()
 }
 
-// PauseSource sets the source to pause
-func (m *Merger) PauseSource(sourceID string) {
-	m.Lock()
-	if source, ok := m.sources[sourceID]; ok {
-		if !source.Pause {
-			m.pauseSource = append(m.pauseSource, sourceID)
-		}
-	}
-	m.Unlock()
-}
-
-// ContinueSource restart the source
-func (m *Merger) ContinueSource(sourceID string) {
-	m.Lock()
-	if source, ok := m.sources[sourceID]; ok {
-		if source.Pause {
-			m.continueSource = append(m.continueSource, sourceID)
-		}
-	}
-	m.Unlock()
-}
-
 func (m *Merger) updateSource() {
 	m.Lock()
 	defer m.Unlock()
@@ -132,24 +110,6 @@ func (m *Merger) updateSource() {
 		log.Infof("merger remove source %s", sourceID)
 	}
 	m.removeSource = m.removeSource[:0]
-
-	// pause source
-	for _, sourceID := range m.pauseSource {
-		if source, ok := m.sources[sourceID]; ok {
-			source.Pause = true
-			log.Infof("merger pause source %s", sourceID)
-		}
-	}
-	m.pauseSource = m.pauseSource[:0]
-
-	// continue source
-	for _, sourceID := range m.continueSource {
-		if source, ok := m.sources[sourceID]; ok {
-			source.Pause = false
-			log.Infof("merger continue source %s", sourceID)
-		}
-	}
-	m.continueSource = m.continueSource[:0]
 }
 
 func (m *Merger) run() {
@@ -165,11 +125,6 @@ func (m *Merger) run() {
 
 		skip := false
 		for sourceID, source := range m.sources {
-			if source.Pause {
-				skip = true
-				continue
-			}
-
 			if _, ok := m.binlogs[sourceID]; ok {
 				continue
 			}
