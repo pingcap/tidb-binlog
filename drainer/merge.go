@@ -29,10 +29,8 @@ type Merger struct {
 
 	output chan MergeItem
 
-	newSource      []MergeSource
-	removeSource   []string
-	pauseSource    []string
-	continueSource []string
+	newSource    []MergeSource
+	removeSource []string
 
 	// when close, close the output chan once chans is empty
 	close int32
@@ -51,9 +49,12 @@ type MergeSource struct {
 // NewMerger create a instance of Merger
 func NewMerger(sources ...MergeSource) *Merger {
 	m := &Merger{
-		sources: make(map[string]MergeSource),
-		output:  make(chan MergeItem, 10),
-		window:  &DepositWindow{},
+		sources:      make(map[string]MergeSource),
+		output:       make(chan MergeItem, 10),
+		binlogs:      make(map[string]MergeItem),
+		newSource:    make([]MergeSource, 0, 3),
+		removeSource: make([]string, 0, 3),
+		window:       &DepositWindow{},
 	}
 
 	for i := 0; i < len(sources); i++ {
