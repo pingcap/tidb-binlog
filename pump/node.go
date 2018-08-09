@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
+	//"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -263,18 +263,19 @@ func checkExclusive(dataDir string) error {
 
 // checkNodeID check NodeID's format is legal or not.
 func checkNodeID(nodeID string) bool {
-	_, port, err := net.SplitHostPort(nodeID)
-	if err != nil {
-		log.Errorf("node id %s is illegal, error %v", nodeID, err)
-		return false
-	}
+	/*
+		_, port, err := net.SplitHostPort(nodeID)
+		if err != nil {
+			log.Errorf("node id %s is illegal, error %v", nodeID, err)
+			return false
+		}
 
-	_, err = strconv.Atoi(port)
-	if err != nil {
-		log.Errorf("node id %s is illegal, error %v", nodeID, err)
-		return false
-	}
-
+		_, err = strconv.Atoi(port)
+		if err != nil {
+			log.Errorf("node id %s is illegal, error %v", nodeID, err)
+			return false
+		}
+	*/
 	return true
 }
 
