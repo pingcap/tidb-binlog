@@ -122,7 +122,7 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*Status, error) {
 	status := &Status{}
 
 	if err := json.Unmarshal(node.Value, &status); err != nil {
-		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
+		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s), node value(%s)", id, node.Value)
 	}
 
 	return status, nil

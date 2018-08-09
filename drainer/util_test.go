@@ -7,25 +7,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tipb/go-binlog"
 )
-
-func (t *testDrainerSuite) TestComparePos(c *C) {
-	c.Assert(ComparePos(binlog.Pos{Suffix: 2, Offset: 3}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, -1)
-	c.Assert(ComparePos(binlog.Pos{Suffix: 4, Offset: 3}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 1)
-	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 2}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, -1)
-	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 5}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 1)
-	c.Assert(ComparePos(binlog.Pos{Suffix: 3, Offset: 4}, binlog.Pos{Suffix: 3, Offset: 4}), Equals, 0)
-}
-
-func (t *testDrainerSuite) TestPosToFloat(c *C) {
-	pos := binlog.Pos{
-		Suffix: 4,
-		Offset: 3721,
-	}
-	f := posToFloat(&pos)
-	c.Assert(f, Equals, float64(4*segmentSizeLevel+pos.Offset))
-}
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 	// test non-mysqltype error
