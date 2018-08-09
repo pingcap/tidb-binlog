@@ -150,6 +150,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		dataDir:   cfg.DataDir,
 		clusterID: fmt.Sprintf("%d", clusterID),
 		node:      n,
+		unixAddr:  cfg.Socket,
 		tcpAddr:   cfg.ListenAddr,
 		gs:        grpc.NewServer(grpcOpts...),
 		ctx:       ctx,
