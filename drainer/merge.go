@@ -133,13 +133,17 @@ func (m *Merger) run() {
 			if ok {
 				m.binlogs[sourceID] = binlog
 			} else {
-				// the channel is close, maybe the source is closing.
+				// the source is closing.
+				log.Warnf("can't read binlog from pump %s", sourceID)
 				skip = true
 			}
 		}
 
 		if skip {
-			// has paused source, or can't get binlog, so can't run merge sort.
+			// can't get binlog from all source, so can't run merge sort.
+			// maybe the source is offline, and then collector will remove this pump in this case.
+			// or meet some error, the pump's ctx is done, and drainer will exit.
+			// so just wait a second and continue.
 			time.Sleep(time.Second)
 			continue
 		}
