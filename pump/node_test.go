@@ -15,6 +15,12 @@ var _ = Suite(&testNodeSuite{})
 
 type testNodeSuite struct{}
 
+type testRegistrySuite struct{}
+
+type RegisrerTestClient interface {
+	Node(context.Context, string, string) (*pkgnode.Status, error)
+}
+
 func (t *testNodeSuite) TestNode(c *C) {
 	tmpDir, err := ioutil.TempDir(os.TempDir(), "nodetest")
 	c.Assert(err, IsNil)
@@ -60,7 +66,7 @@ func testInteracWithEtcd(c *C, node pkgnode.Node) {
 	// check register
 	err := node.RefreshStatus(context.Background(), ns)
 	c.Assert(err, IsNil)
-	mustEqualStatus(c, node.(*pumpNode), pn.ID, ns)
+	mustEqualStatus(c, node.(*pumpNode), pn.status.NodeID, ns)
 }
 
 func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *pkgnode.Status) {

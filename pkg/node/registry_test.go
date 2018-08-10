@@ -30,11 +30,13 @@ func TestNode(t *testing.T) {
 }
 
 func (t *testRegistrySuite) TestUpdateNodeInfo(c *C) {
-	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 	ns := &Status{
-		NodeID: "test",
-		Addr:   "test",
+		NodeID:  "test",
+		Addr:    "test",
+		State:   Online,
+		IsAlive: true,
 	}
 
 	err := r.UpdateNode(context.Background(), nodePrefix, ns)
@@ -52,13 +54,14 @@ func (t *testRegistrySuite) TestUpdateNodeInfo(c *C) {
 }
 
 func (t *testRegistrySuite) TestRegisterNode(c *C) {
-	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
 	ns := &Status{
-		NodeID: "test",
-		Addr:   "test",
-		State:  Online,
+		NodeID:  "test",
+		Addr:    "test",
+		State:   Online,
+		IsAlive: true,
 	}
 	err := r.UpdateNode(context.Background(), nodePrefix, ns)
 	c.Assert(err, IsNil)
@@ -78,12 +81,14 @@ func (t *testRegistrySuite) TestRegisterNode(c *C) {
 }
 
 func (t *testRegistrySuite) TestRefreshNode(c *C) {
-	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), "binlog")
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
 	ns := &Status{
-		NodeID: "test",
-		Addr:   "test",
+		NodeID:  "test",
+		Addr:    "test",
+		State:   Online,
+		IsAlive: true,
 	}
 	err := r.UpdateNode(context.Background(), nodePrefix, ns)
 	c.Assert(err, IsNil)
@@ -99,7 +104,6 @@ func (t *testRegistrySuite) TestRefreshNode(c *C) {
 
 func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *Status) {
 	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
-	// ignore the latestBinlogPos and alive
 	c.Assert(err, IsNil)
 	c.Assert(ns, DeepEquals, status)
 }
