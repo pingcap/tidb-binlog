@@ -665,7 +665,17 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				}
 				bufReqs = append(bufReqs, req)
 				size += len(req.payload)
-				if size >= 4*(1<<20) || len(bufReqs) > 128 {
+
+				// Allow the group to grow up to a maximum size, but if the
+				// original write is small, limit the growth so we do not slow
+				// down the small write too much.
+				maxSize := 1 << 20
+				firstSize := len(bufReqs[0].payload)
+				if firstSize <= (128 << 10) {
+					maxSize = firstSize + (128 << 10)
+				}
+
+				if size >= maxSize {
 					write(bufReqs)
 					size = 0
 					bufReqs = bufReqs[:0]
