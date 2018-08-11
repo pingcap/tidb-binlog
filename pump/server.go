@@ -224,7 +224,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 
 errHandle:
 	lossBinlogCacheCounter.Add(1)
-	//log.Errorf("write binlog error %v in %s mode", err, s.cfg.WriteMode)
+	log.Errorf("write binlog error %v", err)
 	if !s.cfg.EnableTolerant {
 		ret.Errmsg = err.Error()
 		return ret, err

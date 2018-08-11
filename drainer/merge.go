@@ -43,7 +43,6 @@ type Merger struct {
 type MergeSource struct {
 	ID     string
 	Source chan MergeItem
-	Pause  bool
 }
 
 // NewMerger create a instance of Merger

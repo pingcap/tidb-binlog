@@ -50,7 +50,7 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, startTs int64) (*Pump, error) {
+func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, w *DepositWindow, startTs int64) (*Pump, error) {
 	nodeID, err := pump.FormatNodeID(nodeID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -62,7 +62,6 @@ func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, w *De
 		clusterID:  clusterID,
 		currentPos: startTs,
 		latestPos:  startTs,
-		tiStore:    tiStore,
 		window:     w,
 		timeout:    timeout,
 	}, nil

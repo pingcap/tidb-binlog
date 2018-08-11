@@ -27,7 +27,7 @@ func (b *binlogItem) String() string {
 	return fmt.Sprintf("{commitTS: %d, node: %s}", b.binlog.CommitTs, b.nodeID)
 }
 
-func newBinlogItem(b *pb.Binlog, ts int64, nodeID string) *binlogItem {
+func newBinlogItem(b *pb.Binlog, nodeID string) *binlogItem {
 	itemp := &binlogItem{
 		binlog: b,
 		nodeID: nodeID,

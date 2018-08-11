@@ -29,17 +29,17 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
 	reg       *node.EtcdRegistry
 	timeout   time.Duration
 	window    *DepositWindow
-	tiClient  *tikv.LockResolver
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 	syncer    *Syncer
-	latestTS  int64
 	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
@@ -63,10 +63,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	session.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := session.NewStore(tiPath)
@@ -88,7 +84,6 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		window:          w,
 		syncer:          s,
 		cp:              cpt,
-		tiClient:        tiClient,
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		syncedCheckTime: cfg.SyncedCheckTime,
@@ -96,52 +91,56 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		merger:          NewMerger(),
 	}
 
-	go c.startAddToSyncer()
+	go c.publishBinlogs()
 
 	return c, nil
 }
 
-func (c *Collector) startAddToSyncer() {
-	for mergeItem := range c.merger.Output() {
-		item := mergeItem.(*binlogItem)
-		binlog := item.binlog
+func (c *Collector) publishBinlogs() {
+	defer log.Info("publishBinlogs quit")
 
-		if binlog.CommitTs == binlog.StartTs {
-			log.Debug("fake binlog ts: ", binlog.CommitTs)
-			continue
-		}
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case mergeItem := <-c.merger.Output():
+			item := mergeItem.(*binlogItem)
+			binlog := item.binlog
 
-		// TODO when will fail, handle it in better way
-		if binlog.DdlJobId > 0 {
-			for {
-				job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
-				if err != nil {
-					log.Error(err)
-					time.Sleep(time.Second)
-					continue
-				}
-
-				if job == nil {
-					time.Sleep(time.Second)
-					continue
-				}
-
-				if job.State == model.JobStateCancelled {
-					break
-				} else {
-					item.SetJob(job)
-					c.syncer.Add(item)
-					ddlJobsCounter.Add(float64(1))
-					break
-				}
+			if binlog.CommitTs == binlog.StartTs {
+				log.Debug("fake binlog ts: ", binlog.CommitTs)
+				continue
 			}
-		} else {
-			c.syncer.Add(item)
+
+			// TODO when will fail, handle it in better way
+			if binlog.DdlJobId > 0 {
+				for {
+					job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
+					if err != nil {
+						log.Error(err)
+						time.Sleep(time.Second)
+						continue
+					}
+
+					if job == nil {
+						time.Sleep(time.Second)
+						continue
+					}
+
+					if job.State == model.JobStateCancelled {
+						break
+					} else {
+						item.SetJob(job)
+						c.syncer.Add(item)
+						ddlJobsCounter.Add(float64(1))
+						break
+					}
+				}
+			} else {
+				c.syncer.Add(item)
+			}
 		}
-
 	}
-
-	log.Debug("startAddToSyncer quit")
 }
 
 // Start run a loop of collecting binlog from pumps online
@@ -153,9 +152,9 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		if err := c.tiStore.Close(); err != nil {
-			log.Error(err.Error())
-		}
+		//if err := c.tiStore.Close(); err != nil {
+		//	log.Error(err.Error())
+		//}
 	}()
 
 	for {
@@ -212,9 +211,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// query lastest ts from pd
-	c.latestTS = c.queryLatestTsFromPD()
-
 	for _, n := range nodes {
 		// format and check the nodeID
 		n.NodeID, err = pump.FormatNodeID(n.NodeID)
@@ -231,7 +227,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 			// initial pump
 			commitTS := c.cp.Pos()
-			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, c.tiStore, commitTS)
+			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, commitTS)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -241,9 +237,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				Source: p.PullBinlog(ctx, p.latestPos),
 			})
 		} else {
-			// update pumps' latestTS
-			p.UpdateLatestTS(c.latestTS)
-
 			switch n.State {
 			case node.Pausing:
 				// do nothing
