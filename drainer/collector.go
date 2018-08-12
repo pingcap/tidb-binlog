@@ -154,9 +154,6 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		//if err := c.tiStore.Close(); err != nil {
-		//	log.Error(err.Error())
-		//}
 	}()
 
 	for {

@@ -76,16 +76,12 @@ func (p *Pump) Close() {
 
 // Pause sets isPaused to 1, and stop pull binlog from pump.
 func (p *Pump) Pause() {
-	if atomic.CompareAndSwapInt32(&p.isPaused, 0, 1) == false {
-		log.Debug("[pump %s] was paused", p.nodeID)
-	}
+	atomic.StoreInt32(&p.isPaused, 1)
 }
 
 // Continue sets isPaused to 0, and continue pull binlog from pump.
 func (p *Pump) Continue() {
-	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) == false {
-		log.Debug("[pump %s] was normal", p.nodeID)
-	}
+	atomic.StoreInt32(&p.isPaused, 0)
 }
 
 // PullBinlog return the chan to get item from pump
