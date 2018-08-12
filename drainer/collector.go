@@ -2,6 +2,7 @@ package drainer
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -40,6 +41,7 @@ type Collector struct {
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 	syncer    *Syncer
+	latestTS  int64
 	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
@@ -179,7 +181,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.currentPos
-		offsetGauge.WithLabelValues(nodeID).Set(float64(pump.currentPos))
+		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.currentPos))
 	}
 	status.DepositWindow.Lower = c.window.LoadLower()
 	status.DepositWindow.Upper = c.window.LoadUpper()
@@ -202,6 +204,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	windowUpper := c.latestTS
+	windowLower := c.getLatestValidCommitTS()
+	c.updateWindow(ctx, windowUpper, windowLower)
 	return nil
 }
 
@@ -210,6 +215,9 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// query lastest ts from pd
+	c.latestTS = c.queryLatestTsFromPD()
 
 	for _, n := range nodes {
 		// format and check the nodeID
@@ -267,6 +275,37 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	}
 
 	return int64(version.Ver)
+}
+
+func (c *Collector) updateWindow(ctx context.Context, upper, lower int64) {
+	oldLower := c.window.LoadLower()
+	oldUpper := c.window.LoadUpper()
+
+	if lower > oldLower {
+		// we should update window after publishing binlogs
+		c.window.SaveLower(lower)
+		windowGauge.WithLabelValues("lower").Set(float64(lower))
+	}
+	if upper > oldUpper {
+		c.window.SaveUpper(upper)
+		windowGauge.WithLabelValues("upper").Set(float64(upper))
+	}
+}
+
+// select min of all pumps' latestValidCommitTS
+func (c *Collector) getLatestValidCommitTS() int64 {
+	var latest int64 = math.MaxInt64
+	for _, p := range c.pumps {
+		latestCommitTS := p.GetLatestValidCommitTS()
+		if latestCommitTS < latest {
+			latest = latestCommitTS
+		}
+	}
+	if latest == math.MaxInt64 {
+		latest = 0
+	}
+
+	return latest
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB

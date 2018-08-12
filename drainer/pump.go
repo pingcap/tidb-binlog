@@ -9,7 +9,6 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -145,8 +144,8 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				binlog := new(pb.Binlog)
 				err = binlog.Unmarshal(resp.Entity.Payload)
 				if err != nil {
-					log.Error(err)
-					continue
+					log.Errorf("unmarshal binlog error: %v", err)
+					return
 				}
 
 				item := &binlogItem{
@@ -163,53 +162,6 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	}()
 
 	return ret
-}
-
-// UpdateLatestTS updates the latest ts that query from pd
-func (p *Pump) UpdateLatestTS(ts int64) {
-	latestTS := atomic.LoadInt64(&p.latestTS)
-	if ts > latestTS {
-		atomic.StoreInt64(&p.latestTS, ts)
-	}
-}
-
-func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
-	var count int
-	for ts, item := range items {
-		b := item.binlog
-		if b.DdlJobId > 0 {
-			job, err := getDDLJob(p.tiStore, b.DdlJobId)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for job == nil {
-				select {
-				case <-p.ctx.Done():
-					return errors.Trace(p.ctx.Err())
-				case <-time.After(p.timeout):
-					job, err = getDDLJob(p.tiStore, b.DdlJobId)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-			}
-			if job.State == model.JobStateCancelled {
-				delete(items, ts)
-			} else {
-				item.SetJob(job)
-				count++
-			}
-		}
-	}
-	ddlJobsCounter.Add(float64(count))
-	return nil
-}
-
-func (p *Pump) hadFinished(windowLower int64) bool {
-	if p.latestValidCommitTS <= windowLower {
-		return true
-	}
-	return false
 }
 
 // GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete

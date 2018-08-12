@@ -18,12 +18,12 @@ var (
 			Help:      "DepositWindow boundary.",
 		}, []string{"marker"})
 
-	offsetGauge = prometheus.NewGaugeVec(
+	pumpPositionGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "offset",
-			Help:      "offset for each pump.",
+			Name:      "position",
+			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 
 	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
@@ -122,7 +122,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(windowGauge)
-	prometheus.MustRegister(offsetGauge)
+	prometheus.MustRegister(pumpPositionGauge)
 	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
 	prometheus.MustRegister(tikvQueryCount)

@@ -344,7 +344,7 @@ func (s *Server) Start() error {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.collector.Status).Methods("GET")
-	router.HandleFunc("/committs", s.GetLatestTS).Methods("GET")
+	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())

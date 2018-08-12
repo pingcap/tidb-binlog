@@ -29,9 +29,6 @@ type Merger struct {
 
 	output chan MergeItem
 
-	newSource    []MergeSource
-	removeSource []string
-
 	// when close, close the output chan once chans is empty
 	close int32
 
@@ -48,12 +45,10 @@ type MergeSource struct {
 // NewMerger create a instance of Merger
 func NewMerger(sources ...MergeSource) *Merger {
 	m := &Merger{
-		sources:      make(map[string]MergeSource),
-		output:       make(chan MergeItem, 10),
-		binlogs:      make(map[string]MergeItem),
-		newSource:    make([]MergeSource, 0, 3),
-		removeSource: make([]string, 0, 3),
-		window:       &DepositWindow{},
+		sources: make(map[string]MergeSource),
+		output:  make(chan MergeItem, 10),
+		binlogs: make(map[string]MergeItem),
+		window:  &DepositWindow{},
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -78,38 +73,17 @@ func (m *Merger) isClosed() bool {
 // AddSource add a source to Merger
 func (m *Merger) AddSource(source MergeSource) {
 	m.Lock()
-	if _, ok := m.sources[source.ID]; !ok {
-		m.newSource = append(m.newSource, source)
-	}
+	m.sources[source.ID] = source
+	log.Infof("merger add source %s", source.ID)
 	m.Unlock()
 }
 
 // RemoveSource remove a source from Merger
 func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
-	if _, ok := m.sources[sourceID]; ok {
-		m.removeSource = append(m.removeSource, sourceID)
-	}
+	delete(m.sources, sourceID)
+	log.Infof("merger remove source %s", sourceID)
 	m.Unlock()
-}
-
-func (m *Merger) updateSource() {
-	m.Lock()
-	defer m.Unlock()
-
-	// add new source
-	for _, source := range m.newSource {
-		m.sources[source.ID] = source
-		log.Infof("merger add source %s", source.ID)
-	}
-	m.newSource = m.newSource[:0]
-
-	// remove source
-	for _, sourceID := range m.removeSource {
-		delete(m.sources, sourceID)
-		log.Infof("merger remove source %s", sourceID)
-	}
-	m.removeSource = m.removeSource[:0]
 }
 
 func (m *Merger) run() {
@@ -121,17 +95,28 @@ func (m *Merger) run() {
 			return
 		}
 
-		m.updateSource()
-
 		skip := false
+		sources := make(map[string]MergeSource)
+		m.RLock()
 		for sourceID, source := range m.sources {
-			if _, ok := m.binlogs[sourceID]; ok {
+			sources[sourceID] = source
+		}
+		m.RUnlock()
+
+		for sourceID, source := range sources {
+			m.RLock()
+			_, ok := m.binlogs[sourceID]
+			m.RUnlock()
+
+			if ok {
 				continue
 			}
 
 			binlog, ok := <-source.Source
 			if ok {
+				m.Lock()
 				m.binlogs[sourceID] = binlog
+				m.Unlock()
 			} else {
 				// the source is closing.
 				log.Warnf("can't read binlog from pump %s", sourceID)
@@ -151,12 +136,14 @@ func (m *Merger) run() {
 		var minBinlog MergeItem
 		var minID string
 
+		m.RLock()
 		for sourceID, binlog := range m.binlogs {
 			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
 				minBinlog = binlog
 				minID = sourceID
 			}
 		}
+		m.RUnlock()
 
 		if minBinlog == nil {
 			continue
@@ -168,7 +155,9 @@ func (m *Merger) run() {
 		}
 
 		m.output <- minBinlog
+		m.Lock()
 		delete(m.binlogs, minID)
+		m.Unlock()
 		lastTS = minBinlog.GetCommitTs()
 	}
 }
