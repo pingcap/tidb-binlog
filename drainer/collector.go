@@ -230,17 +230,20 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
+			// we should
+			mergeSource := MergeSource{ID: p.nodeID}
+
 			// initial pump
 			commitTS := c.cp.Pos()
 			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, commitTS)
 			if err != nil {
+				// we should still add source for this pump
+				c.merger.AddSource(mergeSource)
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
-			c.merger.AddSource(MergeSource{
-				ID:     p.nodeID,
-				Source: p.PullBinlog(ctx, p.latestPos),
-			})
+			mergeSource.Source = p.PullBinlog(ctx, p.latestPos)
+			c.merger.AddSource(mergeSource)
 		} else {
 			switch n.State {
 			case node.Pausing:

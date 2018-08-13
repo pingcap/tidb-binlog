@@ -29,7 +29,6 @@ type Merger struct {
 
 	output chan MergeItem
 
-	// when close, close the output chan once chans is empty
 	close int32
 
 	// TODO: save the max and min binlog's ts
@@ -109,6 +108,10 @@ func (m *Merger) run() {
 			m.RUnlock()
 
 			if ok {
+				continue
+			}
+
+			if source.Source == nil {
 				continue
 			}
 
