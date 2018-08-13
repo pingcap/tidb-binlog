@@ -33,12 +33,11 @@ type Collector struct {
 	interval  time.Duration
 	reg       *node.EtcdRegistry
 	timeout   time.Duration
-	//window    *DepositWindow
-	tiStore  kv.Storage
-	pumps    map[string]*Pump
-	syncer   *Syncer
-	latestTS int64
-	cp       checkpoint.CheckPoint
+	tiStore   kv.Storage
+	pumps     map[string]*Pump
+	syncer    *Syncer
+	latestTS  int64
+	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
@@ -76,12 +75,11 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	}
 
 	c := &Collector{
-		clusterID: clusterID,
-		interval:  time.Duration(cfg.DetectInterval) * time.Second,
-		reg:       node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:   cfg.PumpTimeout,
-		pumps:     make(map[string]*Pump),
-		//window:          w,
+		clusterID:       clusterID,
+		interval:        time.Duration(cfg.DetectInterval) * time.Second,
+		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:         cfg.PumpTimeout,
+		pumps:           make(map[string]*Pump),
 		syncer:          s,
 		cp:              cpt,
 		tiStore:         tiStore,
@@ -251,6 +249,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			case node.Closing:
 				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
 			case node.Offline:
+				// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
+				// so when the pump is offline, we can remove this pump directly.
 				c.merger.RemoveSource(n.NodeID)
 				// release invalid connection
 				p.Close()
