@@ -3,6 +3,7 @@ package drainer
 import (
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -56,6 +57,9 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
+
+	latestRecvFakeBinlogTS    int64
+	latestRecvNonFakeBinlogTS int64
 }
 
 // NewSyncer returns a Drainer instance
@@ -72,6 +76,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.positions = make(map[string]int64)
 	syncer.c = newCausality()
 	syncer.lastSyncTime = time.Now()
+	syncer.latestRecvNonFakeBinlogTS = cp.Pos()
 
 	return syncer, nil
 }
@@ -739,6 +744,18 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
+	if b.binlog.StartTs == b.binlog.CommitTs {
+		log.Debug("fake binlog ts: ", b.binlog.CommitTs)
+		atomic.StoreInt64(&s.latestRecvFakeBinlogTS, b.binlog.CommitTs)
+		return
+	}
+
+	if b.binlog.Tp == pb.BinlogType_Prewrite {
+		atomic.StoreInt64(&s.latestRecvNonFakeBinlogTS, b.binlog.StartTs)
+	} else {
+		atomic.StoreInt64(&s.latestRecvNonFakeBinlogTS, b.binlog.CommitTs)
+	}
+
 	select {
 	case <-s.ctx.Done():
 	case s.input <- b:
@@ -762,5 +779,23 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
-	return s.cp.Pos()
+	cp := s.cp.Pos()
+
+	latesFakeTS := atomic.LoadInt64(&s.latestRecvFakeBinlogTS)
+	latesNonFakeTS := atomic.LoadInt64(&s.latestRecvNonFakeBinlogTS)
+
+	// because Syncer only handle the true binlog now, checkpoint.Pos() will only be the maximums
+	// true binlog commit ts
+	// if checkpoint.Pos() equals the latestRecvNonFakeBinlogTS
+	// we return the the max(latestRecvFakeBinlogTS, latestRecvNonFakeBinlogTS)
+	// so pump can make sure drainer has consumed all binlog(pump may send some fake binlog)
+	if cp == latesNonFakeTS {
+		if latesFakeTS > latesNonFakeTS {
+			return latesFakeTS
+		}
+		return latesNonFakeTS
+
+	}
+
+	return cp
 }

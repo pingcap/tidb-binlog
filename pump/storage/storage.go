@@ -43,6 +43,8 @@ type Storage interface {
 	// delete <= ts
 	GCTS(ts int64)
 
+	MaxCommitTS() int64
+
 	// PullCommitBinlog return the chan to consume the binlog
 	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
@@ -440,6 +442,11 @@ func (a *Append) doGCTS(ts int64) {
 	a.vlog.gcTS(ts)
 }
 
+// MaxCommitTS implement Storage.MaxCommitTS
+func (a *Append) MaxCommitTS() int64 {
+	return atomic.LoadInt64(&a.maxCommitTS)
+}
+
 // WriteBinlog implement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 	return errors.Trace(a.writeBinlog(binlog).err)
@@ -658,6 +665,12 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 // PullCommitBinlog return commit binlog  > last
 func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	log.Debug("new PullCommitBinlog last: ", last)
+
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		<-a.close
+		cancel()
+	}()
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if last < gcTS {

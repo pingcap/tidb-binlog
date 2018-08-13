@@ -104,11 +104,6 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 			item := mergeItem.(*binlogItem)
 			binlog := item.binlog
 
-			if binlog.CommitTs == binlog.StartTs {
-				log.Debug("fake binlog ts: ", binlog.CommitTs)
-				continue
-			}
-
 			if binlog.DdlJobId > 0 {
 				for {
 					var job *model.Job
