@@ -2,7 +2,6 @@ package drainer
 
 import (
 	"fmt"
-	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -29,8 +28,6 @@ type notifyResult struct {
 
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
 	clusterID uint64
 	batch     int32
 	interval  time.Duration
@@ -55,6 +52,8 @@ type Collector struct {
 	}
 
 	merger *Merger
+
+	errCh chan error
 }
 
 // NewCollector returns an instance of Collector
@@ -90,19 +89,18 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		syncedCheckTime: cfg.SyncedCheckTime,
 		safeForwardTime: cfg.SafeForwardTime,
 		merger:          NewMerger(),
+		errCh:           make(chan error),
 	}
-
-	go c.publishBinlogs()
 
 	return c, nil
 }
 
-func (c *Collector) publishBinlogs() {
+func (c *Collector) publishBinlogs(ctx context.Context) {
 	defer log.Info("publishBinlogs quit")
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			return
 		case mergeItem := <-c.merger.Output():
 			item := mergeItem.(*binlogItem)
@@ -113,12 +111,12 @@ func (c *Collector) publishBinlogs() {
 				continue
 			}
 
-			// TODO when will fail, handle it in better way
 			if binlog.DdlJobId > 0 {
 				for {
 					job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
 					if err != nil {
-						log.Error(err)
+						log.Error("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err))
+						c.errCh <- err
 						time.Sleep(time.Second)
 						continue
 					}
@@ -155,6 +153,8 @@ func (c *Collector) Start(ctx context.Context) {
 		}
 	}()
 
+	go c.publishBinlogs(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -164,6 +164,9 @@ func (c *Collector) Start(ctx context.Context) {
 			nr.wg.Done()
 		case <-time.After(c.interval):
 			c.updateStatus(ctx)
+		case err := <-c.errCh:
+			log.Errorf("collector meets error %v", err)
+			return
 		}
 	}
 }
@@ -198,9 +201,6 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	//windowUpper := c.latestTS
-	//windowLower := c.getLatestValidCommitTS()
-	//c.updateWindow(ctx, windowUpper, windowLower)
 	return nil
 }
 
@@ -271,40 +271,6 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	}
 
 	return int64(version.Ver)
-}
-
-/*
-func (c *Collector) updateWindow(ctx context.Context, upper, lower int64) {
-	oldLower := c.window.LoadLower()
-	oldUpper := c.window.LoadUpper()
-
-	if lower > oldLower {
-		// we should update window after publishing binlogs
-		c.window.SaveLower(lower)
-		windowGauge.WithLabelValues("lower").Set(float64(lower))
-	}
-	if upper > oldUpper {
-		c.window.SaveUpper(upper)
-		windowGauge.WithLabelValues("upper").Set(float64(upper))
-	}
-}
-*/
-
-// select min of all pumps' latestValidCommitTS
-// TODO:
-func (c *Collector) getLatestValidCommitTS() int64 {
-	var latest int64 = math.MaxInt64
-	for range c.pumps {
-		//latestCommitTS := p.GetLatestValidCommitTS()
-		//if latestCommitTS < latest {
-		//	latest = latestCommitTS
-		//}
-	}
-	if latest == math.MaxInt64 {
-		latest = 0
-	}
-
-	return latest
 }
 
 // Notify notifies to detcet pumps
