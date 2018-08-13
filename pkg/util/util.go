@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -105,4 +106,20 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	}
 
 	return colTypeMap
+}
+
+// RetryOnError defines a action with retry when "fn" returns error
+func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
+	var err error
+	for i := 0; i < retryCount; i++ {
+		err = fn()
+		if err == nil {
+			break
+		}
+
+		log.Errorf("%s: %v", errStr, err)
+		time.Sleep(sleepTime)
+	}
+
+	return errors.Trace(err)
 }

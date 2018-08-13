@@ -12,7 +12,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	//"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
@@ -111,12 +111,20 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 
 			if binlog.DdlJobId > 0 {
 				for {
-					job, err := getDDLJob(c.tiStore, binlog.DdlJobId)
-					if err != nil {
-						log.Error("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err))
-						c.errCh <- err
-						time.Sleep(time.Second)
-						continue
+					var job *model.Job
+					var err error
+					err1 := util.RetryOnError(10, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
+						job, err = getDDLJob(c.tiStore, binlog.DdlJobId)
+						if err != nil {
+							return err
+						}
+						return nil
+					})
+
+					if err1 != nil {
+						log.Error("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err1))
+						c.errCh <- err1
+						return
 					}
 
 					if job == nil {
@@ -220,8 +228,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
-			// if pump is not online, ignore it
-			if n.State != node.Online {
+			// if pump is offline, ignore it
+			if n.State == node.Offline {
 				continue
 			}
 

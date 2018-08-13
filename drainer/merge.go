@@ -9,11 +9,6 @@ import (
 	"github.com/ngaut/log"
 )
 
-const (
-	// DefaultCacheSize is the default cache size for every source.
-	DefaultCacheSize = 10
-)
-
 // MergeItem is the item in Merger
 type MergeItem interface {
 	GetCommitTs() int64
@@ -149,21 +144,25 @@ func (m *Merger) run() {
 		}
 		m.RUnlock()
 
+		isValideBinlog := true
+
 		if minBinlog == nil {
-			continue
+			isValideBinlog = false
 		}
 
-		if minBinlog.GetCommitTs() <= lastTS {
+		if minBinlog != nil && minBinlog.GetCommitTs() <= lastTS {
 			log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), lastTS)
-			continue
+			isValideBinlog = false
 		}
 
-		m.output <- minBinlog
+		if isValideBinlog {
+			m.output <- minBinlog
+			lastTS = minBinlog.GetCommitTs()
+		}
 		m.Lock()
-		m.lastTS = minBinlog.GetCommitTs()
+		m.lastTS = lastTS
 		delete(m.binlogs, minID)
 		m.Unlock()
-		lastTS = minBinlog.GetCommitTs()
 	}
 }
 
