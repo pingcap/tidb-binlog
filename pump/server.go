@@ -72,7 +72,6 @@ type Server struct {
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
-	needGenBinlog           AtomicBool
 	pdCli                   pd.Client
 	cfg                     *Config
 
@@ -187,6 +186,11 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+	return s.writeBinlog(ctx, in, false)
+}
+
+// WriteBinlog implements the gRPC interface of pump server
+func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isFakeBinlog bool) (*binlog.WriteBinlogResp, error) {
 	var err error
 	beginTime := time.Now()
 	atomic.StoreInt64(&s.lastWriteBinlogUnixNano, beginTime.UnixNano())
@@ -213,6 +217,14 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	err = blog.Unmarshal(in.Payload)
 	if err != nil {
 		goto errHandle
+	}
+
+	if !isFakeBinlog {
+		state := s.node.NodeStatus().State
+		if state != node.Online {
+			err = errors.Errorf("no online: %v", state)
+			goto errHandle
+		}
 	}
 
 	err = s.storage.WriteBinlog(blog)
@@ -265,8 +277,6 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				return err
 			}
 			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
-		case <-s.ctx.Done():
-			return nil
 		}
 	}
 }
@@ -278,7 +288,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotate(err, "fail to get tso from pd")
 	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, ts)
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
 	err = s.node.RefreshStatus(context.Background(), status)
 	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
@@ -289,7 +299,7 @@ func (s *Server) Start() error {
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, refresh this node's state to paused
-		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, 0)
+		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, s.storage.MaxCommitTS(), 0)
 		err = s.node.RefreshStatus(context.Background(), status)
 		if err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
@@ -379,7 +389,7 @@ func (s *Server) Start() error {
 }
 
 // gennerate rollback binlog can forward the drainer's latestCommitTs, and just be discarded without any side effects
-func (s *Server) genFakeBinlog() ([]byte, error) {
+func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 	ts, err := s.getTSO()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -390,18 +400,21 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 		Tp:       binlog.BinlogType_Rollback,
 		CommitTs: ts,
 	}
-	payload, err := bl.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	return payload, nil
+
+	return bl, nil
 }
 
-func (s *Server) writeFakeBinlog() {
-	payload, err := s.genFakeBinlog()
+func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
+	binlog, err := s.genFakeBinlog()
 	if err != nil {
-		log.Error("gennerate fake binlog err: ", err)
-		return
+		err = errors.Annotate(err, "gennerate fake binlog err")
+		return nil, err
+	}
+
+	payload, err := binlog.Marshal()
+	if err != nil {
+		err = errors.Annotate(err, "gennerate fake binlog err")
+		return nil, err
 	}
 
 	req := new(pb.WriteBinlogReq)
@@ -409,20 +422,20 @@ func (s *Server) writeFakeBinlog() {
 
 	req.ClusterID = s.clusterID
 
-	resp, err := s.WriteBinlog(s.ctx, req)
+	resp, err := s.writeBinlog(s.ctx, req, true)
 
 	if err != nil {
-		log.Error("write fake binlog err: ", err)
-		return
+		err = errors.Annotate(err, "write fake binlog err")
+		return nil, err
 	}
 
 	if len(resp.Errmsg) > 0 {
-		log.Error("write fake binlog err: ", resp.Errmsg)
-		return
+		err = errors.Errorf("write fake binlog err: ", resp.Errmsg)
+		return nil, err
 	}
 
 	log.Debug("write fake binlog successful")
-	return
+	return binlog, nil
 }
 
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
@@ -439,7 +452,10 @@ func (s *Server) genForwardBinlog() {
 		case <-time.After(genFakeBinlogInterval):
 			// if no WriteBinlogReq, we write a fake binlog
 			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
-				s.writeFakeBinlog()
+				_, err := s.writeFakeBinlog()
+				if err != nil {
+					log.Error("write fake binlog err: ", err)
+				}
 			}
 			lastWriteBinlogUnixNano = atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
 		}
@@ -503,7 +519,6 @@ func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 
 // PumpStatus returns all pumps' status.
 func (s *Server) PumpStatus() *HTTPStatus {
-
 	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {
 		log.Errorf("get pumps' status error %v", err)
@@ -589,6 +604,79 @@ func (s *Server) getTSO() (int64, error) {
 	return ts, nil
 }
 
+// return if and only if it's safe to offline or context is canceled
+func (s *Server) waitSafeToOffline(ctx context.Context) error {
+	var fakeBinlog *pb.Binlog
+	var err error
+
+	// write a fake binlog
+	for {
+		fakeBinlog, err = s.writeFakeBinlog()
+		if err != nil {
+			log.Error(err)
+
+			select {
+			case <-time.After(time.Second):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		break
+	}
+
+	// check storage has handle this fake binlog
+	for {
+		maxCommitTS := s.storage.MaxCommitTS()
+		if maxCommitTS < fakeBinlog.CommitTs {
+			log.Info("max commit TS in storage: %d, fake binlog commit ts: %d", maxCommitTS, fakeBinlog.CommitTs)
+			select {
+			case <-time.After(time.Second):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		break
+	}
+
+	log.Debug("start to check offline safe for drainers")
+
+	// check drainer has consume fake binlog we just write
+	for {
+		tick := time.Tick(time.Second)
+		select {
+		case <-tick:
+			pumpNode := s.node.(*pumpNode)
+			drainers, err := pumpNode.Nodes(ctx, "drainers")
+			if err != nil {
+				log.Error(err)
+				return errors.Trace(err)
+			}
+			needByDrainer := false
+			for _, drainer := range drainers {
+				if drainer.State == node.Offline {
+					continue
+				}
+
+				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
+					log.Infof("wait for drainer: %v maxCommitTS: %d, pump maxCommitTS: %d", drainer.NodeID, drainer.MaxCommitTS, fakeBinlog.CommitTs)
+					needByDrainer = true
+					break
+				}
+			}
+			if !needByDrainer {
+				return nil
+			}
+
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
+	}
+}
+
 // commitStatus commit the node's last status to pd when close the server.
 func (s *Server) commitStatus() {
 	// update this node
@@ -597,9 +685,11 @@ func (s *Server) commitStatus() {
 	case node.Pausing, node.Online:
 		state = node.Paused
 	case node.Closing:
+		s.waitSafeToOffline(context.Background())
+		log.Info("safe to offline now")
 		state = node.Offline
 	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, 0)
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), 0)
 	err := s.node.RefreshStatus(context.Background(), status)
 	if err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
@@ -609,7 +699,7 @@ func (s *Server) commitStatus() {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	log.Info("begin to close drainer server")
+	log.Info("begin to close pump server")
 	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
 		log.Debug("server had closed")
 		return
@@ -620,17 +710,9 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
-	// close tiStore
-	if s.pdCli != nil {
-		s.pdCli.Close()
-	}
-	log.Info("has closed pdCli")
-
-	if err := s.storage.Close(); err != nil {
-		log.Errorf("close storage error %v", errors.ErrorStack(err))
-	}
-
 	s.commitStatus()
+	log.Info("has commitStatus")
+
 	if err := s.node.Quit(); err != nil {
 		log.Errorf("close pump node error %s", errors.Trace(err))
 	}
@@ -638,4 +720,14 @@ func (s *Server) Close() {
 	// stop the gRPC server
 	s.gs.GracefulStop()
 	log.Info("grpc is stopped")
+
+	if err := s.storage.Close(); err != nil {
+		log.Errorf("close storage error %v", errors.ErrorStack(err))
+	}
+
+	// close tiStore
+	if s.pdCli != nil {
+		s.pdCli.Close()
+	}
+	log.Info("has closed pdCli")
 }

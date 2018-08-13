@@ -34,7 +34,7 @@ var (
 	maxTxnTimeout     int64 = 600
 	heartbeatTTL      int64 = 60
 	nodePrefix              = "drainers"
-	heartbeatInterval       = 10 * time.Second
+	heartbeatInterval       = 1 * time.Second
 	clusterID         uint64
 	pdReconnTimes     = 30
 	maxMsgSize        = 1024 * 1024 * 1024
@@ -133,7 +133,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
 	}
 
-	status := node.NewStatus(ID, advURL.Host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
 
 	return &Server{
 		ID:        ID,
@@ -435,6 +435,7 @@ func (s *Server) commitStatus() {
 func (s *Server) updateStatus() error {
 	s.statusMu.Lock()
 	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
+	s.status.MaxCommitTS = s.syncer.GetLatestCommitTS()
 	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
 	s.statusMu.Unlock()
 	if err != nil {

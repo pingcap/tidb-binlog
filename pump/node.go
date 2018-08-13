@@ -43,6 +43,8 @@ type pumpNode struct {
 	latestTime time.Time
 }
 
+var _ node.Node = &pumpNode{}
+
 // NewPumpNode returns a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (node.Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
