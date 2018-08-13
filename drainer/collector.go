@@ -225,7 +225,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			mergeSource := MergeSource{ID: p.nodeID}
+			mergeSource := MergeSource{ID: n.NodeID}
 
 			// initial pump
 			commitTS := c.cp.Pos()
