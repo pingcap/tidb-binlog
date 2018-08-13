@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
@@ -102,6 +101,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
+	// remove this?
 	win := NewDepositWindow()
 
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
@@ -198,6 +198,7 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 	return
 }
 
+/*
 func calculateForwardAShortTime(current int64) int64 {
 	physical := oracle.ExtractPhysical(uint64(current))
 	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
@@ -207,6 +208,7 @@ func calculateForwardAShortTime(current int64) int64 {
 	}
 	return int64(previous)
 }
+*/
 
 // StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
@@ -311,7 +313,7 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	jobs, err := s.collector.LoadHistoryDDLJobs()
+	jobs, err := loadHistoryDDLJobs(s.collector.tiStore)
 	if err != nil {
 		return errors.Trace(err)
 	}

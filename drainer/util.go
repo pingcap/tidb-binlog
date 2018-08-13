@@ -94,6 +94,24 @@ func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 	return job, nil
 }
 
+// loadHistoryDDLJobs loads all history DDL jobs from TiDB
+func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapMeta := meta.NewSnapshotMeta(snapshot)
+	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return jobs, nil
+}
+
 func genDrainerID(listenAddr string) (string, error) {
 	urllis, err := url.Parse(listenAddr)
 	if err != nil {

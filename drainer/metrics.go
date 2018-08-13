@@ -22,7 +22,7 @@ var (
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "position",
+			Name:      "pump_position",
 			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 

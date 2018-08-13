@@ -29,10 +29,10 @@ type Merger struct {
 
 	output chan MergeItem
 
-	close int32
+	// lastTS save the last binlog's ts send to syncer
+	lastTS int64
 
-	// TODO: save the max and min binlog's ts
-	window *DepositWindow
+	close int32
 }
 
 // MergeSource contains a source info about binlog
@@ -47,7 +47,7 @@ func NewMerger(sources ...MergeSource) *Merger {
 		sources: make(map[string]MergeSource),
 		output:  make(chan MergeItem, 10),
 		binlogs: make(map[string]MergeItem),
-		window:  &DepositWindow{},
+		//window:  &DepositWindow{},
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -112,18 +112,19 @@ func (m *Merger) run() {
 			}
 
 			if source.Source == nil {
-				continue
-			}
-
-			binlog, ok := <-source.Source
-			if ok {
-				m.Lock()
-				m.binlogs[sourceID] = binlog
-				m.Unlock()
-			} else {
-				// the source is closing.
 				log.Warnf("can't read binlog from pump %s", sourceID)
 				skip = true
+			} else {
+				binlog, ok := <-source.Source
+				if ok {
+					m.Lock()
+					m.binlogs[sourceID] = binlog
+					m.Unlock()
+				} else {
+					// the source is closing.
+					log.Warnf("can't read binlog from pump %s", sourceID)
+					skip = true
+				}
 			}
 		}
 
@@ -159,6 +160,7 @@ func (m *Merger) run() {
 
 		m.output <- minBinlog
 		m.Lock()
+		m.lastTS = minBinlog.GetCommitTs()
 		delete(m.binlogs, minID)
 		m.Unlock()
 		lastTS = minBinlog.GetCommitTs()
@@ -168,4 +170,23 @@ func (m *Merger) run() {
 // Output get the output chan of binlog
 func (m *Merger) Output() chan MergeItem {
 	return m.output
+}
+
+// GetLastTS returns the last binlog's ts send to syncer
+func (m *Merger) GetLastTS() int64 {
+	m.RLock()
+	defer m.RUnlock()
+	return m.lastTS
+}
+
+// IsEmpty returns true if this Merger don't have any binlog to be merged
+func (m *Merger) IsEmpty() bool {
+	m.RLock()
+	defer m.RUnlock()
+
+	if len(m.binlogs) != 0 {
+		return false
+	}
+
+	return true
 }

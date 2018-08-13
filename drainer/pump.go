@@ -28,18 +28,11 @@ type Pump struct {
 	nodeID    string
 	addr      string
 	clusterID uint64
-	// the current position that collector is working on
-	currentPos int64
-	// the latest binlog position that pump had handled
-	latestPos int64
-	tiStore   kv.Storage
-	window    *DepositWindow
-	timeout   time.Duration
-
-	// the latestTS from tso
+	// the latest binlog ts that pump had handled
 	latestTS int64
-	// binlogs are complete before this latestValidCommitTS
-	latestValidCommitTS int64
+	tiStore  kv.Storage
+	//window    *DepositWindow
+	timeout time.Duration
 
 	wg     sync.WaitGroup
 	ctx    context.Context
@@ -49,20 +42,19 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, w *DepositWindow, startTs int64) (*Pump, error) {
+func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, startTs int64) (*Pump, error) {
 	nodeID, err := pump.FormatNodeID(nodeID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &Pump{
-		nodeID:     nodeID,
-		addr:       addr,
-		clusterID:  clusterID,
-		currentPos: startTs,
-		latestPos:  startTs,
-		window:     w,
-		timeout:    timeout,
+		nodeID:    nodeID,
+		addr:      addr,
+		clusterID: clusterID,
+		//currentTS:  startTs,
+		latestTS: startTs,
+		timeout:  timeout,
 	}, nil
 }
 
@@ -76,12 +68,16 @@ func (p *Pump) Close() {
 
 // Pause sets isPaused to 1, and stop pull binlog from pump.
 func (p *Pump) Pause() {
-	atomic.StoreInt32(&p.isPaused, 1)
+	if atomic.CompareAndSwapInt32(&p.isPaused, 0, 1) {
+		log.Infof("pause pull binlog from pump %s", p.nodeID)
+	}
 }
 
 // Continue sets isPaused to 0, and continue pull binlog from pump.
 func (p *Pump) Continue() {
-	atomic.StoreInt32(&p.isPaused, 0)
+	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) {
+		log.Infof("continue pull binlog from pump %s", p.nodeID)
+	}
 }
 
 // PullBinlog return the chan to get item from pump
@@ -151,6 +147,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				select {
 				case ret <- item:
 					last = binlog.CommitTs
+					p.latestTS = binlog.CommitTs
 				case <-p.ctx.Done():
 				}
 			}
@@ -158,9 +155,4 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	}()
 
 	return ret
-}
-
-// GetLatestValidCommitTS returns the latest valid commit ts, the binlogs before this ts are complete
-func (p *Pump) GetLatestValidCommitTS() int64 {
-	return atomic.LoadInt64(&p.latestValidCommitTS)
 }

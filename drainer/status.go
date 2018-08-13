@@ -7,13 +7,10 @@ import (
 
 // HTTPStatus exposes current status of the collector via HTTP
 type HTTPStatus struct {
-	PumpPos       map[string]int64 `json:"PumpPos"`
-	Synced        bool             `json:"Synced"`
-	DepositWindow struct {
-		Upper int64 `json:"Upper"`
-		Lower int64 `json:"Lower"`
-	}
-	TsMap string `json:"TsMap"`
+	PumpPos map[string]int64 `json:"PumpPos"`
+	Synced  bool             `json:"Synced"`
+	LastTS  int64            `json:"LastTS"`
+	TsMap   string           `json:"TsMap"`
 }
 
 // Status implements http.ServeHTTP interface

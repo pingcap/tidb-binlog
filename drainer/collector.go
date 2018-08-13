@@ -13,10 +13,9 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/util"
+	//"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
@@ -37,12 +36,12 @@ type Collector struct {
 	interval  time.Duration
 	reg       *node.EtcdRegistry
 	timeout   time.Duration
-	window    *DepositWindow
-	tiStore   kv.Storage
-	pumps     map[string]*Pump
-	syncer    *Syncer
-	latestTS  int64
-	cp        checkpoint.CheckPoint
+	//window    *DepositWindow
+	tiStore  kv.Storage
+	pumps    map[string]*Pump
+	syncer   *Syncer
+	latestTS int64
+	cp       checkpoint.CheckPoint
 
 	syncedCheckTime int
 	safeForwardTime int
@@ -78,12 +77,12 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	}
 
 	c := &Collector{
-		clusterID:       clusterID,
-		interval:        time.Duration(cfg.DetectInterval) * time.Second,
-		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:         cfg.PumpTimeout,
-		pumps:           make(map[string]*Pump),
-		window:          w,
+		clusterID: clusterID,
+		interval:  time.Duration(cfg.DetectInterval) * time.Second,
+		reg:       node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
+		timeout:   cfg.PumpTimeout,
+		pumps:     make(map[string]*Pump),
+		//window:          w,
 		syncer:          s,
 		cp:              cpt,
 		tiStore:         tiStore,
@@ -174,22 +173,20 @@ func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
 		PumpPos: make(map[string]int64),
+		LastTS:  c.merger.GetLastTS(),
 	}
 
 	for nodeID, pump := range c.pumps {
-		status.PumpPos[nodeID] = pump.currentPos
-		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.currentPos))
+		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.latestTS))
 	}
-	status.DepositWindow.Lower = c.window.LoadLower()
-	status.DepositWindow.Upper = c.window.LoadUpper()
 
 	c.mu.Lock()
 	c.mu.status = &status
 	c.mu.Unlock()
 }
 
-// updateStatus queries pumps' status , deletes the offline pump
-// and updates pumps' latest ts
+// updateStatus queries pumps' status, pause pull binlog for paused pump,
+// continue pull binlog for online pump, and deletes offline pump.
 func (c *Collector) updateStatus(ctx context.Context) error {
 	begin := time.Now()
 	defer func() {
@@ -201,9 +198,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.latestTS
-	windowLower := c.getLatestValidCommitTS()
-	c.updateWindow(ctx, windowUpper, windowLower)
+	//windowUpper := c.latestTS
+	//windowLower := c.getLatestValidCommitTS()
+	//c.updateWindow(ctx, windowUpper, windowLower)
 	return nil
 }
 
@@ -230,19 +227,18 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			// we should
 			mergeSource := MergeSource{ID: p.nodeID}
 
 			// initial pump
 			commitTS := c.cp.Pos()
-			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, c.window, commitTS)
+			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, commitTS)
 			if err != nil {
 				// we should still add source for this pump
 				c.merger.AddSource(mergeSource)
 				return errors.Trace(err)
 			}
 			c.pumps[n.NodeID] = p
-			mergeSource.Source = p.PullBinlog(ctx, p.latestPos)
+			mergeSource.Source = p.PullBinlog(ctx, p.latestTS)
 			c.merger.AddSource(mergeSource)
 		} else {
 			switch n.State {
@@ -277,6 +273,7 @@ func (c *Collector) queryLatestTsFromPD() int64 {
 	return int64(version.Ver)
 }
 
+/*
 func (c *Collector) updateWindow(ctx context.Context, upper, lower int64) {
 	oldLower := c.window.LoadLower()
 	oldUpper := c.window.LoadUpper()
@@ -291,39 +288,23 @@ func (c *Collector) updateWindow(ctx context.Context, upper, lower int64) {
 		windowGauge.WithLabelValues("upper").Set(float64(upper))
 	}
 }
+*/
 
 // select min of all pumps' latestValidCommitTS
+// TODO:
 func (c *Collector) getLatestValidCommitTS() int64 {
 	var latest int64 = math.MaxInt64
-	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestValidCommitTS()
-		if latestCommitTS < latest {
-			latest = latestCommitTS
-		}
+	for range c.pumps {
+		//latestCommitTS := p.GetLatestValidCommitTS()
+		//if latestCommitTS < latest {
+		//	latest = latestCommitTS
+		//}
 	}
 	if latest == math.MaxInt64 {
 		latest = 0
 	}
 
 	return latest
-}
-
-// LoadHistoryDDLJobs loads all history DDL jobs from TiDB
-func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return jobs, nil
 }
 
 // Notify notifies to detcet pumps
@@ -346,10 +327,9 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	c.mu.Lock()
 	status = c.mu.status
 
-	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
-	// if the gap between lower and upper is small and don't have binlog input in a minitue,
+	// if the merger don't have any binlog to be merged and syncer don't have binlog input in a minitue,
 	// we can think the all binlog is synced
-	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+	if c.merger.IsEmpty() && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
 
