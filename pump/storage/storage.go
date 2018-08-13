@@ -441,7 +441,7 @@ func (a *Append) Close() error {
 
 	close(a.sortItems)
 	<-a.handleSortItemQuit
-	log.Debug("handle sort item  quit")
+	log.Debug("handle sort item quit")
 
 	err := a.metadata.Close()
 	if err != nil {

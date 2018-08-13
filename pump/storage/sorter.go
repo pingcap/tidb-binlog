@@ -151,6 +151,7 @@ func (s *sorter) run() {
 				// quit if sorter is closed and still not get the according C binlog
 				// or continue to handle the items
 				if s.isClosed() {
+					s.cond.L.Unlock()
 					return
 				}
 				s.cond.Wait()
