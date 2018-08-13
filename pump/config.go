@@ -12,7 +12,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -211,10 +210,6 @@ func (cfg *Config) validate() error {
 	var host string
 	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
-	}
-
-	if !util.IsValidateListenHost(host) {
-		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
 	}
 
 	// check AdvertiseAddr
