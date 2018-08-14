@@ -225,7 +225,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		// format and check the nodeID
 		n.NodeID, err = pump.FormatNodeID(n.NodeID)
 		if err != nil {
-			return errors.Trace(err)
+			log.Warnf("node id %s maybe illegal", n.NodeID)
 		}
 
 		p, ok := c.pumps[n.NodeID]

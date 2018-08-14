@@ -284,8 +284,13 @@ func (cfg *Config) adjustConfig() error {
 		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
 		cfg.SyncerCfg.To.KafkaAddrs = kafkaUrls
 	}
-	if cfg.SyncerCfg.DestDBType == "kafka" && cfg.SyncerCfg.To.KafkaVersion == "" {
-		cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		if cfg.SyncerCfg.To.KafkaVersion == "" {
+			cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
+		}
+		if cfg.SyncerCfg.To.KafkaAddrs == "" {
+			cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
+		}
 	}
 
 	return nil
