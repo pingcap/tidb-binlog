@@ -26,6 +26,8 @@ type Pump struct {
 	// the latest binlog ts that pump had handled
 	latestTS int64
 
+	isClosed int32
+
 	isPaused int32
 
 	errCh chan error
@@ -45,6 +47,12 @@ func NewPump(nodeID, addr string, clusterID uint64, startTs int64, errCh chan er
 		latestTS:  startTs,
 		errCh:     errCh,
 	}
+}
+
+// Close sets isClose to 1, and pull binlog will be exit.
+func (p *Pump) Close() {
+	log.Infof("[pump %s] is closing", p.nodeID)
+	atomic.StoreInt32(&p.isClosed, 1)
 }
 
 // Pause sets isPaused to 1, and stop pull binlog from pump. This function is reentrant.
@@ -85,6 +93,10 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 		}()
 
 		for {
+			if atomic.LoadInt32(&p.isClosed) == 1 {
+				return
+			}
+
 			if atomic.LoadInt32(&p.isPaused) == 1 {
 				// this pump is paused, wait until it can pull binlog again
 				log.Debugf("[pump %s] is paused", p.nodeID)
@@ -93,7 +105,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			}
 
 			var resp *pb.PullBinlogResp
-			// receive binlog from pump, and will retry 10 times if failed
+			// receive binlog from pump, and will retry some times if failed
 			err = util.RetryOnError(receiveBinlogRetryTime, time.Second, fmt.Sprintf("[pump %s] receive binlog error", p.nodeID), func() error {
 				var err1 error
 				resp, err1 = pullCli.Recv()
