@@ -53,6 +53,7 @@ type Collector struct {
 	merger *Merger
 
 	errCh chan error
+	wg    sync.WaitGroup
 }
 
 // NewCollector returns an instance of Collector
@@ -94,7 +95,10 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 }
 
 func (c *Collector) publishBinlogs(ctx context.Context) {
-	defer log.Info("publishBinlogs quit")
+	defer func() {
+		c.wg.Done()
+		log.Info("publishBinlogs quit")
+	}()
 
 	for {
 		select {
@@ -152,8 +156,11 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
+
+		c.wg.Wait()
 	}()
 
+	c.wg.Add(1)
 	go c.publishBinlogs(ctx)
 
 	for {
