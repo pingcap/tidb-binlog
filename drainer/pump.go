@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
@@ -13,9 +12,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
-
-// we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
-var waitMatchedTime = 3 * time.Second
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -31,8 +27,7 @@ type Pump struct {
 	// the latest binlog ts that pump had handled
 	latestTS int64
 	tiStore  kv.Storage
-	//window    *DepositWindow
-	timeout time.Duration
+	timeout  time.Duration
 
 	wg     sync.WaitGroup
 	ctx    context.Context
@@ -42,23 +37,22 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump with opened gRPC connection
-func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, startTs int64) (*Pump, error) {
+func NewPump(nodeID, addr string, clusterID uint64, timeout time.Duration, startTs int64) *Pump {
 	nodeID, err := pump.FormatNodeID(nodeID)
 	if err != nil {
-		return nil, errors.Trace(err)
+		log.Warnf("pump 's node id %s maybe illegal", nodeID)
 	}
 
 	return &Pump{
 		nodeID:    nodeID,
 		addr:      addr,
 		clusterID: clusterID,
-		//currentTS:  startTs,
-		latestTS: startTs,
-		timeout:  timeout,
-	}, nil
+		latestTS:  startTs,
+		timeout:   timeout,
+	}
 }
 
-// Close closes all process goroutine, publish + pullBinlogs
+// Close closes all process goroutine.
 func (p *Pump) Close() {
 	log.Debugf("[pump %s] closing", p.nodeID)
 	p.cancel()
@@ -89,7 +83,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 		log.Debug("start PullBinlog pump: ", p.nodeID)
 		defer func() {
 			close(ret)
-			log.Debug("start PullBinlog pump leave: ", p.nodeID)
+			log.Debug("PullBinlog pump leave: ", p.nodeID)
 		}()
 
 		for {

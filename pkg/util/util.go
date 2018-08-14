@@ -7,6 +7,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/types"
 )
@@ -122,4 +123,15 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 	}
 
 	return errors.Trace(err)
+}
+
+// QueryLatestTsFromPD returns the latest ts
+func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get current version error: %v", err)
+		return 0, errors.Trace(err)
+	}
+
+	return int64(version.Ver), nil
 }

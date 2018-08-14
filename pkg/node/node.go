@@ -105,3 +105,17 @@ func NewStatus(nodeID, addr, state string, score int64, maxCommitTS int64, updat
 		UpdateTS:    updateTS,
 	}
 }
+
+// CloneStatus returns a new status with same value.
+func CloneStatus(status *Status) *Status {
+	return &Status{
+		NodeID:      status.NodeID,
+		Addr:        status.Addr,
+		State:       status.State,
+		IsAlive:     status.IsAlive,
+		Score:       status.Score,
+		Label:       status.Label,
+		MaxCommitTS: status.MaxCommitTS,
+		UpdateTS:    status.UpdateTS,
+	}
+}

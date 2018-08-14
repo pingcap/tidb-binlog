@@ -28,6 +28,8 @@ type Merger struct {
 	lastTS int64
 
 	close int32
+
+	pause int32
 }
 
 // MergeSource contains a source info about binlog
@@ -42,7 +44,6 @@ func NewMerger(sources ...MergeSource) *Merger {
 		sources: make(map[string]MergeSource),
 		output:  make(chan MergeItem, 10),
 		binlogs: make(map[string]MergeItem),
-		//window:  &DepositWindow{},
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -54,7 +55,7 @@ func NewMerger(sources ...MergeSource) *Merger {
 	return m
 }
 
-// Close close the outpu chan when all the source id drained
+// Close close the output chan when all the source id drained
 func (m *Merger) Close() {
 	log.Debug("close merger")
 	atomic.StoreInt32(&m.close, 1)
@@ -87,6 +88,11 @@ func (m *Merger) run() {
 	for {
 		if m.isClosed() {
 			return
+		}
+
+		if m.isPaused() {
+			time.Sleep(time.Second)
+			continue
 		}
 
 		skip := false
@@ -188,4 +194,17 @@ func (m *Merger) IsEmpty() bool {
 	}
 
 	return true
+}
+
+// Stop stops merge
+func (m *Merger) Stop() {
+	atomic.StoreInt32(&m.pause, 1)
+}
+
+func (m *Merger) Continue() {
+	atomic.StoreInt32(&m.pause, 0)
+}
+
+func (m *Merger) isPaused() bool {
+	return atomic.LoadInt32(&m.pause) == 1
 }

@@ -81,14 +81,13 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// get pd client and cluster ID
 	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	clusterID = pdCli.GetClusterID(ctx)
 	// update latestTS and latestTime
 	latestTS, err := util.GetTSO(pdCli)
@@ -197,18 +196,6 @@ func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.Noti
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
 	return
 }
-
-/*
-func calculateForwardAShortTime(current int64) int64 {
-	physical := oracle.ExtractPhysical(uint64(current))
-	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
-	previous := oracle.ComposeTS(prevPhysical, 0)
-	if previous < 0 {
-		return 0
-	}
-	return int64(previous)
-}
-*/
 
 // StartCollect runs Collector up in a goroutine.
 func (s *Server) StartCollect() {
@@ -436,8 +423,10 @@ func (s *Server) updateStatus() error {
 	s.statusMu.Lock()
 	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
 	s.status.MaxCommitTS = s.syncer.GetLatestCommitTS()
-	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
+	status := node.CloneStatus(s.status)
 	s.statusMu.Unlock()
+
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
 	}

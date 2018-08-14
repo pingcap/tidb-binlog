@@ -21,14 +21,6 @@ import (
 	"github.com/pingcap/tidb/model"
 )
 
-const (
-	lengthOfBinaryTime = 15
-
-	// segmentSizeLevel must be a round number and bigger than SegmentSizeBytes
-	// SegmentSizeBytes = 512 * 1024 * 1024
-	segmentSizeLevel int64 = 1000 * 1000 * 1000
-)
-
 // InitLogger initalizes Pump's logger.
 func InitLogger(cfg *Config) {
 	log.SetLevelByString(cfg.LogLevel)

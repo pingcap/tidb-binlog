@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -236,23 +237,14 @@ func (a *Append) updateStatus() {
 		case <-a.close:
 			return
 		case <-updateLatest:
-			ts, err := a.queryLatestTSFromPD()
+			ts, err := pkgutil.QueryLatestTsFromPD(a.tiStore)
 			if err != nil {
-				log.Errorf("queryLatestTSFromPD err: %v", err)
+				log.Errorf("QueryLatestTSFromPD err: %v", err)
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		}
 	}
-}
-
-func (a *Append) queryLatestTSFromPD() (int64, error) {
-	version, err := a.tiStore.CurrentVersion()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	return int64(version.Ver), nil
 }
 
 func (a *Append) resolve(startTS int64) bool {

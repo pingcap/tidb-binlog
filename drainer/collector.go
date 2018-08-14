@@ -212,7 +212,14 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	}
 
 	// query lastest ts from pd
-	c.latestTS = c.queryLatestTsFromPD()
+	c.latestTS, err = util.QueryLatestTsFromPD(c.tiStore)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// may add new merge source, stop merge first
+	c.merger.Stop()
+	defer c.merger.Continue()
 
 	for _, n := range nodes {
 		// format and check the nodeID
@@ -228,19 +235,19 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			mergeSource := MergeSource{ID: n.NodeID}
-
-			// initial pump
+			// initial pump, use checkpoint's commit ts if merger's last ts is 0
 			commitTS := c.cp.Pos()
-			p, err := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, commitTS)
-			if err != nil {
-				// we should still add source for this pump
-				c.merger.AddSource(mergeSource)
-				return errors.Trace(err)
+			if c.merger.GetLastTS() != 0 {
+				commitTS = c.merger.GetLastTS()
 			}
+
+			p := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, commitTS)
 			c.pumps[n.NodeID] = p
-			mergeSource.Source = p.PullBinlog(ctx, p.latestTS)
-			c.merger.AddSource(mergeSource)
+			c.merger.AddSource(MergeSource{
+				ID:     n.NodeID,
+				Source: p.PullBinlog(ctx, p.latestTS),
+			})
+
 		} else {
 			switch n.State {
 			case node.Pausing:
@@ -264,16 +271,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (c *Collector) queryLatestTsFromPD() int64 {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		log.Errorf("get current version error: %v", err)
-		return 0
-	}
-
-	return int64(version.Ver)
 }
 
 // Notify notifies to detcet pumps
