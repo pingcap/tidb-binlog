@@ -175,7 +175,7 @@ func (sp *FlashCheckPoint) Check(ts int64) bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos implements CheckPoint.TS interface
+// TS implements CheckPoint.TS interface
 func (sp *FlashCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()

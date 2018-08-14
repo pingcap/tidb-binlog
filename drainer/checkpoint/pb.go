@@ -99,7 +99,7 @@ func (sp *PbCheckPoint) Check(int64) bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos implements CheckPoint.TS interface
+// TS implements CheckPoint.TS interface
 func (sp *PbCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
