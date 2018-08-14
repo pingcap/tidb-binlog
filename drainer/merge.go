@@ -201,7 +201,7 @@ func (m *Merger) Stop() {
 	atomic.StoreInt32(&m.pause, 1)
 }
 
-// continue continue merge
+// Continue continue merge
 func (m *Merger) Continue() {
 	atomic.StoreInt32(&m.pause, 0)
 }
