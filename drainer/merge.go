@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,8 +38,9 @@ type MergeSource struct {
 }
 
 // NewMerger create a instance of Merger
-func NewMerger(sources ...MergeSource) *Merger {
+func NewMerger(ts int64, sources ...MergeSource) *Merger {
 	m := &Merger{
+		lastTS:  ts,
 		sources: make(map[string]MergeSource),
 		output:  make(chan MergeItem, 10),
 		binlogs: make(map[string]MergeItem),
@@ -84,7 +84,7 @@ func (m *Merger) RemoveSource(sourceID string) {
 func (m *Merger) run() {
 	defer close(m.output)
 
-	var lastTS int64 = math.MinInt64
+	lastTS := m.lastTS
 	for {
 		if m.isClosed() {
 			return

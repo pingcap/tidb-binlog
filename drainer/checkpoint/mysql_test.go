@@ -46,7 +46,7 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	err = sp.Save(testTs)
 	c.Assert(err, IsNil)
 
-	ts := sp.Pos()
+	ts := sp.TS()
 	c.Assert(ts, Equals, testTs)
 
 	sp1, ero := newMysql("mysql", cfg)

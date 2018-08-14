@@ -157,8 +157,8 @@ func (sp *MysqlCheckPoint) Check(int64) bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos implements CheckPoint.Pos interface
-func (sp *MysqlCheckPoint) Pos() int64 {
+// Pos implements CheckPoint.TS interface
+func (sp *MysqlCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 
@@ -167,6 +167,6 @@ func (sp *MysqlCheckPoint) Pos() int64 {
 
 // String inplements CheckPoint.String interface
 func (sp *MysqlCheckPoint) String() string {
-	ts := sp.Pos()
+	ts := sp.TS()
 	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

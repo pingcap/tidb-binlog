@@ -175,8 +175,8 @@ func (sp *FlashCheckPoint) Check(ts int64) bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos implements CheckPoint.Pos interface
-func (sp *FlashCheckPoint) Pos() int64 {
+// Pos implements CheckPoint.TS interface
+func (sp *FlashCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 
@@ -185,6 +185,6 @@ func (sp *FlashCheckPoint) Pos() int64 {
 
 // String inplements CheckPoint.String interface
 func (sp *FlashCheckPoint) String() string {
-	ts := sp.Pos()
+	ts := sp.TS()
 	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

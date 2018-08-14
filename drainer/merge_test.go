@@ -29,7 +29,7 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		}
 		sources[i] = source
 	}
-	merger := NewMerger(sources...)
+	merger := NewMerger(0, sources...)
 
 	// get output from merger
 	go func() {

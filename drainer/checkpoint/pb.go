@@ -99,8 +99,8 @@ func (sp *PbCheckPoint) Check(int64) bool {
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
-// Pos implements CheckPoint.Pos interface
-func (sp *PbCheckPoint) Pos() int64 {
+// Pos implements CheckPoint.TS interface
+func (sp *PbCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 
@@ -109,6 +109,6 @@ func (sp *PbCheckPoint) Pos() int64 {
 
 // String implements CheckPoint.String interface
 func (sp *PbCheckPoint) String() string {
-	ts := sp.Pos()
+	ts := sp.TS()
 	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

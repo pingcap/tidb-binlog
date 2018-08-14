@@ -18,7 +18,7 @@ type CheckPoint interface {
 	Check(int64) bool
 
 	// Pos gets position information.
-	Pos() int64
+	TS() int64
 
 	// String returns CommitTS and Offset
 	String() string

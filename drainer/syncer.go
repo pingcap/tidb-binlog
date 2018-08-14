@@ -72,11 +72,11 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS = cp.Pos()
+	syncer.initCommitTS = cp.TS()
 	syncer.positions = make(map[string]int64)
 	syncer.c = newCausality()
 	syncer.lastSyncTime = time.Now()
-	syncer.latestRecvNonFakeBinlogTS = cp.Pos()
+	syncer.latestRecvNonFakeBinlogTS = cp.TS()
 
 	return syncer, nil
 }
@@ -779,14 +779,14 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
-	cp := s.cp.Pos()
+	cp := s.cp.TS()
 
 	latesFakeTS := atomic.LoadInt64(&s.latestRecvFakeBinlogTS)
 	latesNonFakeTS := atomic.LoadInt64(&s.latestRecvNonFakeBinlogTS)
 
-	// because Syncer only handle the true binlog now, checkpoint.Pos() will only be the maximums
+	// because Syncer only handle the true binlog now, checkpoint.TS() will only be the maximums
 	// true binlog commit ts
-	// if checkpoint.Pos() equals the latestRecvNonFakeBinlogTS
+	// if checkpoint.TS() equals the latestRecvNonFakeBinlogTS
 	// we return the the max(latestRecvFakeBinlogTS, latestRecvNonFakeBinlogTS)
 	// so pump can make sure drainer has consumed all binlog(pump may send some fake binlog)
 	if cp == latesNonFakeTS {

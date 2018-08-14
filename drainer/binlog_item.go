@@ -13,7 +13,7 @@ type binlogItem struct {
 	job    *model.Job
 }
 
-// GetCommitTs inplement Item interface in merger.go
+// GetCommitTs implements Item interface in merger.go
 func (b *binlogItem) GetCommitTs() int64 {
 	return b.binlog.CommitTs
 }

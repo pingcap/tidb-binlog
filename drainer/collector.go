@@ -86,7 +86,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		syncedCheckTime: cfg.SyncedCheckTime,
-		merger:          NewMerger(),
+		merger:          NewMerger(cpt.TS()),
 		errCh:           make(chan error, 10),
 	}
 
@@ -126,7 +126,6 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 					}
 
 					if job == nil {
-						log.Debugf("ddl job %d is nil", binlog.DdlJobId)
 						time.Sleep(time.Second)
 						continue
 					}
@@ -188,6 +187,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 	}
 
 	for nodeID, pump := range c.pumps {
+		status.PumpPos[nodeID] = pump.latestTS
 		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.latestTS))
 	}
 
@@ -242,17 +242,12 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			// initial pump, use checkpoint's commit ts if merger's last ts is 0
-			commitTS := c.cp.Pos()
-			if c.merger.GetLastTS() != 0 {
-				commitTS = c.merger.GetLastTS()
-			}
-
+			commitTS := c.merger.GetLastTS()
 			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{
 				ID:     n.NodeID,
-				Source: p.PullBinlog(ctx, p.latestTS),
+				Source: p.PullBinlog(ctx, commitTS),
 			})
 
 		} else {

@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -154,7 +155,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) (pb.Pump
 	conn, err := grpc.Dial(p.addr, grpc.WithInsecure())
 	if err != nil {
 		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
-		return nil, nil, nil
+		return nil, nil, errors.Trace(err)
 	}
 
 	cli := pb.NewPumpClient(conn)
@@ -166,7 +167,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) (pb.Pump
 	pullCli, err := cli.PullBinlogs(ctx, in)
 	if err != nil {
 		log.Error("[pump %s] create PullBinlogs client error %v", p.nodeID, err)
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	return pullCli, conn, nil

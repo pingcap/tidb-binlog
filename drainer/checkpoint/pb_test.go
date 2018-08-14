@@ -20,13 +20,13 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	err = meta.Save(testTs)
 	c.Assert(err, IsNil)
 	// check ts
-	ts := meta.Pos()
+	ts := meta.TS()
 	c.Assert(ts, Equals, testTs)
 
 	// check load ts
 	err = meta.Load()
 	c.Assert(err, IsNil)
-	ts = meta.Pos()
+	ts = meta.TS()
 	c.Assert(ts, Equals, testTs)
 
 	// check not exist meta file
