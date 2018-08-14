@@ -118,7 +118,10 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			if err != nil {
 				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
-				p.reportErr(pctx, err)
+				// if this pump is paused or closed, we don't need report error
+				if atomic.LoadInt32(&p.isClosed) == 0 && atomic.LoadInt32(&p.isPaused) == 0 {
+					p.reportErr(pctx, err)
+				}
 				return
 			}
 
