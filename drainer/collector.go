@@ -21,6 +21,10 @@ import (
 	"golang.org/x/net/context"
 )
 
+const (
+	getDDLJobRetryTime = 10
+)
+
 type notifyResult struct {
 	err error
 	wg  sync.WaitGroup
@@ -29,10 +33,8 @@ type notifyResult struct {
 // Collector keeps all online pump infomation and publish window's lower boundary
 type Collector struct {
 	clusterID uint64
-	batch     int32
 	interval  time.Duration
 	reg       *node.EtcdRegistry
-	timeout   time.Duration
 	tiStore   kv.Storage
 	pumps     map[string]*Pump
 	syncer    *Syncer
@@ -40,7 +42,6 @@ type Collector struct {
 	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
-	safeForwardTime int
 
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
@@ -79,16 +80,14 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
 		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
 		syncer:          s,
 		cp:              cpt,
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		syncedCheckTime: cfg.SyncedCheckTime,
-		safeForwardTime: cfg.SafeForwardTime,
 		merger:          NewMerger(),
-		errCh:           make(chan error),
+		errCh:           make(chan error, 10),
 	}
 
 	return c, nil
@@ -111,22 +110,23 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 			if binlog.DdlJobId > 0 {
 				for {
 					var job *model.Job
-					var err error
-					err1 := util.RetryOnError(10, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
-						job, err = getDDLJob(c.tiStore, binlog.DdlJobId)
-						if err != nil {
-							return err
+					err := util.RetryOnError(getDDLJobRetryTime, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
+						var err1 error
+						job, err1 = getDDLJob(c.tiStore, binlog.DdlJobId)
+						if err1 != nil {
+							return err1
 						}
 						return nil
 					})
 
-					if err1 != nil {
-						log.Error("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err1))
-						c.reportErr(ctx, err1)
+					if err != nil {
+						log.Errorf("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err))
+						c.reportErr(ctx, err)
 						return
 					}
 
 					if job == nil {
+						log.Debugf("ddl job %d is nil", binlog.DdlJobId)
 						time.Sleep(time.Second)
 						continue
 					}
@@ -296,10 +296,11 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	status = c.mu.status
 
 	// if the merger don't have any binlog to be merged and syncer don't have binlog input in a minitue,
-	// we can think the all binlog is synced
+	// we can think all the binlog is synced
 	if c.merger.IsEmpty() && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
+	status.LastTS = c.syncer.GetLatestCommitTS()
 
 	c.mu.Unlock()
 	return status

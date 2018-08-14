@@ -37,15 +37,16 @@ var (
 	heartbeatInterval       = 1 * time.Second
 	clusterID         uint64
 	pdReconnTimes     = 30
-	maxMsgSize        = 1024 * 1024 * 1024
 )
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	ID        string
-	host      string
-	cfg       *Config
+	ID   string
+	host string
+	cfg  *Config
+
+	// TODO: maybe don't need window
 	window    *DepositWindow
 	collector *Collector
 	tcpAddr   string

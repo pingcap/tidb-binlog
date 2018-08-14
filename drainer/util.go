@@ -21,6 +21,10 @@ import (
 	"github.com/pingcap/tidb/model"
 )
 
+const (
+	maxMsgSize = 1024 * 1024 * 1024
+)
+
 // InitLogger initalizes Pump's logger.
 func InitLogger(cfg *Config) {
 	log.SetLevelByString(cfg.LogLevel)

@@ -13,6 +13,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	receiveBinlogRetryTime = 10
+	binlogChanSize         = 10
+)
+
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
 type Pump struct {
 	nodeID    string
@@ -60,7 +65,7 @@ func (p *Pump) Continue() {
 
 // PullBinlog return the chan to get item from pump
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
-	ret := make(chan MergeItem, 10)
+	ret := make(chan MergeItem, binlogChanSize)
 
 	go func() {
 		log.Debugf("[pump %s] start PullBinlog", p.nodeID)
@@ -89,17 +94,17 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			var resp *pb.PullBinlogResp
 			// receive binlog from pump, and will retry 10 times if failed
-			err1 := util.RetryOnError(10, time.Second, fmt.Sprintf("[pump %s] receive binlog error", p.nodeID), func() error {
-				var err error
-				resp, err = pullCli.Recv()
-				if err != nil {
-					return err
+			err = util.RetryOnError(receiveBinlogRetryTime, time.Second, fmt.Sprintf("[pump %s] receive binlog error", p.nodeID), func() error {
+				var err1 error
+				resp, err1 = pullCli.Recv()
+				if err1 != nil {
+					return err1
 				}
 				return nil
 			})
 
-			if err1 != nil {
-				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err1)
+			if err != nil {
+				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
 				p.reportErr(pctx, err)
 				return
 			}

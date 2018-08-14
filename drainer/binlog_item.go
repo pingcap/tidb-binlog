@@ -2,14 +2,9 @@ package drainer
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
-)
-
-var (
-	pushRetryTime = 10 * time.Millisecond
 )
 
 type binlogItem struct {
