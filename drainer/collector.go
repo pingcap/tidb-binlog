@@ -122,7 +122,7 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 
 					if err1 != nil {
 						log.Error("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err1))
-						c.errCh <- err1
+						c.reportErr(ctx, err1)
 						return
 					}
 
@@ -150,9 +150,6 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
 	defer func() {
-		for _, p := range c.pumps {
-			p.Close()
-		}
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
@@ -248,7 +245,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				commitTS = c.merger.GetLastTS()
 			}
 
-			p := NewPump(n.NodeID, n.Addr, c.clusterID, c.timeout, commitTS)
+			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{
 				ID:     n.NodeID,
@@ -269,8 +266,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
 				// so when the pump is offline, we can remove this pump directly.
 				c.merger.RemoveSource(n.NodeID)
-				// release invalid connection
-				p.Close()
 				delete(c.pumps, n.NodeID)
 				log.Infof("node(%s) of cluster(%d) has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
@@ -308,4 +303,14 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 
 	c.mu.Unlock()
 	return status
+}
+
+func (c *Collector) reportErr(ctx context.Context, err error) {
+	log.Errorf("reportErr receive error %s", err)
+	select {
+	case <-ctx.Done():
+		return
+	case c.errCh <- err:
+		return
+	}
 }
