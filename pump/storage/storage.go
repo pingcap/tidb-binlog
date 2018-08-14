@@ -252,7 +252,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 				if toSave == nil {
 					toSave = time.After(persistAtLeastTime)
 				}
-				log.Info("item: ", item)
+				log.Debug("get sort item: ", item)
 			case <-toSave:
 				err := a.persistHandlePointer(toSaveItem)
 				if err != nil {
