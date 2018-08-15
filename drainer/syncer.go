@@ -415,7 +415,7 @@ func (s *Syncer) addJob(job *job) {
 		// do nothing
 	}
 
-	if job.sql != "" {
+	if job.binlogTp != translator.FAKE {
 		s.jobWg.Add(1)
 		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
 		s.jobCh[idx] <- job
@@ -601,10 +601,8 @@ func (s *Syncer) run(b *binlogItem) error {
 		if startTS == commitTS {
 			// generate fake binlog job
 			s.addJob(newFakeJob(commitTS))
-			continue
-		}
 
-		if jobID == 0 {
+		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
