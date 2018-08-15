@@ -46,8 +46,6 @@ type Server struct {
 	host string
 	cfg  *Config
 
-	// TODO: maybe don't need window
-	window    *DepositWindow
 	collector *Collector
 	tcpAddr   string
 	gs        *grpc.Server
@@ -139,7 +137,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		ID:        ID,
 		host:      advURL.Host,
 		cfg:       cfg,
-		window:    win,
 		collector: c,
 		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,

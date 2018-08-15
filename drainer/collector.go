@@ -189,7 +189,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
 		PumpPos: make(map[string]int64),
-		LastTS:  c.merger.GetLastTS(),
+		LastTS:  c.merger.GetLatestTS(),
 	}
 
 	for nodeID, pump := range c.pumps {
@@ -244,7 +244,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			commitTS := c.merger.GetLastTS()
+			commitTS := c.merger.GetLatestTS()
 			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{

@@ -23,8 +23,8 @@ type Merger struct {
 
 	output chan MergeItem
 
-	// lastTS save the last binlog's ts send to syncer
-	lastTS int64
+	// latestTS save the last binlog's ts send to syncer
+	latestTS int64
 
 	close int32
 
@@ -40,10 +40,10 @@ type MergeSource struct {
 // NewMerger creates a instance of Merger
 func NewMerger(ts int64, sources ...MergeSource) *Merger {
 	m := &Merger{
-		lastTS:  ts,
-		sources: make(map[string]MergeSource),
-		output:  make(chan MergeItem, 10),
-		binlogs: make(map[string]MergeItem),
+		latestTS: ts,
+		sources:  make(map[string]MergeSource),
+		output:   make(chan MergeItem, 10),
+		binlogs:  make(map[string]MergeItem),
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -84,7 +84,7 @@ func (m *Merger) RemoveSource(sourceID string) {
 func (m *Merger) run() {
 	defer close(m.output)
 
-	lastTS := m.lastTS
+	latestTS := m.latestTS
 	for {
 		if m.isClosed() {
 			return
@@ -162,17 +162,17 @@ func (m *Merger) run() {
 			isValideBinlog = false
 		}
 
-		if minBinlog != nil && minBinlog.GetCommitTs() <= lastTS {
-			log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), lastTS)
+		if minBinlog != nil && minBinlog.GetCommitTs() <= latestTS {
+			log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), latestTS)
 			isValideBinlog = false
 		}
 
 		if isValideBinlog {
 			m.output <- minBinlog
-			lastTS = minBinlog.GetCommitTs()
+			latestTS = minBinlog.GetCommitTs()
 		}
 		m.Lock()
-		m.lastTS = lastTS
+		m.latestTS = latestTS
 		delete(m.binlogs, minID)
 		m.Unlock()
 	}
@@ -183,11 +183,11 @@ func (m *Merger) Output() chan MergeItem {
 	return m.output
 }
 
-// GetLastTS returns the last binlog's ts send to syncer
-func (m *Merger) GetLastTS() int64 {
+// GetLatestTS returns the last binlog's ts send to syncer
+func (m *Merger) GetLatestTS() int64 {
 	m.RLock()
 	defer m.RUnlock()
-	return m.lastTS
+	return m.latestTS
 }
 
 // IsEmpty returns true if this Merger don't have any binlog to be merged
@@ -195,11 +195,7 @@ func (m *Merger) IsEmpty() bool {
 	m.RLock()
 	defer m.RUnlock()
 
-	if len(m.binlogs) != 0 {
-		return false
-	}
-
-	return true
+	return len(m.binlogs) == 0
 }
 
 // Stop stops merge
