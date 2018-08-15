@@ -296,9 +296,9 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	c.mu.Lock()
 	status = c.mu.status
 
-	// if the merger don't have any binlog to be merged and syncer don't have binlog input in a minitue,
+	// if syncer don't have binlog input in a minitue,
 	// we can think all the binlog is synced
-	if c.merger.IsEmpty() && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+	if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
 	status.LastTS = c.syncer.GetLatestCommitTS()

@@ -29,6 +29,8 @@ type Merger struct {
 	close int32
 
 	pause int32
+
+	sourceChanged int32
 }
 
 // MergeSource contains a source info about binlog
@@ -70,6 +72,7 @@ func (m *Merger) AddSource(source MergeSource) {
 	m.Lock()
 	m.sources[source.ID] = source
 	log.Infof("merger add source %s", source.ID)
+	m.setSourceChanged()
 	m.Unlock()
 }
 
@@ -78,6 +81,7 @@ func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
 	delete(m.sources, sourceID)
 	log.Infof("merger remove source %s", sourceID)
+	m.setSourceChanged()
 	m.Unlock()
 }
 
@@ -86,6 +90,8 @@ func (m *Merger) run() {
 
 	latestTS := m.latestTS
 	for {
+		m.resetSourceChanged()
+
 		if m.isClosed() {
 			return
 		}
@@ -102,6 +108,12 @@ func (m *Merger) run() {
 			sources[sourceID] = source
 		}
 		m.RUnlock()
+
+		if len(sources) == 0 {
+			// don't have any source
+			time.Sleep(time.Second)
+			continue
+		}
 
 		for sourceID, source := range sources {
 			m.RLock()
@@ -148,13 +160,12 @@ func (m *Merger) run() {
 				minID = sourceID
 			}
 		}
+		m.RUnlock()
 
-		if len(m.binlogs) != len(m.sources) {
-			// had new source, should choose a new min binlog again
-			m.RUnlock()
+		// may add new source, or remove source, need choose a new min binlog
+		if m.isSourceChanged() {
 			continue
 		}
-		m.RUnlock()
 
 		isValideBinlog := true
 
@@ -190,14 +201,6 @@ func (m *Merger) GetLatestTS() int64 {
 	return m.latestTS
 }
 
-// IsEmpty returns true if this Merger don't have any binlog to be merged
-func (m *Merger) IsEmpty() bool {
-	m.RLock()
-	defer m.RUnlock()
-
-	return len(m.binlogs) == 0
-}
-
 // Stop stops merge
 func (m *Merger) Stop() {
 	atomic.StoreInt32(&m.pause, 1)
@@ -210,4 +213,16 @@ func (m *Merger) Continue() {
 
 func (m *Merger) isPaused() bool {
 	return atomic.LoadInt32(&m.pause) == 1
+}
+
+func (m *Merger) setSourceChanged() {
+	atomic.StoreInt32(&m.pause, 1)
+}
+
+func (m *Merger) resetSourceChanged() {
+	atomic.StoreInt32(&m.pause, 0)
+}
+
+func (m *Merger) isSourceChanged() bool {
+	return atomic.LoadInt32(&m.sourceChanged) == 1
 }
