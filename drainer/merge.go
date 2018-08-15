@@ -148,6 +148,12 @@ func (m *Merger) run() {
 				minID = sourceID
 			}
 		}
+
+		if len(m.binlogs) != len(m.sources) {
+			// had new source, should choose a new min binlog again
+			m.RUnlock()
+			continue
+		}
 		m.RUnlock()
 
 		isValideBinlog := true

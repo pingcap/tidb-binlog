@@ -6,6 +6,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -72,6 +73,11 @@ func (p *Pump) Continue() {
 
 // PullBinlog returns the chan to get item from pump
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
+	// initial log
+	pLog := util.NewLog()
+	label := "receive binlog"
+	pLog.Add(label, time.Minute)
+
 	ret := make(chan MergeItem, binlogChanSize)
 
 	go func() {
@@ -105,7 +111,9 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			resp, err := pullCli.Recv()
 			if err != nil {
-				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
+				pLog.Print(label, func() {
+					log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
+				})
 				time.Sleep(time.Second)
 				// TODO: add metric here
 				continue
