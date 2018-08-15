@@ -106,6 +106,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			resp, err := pullCli.Recv()
 			if err != nil {
 				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
+				time.Sleep(time.Second)
 				// TODO: add metric here
 				continue
 			}
