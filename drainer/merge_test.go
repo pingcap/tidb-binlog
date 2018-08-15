@@ -117,5 +117,4 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		c.Assert(ts > currentTs, Equals, true)
 		currentTs = ts
 	}
-	c.Assert(merger.IsEmpty(), Equals, true)
 }
