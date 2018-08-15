@@ -3,7 +3,6 @@ package drainer
 import (
 	"regexp"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -57,9 +56,6 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
-
-	latestRecvFakeBinlogTS    int64
-	latestRecvNonFakeBinlogTS int64
 }
 
 // NewSyncer returns a Drainer instance
@@ -76,7 +72,6 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.positions = make(map[string]int64)
 	syncer.c = newCausality()
 	syncer.lastSyncTime = time.Now()
-	syncer.latestRecvNonFakeBinlogTS = cp.TS()
 
 	return syncer, nil
 }
@@ -395,6 +390,10 @@ func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeI
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
+func newFakeJob(commitTS int64) *job {
+	return &job{binlogTp: translator.FAKE, commitTS: commitTS}
+}
+
 // binlog bounadary job is used to group jobs, like a barrier
 func newBinlogBoundaryJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.DML, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
@@ -412,12 +411,16 @@ func (s *Syncer) addJob(job *job) {
 		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
+	} else if job.binlogTp == translator.FAKE {
+		// do nothing
 	}
 
-	s.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-	s.jobCh[idx] <- job
-	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
+	if job.sql != "" {
+		s.jobWg.Add(1)
+		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+		s.jobCh[idx] <- job
+		log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
+	}
 
 	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
 		s.positions[job.nodeID] = job.commitTS
@@ -591,8 +594,15 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	for {
 		binlog := b.binlog
+		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+
+		if startTS == commitTS {
+			// generate fake binlog job
+			s.addJob(newFakeJob(commitTS))
+			continue
+		}
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
@@ -744,18 +754,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
-	if b.binlog.StartTs == b.binlog.CommitTs {
-		log.Debug("fake binlog ts: ", b.binlog.CommitTs)
-		atomic.StoreInt64(&s.latestRecvFakeBinlogTS, b.binlog.CommitTs)
-		return
-	}
-
-	if b.binlog.Tp == pb.BinlogType_Prewrite {
-		atomic.StoreInt64(&s.latestRecvNonFakeBinlogTS, b.binlog.StartTs)
-	} else {
-		atomic.StoreInt64(&s.latestRecvNonFakeBinlogTS, b.binlog.CommitTs)
-	}
-
 	select {
 	case <-s.ctx.Done():
 	case s.input <- b:
@@ -779,23 +777,5 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
-	cp := s.cp.TS()
-
-	latesFakeTS := atomic.LoadInt64(&s.latestRecvFakeBinlogTS)
-	latesNonFakeTS := atomic.LoadInt64(&s.latestRecvNonFakeBinlogTS)
-
-	// because Syncer only handle the true binlog now, checkpoint.TS() will only be the maximums
-	// true binlog commit ts
-	// if checkpoint.TS() equals the latestRecvNonFakeBinlogTS
-	// we return the the max(latestRecvFakeBinlogTS, latestRecvNonFakeBinlogTS)
-	// so pump can make sure drainer has consumed all binlog(pump may send some fake binlog)
-	if cp == latesNonFakeTS {
-		if latesFakeTS > latesNonFakeTS {
-			return latesFakeTS
-		}
-		return latesNonFakeTS
-
-	}
-
-	return cp
+	return s.cp.TS()
 }
