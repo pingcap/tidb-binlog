@@ -27,6 +27,7 @@ func (l *Log) Add(label string, interval time.Duration) {
 	l.Unlock()
 }
 
+// Print executes the fn to print log
 func (l *Log) Print(label string, fn func()) {
 	l.Lock()
 	defer l.Unlock()
