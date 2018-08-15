@@ -67,6 +67,9 @@ type Append struct {
 	headPointer   valuePointer
 	handlePointer valuePointer
 
+	sortItems          chan sortItem
+	handleSortItemQuit chan struct{}
+
 	writeCh chan *request
 
 	options *Options
@@ -115,7 +118,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		tiStore:        tiStore,
 		tiLockResolver: tiLockResolver,
 
-		close: make(chan struct{}),
+		close:     make(chan struct{}),
+		sortItems: make(chan sortItem, 1024),
 	}
 
 	append.gcTS, err = append.readGCTSFromDB()
@@ -135,45 +139,10 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
+	append.handleSortItemQuit = append.handleSortItem(append.sortItems)
 	sorter := newSorter(func(item sortItem) {
 		log.Debugf("sorter get item: %+v", item)
-
-		// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
-		// or this should never happend
-		if item.commit < append.maxCommitTS {
-			log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, append.maxCommitTS)
-			return
-		}
-
-		tsKey := encodeTSKey(item.commit)
-		pointerData, err := metadata.Get(tsKey, nil)
-		if err != nil {
-			panic(err)
-		}
-
-		var pointer valuePointer
-		err = pointer.UnmarshalBinary(pointerData)
-		if err != nil {
-			log.Error(err)
-			return
-		}
-
-		var batch leveldb.Batch
-		maxCommitTS := make([]byte, 8)
-		binary.LittleEndian.PutUint64(maxCommitTS, uint64(item.commit))
-		batch.Put(maxCommitTSKey, maxCommitTS)
-
-		batch.Put(handlePointerKey, pointerData)
-		err = metadata.Write(&batch, nil)
-		// extremely case write fail when no disk space at this time, it's safe to don't save the maxCommitTS to DB
-		// because we can recalculate it when restart, so just log and ignore it
-		// better just panic?
-		if err != nil {
-			log.Error(err)
-		}
-
-		append.handlePointer = pointer
-		atomic.StoreInt64(&append.maxCommitTS, item.commit)
+		append.sortItems <- item
 	})
 
 	if tiStore != nil {
@@ -220,6 +189,82 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	go append.updateStatus()
 
 	return
+}
+
+func (a *Append) persistHandlePointer(item sortItem) error {
+	log.Debug("persist item: ", item)
+	tsKey := encodeTSKey(item.commit)
+	pointerData, err := a.metadata.Get(tsKey, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var pointer valuePointer
+	err = pointer.UnmarshalBinary(pointerData)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var batch leveldb.Batch
+	maxCommitTS := make([]byte, 8)
+	binary.LittleEndian.PutUint64(maxCommitTS, uint64(item.commit))
+	batch.Put(maxCommitTSKey, maxCommitTS)
+
+	batch.Put(handlePointerKey, pointerData)
+	err = a.metadata.Write(&batch, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	a.handlePointer = pointer
+
+	return nil
+}
+
+func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
+	quit = make(chan struct{})
+
+	go func() {
+		defer close(quit)
+
+		// we save the handlePointer and maxCommitTS to metadata at most once in persistAtLeastTime
+		persistAtLeastTime := time.Second
+		var toSaveItem sortItem
+		var toSave <-chan time.Time
+		for {
+			select {
+			case item, ok := <-items:
+				if !ok {
+					if toSave != nil {
+						err := a.persistHandlePointer(toSaveItem)
+						if err != nil {
+							log.Error(err)
+						}
+					}
+					return
+				}
+				// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
+				// or this should never happen
+				if item.commit < atomic.LoadInt64(&a.maxCommitTS) {
+					log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, a.maxCommitTS)
+					continue
+				}
+				atomic.StoreInt64(&a.maxCommitTS, item.commit)
+				toSaveItem = item
+				if toSave == nil {
+					toSave = time.After(persistAtLeastTime)
+				}
+				log.Debug("get sort item: ", item)
+			case <-toSave:
+				err := a.persistHandlePointer(toSaveItem)
+				if err != nil {
+					log.Error(err)
+				}
+				toSave = nil
+			}
+
+		}
+	}()
+
+	return quit
 }
 
 func (a *Append) updateStatus() {
@@ -388,9 +433,15 @@ func (a *Append) Close() error {
 	// wait for all binlog write to vlog -> KV -> sorter
 	// after this, writeToValueLog, writeToKV, writeToSorter has quit sequently
 	a.wg.Wait()
+	log.Debug("wait group done")
 
 	// note the call back func will use a.metadata, so we should close sorter before a.metadata
 	a.sorter.close()
+	log.Debug("sorter is closed")
+
+	close(a.sortItems)
+	<-a.handleSortItemQuit
+	log.Debug("handle sort item quit")
 
 	err := a.metadata.Close()
 	if err != nil {
@@ -484,25 +535,31 @@ func (a *Append) writeToSorter(reqs chan *request) {
 func (a *Append) writeToKV(reqs chan *request) chan *request {
 	done := make(chan *request, 1024)
 
+	batchReqs := a.batchRequest(reqs, 128)
+
 	go func() {
 		defer close(done)
 
 		var batch leveldb.Batch
-		for req := range reqs {
-			log.Debugf("write request to kv: %s", req)
-			var err error
-
-			pointer, err := req.valuePointer.MarshalBinary()
-			if err != nil {
-				panic(err)
-			}
-
+		for bufReqs := range batchReqs {
 			batch.Reset()
-			batch.Put(encodeTSKey(req.ts()), pointer)
-			batch.Put(headPointerKey, pointer)
+			var lastPointer []byte
+			for _, req := range bufReqs {
+				log.Debugf("write request to kv: %s", req)
+				var err error
+
+				pointer, err := req.valuePointer.MarshalBinary()
+				if err != nil {
+					panic(err)
+				}
+
+				lastPointer = pointer
+				batch.Put(encodeTSKey(req.ts()), pointer)
+			}
+			batch.Put(headPointerKey, lastPointer)
 
 			for {
-				err = a.metadata.Write(&batch, nil)
+				err := a.metadata.Write(&batch, nil)
 
 				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 				// we just retry of quit when Append is closed
@@ -514,10 +571,52 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 					time.Sleep(time.Second)
 					continue
 				}
-				a.headPointer = req.valuePointer
+				a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
 
-				done <- req
+				for _, req := range bufReqs {
+					done <- req
+				}
 				break
+			}
+		}
+	}()
+
+	return done
+}
+
+func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*request {
+	done := make(chan []*request, 1024)
+	var bufReqs []*request
+
+	go func() {
+		defer close(done)
+
+		for {
+			if len(bufReqs) >= maxBatchNum {
+				done <- bufReqs
+				bufReqs = make([]*request, 0, maxBatchNum)
+			}
+
+			select {
+			case req, ok := <-reqs:
+				if !ok {
+					if len(bufReqs) > 0 {
+						done <- bufReqs
+					}
+					return
+				}
+				bufReqs = append(bufReqs, req)
+			default:
+				if len(bufReqs) > 0 {
+					done <- bufReqs
+					bufReqs = make([]*request, 0, maxBatchNum)
+				} else { // get first req
+					req, ok := <-reqs
+					if !ok {
+						return
+					}
+					bufReqs = append(bufReqs, req)
+				}
 			}
 		}
 	}()
@@ -549,6 +648,8 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			for _, req := range reqs {
 				log.Debug(req.startTS, req.commitTS, " done")
 				req.wg.Done()
+				// payload is useless anymore, let it GC ASAP
+				req.payload = nil
 				done <- req
 			}
 		}
@@ -564,7 +665,17 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				}
 				bufReqs = append(bufReqs, req)
 				size += len(req.payload)
-				if size >= 4*(1<<20) || len(bufReqs) > 128 {
+
+				// Allow the group to grow up to a maximum size, but if the
+				// original write is small, limit the growth so we do not slow
+				// down the small write too much.
+				maxSize := 1 << 20
+				firstSize := len(bufReqs[0].payload)
+				if firstSize <= (128 << 10) {
+					maxSize = firstSize + (128 << 10)
+				}
+
+				if size >= maxSize {
 					write(bufReqs)
 					size = 0
 					bufReqs = bufReqs[:0]
