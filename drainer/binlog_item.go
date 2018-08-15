@@ -18,6 +18,7 @@ func (b *binlogItem) GetCommitTs() int64 {
 	return b.binlog.CommitTs
 }
 
+// String returns the string of this binlogItem
 func (b *binlogItem) String() string {
 	return fmt.Sprintf("{commitTS: %d, node: %s}", b.binlog.CommitTs, b.nodeID)
 }
@@ -31,6 +32,7 @@ func newBinlogItem(b *pb.Binlog, nodeID string) *binlogItem {
 	return itemp
 }
 
+//
 func (b *binlogItem) SetJob(job *model.Job) {
 	b.job = job
 }

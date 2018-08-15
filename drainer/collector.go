@@ -162,6 +162,12 @@ func (c *Collector) Start(ctx context.Context) {
 	c.wg.Add(1)
 	go c.publishBinlogs(ctx)
 
+	// add all the pump to merger
+	c.merger.Stop()
+	c.updateStatus(ctx)
+	c.merger.Continue()
+
+	// update status when had pump notify or reach wait time
 	for {
 		select {
 		case <-ctx.Done():
@@ -223,10 +229,6 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	// may add new merge source, stop merge first
-	c.merger.Stop()
-	defer c.merger.Continue()
 
 	for _, n := range nodes {
 		// format and check the nodeID

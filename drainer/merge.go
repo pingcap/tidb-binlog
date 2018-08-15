@@ -37,7 +37,7 @@ type MergeSource struct {
 	Source chan MergeItem
 }
 
-// NewMerger create a instance of Merger
+// NewMerger creates a instance of Merger
 func NewMerger(ts int64, sources ...MergeSource) *Merger {
 	m := &Merger{
 		lastTS:  ts,
@@ -73,7 +73,7 @@ func (m *Merger) AddSource(source MergeSource) {
 	m.Unlock()
 }
 
-// RemoveSource remove a source from Merger
+// RemoveSource removes a source from Merger
 func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
 	delete(m.sources, sourceID)

@@ -1,13 +1,11 @@
 package drainer
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -72,7 +70,7 @@ func (p *Pump) Continue() {
 	}
 }
 
-// PullBinlog return the chan to get item from pump
+// PullBinlog returns the chan to get item from pump
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	ret := make(chan MergeItem, binlogChanSize)
 
@@ -105,24 +103,11 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				continue
 			}
 
-			var resp *pb.PullBinlogResp
-			// receive binlog from pump, and will retry some times if failed
-			err = util.RetryOnError(receiveBinlogRetryTime, time.Second, fmt.Sprintf("[pump %s] receive binlog error", p.nodeID), func() error {
-				var err1 error
-				resp, err1 = pullCli.Recv()
-				if err1 != nil {
-					return err1
-				}
-				return nil
-			})
-
+			resp, err := pullCli.Recv()
 			if err != nil {
 				log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
-				// if this pump is paused or closed, we don't need report error
-				if atomic.LoadInt32(&p.isClosed) == 0 && atomic.LoadInt32(&p.isPaused) == 0 {
-					p.reportErr(pctx, err)
-				}
-				return
+				// TODO: add metric here
+				continue
 			}
 
 			binlog := new(pb.Binlog)

@@ -183,7 +183,7 @@ func (sp *FlashCheckPoint) TS() int64 {
 	return sp.CommitTS
 }
 
-// String inplements CheckPoint.String interface
+// String implements CheckPoint.String interface
 func (sp *FlashCheckPoint) String() string {
 	ts := sp.TS()
 	return fmt.Sprintf("binlog commitTS = %d", ts)
