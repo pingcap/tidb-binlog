@@ -62,21 +62,19 @@ func CreateMerger(sourceNum int, binlogNum int, strategy string) *Merger {
 	for i := 0; i < sourceNum; i++ {
 		source := MergeSource{
 			ID:     strconv.Itoa(i),
-			Source: make(chan MergeItem, 10),
+			Source: make(chan MergeItem, binlogNum),
 		}
 		sources[i] = source
 	}
 	merger := NewMerger(0, strategy, sources...)
 
 	for id := range sources {
-		go func(id int) {
-			for j := 1; j <= binlogNum; j++ {
-				binlog := new(pb.Binlog)
-				binlog.CommitTs = int64(j*100 + id)
-				binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
-				sources[id].Source <- binlogItem
-			}
-		}(id)
+		for j := 1; j <= binlogNum; j++ {
+			binlog := new(pb.Binlog)
+			binlog.CommitTs = int64(j*100 + id)
+			binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
+			sources[id].Source <- binlogItem
+		}
 	}
 
 	return merger
