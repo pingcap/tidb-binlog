@@ -37,9 +37,8 @@ func (d *decoder) Decode(ent *binlog.Entity, buf *binlogBuffer) error {
 
 	// read and chekc magic number
 	magicNum, err := readInt32(d.br)
-	if err == io.EOF {
-		d.br = nil
-		return io.EOF
+	if err != nil {
+		return err
 	}
 
 	err = checkMagic(magicNum)

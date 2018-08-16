@@ -269,7 +269,12 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		return bf.ErrFileNotFound
 	}
 
-	for _, name := range names[nameIndex:] {
+	for idx, name := range names[nameIndex:] {
+		var isLastFile bool
+		if idx == len(names[nameIndex:])-1 {
+			isLastFile = true
+		}
+
 		select {
 		case <-ctx.Done():
 			log.Warningf("Walk Done!")
@@ -307,7 +312,12 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			buf := binlogBufferPool.Get().(*binlogBuffer)
 			beginTime := time.Now()
 			err = decoder.Decode(ent, buf)
+
 			if err != nil {
+				if err == io.ErrUnexpectedEOF && isLastFile {
+					err = io.EOF
+				}
+
 				// seek next binlog and report metrics
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
 					corruptionBinlogCounter.Add(1)
