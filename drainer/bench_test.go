@@ -11,6 +11,18 @@ const (
 	binlogNum = 100000
 )
 
+func BenchmarkMergeNormal5Source(b *testing.B) {
+	merger := CreateMerger(5, binlogNum/5, "normal")
+	b.ResetTimer()
+	ReadItem(merger.Output(), binlogNum-5)
+}
+
+func BenchmarkMergeHeap5Source(b *testing.B) {
+	merger := CreateMerger(5, binlogNum/5, "heap")
+	b.ResetTimer()
+	ReadItem(merger.Output(), binlogNum-5)
+}
+
 func BenchmarkMergeNormal10Source(b *testing.B) {
 	merger := CreateMerger(10, binlogNum/10, "normal")
 	b.ResetTimer()
