@@ -8,41 +8,42 @@ import (
 )
 
 const (
-	binlogNum = 100000
+	binlogNum     = 100000
+	maxSourceSize = 100
 )
 
 func BenchmarkMergeNormal5Source(b *testing.B) {
-	merger := CreateMerger(5, binlogNum/5, "normal")
+	merger := CreateMerger(5, binlogNum/5, normalStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-5)
 }
 
 func BenchmarkMergeHeap5Source(b *testing.B) {
-	merger := CreateMerger(5, binlogNum/5, "heap")
+	merger := CreateMerger(5, binlogNum/5, heapStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-5)
 }
 
 func BenchmarkMergeNormal10Source(b *testing.B) {
-	merger := CreateMerger(10, binlogNum/10, "normal")
+	merger := CreateMerger(10, binlogNum/10, normalStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-10)
 }
 
 func BenchmarkMergeHeap10Source(b *testing.B) {
-	merger := CreateMerger(10, binlogNum/10, "heap")
+	merger := CreateMerger(10, binlogNum/10, heapStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-10)
 }
 
 func BenchmarkMergeNormal50Source(b *testing.B) {
-	merger := CreateMerger(50, binlogNum/50, "normal")
+	merger := CreateMerger(50, binlogNum/50, normalStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-50)
 }
 
 func BenchmarkMergeHeap50Source(b *testing.B) {
-	merger := CreateMerger(50, binlogNum/50, "heap")
+	merger := CreateMerger(50, binlogNum/50, heapStrategy)
 	b.ResetTimer()
 	ReadItem(merger.Output(), binlogNum-50)
 }
@@ -71,7 +72,7 @@ func CreateMerger(sourceNum int, binlogNum int, strategy string) *Merger {
 	for id := range sources {
 		for j := 1; j <= binlogNum; j++ {
 			binlog := new(pb.Binlog)
-			binlog.CommitTs = int64(j*100 + id)
+			binlog.CommitTs = int64(j*maxSourceSize + id)
 			binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
 			sources[id].Source <- binlogItem
 		}

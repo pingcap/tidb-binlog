@@ -126,8 +126,14 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		}
 
 		binlog := b.binlog
+		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+
+		if startTS == commitTS {
+			// it's fake binlog
+			continue
+		}
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()

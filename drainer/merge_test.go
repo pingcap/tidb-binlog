@@ -14,8 +14,8 @@ var _ = Suite(&testMergerSuite{})
 type testMergerSuite struct{}
 
 func (s *testMergerSuite) TestMerge(c *C) {
-	s.merge(c, "normal")
-	s.merge(c, "heap")
+	s.merge(c, normalStrategy)
+	s.merge(c, heapStrategy)
 }
 
 func (s *testMergerSuite) merge(c *C, strategy string) {

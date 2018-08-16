@@ -9,6 +9,11 @@ import (
 	"github.com/ngaut/log"
 )
 
+const (
+	normalStrategy = "normal"
+	heapStrategy   = "heap"
+)
+
 // MergeItem is the item in Merger
 type MergeItem interface {
 	GetCommitTs() int64
@@ -188,7 +193,7 @@ func (m *Merger) run() {
 		var minID string
 
 		m.RLock()
-		if m.strategy == "normal" {
+		if m.strategy == normalStrategy {
 			for sourceID, binlog := range m.binlogs {
 				if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
 					minBinlog = binlog
