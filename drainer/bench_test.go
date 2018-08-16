@@ -8,31 +8,31 @@ import (
 )
 
 const (
-	binlogNum = 10000
+	binlogNum = 100000
 )
 
 func BenchmarkMergeNormal10Source(b *testing.B) {
-	merger := CreateMerger(10, binlogNum, "normal")
+	merger := CreateMerger(10, binlogNum/10, "normal")
 	b.ResetTimer()
-	ReadItem(merger.Output(), 10*(binlogNum-1))
+	ReadItem(merger.Output(), binlogNum-10)
 }
 
 func BenchmarkMergeHeap10Source(b *testing.B) {
-	merger := CreateMerger(10, binlogNum, "heap")
+	merger := CreateMerger(10, binlogNum/10, "heap")
 	b.ResetTimer()
-	ReadItem(merger.Output(), 10*(binlogNum-1))
+	ReadItem(merger.Output(), binlogNum-10)
 }
 
 func BenchmarkMergeNormal50Source(b *testing.B) {
-	merger := CreateMerger(50, binlogNum, "normal")
+	merger := CreateMerger(50, binlogNum/50, "normal")
 	b.ResetTimer()
-	ReadItem(merger.Output(), 50*(binlogNum-1))
+	ReadItem(merger.Output(), binlogNum-50)
 }
 
 func BenchmarkMergeHeap50Source(b *testing.B) {
-	merger := CreateMerger(50, binlogNum, "heap")
+	merger := CreateMerger(50, binlogNum/50, "heap")
 	b.ResetTimer()
-	ReadItem(merger.Output(), 50*(binlogNum-1))
+	ReadItem(merger.Output(), binlogNum-50)
 }
 
 func ReadItem(itemCh chan MergeItem, total int) {
