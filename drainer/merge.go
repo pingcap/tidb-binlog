@@ -213,21 +213,18 @@ func (m *Merger) run() {
 			continue
 		}
 
-		isValideBinlog := true
-
 		if minBinlog == nil {
-			isValideBinlog = false
+			continue
 		}
 
-		if minBinlog != nil && minBinlog.GetCommitTs() <= latestTS {
+		if minBinlog.GetCommitTs() <= latestTS {
+			// TODO: add metric here
 			log.Errorf("binlog's commit ts is %d, and is greater than the last ts %d", minBinlog.GetCommitTs(), latestTS)
-			isValideBinlog = false
-		}
-
-		if isValideBinlog {
+		} else {
 			m.output <- minBinlog
 			latestTS = minBinlog.GetCommitTs()
 		}
+
 		m.Lock()
 		m.latestTS = latestTS
 		delete(m.binlogs, minID)
