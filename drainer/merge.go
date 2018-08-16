@@ -58,6 +58,7 @@ type Merger struct {
 
 	sourceChanged int32
 
+	// strategy can be "heap" or "normal"
 	strategy string
 }
 

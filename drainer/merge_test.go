@@ -14,6 +14,11 @@ var _ = Suite(&testMergerSuite{})
 type testMergerSuite struct{}
 
 func (s *testMergerSuite) TestMerge(c *C) {
+	s.merge(c, "normal")
+	s.merge(c, "heap")
+}
+
+func (s *testMergerSuite) merge(c *C, strategy string) {
 	var ts []int64
 	var outputTs []int64
 	var l sync.Mutex
@@ -29,7 +34,7 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		}
 		sources[i] = source
 	}
-	merger := NewMerger(0, "normal", sources...)
+	merger := NewMerger(0, strategy, sources...)
 
 	// get output from merger
 	go func() {
