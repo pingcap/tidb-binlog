@@ -170,17 +170,14 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 			copy(dup.Checksum, entity.Checksum)
 
 			ents = append(ents, dup)
-		} else if len(ents) == inums {
+		}
+
+		if len(ents) == inums {
 			cancel()
 		}
 
 		return nil
 	})
-
-	// may encounter err after read enough entity
-	if len(ents) == inums {
-		err = nil
-	}
 
 	return ents, err
 }
