@@ -205,8 +205,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		return bf.ErrFileNotFound
 	}
 
+	var isLastFile bool
 	for idx, name := range names[nameIndex:] {
-		var isLastFile bool
 		if idx == len(names[nameIndex:])-1 {
 			isLastFile = true
 		}
@@ -250,6 +250,9 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			err = decoder.Decode(ent, buf)
 
 			if err != nil {
+				// if this is the current file we are writing,
+				// may contain a partial write entity in the file end
+				// we treat is as io.EOF and will return nil
 				if err == io.ErrUnexpectedEOF && isLastFile {
 					err = io.EOF
 				}
