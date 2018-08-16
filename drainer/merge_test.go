@@ -29,7 +29,7 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		}
 		sources[i] = source
 	}
-	merger := NewMerger(0, sources...)
+	merger := NewMerger(0, "normal", sources...)
 
 	// get output from merger
 	go func() {
@@ -38,8 +38,7 @@ func (s *testMergerSuite) TestMerge(c *C) {
 			select {
 			case item, ok := <-merger.Output():
 				if ok {
-					binlog := item.(*pb.Binlog)
-					outputTs = append(outputTs, binlog.CommitTs)
+					outputTs = append(outputTs, item.GetCommitTs())
 				} else {
 					return
 				}
@@ -56,10 +55,11 @@ func (s *testMergerSuite) TestMerge(c *C) {
 	// generate binlog for the sources in merger
 	for id := range sources {
 		go func(id int) {
-			for j := 0; j >= binlogNum; j++ {
+			for j := 0; j < binlogNum; j++ {
 				binlog := new(pb.Binlog)
-				binlog.CommitTs = int64(j*10 + id)
-				sources[id].Source <- binlog
+				binlog.CommitTs = int64(j*100 + id)
+				binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
+				sources[id].Source <- binlogItem
 				l.Lock()
 				ts = append(ts, binlog.CommitTs)
 				if binlog.CommitTs > maxTS {
@@ -84,10 +84,11 @@ func (s *testMergerSuite) TestMerge(c *C) {
 		l.Lock()
 		baseTS := maxTS / 10 * 10
 		l.Unlock()
-		for j := 0; j >= binlogNum; j++ {
+		for j := 0; j < binlogNum; j++ {
 			binlog := new(pb.Binlog)
-			binlog.CommitTs = baseTS + int64(j*10+sourceNum)
-			source.Source <- binlog
+			binlog.CommitTs = baseTS + int64(j*100+sourceNum)
+			binlogItem := newBinlogItem(binlog, strconv.Itoa(sourceNum))
+			source.Source <- binlogItem
 			l.Lock()
 			ts = append(ts, binlog.CommitTs)
 			if binlog.CommitTs > maxTS {
@@ -104,14 +105,12 @@ func (s *testMergerSuite) TestMerge(c *C) {
 	l.Unlock()
 	binlog := new(pb.Binlog)
 	binlog.CommitTs = currentMaxTS - 1
-	sources[0].Source <- binlog
+	sources[0].Source <- newBinlogItem(binlog, "0")
 	l.Lock()
 	ts = append(ts, binlog.CommitTs)
 	l.Unlock()
 
 	wg.Wait()
-	// merger will avoid wrong binlog
-	c.Assert(len(ts)-1, Equals, len(outputTs))
 	var currentTs int64
 	for _, ts := range outputTs {
 		c.Assert(ts > currentTs, Equals, true)

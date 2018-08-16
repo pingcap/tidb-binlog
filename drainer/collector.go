@@ -86,7 +86,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		syncedCheckTime: cfg.SyncedCheckTime,
-		merger:          NewMerger(cpt.TS()),
+		merger:          NewMerger(cpt.TS(), "heap"),
 		errCh:           make(chan error, 10),
 	}
 

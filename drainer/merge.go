@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"container/heap"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,29 @@ import (
 // MergeItem is the item in Merger
 type MergeItem interface {
 	GetCommitTs() int64
+
+	GetSourceID() string
+}
+
+// MergeItems is a heap of MergeItems.
+type MergeItems []MergeItem
+
+func (m MergeItems) Len() int           { return len(m) }
+func (m MergeItems) Less(i, j int) bool { return m[i].GetCommitTs() < m[j].GetCommitTs() }
+func (m MergeItems) Swap(i, j int)      { m[i], m[j] = m[j], m[i] }
+
+// Push implements heap.Interface's Push function
+func (m *MergeItems) Push(x interface{}) {
+	*m = append(*m, x.(MergeItem))
+}
+
+// Pop implements heap.Interface's Pop function
+func (m *MergeItems) Pop() interface{} {
+	old := *m
+	n := len(old)
+	x := old[n-1]
+	*m = old[0 : n-1]
+	return x
 }
 
 // Merger do merge sort of binlog
@@ -20,6 +44,8 @@ type Merger struct {
 	sources map[string]MergeSource
 
 	binlogs map[string]MergeItem
+
+	binlogsHeap *MergeItems
 
 	output chan MergeItem
 
@@ -31,6 +57,8 @@ type Merger struct {
 	pause int32
 
 	sourceChanged int32
+
+	strategy string
 }
 
 // MergeSource contains a source info about binlog
@@ -40,12 +68,14 @@ type MergeSource struct {
 }
 
 // NewMerger creates a instance of Merger
-func NewMerger(ts int64, sources ...MergeSource) *Merger {
+func NewMerger(ts int64, strategy string, sources ...MergeSource) *Merger {
 	m := &Merger{
-		latestTS: ts,
-		sources:  make(map[string]MergeSource),
-		output:   make(chan MergeItem, 10),
-		binlogs:  make(map[string]MergeItem),
+		latestTS:    ts,
+		sources:     make(map[string]MergeSource),
+		output:      make(chan MergeItem, 10),
+		binlogs:     make(map[string]MergeItem),
+		binlogsHeap: new(MergeItems),
+		strategy:    strategy,
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -88,7 +118,9 @@ func (m *Merger) RemoveSource(sourceID string) {
 func (m *Merger) run() {
 	defer close(m.output)
 
+	heap.Init(m.binlogsHeap)
 	latestTS := m.latestTS
+
 	for {
 		m.resetSourceChanged()
 
@@ -131,6 +163,7 @@ func (m *Merger) run() {
 				binlog, ok := <-source.Source
 				if ok {
 					m.Lock()
+					heap.Push(m.binlogsHeap, binlog)
 					m.binlogs[sourceID] = binlog
 					m.Unlock()
 				} else {
@@ -154,10 +187,17 @@ func (m *Merger) run() {
 		var minID string
 
 		m.RLock()
-		for sourceID, binlog := range m.binlogs {
-			if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
-				minBinlog = binlog
-				minID = sourceID
+		if m.strategy == "normal" {
+			for sourceID, binlog := range m.binlogs {
+				if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
+					minBinlog = binlog
+					minID = sourceID
+				}
+			}
+		} else {
+			if m.binlogsHeap.Len() > 0 {
+				minBinlog = heap.Pop(m.binlogsHeap).(MergeItem)
+				minID = minBinlog.GetSourceID()
 			}
 		}
 		m.RUnlock()
