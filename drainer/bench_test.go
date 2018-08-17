@@ -49,7 +49,7 @@ func BenchmarkMergeHeap50Source(b *testing.B) {
 
 func ReadItem(itemCh chan MergeItem, total int) {
 	num := 0
-	for _ = range itemCh {
+	for range itemCh {
 		num++
 		if num > total {
 			break
@@ -68,7 +68,7 @@ func CreateMerger(sourceNum int, binlogNum int, strategy string) *Merger {
 	}
 	merger := NewMerger(0, strategy, sources...)
 
-	for id, _ := range sources {
+	for id := range sources {
 		for j := 1; j <= binlogNum/sourceNum+sourceNum; j++ {
 			binlog := new(pb.Binlog)
 			binlog.CommitTs = int64(j*maxSourceSize + id)
