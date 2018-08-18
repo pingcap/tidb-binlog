@@ -16,6 +16,8 @@ const (
 	DDL
 	// FLUSH is for wait all operation executed
 	FLUSH
+	// FAKE is for fake binlog
+	FAKE
 )
 
 var providers = make(map[string]SQLTranslator)

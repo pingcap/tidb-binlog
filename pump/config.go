@@ -7,16 +7,15 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/pkg/zk"
 )
 
 const (
@@ -24,21 +23,17 @@ const (
 	defaultEtcdURLs                = "http://127.0.0.1:2379"
 	defaultKafkaAddrs              = "127.0.0.1:9092"
 	defaultListenAddr              = "127.0.0.1:8250"
+	defaultSocket                  = "unix:///tmp/pump.sock"
 	defautMaxKafkaSize             = 1024 * 1024 * 1024
 	defaultHeartbeatInterval       = 2
 	defaultGC                      = 7
 	defaultDataDir                 = "data.pump"
-	defaultKafkaVersion            = "0.8.2.0"
 	defaultBinlogSliceSize         = 10 * 1024 * 1024
 	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
 	defaultSendKafKaRetryNum int   = 10
 
 	// default interval time to generate fake binlog, the unit is second
 	defaultGenFakeBinlogInterval = 3
-
-	kafkaWriteMode = "kafka"
-	// mixedWriteMode will write binlog to local file and then send to kafka
-	mixedWriteMode = "mixed"
 )
 
 // globalConfig is global config of pump to be used in any where
@@ -68,9 +63,6 @@ type Config struct {
 	AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
-	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
-	KafkaVersion      string `toml:"kafka-version" json:"kafka-version"`
-	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string          `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
@@ -79,7 +71,6 @@ type Config struct {
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
 	EnableTolerant    bool            `toml:"enable-tolerant" json:"enable-tolerant"`
-	WriteMode         string          `toml:"write-mode" json:"write-mode"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
 
@@ -108,9 +99,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
-	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
-	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
-	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
 	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
@@ -122,7 +110,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.EnableTolerant, "enable-tolerant", true, "after enable tolerant, pump wouldn't return error if it fails to write binlog")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
-	fs.StringVar(&cfg.WriteMode, "write-mode", mixedWriteMode, "support kafka and mixed mode")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
 
 	// global config
@@ -182,6 +169,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
+	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 	initializeSaramaGlobalConfig()
 
@@ -224,10 +212,6 @@ func (cfg *Config) validate() error {
 		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
 	}
 
-	if !util.IsValidateListenHost(host) {
-		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
-	}
-
 	// check AdvertiseAddr
 	urladv, err := url.Parse(cfg.AdvertiseAddr)
 	if err != nil {
@@ -241,6 +225,15 @@ func (cfg *Config) validate() error {
 		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
 	}
 
+	// check socketAddr
+	urlsock, err := url.Parse(cfg.Socket)
+	if err != nil {
+		return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
+	}
+	if len(strings.Split(urlsock.Path, "/")) < 2 {
+		return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
+	}
+
 	// check EtcdEndpoints
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
@@ -250,33 +243,6 @@ func (cfg *Config) validate() error {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
 		}
-	}
-
-	// check zookeeper
-	if cfg.ZkAddrs != "" {
-		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
-		defer zkClient.Close()
-		if err != nil {
-			log.Errorf("connect to zookeeper %s error %v", cfg.ZkAddrs, err)
-			return errors.Trace(err)
-		}
-
-		kafkaUrls, err := zkClient.KafkaUrls()
-		if err != nil {
-			log.Errorf("get kafka urls from zookeeper error %v", err)
-			return errors.Trace(err)
-		}
-
-		// use kafka address get from zookeeper to reset the config
-		log.Infof("get kafka addrs %v from zookeeper", kafkaUrls)
-		cfg.KafkaAddrs = kafkaUrls
-	}
-
-	switch cfg.WriteMode {
-	case kafkaWriteMode, mixedWriteMode:
-		// do nothing
-	default:
-		return errors.Errorf("unknow binlog mode %s", cfg.WriteMode)
 	}
 
 	return nil

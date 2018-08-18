@@ -3,9 +3,11 @@ package util
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/types"
 )
@@ -105,4 +107,31 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	}
 
 	return colTypeMap
+}
+
+// RetryOnError defines a action with retry when fn returns error
+func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
+	var err error
+	for i := 0; i < retryCount; i++ {
+		err = fn()
+		if err == nil {
+			break
+		}
+
+		log.Errorf("%s: %v", errStr, err)
+		time.Sleep(sleepTime)
+	}
+
+	return errors.Trace(err)
+}
+
+// QueryLatestTsFromPD returns the latest ts
+func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get current version error: %v", err)
+		return 0, errors.Trace(err)
+	}
+
+	return int64(version.Ver), nil
 }

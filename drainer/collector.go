@@ -2,13 +2,9 @@ package drainer
 
 import (
 	"fmt"
-	"math"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
-
-	"github.com/Shopify/sarama"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -16,16 +12,17 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/offsets"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+)
+
+const (
+	getDDLJobRetryTime = 10
 )
 
 type notifyResult struct {
@@ -33,29 +30,19 @@ type notifyResult struct {
 	wg  sync.WaitGroup
 }
 
-// Collector keeps all online pump infomation and publish window's lower boundary
+// Collector collects binlog from all pump, and send binlog to syncer.
 type Collector struct {
-	clusterID    uint64
-	batch        int32
-	kafkaAddrs   []string
-	kafkaVersion string
-	interval     time.Duration
-	reg          *node.EtcdRegistry
-	timeout      time.Duration
-	window       *DepositWindow
-	tiClient     *tikv.LockResolver
-	tiStore      kv.Storage
-	pumps        map[string]*Pump
-	offlines     map[string]struct{}
-	bh           *binlogHeap
-	syncer       *Syncer
-	latestTS     int64
-	cp           checkpoint.CheckPoint
+	clusterID uint64
+	interval  time.Duration
+	reg       *node.EtcdRegistry
+	tiStore   kv.Storage
+	pumps     map[string]*Pump
+	syncer    *Syncer
+	latestTS  int64
+	cp        checkpoint.CheckPoint
 
 	syncedCheckTime int
-	safeForwardTime int
 
-	offsetSeeker offsets.Seeker
 	// notifyChan notifies the new pump is comming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
@@ -63,6 +50,11 @@ type Collector struct {
 		sync.Mutex
 		status *HTTPStatus
 	}
+
+	merger *Merger
+
+	errCh chan error
+	wg    sync.WaitGroup
 }
 
 // NewCollector returns an instance of Collector
@@ -71,20 +63,7 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	kafkaAddrs, err := flags.ParseHostPortAddr(cfg.KafkaAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
-	offsetSeeker, err := createOffsetSeeker(kafkaAddrs, cfg.KafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	tiClient, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	session.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := session.NewStore(tiPath)
@@ -97,26 +76,74 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 		return nil, errors.Trace(err)
 	}
 
-	return &Collector{
+	c := &Collector{
 		clusterID:       clusterID,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
-		kafkaAddrs:      kafkaAddrs,
-		kafkaVersion:    cfg.KafkaVersion,
 		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
-		timeout:         cfg.PumpTimeout,
 		pumps:           make(map[string]*Pump),
-		offlines:        make(map[string]struct{}),
-		bh:              newBinlogHeap(maxBinlogItemCount),
-		window:          w,
 		syncer:          s,
 		cp:              cpt,
-		tiClient:        tiClient,
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
-		offsetSeeker:    offsetSeeker,
 		syncedCheckTime: cfg.SyncedCheckTime,
-		safeForwardTime: cfg.SafeForwardTime,
-	}, nil
+		merger:          NewMerger(cpt.TS(), heapStrategy),
+		errCh:           make(chan error, 10),
+	}
+
+	return c, nil
+}
+
+func (c *Collector) publishBinlogs(ctx context.Context) {
+	defer func() {
+		c.wg.Done()
+		log.Info("publishBinlogs quit")
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case mergeItem := <-c.merger.Output():
+			item := mergeItem.(*binlogItem)
+			binlog := item.binlog
+
+			if binlog.DdlJobId > 0 {
+				for {
+					var job *model.Job
+					err := util.RetryOnError(getDDLJobRetryTime, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
+						var err1 error
+						job, err1 = getDDLJob(c.tiStore, binlog.DdlJobId)
+						if err1 != nil {
+							return err1
+						}
+						return nil
+					})
+
+					if err != nil {
+						log.Errorf("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err))
+						c.reportErr(ctx, err)
+						return
+					}
+
+					if job == nil {
+						time.Sleep(time.Second)
+						continue
+					}
+
+					if job.State == model.JobStateCancelled {
+						break
+					} else {
+						item.SetJob(job)
+						c.syncer.Add(item)
+						ddlJobsCounter.Add(float64(1))
+						break
+					}
+				}
+			} else {
+				c.syncer.Add(item)
+			}
+		}
+	}
 }
 
 // Start run a loop of collecting binlog from pumps online
@@ -128,11 +155,19 @@ func (c *Collector) Start(ctx context.Context) {
 		if err := c.reg.Close(); err != nil {
 			log.Error(err.Error())
 		}
-		if err := c.tiStore.Close(); err != nil {
-			log.Error(err.Error())
-		}
+
+		c.wg.Wait()
 	}()
 
+	c.wg.Add(1)
+	go c.publishBinlogs(ctx)
+
+	// add all the pump to merger
+	c.merger.Stop()
+	c.updateStatus(ctx)
+	c.merger.Continue()
+
+	// update status when had pump notify or reach wait time
 	for {
 		select {
 		case <-ctx.Done():
@@ -142,6 +177,9 @@ func (c *Collector) Start(ctx context.Context) {
 			nr.wg.Done()
 		case <-time.After(c.interval):
 			c.updateStatus(ctx)
+		case err := <-c.errCh:
+			log.Errorf("collector meets error %v", err)
+			return
 		}
 	}
 }
@@ -150,23 +188,22 @@ func (c *Collector) Start(ctx context.Context) {
 func (c *Collector) updateCollectStatus(synced bool) {
 	status := HTTPStatus{
 		Synced:  synced,
-		PumpPos: make(map[string]binlog.Pos),
+		PumpPos: make(map[string]int64),
+		LastTS:  c.merger.GetLatestTS(),
 	}
 
 	for nodeID, pump := range c.pumps {
-		status.PumpPos[nodeID] = pump.currentPos
-		offsetGauge.WithLabelValues(nodeID).Set(posToFloat(&pump.currentPos))
+		status.PumpPos[nodeID] = pump.latestTS
+		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.latestTS))
 	}
-	status.DepositWindow.Lower = c.window.LoadLower()
-	status.DepositWindow.Upper = c.window.LoadUpper()
 
 	c.mu.Lock()
 	c.mu.status = &status
 	c.mu.Unlock()
 }
 
-// updateStatus queries pumps' status , deletes the offline pump
-// and updates pumps' latest ts
+// updateStatus queries pumps' status, pause pull binlog for paused pump,
+// continue pull binlog for online pump, and deletes offline pump.
 func (c *Collector) updateStatus(ctx context.Context) error {
 	begin := time.Now()
 	defer func() {
@@ -175,14 +212,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
-		c.updateCollectStatus(false)
 		return errors.Trace(err)
 	}
 
-	windowUpper := c.latestTS
-	windowLower := c.getLatestValidCommitTS()
-	c.publish(ctx, windowUpper, windowLower)
-	c.updateCollectStatus(windowLower == windowUpper)
 	return nil
 }
 
@@ -192,185 +224,56 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// get current binlog's commit ts which in process
-	currentCommitTS, _ := c.cp.Pos()
-	safeTS := getSafeTS(currentCommitTS, int64(c.safeForwardTime))
 	// query lastest ts from pd
-	c.latestTS = c.queryLatestTsFromPD()
+	c.latestTS, err = util.QueryLatestTsFromPD(c.tiStore)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	for _, n := range nodes {
 		// format and check the nodeID
 		n.NodeID, err = pump.FormatNodeID(n.NodeID)
 		if err != nil {
-			return errors.Trace(err)
+			log.Warnf("node id %s maybe illegal", n.NodeID)
 		}
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
-			// if pump is offline and last binlog ts <= safeTS, ignore it
+			// if pump is offline, ignore it
 			if n.State == node.Offline {
-				if n.UpdateTS <= safeTS {
-					continue
-				}
-
-				if _, exist := c.offlines[n.NodeID]; exist {
-					continue
-				}
+				continue
 			}
 
-			// initial pump
-			pos, err := c.getSavePoints(ctx, n.NodeID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			log.Infof("node %s get save point %v", n.NodeID, pos)
-			p, err := NewPump(n.NodeID, c.clusterID, c.kafkaAddrs, c.kafkaVersion, c.timeout, c.window, c.tiStore, pos)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			commitTS := c.merger.GetLatestTS()
+			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
 			c.pumps[n.NodeID] = p
-			delete(c.offlines, n.NodeID)
-			p.StartCollect(ctx, c.tiClient)
-		} else {
-			// update pumps' latestTS
-			p.UpdateLatestTS(c.latestTS)
-			if n.State == node.Offline {
-				if !p.hadFinished(c.window.LoadLower()) {
-					log.Errorf("pump %s has messages that is not consumed", p.nodeID)
-					continue
-				}
+			c.merger.AddSource(MergeSource{
+				ID:     n.NodeID,
+				Source: p.PullBinlog(ctx, commitTS),
+			})
 
-				// release invalid connection
-				p.Close()
+		} else {
+			switch n.State {
+			case node.Pausing:
+				// do nothing
+			case node.Paused:
+				p.Pause()
+			case node.Online:
+				p.Continue()
+			case node.Closing:
+				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
+			case node.Offline:
+				// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
+				// so when the pump is offline, we can remove this pump directly.
+				c.merger.RemoveSource(n.NodeID)
+				c.pumps[n.NodeID].Close()
 				delete(c.pumps, n.NodeID)
-				c.offlines[n.NodeID] = struct{}{}
-				log.Infof("node(%s) of cluster(%d)  has been removed and release the connection to it",
+				log.Infof("node(%s) of cluster(%d) has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
 			}
 		}
 	}
 	return nil
-}
-
-func (c *Collector) queryLatestTsFromPD() int64 {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		log.Errorf("get current version error: %v", err)
-		return 0
-	}
-
-	return int64(version.Ver)
-}
-
-func (c *Collector) publish(ctx context.Context, upper, lower int64) {
-	oldLower := c.window.LoadLower()
-	oldUpper := c.window.LoadUpper()
-
-	if lower > oldLower {
-		c.publishBinlogs(ctx, oldLower, lower)
-		// we should update window after publishing binlogs
-		c.window.SaveLower(lower)
-		windowGauge.WithLabelValues("lower").Set(float64(lower))
-	}
-	if upper > oldUpper {
-		c.window.SaveUpper(upper)
-		windowGauge.WithLabelValues("upper").Set(float64(upper))
-	}
-}
-
-// select min of all pumps' latestValidCommitTS
-func (c *Collector) getLatestValidCommitTS() int64 {
-	var latest int64 = math.MaxInt64
-	for _, p := range c.pumps {
-		latestCommitTS := p.GetLatestValidCommitTS()
-		if latestCommitTS < latest {
-			latest = latestCommitTS
-		}
-	}
-	if latest == math.MaxInt64 {
-		latest = 0
-	}
-
-	return latest
-}
-
-// LoadHistoryDDLJobs loads all history DDL jobs from TiDB
-func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
-	version, err := c.tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := c.tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return jobs, nil
-}
-
-// publishBinlogs collects binlogs whose commitTS are in (minTS, maxTS], then publish them in ascending commitTS order
-func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
-	begin := time.Now()
-	// multiple ways sort:
-	// 1. get multiple way sorted binlogs
-	// 2. use heap to merge sort
-	// todo: use multiple goroutines to collect sorted binlogs
-	total := 0
-	bss := make(map[string]binlogItems)
-	binlogOffsets := make(map[string]int)
-	for id, p := range c.pumps {
-		bs := p.collectBinlogs(minTS, maxTS)
-		if bs.Len() > 0 {
-			bss[id] = bs
-			binlogOffsets[id] = 1
-			// first push the first item into heap every pump
-			c.bh.push(ctx, bs[0], false)
-		}
-		total += bs.Len()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_collector").Observe(time.Since(begin).Seconds())
-
-	begin = time.Now()
-	item := c.bh.pop()
-	for item != nil {
-		c.syncer.Add(item)
-		// if binlogOffsets[item.nodeID] == len(bss[item.nodeID]), all binlogs must be pushed into heap, delete it from bss
-		if binlogOffsets[item.nodeID] == len(bss[item.nodeID]) {
-			delete(bss, item.nodeID)
-		} else {
-			// push next item into heap and increase the offset
-			c.bh.push(ctx, bss[item.nodeID][binlogOffsets[item.nodeID]], false)
-			binlogOffsets[item.nodeID] = binlogOffsets[item.nodeID] + 1
-		}
-		item = c.bh.pop()
-	}
-	publishBinlogHistogram.WithLabelValues("drainer_merge_sort").Observe(time.Since(begin).Seconds())
-
-	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
-}
-
-func (c *Collector) getSavePoints(ctx context.Context, nodeID string) (binlog.Pos, error) {
-	commitTS, poss := c.cp.Pos()
-	pos, ok := poss[nodeID]
-	if ok {
-		return pos, nil
-	}
-
-	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
-	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
-	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-	offsets, err := c.offsetSeeker.Do(ctx, topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
-	if err == nil {
-		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
-	}
-
-	log.Errorf("seek offset %s error %v", nodeID, err)
-	return binlog.Pos{Offset: sarama.OffsetOldest}, nil
 }
 
 // Notify notifies to detcet pumps
@@ -393,13 +296,23 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	c.mu.Lock()
 	status = c.mu.status
 
-	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
-	// if the gap between lower and upper is small and don't have binlog input in a minitue,
-	// we can think the all binlog is synced
-	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+	// if syncer don't have binlog input in a minitue,
+	// we can think all the binlog is synced
+	if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
+	status.LastTS = c.syncer.GetLatestCommitTS()
 
 	c.mu.Unlock()
 	return status
+}
+
+func (c *Collector) reportErr(ctx context.Context, err error) {
+	log.Errorf("reportErr receive error %s", err)
+	select {
+	case <-ctx.Done():
+		return
+	case c.errCh <- err:
+		return
+	}
 }

@@ -41,12 +41,13 @@ func (r *EtcdRegistry) Node(pctx context.Context, prefix, nodeID string) (*Statu
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	resp, err := r.client.List(ctx, r.prefixed(prefix, nodeID))
+	data, err := r.client.Get(ctx, r.prefixed(prefix, nodeID))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	status, err := nodeStatusFromEtcdNode(nodeID, resp)
-	if err != nil {
+
+	status := &Status{}
+	if err = json.Unmarshal(data, &status); err != nil {
 		return nil, errors.Annotatef(err, "Invalid nodeID(%s)", nodeID)
 	}
 	return status, nil
@@ -73,13 +74,11 @@ func (r *EtcdRegistry) UpdateNode(pctx context.Context, prefix string, status *S
 	ctx, cancel := context.WithTimeout(pctx, r.reqTimeout)
 	defer cancel()
 
-	//state, err := GetState(stateStr)
-
 	if exists, err := r.checkNodeExists(ctx, prefix, status.NodeID); err != nil {
 		return errors.Trace(err)
 	} else if !exists {
 		// not found then create a new node
-		log.Warnf("node %s dosen't exist!", status.NodeID)
+		log.Infof("node %s dosen't exist, will create one", status.NodeID)
 		return r.createNode(ctx, prefix, status)
 	} else {
 		// found it, update status infomation of the node
@@ -122,7 +121,7 @@ func nodeStatusFromEtcdNode(id string, node *etcd.Node) (*Status, error) {
 	status := &Status{}
 
 	if err := json.Unmarshal(node.Value, &status); err != nil {
-		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s)", id)
+		return nil, errors.Annotatef(err, "error unmarshal NodeStatus with nodeID(%s), node value(%s)", id, node.Value)
 	}
 
 	return status, nil

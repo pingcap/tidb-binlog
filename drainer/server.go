@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
@@ -35,19 +34,18 @@ var (
 	maxTxnTimeout     int64 = 600
 	heartbeatTTL      int64 = 60
 	nodePrefix              = "drainers"
-	heartbeatInterval       = 10 * time.Second
+	heartbeatInterval       = 1 * time.Second
 	clusterID         uint64
 	pdReconnTimes     = 30
-	maxMsgSize        = 1024 * 1024 * 1024
 )
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	ID        string
-	host      string
-	cfg       *Config
-	window    *DepositWindow
+	ID   string
+	host string
+	cfg  *Config
+
 	collector *Collector
 	tcpAddr   string
 	gs        *grpc.Server
@@ -61,7 +59,6 @@ type Server struct {
 	statusMu sync.RWMutex
 	status   *node.Status
 
-	// latestTS and latestTime is used for get approach ts
 	latestTS   int64
 	latestTime time.Time
 }
@@ -83,14 +80,13 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// get pd client and cluster ID
 	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	clusterID = pdCli.GetClusterID(ctx)
 	// update latestTS and latestTime
 	latestTS, err := util.GetTSO(pdCli)
@@ -103,6 +99,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
+	// remove this?
 	win := NewDepositWindow()
 
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
@@ -134,13 +131,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
 	}
 
-	status := node.NewStatus(ID, advURL.Host, node.Online, 0, util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
 
 	return &Server{
 		ID:        ID,
 		host:      advURL.Host,
 		cfg:       cfg,
-		window:    win,
 		collector: c,
 		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,
@@ -197,16 +193,6 @@ func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.Noti
 // DumpDDLJobs implements the gRPC interface of drainer server
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
 	return
-}
-
-func calculateForwardAShortTime(current int64) int64 {
-	physical := oracle.ExtractPhysical(uint64(current))
-	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
-	previous := oracle.ComposeTS(prevPhysical, 0)
-	if previous < 0 {
-		return 0
-	}
-	return int64(previous)
 }
 
 // StartCollect runs Collector up in a goroutine.
@@ -312,7 +298,7 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	jobs, err := s.collector.LoadHistoryDDLJobs()
+	jobs, err := loadHistoryDDLJobs(s.collector.tiStore)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -345,6 +331,7 @@ func (s *Server) Start() error {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())
@@ -399,6 +386,16 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// GetLatestTS returns the last binlog's commit ts which synced to downstream.
+func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+	ts := s.syncer.GetLatestCommitTS()
+	rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
+	return
+}
+
 // commitStatus commit the node's last status to pd when close the server.
 func (s *Server) commitStatus() {
 	// update this node
@@ -423,8 +420,11 @@ func (s *Server) commitStatus() {
 func (s *Server) updateStatus() error {
 	s.statusMu.Lock()
 	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
-	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, s.status)
+	s.status.MaxCommitTS = s.syncer.GetLatestCommitTS()
+	status := node.CloneStatus(s.status)
 	s.statusMu.Unlock()
+
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
 	if err != nil {
 		return errors.Trace(err)
 	}

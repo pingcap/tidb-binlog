@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -42,6 +43,8 @@ type Storage interface {
 
 	// delete <= ts
 	GCTS(ts int64)
+
+	MaxCommitTS() int64
 
 	// PullCommitBinlog return the chan to consume the binlog
 	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
@@ -279,23 +282,14 @@ func (a *Append) updateStatus() {
 		case <-a.close:
 			return
 		case <-updateLatest:
-			ts, err := a.queryLatestTSFromPD()
+			ts, err := pkgutil.QueryLatestTsFromPD(a.tiStore)
 			if err != nil {
-				log.Errorf("queryLatestTSFromPD err: %v", err)
+				log.Errorf("QueryLatestTSFromPD err: %v", err)
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		}
 	}
-}
-
-func (a *Append) queryLatestTSFromPD() (int64, error) {
-	version, err := a.tiStore.CurrentVersion()
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	return int64(version.Ver), nil
 }
 
 func (a *Append) resolve(startTS int64) bool {
@@ -489,6 +483,11 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	a.vlog.gcTS(ts)
+}
+
+// MaxCommitTS implement Storage.MaxCommitTS
+func (a *Append) MaxCommitTS() int64 {
+	return atomic.LoadInt64(&a.maxCommitTS)
 }
 
 // WriteBinlog implement Storage.WriteBinlog
@@ -769,6 +768,12 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 // PullCommitBinlog return commit binlog  > last
 func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	log.Debug("new PullCommitBinlog last: ", last)
+
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		<-a.close
+		cancel()
+	}()
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if last < gcTS {

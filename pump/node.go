@@ -43,6 +43,8 @@ type pumpNode struct {
 	latestTime time.Time
 }
 
+var _ node.Node = &pumpNode{}
+
 // NewPumpNode returns a pumpNode obj that initialized by server config
 func NewPumpNode(cfg *Config) (node.Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
@@ -263,6 +265,7 @@ func checkExclusive(dataDir string) error {
 
 // checkNodeID check NodeID's format is legal or not.
 func checkNodeID(nodeID string) bool {
+
 	_, port, err := net.SplitHostPort(nodeID)
 	if err != nil {
 		log.Errorf("node id %s is illegal, error %v", nodeID, err)
@@ -274,7 +277,6 @@ func checkNodeID(nodeID string) bool {
 		log.Errorf("node id %s is illegal, error %v", nodeID, err)
 		return false
 	}
-
 	return true
 }
 

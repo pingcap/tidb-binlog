@@ -86,17 +86,36 @@ type Status struct {
 	// pump client will only send to a pump which label is matched.
 	Label *Label `json:"label"`
 
+	// for pump: max commit ts in pump
+	// for drainer: drainer has consume all binlog less than or equal MaxCommitTS
+	MaxCommitTS int64 `json:"maxCommitTS"`
+
 	// UpdateTS is the last update ts of node's status.
 	UpdateTS int64 `json:"updateTS"`
 }
 
-// NewStatus returns a new status
-func NewStatus(nodeID, addr, state string, score int64, ts int64) *Status {
+// NewStatus returns a new status.
+func NewStatus(nodeID, addr, state string, score int64, maxCommitTS int64, updateTS int64) *Status {
 	return &Status{
-		NodeID:   nodeID,
-		Addr:     addr,
-		State:    state,
-		Score:    score,
-		UpdateTS: ts,
+		NodeID:      nodeID,
+		Addr:        addr,
+		State:       state,
+		Score:       score,
+		MaxCommitTS: maxCommitTS,
+		UpdateTS:    updateTS,
+	}
+}
+
+// CloneStatus returns a new status with same value.
+func CloneStatus(status *Status) *Status {
+	return &Status{
+		NodeID:      status.NodeID,
+		Addr:        status.Addr,
+		State:       status.State,
+		IsAlive:     status.IsAlive,
+		Score:       status.Score,
+		Label:       status.Label,
+		MaxCommitTS: status.MaxCommitTS,
+		UpdateTS:    status.UpdateTS,
 	}
 }

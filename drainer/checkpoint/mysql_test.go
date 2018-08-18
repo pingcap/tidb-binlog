@@ -1,13 +1,11 @@
 package checkpoint
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"testing"
 
 	. "github.com/pingcap/check"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -41,23 +39,15 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.ClusterID = 123
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
-	node := fmt.Sprintf("%s:%d", host, port)
 	sp, err := newMysql("mysql", cfg)
 	c.Assert(err, IsNil)
 
 	testTs := int64(1)
-	testPos := make(map[string]pb.Pos)
-	testPos[node] = pb.Pos{
-		Suffix: 10,
-		Offset: 10000,
-	}
-	err = sp.Save(testTs, testPos)
+	err = sp.Save(testTs)
 	c.Assert(err, IsNil)
 
-	ts, poss := sp.Pos()
+	ts := sp.TS()
 	c.Assert(ts, Equals, testTs)
-	c.Assert(poss, HasLen, 1)
-	c.Assert(poss[node], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 
 	sp1, ero := newMysql("mysql", cfg)
 	c.Assert(ero, IsNil)
@@ -65,5 +55,4 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	c.Assert(err, IsNil)
 	sp2 := sp1.(*MysqlCheckPoint)
 	c.Assert(sp2.CommitTS, Equals, ts)
-	c.Assert(sp2.Positions[node], DeepEquals, pb.Pos{Suffix: 10, Offset: 5000})
 }

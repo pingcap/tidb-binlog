@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	// remove
 	windowGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -18,14 +19,16 @@ var (
 			Help:      "DepositWindow boundary.",
 		}, []string{"marker"})
 
-	offsetGauge = prometheus.NewGaugeVec(
+	// modify
+	pumpPositionGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "offset",
-			Help:      "offset for each pump.",
+			Name:      "pump_position",
+			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 
+	// remove
 	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -35,6 +38,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 
+	// modify
 	publishBinlogHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -44,6 +48,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 
+	// remove
 	publishBinlogCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -52,6 +57,7 @@ var (
 			Help:      "Total binlog count been stored.",
 		}, []string{"nodeID"})
 
+	// keep
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -60,6 +66,7 @@ var (
 			Help:      "Total ddl jobs count been stored.",
 		})
 
+	// remove
 	tikvQueryCount = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -76,6 +83,7 @@ var (
 			Help:      "Total count of binlog that store too late.",
 		})
 
+	// keep
 	eventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -122,7 +130,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(windowGauge)
-	prometheus.MustRegister(offsetGauge)
+	prometheus.MustRegister(pumpPositionGauge)
 	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
 	prometheus.MustRegister(tikvQueryCount)

@@ -7,12 +7,19 @@ import (
 	"strings"
 
 	. "github.com/pingcap/check"
+	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
 	"golang.org/x/net/context"
 )
 
 var _ = Suite(&testNodeSuite{})
 
 type testNodeSuite struct{}
+
+type testRegistrySuite struct{}
+
+type RegisrerTestClient interface {
+	Node(context.Context, string, string) (*pkgnode.Status, error)
+}
 
 func (t *testNodeSuite) TestNode(c *C) {
 	tmpDir, err := ioutil.TempDir(os.TempDir(), "nodetest")
@@ -42,27 +49,28 @@ func (t *testNodeSuite) TestNode(c *C) {
 	testInteracWithEtcd(c, node)
 }
 
-func testCheckNodeID(c *C, node Node, exceptedID string) {
+func testCheckNodeID(c *C, node pkgnode.Node, exceptedID string) {
 	c.Assert(node.ID(), Equals, exceptedID)
 	c.Assert(node.ShortID(), Equals, exceptedID[:shortIDLen])
 }
 
-func testInteracWithEtcd(c *C, node Node) {
+func testInteracWithEtcd(c *C, node pkgnode.Node) {
 	pn := node.(*pumpNode)
-	ns := &NodeStatus{
-		NodeID:  pn.id,
-		Host:    pn.host,
+	ns := &pkgnode.Status{
+		NodeID:  pn.status.NodeID,
+		Addr:    pn.status.Addr,
+		State:   pkgnode.Online,
 		IsAlive: true,
 	}
 
 	// check register
-	err := node.Register(context.Background())
+	err := node.RefreshStatus(context.Background(), ns)
 	c.Assert(err, IsNil)
-	mustEqualStatus(c, node.(*pumpNode), pn.id, ns)
-	// check unregister
-	ctx, cancel := context.WithCancel(context.Background())
-	err = node.Unregister(ctx)
+	mustEqualStatus(c, node.(*pumpNode), pn.status.NodeID, ns)
+}
+
+func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *pkgnode.Status) {
+	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
 	c.Assert(err, IsNil)
-	// cancel context
-	cancel()
+	c.Assert(ns, DeepEquals, status)
 }

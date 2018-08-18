@@ -4,6 +4,10 @@ import (
 	. "github.com/pingcap/check"
 )
 
+var _ = Suite(&testDrainerSuite{})
+
+type testDrainerSuite struct{}
+
 func (t *testDrainerSuite) TestConfig(c *C) {
 	args := []string{
 		"-metrics-addr", "127.0.0.1:9091",

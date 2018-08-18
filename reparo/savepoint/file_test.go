@@ -41,7 +41,7 @@ func (s *testSavepointSuite) TestSavepoint(c *C) {
 	c.Assert(err, IsNil)
 	err = cp.Flush()
 	c.Assert(err, IsNil)
-	c.Assert(cp.Pos(), DeepEquals, pos)
+	c.Assert(cp.TS(), DeepEquals, pos)
 
 	newPos, err := cp.Load()
 	c.Assert(err, IsNil)
