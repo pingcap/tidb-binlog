@@ -32,6 +32,9 @@ type Pump struct {
 	isPaused int32
 
 	errCh chan error
+
+	pullCli  pb.Pump_PullBinlogsClient
+	grpcConn *grpc.ClientConn
 }
 
 // NewPump returns an instance of Pump
@@ -65,10 +68,16 @@ func (p *Pump) Pause() {
 }
 
 // Continue sets isPaused to 0, and continue pull binlog from pump. This function is reentrant.
-func (p *Pump) Continue() {
+func (p *Pump) Continue(pctx context.Context) {
 	// use CompareAndSwapInt32 to avoid redundant log
 	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) {
 		log.Infof("[pump %s] continue pull binlog", p.nodeID)
+
+		// update the grpc conn
+		err := p.createPullBinlogsClient(pctx, p.latestTS)
+		if err != nil {
+			log.Errorf("create pull binlogs client error %v", errors.Trace(err))
+		}
 	}
 }
 
@@ -86,7 +95,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	go func() {
 		log.Debugf("[pump %s] start PullBinlog", p.nodeID)
 
-		pullCli, grpcConn, err := p.createPullBinlogsClient(pctx, last)
+		err := p.createPullBinlogsClient(pctx, last)
 		if err != nil {
 			p.reportErr(pctx, err)
 			return
@@ -94,8 +103,8 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 		defer func() {
 			close(ret)
-			if grpcConn != nil {
-				grpcConn.Close()
+			if p.grpcConn != nil {
+				p.grpcConn.Close()
 			}
 			log.Debugf("[pump %s] stop PullBinlog", p.nodeID)
 		}()
@@ -113,10 +122,9 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				continue
 			}
 
-			if needReCreateConn {
+			if p.grpcConn == nil || needReCreateConn {
 				log.Info("old connection is unavaliable, create pull binlogs client again")
-				grpcConn.Close()
-				pullCli, grpcConn, err = p.createPullBinlogsClient(pctx, last)
+				err = p.createPullBinlogsClient(pctx, last)
 				if err != nil {
 					log.Errorf("[pump %s] create pull binlogs client error %v", p.nodeID, err)
 					time.Sleep(time.Second)
@@ -126,7 +134,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				needReCreateConn = false
 			}
 
-			resp, err := pullCli.Recv()
+			resp, err := p.pullCli.Recv()
 			if err != nil {
 				pLog.Print(labelReceive, func() {
 					log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
@@ -170,11 +178,17 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	return ret
 }
 
-func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) (pb.Pump_PullBinlogsClient, *grpc.ClientConn, error) {
+func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
+	if p.grpcConn != nil {
+		p.grpcConn.Close()
+	}
+
 	conn, err := grpc.Dial(p.addr, grpc.WithInsecure())
 	if err != nil {
 		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
-		return nil, nil, errors.Trace(err)
+		p.pullCli = nil
+		p.grpcConn = nil
+		return errors.Trace(err)
 	}
 
 	cli := pb.NewPumpClient(conn)
@@ -186,10 +200,16 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) (pb.Pump
 	pullCli, err := cli.PullBinlogs(ctx, in)
 	if err != nil {
 		log.Error("[pump %s] create PullBinlogs client error %v", p.nodeID, err)
-		return nil, nil, errors.Trace(err)
+		conn.Close()
+		p.pullCli = nil
+		p.grpcConn = nil
+		return errors.Trace(err)
 	}
 
-	return pullCli, conn, nil
+	p.pullCli = pullCli
+	p.grpcConn = conn
+
+	return nil
 }
 
 func (p *Pump) reportErr(ctx context.Context, err error) {

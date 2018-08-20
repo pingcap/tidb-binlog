@@ -6,7 +6,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/ast"
@@ -93,7 +92,6 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 		keys = append(keys, nil)
 	}
 
-	log.Infof("sql: %s, value: %v", sqls[0], values[0])
 	return sqls, keys, values, nil
 }
 
