@@ -294,7 +294,7 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
-	log.Debug("register success")
+	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
 
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
@@ -377,7 +377,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
-	log.Debug("start to server request")
+	log.Infof("start to server request on %s", s.tcpAddr)
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
@@ -709,7 +709,7 @@ func (s *Server) Close() {
 	log.Info("background goroutins are stopped")
 
 	s.commitStatus()
-	log.Info("has commitStatus")
+	log.Info("commit status done")
 
 	if err := s.node.Quit(); err != nil {
 		log.Errorf("close pump node error %s", errors.Trace(err))

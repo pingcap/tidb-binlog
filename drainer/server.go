@@ -289,6 +289,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Infof("register success, this drainer's node id is %s", s.ID)
 
 	// start heartbeat
 	errc := s.heartbeat(s.ctx)
@@ -338,6 +339,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
+	log.Infof("start to server request on %s", s.tcpAddr)
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
 		return errors.Trace(err)
 	}

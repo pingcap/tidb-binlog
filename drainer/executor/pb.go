@@ -2,6 +2,7 @@ package executor
 
 import (
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -53,6 +54,7 @@ func (p *pbExecutor) Close() error {
 }
 
 func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
+	log.Infof("saveBinlog %v", binlog)
 	data, err := binlog.Marshal()
 	if err != nil {
 		return errors.Trace(err)

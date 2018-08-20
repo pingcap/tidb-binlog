@@ -285,7 +285,7 @@ func FormatNodeID(nodeID string) (string, error) {
 	newNodeID := strings.TrimSpace(nodeID)
 	legal := checkNodeID(newNodeID)
 	if !legal {
-		return "", errors.Errorf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
+		return newNodeID, errors.Errorf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
 	}
 
 	return newNodeID, nil

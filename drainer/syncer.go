@@ -418,6 +418,7 @@ func (s *Syncer) addJob(job *job) {
 		s.jobWg.Wait()
 		return
 	} else if job.binlogTp == translator.FAKE {
+		log.Debugf("fake binlog, commit ts: %d", job.commitTS)
 		// do nothing
 	}
 
