@@ -33,6 +33,7 @@ import (
 )
 
 var pullBinlogInterval = 50 * time.Millisecond
+var notifyDrainerTimeout = time.Second * 10
 
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
@@ -309,11 +310,12 @@ func (s *Server) Start() error {
 	log.Debug("register success")
 
 	// notify all cisterns
-	if err := s.node.Notify(s.ctx); err != nil {
+	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
+	if err := s.node.Notify(ctx); err != nil {
 		// if fail, refresh this node's state to paused
 		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, s.storage.MaxCommitTS(), 0)
-		err = s.node.RefreshStatus(context.Background(), status)
-		if err != nil {
+		rerr := s.node.RefreshStatus(context.Background(), status)
+		if rerr != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
