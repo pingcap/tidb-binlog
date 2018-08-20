@@ -129,6 +129,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	gcTSGause.Set(float64(append.gcTS))
+
 	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -312,6 +314,7 @@ func (a *Append) resolve(startTS int64) bool {
 	}
 
 	if pbinlog.GetDdlJobId() == 0 {
+		tikvQueryCount.Add(1.0)
 		primaryKey := pbinlog.GetPrewriteKey()
 		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
 		if err != nil {
@@ -454,6 +457,7 @@ func (a *Append) Close() error {
 func (a *Append) GCTS(ts int64) {
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
+	gcTSGause.Set(float64(ts))
 	a.doGCTS(ts)
 }
 
@@ -496,14 +500,24 @@ func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 }
 
 func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
+	beginTime := time.Now()
+	request := new(request)
+
+	defer func() {
+		writeBinlogTimeHistogram.WithLabelValues("single").Observe(time.Since(beginTime).Seconds())
+		if request.err != nil {
+			errorCount.WithLabelValues("write_binlog").Add(1.0)
+		}
+	}()
+
 	payload, err := binlog.Marshal()
 	if err != nil {
-		return &request{
-			err: errors.Trace(err),
-		}
+		request.err = errors.Trace(err)
+		return request
 	}
 
-	request := new(request)
+	writeBinlogSizeHistogram.WithLabelValues("single").Observe(float64(len(payload)))
+
 	request.payload = payload
 	request.startTS = binlog.StartTs
 	request.commitTS = binlog.CommitTs
@@ -629,18 +643,25 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	go func() {
 		defer close(done)
 
+		var bufReqs []*request
+		var size int
+
 		write := func(reqs []*request) {
 			if len(reqs) == 0 {
 				return
 			}
 			log.Debugf("write requests to value log: %v", reqs)
+			beginTime := time.Now()
+			writeBinlogSizeHistogram.WithLabelValues("batch").Observe(float64(size))
 
 			err := a.vlog.write(reqs)
+			writeBinlogTimeHistogram.WithLabelValues("batch").Observe(time.Since(beginTime).Seconds())
 			if err != nil {
 				for _, req := range reqs {
 					req.err = err
 					req.wg.Done()
 				}
+				errorCount.WithLabelValues("write_binlog_batch").Add(1.0)
 				return
 			}
 
@@ -653,8 +674,6 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			}
 		}
 
-		var bufReqs []*request
-		var size int
 		for {
 			select {
 			case req, ok := <-reqs:
@@ -814,6 +833,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				if err != nil {
 					log.Error(err)
 					iter.Release()
+					errorCount.WithLabelValues("read_value").Add(1.0)
 					return
 				}
 
@@ -834,6 +854,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					} else {
 						err = a.feedPreWriteValue(binlog)
 						if err != nil {
+							errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
 							log.Error(err)
 							iter.Release()
 							return
