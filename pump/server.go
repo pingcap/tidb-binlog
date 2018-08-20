@@ -247,9 +247,20 @@ errHandle:
 
 // PullBinlogs sends binlogs in the streaming way
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
+	var err error
+	beginTime := time.Now()
+
 	log.Debug("get PullBinlogs req: ", in)
 	defer func() {
 		log.Debug("PullBinlogs req: ", in, " quit")
+		var label string
+		if err != nil {
+			label = "fail"
+		} else {
+			label = "succ"
+		}
+
+		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
 	if in.ClusterID != s.clusterID {
@@ -272,8 +283,9 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			resp := new(binlog.PullBinlogResp)
 
 			resp.Entity.Payload = data
-			err := stream.Send(resp)
+			err = stream.Send(resp)
 			if err != nil {
+				log.Warn(err)
 				return err
 			}
 			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
