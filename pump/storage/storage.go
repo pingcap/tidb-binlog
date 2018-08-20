@@ -503,18 +503,24 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 		}
 	}
 
-	request := new(request)
-	request.payload = payload
-	request.startTS = binlog.StartTs
-	request.commitTS = binlog.CommitTs
-	request.tp = binlog.Tp
-	request.wg.Add(1)
+	newRequest := new(request)
+	newRequest.payload = payload
+	newRequest.startTS = binlog.StartTs
+	newRequest.commitTS = binlog.CommitTs
+	newRequest.tp = binlog.Tp
+	newRequest.wg.Add(1)
 
-	a.writeCh <- request
+	select {
+	case <-a.close:
+		return &request{
+			err: errors.New("append's write channel is closed"),
+		}
+	case a.writeCh <- newRequest:
+	}
 
-	request.wg.Wait()
+	newRequest.wg.Wait()
 
-	return request
+	return newRequest
 }
 
 func (a *Append) writeToSorter(reqs chan *request) {

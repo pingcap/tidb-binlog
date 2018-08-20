@@ -708,6 +708,11 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
+	if err := s.storage.Close(); err != nil {
+		log.Errorf("close storage error %v", errors.ErrorStack(err))
+	}
+	log.Info("storage is closed")
+
 	s.commitStatus()
 	log.Info("commit status done")
 
@@ -716,18 +721,13 @@ func (s *Server) Close() {
 	}
 	log.Info("pump node is closed")
 
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
-
-	if err := s.storage.Close(); err != nil {
-		log.Errorf("close storage error %v", errors.ErrorStack(err))
-	}
-	log.Infof("storage is closed")
-
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
+
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
 }
