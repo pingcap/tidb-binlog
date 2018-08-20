@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -122,7 +121,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				continue
 			}
 
-			if p.grpcConn == nil || needReCreateConn {
+			if needReCreateConn {
 				log.Info("old connection is unavaliable, create pull binlogs client again")
 				err = p.createPullBinlogsClient(pctx, last)
 				if err != nil {
@@ -140,9 +139,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 					log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
 				})
 
-				if strings.Contains(err.Error(), "transport is closing") {
-					needReCreateConn = true
-				}
+				needReCreateConn = true
 
 				time.Sleep(time.Second)
 				// TODO: add metric here

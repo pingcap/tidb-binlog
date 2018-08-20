@@ -501,39 +501,33 @@ func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 
 func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 	beginTime := time.Now()
-	newRequest := new(request)
+	request := new(request)
 
 	defer func() {
 		writeBinlogTimeHistogram.WithLabelValues("single").Observe(time.Since(beginTime).Seconds())
-		if newRequest.err != nil {
+		if request.err != nil {
 			errorCount.WithLabelValues("write_binlog").Add(1.0)
 		}
 	}()
 
 	payload, err := binlog.Marshal()
 	if err != nil {
-		newRequest.err = errors.Trace(err)
-		return newRequest
+		request.err = errors.Trace(err)
+		return request
 	}
 
 	writeBinlogSizeHistogram.WithLabelValues("single").Observe(float64(len(payload)))
-	newRequest.payload = payload
-	newRequest.startTS = binlog.StartTs
-	newRequest.commitTS = binlog.CommitTs
-	newRequest.tp = binlog.Tp
-	newRequest.wg.Add(1)
+	request.payload = payload
+	request.startTS = binlog.StartTs
+	request.commitTS = binlog.CommitTs
+	request.tp = binlog.Tp
+	request.wg.Add(1)
 
-	select {
-	case <-a.close:
-		return &request{
-			err: errors.New("append's write channel is closed"),
-		}
-	case a.writeCh <- newRequest:
-	}
+	a.writeCh <- request
 
-	newRequest.wg.Wait()
+	request.wg.Wait()
 
-	return newRequest
+	return request
 }
 
 func (a *Append) writeToSorter(reqs chan *request) {

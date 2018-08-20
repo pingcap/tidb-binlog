@@ -37,6 +37,8 @@ var pullBinlogInterval = 50 * time.Millisecond
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
+var EndFlag = "end"
+
 const (
 	slowDist      = 30 * time.Millisecond
 	mib           = 1024 * 1024
@@ -414,11 +416,15 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 	return bl, nil
 }
 
-func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
+func (s *Server) writeFakeBinlog(isFlag bool) (*pb.Binlog, error) {
 	binlog, err := s.genFakeBinlog()
 	if err != nil {
 		err = errors.Annotate(err, "gennerate fake binlog err")
 		return nil, err
+	}
+
+	if isFlag {
+		binlog.PrewriteValue = []byte(EndFlag)
 	}
 
 	payload, err := binlog.Marshal()
@@ -462,7 +468,7 @@ func (s *Server) genForwardBinlog() {
 		case <-time.After(genFakeBinlogInterval):
 			// if no WriteBinlogReq, we write a fake binlog
 			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
-				_, err := s.writeFakeBinlog()
+				_, err := s.writeFakeBinlog(false)
 				if err != nil {
 					log.Error("write fake binlog err: ", err)
 				}
@@ -621,7 +627,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	// write a fake binlog
 	for {
-		fakeBinlog, err = s.writeFakeBinlog()
+		fakeBinlog, err = s.writeFakeBinlog(true)
 		if err != nil {
 			log.Error(err)
 
@@ -720,13 +726,13 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
+	s.commitStatus()
+	log.Info("commit status done")
+
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
 	log.Info("storage is closed")
-
-	s.commitStatus()
-	log.Info("commit status done")
 
 	if err := s.node.Quit(); err != nil {
 		log.Errorf("close pump node error %s", errors.Trace(err))
