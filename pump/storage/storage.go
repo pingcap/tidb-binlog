@@ -517,6 +517,7 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 	}
 
 	writeBinlogSizeHistogram.WithLabelValues("single").Observe(float64(len(payload)))
+
 	request.payload = payload
 	request.startTS = binlog.StartTs
 	request.commitTS = binlog.CommitTs

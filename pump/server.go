@@ -37,6 +37,7 @@ var pullBinlogInterval = 50 * time.Millisecond
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
+// EndFlag written in fake binlog, and give a notice to drainer to flush jobs and save binlog commit ts.
 var EndFlag = "end"
 
 const (
