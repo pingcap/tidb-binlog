@@ -714,6 +714,7 @@ func (s *Server) Close() {
 	if err := s.node.Quit(); err != nil {
 		log.Errorf("close pump node error %s", errors.Trace(err))
 	}
+	log.Info("pump node is closed")
 
 	// stop the gRPC server
 	s.gs.GracefulStop()
@@ -722,6 +723,7 @@ func (s *Server) Close() {
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
+	log.Infof("storage is closed")
 
 	// close tiStore
 	if s.pdCli != nil {

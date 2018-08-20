@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -75,8 +76,10 @@ func (p *Pump) Continue() {
 func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	// initial log
 	pLog := util.NewLog()
-	label := "receive binlog"
-	pLog.Add(label, time.Minute)
+	labelReceive := "receive binlog"
+	labelCreateConn := "create conn"
+	pLog.Add(labelReceive, 10*time.Second)
+	pLog.Add(labelCreateConn, 10*time.Second)
 
 	ret := make(chan MergeItem, binlogChanSize)
 
@@ -97,6 +100,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			log.Debugf("[pump %s] stop PullBinlog", p.nodeID)
 		}()
 
+		needReCreateConn := false
 		for {
 			if atomic.LoadInt32(&p.isClosed) == 1 {
 				return
@@ -109,11 +113,29 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				continue
 			}
 
+			if needReCreateConn {
+				log.Info("old connection is unavaliable, create pull binlogs client again")
+				grpcConn.Close()
+				pullCli, grpcConn, err = p.createPullBinlogsClient(pctx, last)
+				if err != nil {
+					log.Errorf("[pump %s] create pull binlogs client error %v", p.nodeID, err)
+					time.Sleep(time.Second)
+					continue
+				}
+
+				needReCreateConn = false
+			}
+
 			resp, err := pullCli.Recv()
 			if err != nil {
-				pLog.Print(label, func() {
+				pLog.Print(labelReceive, func() {
 					log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
 				})
+
+				if strings.Contains(err.Error(), "transport is closing") {
+					needReCreateConn = true
+				}
+
 				time.Sleep(time.Second)
 				// TODO: add metric here
 				continue
