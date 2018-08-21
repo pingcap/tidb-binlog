@@ -13,7 +13,6 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -397,6 +396,10 @@ func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeI
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
+func newFakeJob(commitTS int64) *job {
+	return &job{binlogTp: translator.FAKE, commitTS: commitTS}
+}
+
 // binlog bounadary job is used to group jobs, like a barrier
 func newBinlogBoundaryJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.DML, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
@@ -414,12 +417,16 @@ func (s *Syncer) addJob(job *job) {
 		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
+	} else if job.binlogTp == translator.FAKE {
+		// do nothing
 	}
 
-	s.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-	s.jobCh[idx] <- job
-	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
+	if job.binlogTp != translator.FAKE {
+		s.jobWg.Add(1)
+		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+		s.jobCh[idx] <- job
+		log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
+	}
 
 	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
 		s.positions[job.nodeID] = job.commitTS
@@ -596,18 +603,13 @@ func (s *Syncer) run(b *binlogItem) error {
 		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
-		preWriteValue := binlog.GetPrewriteValue()
 
 		if startTS == commitTS {
-			// it is fake binlog
-			if string(preWriteValue) == pump.EndFlag {
-				// has pump closing, need flush jobs and then save the latest commit ts.
-				job := &job{binlogTp: translator.FLUSH}
-				s.addJob(job)
-			}
-			continue
+			// generate fake binlog job
+			s.addJob(newFakeJob(commitTS))
 
 		} else if jobID == 0 {
+			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {

@@ -419,15 +419,11 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 	return bl, nil
 }
 
-func (s *Server) writeFakeBinlog(isFlag bool) (*pb.Binlog, error) {
+func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
 	binlog, err := s.genFakeBinlog()
 	if err != nil {
 		err = errors.Annotate(err, "gennerate fake binlog err")
 		return nil, err
-	}
-
-	if isFlag {
-		binlog.PrewriteValue = []byte(EndFlag)
 	}
 
 	payload, err := binlog.Marshal()
@@ -471,7 +467,7 @@ func (s *Server) genForwardBinlog() {
 		case <-time.After(genFakeBinlogInterval):
 			// if no WriteBinlogReq, we write a fake binlog
 			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
-				_, err := s.writeFakeBinlog(false)
+				_, err := s.writeFakeBinlog()
 				if err != nil {
 					log.Error("write fake binlog err: ", err)
 				}
@@ -630,7 +626,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	// write a fake binlog
 	for {
-		fakeBinlog, err = s.writeFakeBinlog(true)
+		fakeBinlog, err = s.writeFakeBinlog()
 		if err != nil {
 			log.Error(err)
 
