@@ -149,7 +149,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 }
 
 func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) (pb.Pump_PullBinlogsClient, *grpc.ClientConn, error) {
-	conn, err := grpc.Dial(p.addr, grpc.WithInsecure())
+	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
 		return nil, nil, errors.Trace(err)
