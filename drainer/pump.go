@@ -88,12 +88,6 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	go func() {
 		log.Debugf("[pump %s] start PullBinlog", p.nodeID)
 
-		err := p.createPullBinlogsClient(pctx, last)
-		if err != nil {
-			p.reportErr(pctx, err)
-			return
-		}
-
 		defer func() {
 			close(ret)
 			if p.grpcConn != nil {
@@ -115,9 +109,9 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				continue
 			}
 
-			if needReCreateConn {
+			if p.grpcConn == nil || needReCreateConn {
 				log.Info("old connection is unavaliable, create pull binlogs client again")
-				err = p.createPullBinlogsClient(pctx, last)
+				err := p.createPullBinlogsClient(pctx, last)
 				if err != nil {
 					log.Errorf("[pump %s] create pull binlogs client error %v", p.nodeID, err)
 					time.Sleep(time.Second)
