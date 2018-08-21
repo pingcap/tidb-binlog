@@ -71,12 +71,6 @@ func (p *Pump) Continue(pctx context.Context) {
 	// use CompareAndSwapInt32 to avoid redundant log
 	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) {
 		log.Infof("[pump %s] continue pull binlog", p.nodeID)
-
-		// update the grpc conn
-		err := p.createPullBinlogsClient(pctx, p.latestTS)
-		if err != nil {
-			log.Errorf("create pull binlogs client error %v", errors.Trace(err))
-		}
 	}
 }
 
