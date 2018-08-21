@@ -41,6 +41,7 @@ var (
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_size",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
+			Help:      "The binlog's size written into pump storage",
 		}, []string{"type"})
 
 	writeBinlogTimeHistogram = prometheus.NewHistogramVec(
@@ -49,6 +50,7 @@ var (
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_duration_time",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 20),
+			Help:      "The duration time of writing binlog into pump storage",
 		}, []string{"type"})
 )
 
