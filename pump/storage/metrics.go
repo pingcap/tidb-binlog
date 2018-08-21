@@ -40,6 +40,7 @@ var (
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_size",
+			Help:      "write binlog size",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
 			Help:      "The binlog's size written into pump storage",
 		}, []string{"type"})
@@ -49,6 +50,7 @@ var (
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_duration_time",
+			Help:      "Bucketed histogram of write time (s) of  binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 20),
 			Help:      "The duration time of writing binlog into pump storage",
 		}, []string{"type"})

@@ -183,6 +183,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // Notify implements the gRPC interface of drainer server
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	log.Debug("recv Notify")
+
 	err := s.collector.Notify()
 	if err != nil {
 		log.Errorf("grpc call notify error: %v", err)

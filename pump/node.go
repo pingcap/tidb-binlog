@@ -137,6 +137,7 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 
 	for _, c := range drainers {
 		if c.State == node.Online {
+			log.Info("start try to notify drainer: ", c.Addr)
 			clientConn, err := grpc.Dial(c.Addr, dialerOpt, grpc.WithInsecure())
 			if err != nil {
 				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
