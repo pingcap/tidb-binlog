@@ -38,9 +38,6 @@ var notifyDrainerTimeout = time.Second * 10
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
-// EndFlag written in fake binlog, and give a notice to drainer to flush jobs and save binlog commit ts.
-var EndFlag = "end"
-
 const (
 	slowDist      = 30 * time.Millisecond
 	mib           = 1024 * 1024
