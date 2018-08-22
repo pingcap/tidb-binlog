@@ -169,7 +169,9 @@ func (m *Merger) run() {
 				binlog, ok := <-source.Source
 				if ok {
 					m.Lock()
-					heap.Push(m.binlogsHeap, binlog)
+					if m.strategy == heapStrategy {
+						heap.Push(m.binlogsHeap, binlog)
+					}
 					m.binlogs[sourceID] = binlog
 					m.Unlock()
 				} else {
