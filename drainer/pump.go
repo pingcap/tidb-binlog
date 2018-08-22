@@ -38,13 +38,8 @@ type Pump struct {
 
 // NewPump returns an instance of Pump
 func NewPump(nodeID, addr string, clusterID uint64, startTs int64, errCh chan error) *Pump {
-	nodeID, err := pump.FormatNodeID(nodeID)
-	if err != nil {
-		log.Warnf("[pump %s] node id maybe illegal", nodeID)
-	}
-
 	return &Pump{
-		nodeID:    nodeID,
+		nodeID:    pump.FormatNodeID(nodeID),
 		addr:      addr,
 		clusterID: clusterID,
 		latestTS:  startTs,

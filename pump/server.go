@@ -725,6 +725,10 @@ func (s *Server) Close() {
 	s.commitStatus()
 	log.Info("commit status done")
 
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
+
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
@@ -740,8 +744,4 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
-
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
 }

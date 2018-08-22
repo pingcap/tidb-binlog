@@ -209,10 +209,7 @@ func readLocalNodeID(dataDir string) (string, error) {
 		return "", errors.Annotate(err, "local nodeID file is collapsed")
 	}
 
-	nodeID, err := FormatNodeID(string(data))
-	if err != nil {
-		return "", errors.Trace(err)
-	}
+	nodeID := FormatNodeID(string(data))
 
 	return nodeID, nil
 }
@@ -238,10 +235,7 @@ func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	}
 
 	id := fmt.Sprintf("%s:%s", hostname, port)
-	nodeID, err := FormatNodeID(id)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
+	nodeID := FormatNodeID(id)
 
 	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
 	if err := ioutil.WriteFile(nodeIDPath, []byte(nodeID), file.PrivateFileMode); err != nil {
@@ -266,28 +260,25 @@ func checkExclusive(dataDir string) error {
 
 // checkNodeID check NodeID's format is legal or not.
 func checkNodeID(nodeID string) bool {
-
 	_, port, err := net.SplitHostPort(nodeID)
 	if err != nil {
-		log.Errorf("node id %s is illegal, error %v", nodeID, err)
 		return false
 	}
 
 	_, err = strconv.Atoi(port)
 	if err != nil {
-		log.Errorf("node id %s is illegal, error %v", nodeID, err)
 		return false
 	}
 	return true
 }
 
-// FormatNodeID formats the nodeID
-func FormatNodeID(nodeID string) (string, error) {
+// FormatNodeID formats the nodeID, the nodeID should looks like "host:port"
+func FormatNodeID(nodeID string) string {
 	newNodeID := strings.TrimSpace(nodeID)
 	legal := checkNodeID(newNodeID)
 	if !legal {
-		return newNodeID, errors.Errorf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
+		log.Warnf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
 	}
 
-	return newNodeID, nil
+	return newNodeID
 }
