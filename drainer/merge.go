@@ -46,19 +46,20 @@ func (m *MergeItems) Pop() interface{} {
 type MergeStrategy interface {
 	Push(MergeItem)
 	Pop() MergeItem
-	GetLastItemSourceID() string
+	Exist(string) bool
 }
 
 // HeapStrategy is a strategy to get min item using heap
 type HeapStrategy struct {
-	items            *MergeItems
-	lastItemSourceID string
+	items     *MergeItems
+	sourceIDs map[string]interface{}
 }
 
 // NewHeapStrategy returns a new HeapStrategy
 func NewHeapStrategy() *HeapStrategy {
 	h := &HeapStrategy{
-		items: new(MergeItems),
+		items:     new(MergeItems),
+		sourceIDs: make(map[string]interface{}),
 	}
 	heap.Init(h.items)
 	return h
@@ -66,7 +67,12 @@ func NewHeapStrategy() *HeapStrategy {
 
 // Push implements MergeStrategy's Push function
 func (h *HeapStrategy) Push(item MergeItem) {
+	if _, ok := h.sourceIDs[item.GetSourceID()]; ok {
+		log.Errorf("should not push sourceID %s's item", item.GetSourceID())
+	}
+
 	heap.Push(h.items, item)
+	h.sourceIDs[item.GetSourceID()] = struct{}{}
 }
 
 // Pop implements MergeStrategy's Pop function
@@ -77,19 +83,19 @@ func (h *HeapStrategy) Pop() MergeItem {
 	}
 
 	item := heap.Pop(h.items).(MergeItem)
-	h.lastItemSourceID = item.GetSourceID()
+	delete(h.sourceIDs, item.GetSourceID())
 	return item
 }
 
-// GetLastItemSourceID implements MergeStrategy's GetLastItemSourceID function
-func (h *HeapStrategy) GetLastItemSourceID() string {
-	return h.lastItemSourceID
+// Exist implements MergeStrategy's Exist function
+func (h *HeapStrategy) Exist(sourceID string) bool {
+	_, ok := h.sourceIDs[sourceID]
+	return ok
 }
 
 // NormalStrategy is a strategy to get min item using normal way
 type NormalStrategy struct {
-	items            map[string]MergeItem
-	lastItemSourceID string
+	items map[string]MergeItem
 }
 
 // NewNormalStrategy returns a new NormalStrategy
@@ -120,14 +126,14 @@ func (n *NormalStrategy) Pop() MergeItem {
 		return nil
 	}
 
-	n.lastItemSourceID = minItem.GetSourceID()
 	delete(n.items, minItem.GetSourceID())
 	return minItem
 }
 
-// GetLastItemSourceID implements MergeStrategy's GetLastItemSourceID function
-func (n *NormalStrategy) GetLastItemSourceID() string {
-	return n.lastItemSourceID
+// Exist implements MergeStrategy's Exist function
+func (n *NormalStrategy) Exist(sourceID string) bool {
+	_, ok := n.items[sourceID]
+	return ok
 }
 
 // Merger do merge sort of binlog
@@ -217,7 +223,7 @@ func (m *Merger) run() {
 	defer close(m.output)
 
 	latestTS := m.latestTS
-	var lastItemSourceID string
+
 	for {
 		m.resetSourceChanged()
 
@@ -245,7 +251,7 @@ func (m *Merger) run() {
 		}
 
 		for sourceID, source := range sources {
-			if lastItemSourceID != "" && lastItemSourceID != sourceID {
+			if m.strategy.Exist(sourceID) {
 				continue
 			}
 
@@ -285,10 +291,12 @@ func (m *Merger) run() {
 			continue
 		}
 
-		lastItemSourceID = minBinlog.GetSourceID()
-
 		// may add new source, or remove source, need choose a new min binlog
 		if m.isSourceChanged() {
+			// push the min binlog back
+			m.Lock()
+			m.strategy.Push(minBinlog)
+			m.Unlock()
 			continue
 		}
 
