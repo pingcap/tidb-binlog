@@ -17,52 +17,40 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
 // InsertExec represents an insert executor.
 type InsertExec struct {
 	*InsertValues
-
-	batchInsertRowCount uint64
-	OnDuplicate         []*expression.Assignment
-
-	Priority mysql.PriorityEnum
-
-	finished bool
+	OnDuplicate []*expression.Assignment
+	Priority    mysql.PriorityEnum
+	finished    bool
 }
 
-func (e *InsertExec) insertOneRow(row types.DatumRow) (int64, error) {
-	if err := e.checkBatchLimit(); err != nil {
-		return 0, errors.Trace(err)
-	}
+func (e *InsertExec) insertOneRow(row []types.Datum) (int64, error) {
 	e.ctx.Txn().SetOption(kv.PresumeKeyNotExists, nil)
 	h, err := e.Table.AddRecord(e.ctx, row, false)
 	e.ctx.Txn().DelOption(kv.PresumeKeyNotExists)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if !e.ctx.GetSessionVars().ImportingData {
-		e.ctx.StmtAddDirtyTableOP(DirtyTableAddRow, e.Table.Meta().ID, h, row)
-	}
-	e.batchInsertRowCount++
 	return h, nil
 }
 
-func (e *InsertExec) exec(rows []types.DatumRow) error {
+func (e *InsertExec) exec(rows [][]types.Datum) error {
 	// If tidb_batch_insert is ON and not in a transaction, we could use BatchInsert mode.
 	sessVars := e.ctx.GetSessionVars()
 	defer sessVars.CleanBuffers()
 	ignoreErr := sessVars.StmtCtx.DupKeyAsWarning
 
-	if !sessVars.ImportingData {
+	if !sessVars.LightningMode {
 		sessVars.GetWriteStmtBufs().BufStore = kv.NewBufferStore(e.ctx.Txn(), kv.TempTxnMemBufCap)
 	}
 
@@ -97,27 +85,8 @@ func (e *InsertExec) exec(rows []types.DatumRow) error {
 	return nil
 }
 
-// checkBatchLimit check the batchSize limitation.
-func (e *InsertExec) checkBatchLimit() error {
-	sessVars := e.ctx.GetSessionVars()
-	batchInsert := sessVars.BatchInsert && !sessVars.InTxn()
-	batchSize := sessVars.DMLBatchSize
-	if batchInsert && e.batchInsertRowCount >= uint64(batchSize) {
-		e.ctx.StmtCommit()
-		if err := e.ctx.NewTxn(); err != nil {
-			// We should return a special error for batch insert.
-			return ErrBatchInsertFail.Gen("BatchInsert failed with error: %v", err)
-		}
-		e.batchInsertRowCount = 0
-		if !sessVars.ImportingData {
-			sessVars.GetWriteStmtBufs().BufStore = kv.NewBufferStore(e.ctx.Txn(), kv.TempTxnMemBufCap)
-		}
-	}
-	return nil
-}
-
 // batchUpdateDupRows updates multi-rows in batch if they are duplicate with rows in table.
-func (e *InsertExec) batchUpdateDupRows(newRows []types.DatumRow) error {
+func (e *InsertExec) batchUpdateDupRows(newRows [][]types.Datum) error {
 	err := e.batchGetInsertKeys(e.ctx, e.Table, newRows)
 	if err != nil {
 		return errors.Trace(err)
@@ -191,7 +160,7 @@ func (e *InsertExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 
 // Close implements the Executor Close interface.
 func (e *InsertExec) Close() error {
-	e.ctx.GetSessionVars().CurrInsertValues = nil
+	e.ctx.GetSessionVars().CurrInsertValues = chunk.Row{}
 	if e.SelectExec != nil {
 		return e.SelectExec.Close()
 	}
@@ -207,30 +176,12 @@ func (e *InsertExec) Open(ctx context.Context) error {
 }
 
 // updateDupRow updates a duplicate row to a new row.
-func (e *InsertExec) updateDupRow(row toBeCheckedRow, handle int64, onDuplicate []*expression.Assignment) (err error) {
-	// Get the table record row from storage for update.
-	oldValue, ok := e.dupOldRowValues[string(e.Table.RecordKey(handle))]
-	if !ok {
-		return errors.NotFoundf("can not be duplicated row, due to old row not found. handle %d", handle)
-	}
-	cols := e.Table.WritableCols()
-	oldRow, oldRowMap, err := tables.DecodeRawRowData(e.ctx, e.Table.Meta(), handle, cols, oldValue)
+func (e *InsertExec) updateDupRow(row toBeCheckedRow, handle int64, onDuplicate []*expression.Assignment) error {
+	oldRow, err := e.getOldRow(e.ctx, e.Table, handle)
 	if err != nil {
+		log.Errorf("[insert on dup] handle is %d for the to-be-inserted row %s", handle, types.DatumsToStrNoErr(row.row))
 		return errors.Trace(err)
 	}
-	// Fill write-only and write-reorg columns with originDefaultValue if not found in oldValue.
-	for _, col := range cols {
-		if col.State != model.StatePublic && oldRow[col.Offset].IsNull() {
-			_, found := oldRowMap[col.ID]
-			if !found {
-				oldRow[col.Offset], err = table.GetColOriginDefaultValue(e.ctx, col.ToInfo())
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-	}
-
 	// Do update row.
 	updatedRow, handleChanged, newHandle, err := e.doDupRowUpdate(handle, oldRow, row.row, onDuplicate)
 	if e.ctx.GetSessionVars().StmtCtx.DupKeyAsWarning && kv.ErrKeyExists.Equal(err) {
@@ -245,22 +196,22 @@ func (e *InsertExec) updateDupRow(row toBeCheckedRow, handle int64, onDuplicate 
 
 // doDupRowUpdate updates the duplicate row.
 // TODO: Report rows affected.
-func (e *InsertExec) doDupRowUpdate(handle int64, oldRow types.DatumRow, newRow types.DatumRow,
-	cols []*expression.Assignment) (types.DatumRow, bool, int64, error) {
+func (e *InsertExec) doDupRowUpdate(handle int64, oldRow []types.Datum, newRow []types.Datum,
+	cols []*expression.Assignment) ([]types.Datum, bool, int64, error) {
 	assignFlag := make([]bool, len(e.Table.WritableCols()))
 	// See http://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
-	e.ctx.GetSessionVars().CurrInsertValues = types.DatumRow(newRow)
+	e.ctx.GetSessionVars().CurrInsertValues = chunk.MutRowFromDatums(newRow).ToRow()
 
 	// NOTE: In order to execute the expression inside the column assignment,
 	// we have to put the value of "oldRow" before "newRow" in "row4Update" to
 	// be consistent with "Schema4OnDuplicate" in the "Insert" PhysicalPlan.
-	row4Update := make(types.DatumRow, 0, len(oldRow)+len(newRow))
+	row4Update := make([]types.Datum, 0, len(oldRow)+len(newRow))
 	row4Update = append(row4Update, oldRow...)
 	row4Update = append(row4Update, newRow...)
 
 	// Update old row when the key is duplicated.
 	for _, col := range cols {
-		val, err1 := col.Expr.Eval(row4Update)
+		val, err1 := col.Expr.Eval(chunk.MutRowFromDatums(row4Update).ToRow())
 		if err1 != nil {
 			return nil, false, 0, errors.Trace(err1)
 		}
@@ -273,10 +224,6 @@ func (e *InsertExec) doDupRowUpdate(handle int64, oldRow types.DatumRow, newRow 
 	if err != nil {
 		return nil, false, 0, errors.Trace(err)
 	}
-	e.batchInsertRowCount++
-	if err := e.checkBatchLimit(); err != nil {
-		return nil, false, 0, errors.Trace(err)
-	}
 	if lastInsertID != 0 {
 		e.lastInsertID = lastInsertID
 	}
@@ -285,9 +232,9 @@ func (e *InsertExec) doDupRowUpdate(handle int64, oldRow types.DatumRow, newRow 
 
 // updateDupKeyValues updates the dupKeyValues for further duplicate key check.
 func (e *InsertExec) updateDupKeyValues(row toBeCheckedRow, oldHandle int64,
-	newHandle int64, handleChanged bool, updatedRow types.DatumRow) error {
+	newHandle int64, handleChanged bool, updatedRow []types.Datum) error {
 	// There is only one row per update.
-	fillBackKeysInRows, err := e.getKeysNeedCheck(e.ctx, e.Table, []types.DatumRow{updatedRow})
+	fillBackKeysInRows, err := e.getKeysNeedCheck(e.ctx, e.Table, [][]types.Datum{updatedRow})
 	if err != nil {
 		return errors.Trace(err)
 	}

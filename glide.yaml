@@ -147,7 +147,7 @@ import:
 - package: github.com/pingcap/pd
   version: 722081d662b31a334c0a24b7955c1ac4424609bc
 - package: github.com/pingcap/tidb
-  version: cc722546ef306e789f65a674673582d906d6f586
+  version: ef6590e1899a35515cf6a99353baf3d4d99db543
   subpackages:
   - ast
   - context

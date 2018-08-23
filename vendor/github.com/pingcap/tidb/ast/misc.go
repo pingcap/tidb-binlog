@@ -339,6 +339,7 @@ const (
 	FlushNone FlushStmtType = iota
 	FlushTables
 	FlushPrivileges
+	FlushStatus
 )
 
 // FlushStmt is a statement to flush tables/privileges/optimizer costs and so on.
@@ -630,10 +631,11 @@ type HandleRange struct {
 type AdminStmt struct {
 	stmtNode
 
-	Tp     AdminStmtType
-	Index  string
-	Tables []*TableName
-	JobIDs []int64
+	Tp        AdminStmtType
+	Index     string
+	Tables    []*TableName
+	JobIDs    []int64
+	JobNumber int64
 
 	HandleRanges []HandleRange
 }

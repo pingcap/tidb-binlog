@@ -52,6 +52,7 @@ type Domain struct {
 	statsHandle     unsafe.Pointer
 	statsLease      time.Duration
 	ddl             ddl.DDL
+	info            *InfoSyncer
 	m               sync.Mutex
 	SchemaValidator SchemaValidator
 	sysSessionPool  *pools.ResourcePool
@@ -251,6 +252,11 @@ func (do *Domain) DDL() ddl.DDL {
 	return do.ddl
 }
 
+// InfoSyncer gets infoSyncer from domain.
+func (do *Domain) InfoSyncer() *InfoSyncer {
+	return do.info
+}
+
 // Store gets KV store from domain.
 func (do *Domain) Store() kv.Storage {
 	return do.store
@@ -359,6 +365,9 @@ func (do *Domain) loadSchemaInLoop(lease time.Duration) {
 				break
 			}
 			do.SchemaValidator.Restart()
+		case <-do.info.Done():
+			log.Info("[ddl] reload schema in loop, server info syncer need restart")
+			do.info.Restart(context.Background())
 		case <-do.exit:
 			return
 		}
@@ -391,6 +400,9 @@ func (do *Domain) mustRestartSyncer() error {
 func (do *Domain) Close() {
 	if do.ddl != nil {
 		terror.Log(errors.Trace(do.ddl.Stop()))
+	}
+	if do.info != nil {
+		do.info.RemoveServerInfo()
 	}
 	close(do.exit)
 	if do.etcdClient != nil {
@@ -497,6 +509,11 @@ func (do *Domain) Init(ddlLease time.Duration, sysFactory func(*Domain) (pools.R
 	do.ddl = ddl.NewDDL(ctx, do.etcdClient, do.store, do.infoHandle, callback, ddlLease, sysCtxPool)
 
 	err := do.ddl.SchemaSyncer().Init(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	do.info = NewInfoSyncer(do.ddl.GetID(), do.etcdClient)
+	err = do.info.Init(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -623,7 +640,7 @@ func (do *Domain) newStatsOwner() owner.Manager {
 	// TODO: Need to do something when err is not nil.
 	err := statsOwner.CampaignOwner(cancelCtx)
 	if err != nil {
-		log.Warnf("[stats] campaign owner fail:", errors.ErrorStack(err))
+		log.Warnf("[stats] campaign owner fail: %s", errors.ErrorStack(err))
 	}
 	return statsOwner
 }
@@ -681,6 +698,7 @@ func (do *Domain) updateStatsWorker(ctx sessionctx.Context, owner owner.Manager)
 				log.Debug("[stats] load histograms fail: ", errors.ErrorStack(err))
 			}
 		case <-loadFeedbackTicker.C:
+			statsHandle.UpdateStatsByLocalFeedback(do.InfoSchema())
 			if !owner.IsOwner() {
 				continue
 			}
