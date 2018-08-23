@@ -43,63 +43,88 @@ func (m *MergeItems) Pop() interface{} {
 }
 
 type MergeStrategy interface {
-	Push(*MergeItem)
-	Pop() *MergeItem
+	Push(MergeItem)
+	Pop() MergeItem
 	GetLastItemSourceID() string
 }
 
+// HeapStrategy is a strategy to get min item using heap
 type HeapStrategy struct {
-	items *MergeItems
+	items            *MergeItems
 	lastItemSourceID string
 }
 
 // NewHeapStrategy returns a new HeapStrategy
 func NewHeapStrategy() *HeapStrategy {
-	h := &HeapStrategy {}
+	h := &HeapStrategy{
+		items: new(MergeItems),
+	}
 	heap.Init(h.items)
 	return h
 }
 
-// Push implements MergeStrategt.Push 
+// Push implements MergeStrategy's Push function
 func (h *HeapStrategy) Push(item MergeItem) {
 	heap.Push(h.items, item)
 }
 
+// Pop implements MergeStrategy's Pop function
 func (h *HeapStrategy) Pop() MergeItem {
-	item = heap.Pop(m.binlogsHeap).(MergeItem)
-	lastItemSourceID ＝ item.GetSourceID()
+	if h.items.Len() == 0 {
+		log.Error("no item exist")
+		return nil
+	}
+
+	item := heap.Pop(h.items).(MergeItem)
+	h.lastItemSourceID = item.GetSourceID()
+	return item
 }
 
+// GetLastItemSourceID implements MergeStrategy's GetLastItemSourceID function
+func (h *HeapStrategy) GetLastItemSourceID() string {
+	return h.lastItemSourceID
+}
+
+// NormalStrategy is a strategy to get min item using normal way
 type NormalStrategy struct {
-	items map[string]MergeItem
+	items            map[string]MergeItem
 	lastItemSourceID string
 }
 
+// NewNormalStrategy returns a new NormalStrategy
 func NewNormalStrategy() *NormalStrategy {
-	return *NormalStrategy {
-		items:  make(map[string]MergeItem)
+	return &NormalStrategy{
+		items: make(map[string]MergeItem),
 	}
 }
 
+// Push implements MergeStrategy's Push function
 func (n *NormalStrategy) Push(item MergeItem) {
-	if _, ok := m.items[item.GetSourceID]; ok {
-		log.Errorf("")
+	if _, ok := n.items[item.GetSourceID()]; ok {
+		log.Errorf("should not push sourceID %s's item", item.GetSourceID())
 	}
-	m.items[item.GetSourceID()] = item
+	n.items[item.GetSourceID()] = item
 }
 
+// Pop implements MergeStrategy's Pop function
 func (n *NormalStrategy) Pop() MergeItem {
 	var minItem MergeItem
-	for _, item := range m.items {
+	for _, item := range n.items {
 		if minItem == nil || item.GetCommitTs() < minItem.GetCommitTs() {
 			minItem = item
 		}
 	}
+	if minItem == nil {
+		log.Error("no item exist")
+		return nil
+	}
+
 	n.lastItemSourceID = minItem.GetSourceID()
 	delete(n.items, minItem.GetSourceID())
 	return minItem
 }
 
+// GetLastItemSourceID implements MergeStrategy's GetLastItemSourceID function
 func (n *NormalStrategy) GetLastItemSourceID() string {
 	return n.lastItemSourceID
 }
@@ -110,9 +135,7 @@ type Merger struct {
 
 	sources map[string]MergeSource
 
-	binlogs map[string]MergeItem
-
-	binlogsHeap *MergeItems
+	strategy MergeStrategy
 
 	output chan MergeItem
 
@@ -124,9 +147,6 @@ type Merger struct {
 	pause int32
 
 	sourceChanged int32
-
-	// strategy can be "heap" or "normal"
-	strategy string
 }
 
 // MergeSource contains a source info about binlog
@@ -137,13 +157,22 @@ type MergeSource struct {
 
 // NewMerger creates a instance of Merger
 func NewMerger(ts int64, strategy string, sources ...MergeSource) *Merger {
+	var mergeStrategy MergeStrategy
+	switch strategy {
+	case heapStrategy:
+		mergeStrategy = NewHeapStrategy()
+	case normalStrategy:
+		mergeStrategy = NewNormalStrategy()
+	default:
+		log.Errorf("unsupport strategy %s, use heap instead", strategy)
+		mergeStrategy = NewHeapStrategy()
+	}
+
 	m := &Merger{
-		latestTS:    ts,
-		sources:     make(map[string]MergeSource),
-		output:      make(chan MergeItem, 10),
-		binlogs:     make(map[string]MergeItem),
-		binlogsHeap: new(MergeItems),
-		strategy:    strategy,
+		latestTS: ts,
+		sources:  make(map[string]MergeSource),
+		output:   make(chan MergeItem, 10),
+		strategy: mergeStrategy,
 	}
 
 	for i := 0; i < len(sources); i++ {
@@ -186,7 +215,6 @@ func (m *Merger) RemoveSource(sourceID string) {
 func (m *Merger) run() {
 	defer close(m.output)
 
-	heap.Init(m.binlogsHeap)
 	latestTS := m.latestTS
 
 	for {
@@ -217,10 +245,10 @@ func (m *Merger) run() {
 
 		for sourceID, source := range sources {
 			m.RLock()
-			_, ok := m.binlogs[sourceID]
+			lastItemSourceID := m.strategy.GetLastItemSourceID()
 			m.RUnlock()
 
-			if ok {
+			if lastItemSourceID != "" && lastItemSourceID != sourceID {
 				continue
 			}
 
@@ -231,10 +259,7 @@ func (m *Merger) run() {
 				binlog, ok := <-source.Source
 				if ok {
 					m.Lock()
-					if m.strategy == heapStrategy {
-						heap.Push(m.binlogsHeap, binlog)
-					}
-					m.binlogs[sourceID] = binlog
+					m.strategy.Push(binlog)
 					m.Unlock()
 				} else {
 					// the source is closing.
@@ -254,22 +279,9 @@ func (m *Merger) run() {
 		}
 
 		var minBinlog MergeItem
-		var minID string
 
 		m.RLock()
-		if m.strategy == normalStrategy {
-			for sourceID, binlog := range m.binlogs {
-				if minBinlog == nil || binlog.GetCommitTs() < minBinlog.GetCommitTs() {
-					minBinlog = binlog
-					minID = sourceID
-				}
-			}
-		} else {
-			if m.binlogsHeap.Len() > 0 {
-				minBinlog = heap.Pop(m.binlogsHeap).(MergeItem)
-				minID = minBinlog.GetSourceID()
-			}
-		}
+		minBinlog = m.strategy.Pop()
 		m.RUnlock()
 
 		// may add new source, or remove source, need choose a new min binlog
@@ -291,7 +303,6 @@ func (m *Merger) run() {
 
 		m.Lock()
 		m.latestTS = latestTS
-		delete(m.binlogs, minID)
 		m.Unlock()
 	}
 }
