@@ -385,7 +385,7 @@ func (s *Server) Start() error {
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.Status).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
-	router.HandleFunc("/drainers", s.AllDrainers).Methods("PUT")
+	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	http.Handle("/", router)
 	http.Handle("/metrics", prometheus.Handler())
 
@@ -516,7 +516,7 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
+	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "drainers")
 	if err != nil {
 		log.Errorf("get pumps error %v", err)
 	}
