@@ -390,15 +390,21 @@ func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
 func (c *Collector) HTTPStatus() *HTTPStatus {
 	var status *HTTPStatus
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	status = c.mu.status
 
-	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
-	// if the gap between lower and upper is small and don't have binlog input in a minitue,
-	// we can think the all binlog is synced
-	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
-		status.Synced = true
+	if status != nil {
+		interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
+		// if the gap between lower and upper is small and don't have binlog input in a minitue,
+		// we can think the all binlog is synced
+		if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+			status.Synced = true
+		}
+
+		return status
 	}
 
-	c.mu.Unlock()
-	return status
+	return &HTTPStatus{
+		Synced: false,
+	}
 }
