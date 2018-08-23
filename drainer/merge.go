@@ -60,6 +60,7 @@ func NewHeapStrategy() *HeapStrategy {
 	return h
 }
 
+// Push implements MergeStrategt.Push 
 func (h *HeapStrategy) Push(item MergeItem) {
 	heap.Push(h.items, item)
 }
