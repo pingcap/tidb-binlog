@@ -42,6 +42,67 @@ func (m *MergeItems) Pop() interface{} {
 	return x
 }
 
+type MergeStrategy interface {
+	Push(*MergeItem)
+	Pop() *MergeItem
+	GetLastItemSourceID() string
+}
+
+type HeapStrategy struct {
+	items *MergeItems
+	lastItemSourceID string
+}
+
+// NewHeapStrategy returns a new HeapStrategy
+func NewHeapStrategy() *HeapStrategy {
+	h := &HeapStrategy {}
+	heap.Init(h.items)
+	return h
+}
+
+func (h *HeapStrategy) Push(item MergeItem) {
+	heap.Push(h.items, item)
+}
+
+func (h *HeapStrategy) Pop() MergeItem {
+	item = heap.Pop(m.binlogsHeap).(MergeItem)
+	lastItemSourceID ＝ item.GetSourceID()
+}
+
+type NormalStrategy struct {
+	items map[string]MergeItem
+	lastItemSourceID string
+}
+
+func NewNormalStrategy() *NormalStrategy {
+	return *NormalStrategy {
+		items:  make(map[string]MergeItem)
+	}
+}
+
+func (n *NormalStrategy) Push(item MergeItem) {
+	if _, ok := m.items[item.GetSourceID]; ok {
+		log.Errorf("")
+	}
+	m.items[item.GetSourceID()] = item
+}
+
+func (n *NormalStrategy) Pop() MergeItem {
+	var minItem MergeItem
+	for _, item := range m.items {
+		if minItem == nil || item.GetCommitTs() < minItem.GetCommitTs() {
+			minItem = item
+		}
+	}
+	n.lastItemSourceID = minItem.GetSourceID()
+	delete(n.items, minItem.GetSourceID())
+	return minItem
+}
+
+func (n *NormalStrategy) GetLastItemSourceID() string {
+	return n.lastItemSourceID
+}
+
 // Merger do merge sort of binlog
 type Merger struct {
 	sync.RWMutex
