@@ -81,4 +81,38 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 			log.Fatal(err)
 		}
 	})
+
+	// test big binlog msg
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		_, err := src.Query("create table binlog_big(id int primary key, data longtext);")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		tx, err := src.Begin()
+		if err != nil {
+			log.Fatal(err)
+		}
+		// insert 50 * 1M
+		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
+		var data = make([]byte, 1<<20)
+		for i := 0; i < 50; i++ {
+			_, err = tx.Query("insert into binlog_big(id, data) values(?, ?);", i, data)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+	// clean table
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		_, err := src.Query("drop table binlog_big;")
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
 }

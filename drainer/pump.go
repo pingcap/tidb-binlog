@@ -163,7 +163,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 		p.grpcConn.Close()
 	}
 
-	conn, err := grpc.Dial(p.addr, grpc.WithInsecure())
+	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 	if err != nil {
 		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
 		p.pullCli = nil
