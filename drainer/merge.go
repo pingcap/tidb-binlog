@@ -42,6 +42,7 @@ func (m *MergeItems) Pop() interface{} {
 	return x
 }
 
+// MergeStrategy is a strategy interface for merge item
 type MergeStrategy interface {
 	Push(MergeItem)
 	Pop() MergeItem
