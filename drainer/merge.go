@@ -217,7 +217,7 @@ func (m *Merger) run() {
 	defer close(m.output)
 
 	latestTS := m.latestTS
-
+	var lastItemSourceID string
 	for {
 		m.resetSourceChanged()
 
@@ -245,10 +245,6 @@ func (m *Merger) run() {
 		}
 
 		for sourceID, source := range sources {
-			m.RLock()
-			lastItemSourceID := m.strategy.GetLastItemSourceID()
-			m.RUnlock()
-
 			if lastItemSourceID != "" && lastItemSourceID != sourceID {
 				continue
 			}
@@ -285,12 +281,14 @@ func (m *Merger) run() {
 		minBinlog = m.strategy.Pop()
 		m.RUnlock()
 
-		// may add new source, or remove source, need choose a new min binlog
-		if m.isSourceChanged() {
+		if minBinlog == nil {
 			continue
 		}
 
-		if minBinlog == nil {
+		lastItemSourceID = minBinlog.GetSourceID()
+
+		// may add new source, or remove source, need choose a new min binlog
+		if m.isSourceChanged() {
 			continue
 		}
 
