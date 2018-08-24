@@ -592,8 +592,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "pause":
+		log.Infof("pump %s's state change to pausing", nodeID)
 		s.node.NodeStatus().State = node.Pausing
 	case "close":
+		log.Infof("pump %s's state change to closing", nodeID)
 		s.node.NodeStatus().State = node.Closing
 	default:
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
@@ -683,6 +685,11 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				return nil
 			}
 
+			_, err = s.writeFakeBinlog()
+			if err != nil {
+				log.Errorf("write fake binlog error %v", err)
+			}
+
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		}
@@ -700,6 +707,9 @@ func (s *Server) commitStatus() {
 		s.waitSafeToOffline(context.Background())
 		log.Info("safe to offline now")
 		state = node.Offline
+	default:
+		log.Warnf("there must be something wrong, now the node status is %v", s.node.NodeStatus())
+		state = s.node.NodeStatus().State
 	}
 	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), 0)
 	err := s.node.RefreshStatus(context.Background(), status)

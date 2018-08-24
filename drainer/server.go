@@ -447,6 +447,7 @@ func (s *Server) Close() {
 
 	// update drainer's status
 	s.commitStatus()
+	log.Info("commit status done")
 
 	// notify all goroutines to exit
 	s.cancel()
@@ -455,4 +456,5 @@ func (s *Server) Close() {
 
 	// stop gRPC server
 	s.gs.Stop()
+	log.Info("drainer exit")
 }
