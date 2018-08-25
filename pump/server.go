@@ -307,7 +307,7 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
-	log.Debug("register success")
+	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
 
 	// notify all cisterns
 	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
@@ -391,7 +391,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
-	log.Debug("start to server request")
+	log.Infof("start to server request on %s", s.tcpAddr)
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
@@ -592,8 +592,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "pause":
+		log.Infof("pump %s's state change to pausing", nodeID)
 		s.node.NodeStatus().State = node.Pausing
 	case "close":
+		log.Infof("pump %s's state change to closing", nodeID)
 		s.node.NodeStatus().State = node.Closing
 	default:
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
@@ -683,6 +685,11 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				return nil
 			}
 
+			_, err = s.writeFakeBinlog()
+			if err != nil {
+				log.Errorf("write fake binlog error %v", err)
+			}
+
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		}
@@ -700,6 +707,9 @@ func (s *Server) commitStatus() {
 		s.waitSafeToOffline(context.Background())
 		log.Info("safe to offline now")
 		state = node.Offline
+	default:
+		log.Warnf("there must be something wrong, now the node status is %v", s.node.NodeStatus())
+		state = s.node.NodeStatus().State
 	}
 	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), 0)
 	err := s.node.RefreshStatus(context.Background(), status)
@@ -723,11 +733,7 @@ func (s *Server) Close() {
 	log.Info("background goroutins are stopped")
 
 	s.commitStatus()
-	log.Info("has commitStatus")
-
-	if err := s.node.Quit(); err != nil {
-		log.Errorf("close pump node error %s", errors.Trace(err))
-	}
+	log.Info("commit status done")
 
 	// stop the gRPC server
 	s.gs.GracefulStop()
@@ -736,6 +742,12 @@ func (s *Server) Close() {
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
+	log.Info("storage is closed")
+
+	if err := s.node.Quit(); err != nil {
+		log.Errorf("close pump node error %s", errors.Trace(err))
+	}
+	log.Info("pump node is closed")
 
 	// close tiStore
 	if s.pdCli != nil {

@@ -396,8 +396,8 @@ func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeI
 	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
-func newFakeJob(commitTS int64) *job {
-	return &job{binlogTp: translator.FAKE, commitTS: commitTS}
+func newFakeJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
 // binlog bounadary job is used to group jobs, like a barrier
@@ -606,7 +606,7 @@ func (s *Syncer) run(b *binlogItem) error {
 
 		if startTS == commitTS {
 			// generate fake binlog job
-			s.addJob(newFakeJob(commitTS))
+			s.addJob(newFakeJob(commitTS, b.nodeID))
 
 		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
