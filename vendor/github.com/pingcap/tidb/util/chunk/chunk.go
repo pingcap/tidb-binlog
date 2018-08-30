@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"unsafe"
 
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 )
@@ -80,21 +79,12 @@ func (c *Chunk) addVarLenColumn(initCap int) {
 
 // addColumnByFieldType adds a column by field type.
 func (c *Chunk) addColumnByFieldType(fieldTp *types.FieldType, initCap int) {
-	switch fieldTp.Tp {
-	case mysql.TypeFloat:
-		c.addFixedLenColumn(4, initCap)
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
-		mysql.TypeDouble, mysql.TypeYear:
-		c.addFixedLenColumn(8, initCap)
-	case mysql.TypeDuration:
-		c.addFixedLenColumn(16, initCap)
-	case mysql.TypeNewDecimal:
-		c.addFixedLenColumn(types.MyDecimalStructSize, initCap)
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		c.addFixedLenColumn(16, initCap)
-	default:
-		c.addVarLenColumn(initCap)
+	numFixedBytes := getFixedLen(fieldTp)
+	if numFixedBytes != -1 {
+		c.addFixedLenColumn(numFixedBytes, initCap)
+		return
 	}
+	c.addVarLenColumn(initCap)
 }
 
 // MakeRef makes column in "dstColIdx" reference to column in "srcColIdx".
@@ -208,7 +198,17 @@ func (c *Chunk) TruncateTo(numRows int) {
 			}
 		}
 		col.length = numRows
-		col.nullBitmap = col.nullBitmap[:(col.length>>3)+1]
+		bitmapLen := (col.length + 7) / 8
+		col.nullBitmap = col.nullBitmap[:bitmapLen]
+		if col.length%8 != 0 {
+			// When we append null, we simply increment the nullCount,
+			// so we need to clear the unused bits in the last bitmap byte.
+			lastByte := col.nullBitmap[bitmapLen-1]
+			unusedBitsLen := 8 - uint(col.length%8)
+			lastByte <<= unusedBitsLen
+			lastByte >>= unusedBitsLen
+			col.nullBitmap[bitmapLen-1] = lastByte
+		}
 	}
 	c.numVirtualRows = numRows
 }

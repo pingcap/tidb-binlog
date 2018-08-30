@@ -1,5 +1,5 @@
-hash: fd87d69dbcfac382b44a8a92a223889bd653704d16963f4269823e3411264f84
-updated: 2018-08-30T11:12:56.862699087+08:00
+hash: dabfbdfe07f62d0135d77a197b70dd40e3f683aebf38ee8b3c2352bfafe839c5
+updated: 2018-08-30T11:36:23.978528452+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -252,7 +252,7 @@ imports:
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: cc722546ef306e789f65a674673582d906d6f586
+  version: ef6590e1899a35515cf6a99353baf3d4d99db543
   subpackages:
   - ast
   - config
@@ -317,6 +317,7 @@ imports:
   - util/codec
   - util/distinct
   - util/encrypt
+  - util/execdetails
   - util/format
   - util/goroutine_pool
   - util/hack

@@ -203,12 +203,11 @@ func (dr *delRange) doTask(ctx sessionctx.Context, r util.DelRangeTask) error {
 			}
 			log.Infof("[ddl] delRange emulator complete task: (%d, %d)", r.JobID, r.ElementID)
 			break
-		} else {
-			if err := util.UpdateDeleteRange(ctx, r, newStartKey, oldStartKey); err != nil {
-				log.Errorf("[ddl] delRange emulator update task fail: %s", err)
-			}
-			oldStartKey = newStartKey
 		}
+		if err := util.UpdateDeleteRange(ctx, r, newStartKey, oldStartKey); err != nil {
+			log.Errorf("[ddl] delRange emulator update task fail: %s", err)
+		}
+		oldStartKey = newStartKey
 	}
 	return nil
 }
@@ -238,17 +237,33 @@ func insertJobIntoDeleteRangeTable(ctx sessionctx.Context, job *model.Job) error
 		}
 	case model.ActionDropTable, model.ActionTruncateTable:
 		tableID := job.TableID
-		startKey := tablecodec.EncodeTablePrefix(tableID)
+		// The startKey here is for compatibility with previous versions, old version did not endKey so don't have to deal with.
+		var startKey kv.Key
+		var physicalTableIDs []int64
+		if err := job.DecodeArgs(startKey, &physicalTableIDs); err != nil {
+			return errors.Trace(err)
+		}
+		if len(physicalTableIDs) > 0 {
+			for _, pid := range physicalTableIDs {
+				startKey = tablecodec.EncodeTablePrefix(pid)
+				endKey := tablecodec.EncodeTablePrefix(pid + 1)
+				if err := doInsert(s, job.ID, pid, startKey, endKey, now); err != nil {
+					return errors.Trace(err)
+				}
+			}
+			return nil
+		}
+		startKey = tablecodec.EncodeTablePrefix(tableID)
 		endKey := tablecodec.EncodeTablePrefix(tableID + 1)
 		return doInsert(s, job.ID, tableID, startKey, endKey, now)
 	case model.ActionDropTablePartition:
-		var partitionID int64
-		if err := job.DecodeArgs(&partitionID); err != nil {
+		var physicalTableID int64
+		if err := job.DecodeArgs(&physicalTableID); err != nil {
 			return errors.Trace(err)
 		}
-		startKey := tablecodec.EncodeTablePrefix(partitionID)
-		endKey := tablecodec.EncodeTablePrefix(partitionID + 1)
-		return doInsert(s, job.ID, partitionID, startKey, endKey, now)
+		startKey := tablecodec.EncodeTablePrefix(physicalTableID)
+		endKey := tablecodec.EncodeTablePrefix(physicalTableID + 1)
+		return doInsert(s, job.ID, physicalTableID, startKey, endKey, now)
 	// ActionAddIndex needs do it, because it needs to be rolled back when it's canceled.
 	case model.ActionAddIndex:
 		tableID := job.TableID
@@ -263,12 +278,23 @@ func insertJobIntoDeleteRangeTable(ctx sessionctx.Context, job *model.Job) error
 		tableID := job.TableID
 		var indexName interface{}
 		var indexID int64
-		if err := job.DecodeArgs(&indexName, &indexID); err != nil {
+		var partitionIDs []int64
+		if err := job.DecodeArgs(&indexName, &indexID, &partitionIDs); err != nil {
 			return errors.Trace(err)
 		}
-		startKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID)
-		endKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID+1)
-		return doInsert(s, job.ID, indexID, startKey, endKey, now)
+		if len(partitionIDs) > 0 {
+			for _, pid := range partitionIDs {
+				startKey := tablecodec.EncodeTableIndexPrefix(pid, indexID)
+				endKey := tablecodec.EncodeTableIndexPrefix(pid, indexID+1)
+				if err := doInsert(s, job.ID, indexID, startKey, endKey, now); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		} else {
+			startKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID)
+			endKey := tablecodec.EncodeTableIndexPrefix(tableID, indexID+1)
+			return doInsert(s, job.ID, indexID, startKey, endKey, now)
+		}
 	}
 	return nil
 }
