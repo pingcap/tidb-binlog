@@ -6,8 +6,8 @@ import (
 	"github.com/zanmato1984/clickhouse/lib/binary"
 )
 
-// DateEpochOffset is days from 1970-01-01 to 1000-01-01, as new Date type originates from the latter.
-const DateEpochOffset = -354285
+// DateEpochOffset is days from 1970-01-01 to 1400-01-01, as new Date type originates from the latter.
+const DateEpochOffset = -208188
 
 type DateTime struct {
 	base

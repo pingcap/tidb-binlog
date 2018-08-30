@@ -305,12 +305,27 @@ import:
   version: v1.4.0
 - package: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
-- package: github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto
-  version: 347725a566f4a7d897aa0d6addb710c77395c640
 - package: github.com/google/gofuzz
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - package: github.com/syndtr/goleveldb/leveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
+- package: github.com/pingcap/tidb-tools
+  version: 85f3b6e13d6c98824050f42e72e80ba10ad859d7
+  subpackages:
+  - pkg
+  - pkg/dbutil
+  - pkg/etcd
+  - pkg/utils
+  - tidb-binlog
+  - tidb-binlog/node
+  - tidb-binlog/slave_binlog_proto
+- package: google.golang.org/appengine
+  version: 4216e58b9158e5f1c906f1aca75162a46a2ec88a
+  subpackages:
+  - cloudsql
+  - internal
+  - internal/modules
+  - internal/app_identity
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
