@@ -390,12 +390,12 @@ type job struct {
 	isCompleteBinlog bool
 }
 
-func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
 }
 
 func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
 }
 
 func (s *Syncer) addJob(job *job) {
@@ -435,8 +435,7 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 		return errors.Errorf("resolve karam error %v", err)
 	}
 
-	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
-	job.isCompleteBinlog = isCompleteBinlog
+	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID, isCompleteBinlog)
 	s.addJob(job)
 	return nil
 }
@@ -626,7 +625,6 @@ func (s *Syncer) run(b *binlogItem) error {
 					args = []interface{}{schema, table}
 				}
 				job := newDDLJob(sql, args, "", commitTS, b.pos, b.nodeID)
-				job.isCompleteBinlog = true
 				s.addJob(job)
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
