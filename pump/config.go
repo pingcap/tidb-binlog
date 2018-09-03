@@ -101,7 +101,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
-	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days, zero means never recycle")
+	fs.IntVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc days")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
@@ -201,6 +201,11 @@ func adjustDuration(v *time.Duration, defValue time.Duration) {
 
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
+	// check GC
+	if cfg.GC <= 0 {
+		return errors.Errorf("GC is %d, must bigger than 0", cfg.GC)
+	}
+
 	// check ListenAddr
 	urllis, err := url.Parse(cfg.ListenAddr)
 	if err != nil {

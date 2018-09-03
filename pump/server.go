@@ -3,6 +3,7 @@ package pump
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -62,14 +63,14 @@ type Server struct {
 	// node maintains the status of this pump and interact with etcd registry
 	node node.Node
 
-	tcpAddr  string
-	unixAddr string
-	gs       *grpc.Server
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	gc       time.Duration
-	metrics  *metricClient
+	tcpAddr    string
+	unixAddr   string
+	gs         *grpc.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	gcDuration time.Duration
+	metrics    *metricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
@@ -145,19 +146,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
-		dataDir:   cfg.DataDir,
-		storage:   storage,
-		clusterID: clusterID,
-		node:      n,
-		unixAddr:  cfg.Socket,
-		tcpAddr:   cfg.ListenAddr,
-		gs:        grpc.NewServer(grpcOpts...),
-		ctx:       ctx,
-		cancel:    cancel,
-		metrics:   metrics,
-		gc:        time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:     pdCli,
-		cfg:       cfg,
+		dataDir:    cfg.DataDir,
+		storage:    storage,
+		clusterID:  clusterID,
+		node:       n,
+		unixAddr:   cfg.Socket,
+		tcpAddr:    cfg.ListenAddr,
+		gs:         grpc.NewServer(grpcOpts...),
+		ctx:        ctx,
+		cancel:     cancel,
+		metrics:    metrics,
+		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:      pdCli,
+		cfg:        cfg,
 	}, nil
 }
 
@@ -476,9 +477,6 @@ func (s *Server) genForwardBinlog() {
 
 func (s *Server) gcBinlogFile() {
 	defer s.wg.Done()
-	if s.gc == 0 {
-		return
-	}
 
 	for {
 		select {
@@ -486,15 +484,48 @@ func (s *Server) gcBinlogFile() {
 			log.Info("gcBinlogFile exit")
 			return
 		case <-time.Tick(time.Hour):
-			if s.gc == 0 {
+			if s.gcDuration == 0 {
 				continue
 			}
-			// TODO check safe to gc for drainer
-			millisecond := time.Now().Add(-time.Hour*s.gc).UnixNano() / 1000
+
+			safeTSO, err := s.getSaveGCTSOForDrainers()
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			log.Debug("safe tso for drainers: ", safeTSO)
+
+			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
+			if safeTSO < gcTS {
+				gcTS = safeTSO
+			}
+			log.Debug("gc tso: ", gcTS)
 			s.storage.GCTS(gcTS)
 		}
 	}
+}
+
+func (s *Server) getSaveGCTSOForDrainers() (int64, error) {
+	pumpNode := s.node.(*pumpNode)
+
+	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	var minTSO int64 = math.MaxInt64
+	for _, drainer := range drainers {
+		if drainer.State == node.Offline {
+			continue
+		}
+
+		if drainer.MaxCommitTS < minTSO {
+			minTSO = drainer.MaxCommitTS
+		}
+	}
+
+	return minTSO, nil
 }
 
 func (s *Server) startMetrics() {

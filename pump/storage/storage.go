@@ -241,7 +241,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 					if toSave != nil {
 						err := a.persistHandlePointer(toSaveItem)
 						if err != nil {
-							log.Error(err)
+							log.Error(errors.ErrorStack(err))
 						}
 					}
 					return
@@ -261,7 +261,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 			case <-toSave:
 				err := a.persistHandlePointer(toSaveItem)
 				if err != nil {
-					log.Error(err)
+					log.Error(errors.ErrorStack(err))
 				}
 				toSave = nil
 			}
@@ -455,10 +455,18 @@ func (a *Append) Close() error {
 
 // GCTS implement Storage.GCTS
 func (a *Append) GCTS(ts int64) {
+	lastTS := atomic.LoadInt64(&a.gcTS)
+	if ts <= lastTS {
+		log.Infof("ignore gc ts: %d, last gc ts: %d", ts, lastTS)
+		return
+	}
+
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
 	gcTSGause.Set(float64(ts))
-	a.doGCTS(ts)
+	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
+	// so we forward a little bit to make sure we can get the according P binlog
+	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 }
 
 func (a *Append) doGCTS(ts int64) {
