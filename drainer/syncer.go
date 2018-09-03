@@ -537,7 +537,9 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				tpCnt[job.mutationTp]++
 			}
 
-			if job.binlogTp == translator.FLUSH || (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+			if job.binlogTp == translator.FLUSH ||
+				!s.cfg.DisableDispatch && idx >= count ||
+				s.cfg.DisableDispatch && job.isCompleteBinlog {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
