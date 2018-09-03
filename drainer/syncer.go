@@ -361,39 +361,41 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	// Note: checkpoint's Save() must be called first.
-	if s.cp.Check(job.commitTS, s.positions) && (!s.cfg.DisableDispatch || job.isCompleteBinlog) {
+	if !job.isCompleteBinlog {
+		return false
+	}
+
+	if s.cp.Check(job.commitTS, s.positions) {
 		return true
 	}
-	if job.binlogTp == translator.DDL || job.binlogTp == translator.FLUSH {
+
+	if job.binlogTp == translator.DDL {
 		return true
 	}
+
 	return false
 }
 
 type job struct {
-	binlogTp         translator.OpType
-	mutationTp       pb.MutationType
-	sql              string
-	args             []interface{}
-	key              string
-	commitTS         int64
-	pos              pb.Pos
-	nodeID           string
+	binlogTp   translator.OpType
+	mutationTp pb.MutationType
+	sql        string
+	args       []interface{}
+	key        string
+	commitTS   int64
+	pos        pb.Pos
+	nodeID     string
+	// set to true when this is the last job of a txn
+	// we will generate many job and call addJob(job) from a txn
 	isCompleteBinlog bool
 }
 
-func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
 }
 
 func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID}
-}
-
-// binlog bounadary job is used to group jobs, like a barrier
-func newBinlogBoundaryJob(commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DML, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
 }
 
 func (s *Syncer) addJob(job *job) {
@@ -427,13 +429,13 @@ func (s *Syncer) addJob(job *job) {
 	}
 }
 
-func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string) error {
+func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) error {
 	key, err := s.resolveCasuality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
 
-	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID)
+	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID, isCompleteBinlog)
 	s.addJob(job)
 	return nil
 }
@@ -528,14 +530,16 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				}
 				s.addDDLCount()
 				clearF()
-			} else if !job.isCompleteBinlog && job.binlogTp != translator.FLUSH {
+			} else if job.binlogTp == translator.DML {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
 				commitTSs = append(commitTSs, job.commitTS)
 				tpCnt[job.mutationTp]++
 			}
 
-			if job.binlogTp == translator.FLUSH || (!s.cfg.DisableDispatch && idx >= count) || job.isCompleteBinlog {
+			if job.binlogTp == translator.FLUSH ||
+				!s.cfg.DisableDispatch && idx >= count ||
+				s.cfg.DisableDispatch && job.isCompleteBinlog {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -601,11 +605,6 @@ func (s *Syncer) run(b *binlogItem) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// send binlog boundary job for dml binlog, disdispatch also disables batch
-			if s.cfg.DisableDispatch {
-				s.addJob(newBinlogBoundaryJob(commitTS, b.pos, b.nodeID))
-			}
-
 		} else if jobID > 0 {
 			schema, table, sql, err := s.schema.handleDDL(b.job, s.ignoreSchemaNames)
 			if err != nil {
@@ -702,25 +701,27 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 			offsets[pb.MutationType_DeleteRow] = 0
 		}
 
-		for _, dmlType := range sequences {
+		for idx, dmlType := range sequences {
 			if offsets[dmlType] >= len(sqls[dmlType]) {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
+			isCompleteBinlog := (idx == len(sequences)-1)
+
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
-				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID)
+				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID, isCompleteBinlog)
 				if err != nil {
 					return errors.Trace(err)
 				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID)
+				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID, isCompleteBinlog)
 				if err != nil {
 					return errors.Trace(err)
 				}
