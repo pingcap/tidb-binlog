@@ -2,6 +2,7 @@ package column
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -54,7 +55,7 @@ func parseDecimal(name, chType string) (*Decimal, error) {
 		base: base{
 			name:    name,
 			chType:  chType,
-			valueOf: baseTypes[string("")],
+			valueOf: reflect.ValueOf(make([]byte, 64)),
 		},
 		Precision: precision,
 		Scale:     scale,
