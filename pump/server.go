@@ -477,9 +477,6 @@ func (s *Server) genForwardBinlog() {
 
 func (s *Server) gcBinlogFile() {
 	defer s.wg.Done()
-	if s.gcDuration == 0 {
-		return
-	}
 
 	for {
 		select {
