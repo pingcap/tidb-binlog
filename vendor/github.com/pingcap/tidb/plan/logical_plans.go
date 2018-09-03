@@ -35,7 +35,6 @@ var (
 	_ LogicalPlan = &LogicalProjection{}
 	_ LogicalPlan = &LogicalSelection{}
 	_ LogicalPlan = &LogicalApply{}
-	_ LogicalPlan = &LogicalExists{}
 	_ LogicalPlan = &LogicalMaxOneRow{}
 	_ LogicalPlan = &LogicalTableDual{}
 	_ LogicalPlan = &DataSource{}
@@ -257,11 +256,6 @@ func (la *LogicalApply) extractCorrelatedCols() []*expression.CorrelatedColumn {
 	return corCols
 }
 
-// LogicalExists checks if a query returns result.
-type LogicalExists struct {
-	logicalSchemaProducer
-}
-
 // LogicalMaxOneRow checks if a query returns no more than one row.
 type LogicalMaxOneRow struct {
 	baseLogicalPlan
@@ -301,17 +295,14 @@ type DataSource struct {
 	// relevantIndices means the indices match the push down conditions
 	relevantIndices []bool
 
-	// statsAfterSelect is the statsInfo for dataSource and selection.
-	statsAfterSelect *statsInfo
-
 	statisticTable *statistics.Table
 
 	// possibleAccessPaths stores all the possible access path for physical plan, including table scan.
 	possibleAccessPaths []*accessPath
 
 	// The data source may be a partition, rather than a real table.
-	isPartition bool
-	partitionID int64
+	isPartition     bool
+	physicalTableID int64
 }
 
 // accessPath tells how we access one index or just access table.
@@ -396,6 +387,11 @@ func (ds *DataSource) deriveTablePathStats(path *accessPath) (bool, error) {
 		return false, errors.Trace(err)
 	}
 	path.countAfterAccess, err = ds.statisticTable.GetRowCountByIntColumnRanges(sc, pkCol.ID, path.ranges)
+	// If the `countAfterAccess` is less than `stats.count`, there must be some inconsistent stats info.
+	// We prefer the `stats.count` because it could use more stats info to calculate the selectivity.
+	if path.countAfterAccess < ds.stats.count {
+		path.countAfterAccess = math.Min(ds.stats.count/selectionFactor, float64(ds.statisticTable.Count))
+	}
 	// Check whether the primary key is covered by point query.
 	noIntervalRange := true
 	for _, ran := range path.ranges {
@@ -443,8 +439,13 @@ func (ds *DataSource) deriveIndexPathStats(path *accessPath) (bool, error) {
 		if ok && !ds.statisticTable.Pseudo {
 			path.countAfterAccess = idxHist.AvgCountPerValue(ds.statisticTable.Count)
 		} else {
-			path.countAfterAccess = ds.statisticTable.PseudoAvgCountPerCount()
+			path.countAfterAccess = ds.statisticTable.PseudoAvgCountPerValue()
 		}
+	}
+	// If the `countAfterAccess` is less than `stats.count`, there must be some inconsistent stats info.
+	// We prefer the `stats.count` because it could use more stats info to calculate the selectivity.
+	if path.countAfterAccess < ds.stats.count {
+		path.countAfterAccess = math.Min(ds.stats.count/selectionFactor, float64(ds.statisticTable.Count))
 	}
 	if path.indexFilters != nil {
 		selectivity, err := ds.statisticTable.Selectivity(ds.ctx, path.indexFilters)
@@ -452,7 +453,7 @@ func (ds *DataSource) deriveIndexPathStats(path *accessPath) (bool, error) {
 			log.Warnf("An error happened: %v, we have to use the default selectivity", err.Error())
 			selectivity = selectionFactor
 		}
-		path.countAfterIndex = math.Max(path.countAfterAccess*selectivity, ds.statsAfterSelect.count)
+		path.countAfterIndex = math.Max(path.countAfterAccess*selectivity, ds.stats.count)
 	}
 	// Check whether there's only point query.
 	noIntervalRanges := true

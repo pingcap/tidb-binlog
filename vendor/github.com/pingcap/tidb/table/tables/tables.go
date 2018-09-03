@@ -45,12 +45,11 @@ import (
 	"golang.org/x/net/context"
 )
 
-// tableCommon is shared by both Table and Partition.
+// tableCommon is shared by both Table and partition.
 type tableCommon struct {
 	tableID int64
-	// partitionID is a unique int64 to identify a partition, it equals to tableID
-	// if this tableCommon struct is not a Partition.
-	partitionID     int64
+	// physicalTableID is a unique int64 to identify a physical table.
+	physicalTableID int64
 	Columns         []*table.Column
 	publicColumns   []*table.Column
 	writableColumns []*table.Column
@@ -59,7 +58,7 @@ type tableCommon struct {
 	meta            *model.TableInfo
 	alloc           autoid.Allocator
 
-	// Both of them are generated using partitionID.
+	// recordPrefix and indexPrefix are generated using physicalTableID.
 	recordPrefix kv.Key
 	indexPrefix  kv.Key
 }
@@ -72,27 +71,27 @@ type Table struct {
 var _ table.Table = &Table{}
 
 // MockTableFromMeta only serves for test.
-func MockTableFromMeta(tableInfo *model.TableInfo) table.Table {
-	columns := make([]*table.Column, 0, len(tableInfo.Columns))
-	for _, colInfo := range tableInfo.Columns {
+func MockTableFromMeta(tblInfo *model.TableInfo) table.Table {
+	columns := make([]*table.Column, 0, len(tblInfo.Columns))
+	for _, colInfo := range tblInfo.Columns {
 		col := table.ToColumn(colInfo)
 		columns = append(columns, col)
 	}
+
 	var t Table
-	initTableCommon(&t.tableCommon, tableInfo.ID, tableInfo.ID, columns, nil)
-	t.meta = tableInfo
-	if tableInfo.GetPartitionInfo() == nil {
+	initTableCommon(&t.tableCommon, tblInfo, tblInfo.ID, columns, nil)
+	if tblInfo.GetPartitionInfo() == nil {
+		if err := initTableIndices(&t.tableCommon); err != nil {
+			return nil
+		}
 		return &t
 	}
 
-	partitionExpr, err := generatePartitionExpr(tableInfo)
+	ret, err := newPartitionedTable(&t, tblInfo)
 	if err != nil {
 		return nil
 	}
-	return &PartitionedTable{
-		Table:         t,
-		partitionExpr: partitionExpr,
-	}
+	return ret
 }
 
 // TableFromMeta creates a Table instance from model.TableInfo.
@@ -129,44 +128,49 @@ func TableFromMeta(alloc autoid.Allocator, tblInfo *model.TableInfo) (table.Tabl
 	}
 
 	var t Table
-	initTableCommon(&t.tableCommon, tblInfo.ID, tblInfo.ID, columns, alloc)
-
-	for _, idxInfo := range tblInfo.Indices {
-		if idxInfo.State == model.StateNone {
-			return nil, table.ErrIndexStateCantNone.Gen("index %s can't be in none state", idxInfo.Name)
-		}
-
-		idx := NewIndex(tblInfo, idxInfo)
-		t.indices = append(t.indices, idx)
-	}
-
-	t.meta = tblInfo
+	initTableCommon(&t.tableCommon, tblInfo, tblInfo.ID, columns, alloc)
 	if tblInfo.GetPartitionInfo() == nil {
+		if err := initTableIndices(&t.tableCommon); err != nil {
+			return nil, errors.Trace(err)
+		}
 		return &t, nil
 	}
 
-	partitionExpr, err := generatePartitionExpr(tblInfo)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &PartitionedTable{
-		Table:         t,
-		partitionExpr: partitionExpr,
-	}, nil
+	return newPartitionedTable(&t, tblInfo)
 }
 
 // initTableCommon initializes a tableCommon struct.
-func initTableCommon(t *tableCommon, tableID, partitionID int64, cols []*table.Column, alloc autoid.Allocator) {
-	t.tableID = tableID
-	t.partitionID = partitionID
+func initTableCommon(t *tableCommon, tblInfo *model.TableInfo, physicalTableID int64, cols []*table.Column, alloc autoid.Allocator) {
+	t.tableID = tblInfo.ID
+	t.physicalTableID = physicalTableID
 	t.alloc = alloc
+	t.meta = tblInfo
 	t.Columns = cols
 	t.publicColumns = t.Cols()
 	t.writableColumns = t.WritableCols()
 	t.writableIndices = t.WritableIndices()
-	t.recordPrefix = tablecodec.GenTableRecordPrefix(partitionID)
-	t.indexPrefix = tablecodec.GenTableIndexPrefix(partitionID)
-	return
+	t.recordPrefix = tablecodec.GenTableRecordPrefix(physicalTableID)
+	t.indexPrefix = tablecodec.GenTableIndexPrefix(physicalTableID)
+}
+
+// initTableIndices initializes the indices of the tableCommon.
+func initTableIndices(t *tableCommon) error {
+	tblInfo := t.meta
+	for _, idxInfo := range tblInfo.Indices {
+		if idxInfo.State == model.StateNone {
+			return table.ErrIndexStateCantNone.Gen("index %s can't be in none state", idxInfo.Name)
+		}
+
+		// Use partition ID for index, because tableCommon may be table or partition.
+		idx := NewIndex(t.physicalTableID, tblInfo, idxInfo)
+		t.indices = append(t.indices, idx)
+	}
+	return nil
+}
+
+func initTableCommonWithIndices(t *tableCommon, tblInfo *model.TableInfo, physicalTableID int64, cols []*table.Column, alloc autoid.Allocator) error {
+	initTableCommon(t, tblInfo, physicalTableID, cols, alloc)
+	return errors.Trace(initTableIndices(t))
 }
 
 // Indices implements table.Table Indices interface.
@@ -198,6 +202,11 @@ func (t *tableCommon) DeletableIndices() []table.Index {
 // Meta implements table.Table Meta interface.
 func (t *tableCommon) Meta() *model.TableInfo {
 	return t.meta
+}
+
+// GetPhysicalID implements table.Table GetPhysicalID interface.
+func (t *Table) GetPhysicalID() int64 {
+	return t.physicalTableID
 }
 
 // Cols implements table.Table Cols interface.
@@ -316,6 +325,8 @@ func (t *tableCommon) UpdateRecord(ctx sessionctx.Context, h int64, oldData, new
 	if err = bs.SaveTo(txn); err != nil {
 		return errors.Trace(err)
 	}
+	ctx.StmtAddDirtyTableOP(table.DirtyTableDeleteRow, t.physicalTableID, h, nil)
+	ctx.StmtAddDirtyTableOP(table.DirtyTableAddRow, t.physicalTableID, h, newData)
 	if shouldWriteBinlog(ctx) {
 		if !t.meta.PKIsHandle {
 			binlogColIDs = append(binlogColIDs, model.ExtraHandleID)
@@ -378,7 +389,7 @@ func adjustRowValuesBuf(writeBufs *variable.WriteStmtBufs, rowLen int) {
 // getRollbackableMemStore get a rollbackable BufferStore, when we are importing data,
 // Just add the kv to transaction's membuf directly.
 func (t *tableCommon) getRollbackableMemStore(ctx sessionctx.Context) kv.RetrieverMutator {
-	if ctx.GetSessionVars().ImportingData {
+	if ctx.GetSessionVars().LightningMode {
 		return ctx.Txn()
 	}
 
@@ -417,9 +428,9 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, skipHan
 
 	txn := ctx.Txn()
 	sessVars := ctx.GetSessionVars()
-	// when ImportingData or BatchCheck is true,
+	// when LightningMode or BatchCheck is true,
 	// no needs to check the key constrains, so we names the variable skipCheck.
-	skipCheck := sessVars.ImportingData || ctx.GetSessionVars().StmtCtx.BatchCheck
+	skipCheck := sessVars.LightningMode || ctx.GetSessionVars().StmtCtx.BatchCheck
 	if skipCheck {
 		txn.SetOption(kv.SkipCheckForWrite, true)
 	}
@@ -463,10 +474,14 @@ func (t *tableCommon) AddRecord(ctx sessionctx.Context, r []types.Datum, skipHan
 	if err = txn.Set(key, value); err != nil {
 		return 0, errors.Trace(err)
 	}
-	if !sessVars.ImportingData {
+	if !sessVars.LightningMode {
 		if err = rm.(*kv.BufferStore).SaveTo(txn); err != nil {
 			return 0, errors.Trace(err)
 		}
+	}
+
+	if !ctx.GetSessionVars().LightningMode {
+		ctx.StmtAddDirtyTableOP(table.DirtyTableAddRow, t.physicalTableID, recordID, r)
 	}
 	if shouldWriteBinlog(ctx) {
 		// For insert, TiDB and Binlog can use same row and schema.
@@ -512,9 +527,9 @@ func (t *tableCommon) addIndices(ctx sessionctx.Context, recordID int64, r []typ
 	txn := ctx.Txn()
 	// Clean up lazy check error environment
 	defer txn.DelOption(kv.PresumeKeyNotExistsError)
-	skipCheck := ctx.GetSessionVars().ImportingData || ctx.GetSessionVars().StmtCtx.BatchCheck
+	skipCheck := ctx.GetSessionVars().LightningMode || ctx.GetSessionVars().StmtCtx.BatchCheck
 	if t.meta.PKIsHandle && !skipCheck && !skipHandleCheck {
-		if err := CheckHandleExists(ctx, t, recordID); err != nil {
+		if err := CheckHandleExists(ctx, t, recordID, nil); err != nil {
 			return recordID, errors.Trace(err)
 		}
 	}
@@ -583,7 +598,7 @@ func DecodeRawRowData(ctx sessionctx.Context, meta *model.TableInfo, h int64, co
 		}
 		colTps[col.ID] = &col.FieldType
 	}
-	rowMap, err := tablecodec.DecodeRow(value, colTps, ctx.GetSessionVars().GetTimeZone())
+	rowMap, err := tablecodec.DecodeRow(value, colTps, ctx.GetSessionVars().Location())
 	if err != nil {
 		return nil, rowMap, errors.Trace(err)
 	}
@@ -627,6 +642,8 @@ func (t *tableCommon) RemoveRecord(ctx sessionctx.Context, h int64, r []types.Da
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	ctx.StmtAddDirtyTableOP(table.DirtyTableDeleteRow, t.physicalTableID, h, nil)
 	if shouldWriteBinlog(ctx) {
 		cols := t.Cols()
 		colIDs := make([]int64, 0, len(cols)+1)
@@ -704,14 +721,14 @@ func (t *tableCommon) removeRowIndices(ctx sessionctx.Context, h int64, rec []ty
 	for _, v := range t.DeletableIndices() {
 		vals, err := v.FetchValues(rec, nil)
 		if err != nil {
-			log.Infof("remove row index %v failed %v, txn %d, handle %d, data %v", v.Meta(), err, ctx.Txn().StartTS, h, rec)
+			log.Infof("remove row index %v failed %v, txn %d, handle %d, data %v", v.Meta(), err, ctx.Txn().StartTS(), h, rec)
 			return errors.Trace(err)
 		}
 		if err = v.Delete(ctx.GetSessionVars().StmtCtx, ctx.Txn(), vals, h); err != nil {
 			if v.Meta().State != model.StatePublic && kv.ErrNotExist.Equal(err) {
 				// If the index is not in public state, we may have not created the index,
 				// or already deleted the index, so skip ErrNotExist error.
-				log.Debugf("remove row index %v doesn't exist, txn %d, handle %d", v.Meta(), ctx.Txn().StartTS, h)
+				log.Debugf("remove row index %v doesn't exist, txn %d, handle %d", v.Meta(), ctx.Txn().StartTS(), h)
 				continue
 			}
 			return errors.Trace(err)
@@ -765,7 +782,7 @@ func (t *tableCommon) IterRecords(ctx sessionctx.Context, startKey kv.Key, cols 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		rowMap, err := tablecodec.DecodeRow(it.Value(), colMap, ctx.GetSessionVars().GetTimeZone())
+		rowMap, err := tablecodec.DecodeRow(it.Value(), colMap, ctx.GetSessionVars().Location())
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -868,7 +885,7 @@ func (t *tableCommon) RebaseAutoID(ctx sessionctx.Context, newBase int64, isSetS
 
 // Seek implements table.Table Seek interface.
 func (t *tableCommon) Seek(ctx sessionctx.Context, h int64) (int64, bool, error) {
-	seekKey := tablecodec.EncodeRowKeyWithHandle(t.partitionID, h)
+	seekKey := tablecodec.EncodeRowKeyWithHandle(t.physicalTableID, h)
 	iter, err := ctx.Txn().Seek(seekKey)
 	if !iter.Valid() || !iter.Key().HasPrefix(t.RecordPrefix()) {
 		// No more records in the table, skip to the end.
@@ -947,7 +964,15 @@ func FindIndexByColName(t table.Table, name string) table.Index {
 
 // CheckHandleExists check whether recordID key exists. if not exists, return nil,
 // otherwise return kv.ErrKeyExists error.
-func CheckHandleExists(ctx sessionctx.Context, t table.Table, recordID int64) error {
+func CheckHandleExists(ctx sessionctx.Context, t table.Table, recordID int64, data []types.Datum) error {
+	if pt, ok := t.(*partitionedTable); ok {
+		info := t.Meta().GetPartitionInfo()
+		pid, err := pt.locatePartition(ctx, info, data)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		t = pt.GetPartition(pid)
+	}
 	txn := ctx.Txn()
 	// Check key exists.
 	recordKey := t.RecordKey(recordID)
