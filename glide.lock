@@ -1,5 +1,5 @@
 hash: dabfbdfe07f62d0135d77a197b70dd40e3f683aebf38ee8b3c2352bfafe839c5
-updated: 2018-08-30T11:36:23.978528452+08:00
+updated: 2018-09-04T15:06:00.777418+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -114,7 +114,7 @@ imports:
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -165,7 +165,7 @@ imports:
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
-  version: 15ea7401d63d2d8c2f17472d22359564615a9f7a
+  version: 498ae206fc3cfe81cd82e48c1d4354026fa5f9ec
   subpackages:
   - tags
   - tracing/opentracing
@@ -218,7 +218,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: dbe9298ce0992bc74bd23afef466c795d0d8afa0
+  version: ea731401f5c95a8ba30f15787e5e0fb77c60c66b
   subpackages:
   - internal/xxh32
 - name: github.com/pingcap/goleveldb
@@ -352,7 +352,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: 967789050ba94deca04a5e84cce8ad472ce313c1
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/push
@@ -383,7 +383,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: 51df1d314861d341546c26e4354ce760fe4bb02b
+  version: 78fa2915c1fa231f62e0438da493688c21ca678e
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -406,7 +406,7 @@ imports:
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: 252d853b2a4f3cfc98bb89c3a8bb3d3aa50ed4d6
+  version: 12b4b58a7d8119c9f22db2745df843fca67a310a
   subpackages:
   - config
   - internal/baggage

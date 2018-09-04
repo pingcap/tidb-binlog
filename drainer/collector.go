@@ -291,17 +291,21 @@ func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
 func (c *Collector) HTTPStatus() *HTTPStatus {
 	var status *HTTPStatus
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	status = c.mu.status
 
-	// if syncer don't have binlog input in a minitue,
-	// we can think all the binlog is synced
-	if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
-		status.Synced = true
+	if status != nil {
+		// if syncer don't have binlog input in a minitue,
+		// we can think all the binlog is synced
+		if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+			status.Synced = true
+		}
+		status.LastTS = c.syncer.GetLatestCommitTS()
 	}
-	status.LastTS = c.syncer.GetLatestCommitTS()
 
-	c.mu.Unlock()
-	return status
+	return &HTTPStatus{
+		Synced: false,
+	}
 }
 
 func (c *Collector) reportErr(ctx context.Context, err error) {

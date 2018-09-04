@@ -7,6 +7,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -197,7 +198,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 
 	ents, err := bl.ReadFrom(binlog.Pos{Suffix: 1, Offset: 26}, 4)
 	c.Assert(ents, HasLen, 1)
-	c.Assert(err, Equals, io.ErrUnexpectedEOF)
+	c.Assert(errors.Cause(err), Equals, io.ErrUnexpectedEOF)
 }
 
 func (s *testBinloggerSuite) TestGC(c *C) {
