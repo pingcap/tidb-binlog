@@ -98,12 +98,17 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
 	as.testWriteBinlogAndPullBack(c, 128, 1)
 
+	// write a 500M binlog
+	as.testWriteBinlogAndPullBack(c, 500*1<<20, 1)
+
 	as.testWriteBinlogAndPullBack(c, 128, 1024)
+
+	as.testWriteBinlogAndPullBack(c, 128, 1024*10)
 
 	as.testWriteBinlogAndPullBack(c, 1<<20, 1024)
 }
 
-func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int) {
+func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int32) {
 	appendStorage := newAppend(c)
 	defer os.RemoveAll(appendStorage.dir)
 
@@ -132,7 +137,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 				err := getBinlog.Unmarshal(value)
 				c.Assert(err, check.IsNil)
 				binlogs = append(binlogs, getBinlog)
-				if len(binlogs) == binlogNum {
+				if len(binlogs) == int(binlogNum) {
 					break PullLoop
 				}
 			case <-time.After(time.Second * 5):
@@ -230,38 +235,47 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 }
 
 // test helper to write binlogNum binlog to append
-func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int) {
+func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int32) {
 	prewriteValue := make([]byte, prewriteValueSize)
 	var ts int64
 	getTS := func() int64 {
 		return atomic.AddInt64(&ts, 1)
 	}
 
+	goNum := 512
+
 	var wg sync.WaitGroup
-	for i := 0; i < binlogNum; i++ {
+
+	for i := 0; i < goNum; i++ {
 		wg.Add(1)
 		func() {
 			defer wg.Done()
-			// write P binlog
-			binlog := new(pb.Binlog)
-			binlog.Tp = pb.BinlogType_Prewrite
-			startTS := getTS()
-			binlog.StartTs = startTS
-			binlog.PrewriteValue = prewriteValue
+			for {
+				num := atomic.AddInt32(&binlogNum, -1)
+				if num < 0 {
+					return
+				}
+				// write P binlog
+				binlog := new(pb.Binlog)
+				binlog.Tp = pb.BinlogType_Prewrite
+				startTS := getTS()
+				binlog.StartTs = startTS
+				binlog.PrewriteValue = prewriteValue
 
-			err := append.WriteBinlog(binlog)
-			if err != nil {
-				b.Fatal(err)
-			}
+				err := append.WriteBinlog(binlog)
+				if err != nil {
+					b.Fatal(err)
+				}
 
-			// write C binlog
-			binlog = new(pb.Binlog)
-			binlog.Tp = pb.BinlogType_Commit
-			binlog.StartTs = startTS
-			binlog.CommitTs = getTS()
-			err = append.WriteBinlog(binlog)
-			if err != nil {
-				b.Fatal(err)
+				// write C binlog
+				binlog = new(pb.Binlog)
+				binlog.Tp = pb.BinlogType_Commit
+				binlog.StartTs = startTS
+				binlog.CommitTs = getTS()
+				err = append.WriteBinlog(binlog)
+				if err != nil {
+					b.Fatal(err)
+				}
 			}
 		}()
 	}

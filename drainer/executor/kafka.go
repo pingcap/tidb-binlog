@@ -9,7 +9,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
 
 type kafkaExecutor struct {

@@ -205,11 +205,6 @@ func (c *Collector) updateCollectStatus(synced bool) {
 // updateStatus queries pumps' status, pause pull binlog for paused pump,
 // continue pull binlog for online pump, and deletes offline pump.
 func (c *Collector) updateStatus(ctx context.Context) error {
-	begin := time.Now()
-	defer func() {
-		publishBinlogHistogram.WithLabelValues("drainer").Observe(time.Since(begin).Seconds())
-	}()
-
 	if err := c.updatePumpStatus(ctx); err != nil {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 		return errors.Trace(err)
@@ -232,10 +227,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 
 	for _, n := range nodes {
 		// format and check the nodeID
-		n.NodeID, err = pump.FormatNodeID(n.NodeID)
-		if err != nil {
-			log.Warnf("node id %s maybe illegal", n.NodeID)
-		}
+		n.NodeID = pump.FormatNodeID(n.NodeID)
 
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
@@ -259,7 +251,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			case node.Paused:
 				p.Pause()
 			case node.Online:
-				p.Continue()
+				p.Continue(ctx)
 			case node.Closing:
 				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
 			case node.Offline:

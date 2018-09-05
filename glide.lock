@@ -1,5 +1,5 @@
-hash: 5716461fd40f6978b65b72b42399601174bba360f46eb033334021cb48559a16
-updated: 2018-08-06T18:20:59.662852735+08:00
+hash: dabfbdfe07f62d0135d77a197b70dd40e3f683aebf38ee8b3c2352bfafe839c5
+updated: 2018-08-30T11:36:23.978528452+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -124,7 +124,7 @@ imports:
   subpackages:
   - breaker
 - name: github.com/eapache/go-xerial-snappy
-  version: 040cc1a32f578808623071247fdbd5cc43f37f5f
+  version: 776d5712da21bc4762676d614db1d8a64f4238b0
 - name: github.com/eapache/queue
   version: 093482f3f8ce946c05bcba64badd2c82369e084d
 - name: github.com/ghodss/yaml
@@ -160,16 +160,18 @@ imports:
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/google/gofuzz
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
-  version: e9c5d9645c437ab1b204cff969a2c0fb16cd4276
+  version: 15ea7401d63d2d8c2f17472d22359564615a9f7a
   subpackages:
   - tags
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: c225b8c3b01faf2899099b768856a9e916e5087b
+  version: 93bf4626fba73b751b0f3cdf2649be4ce0c420cd
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -216,7 +218,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
+  version: dbe9298ce0992bc74bd23afef466c795d0d8afa0
   subpackages:
   - internal/xxh32
 - name: github.com/pingcap/goleveldb
@@ -250,7 +252,7 @@ imports:
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: cc722546ef306e789f65a674673582d906d6f586
+  version: ef6590e1899a35515cf6a99353baf3d4d99db543
   subpackages:
   - ast
   - config
@@ -315,6 +317,7 @@ imports:
   - util/codec
   - util/distinct
   - util/encrypt
+  - util/execdetails
   - util/format
   - util/goroutine_pool
   - util/hack
@@ -330,10 +333,16 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 347725a566f4a7d897aa0d6addb710c77395c640
+  version: 85f3b6e13d6c98824050f42e72e80ba10ad859d7
   subpackages:
-  - tidb_binlog/slave_binlog_proto
-  - tidb_binlog/slave_binlog_proto/go-binlog
+  - pkg
+  - pkg/dbutil
+  - pkg/etcd
+  - pkg/utils
+  - tidb-binlog
+  - tidb-binlog/node
+  - tidb-binlog/slave_binlog_proto
+  - tidb-binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
   version: 4141907f6909f62af0378aa1c891c46f34aed0a7
   subpackages:
@@ -374,7 +383,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: d329d24db4313262a3b0a24d8aeb1dc4bd294fb0
+  version: 51df1d314861d341546c26e4354ce760fe4bb02b
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -424,11 +433,11 @@ imports:
   subpackages:
   - codec
 - name: github.com/unrolled/render
-  version: 65450fb6b2d3595beca39f969c411db8f8d5c806
+  version: 4206df6ff70175d219fdb4672ae157fbed820103
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
 - name: github.com/zanmato1984/clickhouse
-  version: cc03bd0a10107eecbed0f4a4b6ca595ac50d50d0
+  version: 6c32f7b4cd79451e23e7369c500d082815380b3e
   subpackages:
   - lib/binary
   - lib/column
@@ -493,6 +502,9 @@ imports:
   version: 4216e58b9158e5f1c906f1aca75162a46a2ec88a
   subpackages:
   - cloudsql
+  - internal
+  - internal/app_identity
+  - internal/modules
 - name: google.golang.org/genproto
   version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
   subpackages:

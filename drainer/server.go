@@ -183,6 +183,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // Notify implements the gRPC interface of drainer server
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	log.Debug("recv Notify")
+
 	err := s.collector.Notify()
 	if err != nil {
 		log.Errorf("grpc call notify error: %v", err)
@@ -289,6 +291,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Infof("register success, this drainer's node id is %s", s.ID)
 
 	// start heartbeat
 	errc := s.heartbeat(s.ctx)
@@ -338,6 +341,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
+	log.Infof("start to server request on %s", s.tcpAddr)
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
 		return errors.Trace(err)
 	}
@@ -441,14 +445,16 @@ func (s *Server) Close() {
 		return
 	}
 
+	// update drainer's status
+	s.commitStatus()
+	log.Info("commit status done")
+
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
 
-	// update drainer's status
-	s.commitStatus()
-
 	// stop gRPC server
 	s.gs.Stop()
+	log.Info("drainer exit")
 }

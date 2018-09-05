@@ -27,21 +27,28 @@ import (
 type simpleRewriter struct {
 	exprStack
 
-	tbl *model.TableInfo
-	err error
-	ctx sessionctx.Context
+	schema *Schema
+	err    error
+	ctx    sessionctx.Context
 }
 
-// ParseSimpleExpr parses simple expression string to Expression.
+// ParseSimpleExprWithTableInfo parses simple expression string to Expression.
 // The expression string must only reference the column in table Info.
-func ParseSimpleExpr(ctx sessionctx.Context, exprStr string, tableInfo *model.TableInfo) (Expression, error) {
+func ParseSimpleExprWithTableInfo(ctx sessionctx.Context, exprStr string, tableInfo *model.TableInfo) (Expression, error) {
 	exprStr = "select " + exprStr
 	stmts, err := parser.New().Parse(exprStr, "", "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	expr := stmts[0].(*ast.SelectStmt).Fields.Fields[0].Expr
-	rewriter := &simpleRewriter{tbl: tableInfo, ctx: ctx}
+	return RewriteSimpleExprWithTableInfo(ctx, tableInfo, expr)
+}
+
+// RewriteSimpleExprWithTableInfo rewrites simple ast.ExprNode to expression.Expression.
+func RewriteSimpleExprWithTableInfo(ctx sessionctx.Context, tbl *model.TableInfo, expr ast.ExprNode) (Expression, error) {
+	dbName := model.NewCIStr(ctx.GetSessionVars().CurrentDB)
+	columns := ColumnInfos2ColumnsWithDBName(ctx, dbName, tbl.Name, tbl.Columns)
+	rewriter := &simpleRewriter{ctx: ctx, schema: NewSchema(columns...)}
 	expr.Accept(rewriter)
 	if rewriter.err != nil {
 		return nil, errors.Trace(rewriter.err)
@@ -50,21 +57,9 @@ func ParseSimpleExpr(ctx sessionctx.Context, exprStr string, tableInfo *model.Ta
 }
 
 func (sr *simpleRewriter) rewriteColumn(nodeColName *ast.ColumnNameExpr) (*Column, error) {
-	tblCols := sr.tbl.Columns
-	for i, col := range tblCols {
-		if col.Name.L == nodeColName.Name.Name.L {
-			return &Column{
-				FromID:      1,
-				ColName:     col.Name,
-				OrigTblName: sr.tbl.Name,
-				DBName:      model.NewCIStr(sr.ctx.GetSessionVars().CurrentDB),
-				TblName:     sr.tbl.Name,
-				RetType:     &col.FieldType,
-				ID:          col.ID,
-				Position:    col.Offset,
-				Index:       i,
-			}, nil
-		}
+	col := sr.schema.FindColumnByName(nodeColName.Name.Name.L)
+	if col != nil {
+		return col, nil
 	}
 	return nil, errBadField.GenByArgs(nodeColName.Name.Name.O, "expression")
 }
@@ -398,23 +393,23 @@ func (sr *simpleRewriter) inToExpression(lLen int, not bool, tp *types.FieldType
 	exprs := sr.popN(lLen + 1)
 	leftExpr := exprs[0]
 	elems := exprs[1:]
-	l := GetRowLen(leftExpr)
+	l, leftFt := GetRowLen(leftExpr), leftExpr.GetType()
 	for i := 0; i < lLen; i++ {
 		if l != GetRowLen(elems[i]) {
 			sr.err = ErrOperandColumns.GenByArgs(l)
 			return
 		}
 	}
-	leftIsNull := leftExpr.GetType().Tp == mysql.TypeNull
+	leftIsNull := leftFt.Tp == mysql.TypeNull
 	if leftIsNull {
 		sr.push(Null.Clone())
 		return
 	}
-	leftEt := leftExpr.GetType().EvalType()
+	leftEt := leftFt.EvalType()
 	if leftEt == types.ETInt {
 		for i := 0; i < len(elems); i++ {
 			if c, ok := elems[i].(*Constant); ok {
-				elems[i] = RefineConstantArg(sr.ctx, c, opcode.EQ)
+				elems[i], _ = RefineComparedConstant(sr.ctx, mysql.HasUnsignedFlag(leftFt.Flag), c, opcode.EQ)
 			}
 		}
 	}

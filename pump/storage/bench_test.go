@@ -35,7 +35,7 @@ func BenchmarkWriteNoSync1K(b *testing.B) {
 }
 
 func BenchmarkWriteNoSync10K(b *testing.B) {
-	benchmarkWrite(b, 100*1024, 100, false)
+	benchmarkWrite(b, 10*1024, 100, false)
 }
 
 func BenchmarkWriteNoSync100K(b *testing.B) {
@@ -62,7 +62,7 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 	append := newAppend(b)
 	defer os.RemoveAll(append.dir)
 
-	populateBinlog(b, append, prewriteValueSize, binlogNum)
+	populateBinlog(b, append, prewriteValueSize, int32(binlogNum))
 
 	runtime.GC()
 	b.ResetTimer()
@@ -82,8 +82,12 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 		b.Fatalf("only get %d binlog, should has %d", cnt, binlogNum)
 	}
 
+	b.StopTimer()
+	append.Close()
+
 	// just count the prewriteValueSize
 	b.SetBytes(int64(prewriteValueSize))
+	b.ReportAllocs()
 }
 
 func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync bool) {
@@ -126,6 +130,11 @@ func benchmarkWrite(b *testing.B, prewriteValueSize int, parallelism int, sync b
 		}
 	})
 
+	append.Close()
+
+	b.StopTimer()
+
 	// just count the prewriteValueSize
 	b.SetBytes(int64(prewriteValueSize))
+	b.ReportAllocs()
 }

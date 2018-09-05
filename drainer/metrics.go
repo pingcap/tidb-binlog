@@ -10,14 +10,6 @@ import (
 )
 
 var (
-	windowGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "window",
-			Help:      "DepositWindow boundary.",
-		}, []string{"marker"})
-
 	pumpPositionGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -26,46 +18,12 @@ var (
 			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 
-	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "find_matched_binlog_duration_time",
-			Help:      "Bucketed histogram of find a matched binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	publishBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_duration_time",
-			Help:      "Bucketed histogram of publish a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	publishBinlogCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_count",
-			Help:      "Total binlog count been stored.",
-		}, []string{"nodeID"})
-
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "ddl_jobs_total",
 			Help:      "Total ddl jobs count been stored.",
-		})
-
-	tikvQueryCount = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "query_tikv_count",
-			Help:      "Total count that queried tikv.",
 		})
 
 	errorBinlogCount = prometheus.NewCounter(
@@ -121,19 +79,14 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(windowGauge)
 	prometheus.MustRegister(pumpPositionGauge)
-	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
-	prometheus.MustRegister(tikvQueryCount)
 	prometheus.MustRegister(errorBinlogCount)
 	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(readBinlogHistogram)
 	prometheus.MustRegister(readBinlogSizeHistogram)
-	prometheus.MustRegister(publishBinlogHistogram)
-	prometheus.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {
