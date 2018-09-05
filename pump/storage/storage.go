@@ -19,6 +19,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -129,12 +130,14 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	gcTSGause.Set(float64(append.gcTS))
+	gcTSGause.Set(float64(oracle.ExtractPhysical(uint64(append.gcTS))))
 
 	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	maxCommitTSGause.Set(float64(oracle.ExtractPhysical(uint64(append.maxCommitTS))))
+
 	append.headPointer, err = append.readPointer(headPointerKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -253,6 +256,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 					continue
 				}
 				atomic.StoreInt64(&a.maxCommitTS, item.commit)
+				maxCommitTSGause.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
 				toSaveItem = item
 				if toSave == nil {
 					toSave = time.After(persistAtLeastTime)
@@ -279,6 +283,9 @@ func (a *Append) updateStatus() {
 	if a.tiStore != nil {
 		updateLatest = time.Tick(time.Second)
 	}
+
+	updateSize := time.Tick(time.Second * 3)
+
 	for {
 		select {
 		case <-a.close:
@@ -289,6 +296,14 @@ func (a *Append) updateStatus() {
 				log.Errorf("QueryLatestTSFromPD err: %v", err)
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
+			}
+		case <-updateSize:
+			size, err := getStorageSize(a.dir)
+			if err != nil {
+				log.Error("update sotrage size err: ", err)
+			} else {
+				storageSizeGause.WithLabelValues("capacity").Set(float64(size.capacity))
+				storageSizeGause.WithLabelValues("available").Set(float64(size.available))
 			}
 		}
 	}
@@ -463,7 +478,7 @@ func (a *Append) GCTS(ts int64) {
 
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
-	gcTSGause.Set(float64(ts))
+	gcTSGause.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
 	// so we forward a little bit to make sure we can get the according P binlog
 	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
@@ -900,4 +915,29 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 	}()
 
 	return values
+}
+
+type storageSize struct {
+	capacity  int
+	available int
+}
+
+func getStorageSize(dir string) (size storageSize, err error) {
+	var stat unix.Statfs_t
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return size, errors.Trace(err)
+	}
+
+	err = unix.Statfs(wd, &stat)
+	if err != nil {
+		return size, errors.Trace(err)
+	}
+
+	// Available blocks * size per block = available space in bytes
+	size.available = int(stat.Bavail) * int(stat.Bsize)
+	size.capacity = int(stat.Blocks) * int(stat.Bsize)
+
+	return
 }

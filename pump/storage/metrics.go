@@ -1,6 +1,8 @@
 package storage
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
 	gcTSGause = prometheus.NewGauge(
@@ -10,6 +12,14 @@ var (
 			Name:      "gc_ts",
 			Help:      "gc ts of storage",
 		})
+
+	storageSizeGause = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "storage_size_bytes",
+			Help:      "storage size info",
+		}, []string{"type"})
 
 	maxCommitTSGause = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -41,7 +51,7 @@ var (
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_size",
 			Help:      "write binlog size",
-			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"type"})
 
 	writeBinlogTimeHistogram = prometheus.NewHistogramVec(
@@ -61,4 +71,5 @@ func init() {
 	prometheus.MustRegister(errorCount)
 	prometheus.MustRegister(writeBinlogSizeHistogram)
 	prometheus.MustRegister(writeBinlogTimeHistogram)
+	prometheus.MustRegister(storageSizeGause)
 }
