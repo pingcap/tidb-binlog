@@ -135,6 +135,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			binlog := new(pb.Binlog)
 			err = binlog.Unmarshal(resp.Entity.Payload)
 			if err != nil {
+				errorBinlogCount.Add(1)
 				log.Errorf("[pump %s] unmarshal binlog error: %v", p.nodeID, err)
 				p.reportErr(pctx, err)
 				return

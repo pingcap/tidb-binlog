@@ -31,7 +31,15 @@ var (
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "error_binlog_count",
-			Help:      "Total count of binlog that store too late.",
+			Help:      "Total count of binlog with wrong struct.",
+		})
+
+	disorderBinlogCount = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "disorder_binlog_count",
+			Help:      "Total count of binlog which is disorder.",
 		})
 
 	eventCounter = prometheus.NewCounterVec(

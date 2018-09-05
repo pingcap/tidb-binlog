@@ -260,7 +260,6 @@ func checkExclusive(dataDir string) error {
 
 // checkNodeID check NodeID's format is legal or not.
 func checkNodeID(nodeID string) bool {
-
 	_, port, err := net.SplitHostPort(nodeID)
 	if err != nil {
 		return false
