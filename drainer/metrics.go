@@ -86,15 +86,17 @@ var (
 		}, []string{"nodeID"})
 )
 
+var registerer = prometheus.NewRegistry()
+
 func init() {
-	prometheus.MustRegister(pumpPositionGauge)
-	prometheus.MustRegister(ddlJobsCounter)
-	prometheus.MustRegister(errorBinlogCount)
-	prometheus.MustRegister(positionGauge)
-	prometheus.MustRegister(eventCounter)
-	prometheus.MustRegister(txnHistogram)
-	prometheus.MustRegister(readBinlogHistogram)
-	prometheus.MustRegister(readBinlogSizeHistogram)
+	registerer.MustRegister(pumpPositionGauge)
+	registerer.MustRegister(ddlJobsCounter)
+	registerer.MustRegister(errorBinlogCount)
+	registerer.MustRegister(positionGauge)
+	registerer.MustRegister(eventCounter)
+	registerer.MustRegister(txnHistogram)
+	registerer.MustRegister(readBinlogHistogram)
+	registerer.MustRegister(readBinlogSizeHistogram)
 }
 
 type metricClient struct {
@@ -114,7 +116,7 @@ func (mc *metricClient) Start(ctx context.Context, drainerID string) {
 				"binlog",
 				map[string]string{"instance": drainerID},
 				mc.addr,
-				prometheus.DefaultGatherer,
+				registerer,
 			)
 			if err != nil {
 				log.Errorf("could not push metrics to Prometheus Pushgateway: %v", err)
