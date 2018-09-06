@@ -120,22 +120,22 @@ var (
 		}, []string{"nodeID"})
 )
 
-var registerer = prometheus.NewRegistry()
+var registry = prometheus.NewRegistry()
 
 func init() {
-	registerer.MustRegister(windowGauge)
-	registerer.MustRegister(offsetGauge)
-	registerer.MustRegister(publishBinlogCounter)
-	registerer.MustRegister(ddlJobsCounter)
-	registerer.MustRegister(tikvQueryCount)
-	registerer.MustRegister(errorBinlogCount)
-	registerer.MustRegister(positionGauge)
-	registerer.MustRegister(eventCounter)
-	registerer.MustRegister(txnHistogram)
-	registerer.MustRegister(readBinlogHistogram)
-	registerer.MustRegister(readBinlogSizeHistogram)
-	registerer.MustRegister(publishBinlogHistogram)
-	registerer.MustRegister(findMatchedBinlogHistogram)
+	registry.MustRegister(windowGauge)
+	registry.MustRegister(offsetGauge)
+	registry.MustRegister(publishBinlogCounter)
+	registry.MustRegister(ddlJobsCounter)
+	registry.MustRegister(tikvQueryCount)
+	registry.MustRegister(errorBinlogCount)
+	registry.MustRegister(positionGauge)
+	registry.MustRegister(eventCounter)
+	registry.MustRegister(txnHistogram)
+	registry.MustRegister(readBinlogHistogram)
+	registry.MustRegister(readBinlogSizeHistogram)
+	registry.MustRegister(publishBinlogHistogram)
+	registry.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {
@@ -155,7 +155,7 @@ func (mc *metricClient) Start(ctx context.Context, drainerID string) {
 				"binlog",
 				map[string]string{"instance": drainerID},
 				mc.addr,
-				registerer,
+				registry,
 			)
 			if err != nil {
 				log.Errorf("could not push metrics to Prometheus Pushgateway: %v", err)
