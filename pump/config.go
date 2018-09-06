@@ -169,7 +169,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustString(&cfg.Socket, defaultSocket)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 	initializeSaramaGlobalConfig()
 
@@ -231,12 +230,14 @@ func (cfg *Config) validate() error {
 	}
 
 	// check socketAddr
-	urlsock, err := url.Parse(cfg.Socket)
-	if err != nil {
-		return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
-	}
-	if len(strings.Split(urlsock.Path, "/")) < 2 {
-		return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
+	if len(cfg.Socket) > 0 {
+		urlsock, err := url.Parse(cfg.Socket)
+		if err != nil {
+			return errors.Errorf("parse Socket error: %s, %v", cfg.Socket, err)
+		}
+		if len(strings.Split(urlsock.Path, "/")) < 2 {
+			return errors.Errorf("bad Socket addr format: %s", urlsock.Path)
+		}
 	}
 
 	// check EtcdEndpoints
