@@ -109,10 +109,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
-	//Host          string `toml:"host" json:"host"`
-	//User          string `toml:"user" json:"user"`
-	//Password      string `toml:"password" json:"password"`
-	//Port          int    `toml:"port" json:"port"`
 
 	return cfg
 }
