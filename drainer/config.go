@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -108,6 +109,10 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	//Host          string `toml:"host" json:"host"`
+	//User          string `toml:"user" json:"user"`
+	//Password      string `toml:"password" json:"password"`
+	//Port          int    `toml:"port" json:"port"`
 
 	return cfg
 }
@@ -247,11 +252,25 @@ func (cfg *Config) adjustConfig() error {
 	if cfg.SyncerCfg.To == nil {
 		cfg.SyncerCfg.To = new(executor.DBConfig)
 		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
-			cfg.SyncerCfg.To.Host = "localhost"
-			cfg.SyncerCfg.To.Port = 3306
-			cfg.SyncerCfg.To.User = "root"
-			cfg.SyncerCfg.To.Password = ""
-			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
+			host := os.Getenv("MYSQL_HOST")
+			if host == "" {
+				host = "localhost"
+			}
+			port, _ := strconv.Atoi(os.Getenv("MYSQL_PORT"))
+			if port == 0 {
+				port = 3306
+			}
+			user := os.Getenv("MYSQL_USER")
+			if user == "" {
+				user = "root"
+			}
+			pswd := os.Getenv("MYSQL_PSWD")
+
+			cfg.SyncerCfg.To.Host = host
+			cfg.SyncerCfg.To.Port = port
+			cfg.SyncerCfg.To.User = user
+			cfg.SyncerCfg.To.Password = pswd
+			log.Infof("mysql use config: %s@%s:%d", user, host, port)
 		} else if cfg.SyncerCfg.DestDBType == "pb" {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
