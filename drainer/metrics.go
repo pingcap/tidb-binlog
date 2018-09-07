@@ -10,16 +10,6 @@ import (
 )
 
 var (
-	// remove
-	windowGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "window",
-			Help:      "DepositWindow boundary.",
-		}, []string{"marker"})
-
-	// modify
 	pumpPositionGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -28,36 +18,6 @@ var (
 			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 
-	// remove
-	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "find_matched_binlog_duration_time",
-			Help:      "Bucketed histogram of find a matched binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	// modify
-	publishBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_duration_time",
-			Help:      "Bucketed histogram of publish a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	// remove
-	publishBinlogCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_count",
-			Help:      "Total binlog count been stored.",
-		}, []string{"nodeID"})
-
-	// keep
 	ddlJobsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -66,24 +26,22 @@ var (
 			Help:      "Total ddl jobs count been stored.",
 		})
 
-	// remove
-	tikvQueryCount = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "query_tikv_count",
-			Help:      "Total count that queried tikv.",
-		})
-
 	errorBinlogCount = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "error_binlog_count",
-			Help:      "Total count of binlog that store too late.",
+			Help:      "Total count of binlog with wrong struct.",
 		})
 
-	// keep
+	disorderBinlogCount = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "disorder_binlog_count",
+			Help:      "Total count of binlog which is disorder.",
+		})
+
 	eventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
@@ -129,19 +87,14 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(windowGauge)
 	prometheus.MustRegister(pumpPositionGauge)
-	prometheus.MustRegister(publishBinlogCounter)
 	prometheus.MustRegister(ddlJobsCounter)
-	prometheus.MustRegister(tikvQueryCount)
 	prometheus.MustRegister(errorBinlogCount)
 	prometheus.MustRegister(positionGauge)
 	prometheus.MustRegister(eventCounter)
 	prometheus.MustRegister(txnHistogram)
 	prometheus.MustRegister(readBinlogHistogram)
 	prometheus.MustRegister(readBinlogSizeHistogram)
-	prometheus.MustRegister(publishBinlogHistogram)
-	prometheus.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {

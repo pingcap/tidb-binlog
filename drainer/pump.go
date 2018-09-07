@@ -116,6 +116,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				needReCreateConn = false
 			}
 
+			beginTime := time.Now()
 			resp, err := p.pullCli.Recv()
 			if err != nil {
 				pLog.Print(labelReceive, func() {
@@ -128,10 +129,13 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				// TODO: add metric here
 				continue
 			}
+			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
+			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(resp.Entity.Payload)))
 
 			binlog := new(pb.Binlog)
 			err = binlog.Unmarshal(resp.Entity.Payload)
 			if err != nil {
+				errorBinlogCount.Add(1)
 				log.Errorf("[pump %s] unmarshal binlog error: %v", p.nodeID, err)
 				p.reportErr(pctx, err)
 				return
