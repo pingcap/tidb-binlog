@@ -443,7 +443,7 @@ func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
 	}
 
 	if len(resp.Errmsg) > 0 {
-		err = errors.Errorf("write fake binlog err: ", resp.Errmsg)
+		err = errors.Errorf("write fake binlog err: %v", resp.Errmsg)
 		return nil, err
 	}
 
