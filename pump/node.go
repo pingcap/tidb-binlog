@@ -47,6 +47,8 @@ type Node interface {
 	Notify(ctx context.Context) error
 	// Nodes returns all pump nodes
 	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
+	// Close release the resource
+	Close() error
 }
 
 type pumpNode struct {
@@ -118,6 +120,10 @@ func (p *pumpNode) ID() string {
 	return p.id
 }
 
+func (p *pumpNode) Close() error {
+	return errors.Trace(p.EtcdRegistry.Close())
+}
+
 func (p *pumpNode) ShortID() string {
 	if len(p.id) <= shortIDLen {
 		return p.id
@@ -173,10 +179,6 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
 		defer func() {
-			if err := p.Close(); err != nil {
-				errc <- errors.Trace(err)
-			}
-			close(errc)
 			log.Info("Heartbeat goroutine exited")
 		}()
 

@@ -615,4 +615,6 @@ func (s *Server) Close() {
 			log.Errorf("close binlogger error %v", err)
 		}
 	}
+
+	s.node.Close()
 }
