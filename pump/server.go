@@ -583,10 +583,6 @@ func (s *Server) getTSO() (int64, error) {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
-
 	// update latest for offline ts in unregister process
 	if _, err := s.getTSO(); err != nil {
 		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
@@ -602,6 +598,17 @@ func (s *Server) Close() {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	log.Info(s.node.ID, " has unregister")
+
+	err := s.node.Quit()
+	if err != nil {
+		log.Errorf("close node error %v", errors.ErrorStack(err))
+	}
+	log.Info("pump node is closed")
+
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
+
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()

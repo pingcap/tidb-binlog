@@ -47,6 +47,8 @@ type Node interface {
 	Notify(ctx context.Context) error
 	// Nodes returns all pump nodes
 	NodesStatus(ctx context.Context) ([]*NodeStatus, error)
+	// Quit quits the node.
+	Quit() error
 }
 
 type pumpNode struct {
@@ -173,9 +175,6 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
 	go func() {
 		defer func() {
-			if err := p.Close(); err != nil {
-				errc <- errors.Trace(err)
-			}
 			close(errc)
 			log.Info("Heartbeat goroutine exited")
 		}()
@@ -193,6 +192,10 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 		}
 	}()
 	return errc
+}
+
+func (p *pumpNode) Quit() error {
+	return errors.Trace(p.Close())
 }
 
 // readLocalNodeID reads nodeID from a local file
