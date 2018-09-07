@@ -107,6 +107,11 @@ func (ks *KafkaSeeker) seekOffsets(ctx context.Context, topic string, partitions
 			return offsets, errors.Annotatef(err, "get newest offset from topic %s partition %d", topic, partition)
 		}
 
+		if start >= end {
+			offsets[partition] = sarama.OffsetOldest
+			continue
+		}
+
 		log.Infof("seek position %v in topic %s partition %d, oldest offset %d, newest offset %d", pos, topic, partition, start, end)
 		offset, err := ks.seekOffset(ctx, topic, partition, start, end-1, pos)
 		if err != nil {
