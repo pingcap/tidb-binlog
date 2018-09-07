@@ -602,6 +602,13 @@ func (s *Server) Close() {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	log.Info(s.node.ID, " has unregister")
+
+	err := s.node.Quit()
+	if err != nil {
+		log.Errorf("close node error %v", errors.ErrorStack(err))
+	}
+	log.Info("pump node is closed")
+
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
