@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -490,7 +491,7 @@ func (s *Syncer) savePoint(ts int64) {
 		log.Fatalf("[write save point]%d[error]%v", ts, err)
 	}
 
-	positionGauge.Set(float64(ts))
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 }
 
 func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {

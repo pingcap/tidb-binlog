@@ -64,12 +64,13 @@ var (
 		}, []string{"type"})
 )
 
-func init() {
-	prometheus.MustRegister(gcTSGause)
-	prometheus.MustRegister(maxCommitTSGause)
-	prometheus.MustRegister(tikvQueryCount)
-	prometheus.MustRegister(errorCount)
-	prometheus.MustRegister(writeBinlogSizeHistogram)
-	prometheus.MustRegister(writeBinlogTimeHistogram)
-	prometheus.MustRegister(storageSizeGause)
+// InitMetircs register the metrics to registry
+func InitMetircs(registry *prometheus.Registry) {
+	registry.MustRegister(gcTSGause)
+	registry.MustRegister(maxCommitTSGause)
+	registry.MustRegister(tikvQueryCount)
+	registry.MustRegister(errorCount)
+	registry.MustRegister(writeBinlogSizeHistogram)
+	registry.MustRegister(writeBinlogTimeHistogram)
+	registry.MustRegister(storageSizeGause)
 }

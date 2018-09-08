@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/net/context"
 )
 
@@ -194,7 +195,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 
 	for nodeID, pump := range c.pumps {
 		status.PumpPos[nodeID] = pump.latestTS
-		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(pump.latestTS))
+		pumpPositionGauge.WithLabelValues(nodeID).Set(float64(oracle.ExtractPhysical(uint64(pump.latestTS))))
 	}
 
 	c.mu.Lock()
@@ -209,6 +210,8 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
 		return errors.Trace(err)
 	}
+
+	c.updateCollectStatus(false)
 
 	return nil
 }
@@ -289,18 +292,21 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 	defer c.mu.Unlock()
 	status = c.mu.status
 
-	if status != nil {
-		// if syncer don't have binlog input in a minitue,
-		// we can think all the binlog is synced
-		if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
-			status.Synced = true
+	if status == nil {
+		return &HTTPStatus{
+			Synced: false,
 		}
-		status.LastTS = c.syncer.GetLatestCommitTS()
+
 	}
 
-	return &HTTPStatus{
-		Synced: false,
+	// if syncer don't have binlog input in a minitue,
+	// we can think all the binlog is synced
+	if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+		status.Synced = true
 	}
+	status.LastTS = c.syncer.GetLatestCommitTS()
+
+	return status
 }
 
 func (c *Collector) reportErr(ctx context.Context, err error) {

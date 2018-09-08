@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"os"
 	"time"
 
 	"github.com/ngaut/log"
@@ -26,13 +27,13 @@ var (
 			Help:      "Total ddl jobs count been stored.",
 		})
 
-	errorBinlogCount = prometheus.NewCounter(
+	errorCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "error_binlog_count",
-			Help:      "Total count of binlog with wrong struct.",
-		})
+			Name:      "error_count",
+			Help:      "Total count of error type",
+		}, []string{"type"})
 
 	disorderBinlogCount = prometheus.NewCounter(
 		prometheus.CounterOpts{
@@ -50,28 +51,28 @@ var (
 			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
 
-	positionGauge = prometheus.NewGauge(
+	checkpointTSOGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "position",
-			Help:      "save position of drainer.",
+			Name:      "checkpoint_tso",
+			Help:      "save checkpoint tso of drainer.",
 		})
 
-	txnHistogram = prometheus.NewHistogram(
+	executeHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "txn_duration_time",
-			Help:      "Bucketed histogram of processing time (s) of a txn.",
+			Name:      "execute_duration_time",
+			Help:      "Bucketed histogram of processing time (s) of a execute to sync data to downstream.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
-	readBinlogHistogram = prometheus.NewHistogramVec(
+	binlogReachDurationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "read_binlog_duration_time",
+			Name:      "binlog_reach_duration_time",
 			Help:      "Bucketed histogram of read time (s) of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
@@ -89,13 +90,15 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
+	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewGoCollector())
 	registry.MustRegister(pumpPositionGauge)
 	registry.MustRegister(ddlJobsCounter)
-	registry.MustRegister(errorBinlogCount)
-	registry.MustRegister(positionGauge)
+	registry.MustRegister(errorCount)
+	registry.MustRegister(checkpointTSOGauge)
 	registry.MustRegister(eventCounter)
-	registry.MustRegister(txnHistogram)
-	registry.MustRegister(readBinlogHistogram)
+	registry.MustRegister(executeHistogram)
+	registry.MustRegister(binlogReachDurationHistogram)
 	registry.MustRegister(readBinlogSizeHistogram)
 }
 
