@@ -616,5 +616,8 @@ func (s *Server) Close() {
 		}
 	}
 
-	s.node.Close()
+	err := s.node.Close()
+	if err != nil {
+		log.Error(err)
+	}
 }
