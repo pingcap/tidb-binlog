@@ -329,6 +329,8 @@ func (a *Append) resolve(startTS int64) bool {
 		return false
 	}
 
+	log.Warnf("unknown commit stats start ts: %d", startTS)
+
 	if pbinlog.GetDdlJobId() == 0 {
 		tikvQueryCount.Add(1.0)
 		primaryKey := pbinlog.GetPrewriteKey()
@@ -369,6 +371,8 @@ func (a *Append) resolve(startTS int64) bool {
 		} else { // rollback
 			// we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		}
+
+		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.IsCommitted())
 		return true
 	}
 
