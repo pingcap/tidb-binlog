@@ -73,7 +73,7 @@ var (
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "binlog_reach_duration_time",
-			Help:      "Bucketed histogram of read time (s) of a binlog.",
+			Help:      "Bucketed histogram of how long the binlog take to reach drainer since it's committed",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 

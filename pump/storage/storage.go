@@ -131,13 +131,13 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	gcTSGause.Set(float64(oracle.ExtractPhysical(uint64(append.gcTS))))
+	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(append.gcTS))))
 
 	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	maxCommitTSGause.Set(float64(oracle.ExtractPhysical(uint64(append.maxCommitTS))))
+	maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(append.maxCommitTS))))
 
 	append.headPointer, err = append.readPointer(headPointerKey)
 	if err != nil {
@@ -257,7 +257,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 					continue
 				}
 				atomic.StoreInt64(&a.maxCommitTS, item.commit)
-				maxCommitTSGause.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
+				maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
 				toSaveItem = item
 				if toSave == nil {
 					toSave = time.After(persistAtLeastTime)
@@ -303,8 +303,8 @@ func (a *Append) updateStatus() {
 			if err != nil {
 				log.Error("update sotrage size err: ", err)
 			} else {
-				storageSizeGause.WithLabelValues("capacity").Set(float64(size.capacity))
-				storageSizeGause.WithLabelValues("available").Set(float64(size.available))
+				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
 			}
 		}
 	}
@@ -483,7 +483,7 @@ func (a *Append) GCTS(ts int64) {
 
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
-	gcTSGause.Set(float64(oracle.ExtractPhysical(uint64(ts))))
+	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
 	// so we forward a little bit to make sure we can get the according P binlog
 	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))

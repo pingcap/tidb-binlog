@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	gcTSGause = prometheus.NewGauge(
+	gcTSGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
@@ -13,7 +13,7 @@ var (
 			Help:      "gc ts of storage",
 		})
 
-	storageSizeGause = prometheus.NewGaugeVec(
+	storageSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
@@ -21,7 +21,7 @@ var (
 			Help:      "storage size info",
 		}, []string{"type"})
 
-	maxCommitTSGause = prometheus.NewGauge(
+	maxCommitTSGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
@@ -66,11 +66,11 @@ var (
 
 // InitMetircs register the metrics to registry
 func InitMetircs(registry *prometheus.Registry) {
-	registry.MustRegister(gcTSGause)
-	registry.MustRegister(maxCommitTSGause)
+	registry.MustRegister(gcTSGauge)
+	registry.MustRegister(maxCommitTSGauge)
 	registry.MustRegister(tikvQueryCount)
 	registry.MustRegister(errorCount)
 	registry.MustRegister(writeBinlogSizeHistogram)
 	registry.MustRegister(writeBinlogTimeHistogram)
-	registry.MustRegister(storageSizeGause)
+	registry.MustRegister(storageSizeGauge)
 }
