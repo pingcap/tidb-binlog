@@ -75,6 +75,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		metaCP:          flash.GetInstance(),
+		saveTime:        time.Now(),
 	}
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)

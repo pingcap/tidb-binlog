@@ -9,6 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -54,6 +55,7 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		table:           cfg.Table,
 		tp:              tp,
 		TsMap:           make(map[string]int64),
+		saveTime:        time.Now(),
 	}
 
 	sql := genCreateSchema(sp)
