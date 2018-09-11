@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"os"
 	"time"
 
 	"github.com/ngaut/log"
@@ -123,6 +124,9 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
+	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewGoCollector())
+
 	registry.MustRegister(windowGauge)
 	registry.MustRegister(offsetGauge)
 	registry.MustRegister(publishBinlogCounter)
