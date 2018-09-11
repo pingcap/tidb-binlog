@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
@@ -107,6 +108,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(cp.TS()))))
 
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {

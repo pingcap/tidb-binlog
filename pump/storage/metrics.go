@@ -1,9 +1,11 @@
 package storage
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
-	gcTSGause = prometheus.NewGauge(
+	gcTSGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
@@ -11,7 +13,15 @@ var (
 			Help:      "gc ts of storage",
 		})
 
-	maxCommitTSGause = prometheus.NewGauge(
+	storageSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "storage_size_bytes",
+			Help:      "storage size info",
+		}, []string{"type"})
+
+	maxCommitTSGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
@@ -41,7 +51,7 @@ var (
 			Subsystem: "pump_storage",
 			Name:      "write_binlog_size",
 			Help:      "write binlog size",
-			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"type"})
 
 	writeBinlogTimeHistogram = prometheus.NewHistogramVec(
@@ -54,11 +64,13 @@ var (
 		}, []string{"type"})
 )
 
-func init() {
-	prometheus.MustRegister(gcTSGause)
-	prometheus.MustRegister(maxCommitTSGause)
-	prometheus.MustRegister(tikvQueryCount)
-	prometheus.MustRegister(errorCount)
-	prometheus.MustRegister(writeBinlogSizeHistogram)
-	prometheus.MustRegister(writeBinlogTimeHistogram)
+// InitMetircs register the metrics to registry
+func InitMetircs(registry *prometheus.Registry) {
+	registry.MustRegister(gcTSGauge)
+	registry.MustRegister(maxCommitTSGauge)
+	registry.MustRegister(tikvQueryCount)
+	registry.MustRegister(errorCount)
+	registry.MustRegister(writeBinlogSizeHistogram)
+	registry.MustRegister(writeBinlogTimeHistogram)
+	registry.MustRegister(storageSizeGauge)
 }

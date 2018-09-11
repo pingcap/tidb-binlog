@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -129,12 +131,14 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	gcTSGause.Set(float64(append.gcTS))
+	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(append.gcTS))))
 
 	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(append.maxCommitTS))))
+
 	append.headPointer, err = append.readPointer(headPointerKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -253,6 +257,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 					continue
 				}
 				atomic.StoreInt64(&a.maxCommitTS, item.commit)
+				maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
 				toSaveItem = item
 				if toSave == nil {
 					toSave = time.After(persistAtLeastTime)
@@ -279,6 +284,9 @@ func (a *Append) updateStatus() {
 	if a.tiStore != nil {
 		updateLatest = time.Tick(time.Second)
 	}
+
+	updateSize := time.Tick(time.Second * 3)
+
 	for {
 		select {
 		case <-a.close:
@@ -289,6 +297,14 @@ func (a *Append) updateStatus() {
 				log.Errorf("QueryLatestTSFromPD err: %v", err)
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
+			}
+		case <-updateSize:
+			size, err := getStorageSize(a.dir)
+			if err != nil {
+				log.Error("update sotrage size err: ", err)
+			} else {
+				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
 			}
 		}
 	}
@@ -312,6 +328,8 @@ func (a *Append) resolve(startTS int64) bool {
 		log.Error(err)
 		return false
 	}
+
+	log.Warnf("unknown commit stats start ts: %d", startTS)
 
 	if pbinlog.GetDdlJobId() == 0 {
 		tikvQueryCount.Add(1.0)
@@ -353,6 +371,8 @@ func (a *Append) resolve(startTS int64) bool {
 		} else { // rollback
 			// we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		}
+
+		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.IsCommitted())
 		return true
 	}
 
@@ -463,7 +483,7 @@ func (a *Append) GCTS(ts int64) {
 
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
-	gcTSGause.Set(float64(ts))
+	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
 	// so we forward a little bit to make sure we can get the according P binlog
 	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
@@ -900,4 +920,39 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 	}()
 
 	return values
+}
+
+type storageSize struct {
+	capacity  int
+	available int
+}
+
+func getStorageSize(dir string) (size storageSize, err error) {
+	var stat unix.Statfs_t
+
+	err = unix.Statfs(dir, &stat)
+	if err != nil {
+		return size, errors.Trace(err)
+	}
+
+	// When container is run in MacOS, `bsize` obtained by `statfs` syscall is not the fundamental block size,
+	// but the `iosize` (optimal transfer block size) instead, it's usually 1024 times larger than the `bsize`.
+	// for example `4096 * 1024`. To get the correct block size, we should use `frsize`. But `frsize` isn't
+	// guaranteed to be supported everywhere, so we need to check whether it's supported before use it.
+	// For more details, please refer to: https://github.com/docker/for-mac/issues/2136
+	bSize := uint64(stat.Bsize)
+	field := reflect.ValueOf(&stat).Elem().FieldByName("Frsize")
+	if field.IsValid() {
+		if field.Kind() == reflect.Uint64 {
+			bSize = field.Uint()
+		} else {
+			bSize = uint64(field.Int())
+		}
+	}
+
+	// Available blocks * size per block = available space in bytes
+	size.available = int(stat.Bavail) * int(bSize)
+	size.capacity = int(stat.Blocks) * int(bSize)
+
+	return
 }

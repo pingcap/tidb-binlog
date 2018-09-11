@@ -8,6 +8,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -116,7 +117,6 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				needReCreateConn = false
 			}
 
-			beginTime := time.Now()
 			resp, err := p.pullCli.Recv()
 			if err != nil {
 				pLog.Print(labelReceive, func() {
@@ -129,17 +129,19 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				// TODO: add metric here
 				continue
 			}
-			readBinlogHistogram.WithLabelValues(p.nodeID).Observe(time.Since(beginTime).Seconds())
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(resp.Entity.Payload)))
 
 			binlog := new(pb.Binlog)
 			err = binlog.Unmarshal(resp.Entity.Payload)
 			if err != nil {
-				errorBinlogCount.Add(1)
+				errorCount.WithLabelValues("unmarshal_binlog").Add(1)
 				log.Errorf("[pump %s] unmarshal binlog error: %v", p.nodeID, err)
 				p.reportErr(pctx, err)
 				return
 			}
+
+			millisecond := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(binlog.CommitTs))
+			binlogReachDurationHistogram.WithLabelValues(p.nodeID).Observe(float64(millisecond) / 1000.0)
 
 			item := &binlogItem{
 				binlog: binlog,
@@ -183,7 +185,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 	}
 	pullCli, err := cli.PullBinlogs(ctx, in)
 	if err != nil {
-		log.Error("[pump %s] create PullBinlogs client error %v", p.nodeID, err)
+		log.Errorf("[pump %s] create PullBinlogs client error %v", p.nodeID, err)
 		conn.Close()
 		p.pullCli = nil
 		p.grpcConn = nil

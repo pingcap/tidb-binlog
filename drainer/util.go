@@ -134,7 +134,7 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 
 	beginTime := time.Now()
 	defer func() {
-		txnHistogram.Observe(time.Since(beginTime).Seconds())
+		executeHistogram.Observe(time.Since(beginTime).Seconds())
 	}()
 
 	return executor.Execute(sqls, args, commitTSs, isDDL)
