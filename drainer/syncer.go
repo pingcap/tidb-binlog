@@ -19,9 +19,6 @@ import (
 )
 
 var (
-	maxDMLRetryCount = 100
-	maxDDLRetryCount = 5
-
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
 )

@@ -4,9 +4,7 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-	"math"
 
-	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -58,70 +56,6 @@ func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
 	}
 	log.Warn("bw is not *file.Lockedfile, unexpected!")
 	return 0, errors.Trace(err)
-}
-
-type kafkaEncoder struct {
-	topic     string
-	partition int32
-	producer  sarama.SyncProducer
-	slicer    *KafkaSlicer
-}
-
-func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
-	return &kafkaEncoder{
-		producer:  producer,
-		topic:     topic,
-		partition: partition,
-		slicer:    NewKafkaSlicer(topic, partition),
-	}
-}
-
-func (k *kafkaEncoder) Encode(entity *binlog.Entity) (int64, error) {
-	var (
-		messages    []*sarama.ProducerMessage
-		errMessages []*sarama.ProducerMessage
-		err         error
-		retry       int
-		offset      int64 = math.MaxInt64
-	)
-
-	messages, err = k.slicer.Generate(entity)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	err = k.producer.SendMessages(messages)
-	for err != nil && retry < GlobalConfig.sendKafKaRetryNum {
-		producerErrors, ok := err.(sarama.ProducerErrors)
-		if !ok {
-			return 0, errors.Trace(err)
-		}
-		retry++
-
-		log.Errorf("[encoder] produce meesage error %v", producerErrors.Error())
-
-		errMessages = errMessages[:0]
-		for _, errMessage := range producerErrors {
-			log.Errorf("[encode] produce message %s, now retry No. %d", errMessage.Error(), retry)
-			errMessages = append(errMessages, errMessage.Msg)
-		}
-		err = k.producer.SendMessages(errMessages)
-	}
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	for _, message := range messages {
-		if offset > message.Offset {
-			offset = message.Offset
-		}
-
-		if message.Partition != k.partition {
-			return 0, errors.Errorf("produce message to wrong partition %d, not specified partition %d", message.Partition, k.partition)
-		}
-	}
-
-	return offset, nil
 }
 
 func encode(payload []byte) []byte {

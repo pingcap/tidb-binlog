@@ -33,23 +33,20 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-var pullBinlogInterval = 50 * time.Millisecond
 var notifyDrainerTimeout = time.Second * 10
 
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
 const (
-	slowDist      = 30 * time.Millisecond
 	mib           = 1024 * 1024
 	pdReconnTimes = 30
 )
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
-	latestKafkaPos binlog.Pos
-	latestFilePos  binlog.Pos
-	latestTS       int64
+	latestFilePos binlog.Pos
+	latestTS      int64
 )
 
 // Server implements the gRPC interface,
@@ -76,8 +73,6 @@ type Server struct {
 	lastWriteBinlogUnixNano int64
 	pdCli                   pd.Client
 	cfg                     *Config
-
-	cp *checkPoint
 
 	isClosed int32
 }
@@ -584,14 +579,9 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	var cp binlog.Pos
-	if s.cp != nil {
-		cp = s.cp.pos()
-	}
 	return &HTTPStatus{
-		StatusMap:  statusMap,
-		CommitTS:   commitTS,
-		CheckPoint: cp,
+		StatusMap: statusMap,
+		CommitTS:  commitTS,
 	}
 }
 

@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	receiveBinlogRetryTime = 10
-	binlogChanSize         = 10
+	binlogChanSize = 10
 )
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read

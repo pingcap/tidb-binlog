@@ -63,16 +63,6 @@ func initializeSaramaGlobalConfig() {
 	sarama.MaxRequestSize = int32(maxMsgSize)
 }
 
-func getSafeTS(ts int64, forwardTime int64) int64 {
-	subTime := (forwardTime * 60 * 1000) << 18
-	ts -= subTime
-	if ts < int64(0) {
-		ts = int64(0)
-	}
-
-	return ts
-}
-
 func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 	version, err := tiStore.CurrentVersion()
 	if err != nil {

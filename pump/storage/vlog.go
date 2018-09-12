@@ -72,12 +72,6 @@ func (r *request) String() string {
 	return fmt.Sprintf("{ts: %d, payload len: %d, valuePointer: %+v}", r.ts(), len(r.payload), r.valuePointer)
 }
 
-func newRequest(payload []byte) *request {
-	return &request{
-		payload: payload,
-	}
-}
-
 type valuePointer struct {
 	Fid    uint32
 	Offset int64

@@ -55,6 +55,8 @@ func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 	c.Assert(len(cols), Equals, 0)
 }
 
+// TODO: useless code fix test?
+// nolint
 func (t *testTranslatorSuite) testGenerateColumnAndValue(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("normal")
