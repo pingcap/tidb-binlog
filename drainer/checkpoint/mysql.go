@@ -57,6 +57,7 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		Positions:       make(map[string]pb.Pos),
 		tp:              tp,
 		TsMap:           make(map[string]int64),
+		saveTime:        time.Now(),
 	}
 
 	sql := genCreateSchema(sp)
