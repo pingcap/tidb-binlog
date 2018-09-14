@@ -341,11 +341,11 @@ func (m *Merger) isPaused() bool {
 }
 
 func (m *Merger) setSourceChanged() {
-	atomic.StoreInt32(&m.pause, 1)
+	atomic.StoreInt32(&m.sourceChanged, 1)
 }
 
 func (m *Merger) resetSourceChanged() {
-	atomic.StoreInt32(&m.pause, 0)
+	atomic.StoreInt32(&m.sourceChanged, 0)
 }
 
 func (m *Merger) isSourceChanged() bool {
