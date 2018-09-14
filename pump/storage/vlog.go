@@ -20,7 +20,8 @@ import (
 
 const (
 	// we finalize the curFile when size >= finalizeFileSizeAtClose when closing the vlog, we don't need to scan the too big curFile to recover the maxTS of the file when reopen the vlog
-	finalizeFileSizeAtClose = 50 * 1024 * 1024 // 50M
+	// TODO we can always finalize the curFile when close Storage, and truncate the footer when open if we want to continue writing this file, so no need to scan the file to get the info in footer
+	finalizeFileSizeAtClose = 50 * 1024 // 50K
 )
 
 // Options is the config options of Append and vlog

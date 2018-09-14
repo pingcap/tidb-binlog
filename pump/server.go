@@ -272,7 +272,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
@@ -291,6 +291,9 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 				return err
 			}
 			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
+		case <-stream.Context().Done():
+			log.Debug("stream done: ", stream.Context().Err())
+			return nil
 		}
 	}
 }
@@ -379,6 +382,9 @@ func (s *Server) Start() error {
 
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
+	// sets a timeout for the read of matchers
+	m.SetReadTimeout(time.Second * 10)
+
 	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
