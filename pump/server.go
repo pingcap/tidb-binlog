@@ -403,6 +403,7 @@ func (s *Server) Start() error {
 
 	http.HandleFunc("/status", s.Status)
 	http.HandleFunc("/drainers", s.AllDrainers)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 

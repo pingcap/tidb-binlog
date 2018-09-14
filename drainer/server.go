@@ -312,6 +312,7 @@ func (s *Server) Start() error {
 	go s.gs.Serve(grpcL)
 
 	http.HandleFunc("/status", s.collector.Status)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
