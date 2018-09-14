@@ -823,7 +823,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 			cancel()
 		case <-ctx.Done():
 		}
-		return
 	}()
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
