@@ -388,6 +388,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	http.Handle("/", router)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 
 	go http.Serve(httpL, nil)

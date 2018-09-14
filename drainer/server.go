@@ -340,6 +340,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	http.Handle("/", router)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 
 	go http.Serve(httpL, nil)
