@@ -818,8 +818,11 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
-		<-a.close
-		cancel()
+		select {
+		case <-a.close:
+			cancel()
+		case <-ctx.Done():
+		}
 	}()
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
