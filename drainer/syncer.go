@@ -137,7 +137,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		if startTS == commitTS {
 			// it's fake binlog
-			atomic.StoreInt64(&prepareTS, commitTS)
+			atomic.StoreInt64(&s.prepareTS, commitTS)
 			continue
 		}
 
@@ -157,7 +157,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		}
 
 		if commitTS <= s.initCommitTS {
-			atomic.StoreInt64(&prepareTS, commitTS)
+			atomic.StoreInt64(&s.prepareTS, commitTS)
 			continue
 		}
 
@@ -179,7 +179,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		log.Infof("prepare commitTS: %d, schema venison %d", commitTS, latestSchemaVersion)
 		log.Infof("prepare schema: %s", s.schema)
-		atomic.StoreInt32(&prepared, 1)
+		atomic.StoreInt32(&s.prepared, 1)
 
 		return b, nil
 	}
@@ -790,8 +790,8 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
-	if atomic.LoadInt32(&prepared) != 1 {
-		return prepareTS
+	if atomic.LoadInt32(&s.prepared) != 1 {
+		return atomic.LoadInt64(&s.prepareTS)
 	}
 
 	return s.cp.TS()
