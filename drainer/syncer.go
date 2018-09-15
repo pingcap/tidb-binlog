@@ -3,6 +3,7 @@ package drainer
 import (
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -57,6 +58,9 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
+
+	prepared  int32
+	prepareTS int64
 }
 
 // NewSyncer returns a Drainer instance
@@ -133,6 +137,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		if startTS == commitTS {
 			// it's fake binlog
+			atomic.StoreInt64(&s.prepareTS, commitTS)
 			continue
 		}
 
@@ -152,6 +157,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		}
 
 		if commitTS <= s.initCommitTS {
+			atomic.StoreInt64(&s.prepareTS, commitTS)
 			continue
 		}
 
@@ -173,6 +179,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		log.Infof("prepare commitTS: %d, schema venison %d", commitTS, latestSchemaVersion)
 		log.Infof("prepare schema: %s", s.schema)
+		atomic.StoreInt32(&s.prepared, 1)
 
 		return b, nil
 	}
@@ -783,5 +790,9 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
+	if atomic.LoadInt32(&s.prepared) != 1 {
+		return atomic.LoadInt64(&s.prepareTS)
+	}
+
 	return s.cp.TS()
 }

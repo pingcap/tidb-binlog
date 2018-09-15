@@ -372,7 +372,7 @@ func (a *Append) resolve(startTS int64) bool {
 			// we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		}
 
-		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.IsCommitted())
+		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.CommitTS())
 		return true
 	}
 
