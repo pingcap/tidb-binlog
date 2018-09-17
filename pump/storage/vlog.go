@@ -371,7 +371,7 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 		if fid < start.Fid {
 			continue
 		}
-		lf, _ := vlog.filesMap[fid]
+		lf := vlog.filesMap[fid]
 		var startOffset int64
 		if fid == start.Fid {
 			startOffset = start.Offset

@@ -332,7 +332,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 				continue
 			}
 			log.Info("GC binlog file:", fileName)
-		} else if time.Now().Sub(fi.ModTime()) > days {
+		} else if time.Since(fi.ModTime()) > days {
 			log.Warningf("binlog file %s is already reach the gc time, but data is not send to kafka, position is %v", fileName, pos)
 		}
 	}

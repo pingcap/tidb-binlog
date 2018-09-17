@@ -279,10 +279,10 @@ func (cfg *Config) adjustConfig() error {
 	// get KafkaAddrs from zookeeper if ZkAddrs is setted
 	if cfg.SyncerCfg.To.ZKAddrs != "" {
 		zkClient, err := zk.NewFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
-		defer zkClient.Close()
 		if err != nil {
 			return errors.Trace(err)
 		}
+		defer zkClient.Close()
 
 		kafkaUrls, err := zkClient.KafkaUrls()
 		if err != nil {

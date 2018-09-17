@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"encoding/binary"
+	"hash/crc32"
+	"math/rand"
+
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
@@ -14,8 +17,6 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
-	"hash/crc32"
-	"math/rand"
 )
 
 var (
@@ -142,7 +143,7 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	messages, err = sli.Generate(entity)
 	c.Assert(err, IsNil)
 	messages = messages[1:] // drop a slice
-	offset, err = to.produceMessageSlices(messages)
+	_, err = to.produceMessageSlices(messages)
 	c.Assert(err, IsNil)
 
 	message = []byte("eeeeeeeeeeeeeeeeeeee")

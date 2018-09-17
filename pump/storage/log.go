@@ -145,7 +145,7 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 		}
 	}
 
-	if lf.end == false {
+	if !lf.end {
 		err = lf.recover()
 		if err != nil {
 			err = errors.Trace(err)
@@ -248,7 +248,7 @@ func (lf *logFile) readRecord(offset int64) (record *Record, err error) {
 		return
 	}
 
-	if record.isValid() == false {
+	if !record.isValid() {
 		err = errors.New("checksum mismatch")
 		return
 	}

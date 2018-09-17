@@ -54,9 +54,7 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 }
 
 func (s *SorterSuite) TestSorter(c *check.C) {
-	var items []sortItem
-
-	items = []sortItem{
+	var items = []sortItem{
 		{
 			start: 1,
 			tp:    pb.BinlogType_Prewrite,

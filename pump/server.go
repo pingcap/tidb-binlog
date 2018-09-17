@@ -113,7 +113,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
-	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(GlobalConfig.maxMsgSize)}
+	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
 	if cfg.tls != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
@@ -291,6 +291,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			return nil
 		}
 	}
+	return nil
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
@@ -485,7 +486,7 @@ func (s *Server) gcBinlogFile() {
 		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
-		case <-time.Tick(time.Hour):
+		case <-time.After(time.Hour):
 			if s.gcDuration == 0 {
 				continue
 			}
@@ -632,7 +633,6 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	go s.Close()
 	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
-	return
 }
 
 func (s *Server) getTSO() (int64, error) {
@@ -688,9 +688,8 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	// check drainer has consume fake binlog we just write
 	for {
-		tick := time.Tick(time.Second)
 		select {
-		case <-tick:
+		case <-time.After(time.Second):
 			pumpNode := s.node.(*pumpNode)
 			drainers, err := pumpNode.Nodes(ctx, "drainers")
 			if err != nil {
@@ -750,7 +749,7 @@ func (s *Server) commitStatus() {
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
 	log.Info("begin to close pump server")
-	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
 		log.Debug("server had closed")
 		return
 	}

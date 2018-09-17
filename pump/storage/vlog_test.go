@@ -128,8 +128,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 	var reqs []*request
 	for i := 0; i < n; i++ {
 		// close and open back every time
-		var err error
-		err = vlog.close()
+		var err = vlog.close()
 		c.Assert(err, check.IsNil)
 
 		vlog = new(valueLog)

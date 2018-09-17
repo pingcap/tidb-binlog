@@ -5,11 +5,12 @@ import (
 	"hash/crc32"
 	"time"
 
+	"testing"
+
 	"github.com/Shopify/sarama"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"
 	"github.com/prometheus/client_golang/prometheus"
-	"testing"
 )
 
 func TestClient(t *testing.T) {
@@ -133,7 +134,6 @@ func (t *testAssemblerSuite) TestAssembleBinlog(c *C) {
 
 	// cache overflow
 	// [incomplete binlog,  binlog slices]
-	binlog = nil
 	messages = t.testGenerateConsumerMessage("t1", 4, nil)
 	asm.cacheSize = 3
 	for _, message := range messages {

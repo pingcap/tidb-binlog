@@ -50,10 +50,7 @@ func (s *Syncer) whiteFilter(stbs []TableName) []TableName {
 func (s *Syncer) skipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: schema, Table: table}}
 	tbs = s.whiteFilter(tbs)
-	if len(tbs) == 0 {
-		return true
-	}
-	return false
+	return len(tbs) == 0
 }
 
 func (s *Syncer) matchString(pattern string, t string) bool {

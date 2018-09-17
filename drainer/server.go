@@ -388,7 +388,6 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	go s.Close()
 	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
-	return
 }
 
 // GetLatestTS returns the last binlog's commit ts which synced to downstream.
@@ -398,7 +397,6 @@ func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
 	})
 	ts := s.syncer.GetLatestCommitTS()
 	rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
-	return
 }
 
 // commitStatus commit the node's last status to pd when close the server.
@@ -441,7 +439,7 @@ func (s *Server) updateStatus() error {
 func (s *Server) Close() {
 	log.Info("begin to close drainer server")
 
-	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
 		log.Debug("server had closed")
 		return
 	}
