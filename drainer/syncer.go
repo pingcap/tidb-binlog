@@ -222,7 +222,7 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
 		}
-		
+
 		// first drop the table
 		_, err := s.DropTable(job.TableID)
 		if err != nil {
@@ -244,8 +244,6 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 		if ok {
 			return "", "", "", nil
 		}
-
-		log.Infof("ActionRenameTable, job.TableID: %d, tableInfo.ID: %d", job.TableID, table.ID)
 
 		return schema.Name.O, table.Name.O, sql, nil
 

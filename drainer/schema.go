@@ -105,7 +105,7 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			if !ok {
 				return errors.NotFoundf("table(%d) or it's schema", job.TableID)
 			}
-			
+
 			// first drop the table
 			_, err := s.DropTable(job.TableID)
 			if err != nil {
@@ -136,13 +136,6 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionDropTable:
-			/*
-			_, ok := s.IgnoreSchemaByID(job.SchemaID)
-			if ok {
-				continue
-			}
-			*/
-
 			_, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
