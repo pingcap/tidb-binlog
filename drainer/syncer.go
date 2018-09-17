@@ -240,13 +240,9 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 			return "", "", "", errors.Trace(err)
 		}
 
-		// ignore schema doesn't support reanme ddl
 		_, ok = s.IgnoreSchemaByID(job.SchemaID)
 		if ok {
-			//table := job.BinlogInfo.TableInfo
-			//log.Warnf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 			return "", "", "", nil
-			//return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
 		}
 
 		log.Infof("ActionRenameTable, job.TableID: %d, tableInfo.ID: %d", job.TableID, table.ID)
@@ -273,8 +269,6 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 		if ok {
 			return "", "", "", nil
 		}
-
-		log.Infof("ActionCreateTable, tableInfo.ID: %d", job.TableID, table.ID)
 
 		return schema.Name.O, table.Name.O, sql, nil
 

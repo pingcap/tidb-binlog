@@ -6,7 +6,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/ngaut/log"
 )
 
 const implicitColName = "_tidb_rowid"
@@ -123,26 +122,9 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Infof("ActionRenameTable, job.TableID: %d, tableInfo.ID: %d", job.TableID, table.ID)
-
-			/*
-			_, ok := s.IgnoreSchemaByID(job.SchemaID)
-			if ok {
-				log.Warnf("ignore schema %d don't support rename ddl sql %s", job.SchemaID, job.Query)
-				continue
-				//return errors.Errorf("ignore schema %d don't support rename ddl sql %s", job.SchemaID, job.Query)
-			}
-			*/
 
 		case model.ActionCreateTable:
 			table := job.BinlogInfo.TableInfo
-			/*
-			_, ok := s.IgnoreSchemaByID(job.SchemaID)
-			if ok {
-				continue
-			}
-			*/
-
 			schema, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
@@ -152,7 +134,6 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Infof("ActionCreateTable, tableInfo.ID: %d", job.TableID, table.ID)
 
 		case model.ActionDropTable:
 			/*
@@ -173,13 +154,6 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 			}
 
 		case model.ActionTruncateTable:
-			/*
-			_, ok := s.IgnoreSchemaByID(job.SchemaID)
-			if ok {
-				continue
-			}
-			*/
-
 			schema, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
@@ -206,19 +180,11 @@ func (s *Schema) reconstructSchema(jobs []*model.Job, ignoreSchemaNames map[stri
 				return errors.NotFoundf("table %d", job.TableID)
 			}
 
-			/*
-			_, ok := s.IgnoreSchemaByID(job.SchemaID)
-			if ok {
-				continue
-			}
-			*/
-
 			_, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
 				return errors.NotFoundf("schema %d", job.SchemaID)
 			}
 
-			log.Infof("replace table job.TableID: %d, tableInfo.ID: %d", job.TableID, tbInfo.ID)
 			err := s.ReplaceTable(tbInfo)
 			if err != nil {
 				return errors.Trace(err)
