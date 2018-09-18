@@ -31,11 +31,8 @@ import (
 )
 
 var (
-	waitTime                = 3 * time.Second
-	maxTxnTimeout     int64 = 600
-	heartbeatTTL      int64 = 60
-	nodePrefix              = "drainers"
-	heartbeatInterval       = 1 * time.Second
+	nodePrefix        = "drainers"
+	heartbeatInterval = 1 * time.Second
 	clusterID         uint64
 	pdReconnTimes     = 30
 )

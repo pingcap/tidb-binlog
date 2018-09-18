@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	statusOK             = 200
+	statusOK = 200
+	// nolint
 	statusWrongParameter = 1
 	statusNotFound       = 2
 	statusOtherError     = 3

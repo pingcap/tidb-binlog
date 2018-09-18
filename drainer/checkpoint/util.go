@@ -76,9 +76,3 @@ func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 func genSelectSQL(sp *MysqlCheckPoint) string {
 	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
 }
-
-func genDropSchema(cp CheckPoint) (sql.Result, error) {
-	sp := cp.(*MysqlCheckPoint)
-	sql := fmt.Sprintf("drop schema if exists %s", sp.schema)
-	return sp.db.Exec(sql)
-}

@@ -87,7 +87,7 @@ func (conn *mockSQLConn) Begin() (driver.Tx, error) {
 		return nil, errMock
 	}
 
-	return &mockSQLTx{}, nil
+	return &mockSQLTx{mc: conn}, nil
 }
 
 func (conn *mockSQLConn) Close() error {

@@ -1,16 +1,11 @@
 package storage
 
 import (
-	"bytes"
 	"encoding/binary"
 	"sync/atomic"
 )
 
 var tsKeyPrefix = []byte("ts:")
-
-func isTSKey(key []byte) bool {
-	return bytes.HasPrefix(key, tsKeyPrefix)
-}
 
 func decodeTSKey(key []byte) int64 {
 	// check bound

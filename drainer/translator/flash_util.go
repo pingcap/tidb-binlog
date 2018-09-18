@@ -66,38 +66,6 @@ func pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	return nil
 }
 
-func pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
-	col := pkHandleColumn(table)
-	if col != nil {
-		return []*model.ColumnInfo{col}, nil
-	}
-
-	var cols []*model.ColumnInfo
-	for _, idx := range table.Indices {
-		if idx.Primary {
-			columns := make(map[string]*model.ColumnInfo)
-
-			for _, col := range table.Columns {
-				columns[col.Name.O] = col
-			}
-
-			for _, col := range idx.Columns {
-				if column, ok := columns[col.Name.O]; ok {
-					cols = append(cols, column)
-				}
-			}
-
-			if len(cols) == 0 {
-				return nil, errors.New("primay index is empty, but should not be empty")
-			}
-
-			return cols, nil
-		}
-	}
-
-	return cols, nil
-}
-
 func isNullable(colDef *ast.ColumnDef) bool {
 	if isPrimaryKeyColumn(colDef) {
 		return false

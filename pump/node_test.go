@@ -15,8 +15,6 @@ var _ = Suite(&testNodeSuite{})
 
 type testNodeSuite struct{}
 
-type testRegistrySuite struct{}
-
 type RegisrerTestClient interface {
 	Node(context.Context, string, string) (*pkgnode.Status, error)
 }
