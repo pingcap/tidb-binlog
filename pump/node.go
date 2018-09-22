@@ -266,10 +266,8 @@ func checkNodeID(nodeID string) bool {
 	}
 
 	_, err = strconv.Atoi(port)
-	if err != nil {
-		return false
-	}
-	return true
+
+	return err != nil
 }
 
 // FormatNodeID formats the nodeID, the nodeID should looks like "host:port"

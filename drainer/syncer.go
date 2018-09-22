@@ -424,8 +424,6 @@ func (s *Syncer) addJob(job *job) {
 		eventCounter.WithLabelValues("flush").Add(1)
 		s.jobWg.Wait()
 		return
-	} else if job.binlogTp == translator.FAKE {
-		// do nothing
 	}
 
 	if job.binlogTp != translator.FAKE {

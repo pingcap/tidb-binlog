@@ -282,10 +282,14 @@ func (a *Append) updateStatus() {
 
 	var updateLatest <-chan time.Time
 	if a.tiStore != nil {
-		updateLatest = time.Tick(time.Second)
+		updateLatestTicker := time.NewTicker(time.Second)
+		defer updateLatestTicker.Stop()
+		updateLatest = updateLatestTicker.C
 	}
 
-	updateSize := time.Tick(time.Second * 3)
+	updateSizeTicker := time.NewTicker(time.Second * 3)
+	defer updateSizeTicker.Stop()
+	updateSize := updateSizeTicker.C
 
 	for {
 		select {
@@ -340,6 +344,8 @@ func (a *Append) resolve(startTS int64) bool {
 			return false
 		}
 
+		// Write a commit binlog myself if the status is committed,
+		// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		if status.IsCommitted() {
 			// write the commit binlog myself
 			cbinlog := new(pb.Binlog)
@@ -367,9 +373,6 @@ func (a *Append) resolve(startTS int64) bool {
 				log.Error(err)
 				return false
 			}
-
-		} else { // rollback
-			// we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		}
 
 		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.CommitTS())
@@ -735,14 +738,12 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				}
 
 				// get first
-				select {
-				case req, ok := <-reqs:
-					if !ok {
-						return
-					}
-					bufReqs = append(bufReqs, req)
-					size += len(req.payload)
+				req, ok := <-reqs
+				if !ok {
+					return
 				}
+				bufReqs = append(bufReqs, req)
+				size += len(req.payload)
 			}
 		}
 	}()

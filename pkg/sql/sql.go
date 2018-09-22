@@ -144,19 +144,20 @@ func GetTidbPosition(db *sql.DB) (int64, error) {
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		fields, err1 := ScanRow(rows)
-		if err1 != nil {
-			return 0, errors.Trace(err1)
-		}
-
-		ts, err1 := strconv.ParseInt(string(fields["Position"]), 10, 64)
-		if err1 != nil {
-			return 0, errors.Trace(err1)
-		}
-		return ts, nil
+	if !rows.Next() {
+		return 0, errors.New("get slave cluster's ts failed")
 	}
-	return 0, errors.New("get slave cluster's ts failed")
+
+	fields, err1 := ScanRow(rows)
+	if err1 != nil {
+		return 0, errors.Trace(err1)
+	}
+
+	ts, err1 := strconv.ParseInt(string(fields["Position"]), 10, 64)
+	if err1 != nil {
+		return 0, errors.Trace(err1)
+	}
+	return ts, nil
 }
 
 // ScanRow scans rows into a map.

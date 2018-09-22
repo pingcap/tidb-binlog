@@ -77,6 +77,7 @@ check:
 check-static:
 	gometalinter --disable-all --deadline 120s \
 		--enable megacheck \
+		--enable ineffassign \
 		$$($(PACKAGE_DIRECTORIES))
 
 update:

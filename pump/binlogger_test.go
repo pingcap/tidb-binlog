@@ -68,13 +68,13 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	latestPos := &binlog.Pos{Suffix: 1}
 	c.Assert(latestPos.Suffix, Equals, uint64(1))
 
-	curOffset, err := curFile.Seek(0, os.SEEK_CUR)
+	curOffset, err := curFile.Seek(0, io.SeekCurrent)
 	c.Assert(err, IsNil)
 
 	_, err = b.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 
-	nowOffset, err := curFile.Seek(0, os.SEEK_CUR)
+	nowOffset, err := curFile.Seek(0, io.SeekCurrent)
 	c.Assert(err, IsNil)
 	c.Assert(nowOffset, Equals, curOffset+26)
 

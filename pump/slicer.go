@@ -47,7 +47,7 @@ func (s *KafkaSlicer) Generate(entity *binlog.Entity) ([]*sarama.ProducerMessage
 		total     = (len(entity.Payload) + GlobalConfig.SlicesSize - 1) / GlobalConfig.SlicesSize
 		messages  = make([]*sarama.ProducerMessage, 0, total)
 		left      = 0
-		right     = 0
+		right     int
 		totalByte = make([]byte, 4)
 		messageID = []byte(BinlogSliceMessageID(entity.Pos))
 	)

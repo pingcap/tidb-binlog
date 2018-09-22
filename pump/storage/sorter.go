@@ -154,7 +154,7 @@ func (s *sorter) run() {
 		if item.tp == pb.BinlogType_Prewrite {
 			for {
 				_, ok := s.waitStartTS[item.start]
-				if ok == false {
+				if !ok {
 					break
 				}
 				if s.resolver != nil && s.resolver(item.start) {

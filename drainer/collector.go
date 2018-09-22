@@ -114,10 +114,7 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 					err := util.RetryOnError(getDDLJobRetryTime, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
 						var err1 error
 						job, err1 = getDDLJob(c.tiStore, binlog.DdlJobId)
-						if err1 != nil {
-							return err1
-						}
-						return nil
+						return err1
 					})
 
 					if err != nil {

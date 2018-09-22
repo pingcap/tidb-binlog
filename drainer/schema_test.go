@@ -176,15 +176,15 @@ func (*testDrainerSuite) TestTable(c *C) {
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1, 123}})
 	schema1, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
-	table, ok = schema1.TableByID(tblInfo1.ID)
+	_, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
-	table, ok = schema1.TableByID(2)
+	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
 	schema2, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
-	table, ok = schema2.TableByID(tblInfo.ID)
+	_, ok = schema2.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)
 	// test schemaAndTableName
 	_, _, ok = schema1.SchemaAndTableName(9)

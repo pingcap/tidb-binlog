@@ -98,7 +98,7 @@ func (t *testEtcdSuite) TestUpdate(c *C) {
 	c.Assert(string(res), Equals, obj2)
 
 	time.Sleep(2 * time.Second)
-	res, err = etcdCli.Get(ctx, key)
+	_, err = etcdCli.Get(ctx, key)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
