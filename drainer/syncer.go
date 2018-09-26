@@ -430,7 +430,7 @@ func (s *Syncer) addJob(job *job) {
 }
 
 func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) error {
-	key, err := s.resolveCasuality(keys)
+	key, err := s.resolveCausality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
