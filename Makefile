@@ -11,8 +11,8 @@ path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
 GO        := go
-GOBUILD   := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST    := GOPATH=$(CURDIR)/_vendor:$(GOPATH) CGO_ENABLED=1 $(GO) test -p 3
+GOBUILD   := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST    := CGO_ENABLED=1 $(GO) test -p 3
 
 ARCH      := "`uname -s`"
 LINUX     := "Linux"
@@ -65,15 +65,13 @@ check:
 	@echo "vet --shadow"
 	@ go tool vet --shadow $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "golint"
-	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | awk '{print} END{if(NR>0) {exit 1}}'
+	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | grep -vE 'vendor' | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "gofmt (simplify)"
 	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
 
 update:
 	which glide >/dev/null || curl https://glide.sh/get | sh
 	which glide-vc || go get -v -u github.com/sgotti/glide-vc
-	rm -r vendor && mv _vendor/src vendor || true
-	rm -rf _vendor
 ifdef PKG
 	glide get -s -v --skip-test ${PKG}
 else
@@ -81,8 +79,6 @@ else
 endif
 	@echo "removing test files"
 	glide vc --use-lock-file --only-code --no-tests
-	mkdir -p _vendor
-	mv vendor _vendor/src
 
 clean:
 	go clean -i ./...

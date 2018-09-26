@@ -21,13 +21,13 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 
 	// check cancelled job
 	job := &model.Job{ID: 1, State: model.JobStateCancelled}
-	_, _, sql, err := s.handleDDL(job)
+	_, _, sql, err := s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobStateDone}
-	_, _, sql, err = s.handleDDL(job)
+	_, _, sql, err = s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -73,11 +73,11 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 		schemaName  string
 		tableName   string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil}, "create database Test", "create database Test", dbInfo.Name.O, ""},
-		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil}, "create database ignoreTest", "", "", ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo}, "create table T(id int);", "create table T(id int);", dbInfo.Name.O, tblInfo.Name.O},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo}, "alter table T add a varchar(45);", "alter table T add a varchar(45);", dbInfo.Name.O, tblInfo.Name.O},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo}, "truncate table T;", "truncate table T;", dbInfo.Name.O, tblInfo.Name.O},
+		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{123, dbInfo, nil, 123}, "create database Test", "create database Test", dbInfo.Name.O, ""},
+		{"createIgnoreSchema", 5, 4, 0, model.ActionCreateSchema, &model.HistoryInfo{123, ingnoreDBInfo, nil, 123}, "create database ignoreTest", "", "", ""},
+		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{123, nil, tblInfo, 123}, "create table T(id int);", "create table T(id int);", dbInfo.Name.O, tblInfo.Name.O},
+		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{123, nil, tblInfo, 123}, "alter table T add a varchar(45);", "alter table T add a varchar(45);", dbInfo.Name.O, tblInfo.Name.O},
+		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{123, nil, tblInfo, 123}, "truncate table T;", "truncate table T;", dbInfo.Name.O, tblInfo.Name.O},
 		{"dropTable", 12, 2, 10, model.ActionDropTable, nil, "drop table T;", "drop table T;", dbInfo.Name.O, tblInfo.Name.O},
 		{"dropSchema", 13, 2, 0, model.ActionDropSchema, nil, "drop database test;", "drop database test;", dbInfo.Name.O, ""},
 	}
@@ -124,7 +124,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 }
 
 func testDoDDLAndCheck(c *C, s *Syncer, job *model.Job, isErr bool, sql string, schema string, table string) {
-	schemaName, tableName, resSQL, err := s.handleDDL(job)
+	schemaName, tableName, resSQL, err := s.schema.handleDDL(job, s.ignoreSchemaNames)
 	c.Assert(err != nil, Equals, isErr)
 	c.Assert(sql, Equals, resSQL)
 	c.Assert(schemaName, Equals, schema)

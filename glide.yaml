@@ -5,7 +5,7 @@ import:
   subpackages:
   - quantile
 - package: github.com/BurntSushi/toml
-  version: 99064174e013895bbd9b025c31100bd1d9b590ca
+  version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - package: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - package: github.com/coreos/etcd
@@ -83,7 +83,7 @@ import:
 - package: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - package: github.com/go-sql-driver/mysql
-  version: dbc3fe23a4aced10a53834106e288b155d17e2ee
+  version: ^1.4.0
 - package: github.com/gogo/protobuf
   version: ^0.3.0
   subpackages:
@@ -93,7 +93,7 @@ import:
   subpackages:
   - lru
 - package: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: v1.1.0
   subpackages:
   - jsonpb
   - proto
@@ -143,11 +143,11 @@ import:
   - leveldb/table
   - leveldb/util
 - package: github.com/pingcap/kvproto
-  version: 7b013aefd7210f4f4dbfca3330b462ddce5dd496
+  version: 4647096953d282e989b79c6e9b325aec3312b8ac
 - package: github.com/pingcap/pd
-  version: eed819b6999186a4bf2d25255f8d61b371a450d6
+  version: 722081d662b31a334c0a24b7955c1ac4424609bc
 - package: github.com/pingcap/tidb
-  version: fc699c9b0d29f038e0a55702c9fd2e18e89373c4
+  version: ef6590e1899a35515cf6a99353baf3d4d99db543
   subpackages:
   - ast
   - context
@@ -201,7 +201,7 @@ import:
   - util/sqlexec
   - util/stringutil
 - package: github.com/pingcap/tipb
-  version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
+  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
   subpackages:
   - go-binlog
   - go-tipb
@@ -274,7 +274,7 @@ import:
   - unicode/bidi
   - unicode/norm
 - package: google.golang.org/grpc
-  version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
+  version: "1.12.0"
   subpackages:
   - codes
   - credentials
@@ -287,7 +287,7 @@ import:
 - package: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - package: github.com/Shopify/sarama
-  version: v1.16.0
+  version: v1.18.0
 - package: github.com/samuel/go-zookeeper
   version: e6b59f6144beb8570562539c1898a0b1fea34b41
 - package: github.com/golang-collections/collections
@@ -297,3 +297,10 @@ import:
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689
+
+- package: github.com/onsi/gomega
+  version: v1.4.0
+- package: github.com/rcrowley/go-metrics
+  version: e2704e165165ec55d062f5919b4b29494e9fa790
+- package: github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto
+  version: 347725a566f4a7d897aa0d6addb710c77395c640

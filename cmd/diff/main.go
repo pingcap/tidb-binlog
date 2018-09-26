@@ -129,7 +129,7 @@ func (dbcf *dbConf) fromString(url string) error {
 }
 
 func (dbcf *dbConf) fullPath(dbName string) string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=30s&strict=true",
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=30s",
 		dbcf.user,
 		dbcf.password,
 		dbcf.host,
@@ -157,7 +157,7 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 		return false, errors.Trace(err1)
 	}
 
-	df := diff.New(db1, db2)
+	df := diff.New(nil, db1, db2)
 	eq, err := df.Equal()
 	if err != nil {
 		return false, errors.Trace(err)
@@ -166,7 +166,7 @@ func compareOneDB(dbc1, dbc2 *dbConf, dbName string) (bool, error) {
 }
 
 func showDatabases(dbcf *dbConf) []string {
-	src := fmt.Sprintf("%s@tcp(%s:%d)/?timeout=30s&strict=true",
+	src := fmt.Sprintf("%s@tcp(%s:%d)/?timeout=30s",
 		dbcf.user,
 		dbcf.host,
 		dbcf.port)

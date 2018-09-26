@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
@@ -29,12 +30,12 @@ func (p *pbTranslator) SetConfig(safeMode, hasImplicitCol bool) {
 	// do nothing
 }
 
-func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		//decode the pk value
@@ -58,7 +59,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) {
+			if IsPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 			}
 
@@ -94,15 +95,15 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
-		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
@@ -150,12 +151,12 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
@@ -199,7 +200,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenDDLSQL(sql string, schema string) (string, error) {
+func (p *pbTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)

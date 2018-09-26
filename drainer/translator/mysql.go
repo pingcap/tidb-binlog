@@ -8,6 +8,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -38,13 +39,13 @@ func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
 	m.hasImplicitCol = hasImplicitCol
 }
 
-func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
 	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
@@ -67,7 +68,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 		var vals []interface{}
 		for _, col := range columns {
-			if isPKHandleColumn(table, col) {
+			if IsPKHandleColumn(table, col) {
 				columnValues[col.ID] = pk
 				vals = append(vals, pk.GetValue())
 				continue
@@ -105,23 +106,23 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	if m.safeMode {
-		return m.genUpdateSQLsSafeMode(schema, table, rows)
+		return m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
 	}
 
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
 		var oldValues []interface{}
 		var newValues []interface{}
 
-		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
@@ -173,17 +174,17 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns))
 
 	for _, row := range rows {
-		oldColumnValues, newColumnValues, err := decodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
@@ -226,12 +227,12 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := toColumnTypeMap(columns)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
 		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
@@ -280,7 +281,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 	return sql, value, key, nil
 }
 
-func (m *mysqlTranslator) GenDDLSQL(sql string, schema string) (string, error) {
+func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	stmts, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
@@ -365,7 +366,7 @@ func (m *mysqlTranslator) genKVs(columns []*model.ColumnInfo) string {
 
 func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	for _, col := range table.Columns {
-		if isPKHandleColumn(table, col) {
+		if IsPKHandleColumn(table, col) {
 			return col
 		}
 	}
@@ -403,7 +404,8 @@ func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.Colum
 	return cols, nil
 }
 
-func isPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
+// IsPKHandleColumn check if the column if the pk handle of tidb
+func IsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
 }
 
@@ -463,24 +465,15 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	case mysql.TypeSet:
 		data = types.NewDatum(data.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		data = types.NewDatum(data.GetMysqlBit())
+		data = types.NewDatum(data.GetBytes())
 	}
 
 	return data, nil
 }
 
-func toColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
-	colTypeMap := make(map[int64]*types.FieldType)
-	for _, col := range columns {
-		colTypeMap[col.ID] = &col.FieldType
-	}
-
-	return colTypeMap
-}
-
-// DecodeRowWithMap decodes a byte slice into datums with a existing row map.
+// DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func decodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}

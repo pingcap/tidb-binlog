@@ -1,22 +1,18 @@
-hash: 4a7b6ca2d8991fd4b746aa6037fc23fa2fad794200707b15b1e2119cdb1a6d37
-updated: 2018-05-14T13:46:23.464709503+08:00
+hash: 8c668caa437db1aa7ebfe189e27015e0cffec3bcbf46934ef4fe21c657145a1c
+updated: 2018-09-15T21:52:14.577274+08:00
 imports:
-- name: github.com/apache/thrift
-  version: b2a4d4ae21c789b689dd162deb819665567f481c
-  subpackages:
-  - lib/go/thrift
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
   - quantile
 - name: github.com/BurntSushi/toml
-  version: 99064174e013895bbd9b025c31100bd1d9b590ca
+  version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - name: github.com/cockroachdb/cmux
   version: 112f0506e7743d64a6eb8fedbcff13d9979bbf92
 - name: github.com/codahale/hdrhistogram
-  version: f8ad88b59a584afeee9d334eff879b104439117b
+  version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/bbolt
   version: 32c383e75ce054674c53b5a07e55de85332aee14
 - name: github.com/coreos/etcd
@@ -114,7 +110,7 @@ imports:
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
   subpackages:
   - spew
 - name: github.com/dgrijalva/jwt-go
@@ -124,13 +120,13 @@ imports:
   subpackages:
   - breaker
 - name: github.com/eapache/go-xerial-snappy
-  version: bb955e01b9346ac19dc29eb16586c90ded99a98c
+  version: 776d5712da21bc4762676d614db1d8a64f4238b0
 - name: github.com/eapache/queue
   version: 093482f3f8ce946c05bcba64badd2c82369e084d
 - name: github.com/ghodss/yaml
   version: aa0c862057666179de291b67d9f093d12b5a8473
 - name: github.com/go-sql-driver/mysql
-  version: dbc3fe23a4aced10a53834106e288b155d17e2ee
+  version: d523deb1b23d913de5bdada721a6071e71283618
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -144,7 +140,7 @@ imports:
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  version: b4deda0973fb4c70b50d226b1af49f3da59f5265
   subpackages:
   - jsonpb
   - proto
@@ -152,19 +148,20 @@ imports:
   - ptypes
   - ptypes/any
   - ptypes/duration
+  - ptypes/struct
   - ptypes/timestamp
 - name: github.com/golang/snappy
   version: 723cc1e459b8eea2dea4583200fd60757d40097a
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/grpc-ecosystem/go-grpc-middleware
-  version: 82921fcf811d228d2fa202bc31238b356bf9f8d5
+  version: 498ae206fc3cfe81cd82e48c1d4354026fa5f9ec
   subpackages:
   - tags
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: 39de4380c2e0353a115b80b1c730719c79bfb771
+  version: 93bf4626fba73b751b0f3cdf2649be4ce0c420cd
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -187,8 +184,22 @@ imports:
   version: b7bc8c42aac787667ba45adea78233f53f548443
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
+- name: github.com/onsi/gomega
+  version: 7615b9433f86a8bdf29709bf288bc4fd0636a369
+  subpackages:
+  - format
+  - internal/assertion
+  - internal/asyncassertion
+  - internal/oraclematcher
+  - internal/testingtsupport
+  - matchers
+  - matchers/support/goraph/bipartitegraph
+  - matchers/support/goraph/edge
+  - matchers/support/goraph/node
+  - matchers/support/goraph/util
+  - types
 - name: github.com/opentracing/opentracing-go
-  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  version: 6aa6febac7b98f836100ecaea478c04f30b6dbd0
   subpackages:
   - ext
   - log
@@ -197,11 +208,9 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: ed8d4cc3b461464e69798080a0092bd028910298
-- name: github.com/pierrec/xxHash
-  version: a0006b13c722f7f12368c00a3d3c2ae8a999a0c6
+  version: 1f6e18d34f6790fc0afea6f13a5fe3d9ab1770af
   subpackages:
-  - xxHash32
+  - internal/xxh32
 - name: github.com/pingcap/goleveldb
   version: 158edde5a354460121af007d02a00b01c8d03443
   subpackages:
@@ -218,7 +227,7 @@ imports:
   - leveldb/table
   - leveldb/util
 - name: github.com/pingcap/kvproto
-  version: 7b013aefd7210f4f4dbfca3330b462ddce5dd496
+  version: 4647096953d282e989b79c6e9b325aec3312b8ac
   subpackages:
   - pkg/coprocessor
   - pkg/eraftpb
@@ -229,11 +238,11 @@ imports:
   - pkg/raft_serverpb
   - pkg/tikvpb
 - name: github.com/pingcap/pd
-  version: eed819b6999186a4bf2d25255f8d61b371a450d6
+  version: 722081d662b31a334c0a24b7955c1ac4424609bc
   subpackages:
   - pd-client
 - name: github.com/pingcap/tidb
-  version: fc699c9b0d29f038e0a55702c9fd2e18e89373c4
+  version: ef6590e1899a35515cf6a99353baf3d4d99db543
   subpackages:
   - ast
   - config
@@ -245,6 +254,7 @@ imports:
   - domain
   - evaluator
   - executor
+  - executor/aggfuncs
   - expression
   - expression/aggregation
   - infoschema
@@ -263,6 +273,7 @@ imports:
   - plan/statistics
   - privilege
   - privilege/privileges
+  - session
   - sessionctx
   - sessionctx/autocommit
   - sessionctx/binloginfo
@@ -275,8 +286,8 @@ imports:
   - store/localstore/engine
   - store/localstore/goleveldb
   - store/tikv
+  - store/tikv/latch
   - store/tikv/mock-tikv
-  - store/tikv/mocktikv
   - store/tikv/oracle
   - store/tikv/oracle/oracles
   - store/tikv/tikvrpc
@@ -296,11 +307,14 @@ imports:
   - util/codec
   - util/distinct
   - util/encrypt
+  - util/execdetails
   - util/format
   - util/goroutine_pool
   - util/hack
+  - util/israce
   - util/kvcache
   - util/logutil
+  - util/memory
   - util/mock
   - util/mvmap
   - util/printer
@@ -308,12 +322,18 @@ imports:
   - util/segmentmap
   - util/sqlexec
   - util/stringutil
+- name: github.com/pingcap/tidb-tools
+  version: b4f5a10ae872e91064f4b83cb00e2480d505aa05
+  subpackages:
+  - tidb_binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
-  version: 07ff5b094233a557a3ac11b1e4d8714d8c6ff406
+  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
   subpackages:
   - go-binlog
   - go-tipb
   - sharedbytes
+- name: github.com/pkg/errors
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
   version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
@@ -333,18 +353,20 @@ imports:
   version: abf152e5f3e97f2fafac028d2cc06c1feb87ffa5
 - name: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
+  subpackages:
+  - exp
 - name: github.com/samuel/go-zookeeper
   version: e6b59f6144beb8570562539c1898a0b1fea34b41
   subpackages:
   - zk
 - name: github.com/Shopify/sarama
-  version: f7be6aa2bc7b2e38edf816b08b582782194a1c02
+  version: a6144ae922fd99dd0ea5046c8137acfb7fab0914
 - name: github.com/siddontang/go
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: 778f2e774c725116edbc3d039dc0dfc1cc62aae8
+  version: f3df9aeffda7c12bd9f5a03f9251d75d35993165
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -352,19 +374,26 @@ imports:
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: d021e646f5187d77b55592c3efee1a2810e895d7
+  version: 12b4b58a7d8119c9f22db2745df843fca67a310a
   subpackages:
   - config
+  - internal/baggage
+  - internal/baggage/remote
   - internal/spanlog
+  - internal/throttler
+  - internal/throttler/remote
   - log
   - rpcmetrics
+  - thrift
   - thrift-gen/agent
+  - thrift-gen/baggage
   - thrift-gen/jaeger
   - thrift-gen/sampling
   - thrift-gen/zipkincore
+  - transport
   - utils
 - name: github.com/uber/jaeger-lib
-  version: bd9bb48fb16a7537a5ffa02987fd13d06d46eb3a
+  version: ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -373,6 +402,15 @@ imports:
   - codec
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
+- name: github.com/zanmato1984/clickhouse
+  version: 6c32f7b4cd79451e23e7369c500d082815380b3e
+  subpackages:
+  - lib/binary
+  - lib/column
+  - lib/data
+  - lib/protocol
+  - lib/types
+  - lib/writebuffer
 - name: golang.org/x/crypto
   version: 1351f936d976c60a0a48d728281922cf63eafb8d
   subpackages:
@@ -384,6 +422,9 @@ imports:
   repo: https://github.com/golang/net.git
   subpackages:
   - context
+  - html
+  - html/atom
+  - html/charset
   - http2
   - http2/hpack
   - idna
@@ -402,6 +443,7 @@ imports:
   subpackages:
   - encoding
   - encoding/charmap
+  - encoding/htmlindex
   - encoding/internal
   - encoding/internal/identifier
   - encoding/japanese
@@ -409,7 +451,9 @@ imports:
   - encoding/simplifiedchinese
   - encoding/traditionalchinese
   - encoding/unicode
+  - internal/tag
   - internal/utf8internal
+  - language
   - runes
   - secure
   - secure/bidirule
@@ -420,18 +464,27 @@ imports:
   version: c06e80d9300e4443158a03817b8a8cb37d230320
   subpackages:
   - rate
+- name: google.golang.org/appengine
+  version: 03cac3b07182cfb08c0d0c0b6ee72a1ceb151c92
+  subpackages:
+  - cloudsql
 - name: google.golang.org/genproto
-  version: b0a3dcfcd1a9bd48e63634bd8802960804cf8315
+  version: 09f6ed296fc66555a25fe4ce95173148778dfa85
   subpackages:
   - googleapis/api/annotations
   - googleapis/rpc/status
 - name: google.golang.org/grpc
-  version: 5b3c4e850e90a4cf6a20ebd46c8b32a0a3afcb9e
+  version: 41344da2231b913fa3d983840a57a6b1b7b631a1
   subpackages:
   - balancer
+  - balancer/base
+  - balancer/roundrobin
+  - channelz
   - codes
   - connectivity
   - credentials
+  - encoding
+  - encoding/proto
   - grpclb/grpc_lb_v1/messages
   - grpclog
   - health/grpc_health_v1
@@ -441,12 +494,16 @@ imports:
   - naming
   - peer
   - resolver
+  - resolver/dns
+  - resolver/passthrough
   - stats
   - status
   - tap
   - transport
 - name: gopkg.in/natefinch/lumberjack.v2
   version: a96e63847dc3c67d17befa69c303767e2f84e54f
+- name: gopkg.in/yaml.v2
+  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/pingcap/check
-  version: ce8a2f822ab1e245a4eefcef2996531c79c943f1
+  version: 1c287c953996ab3a0bf535dba9d53d809d3dc0b6

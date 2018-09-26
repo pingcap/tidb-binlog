@@ -12,7 +12,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -22,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -84,9 +84,9 @@ func NewCollector(cfg *Config, clusterID uint64, w *DepositWindow, s *Syncer, cp
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tidb.RegisterStore("tikv", tikv.Driver{})
+	session.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := tidb.NewStore(tiPath)
+	tiStore, err := session.NewStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -198,6 +198,12 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	c.latestTS = c.queryLatestTsFromPD()
 
 	for _, n := range nodes {
+		// format and check the nodeID
+		n.NodeID, err = pump.FormatNodeID(n.NodeID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
 		p, ok := c.pumps[n.NodeID]
 		if !ok {
 			// if pump is offline and last binlog ts <= safeTS, ignore it
@@ -212,7 +218,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			}
 
 			// initial pump
-			pos, err := c.getSavePoints(n.NodeID)
+			pos, err := c.getSavePoints(ctx, n.NodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -347,7 +353,7 @@ func (c *Collector) publishBinlogs(ctx context.Context, minTS, maxTS int64) {
 	publishBinlogCounter.WithLabelValues("drainer").Add(float64(total))
 }
 
-func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
+func (c *Collector) getSavePoints(ctx context.Context, nodeID string) (binlog.Pos, error) {
 	commitTS, poss := c.cp.Pos()
 	pos, ok := poss[nodeID]
 	if ok {
@@ -357,7 +363,7 @@ func (c *Collector) getSavePoints(nodeID string) (binlog.Pos, error) {
 	topic := pump.TopicName(strconv.FormatUint(c.clusterID, 10), nodeID)
 	safeCommitTS := getSafeTS(commitTS, int64(c.safeForwardTime))
 	log.Infof("commit ts %d's safe commit ts is %d", commitTS, safeCommitTS)
-	offsets, err := c.offsetSeeker.Do(topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
+	offsets, err := c.offsetSeeker.Do(ctx, topic, safeCommitTS, 0, 0, []int32{pump.DefaultTopicPartition()})
 	if err == nil {
 		return binlog.Pos{Offset: offsets[int(pump.DefaultTopicPartition())]}, nil
 	}
@@ -384,15 +390,21 @@ func (c *Collector) Status(w http.ResponseWriter, r *http.Request) {
 func (c *Collector) HTTPStatus() *HTTPStatus {
 	var status *HTTPStatus
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	status = c.mu.status
 
-	interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
-	// if the gap between lower and upper is small and don't have binlog input in a minitue,
-	// we can think the all binlog is synced
-	if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
-		status.Synced = true
+	if status != nil {
+		interval := time.Duration(util.TsToTimestamp(status.DepositWindow.Upper) - util.TsToTimestamp(status.DepositWindow.Lower))
+		// if the gap between lower and upper is small and don't have binlog input in a minitue,
+		// we can think the all binlog is synced
+		if interval < time.Duration(2)*c.interval && time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
+			status.Synced = true
+		}
+
+		return status
 	}
 
-	c.mu.Unlock()
-	return status
+	return &HTTPStatus{
+		Synced: false,
+	}
 }

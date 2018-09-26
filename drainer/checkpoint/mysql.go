@@ -12,6 +12,7 @@ import (
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	tmysql "github.com/pingcap/tidb/mysql"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -25,12 +26,17 @@ type MysqlCheckPoint struct {
 	schema   string
 	table    string
 	saveTime time.Time
+	// type, tidb or mysql
+	tp string
 
 	CommitTS  int64             `toml:"commitTS" json:"commitTS"`
 	Positions map[string]pb.Pos `toml:"positions" json:"positions"`
+	TsMap     map[string]int64  `toml:"ts-map" json:"ts-map"`
+
+	snapshot time.Time
 }
 
-func newMysql(cfg *Config) (CheckPoint, error) {
+func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	if res := checkConfig(cfg); res != nil {
 		log.Errorf("Argument cfg is Invaild %v", res)
 		return &MysqlCheckPoint{}, errors.Trace(res)
@@ -49,6 +55,9 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		Positions:       make(map[string]pb.Pos),
+		tp:              tp,
+		TsMap:           make(map[string]int64),
+		saveTime:        time.Now(),
 	}
 
 	sql := genCreateSchema(sp)
@@ -126,6 +135,22 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
 
+	// we don't need update tsMap every time.
+	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
+		sp.snapshot = time.Now()
+		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
+		if err != nil {
+			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
+			errCode, ok := pkgsql.GetSQLErrCode(err)
+			if !ok || int(errCode) != tmysql.ErrUnknown {
+				log.Warnf("get ts from slave cluster error %v", err)
+			}
+		} else {
+			sp.TsMap["master-ts"] = ts
+			sp.TsMap["slave-ts"] = slaveTS
+		}
+	}
+
 	b, err := json.Marshal(sp)
 	if err != nil {
 		log.Errorf("Json Marshal error %v", err)
@@ -139,7 +164,7 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 }
 
 // Check implements CheckPoint.Check interface
-func (sp *MysqlCheckPoint) Check() bool {
+func (sp *MysqlCheckPoint) Check(int64, map[string]pb.Pos) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 

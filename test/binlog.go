@@ -4,18 +4,16 @@ import (
 	"database/sql"
 	"flag"
 	"os"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/test/dailytest"
 	"github.com/pingcap/tidb-binlog/test/util"
 )
 
 func main() {
-	cfg := NewConfig()
+	cfg := util.NewConfig()
 	err := cfg.Parse(os.Args[1:])
 	switch errors.Cause(err) {
 	case nil:
@@ -64,48 +62,23 @@ create table ntest(
 	}
 	defer util.CloseDB(targetDB)
 
-	// generate insert/update/delete sqls and execute
-	dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	// run the simple test case
+	dailytest.RunCase(&cfg.DiffConfig, sourceDB, targetDB)
 
-	// wait for sync to downstream sql server
-	time.Sleep(90 * time.Second)
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// generate insert/update/delete sqls and execute
+		dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	})
 
-	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// truncate test data
+		dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
+	})
 
-	// truncate test data
-	dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
-
-	// wait for sync to downstream sql server
-	time.Sleep(30 * time.Second)
-
-	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
-
-	// drop test table
-	dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
-
-	// wait for sync to downstream sql server
-	time.Sleep(30 * time.Second)
-
-	// diff the test schema
-	if !checkSyncState(sourceDB, targetDB) {
-		log.Fatal("sourceDB don't equal targetDB")
-	}
+	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
+		// drop test table
+		dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
+	})
 
 	log.Info("test pass!!!")
-}
-
-func checkSyncState(sourceDB, targetDB *sql.DB) bool {
-	d := diff.New(sourceDB, targetDB)
-	ok, err := d.Equal()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return ok
 }

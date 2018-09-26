@@ -7,17 +7,23 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/onsi/gomega"
 )
 
 // Diff contains two sql DB, used for comparing.
 type Diff struct {
+	cfg *Config
 	db1 *sql.DB
 	db2 *sql.DB
 }
 
 // New returns a Diff instance.
-func New(db1, db2 *sql.DB) *Diff {
+func New(cfg *Config, db1, db2 *sql.DB) *Diff {
+	if cfg == nil {
+		cfg = defaultConfig
+	}
 	return &Diff{
+		cfg: cfg,
 		db1: db1,
 		db2: db2,
 	}
@@ -44,14 +50,16 @@ func (df *Diff) Equal() (eq bool, err error) {
 	}
 
 	for _, tblName := range tbls1 {
-		eq, err = df.EqualIndex(tblName)
-		if err != nil {
-			err = errors.Trace(err)
-			return
-		}
-		if !eq {
-			log.Infof("table have different index: %s\n", tblName)
-			return
+		if df.cfg.EqualIndex {
+			eq, err = df.EqualIndex(tblName)
+			if err != nil {
+				err = errors.Trace(err)
+				return
+			}
+			if !eq {
+				log.Infof("table have different index: %s\n", tblName)
+				return
+			}
 		}
 
 		eq, err = df.EqualTable(tblName)
@@ -65,24 +73,39 @@ func (df *Diff) Equal() (eq bool, err error) {
 }
 
 // EqualTable tests whether two database table have same data and schema.
-func (df *Diff) EqualTable(tblName string) (bool, error) {
-	eq, err := df.equalCreateTable(tblName)
-	if err != nil {
-		return eq, errors.Trace(err)
-	}
-	if !eq {
-		log.Infof("table have different schema: %s\n", tblName)
-		return eq, err
+func (df *Diff) EqualTable(tblName string) (eq bool, err error) {
+	if df.cfg.EqualCreateTable {
+		eq, err = df.equalCreateTable(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table have different schema: %s\n", tblName)
+			return eq, err
+		}
 	}
 
-	eq, err = df.equalTableData(tblName)
-	if err != nil {
-		return eq, errors.Trace(err)
+	if df.cfg.EqualRowCount {
+		eq, err = df.equalTableRowCount(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table row count different: %s\n", tblName)
+		}
 	}
-	if !eq {
-		log.Infof("table data different: %s\n", tblName)
+
+	if df.cfg.EqualData {
+		eq, err = df.equalTableData(tblName)
+		if err != nil {
+			return eq, errors.Trace(err)
+		}
+		if !eq {
+			log.Infof("table data different: %s\n", tblName)
+		}
 	}
-	return eq, err
+
+	return
 }
 
 // EqualIndex tests whether two database index are same.
@@ -124,6 +147,36 @@ func (df *Diff) equalCreateTable(tblName string) (bool, error) {
 	return true, nil
 }
 
+func (df *Diff) equalTableRowCount(tblName string) (bool, error) {
+	rows1, err := getTableRowCount(df.db1, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer rows1.Close()
+
+	rows2, err := getTableRowCount(df.db2, tblName)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer rows2.Close()
+
+	cols1, err := rows1.ColumnTypes()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	cols2, err := rows2.ColumnTypes()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if len(cols1) != len(cols2) {
+		return false, nil
+	}
+
+	row1 := newRawBytesRow(cols1)
+	row2 := newRawBytesRow(cols2)
+	return equalRows(rows1, rows2, row1, row2)
+}
+
 func (df *Diff) equalTableData(tblName string) (bool, error) {
 	rows1, err := getTableRows(df.db1, tblName)
 	if err != nil {
@@ -137,11 +190,11 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 	}
 	defer rows2.Close()
 
-	cols1, err := rows1.Columns()
+	cols1, err := rows1.ColumnTypes()
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	cols2, err := rows2.Columns()
+	cols2, err := rows2.ColumnTypes()
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -149,8 +202,8 @@ func (df *Diff) equalTableData(tblName string) (bool, error) {
 		return false, nil
 	}
 
-	row1 := make(rawBytesRow, len(cols1))
-	row2 := make(rawBytesRow, len(cols2))
+	row1 := newRawBytesRow(cols1)
+	row2 := newRawBytesRow(cols2)
 	return equalRows(rows1, rows2, row1, row2)
 }
 
@@ -197,7 +250,15 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 	pk1 := orderbyKey(descs)
 
 	// TODO select all data out may OOM if table is huge
-	rows, err := querySQL(db, fmt.Sprintf("select * from %s order by %s", tblName, pk1))
+	rows, err := querySQL(db, fmt.Sprintf("select * from `%s` order by %s", tblName, pk1))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return rows, nil
+}
+
+func getTableRowCount(db *sql.DB, tblName string) (*sql.Rows, error) {
+	rows, err := querySQL(db, fmt.Sprintf("select count(*) from `%s`", tblName))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -205,7 +266,7 @@ func getTableRows(db *sql.DB, tblName string) (*sql.Rows, error) {
 }
 
 func getTableIndex(db *sql.DB, tblName string) (*sql.Rows, error) {
-	rows, err := querySQL(db, fmt.Sprintf("show index from %s;", tblName))
+	rows, err := querySQL(db, fmt.Sprintf("show index from `%s`;", tblName))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -232,7 +293,7 @@ func getTables(db *sql.DB) ([]string, error) {
 }
 
 func getCreateTable(db *sql.DB, tn string) (string, error) {
-	stmt := fmt.Sprintf("show create table %s;", tn)
+	stmt := fmt.Sprintf("show create table `%s`;", tn)
 	rs, err := querySQL(db, stmt)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -263,16 +324,26 @@ type comparable interface {
 	Equal(comparable) bool
 }
 
-type rawBytesRow []sql.RawBytes
+type rawBytesRow struct {
+	rawBytes []sql.RawBytes
+	colTypes []*sql.ColumnType
+}
+
+func newRawBytesRow(colTypes []*sql.ColumnType) rawBytesRow {
+	return rawBytesRow{
+		colTypes: colTypes,
+		rawBytes: make([]sql.RawBytes, len(colTypes)),
+	}
+}
 
 func (r rawBytesRow) Len() int {
-	return len([]sql.RawBytes(r))
+	return len(r.rawBytes)
 }
 
 func (r rawBytesRow) Scan(rows *sql.Rows) error {
-	args := make([]interface{}, len(r))
+	args := make([]interface{}, len(r.rawBytes))
 	for i := 0; i < len(args); i++ {
-		args[i] = &r[i]
+		args[i] = &r.rawBytes[i]
 	}
 
 	err := rows.Scan(args...)
@@ -280,6 +351,31 @@ func (r rawBytesRow) Scan(rows *sql.Rows) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func equalJSON(data1 []byte, data2 []byte) bool {
+	if len(data1) == 0 && len(data2) != 0 {
+		return false
+	}
+
+	if len(data2) == 0 && len(data1) != 0 {
+		return false
+	}
+
+	if len(data1) == 0 && len(data2) == 0 {
+		return true
+	}
+
+	matcher := gomega.MatchJSON(string(data1))
+
+	// key-ordering and whitespace shouldn't matter
+	matched, err := matcher.Match(string(data2))
+	if err != nil {
+		log.Error(err, "data1: ", string(data1), " data2: ", string(data2))
+		return false
+	}
+
+	return matched
 }
 
 func (r rawBytesRow) Equal(data comparable) bool {
@@ -291,8 +387,19 @@ func (r rawBytesRow) Equal(data comparable) bool {
 		return false
 	}
 	for i := 0; i < r.Len(); i++ {
-		if bytes.Compare(r[i], r2[i]) != 0 {
-			return false
+		tname := r.colTypes[i].DatabaseTypeName()
+		if len(tname) == 0 {
+			log.Warn("empty type name: ", tname)
+		}
+
+		if r.colTypes[i].DatabaseTypeName() == "JSON" {
+			if !equalJSON(r.rawBytes[i], r2.rawBytes[i]) {
+				return false
+			}
+		} else {
+			if bytes.Compare(r.rawBytes[i], r2.rawBytes[i]) != 0 {
+				return false
+			}
 		}
 	}
 	return true
@@ -360,7 +467,7 @@ func (desc *describeTable) Scan(rows *sql.Rows) error {
 }
 
 func getTableSchema(db *sql.DB, tblName string) ([]describeTable, error) {
-	stmt := fmt.Sprintf("describe %s;", tblName)
+	stmt := fmt.Sprintf("describe `%s`;", tblName)
 	rows, err := querySQL(db, stmt)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -386,10 +493,10 @@ func orderbyKey(descs []describeTable) string {
 	for _, desc := range descs {
 		if desc.Key == "PRI" {
 			if firstTime {
-				fmt.Fprintf(&buf, "%s", desc.Field)
+				fmt.Fprintf(&buf, "`%s`", desc.Field)
 				firstTime = false
 			} else {
-				fmt.Fprintf(&buf, ",%s", desc.Field)
+				fmt.Fprintf(&buf, ",`%s`", desc.Field)
 			}
 		}
 	}
@@ -397,10 +504,10 @@ func orderbyKey(descs []describeTable) string {
 		// if no primary key found, use all fields as order by key
 		for _, desc := range descs {
 			if firstTime {
-				fmt.Fprintf(&buf, "%s", desc.Field)
+				fmt.Fprintf(&buf, "`%s`", desc.Field)
 				firstTime = false
 			} else {
-				fmt.Fprintf(&buf, ",%s", desc.Field)
+				fmt.Fprintf(&buf, ",`%s`", desc.Field)
 			}
 		}
 	}

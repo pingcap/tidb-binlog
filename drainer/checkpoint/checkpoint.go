@@ -16,7 +16,7 @@ type CheckPoint interface {
 	Save(int64, map[string]pb.Pos) error
 
 	// Check checks whether we should save checkpoint.
-	Check() bool
+	Check(int64, map[string]pb.Pos) bool
 
 	// Pos gets position information.
 	Pos() (int64, map[string]pb.Pos)
@@ -33,9 +33,11 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	)
 	switch name {
 	case "mysql", "tidb":
-		cp, err = newMysql(cfg)
-	case "pb":
+		cp, err = newMysql(name, cfg)
+	case "pb", "kafka":
 		cp, err = newPb(cfg)
+	case "flash":
+		cp, err = newFlash(cfg)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", name)
 	}

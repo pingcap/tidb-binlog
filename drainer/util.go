@@ -79,6 +79,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 
 func initializeSaramaGlobalConfig() {
 	sarama.MaxResponseSize = int32(maxMsgSize)
+	sarama.MaxRequestSize = int32(maxMsgSize)
 }
 
 func getSafeTS(ts int64, forwardTime int64) int64 {
@@ -170,17 +171,4 @@ func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
-}
-
-func createKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Consumer.Return.Errors = true
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	kafkaCfg.Version = version
-	log.Infof("kafka consumer version %v", version)
-
-	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }

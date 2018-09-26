@@ -1,6 +1,7 @@
 package pump
 
 import (
+	"os"
 	"time"
 
 	"github.com/ngaut/log"
@@ -87,16 +88,21 @@ var (
 		}, []string{"label"})
 )
 
+var registry = prometheus.NewRegistry()
+
 func init() {
-	prometheus.MustRegister(rpcHistogram)
-	prometheus.MustRegister(writeBinlogSizeHistogram)
-	prometheus.MustRegister(readBinlogHistogram)
-	prometheus.MustRegister(lossBinlogCacheCounter)
-	prometheus.MustRegister(writeBinlogHistogram)
-	prometheus.MustRegister(readErrorCounter)
-	prometheus.MustRegister(writeErrorCounter)
-	prometheus.MustRegister(checkpointGauge)
-	prometheus.MustRegister(corruptionBinlogCounter)
+	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewGoCollector())
+
+	registry.MustRegister(rpcHistogram)
+	registry.MustRegister(writeBinlogSizeHistogram)
+	registry.MustRegister(readBinlogHistogram)
+	registry.MustRegister(lossBinlogCacheCounter)
+	registry.MustRegister(writeBinlogHistogram)
+	registry.MustRegister(readErrorCounter)
+	registry.MustRegister(writeErrorCounter)
+	registry.MustRegister(checkpointGauge)
+	registry.MustRegister(corruptionBinlogCounter)
 }
 
 type metricClient struct {
@@ -107,16 +113,18 @@ type metricClient struct {
 // Start run a loop of pushing metrics to Prometheus Pushgateway.
 func (mc *metricClient) Start(ctx context.Context, pumpID string) {
 	log.Debugf("start prometheus metrics client, addr=%s, internal=%ds", mc.addr, mc.interval)
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("metricClient exit Start")
 			return
 		case <-time.After(time.Duration(mc.interval) * time.Second):
 			err := push.AddFromGatherer(
 				"binlog",
 				map[string]string{"instance": pumpID},
 				mc.addr,
-				prometheus.DefaultGatherer,
+				registry,
 			)
 			if err != nil {
 				log.Errorf("could not push metrics to Prometheus Pushgateway: %v", err)

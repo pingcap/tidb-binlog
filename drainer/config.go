@@ -32,7 +32,7 @@ const (
 	defaultPumpTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5  // 5 minute
 	defaultSafeForwardTime = 20 // 20 minute
-	defaultKafkaVersion    = "1.0.0"
+	defaultKafkaVersion    = "0.8.2.0"
 	defautMaxKafkaSize     = 1024 * 1024 * 1024
 )
 
@@ -123,7 +123,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 1, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or pb; see syncer section in conf/drainer.toml")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or pb or flash or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
@@ -182,27 +182,8 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
-	// adjust configuration
-	adjustString(&cfg.ListenAddr, defaultListenAddr())
-	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.SyncerCfg.adjustWorkCount()
-	cfg.SyncerCfg.adjustDoDBAndTable()
-
-	// add default syncer.to configuration if need
-	if cfg.SyncerCfg.To == nil {
-		cfg.SyncerCfg.To = new(executor.DBConfig)
-		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
-			cfg.SyncerCfg.To.Host = "localhost"
-			cfg.SyncerCfg.To.Port = 3306
-			cfg.SyncerCfg.To.User = "root"
-			cfg.SyncerCfg.To.Password = ""
-			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
-		} else {
-			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
-		}
+	if err = cfg.adjustConfig(); err != nil {
+		return errors.Trace(err)
 	}
 
 	initializeSaramaGlobalConfig()
@@ -210,7 +191,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" {
+	if c.DestDBType == "pb" || c.DestDBType == "kafka" {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
@@ -280,7 +261,34 @@ func (cfg *Config) validate() error {
 		}
 	}
 
-	// check zookeeper
+	return nil
+}
+
+func (cfg *Config) adjustConfig() error {
+	// adjust configuration
+	adjustString(&cfg.ListenAddr, defaultListenAddr())
+	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
+	adjustString(&cfg.DataDir, defaultDataDir)
+	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
+
+	// add default syncer.to configuration if need
+	if cfg.SyncerCfg.To == nil {
+		cfg.SyncerCfg.To = new(executor.DBConfig)
+		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
+			cfg.SyncerCfg.To.Host = "localhost"
+			cfg.SyncerCfg.To.Port = 3306
+			cfg.SyncerCfg.To.User = "root"
+			cfg.SyncerCfg.To.Password = ""
+			log.Infof("use default downstream mysql config: %s@%s:%d", "root", "localhost", 3306)
+		} else if cfg.SyncerCfg.DestDBType == "pb" {
+			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
+			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	}
+
+	// get cfg.KafkaAddrs from cfg.ZkAddrs if cfg.ZkAddrs is setted
 	if cfg.ZkAddrs != "" {
 		zkClient, err := zk.NewFromConnectionString(cfg.ZkAddrs, time.Second*5, time.Second*60)
 		defer zkClient.Close()
@@ -296,6 +304,14 @@ func (cfg *Config) validate() error {
 		// use kafka address get from zookeeper to reset the config
 		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
 		cfg.KafkaAddrs = kafkaUrls
+	}
+
+	// set default kafka addr
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		if len(cfg.SyncerCfg.To.KafkaAddrs) == 0 {
+			cfg.SyncerCfg.To.KafkaAddrs = cfg.KafkaAddrs
+			cfg.SyncerCfg.To.KafkaVersion = cfg.KafkaVersion
+		}
 	}
 
 	return nil

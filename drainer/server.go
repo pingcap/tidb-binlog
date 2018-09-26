@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -45,6 +48,7 @@ type Server struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	syncer    *Syncer
+	isClosed  int32
 }
 
 func init() {
@@ -73,6 +77,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	clusterID = pdCli.GetClusterID(ctx)
+	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
@@ -175,6 +180,10 @@ func (s *Server) StartCollect() {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("start collect panic. err: %s, stack: %s", err, debug.Stack())
+			}
+
 			log.Info("collect goroutine exited")
 			s.wg.Done()
 			s.Close()
@@ -191,6 +200,10 @@ func (s *Server) StartMetrics() {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("start metrics panic. err: %s, stack: %s", err, debug.Stack())
+			}
+
 			log.Info("metrics goroutine exited")
 			s.wg.Done()
 		}()
@@ -203,6 +216,10 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
+			if err := recover(); err != nil {
+				log.Errorf("start syncer panic. err: %s, stack: %s", err, debug.Stack())
+			}
+
 			log.Info("syncer goroutine exited")
 			s.wg.Done()
 			s.Close()
@@ -295,20 +312,32 @@ func (s *Server) Start() error {
 	go s.gs.Serve(grpcL)
 
 	http.HandleFunc("/status", s.collector.Status)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
-	return m.Serve()
+	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
+	log.Info("begin to close drainer server")
+
+	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+		log.Debug("server had closed")
+		return
+	}
+
 	// unregister drainer
-	if err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID); err != nil {
+	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
 	}
-	// stop syncer
-	s.syncer.Close()
+
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit

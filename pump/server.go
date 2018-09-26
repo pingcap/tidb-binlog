@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/errors"
@@ -27,7 +29,8 @@ import (
 
 var pullBinlogInterval = 50 * time.Millisecond
 
-var maxMsgSize = 1024 * 1024 * 1024
+// GlobalConfig is global config of pump
+var GlobalConfig *globalConfig
 
 const (
 	slowDist      = 30 * time.Millisecond
@@ -84,6 +87,7 @@ type Server struct {
 	gs       *grpc.Server
 	ctx      context.Context
 	cancel   context.CancelFunc
+	wg       sync.WaitGroup
 	gc       time.Duration
 	metrics  *metricClient
 	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
@@ -98,6 +102,12 @@ func init() {
 	// tracing has suspicious leak problem, so disable it here.
 	// it must be set before any real grpc operation.
 	grpc.EnableTracing = false
+	GlobalConfig = &globalConfig{
+		maxMsgSize:        defautMaxKafkaSize,
+		segmentSizeBytes:  defaultSegmentSizeBytes,
+		SlicesSize:        defaultBinlogSliceSize,
+		sendKafKaRetryNum: defaultSendKafKaRetryNum,
+	}
 }
 
 // NewServer returns a instance of pump server
@@ -124,7 +134,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
-	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(maxMsgSize)}
+	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(GlobalConfig.maxMsgSize)}
 	if cfg.tls != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
@@ -269,7 +279,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		return ret, err
 	}
 
-	if _, err1 := binlogger.WriteTail(in.Payload); err1 != nil {
+	if _, err1 := binlogger.WriteTail(&binlog.Entity{Payload: in.Payload}); err1 != nil {
 		lossBinlogCacheCounter.Add(1)
 		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
 
@@ -284,6 +294,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 }
 
 // PullBinlogs sends binlogs in the streaming way
+// the rpc looks no use now, drainer read from kafka directly
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
 	cid := fmt.Sprintf("%d", in.ClusterID)
 	if cid != s.clusterID {
@@ -296,10 +307,10 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 
 	pos := in.StartFrom
-	sendBinlog := func(entity binlog.Entity) error {
+	sendBinlog := func(entity *binlog.Entity) error {
 		pos.Suffix = entity.Pos.Suffix
 		pos.Offset = entity.Pos.Offset
-		resp := &binlog.PullBinlogResp{Entity: entity}
+		resp := &binlog.PullBinlogResp{Entity: *entity}
 		return errors.Trace(stream.Send(resp))
 	}
 
@@ -309,8 +320,13 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			return errors.Trace(err)
 		}
 
+		select {
+		// walk return nil even if ctx is Done, so check and return here
+		case <-s.ctx.Done():
+			return nil
 		// sleep 50 ms to prevent cpu occupied
-		time.Sleep(pullBinlogInterval)
+		case <-time.After(pullBinlogInterval):
+		}
 	}
 }
 
@@ -324,17 +340,18 @@ func (s *Server) Start() error {
 	// notify all cisterns
 	if err := s.node.Notify(s.ctx); err != nil {
 		// if fail, unregister this node
-		if err := s.node.Unregister(s.ctx); err != nil {
+		if err := s.node.Unregister(context.Background()); err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
-	// start heartbeat loop
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
-			log.Errorf("send heartbeat error %v", err)
+			if err != context.Canceled {
+				log.Errorf("send heartbeat error %v", err)
+			}
 		}
 	}()
 
@@ -363,12 +380,15 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
 	}
 	// start generate binlog if pump doesn't receive new binlogs
+	s.wg.Add(1)
 	go s.genForwardBinlog()
 
 	// gc old binlog files
+	s.wg.Add(1)
 	go s.gcBinlogFile()
 
 	// collect metrics to prometheus
+	s.wg.Add(1)
 	go s.startMetrics()
 
 	// register pump with gRPC server and start to serve listeners
@@ -383,10 +403,16 @@ func (s *Server) Start() error {
 
 	http.HandleFunc("/status", s.Status)
 	http.HandleFunc("/drainers", s.AllDrainers)
+	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
 	go http.Serve(httpL, nil)
 
-	return m.Serve()
+	err = m.Serve()
+	if strings.Contains(err.Error(), "use of closed network connection") {
+		err = nil
+	}
+
+	return err
 }
 
 // gennerate rollback binlog can forward the drainer's latestCommitTs, and just be discarded without any side effects
@@ -423,7 +449,7 @@ func (s *Server) writeFakeBinlog() {
 			return
 		}
 
-		_, err = binlogger.WriteTail(payload)
+		_, err = binlogger.WriteTail(&binlog.Entity{Payload: payload})
 		if err != nil {
 			log.Errorf("generate forward binlog, write binlog err %v", err)
 			return
@@ -438,11 +464,14 @@ func (s *Server) writeFakeBinlog() {
 
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
+	defer s.wg.Done()
+
 	s.needGenBinlog.Set(true)
 	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
 	for {
 		select {
 		case <-s.ctx.Done():
+			log.Info("genFakeBinlog exit")
 			return
 		case <-time.After(genFakeBinlogInterval):
 			s.writeFakeBinlog()
@@ -451,22 +480,33 @@ func (s *Server) genForwardBinlog() {
 }
 
 func (s *Server) gcBinlogFile() {
+	defer s.wg.Done()
 	if s.gc == 0 {
 		return
 	}
+
 	for {
-		if s.dispatcher != nil {
-			s.dispatcher.GC(s.gc, binlog.Pos{})
+		select {
+		case <-s.ctx.Done():
+			log.Info("gcBinlogFile exit")
+			return
+		case <-time.Tick(time.Hour):
+			if s.dispatcher != nil {
+				s.dispatcher.GC(s.gc, binlog.Pos{})
+			}
 		}
-		time.Sleep(time.Hour)
 	}
 }
 
 func (s *Server) startMetrics() {
+	defer s.wg.Done()
+
 	if s.metrics == nil {
 		return
 	}
+	log.Info("start metricClient")
 	s.metrics.Start(s.ctx, s.node.ID())
+	log.Info("startMetrics exit")
 }
 
 // AllDrainers exposes drainers' status to HTTP handler.
@@ -544,27 +584,41 @@ func (s *Server) getTSO() (int64, error) {
 
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	if s.dispatcher != nil {
-		if err := s.dispatcher.Close(); err != nil {
-			log.Errorf("close binlogger error %v", err)
-		}
-	}
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
 
 	// update latest for offline ts in unregister process
 	if _, err := s.getTSO(); err != nil {
 		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
 	}
 
+	// notify other goroutines to exit
+	s.cancel()
+	s.wg.Wait()
+	log.Info("background goroutins are stopped")
+
 	// unregister this node
-	if err := s.node.Unregister(s.ctx); err != nil {
+	if err := s.node.Unregister(context.Background()); err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
+	log.Info(s.node.ID, " has unregister")
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
 	}
-	// notify other goroutines to exit
-	s.cancel()
-	// stop the gRPC server
-	s.gs.Stop()
+	log.Info("has closed pdCli")
+
+	// will write binlog to dispatcher if genFakeBinlog() is still running or the pump server is serving
+	// so close this at lastest
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Close(); err != nil {
+			log.Errorf("close binlogger error %v", err)
+		}
+	}
+
+	err := s.node.Close()
+	if err != nil {
+		log.Error(err)
+	}
 }
