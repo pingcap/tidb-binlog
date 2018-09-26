@@ -1,5 +1,5 @@
-hash: c423bfb75c5b21538f63c791e75fdb8cf9550c264337606e609a26ab2a6818ba
-updated: 2018-09-26T11:26:53.034221614+08:00
+hash: fe274c92e63b963dfc4a4fa4d765d7ef95ec31c367f4bcc5248b1d1a28002ec5
+updated: 2018-09-26T12:03:43.533538148+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -110,7 +110,7 @@ imports:
   subpackages:
   - capnslog
 - name: github.com/cznic/mathutil
-  version: c90ba19bea8927552cef4560ab888231566f049d
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
 - name: github.com/cznic/sortutil
   version: 4c7342852e65c2088c981288f2c5610d10b9f7f4
 - name: github.com/davecgh/go-spew
@@ -171,7 +171,7 @@ imports:
   - tracing/opentracing
   - util/metautils
 - name: github.com/grpc-ecosystem/go-grpc-prometheus
-  version: 6b7015e65d366bf3f19b2b2a000a831940f0f7e0
+  version: 93bf4626fba73b751b0f3cdf2649be4ce0c420cd
 - name: github.com/grpc-ecosystem/grpc-gateway
   version: 07f5e79768022f9a3265235f0db4ac8c3f675fec
   subpackages:
@@ -209,7 +209,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/opentracing/opentracing-go
-  version: 1949ddbfd147afd4d964a9f00b24eb291e0e7c38
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
   subpackages:
   - ext
   - log
@@ -218,7 +218,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
+  version: ea731401f5c95a8ba30f15787e5e0fb77c60c66b
   subpackages:
   - internal/xxh32
 - name: github.com/pingcap/goleveldb
@@ -352,7 +352,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: 967789050ba94deca04a5e84cce8ad472ce313c1
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/push
@@ -383,7 +383,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: 3bcb09397d6d88e7676a9bc8433ca11ba5304837
+  version: 78fa2915c1fa231f62e0438da493688c21ca678e
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -406,7 +406,7 @@ imports:
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: ab5afa7b97b7a16aa6ae001f1c80af61a880e5d9
+  version: 12b4b58a7d8119c9f22db2745df843fca67a310a
   subpackages:
   - config
   - internal/baggage
@@ -433,7 +433,7 @@ imports:
   subpackages:
   - codec
 - name: github.com/unrolled/render
-  version: b9786414de4d903830df7ac38eea68a0e3267a35
+  version: 4206df6ff70175d219fdb4672ae157fbed820103
 - name: github.com/xiang90/probing
   version: 07dd2e8dfe18522e9c447ba95f2fe95262f63bb2
 - name: github.com/zanmato1984/clickhouse
@@ -450,6 +450,7 @@ imports:
   subpackages:
   - bcrypt
   - blowfish
+  - ssh/terminal
 - name: golang.org/x/net
   version: d1e1b351919c6738fdeb9893d5c998b161464f0c
   repo: https://github.com/golang/net.git
