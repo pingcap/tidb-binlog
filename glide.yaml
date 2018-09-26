@@ -310,7 +310,7 @@ import:
 - package: github.com/syndtr/goleveldb/leveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
 - package: github.com/pingcap/tidb-tools
-  version: 85f3b6e13d6c98824050f42e72e80ba10ad859d7
+  version: ff0ddbf51b5744cca6d426b892a5dac5aa97a014
   subpackages:
   - pkg
   - pkg/dbutil

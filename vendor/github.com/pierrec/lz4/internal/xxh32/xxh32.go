@@ -4,10 +4,25 @@ package xxh32
 
 import (
 	"encoding/binary"
+	"hash"
 )
 
-// XXHZero represents an xxhash32 object with seed 0.
-type XXHZero struct {
+const (
+	prime32_1 uint32 = 2654435761
+	prime32_2 uint32 = 2246822519
+	prime32_3 uint32 = 3266489917
+	prime32_4 uint32 = 668265263
+	prime32_5 uint32 = 374761393
+
+	prime32_1plus2 uint32 = 606290984
+	prime32_minus1 uint32 = 1640531535
+)
+
+var _ hash.Hash32 = (*XXH)(nil)
+
+// XXH represents an xxhash32 object.
+type XXH struct {
+	seed     uint32
 	v1       uint32
 	v2       uint32
 	v3       uint32
@@ -17,36 +32,43 @@ type XXHZero struct {
 	bufused  int
 }
 
+// Init sets the seed and Reset().
+func (xxh *XXH) Init(seed uint32) {
+	xxh.seed = seed
+	xxh.Reset()
+}
+
 // Sum appends the current hash to b and returns the resulting slice.
 // It does not change the underlying hash state.
-func (xxh XXHZero) Sum(b []byte) []byte {
+func (xxh XXH) Sum(b []byte) []byte {
 	h32 := xxh.Sum32()
 	return append(b, byte(h32), byte(h32>>8), byte(h32>>16), byte(h32>>24))
 }
 
 // Reset resets the Hash to its initial state.
-func (xxh *XXHZero) Reset() {
-	xxh.v1 = prime32_1plus2
-	xxh.v2 = prime32_2
-	xxh.v3 = 0
-	xxh.v4 = prime32_minus1
+func (xxh *XXH) Reset() {
+	seed := xxh.seed
+	xxh.v1 = seed + prime32_1plus2
+	xxh.v2 = seed + prime32_2
+	xxh.v3 = seed
+	xxh.v4 = seed - prime32_1
 	xxh.totalLen = 0
 	xxh.bufused = 0
 }
 
 // Size returns the number of bytes returned by Sum().
-func (xxh *XXHZero) Size() int {
+func (xxh *XXH) Size() int {
 	return 4
 }
 
 // BlockSize gives the minimum number of bytes accepted by Write().
-func (xxh *XXHZero) BlockSize() int {
+func (xxh *XXH) BlockSize() int {
 	return 1
 }
 
 // Write adds input bytes to the Hash.
 // It never returns an error.
-func (xxh *XXHZero) Write(input []byte) (int, error) {
+func (xxh *XXH) Write(input []byte) (int, error) {
 	n := len(input)
 	m := xxh.bufused
 
@@ -93,12 +115,12 @@ func (xxh *XXHZero) Write(input []byte) (int, error) {
 }
 
 // Sum32 returns the 32 bits Hash value.
-func (xxh *XXHZero) Sum32() uint32 {
+func (xxh *XXH) Sum32() uint32 {
 	h32 := uint32(xxh.totalLen)
 	if h32 >= 16 {
 		h32 += rol1(xxh.v1) + rol7(xxh.v2) + rol12(xxh.v3) + rol18(xxh.v4)
 	} else {
-		h32 += prime32_5
+		h32 += xxh.seed + prime32_5
 	}
 
 	p := 0
@@ -122,18 +144,18 @@ func (xxh *XXHZero) Sum32() uint32 {
 	return h32
 }
 
-// ChecksumZero returns the 32bits Hash value.
-func ChecksumZero(input []byte) uint32 {
+// Checksum returns the 32bits Hash value.
+func Checksum(input []byte, seed uint32) uint32 {
 	n := len(input)
 	h32 := uint32(n)
 
 	if n < 16 {
-		h32 += prime32_5
+		h32 += seed + prime32_5
 	} else {
-		v1 := prime32_1plus2
-		v2 := prime32_2
-		v3 := uint32(0)
-		v4 := prime32_minus1
+		v1 := seed + prime32_1 + prime32_2
+		v2 := seed + prime32_2
+		v3 := seed
+		v4 := seed - prime32_1
 		p := 0
 		for n := n - 16; p <= n; p += 16 {
 			sub := input[p:][:16] //BCE hint for compiler
@@ -167,9 +189,37 @@ func ChecksumZero(input []byte) uint32 {
 	return h32
 }
 
-// Uint32Zero hashes x with seed 0.
-func Uint32Zero(x uint32) uint32 {
-	h := prime32_5 + 4 + x*prime32_3
+func rol1(u uint32) uint32 {
+	return u<<1 | u>>31
+}
+
+func rol7(u uint32) uint32 {
+	return u<<7 | u>>25
+}
+
+func rol11(u uint32) uint32 {
+	return u<<11 | u>>21
+}
+
+func rol12(u uint32) uint32 {
+	return u<<12 | u>>20
+}
+
+func rol13(u uint32) uint32 {
+	return u<<13 | u>>19
+}
+
+func rol17(u uint32) uint32 {
+	return u<<17 | u>>15
+}
+
+func rol18(u uint32) uint32 {
+	return u<<18 | u>>14
+}
+
+// Uint32 hashes x with the given seed.
+func Uint32(x, seed uint32) uint32 {
+	h := seed + prime32_5 + 4 + x*prime32_3
 	h = rol17(h) * prime32_4
 	h ^= h >> 15
 	h *= prime32_2
