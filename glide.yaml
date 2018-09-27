@@ -206,7 +206,7 @@ import:
   - go-binlog
   - go-tipb
 - package: github.com/prometheus/client_golang
-  version: ^0.8.0
+  version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
   - prometheus
   - prometheus/push
@@ -239,6 +239,7 @@ import:
   subpackages:
   - bcrypt
   - blowfish
+  - ssh/terminal
 - package: golang.org/x/net
   version: d1e1b351919c6738fdeb9893d5c998b161464f0c
   repo: https://github.com/golang/net.git
@@ -297,6 +298,7 @@ import:
 - package: github.com/gorilla/mux
   version: ~1.6.2
 - package: github.com/unrolled/render
+  version: 4206df6ff70175d219fdb4672ae157fbed820103
 - package: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
   subpackages:
@@ -310,7 +312,7 @@ import:
 - package: github.com/syndtr/goleveldb/leveldb
   version: c4c61651e9e37fa117f53c5a906d3b63090d8445
 - package: github.com/pingcap/tidb-tools
-  version: 85f3b6e13d6c98824050f42e72e80ba10ad859d7
+  version: ff0ddbf51b5744cca6d426b892a5dac5aa97a014
   subpackages:
   - pkg
   - pkg/dbutil
@@ -326,6 +328,18 @@ import:
   - internal
   - internal/modules
   - internal/app_identity
+- package: github.com/cznic/mathutil
+  version: ca4c9f2c136954238c3158b92de72078c7672ecc
+- package: github.com/grpc-ecosystem/go-grpc-prometheus
+  version: 93bf4626fba73b751b0f3cdf2649be4ce0c420cd
+- package: github.com/opentracing/opentracing-go
+  version: bd9c3193394760d98b2fa6ebb2291f0cd1d06a7d
+- package: github.com/pierrec/lz4
+  version: ea731401f5c95a8ba30f15787e5e0fb77c60c66b
+- package: github.com/sirupsen/logrus
+  version: 78fa2915c1fa231f62e0438da493688c21ca678e
+- package: github.com/uber/jaeger-client-go
+  version: 12b4b58a7d8119c9f22db2745df843fca67a310a
 testImports:
 - package: github.com/pingcap/check
   version: 5ebf485998c8549fd2ccfd8f716adebe2e69d689

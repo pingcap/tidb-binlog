@@ -1,5 +1,5 @@
-hash: dabfbdfe07f62d0135d77a197b70dd40e3f683aebf38ee8b3c2352bfafe839c5
-updated: 2018-09-04T15:06:00.777418+08:00
+hash: fe274c92e63b963dfc4a4fa4d765d7ef95ec31c367f4bcc5248b1d1a28002ec5
+updated: 2018-09-26T12:03:43.533538148+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -333,7 +333,7 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 85f3b6e13d6c98824050f42e72e80ba10ad859d7
+  version: ff0ddbf51b5744cca6d426b892a5dac5aa97a014
   subpackages:
   - pkg
   - pkg/dbutil
