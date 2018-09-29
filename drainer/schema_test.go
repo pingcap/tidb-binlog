@@ -62,6 +62,11 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
+	// test rename table
+	jobs = append(jobs, &model.Job{ID: 8, SchemaID: 2, Type:model.ActionRenameTable})
+	_, err := NewSchema(jobs, ignoreNames, false)
+	c.Assert(err, IsNil)
+
 	// test schema drop schema error
 	jobs = jobs[:0]
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
