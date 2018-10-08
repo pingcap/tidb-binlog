@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -258,25 +257,9 @@ func checkExclusive(dataDir string) error {
 	return errors.Trace(err)
 }
 
-// checkNodeID check NodeID's format is legal or not.
-func checkNodeID(nodeID string) bool {
-	_, port, err := net.SplitHostPort(nodeID)
-	if err != nil {
-		return false
-	}
-
-	_, err = strconv.Atoi(port)
-
-	return err != nil
-}
-
 // FormatNodeID formats the nodeID, the nodeID should looks like "host:port"
 func FormatNodeID(nodeID string) string {
 	newNodeID := strings.TrimSpace(nodeID)
-	legal := checkNodeID(newNodeID)
-	if !legal {
-		log.Warnf("node id %s is illegal, the bytes is %v, and format failed", nodeID, []byte(nodeID))
-	}
 
 	return newNodeID
 }
