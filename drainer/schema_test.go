@@ -63,7 +63,9 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
 	// test rename table
-	jobs = append(jobs, &model.Job{ID: 8, SchemaID: 2, Type:model.ActionRenameTable})
+	jobs = jobs[:0]
+	jobs = append(jobs, job1)
+	jobs = append(jobs, &model.Job{ID: 8, SchemaID: 2, Type: model.ActionRenameTable})
 	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 
