@@ -62,13 +62,6 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	_, err = NewSchema(jobs, ignoreNames, false)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
-	// test rename table
-	jobs = jobs[:0]
-	jobs = append(jobs, job1)
-	jobs = append(jobs, &model.Job{ID: 8, SchemaID: 2, Type: model.ActionRenameTable})
-	_, err = NewSchema(jobs, ignoreNames, false)
-	c.Assert(err, IsNil)
-
 	// test schema drop schema error
 	jobs = jobs[:0]
 	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
@@ -187,8 +180,43 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(ok, IsTrue)
 	table, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
+
+	// test rename table in ignore schema
+	ingnoreDBInfo := &model.DBInfo{
+		ID:    4,
+		Name:  ignoreDBName,
+		State: model.StatePublic,
+	}
+
+	createIgnoreSchemaJob := &model.Job{
+		ID:         8,
+		SchemaID:   ingnoreDBInfo.ID,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil, 123},
+	}
+
+	createTableJob := &model.Job{
+		ID:         9,
+		SchemaID:   ingnoreDBInfo.ID,
+		Type:       model.ActionCreateTable,
+		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, &model.TableInfo{ID: 3}, 123},
+	}
+
+	jobs = append(jobs, createIgnoreSchemaJob)
+	jobs = append(jobs, createTableJob)
+	jobs = append(jobs, &model.Job{
+		ID:         10,
+		SchemaID:   ingnoreDBInfo.ID,
+		TableID:    3,
+		Type:       model.ActionRenameTable,
+		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, &model.TableInfo{ID: 4}, 123},
+	})
+	_, err = NewSchema(jobs, ignoreNames, false)
+	// rename table in ignore schema will not return error
+	c.Assert(err, IsNil)
+
 	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
+	jobs = append(jobs, &model.Job{ID: 11, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
 	schema2, err := NewSchema(jobs, ignoreNames, false)
 	c.Assert(err, IsNil)
 	table, ok = schema2.TableByID(tblInfo.ID)
