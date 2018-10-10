@@ -205,17 +205,13 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		//sqls = append(sqls, deleteSQL)
-		//values = append(values, deleteValue)
-		//keys = append(keys, deleteKey)
+		sqls = append(sqls, deleteSQL)
+		values = append(values, deleteValue)
 
 		// generate replace sql
 		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
-		//sqls = append(sqls, sql)
-		//values = append(values, newValues)
-
-
-
+		sqls = append(sqls, replaceSQL)
+		values = append(values, newValues)
 
 		// generate dispatching key
 		// find primary keys
@@ -224,9 +220,9 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		sqls = append(sqls, fmt.Sprintf("%s%s", deleteSQL, replaceSQL))
-		keys = append(keys, append(deleteKey, replaceKey...))
-		values = append(values, append(deleteValue, newValues))
+		key := append(deleteKey, replaceKey...)
+		keys = append(keys, key)
+		keys = append(keys, key)
 	}
 
 	return sqls, keys, values, nil

@@ -667,7 +667,7 @@ func (s *Syncer) run(b *binlogItem) error {
 }
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
-	//useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
+	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
 	for _, mutation := range mutations {
 		table, ok := s.schema.TableByID(mutation.GetTableId())
@@ -734,7 +734,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			isCompleteBinlog := (idx == len(sequences)-1)
 
 			// update is split to delete and insert
-			/*
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
 				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, false)
 				if err != nil {
@@ -747,13 +746,12 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				*/
 				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, isCompleteBinlog)
 				if err != nil {
 					return errors.Trace(err)
 				}
 				offsets[dmlType] = offsets[dmlType] + 1
-			//}
+			}
 		}
 
 		for tp := range sqls {
