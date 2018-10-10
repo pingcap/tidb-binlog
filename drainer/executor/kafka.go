@@ -8,6 +8,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
@@ -87,6 +88,7 @@ func (p *kafkaExecutor) Close() error {
 }
 
 func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
+	log.Debug(binlog.String())
 	data, err := binlog.Marshal()
 	if err != nil {
 		return errors.Trace(err)

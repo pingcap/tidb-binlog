@@ -413,6 +413,8 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 }
 
 func (s *Syncer) addJob(job *job) {
+	log.Debugf("add job: %+v", *job)
+
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
@@ -430,7 +432,6 @@ func (s *Syncer) addJob(job *job) {
 		s.jobWg.Add(1)
 		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
 		s.jobCh[idx] <- job
-		log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 	}
 
 	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
@@ -665,7 +666,9 @@ func (s *Syncer) run(b *binlogItem) error {
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
-	for _, mutation := range mutations {
+	for mutationIdx, mutation := range mutations {
+		isLastMutation := (mutationIdx == len(mutations)-1)
+
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
@@ -727,7 +730,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			isCompleteBinlog := (idx == len(sequences)-1)
+			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
