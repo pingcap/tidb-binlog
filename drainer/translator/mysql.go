@@ -205,23 +205,28 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		sqls = append(sqls, deleteSQL)
-		values = append(values, deleteValue)
-		keys = append(keys, deleteKey)
+		//sqls = append(sqls, deleteSQL)
+		//values = append(values, deleteValue)
+		//keys = append(keys, deleteKey)
 
 		// generate replace sql
-		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
-		sqls = append(sqls, sql)
-		values = append(values, newValues)
+		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+		//sqls = append(sqls, sql)
+		//values = append(values, newValues)
+
+
+
 
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, newColumnValues)
+		replaceKey, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		keys = append(keys, key)
+		sqls = append(sqls, fmt.Sprintf("%s%s", deleteSQL, replaceSQL))
+		keys = append(keys, append(deleteKey, replaceKey...))
+		values = append(values, append(deleteValue, newValues))
 	}
 
 	return sqls, keys, values, nil
