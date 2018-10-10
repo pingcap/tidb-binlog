@@ -72,8 +72,10 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 			if rerr != nil {
 				log.Errorf("[rollback][error]%v", rerr)
 			}
+			log.Infof("rollback success sqls %v, args %v", sqls[:i+1], args[:i+1])
 			return errors.Trace(err)
 		}
+		log.Infof("exec sql %s, args %v", sqls[i], args[i])
 	}
 
 	err = txn.Commit()
@@ -81,6 +83,7 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
 		return errors.Trace(err)
 	}
+	log.Infof("exec success sqls %v, args %v", sqls, args)
 
 	return nil
 }
