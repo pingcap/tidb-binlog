@@ -40,17 +40,18 @@ func (t *testTranslatorSuite) TestPkHandleColumn(c *C) {
 func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 	m := testGenMysqlTranslator(c)
 	table := testGenTable("hasPK")
-	cols, err := m.pkIndexColumns(table)
+	cols, err := m.uniqueIndexColumns(table)
 	c.Assert(err, IsNil)
 	c.Assert(len(cols), Equals, 2)
 
 	table = testGenTable("hasID")
-	cols, err = m.pkIndexColumns(table)
+	cols, err = m.uniqueIndexColumns(table)
 	c.Assert(err, IsNil)
+	//c.Assert(cols, Equals, nil)
 	c.Assert(len(cols), Equals, 1)
 
 	table = testGenTable("normal")
-	cols, err = m.pkIndexColumns(table)
+	cols, err = m.uniqueIndexColumns(table)
 	c.Assert(err, IsNil)
 	c.Assert(len(cols), Equals, 0)
 }

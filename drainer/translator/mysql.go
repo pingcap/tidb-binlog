@@ -376,10 +376,14 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 }
 
 func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
-	var cols []*model.ColumnInfo
+	// pkHandleCol may in table.Indices, use map to keep olny one same key.
+	uniqueColsMap := make(map[string]interface{})
+	uniqueCols := make([]*model.ColumnInfo, 0, 2)
+
 	pkHandleCol := m.pkHandleColumn(table)
 	if pkHandleCol != nil {
-		cols = append(cols, pkHandleCol)
+		uniqueColsMap[pkHandleCol.Name.O] = pkHandleCol
+		uniqueCols = append(uniqueCols, pkHandleCol)
 	}
 
 	columns := make(map[string]*model.ColumnInfo)
@@ -391,18 +395,20 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo) ([]*model.C
 		if idx.Primary || idx.Unique {
 			for _, col := range idx.Columns {
 				if column, ok := columns[col.Name.O]; ok {
-					cols = append(cols, column)
+					if _, ok := uniqueColsMap[col.Name.O]; !ok {
+						uniqueColsMap[col.Name.O] = column
+						uniqueCols = append(uniqueCols, column)
+					}
 				}
 			}
 
-			if len(cols) == 0 {
-				return nil, errors.New("primay index is empty, but should not be empty")
+			if len(uniqueCols) == 0 {
+				return nil, errors.New("primay/unique index is empty, but should not be empty")
 			}
-			return cols, nil
 		}
 	}
 
-	return cols, nil
+	return uniqueCols, nil
 }
 
 // IsPKHandleColumn check if the column if the pk handle of tidb
