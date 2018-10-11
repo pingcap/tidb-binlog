@@ -487,6 +487,10 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) savePoint(ts int64) {
+	if ts < s.cp.TS() {
+		log.Errorf("ts %d is less than checkpoint ts %d", ts, s.cp.TS())
+	}
+
 	log.Infof("[write save point]%d", ts)
 	err := s.cp.Save(ts)
 	if err != nil {
