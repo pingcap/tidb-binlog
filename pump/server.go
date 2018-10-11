@@ -291,7 +291,6 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			return nil
 		}
 	}
-	return nil
 }
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd

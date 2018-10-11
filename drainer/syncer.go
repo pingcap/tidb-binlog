@@ -1,7 +1,9 @@
 package drainer
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -400,6 +402,27 @@ type job struct {
 	isCompleteBinlog bool
 }
 
+func (j *job) String() string {
+	// build args String, avoid to print too big value arg
+	builder := new(strings.Builder)
+	builder.WriteString("[")
+
+	for i := 0; i < len(j.args); i++ {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+
+		tmp := fmt.Sprintf("%v", j.args[i])
+		if len(tmp) > 30 {
+			tmp = tmp[0:30] + "..."
+		}
+		builder.WriteString(tmp)
+	}
+	builder.WriteString("]")
+
+	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v, isCompleteBinlog: %v}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID, j.isCompleteBinlog)
+}
+
 func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string, isCompleteBinlog bool) *job {
 	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
 }
@@ -413,7 +436,7 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 }
 
 func (s *Syncer) addJob(job *job) {
-	log.Debugf("add job: %+v", *job)
+	log.Debugf("add job: %s", job)
 
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
@@ -488,6 +511,10 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) savePoint(ts int64) {
+	if ts < s.cp.TS() {
+		log.Errorf("ts %d is less than checkpoint ts %d", ts, s.cp.TS())
+	}
+
 	log.Infof("[write save point]%d", ts)
 	err := s.cp.Save(ts)
 	if err != nil {
