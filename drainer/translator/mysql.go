@@ -300,7 +300,7 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
 	var kvs bytes.Buffer
 	// if has unique key, use it to construct where condition
-	ucs, err := m.uniqueIndexColumns(table)
+	ucs, err := m.uniqueIndexColumns(table, false)
 	if err != nil {
 		return "", nil, errors.Trace(err)
 	}
@@ -316,7 +316,7 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 	for i, col := range columns {
 		_, ok := ucsMap[col.ID]
 		if !ok && hasUK {
-			// if table has primary key, just ignore the non primary key column
+			// if table has primary/unique key, just ignore the non primary/unique key column
 			continue
 		}
 
@@ -375,7 +375,7 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 	return nil
 }
 
-func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
+func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll bool) ([]*model.ColumnInfo, error) {
 	// pkHandleCol may in table.Indices, use map to keep olny one same key.
 	uniqueColsMap := make(map[string]interface{})
 	uniqueCols := make([]*model.ColumnInfo, 0, 2)
@@ -384,6 +384,10 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo) ([]*model.C
 	if pkHandleCol != nil {
 		uniqueColsMap[pkHandleCol.Name.O] = pkHandleCol
 		uniqueCols = append(uniqueCols, pkHandleCol)
+
+		if !findAll {
+			return uniqueCols, nil
+		}
 	}
 
 	columns := make(map[string]*model.ColumnInfo)
@@ -404,6 +408,10 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo) ([]*model.C
 
 			if len(uniqueCols) == 0 {
 				return nil, errors.New("primay/unique index is empty, but should not be empty")
+			}
+
+			if !findAll {
+				return uniqueCols, nil
 			}
 		}
 	}
@@ -438,7 +446,7 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 
 func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
 	var columnsValues []string
-	columns, err := m.uniqueIndexColumns(table)
+	columns, err := m.uniqueIndexColumns(table, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
