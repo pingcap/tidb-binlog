@@ -8,6 +8,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
@@ -62,9 +63,11 @@ func (p *kafkaExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		var tables []*obinlog.Table
 		for i := range args {
 			table := args[i][0].(*obinlog.Table)
+
 			var idx int
 			var preTable *obinlog.Table
-			for idx, preTable = range tables {
+			for idx = 0; idx < len(tables); idx++ {
+				preTable = tables[idx]
 				if preTable.GetSchemaName() == table.GetSchemaName() && preTable.GetTableName() == table.GetTableName() {
 					preTable.Mutations = append(preTable.Mutations, table.Mutations...)
 					break
@@ -87,6 +90,7 @@ func (p *kafkaExecutor) Close() error {
 }
 
 func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
+	log.Debug("save binlog: ", binlog.String())
 	data, err := binlog.Marshal()
 	if err != nil {
 		return errors.Trace(err)
