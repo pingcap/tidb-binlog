@@ -47,7 +47,6 @@ func (t *testTranslatorSuite) TestPkIndexColumns(c *C) {
 	table = testGenTable("hasID")
 	cols, err = m.uniqueIndexColumns(table)
 	c.Assert(err, IsNil)
-	//c.Assert(cols, Equals, nil)
 	c.Assert(len(cols), Equals, 1)
 
 	table = testGenTable("normal")
