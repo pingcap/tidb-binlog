@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/juju/errors"
@@ -387,6 +388,7 @@ func (s *Server) Start() error {
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.Status).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router.HandleFunc("/binlog/{from}/{to}", s.SelectBinlog).Methods("GET")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
@@ -780,4 +782,32 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
+}
+
+// SelectBinlog
+func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	from := mux.Vars(r)["from"]
+	to := mux.Vars(r)["to"]
+	//log.Infof("node %s receive action %s", nodeID, action)
+	
+	fromTs, err := strconv.Atoi(from)
+	if err != nil {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value from: %s", from))
+	}
+
+	toTs, err := strconv.Atoi(to)
+	if err != nil {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value to: %s", to))
+	}
+
+	binlogBytes := s.storage.SelectCommitBinlog(s.ctx, int64(fromTs), int64(toTs))
+	if len(binlogBytes) == 0 {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("not find binlog from %d to %d", fromTs, toTs))
+	}
+
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %v", len(binlogBytes), fromTs, toTs, binlogBytes), nil))
 }

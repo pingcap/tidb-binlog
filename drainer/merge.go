@@ -300,7 +300,7 @@ func (m *Merger) run() {
 			continue
 		}
 
-		if minBinlog.GetCommitTs() <= latestTS {
+		if minBinlog.GetCommitTs() < latestTS {
 			disorderBinlogCount.Add(1)
 			log.Errorf("binlog's commit ts is %d, and is less than the last ts %d", minBinlog.GetCommitTs(), latestTS)
 		} else {
