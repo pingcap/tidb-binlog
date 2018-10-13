@@ -154,6 +154,7 @@ type chDB struct {
 type flashExecutor struct {
 	sync.Mutex
 	close chan bool
+	wg    sync.WaitGroup
 
 	timeLimit time.Duration
 	sizeLimit int
@@ -162,7 +163,7 @@ type flashExecutor struct {
 	rowBatches map[string][]*flashRowBatch
 	metaCP     *flash.MetaCheckpoint
 
-	err error
+	*baseError
 }
 
 func newFlash(cfg *DBConfig) (Executor, error) {
@@ -203,8 +204,10 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 		chDBs:      chDBs,
 		rowBatches: make(map[string][]*flashRowBatch),
 		metaCP:     flash.GetInstance(),
+		baseError:  newBaseError(),
 	}
 
+	e.wg.Add(1)
 	go e.flushRoutine()
 
 	return &e, nil
@@ -221,7 +224,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 
 	if isDDL {
 		// Flush all row batches.
-		e.flushAll(true)
+		e.err = e.flushAll(true)
 		if e.err != nil {
 			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
@@ -272,7 +275,7 @@ func (e *flashExecutor) Close() error {
 
 	// Wait for async flush goroutine to exit.
 	log.Info("[close] Waiting for flush thread to close.")
-	e.close <- true
+	close(e.close)
 
 	hasError := false
 	for _, chDB := range e.chDBs {
@@ -294,6 +297,7 @@ func (e *flashExecutor) Close() error {
 }
 
 func (e *flashExecutor) flushRoutine() {
+	defer e.wg.Done()
 	log.Info("[flush_thread] Flush thread started.")
 	for {
 		select {
@@ -308,10 +312,11 @@ func (e *flashExecutor) flushRoutine() {
 				log.Errorf("[flush_thread] Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
 				return
 			}
-			e.flushAll(false)
-			if e.err != nil {
+			err := e.flushAll(false)
+			if err != nil {
 				e.Unlock()
 				log.Errorf("[flush_thread] Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
+				e.SetErr(err)
 				return
 			}
 			// TODO: save checkpoint.
@@ -325,7 +330,7 @@ func (e *flashExecutor) partition(key int64) int {
 	return int(key) % len(e.chDBs)
 }
 
-func (e *flashExecutor) flushAll(forceSaveCP bool) {
+func (e *flashExecutor) flushAll(forceSaveCP bool) error {
 	log.Debug("[flush_all] Flushing all row batches.")
 
 	// Pick the latest commitTS among all row batches.
@@ -338,8 +343,7 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) {
 			}
 			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
 			if err != nil {
-				e.err = errors.Trace(err)
-				return
+				return errors.Trace(err)
 			}
 			if maxCommitTS < lastestCommitTS {
 				maxCommitTS = lastestCommitTS
@@ -348,4 +352,5 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) {
 	}
 
 	e.metaCP.Flush(maxCommitTS, forceSaveCP)
+	return nil
 }
