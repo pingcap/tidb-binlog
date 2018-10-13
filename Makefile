@@ -12,17 +12,17 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
-GO        := go
-GOBUILD   := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST    := CGO_ENABLED=1 $(GO) test -p 3
+GO		:= go
+GOBUILD   := GO111MODULE=off CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST	:= GO111MODULE=off CGO_ENABLED=1 $(GO) test -p 3
 
-ARCH      := "`uname -s`"
-LINUX     := "Linux"
-MAC       := "Darwin"
+ARCH	  := "`uname -s`"
+LINUX	 := "Linux"
+MAC	   := "Darwin"
 PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -80,19 +80,17 @@ check-static:
 		--enable ineffassign \
 		$$($(PACKAGE_DIRECTORIES))
 
-update:
-	which glide >/dev/null || curl https://glide.sh/get | sh
-	which glide-vc || go get -v -u github.com/sgotti/glide-vc
-ifdef PKG
-	glide get -s -v --skip-test ${PKG}
-else
-	glide update -v
-endif
-	@echo "removing test files"
-	glide vc --use-lock-file --only-code --no-tests
+update: update_vendor clean_vendor
+update_vendor:
+	rm -rf vendor/
+	GO111MODULE=on go mod verify
+	GO111MODULE=on go mod vendor
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+clean_vendor:
+	hack/clean_vendor.sh
 
 
