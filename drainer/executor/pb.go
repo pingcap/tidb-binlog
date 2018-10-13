@@ -11,6 +11,7 @@ import (
 type pbExecutor struct {
 	dir       string
 	binlogger pump.Binlogger
+	*baseError
 }
 
 func newPB(cfg *DBConfig) (Executor, error) {
@@ -23,6 +24,7 @@ func newPB(cfg *DBConfig) (Executor, error) {
 	return &pbExecutor{
 		dir:       cfg.BinlogFileDir,
 		binlogger: binlogger,
+		baseError: newBaseError(),
 	}, nil
 }
 
