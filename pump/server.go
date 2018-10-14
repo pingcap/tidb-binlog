@@ -225,8 +225,10 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		}
 	}
 
+	log.Infof("write binlog Tp: %s, startTS: %d, commitTS: %d, length: %d", blog.Tp, blog.StartTs, blog.CommitTs, len(blog.PrewriteValue))
 	err = s.storage.WriteBinlog(blog)
 	if err != nil {
+		log.Infof("write binlog error %v, Tp: %s, startTS: %d, commitTS: %d, length: %d", err, blog.Tp, blog.StartTs, blog.CommitTs, len(blog.PrewriteValue))
 		goto errHandle
 	}
 
