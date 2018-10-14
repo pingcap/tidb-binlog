@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path"
@@ -10,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"fmt"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -50,7 +50,7 @@ type Storage interface {
 	MaxCommitTS() int64
 
 	// PullCommitBinlog return the chan to consume the binlog
-	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
+	PullCommitBinlog(ctx context.Context, beginTs, endTs int64, useStructInfo bool) <-chan []byte
 
 	SelectCommitBinlog(ctx context.Context, from, to int64) []string
 
@@ -817,8 +817,8 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 }
 
 // PullCommitBinlog return commit binlog  > last
-func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
-	log.Debug("new PullCommitBinlog last: ", last)
+func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, useStructInfo bool) <-chan []byte {
+	log.Debugf("new PullCommitBinlog beginTs: %d, endTs: %d", beginTs, endTs)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
@@ -830,9 +830,9 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 	}()
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
-	if last < gcTS {
-		log.Warnf("last ts %d less than gcTS %d", last, gcTS)
-		last = gcTS
+	if beginTs < gcTS {
+		log.Warnf("last ts %d less than gcTS %d", beginTs, gcTS)
+		beginTs = gcTS
 	}
 
 	values := make(chan []byte, 5)
@@ -846,15 +846,18 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		defer close(values)
 
 		for {
-			startTS := last + 1
-
-			irange.Start = encodeTSKey(startTS)
+			irange.Start = encodeTSKey(beginTs)
 			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
-			for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
+			for ok := iter.Seek(encodeTSKey(beginTs)); ok; ok = iter.Next() {
+				if endTs >= 0 && beginTs > endTs {
+					values <- []byte("end")
+					iter.Release()
+				}
+
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
@@ -896,13 +899,16 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 						}
 					}
 
-					value, err = binlog.Marshal()
-					if err != nil {
-						log.Error(err)
-						iter.Release()
-						return
+					if !useStructInfo {
+						value, err = binlog.Marshal()
+						if err != nil {
+							log.Error(err)
+							iter.Release()
+							return
+						}
+					} else {
+						value = []byte(fmt.Sprintf("%v", binlog))
 					}
-
 				}
 
 				select {
@@ -913,7 +919,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					return
 				}
 
-				last = decodeTSKey(iter.Key())
+				beginTs = decodeTSKey(iter.Key()) + 1
 			}
 			iter.Release()
 

@@ -125,7 +125,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		values := appendStorage.PullCommitBinlog(ctx, 0)
+		values := appendStorage.PullCommitBinlog(ctx, 0, -1, false)
 
 		// pull the binlogs back and check sorted
 		var binlogs []*pb.Binlog

@@ -67,7 +67,7 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 	runtime.GC()
 	b.ResetTimer()
 
-	pulller := append.PullCommitBinlog(context.Background(), 0)
+	pulller := append.PullCommitBinlog(context.Background(), 0, -1, false)
 
 	cnt := 0
 	for b := range pulller {

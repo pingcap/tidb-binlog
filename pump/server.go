@@ -7,11 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/juju/errors"
@@ -272,7 +272,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
-	binlogs := s.storage.PullCommitBinlog(ctx, last)
+	binlogs := s.storage.PullCommitBinlog(ctx, last, -1, false)
 
 	for {
 		select {
@@ -795,7 +795,7 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 	from := mux.Vars(r)["from"]
 	to := mux.Vars(r)["to"]
 	//log.Infof("node %s receive action %s", nodeID, action)
-	
+
 	fromTs, err := strconv.Atoi(from)
 	if err != nil {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value from: %s", from))
@@ -806,9 +806,32 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value to: %s", to))
 	}
 
-	binlogBytes := s.storage.SelectCommitBinlog(s.ctx, int64(fromTs), int64(toTs))
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+
+	timeout := time.After(time.Second * 15)
+
+	binlogs := s.storage.PullCommitBinlog(ctx, int64(fromTs), int64(toTs), true)
+	binlogBytes := make([][]byte, 0, 5)
+	for {
+		select {
+		case binlog := <-binlogs:
+			if len(binlog) == 3 && string(binlog) == "end" {
+				break
+			}
+			binlogBytes = append(binlogBytes, binlog)
+		case <-s.ctx.Done():
+			rd.JSON(w, http.StatusOK, util.ErrResponsef("pump is closing"))
+			return
+		case <-timeout:
+			rd.JSON(w, http.StatusOK, util.ErrResponsef("select binlog timeout"))
+			return
+		}
+	}
+
 	if len(binlogBytes) == 0 {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("not find binlog from %d to %d", fromTs, toTs))
+		return
 	}
 
 	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %v", len(binlogBytes), fromTs, toTs, binlogBytes), nil))
