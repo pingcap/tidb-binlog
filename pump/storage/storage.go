@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"math"
 	"os"
 	"path"
@@ -50,9 +49,7 @@ type Storage interface {
 	MaxCommitTS() int64
 
 	// PullCommitBinlog return the chan to consume the binlog
-	PullCommitBinlog(ctx context.Context, beginTs, endTs int64, useStructInfo bool) <-chan []byte
-
-	SelectCommitBinlog(ctx context.Context, from, to int64) []string
+	PullCommitBinlog(ctx context.Context, beginTs, endTs int64, selectMode bool) <-chan []byte
 
 	Close() error
 }
@@ -817,7 +814,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 }
 
 // PullCommitBinlog return commit binlog  > last
-func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, useStructInfo bool) <-chan []byte {
+func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, selectMode bool) <-chan []byte {
 	log.Debugf("new PullCommitBinlog beginTs: %d, endTs: %d", beginTs, endTs)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -829,13 +826,17 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, use
 		}
 	}()
 
+	values := make(chan []byte, 5)
+
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if beginTs < gcTS {
 		log.Warnf("last ts %d less than gcTS %d", beginTs, gcTS)
+		if selectMode {
+			values <- []byte("end")
+			return values
+		}
 		beginTs = gcTS
 	}
-
-	values := make(chan []byte, 5)
 
 	irange := &util.Range{
 		Start: encodeTSKey(0),
@@ -854,14 +855,18 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, use
 
 			for ok := iter.Seek(encodeTSKey(beginTs)); ok; ok = iter.Next() {
 				if endTs >= 0 && beginTs > endTs {
+					log.Info("select finished")
 					values <- []byte("end")
+					log.Info("select finished")
 					iter.Release()
+					return
 				}
 
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
 				if err != nil {
+					log.Error(err)
 					panic(err)
 				}
 
@@ -899,15 +904,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, use
 						}
 					}
 
-					if !useStructInfo {
+					if !selectMode {
 						value, err = binlog.Marshal()
-						if err != nil {
-							log.Error(err)
-							iter.Release()
-							return
-						}
-					} else {
-						value = []byte(fmt.Sprintf("%v", binlog))
+					} else if binlog.CommitTs < endTs {
+						value, err = binlogInfo(binlog)
+					}
+					if err != nil {
+						log.Error(err)
+						iter.Release()
+						return
 					}
 				}
 
@@ -931,104 +936,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, use
 			}
 		}
 	}()
-
-	return values
-}
-
-// SelectCommitBinlog return commit binlog  >= min && <= max
-func (a *Append) SelectCommitBinlog(ctx context.Context, min, max int64) []string {
-	log.Debug("new SelectCommitBinlog from %d to %d ", min, max)
-
-	ctx, cancel := context.WithCancel(ctx)
-	go func() {
-		select {
-		case <-a.close:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
-	gcTS := atomic.LoadInt64(&a.gcTS)
-	if min < gcTS {
-		log.Warnf("min ts %d less than gcTS %d", min, gcTS)
-		min = gcTS
-	}
-
-	values := make([]string, 0, 5)
-
-	irange := &util.Range{
-		Start: encodeTSKey(0),
-		Limit: encodeTSKey(math.MaxInt64),
-	}
-
-	startTS := min
-
-	irange.Start = encodeTSKey(startTS)
-	irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
-	iter := a.metadata.NewIterator(irange, nil)
-
-	// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
-
-	for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
-		var vp valuePointer
-		err := vp.UnmarshalBinary(iter.Value())
-		// should never happen
-		if err != nil {
-			panic(err)
-		}
-
-		log.Debugf("get ts: %d, pointer: %v", decodeTSKey(iter.Key()), vp)
-
-		value, err := a.vlog.readValue(vp)
-		if err != nil {
-			log.Error(err)
-			iter.Release()
-			errorCount.WithLabelValues("read_value").Add(1.0)
-			return values
-		}
-
-		binlog := new(pb.Binlog)
-		err = binlog.Unmarshal(value)
-		if err != nil {
-			log.Error(err)
-			iter.Release()
-			return values
-		}
-
-		if binlog.CommitTs > max {
-			//iter.Release()
-			break
-		}
-
-		if binlog.Tp == pb.BinlogType_Prewrite {
-			continue
-		} else {
-			if binlog.CommitTs == binlog.StartTs {
-				// this should be a fake binlog, drainer should ignore this when push binlog to the downstream
-				log.Debug("get fake c binlog: ", binlog.CommitTs)
-			} else {
-				err = a.feedPreWriteValue(binlog)
-				if err != nil {
-					errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
-					log.Error(err)
-					iter.Release()
-					return values
-				}
-			}
-
-			value, err = binlog.Marshal()
-			if err != nil {
-				log.Error(err)
-				iter.Release()
-				return values
-			}
-
-		}
-
-		values = append(values, fmt.Sprintf("type: %s, startTS: %d, commitTS: %d, length: %d", binlog.Tp, binlog.StartTs, binlog.CommitTs, len(binlog.PrewriteValue)))
-		min = decodeTSKey(iter.Key())
-	}
-	iter.Release()
 
 	return values
 }

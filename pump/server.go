@@ -794,16 +794,18 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 
 	from := mux.Vars(r)["from"]
 	to := mux.Vars(r)["to"]
-	//log.Infof("node %s receive action %s", nodeID, action)
+	log.Debugf("SelectBinlog from %s to %s", from, to)
 
 	fromTs, err := strconv.Atoi(from)
 	if err != nil {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value from: %s", from))
+		return
 	}
 
 	toTs, err := strconv.Atoi(to)
 	if err != nil {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide value to: %s", to))
+		return
 	}
 
 	ctx, cancel := context.WithCancel(s.ctx)
@@ -812,14 +814,21 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 	timeout := time.After(time.Second * 15)
 
 	binlogs := s.storage.PullCommitBinlog(ctx, int64(fromTs), int64(toTs), true)
-	binlogBytes := make([][]byte, 0, 5)
+	binlogInfos := make([]string, 0, 5)
+	
+SelectBinlog:
 	for {
 		select {
-		case binlog := <-binlogs:
-			if len(binlog) == 3 && string(binlog) == "end" {
-				break
+		case binlog, ok := <-binlogs:
+			if !ok {
+				log.Info("select binlog down")
+				break SelectBinlog
 			}
-			binlogBytes = append(binlogBytes, binlog)
+			if string(binlog) == "end" {
+				log.Info("select binlog down")
+				break SelectBinlog
+			}
+			binlogInfos = append(binlogInfos, string(binlog))
 		case <-s.ctx.Done():
 			rd.JSON(w, http.StatusOK, util.ErrResponsef("pump is closing"))
 			return
@@ -829,10 +838,11 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(binlogBytes) == 0 {
+	if len(binlogInfos) == 0 {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("not find binlog from %d to %d", fromTs, toTs))
 		return
 	}
 
-	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %v", len(binlogBytes), fromTs, toTs, binlogBytes), nil))
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %v", len(binlogInfos), fromTs, toTs, binlogInfos), nil))
+	return
 }
