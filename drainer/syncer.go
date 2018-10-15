@@ -240,8 +240,16 @@ func (s *Schema) handleDDL(job *model.Job, ignoreSchemaNames map[string]struct{}
 			return "", "", "", errors.Trace(err)
 		}
 
-		_, ok = s.IgnoreSchemaByID(job.SchemaID)
-		if ok {
+		targetSchema := job.BinlogInfo.DBInfo
+		_, ignoreSourceSchema := s.IgnoreSchemaByID(job.SchemaID)
+		ignoreTargetSchema := filterIgnoreSchema(targetSchema, ignoreSchemaNames)
+		if ignoreSourceSchema {
+			// if source schema be ignored, but target schema not be ignored, return error.
+			if !ignoreTargetSchema {
+				return "", "", "", errors.Errorf("ignore schema %d doesn't support rename ddl sql %s", job.SchemaID, sql)
+			}
+
+			// when target schema and source schema all in ignoreSchemas, just ignore this dll.
 			return "", "", "", nil
 		}
 
