@@ -234,12 +234,8 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 errHandle:
 	lossBinlogCacheCounter.Add(1)
 	log.Errorf("write binlog error %v", err)
-	if !s.cfg.EnableTolerant {
-		ret.Errmsg = err.Error()
-		return ret, err
-	}
-
-	return ret, nil
+	ret.Errmsg = err.Error()
+	return ret, err
 }
 
 // PullBinlogs sends binlogs in the streaming way
