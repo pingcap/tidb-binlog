@@ -1,5 +1,5 @@
-hash: fe274c92e63b963dfc4a4fa4d765d7ef95ec31c367f4bcc5248b1d1a28002ec5
-updated: 2018-09-26T12:03:43.533538148+08:00
+hash: 683197a5ab4693e069c5c834248783d45e8cdbd068cfd527ec68702e247d8a80
+updated: 2018-10-16T18:45:52.53432259+08:00
 imports:
 - name: github.com/apache/thrift
   version: 3ae304268e1b058dc51642a83921e1d7ce7a1d12
@@ -10,7 +10,7 @@ imports:
   subpackages:
   - quantile
 - name: github.com/BurntSushi/toml
-  version: 99064174e013895bbd9b025c31100bd1d9b590ca
+  version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/cloudfoundry-incubator/candiedyaml
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - name: github.com/cockroachdb/cmux
@@ -161,7 +161,7 @@ imports:
 - name: github.com/google/gofuzz
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/gorilla/context
-  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+  version: 51ce91d2eaddeca0ef29a71d766bb3634dadf729
 - name: github.com/gorilla/mux
   version: e3702bed27f0d39777b0b37b664b6280e8ef8fbf
 - name: github.com/grpc-ecosystem/go-grpc-middleware
@@ -377,7 +377,7 @@ imports:
   subpackages:
   - zk
 - name: github.com/Shopify/sarama
-  version: f7be6aa2bc7b2e38edf816b08b582782194a1c02
+  version: a6144ae922fd99dd0ea5046c8137acfb7fab0914
 - name: github.com/siddontang/go
   version: 1e9ce2a5ac4092fdf61e293634e40bfb49595105
   subpackages:
