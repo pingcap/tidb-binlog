@@ -1,6 +1,8 @@
 package drainer
 
 import (
+	"fmt"
+
 	"github.com/juju/errors"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/model"
@@ -11,16 +13,10 @@ import (
 func (t *testDrainerSuite) TestSchema(c *C) {
 	var jobs []*model.Job
 	dbName := model.NewCIStr("Test")
-	ignoreDBName := model.NewCIStr("ignoreTest")
 	// db and ignoreDB info
 	dbInfo := &model.DBInfo{
 		ID:    1,
 		Name:  dbName,
-		State: model.StatePublic,
-	}
-	ingnoreDBInfo := &model.DBInfo{
-		ID:    2,
-		Name:  ignoreDBName,
 		State: model.StatePublic,
 	}
 	// `createSchema` job
@@ -28,51 +24,56 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		ID:         3,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		Query:      "create database test",
+	}
+	jobDup := &model.Job{
+		ID:         3,
+		SchemaID:   1,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
+		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
-	// `createIgnoreSchema` job
-	job1 := &model.Job{
-		ID:         4,
-		SchemaID:   2,
-		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, ingnoreDBInfo, nil, 123},
-	}
-	jobs = append(jobs, job1)
+
 	// construct a cancelled job
 	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateCancelled})
-	// construct ignore db list
-	ignoreNames := make(map[string]struct{})
-	ignoreNames[ignoreDBName.L] = struct{}{}
+
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, ignoreNames, false)
+	schema, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	// check ignore DB
-	_, ok := schema.IgnoreSchemaByID(ingnoreDBInfo.ID)
-	c.Assert(ok, IsTrue)
-	// test drop schema and drop ignore schema
-	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema})
-	jobs = append(jobs, &model.Job{ID: 7, SchemaID: 2, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames, false)
+	err = schema.handlePreviousDDLJobIfNeed(2)
 	c.Assert(err, IsNil)
+
+	// test drop schema
+	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{3, nil, nil, 123}, Query: "drop database test"})
+	schema, err = NewSchema(jobs, false)
+	c.Assert(err, IsNil)
+	err = schema.handlePreviousDDLJobIfNeed(3)
+	c.Assert(err, IsNil)
+
 	// test create schema already exist error
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
-	jobs = append(jobs, job)
-	_, err = NewSchema(jobs, ignoreNames, false)
+	jobs = append(jobs, jobDup)
+	schema, err = NewSchema(jobs, false)
+	c.Assert(err, IsNil)
+	err = schema.handlePreviousDDLJobIfNeed(2)
+	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
 	// test schema drop schema error
 	jobs = jobs[:0]
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema})
-	_, err = NewSchema(jobs, ignoreNames, false)
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{1, nil, nil, 123}, Query: "drop database test"})
+	schema, err = NewSchema(jobs, false)
+	c.Assert(err, IsNil)
+	err = schema.handlePreviousDDLJobIfNeed(1)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
 func (*testDrainerSuite) TestTable(c *C) {
 	var jobs []*model.Job
 	dbName := model.NewCIStr("Test")
-	ignoreDBName := model.NewCIStr("ignoreTest")
 	tbName := model.NewCIStr("T")
 	colName := model.NewCIStr("A")
 	idxName := model.NewCIStr("idx")
@@ -117,7 +118,8 @@ func (*testDrainerSuite) TestTable(c *C) {
 		ID:         5,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{123, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
 
@@ -127,7 +129,8 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{2, nil, tblInfo, 123},
+		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
 
@@ -138,7 +141,8 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{3, nil, tblInfo, 123},
+		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
 
@@ -149,16 +153,17 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{123, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{4, nil, tblInfo, 123},
+		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
 
-	// construct ignore db list
-	ignoreNames := make(map[string]struct{})
-	ignoreNames[ignoreDBName.O] = struct{}{}
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, ignoreNames, false)
+	schema, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
+	err = schema.handlePreviousDDLJobIfNeed(4)
+	c.Assert(err, IsNil)
+
 	// check the historical db that constructed above whether in the schema list of local schema
 	_, ok := schema.SchemaByID(dbInfo.ID)
 	c.Assert(ok, IsTrue)
@@ -173,17 +178,23 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{123, nil, tblInfo1, 123}})
-	schema1, err := NewSchema(jobs, ignoreNames, false)
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{5, nil, tblInfo1, 123}, Query: "truncate table " + tbName.O})
+	schema1, err := NewSchema(jobs, false)
+	c.Assert(err, IsNil)
+	err = schema1.handlePreviousDDLJobIfNeed(5)
 	c.Assert(err, IsNil)
 	_, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
+
 	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable})
-	schema2, err := NewSchema(jobs, ignoreNames, false)
+	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable, BinlogInfo: &model.HistoryInfo{6, nil, nil, 123}, Query: "drop table " + tbName.O})
+	schema2, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
+	err = schema2.handlePreviousDDLJobIfNeed(6)
+	c.Assert(err, IsNil)
+
 	_, ok = schema2.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)
 	// test schemaAndTableName
