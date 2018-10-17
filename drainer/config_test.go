@@ -1,8 +1,13 @@
 package drainer
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 )
+
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
 
 var _ = Suite(&testDrainerSuite{})
 
