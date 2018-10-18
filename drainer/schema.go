@@ -26,7 +26,7 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
-	version2SchemaTable map[int64]schemaTable
+	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
 
@@ -40,7 +40,7 @@ type TableName struct {
 func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{
 		hasImplicitCol:      hasImplicitCol,
-		version2SchemaTable: make(map[int64]schemaTable),
+		version2SchemaTable: make(map[int64]TableName),
 		jobs:                jobs,
 	}
 

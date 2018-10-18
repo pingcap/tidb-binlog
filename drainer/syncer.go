@@ -105,7 +105,7 @@ func (s *Schema) getSchemaTableAndEvit(version int64) (string, string, error) {
 	}
 	delete(s.version2SchemaTable, version)
 
-	return schemaTable.schema, schemaTable.table, nil
+	return schemaTable.Schema, schemaTable.Table, nil
 }
 
 // handleDDL has four return values,
@@ -134,7 +134,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, ""}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, "", sql, nil
 
@@ -144,7 +144,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schemaName, ""}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schemaName, ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schemaName, "", sql, nil
 
@@ -171,7 +171,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, table.Name.O, sql, nil
 
@@ -191,7 +191,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, table.Name.O, sql, nil
 
@@ -206,7 +206,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, tableName}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tableName}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, tableName, sql, nil
 
@@ -231,7 +231,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, table.Name.O, sql, nil
 
@@ -256,7 +256,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = schemaTable{schema.Name.O, tbInfo.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tbInfo.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		return schema.Name.O, tbInfo.Name.O, sql, nil
 	}
@@ -754,9 +754,4 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
 	return s.cp.TS()
-}
-
-type schemaTable struct {
-	schema string
-	table  string
 }
