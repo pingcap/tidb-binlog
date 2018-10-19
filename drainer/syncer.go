@@ -108,160 +108,6 @@ func (s *Schema) getSchemaTableAndEvit(version int64) (string, string, error) {
 	return schemaTable.Schema, schemaTable.Table, nil
 }
 
-// handleDDL has four return values,
-// the first value[string]: the schema name
-// the second value[string]: the table name
-// the third value[string]: the sql that is corresponding to the job
-// the fourth value[error]: the handleDDL execution's err
-func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
-	if job.State == model.JobStateCancelled {
-		return "", "", "", nil
-	}
-
-	// log.Infof("ddl query %s", job.Query)
-	sql := job.Query
-	if sql == "" {
-		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
-	}
-
-	switch job.Type {
-	case model.ActionCreateSchema:
-		// get the DBInfo from job rawArgs
-		schema := job.BinlogInfo.DBInfo
-
-		err := s.CreateSchema(schema)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, ""}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, "", sql, nil
-
-	case model.ActionDropSchema:
-		schemaName, err := s.DropSchema(job.SchemaID)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schemaName, ""}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schemaName, "", sql, nil
-
-	case model.ActionRenameTable:
-		// ignore schema doesn't support reanme ddl
-		_, ok := s.SchemaByTableID(job.TableID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
-		}
-		// first drop the table
-		_, err := s.DropTable(job.TableID)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-		// create table
-		table := job.BinlogInfo.TableInfo
-		schema, ok := s.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		err = s.CreateTable(schema, table)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
-
-	case model.ActionCreateTable:
-		table := job.BinlogInfo.TableInfo
-		if table == nil {
-			return "", "", "", errors.NotFoundf("table %d", job.TableID)
-		}
-
-		schema, ok := s.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		err := s.CreateTable(schema, table)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
-
-	case model.ActionDropTable:
-		schema, ok := s.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		tableName, err := s.DropTable(job.TableID)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tableName}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, tableName, sql, nil
-
-	case model.ActionTruncateTable:
-		schema, ok := s.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		_, err := s.DropTable(job.TableID)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		table := job.BinlogInfo.TableInfo
-		if table == nil {
-			return "", "", "", errors.NotFoundf("table %d", job.TableID)
-		}
-
-		err = s.CreateTable(schema, table)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
-
-	default:
-		log.Infof("get unknow ddl type %v", job.Type)
-		binlogInfo := job.BinlogInfo
-		if binlogInfo == nil {
-			return "", "", "", errors.NotFoundf("table %d", job.TableID)
-		}
-		tbInfo := binlogInfo.TableInfo
-		if tbInfo == nil {
-			return "", "", "", errors.NotFoundf("table %d", job.TableID)
-		}
-
-		schema, ok := s.SchemaByID(job.SchemaID)
-		if !ok {
-			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
-		}
-
-		err := s.ReplaceTable(tbInfo)
-		if err != nil {
-			return "", "", "", errors.Trace(err)
-		}
-
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tbInfo.Name.O}
-		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, tbInfo.Name.O, sql, nil
-	}
-}
-
 func (s *Syncer) addDMLCount(tp pb.MutationType, nums int) {
 	switch tp {
 	case pb.MutationType_Insert:
@@ -572,7 +418,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 
-			log.Debug("SchemaVersion: ", preWrite.SchemaVersion)
+			log.Debug("DML SchemaVersion: ", preWrite.SchemaVersion)
 			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
@@ -583,15 +429,11 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Trace(err)
 			}
 		} else if jobID > 0 {
-			data, err := json.Marshal(b.job)
-			if err != nil {
-				log.Error(err)
-			} else {
-				log.Debug("get ddl binlog ddl job: ", string(data))
-			}
+			log.Debug("get ddl binlog ddl job: ", b.job)
 
 			s.schema.addJob(b.job)
 
+			log.Debug("DDL SchemaVersion: ", b.job.BinlogInfo.SchemaVersion)
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
