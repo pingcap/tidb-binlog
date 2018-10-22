@@ -1,8 +1,8 @@
 module github.com/pingcap/tidb-binlog
 
 require (
-	github.com/BurntSushi/toml v0.0.0-20160717150709-99064174e013
-	github.com/Shopify/sarama v1.16.0
+	github.com/BurntSushi/toml v0.3.1
+	github.com/Shopify/sarama v1.18.0
 	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
 	github.com/beorn7/perks v0.0.0-20160229213445-3ac7bf7a47d1 // indirect
 	github.com/cloudfoundry-incubator/candiedyaml v0.0.0-20160429080125-99c3df83b515 // indirect

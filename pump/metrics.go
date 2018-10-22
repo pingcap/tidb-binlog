@@ -96,6 +96,7 @@ func init() {
 
 	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
 	registry.MustRegister(prometheus.NewGoCollector())
+
 	registry.MustRegister(rpcHistogram)
 	registry.MustRegister(writeBinlogSizeHistogram)
 	registry.MustRegister(readBinlogHistogram)
