@@ -82,3 +82,7 @@ port = 3306
 #[syncer.to]
 # kafka-addrs = "127.0.0.1:9092"
 # kafka-version = "0.8.2.0"
+#
+# the topic name drainer will push msg, the default name is <cluster-id>_obinlog
+# be careful don't use the same name if run multi drainer instances
+# topic-name = ""
