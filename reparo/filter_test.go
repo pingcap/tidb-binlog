@@ -72,3 +72,41 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 		c.Assert(res, Equals, t.expected)
 	}
 }
+
+
+func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
+	r := &Reparo{
+		cfg: &Config{
+			StartDatetime: "2018-10-01 11:11:11",
+		},
+	}
+
+	var err error
+	r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
+	c.Assert(err, IsNil)
+	
+
+	fileNames := [][]string{
+		{
+		"binlog-0000000000000000-20181001101111",
+		"binlog-0000000000000000-20181001102111",
+		"binlog-0000000000000000-20181001103111",
+		"binlog-0000000000000000-20181001111110",
+		},
+		{
+			"binlog-0000000000000000-20181001111111",
+			"binlog-0000000000000000-20181001111112",
+		},
+		{
+			"binlog-0000000000000000-20181001111112",
+		},
+	}
+
+	expectNums := []int{1, 2, 1}
+
+	for i, fs := range fileNames {
+		filterBinlogFile, err := r.filterFiles(fs)
+		c.Assert(err, IsNil)
+		c.Assert(len(filterBinlogFile), Equals, expectNums[i])
+	}
+}
