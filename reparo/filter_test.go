@@ -97,10 +97,11 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		},
 		{
 			"binlog-0000000000000000-20181001111112",
+			"binlog-0000000000000000-20181001111113",
 		},
 	}
 
-	expectNums := []int{1, 2, 1}
+	expectNums := []int{1, 2, 2}
 
 	for i, fs := range fileNames {
 		filterBinlogFile, err := r.filterFiles(fs)
