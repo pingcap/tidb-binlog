@@ -14,20 +14,25 @@ import (
 )
 
 type kafkaExecutor struct {
-	addr      []string
-	version   string
-	clusterID string
-	producer  sarama.SyncProducer
-	topic     string
+	addr     []string
+	version  string
+	producer sarama.SyncProducer
+	topic    string
 }
 
 func newKafka(cfg *DBConfig) (Executor, error) {
-	clusterIDStr := strconv.FormatUint(cfg.ClusterID, 10)
+	var topic string
+	if len(cfg.TopicName) == 0 {
+		clusterIDStr := strconv.FormatUint(cfg.ClusterID, 10)
+		topic = clusterIDStr + "_obinlog"
+	} else {
+		topic = cfg.TopicName
+	}
+
 	executor := &kafkaExecutor{
-		addr:      strings.Split(cfg.KafkaAddrs, ","),
-		version:   cfg.KafkaVersion,
-		clusterID: clusterIDStr,
-		topic:     clusterIDStr + "_obinlog",
+		addr:    strings.Split(cfg.KafkaAddrs, ","),
+		version: cfg.KafkaVersion,
+		topic:   topic,
 	}
 
 	var err error
