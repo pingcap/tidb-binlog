@@ -83,7 +83,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		},
 		{
 			cfg: &Config{
-				StopDatetime:  "2018-10-01 12:11:11",
+				StopDatetime: "2018-10-01 12:11:11",
 			},
 		},
 		{
@@ -124,12 +124,12 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		c.Assert(err, IsNil)
 		r.cfg.StopTSO, err = dateTimeToTSO(r.cfg.StopDatetime)
 		c.Assert(err, IsNil)
-		
+
 		for j, fs := range fileNames {
 			filterBinlogFile, err := r.filterFiles(fs)
 			c.Assert(err, IsNil)
 			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
 		}
-	
+
 	}
 }

@@ -25,6 +25,10 @@ func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
 
+	if len(sortedNames) == 0 {
+		return nil, errors.Errorf("no binlog file found under %s", dir)
+	}
+
 	return r.filterFiles(sortedNames)
 }
 
@@ -38,7 +42,6 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 		if err != nil {
 			return nil, errors.Annotatef(err, "analyse binlog file name error")
 		}
-
 		fileCreateTime, err := time.ParseInLocation("2006-01-02T15:04:05", createTimeStr, time.Local)
 		if err != nil {
 			return nil, errors.Annotatef(err, "analyse binlog file name error")
@@ -49,7 +52,7 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 			continue
 		}
 
-		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) > r.cfg.StopTSO && r.cfg.StopTSO != 0{
+		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) > r.cfg.StopTSO && r.cfg.StopTSO != 0 {
 			preBinlogFile = name
 			break
 		}
@@ -57,8 +60,8 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 		if preBinlogFile != "" {
 			fullpath := path.Join(r.cfg.Dir, preBinlogFile)
 			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
-		} 
-		
+		}
+
 		preBinlogFile = name
 	}
 
@@ -66,7 +69,6 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 	binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 
 	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, r.cfg.StartTSO, r.cfg.StopTSO)
-
 	return binlogFiles, nil
 }
 

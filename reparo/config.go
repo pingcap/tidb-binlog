@@ -121,7 +121,7 @@ func (c *Config) Parse(args []string) (err error) {
 		return errors.Trace(err)
 	}
 	log.Infof("start tso %d", c.StartTSO)
-	
+
 	c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
 	if err != nil {
 		return errors.Trace(err)
