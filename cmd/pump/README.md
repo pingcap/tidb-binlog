@@ -17,8 +17,6 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
       path to the pump configuration file
   -data-dir string
       the path to store binlog data
-  -enable-tolerant
-      after enable tolerant, pump wouldn't return error if it fails to write binlog (default true)
   -gc int
       recycle binlog files older than gc days, zero means never recycle (default 7)
   -heartbeat-interval int
@@ -39,8 +37,6 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
       the ID of pump node; if not specify, we will generate one from hostname and the listening port
   -pd-urls string
       a comma separated list of the PD endpoints (default "http://127.0.0.1:2379")
-  -socket string
-      unix socket addr to listen on for client traffic
   -zookeeper-addrs string
       a comma separated list of the zookeeper broker endpoints
 ```

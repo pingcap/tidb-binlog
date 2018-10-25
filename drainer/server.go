@@ -1,6 +1,7 @@
 package drainer
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,35 +12,38 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
+	"github.com/unrolled/render"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
-var waitTime = 3 * time.Second
-var maxTxnTimeout int64 = 600
-var heartbeatTTL int64 = 60
-var nodePrefix = "cisterns"
-var heartbeatInterval = 10 * time.Second
-var clusterID uint64
-var pdReconnTimes = 30
-var maxMsgSize = 1024 * 1024 * 1024
+var (
+	nodePrefix        = "drainers"
+	heartbeatInterval = 1 * time.Second
+	clusterID         uint64
+	pdReconnTimes     = 30
+)
 
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
-	ID        string
-	cfg       *Config
-	window    *DepositWindow
+	ID   string
+	host string
+	cfg  *Config
+
 	collector *Collector
 	tcpAddr   string
 	gs        *grpc.Server
@@ -49,6 +53,12 @@ type Server struct {
 	wg        sync.WaitGroup
 	syncer    *Syncer
 	isClosed  int32
+
+	statusMu sync.RWMutex
+	status   *node.Status
+
+	latestTS   int64
+	latestTime time.Time
 }
 
 func init() {
@@ -68,20 +78,24 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// get pd client and cluster ID
 	pdCli, err := getPdClient(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	clusterID = pdCli.GetClusterID(ctx)
+	// update latestTS and latestTime
+	latestTS, err := util.GetTSO(pdCli)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	latestTime := time.Now()
+
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
-
-	win := NewDepositWindow()
 
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
 	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
@@ -89,12 +103,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(cp.TS()))))
+
 	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
+	c, err := NewCollector(cfg, clusterID, syncer, cp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -107,10 +123,17 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
+	advURL, err := url.Parse(cfg.ListenAddr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
+	}
+
+	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
+
 	return &Server{
 		ID:        ID,
+		host:      advURL.Host,
 		cfg:       cfg,
-		window:    win,
 		collector: c,
 		metrics:   metrics,
 		tcpAddr:   cfg.ListenAddr,
@@ -118,6 +141,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:       ctx,
 		cancel:    cancel,
 		syncer:    syncer,
+		status:    status,
+
+		latestTS:   latestTS,
+		latestTime: latestTime,
 	}, nil
 }
 
@@ -153,6 +180,8 @@ func (s *Server) DumpBinlog(req *binlog.DumpBinlogReq, stream binlog.Cistern_Dum
 
 // Notify implements the gRPC interface of drainer server
 func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	log.Debug("recv Notify")
+
 	err := s.collector.Notify()
 	if err != nil {
 		log.Errorf("grpc call notify error: %v", err)
@@ -163,16 +192,6 @@ func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.Noti
 // DumpDDLJobs implements the gRPC interface of drainer server
 func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (resp *binlog.DumpDDLJobsResp, err error) {
 	return
-}
-
-func calculateForwardAShortTime(current int64) int64 {
-	physical := oracle.ExtractPhysical(uint64(current))
-	prevPhysical := physical - int64(10*time.Minute/time.Millisecond)
-	previous := oracle.ComposeTS(prevPhysical, 0)
-	if previous < 0 {
-		return 0
-	}
-	return int64(previous)
 }
 
 // StartCollect runs Collector up in a goroutine.
@@ -231,12 +250,13 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 	}()
 }
 
-func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
+func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
-	// must refresh node firstly
-	if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+	err := s.updateStatus()
+	if err != nil {
 		errc <- errors.Trace(err)
 	}
+
 	s.wg.Add(1)
 	go func() {
 		defer func() {
@@ -251,7 +271,8 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 			case <-ctx.Done():
 				return
 			case <-time.After(heartbeatInterval):
-				if err := s.collector.reg.RefreshNode(ctx, nodePrefix, id, heartbeatTTL); err != nil {
+				err := s.updateStatus()
+				if err != nil {
 					errc <- errors.Trace(err)
 				}
 			}
@@ -263,24 +284,21 @@ func (s *Server) heartbeat(ctx context.Context, id string) <-chan error {
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// register drainer
-	advURL, err := url.Parse(s.cfg.ListenAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid configuration of advertise addr(%s)", s.cfg.ListenAddr)
-	}
-	err = s.collector.reg.RegisterNode(s.ctx, nodePrefix, s.ID, advURL.Host)
+	err := s.updateStatus()
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Infof("register success, this drainer's node id is %s", s.ID)
 
 	// start heartbeat
-	errc := s.heartbeat(s.ctx, s.ID)
+	errc := s.heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
 			log.Errorf("send heart error %v", err)
 		}
 	}()
 
-	jobs, err := s.collector.LoadHistoryDDLJobs()
+	jobs, err := loadHistoryDDLJobs(s.collector.tiStore)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -311,12 +329,103 @@ func (s *Server) Start() error {
 	binlog.RegisterCisternServer(s.gs, s)
 	go s.gs.Serve(grpcL)
 
-	http.HandleFunc("/status", s.collector.Status)
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
+
 	go http.Serve(httpL, nil)
 
+	log.Infof("start to server request on %s", s.tcpAddr)
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// ApplyAction change the pump's state, now can be pause or close.
+func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	nodeID := mux.Vars(r)["nodeID"]
+	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
+
+	if nodeID != s.ID {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		return
+	}
+
+	s.statusMu.RLock()
+	if s.status.State != node.Online {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.status.State, action))
+		s.statusMu.RUnlock()
+		return
+	}
+	s.statusMu.RUnlock()
+
+	s.statusMu.Lock()
+	switch action {
+	case "pause":
+		s.status.State = node.Pausing
+	case "close":
+		s.status.State = node.Closing
+	default:
+		s.statusMu.Unlock()
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		return
+	}
+	s.statusMu.Unlock()
+
+	go s.Close()
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+}
+
+// GetLatestTS returns the last binlog's commit ts which synced to downstream.
+func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+	ts := s.syncer.GetLatestCommitTS()
+	rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
+}
+
+// commitStatus commit the node's last status to pd when close the server.
+func (s *Server) commitStatus() {
+	// update this node
+	s.statusMu.Lock()
+	switch s.status.State {
+	case node.Pausing, node.Online:
+		s.status.State = node.Paused
+	case node.Closing:
+		s.status.State = node.Offline
+	}
+	s.statusMu.Unlock()
+
+	err := s.updateStatus()
+	if err != nil {
+		log.Errorf("%s failed to update status", s.ID)
+		return
+	}
+
+	log.Infof("%s has already update status ", s.ID)
+}
+
+func (s *Server) updateStatus() error {
+	s.statusMu.Lock()
+	s.status.UpdateTS = util.GetApproachTS(s.latestTS, s.latestTime)
+	s.status.MaxCommitTS = s.syncer.GetLatestCommitTS()
+	status := node.CloneStatus(s.status)
+	s.statusMu.Unlock()
+
+	err := s.collector.reg.UpdateNode(context.Background(), nodePrefix, status)
+	if err != nil {
 		return errors.Trace(err)
 	}
 
@@ -327,21 +436,21 @@ func (s *Server) Start() error {
 func (s *Server) Close() {
 	log.Info("begin to close drainer server")
 
-	if atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) == false {
+	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
 		log.Debug("server had closed")
 		return
 	}
 
-	// unregister drainer
-	err := s.collector.reg.UnregisterNode(s.ctx, nodePrefix, s.ID)
-	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Errorf("unregister drainer error %v", errors.ErrorStack(err))
-	}
+	// update drainer's status
+	s.commitStatus()
+	log.Info("commit status done")
 
 	// notify all goroutines to exit
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
-	//  stop gRPC server
+
+	// stop gRPC server
 	s.gs.Stop()
+	log.Info("drainer exit")
 }

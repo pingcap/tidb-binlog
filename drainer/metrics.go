@@ -11,46 +11,12 @@ import (
 )
 
 var (
-	windowGauge = prometheus.NewGaugeVec(
+	pumpPositionGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "window",
-			Help:      "DepositWindow boundary.",
-		}, []string{"marker"})
-
-	offsetGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "offset",
-			Help:      "offset for each pump.",
-		}, []string{"nodeID"})
-
-	findMatchedBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "find_matched_binlog_duration_time",
-			Help:      "Bucketed histogram of find a matched binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	publishBinlogHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_duration_time",
-			Help:      "Bucketed histogram of publish a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"nodeID"})
-
-	publishBinlogCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "binlog",
-			Subsystem: "drainer",
-			Name:      "publish_binlog_count",
-			Help:      "Total binlog count been stored.",
+			Name:      "pump_position",
+			Help:      "position for each pump.",
 		}, []string{"nodeID"})
 
 	ddlJobsCounter = prometheus.NewCounter(
@@ -61,20 +27,20 @@ var (
 			Help:      "Total ddl jobs count been stored.",
 		})
 
-	tikvQueryCount = prometheus.NewCounter(
+	errorCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "query_tikv_count",
-			Help:      "Total count that queried tikv.",
-		})
+			Name:      "error_count",
+			Help:      "Total count of error type",
+		}, []string{"type"})
 
-	errorBinlogCount = prometheus.NewCounter(
+	disorderBinlogCount = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "error_binlog_count",
-			Help:      "Total count of binlog that store too late.",
+			Name:      "disorder_binlog_count",
+			Help:      "Total count of binlog which is disorder.",
 		})
 
 	eventCounter = prometheus.NewCounterVec(
@@ -85,29 +51,29 @@ var (
 			Help:      "the count of sql event(dml, ddl).",
 		}, []string{"type"})
 
-	positionGauge = prometheus.NewGauge(
+	checkpointTSOGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "position",
-			Help:      "save position of drainer.",
+			Name:      "checkpoint_tso",
+			Help:      "save checkpoint tso of drainer.",
 		})
 
-	txnHistogram = prometheus.NewHistogram(
+	executeHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "txn_duration_time",
-			Help:      "Bucketed histogram of processing time (s) of a txn.",
+			Name:      "execute_duration_time",
+			Help:      "Bucketed histogram of processing time (s) of a execute to sync data to downstream.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
-	readBinlogHistogram = prometheus.NewHistogramVec(
+	binlogReachDurationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
-			Name:      "read_binlog_duration_time",
-			Help:      "Bucketed histogram of read time (s) of a binlog.",
+			Name:      "binlog_reach_duration_time",
+			Help:      "Bucketed histogram of how long the binlog take to reach drainer since it's committed",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"nodeID"})
 
@@ -126,20 +92,14 @@ var registry = prometheus.NewRegistry()
 func init() {
 	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
 	registry.MustRegister(prometheus.NewGoCollector())
-
-	registry.MustRegister(windowGauge)
-	registry.MustRegister(offsetGauge)
-	registry.MustRegister(publishBinlogCounter)
+	registry.MustRegister(pumpPositionGauge)
 	registry.MustRegister(ddlJobsCounter)
-	registry.MustRegister(tikvQueryCount)
-	registry.MustRegister(errorBinlogCount)
-	registry.MustRegister(positionGauge)
+	registry.MustRegister(errorCount)
+	registry.MustRegister(checkpointTSOGauge)
 	registry.MustRegister(eventCounter)
-	registry.MustRegister(txnHistogram)
-	registry.MustRegister(readBinlogHistogram)
+	registry.MustRegister(executeHistogram)
+	registry.MustRegister(binlogReachDurationHistogram)
 	registry.MustRegister(readBinlogSizeHistogram)
-	registry.MustRegister(publishBinlogHistogram)
-	registry.MustRegister(findMatchedBinlogHistogram)
 }
 
 type metricClient struct {

@@ -402,8 +402,8 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 	case ast.AlterTableOption:
 		return "", nil
 	case ast.AlterTableAddColumns:
-		var colDefStr = ""
-		var colPosStr = ""
+		var colDefStr string
+		var colPosStr string
 		var err error
 		// TODO: Support add multiple columns.
 		colDefStr, err = analyzeColumnDef(alterSpec.NewColumns[0], "")
@@ -448,8 +448,8 @@ func analyzeAlterSpec(alterSpec *ast.AlterTableSpec) (string, error) {
 }
 
 func analyzeModifyColumn(alterSpec *ast.AlterTableSpec) (string, error) {
-	var colDefStr = ""
-	var colPosStr = ""
+	var colDefStr string
+	var colPosStr string
 	var err error
 	colDefStr, err = analyzeColumnDef(alterSpec.NewColumns[0], "")
 	if err != nil {

@@ -6,14 +6,8 @@ addr = "127.0.0.1:8250"
 # addr(i.e. 'host:port') to advertise to the public
 advertise-addr = ""
 
-# kafka addrs where pump push binlog to
-kafka-addrs = "127.0.0.1:9092"
-
-# zookeeper addrs, get kafka-addrs from zookeeper if uncomment this
-# zookeeper-addrs = "127.0.0.1:2181"
- 
 # a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. 
-# (default value is 0, means binlog data would never be removed)
+# must bigger than 0
 gc = 7
 
 # path to the data directory of pump's data
@@ -24,9 +18,6 @@ heartbeat-interval = 2
 
 # a comma separated list of PD endpoints
 pd-urls = "http://127.0.0.1:2379"
-
-# unix socket addr to listen on for client traffic
-socket = "unix:///tmp/pump.sock"
 
 #[security]
 # Path of file that contains list of trusted SSL CAs for connection with cluster components.

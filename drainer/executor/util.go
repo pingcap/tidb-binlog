@@ -16,8 +16,10 @@ type DBConfig struct {
 	TimeLimit     string `toml:"time-limit" json:"time-limit"`
 	SizeLimit     string `toml:"size-limit" json:"size-limit"`
 
+	ZKAddrs      string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs   string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion string `toml:"kafka-version" json:"kafka-version"`
+	TopicName    string `toml:"topic-name" json:"topic-name"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
 }

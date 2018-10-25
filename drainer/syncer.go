@@ -1,8 +1,11 @@
 package drainer
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -14,13 +17,11 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
-	maxDMLRetryCount = 100
-	maxDDLRetryCount = 5
-
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
 )
@@ -42,7 +43,7 @@ type Syncer struct {
 
 	executors []executor.Executor
 
-	positions    map[string]pb.Pos
+	positions    map[string]int64
 	initCommitTS int64
 
 	// because TiDB is case-insensitive, only lower-case here.
@@ -56,6 +57,9 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
+
+	prepared  int32
+	prepareTS int64
 }
 
 // NewSyncer returns a Drainer instance
@@ -68,8 +72,8 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.reMap = make(map[string]*regexp.Regexp)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS, _ = cp.Pos()
-	syncer.positions = make(map[string]pb.Pos)
+	syncer.initCommitTS = cp.TS()
+	syncer.positions = make(map[string]int64)
 	syncer.c = newCausality()
 	syncer.lastSyncTime = time.Now()
 
@@ -126,8 +130,15 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		}
 
 		binlog := b.binlog
+		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+
+		if startTS == commitTS {
+			// it's fake binlog
+			atomic.StoreInt64(&s.prepareTS, commitTS)
+			continue
+		}
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
@@ -145,6 +156,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 		}
 
 		if commitTS <= s.initCommitTS {
+			atomic.StoreInt64(&s.prepareTS, commitTS)
 			continue
 		}
 
@@ -166,6 +178,7 @@ func (s *Syncer) prepare(jobs []*model.Job) (*binlogItem, error) {
 
 		log.Infof("prepare commitTS: %d, schema venison %d", commitTS, latestSchemaVersion)
 		log.Infof("prepare schema: %s", s.schema)
+		atomic.StoreInt32(&s.prepared, 1)
 
 		return b, nil
 	}
@@ -365,7 +378,7 @@ func (s *Syncer) checkWait(job *job) bool {
 		return false
 	}
 
-	if s.cp.Check(job.commitTS, s.positions) {
+	if s.cp.Check(job.commitTS) {
 		return true
 	}
 
@@ -383,22 +396,48 @@ type job struct {
 	args       []interface{}
 	key        string
 	commitTS   int64
-	pos        pb.Pos
 	nodeID     string
 	// set to true when this is the last job of a txn
 	// we will generate many job and call addJob(job) from a txn
 	isCompleteBinlog bool
 }
 
-func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) *job {
-	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
+func (j *job) String() string {
+	// build args String, avoid to print too big value arg
+	builder := new(strings.Builder)
+	builder.WriteString("[")
+
+	for i := 0; i < len(j.args); i++ {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+
+		tmp := fmt.Sprintf("%v", j.args[i])
+		if len(tmp) > 30 {
+			tmp = tmp[0:30] + "..."
+		}
+		builder.WriteString(tmp)
+	}
+	builder.WriteString("]")
+
+	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v, isCompleteBinlog: %v}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID, j.isCompleteBinlog)
 }
 
-func newDDLJob(sql string, args []interface{}, key string, commitTS int64, pos pb.Pos, nodeID string) *job {
-	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, pos: pos, nodeID: nodeID, isCompleteBinlog: true}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string, isCompleteBinlog bool) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
+}
+
+func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
+}
+
+func newFakeJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
 func (s *Syncer) addJob(job *job) {
+	log.Debugf("add job: %s", job)
+
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
 		s.jobWg.Wait()
@@ -412,30 +451,31 @@ func (s *Syncer) addJob(job *job) {
 		return
 	}
 
-	s.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-	s.jobCh[idx] <- job
-	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
+	if job.binlogTp != translator.FAKE {
+		s.jobWg.Add(1)
+		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+		s.jobCh[idx] <- job
+	}
 
-	if pos, ok := s.positions[job.nodeID]; !ok || ComparePos(job.pos, pos) > 0 {
-		s.positions[job.nodeID] = job.pos
+	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
+		s.positions[job.nodeID] = job.commitTS
 	}
 
 	wait := s.checkWait(job)
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
-		s.savePoint(job.commitTS, s.positions)
+		s.savePoint(job.commitTS)
 	}
 }
 
-func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, pos pb.Pos, nodeID string, isCompleteBinlog bool) error {
+func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, nodeID string, isCompleteBinlog bool) error {
 	key, err := s.resolveCasuality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
 
-	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID, isCompleteBinlog)
+	job := newDMLJob(tp, sql, args, key, commitTS, nodeID, isCompleteBinlog)
 	s.addJob(job)
 	return nil
 }
@@ -470,14 +510,18 @@ func (s *Syncer) flushJobs() error {
 	return nil
 }
 
-func (s *Syncer) savePoint(ts int64, positions map[string]pb.Pos) {
-	log.Infof("[write save point]%d[positions]%v", ts, positions)
-	err := s.cp.Save(ts, positions)
-	if err != nil {
-		log.Fatalf("[write save point]%d[positions]%v[error]%v", ts, positions, err)
+func (s *Syncer) savePoint(ts int64) {
+	if ts < s.cp.TS() {
+		log.Errorf("ts %d is less than checkpoint ts %d", ts, s.cp.TS())
 	}
 
-	positionGauge.Set(float64(ts))
+	log.Infof("[write save point]%d", ts)
+	err := s.cp.Save(ts)
+	if err != nil {
+		log.Fatalf("[write save point]%d[error]%v", ts, err)
+	}
+
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 }
 
 func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
@@ -591,17 +635,22 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	for {
 		binlog := b.binlog
+		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		if jobID == 0 {
+		if startTS == commitTS {
+			// generate fake binlog job
+			s.addJob(newFakeJob(commitTS, b.nodeID))
+
+		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
-			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.pos, b.nodeID)
+			err = s.translateSqls(preWrite.GetMutations(), commitTS, b.nodeID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -612,23 +661,23 @@ func (s *Syncer) run(b *binlogItem) error {
 			}
 
 			if s.skipSchemaAndTable(schema, table) {
-				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d, pos %v", schema, table, sql, commitTS, b.pos)
+				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d", schema, table, sql, commitTS)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema, commitTS)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
 				var args []interface{}
 				// for kafka, we want to know the relate schema and table, get it while args now
 				// in executor
 				if s.cfg.DestDBType == "kafka" {
 					args = []interface{}{schema, table}
 				}
-				job := newDDLJob(sql, args, "", commitTS, b.pos, b.nodeID)
+				job := newDDLJob(sql, args, "", commitTS, b.nodeID)
 				s.addJob(job)
-				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
+				log.Infof("[ddl][end]%s[commit ts]%v", sql, commitTS)
 			}
 		}
 
@@ -641,10 +690,12 @@ func (s *Syncer) run(b *binlogItem) error {
 	}
 }
 
-func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
+func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
-	for _, mutation := range mutations {
+	for mutationIdx, mutation := range mutations {
+		isLastMutation := (mutationIdx == len(mutations)-1)
+
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
@@ -706,22 +757,22 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			isCompleteBinlog := (idx == len(sequences)-1)
+			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
-				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID, false)
+				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, pos, nodeID, isCompleteBinlog)
+				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, nodeID, isCompleteBinlog)
 				if err != nil {
 					return errors.Trace(err)
 				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, pos, nodeID, isCompleteBinlog)
+				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, isCompleteBinlog)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -760,4 +811,13 @@ func (s *Syncer) Close() {
 // GetLastSyncTime returns lastSyncTime
 func (s *Syncer) GetLastSyncTime() time.Time {
 	return s.lastSyncTime
+}
+
+// GetLatestCommitTS returns the latest commit ts.
+func (s *Syncer) GetLatestCommitTS() int64 {
+	if atomic.LoadInt32(&s.prepared) != 1 {
+		return atomic.LoadInt64(&s.prepareTS)
+	}
+
+	return s.cp.TS()
 }

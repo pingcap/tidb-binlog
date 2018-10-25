@@ -207,20 +207,22 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 		sqls = append(sqls, deleteSQL)
 		values = append(values, deleteValue)
-		keys = append(keys, deleteKey)
 
 		// generate replace sql
-		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
-		sqls = append(sqls, sql)
+		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+		sqls = append(sqls, replaceSQL)
 		values = append(values, newValues)
 
 		// generate dispatching key
 		// find primary keys
-		key, err := m.generateDispatchKey(table, newColumnValues)
+		replaceKey, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
+		key := append(deleteKey, replaceKey...)
+		// one is for delete sql, another for replace sql
+		keys = append(keys, key)
 		keys = append(keys, key)
 	}
 
@@ -298,24 +300,24 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
 	var kvs bytes.Buffer
-	// if has primary key, use it to construct where condition
-	pcs, err := m.pkIndexColumns(table)
+	// if has unique key, use it to construct where condition
+	ucs, err := m.uniqueIndexColumns(table, false)
 	if err != nil {
 		return "", nil, errors.Trace(err)
 	}
 
-	hasPK := (len(pcs) != 0)
-	pcsMap := make(map[int64]*model.ColumnInfo)
-	for _, col := range pcs {
-		pcsMap[col.ID] = col
+	hasUK := (len(ucs) != 0)
+	ucsMap := make(map[int64]*model.ColumnInfo)
+	for _, col := range ucs {
+		ucsMap[col.ID] = col
 	}
 
 	var conditionValues []interface{}
 	first := true
 	for i, col := range columns {
-		_, ok := pcsMap[col.ID]
-		if !ok && hasPK {
-			// if table has primary key, just ignore the non primary key column
+		_, ok := ucsMap[col.ID]
+		if !ok && hasUK {
+			// if table has primary/unique key, just ignore the non primary/unique key column
 			continue
 		}
 
@@ -374,34 +376,48 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 	return nil
 }
 
-func (m *mysqlTranslator) pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
-	col := m.pkHandleColumn(table)
-	if col != nil {
-		return []*model.ColumnInfo{col}, nil
+func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll bool) ([]*model.ColumnInfo, error) {
+	// pkHandleCol may in table.Indices, use map to keep olny one same key.
+	uniqueColsMap := make(map[string]interface{})
+	uniqueCols := make([]*model.ColumnInfo, 0, 2)
+
+	pkHandleCol := m.pkHandleColumn(table)
+	if pkHandleCol != nil {
+		uniqueColsMap[pkHandleCol.Name.O] = pkHandleCol
+		uniqueCols = append(uniqueCols, pkHandleCol)
+
+		if !findAll {
+			return uniqueCols, nil
+		}
 	}
 
-	var cols []*model.ColumnInfo
 	columns := make(map[string]*model.ColumnInfo)
 	for _, col := range table.Columns {
 		columns[col.Name.O] = col
 	}
 
 	for _, idx := range table.Indices {
-		if idx.Primary {
+		if idx.Primary || idx.Unique {
 			for _, col := range idx.Columns {
 				if column, ok := columns[col.Name.O]; ok {
-					cols = append(cols, column)
+					if _, ok := uniqueColsMap[col.Name.O]; !ok {
+						uniqueColsMap[col.Name.O] = column
+						uniqueCols = append(uniqueCols, column)
+					}
 				}
 			}
 
-			if len(cols) == 0 {
-				return nil, errors.New("primay index is empty, but should not be empty")
+			if len(uniqueCols) == 0 {
+				return nil, errors.New("primay/unique index is empty, but should not be empty")
 			}
-			return cols, nil
+
+			if !findAll {
+				return uniqueCols, nil
+			}
 		}
 	}
 
-	return cols, nil
+	return uniqueCols, nil
 }
 
 // IsPKHandleColumn check if the column if the pk handle of tidb
@@ -431,7 +447,7 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 
 func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
 	var columnsValues []string
-	columns, err := m.pkIndexColumns(table)
+	columns, err := m.uniqueIndexColumns(table, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

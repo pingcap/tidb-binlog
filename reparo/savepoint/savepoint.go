@@ -20,7 +20,7 @@ type Savepoint interface {
 	// Flush flushes the position to persistent storage.
 	Flush() error
 	// Pos tells current position
-	Pos() Position
+	TS() Position
 	// Close the resources the savepoint implementations needs.
 	Close() error
 }

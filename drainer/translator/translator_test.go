@@ -375,11 +375,3 @@ func testGenTable(tt string) *model.TableInfo {
 func testIsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
 }
-
-func interfaceToString(i []interface{}) []string {
-	var s []string
-	for _, item := range i {
-		s = append(s, fmt.Sprintf("%s", item))
-	}
-	return s
-}

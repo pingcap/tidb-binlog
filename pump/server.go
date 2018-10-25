@@ -3,99 +3,78 @@ package pump
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
-	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump/storage"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/soheilhy/cmux"
+	"github.com/unrolled/render"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
-var pullBinlogInterval = 50 * time.Millisecond
+var notifyDrainerTimeout = time.Second * 10
 
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
 const (
-	slowDist      = 30 * time.Millisecond
 	mib           = 1024 * 1024
 	pdReconnTimes = 30
 )
 
 // use latestPos and latestTS to record the latest binlog position and ts the pump works on
 var (
-	latestKafkaPos binlog.Pos
-	latestFilePos  binlog.Pos
-	latestTS       int64
+	latestFilePos binlog.Pos
+	latestTS      int64
 )
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
-	// dispatcher keeps all opened binloggers which is indexed by clusterID.
-	dispatcher Binlogger
-
-	// dataDir is the root directory of all pump data
-	// |
-	// +-- .node
-	// |   |
-	// |   +-- nodeID
-	// |
-	// +-- clusters
-	//     |
-	//     +-- 100
-	//     |   |
-	//     |   +-- binlog.000001
-	//     |   |
-	//     |   +-- binlog.000002
-	//     |   |
-	//     |   +-- ...
-	//     |
-	//     +-- 200
-	//         |
-	//         +-- binlog.000001
-	//         |
-	//         +-- binlog.000002
-	//         |
-	//         +-- ...
-	//
 	dataDir string
+	storage storage.Storage
 
-	clusterID string
+	clusterID uint64
 
 	// node maintains the status of this pump and interact with etcd registry
-	node Node
+	node node.Node
 
-	tcpAddr  string
-	unixAddr string
-	gs       *grpc.Server
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	gc       time.Duration
-	metrics  *metricClient
-	// it would be set false while there are new binlog coming, would be set true every genBinlogInterval
-	needGenBinlog AtomicBool
-	pdCli         pd.Client
-	cfg           *Config
+	tcpAddr    string
+	unixAddr   string
+	gs         *grpc.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	gcDuration time.Duration
+	metrics    *metricClient
+	// save the last time we write binlog to Storage
+	// if long time not write, we can write a fake binlog
+	lastWriteBinlogUnixNano int64
+	pdCli                   pd.Client
+	cfg                     *Config
 
-	cp *checkPoint
+	isClosed int32
 }
 
 func init() {
@@ -134,24 +113,47 @@ func NewServer(cfg *Config) (*Server, error) {
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
-	grpcOpts := []grpc.ServerOption{grpc.MaxMsgSize(GlobalConfig.maxMsgSize)}
+	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
 	if cfg.tls != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
 	}
 
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	lockResolver, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	session.RegisterStore("tikv", tikv.Driver{})
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := session.NewStore(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	storage, err := storage.NewAppendWithResolver(cfg.DataDir, nil, tiStore, lockResolver)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &Server{
-		dataDir:   cfg.DataDir,
-		clusterID: fmt.Sprintf("%d", clusterID),
-		node:      n,
-		tcpAddr:   cfg.ListenAddr,
-		unixAddr:  cfg.Socket,
-		gs:        grpc.NewServer(grpcOpts...),
-		ctx:       ctx,
-		cancel:    cancel,
-		metrics:   metrics,
-		gc:        time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:     pdCli,
-		cfg:       cfg,
+		dataDir:    cfg.DataDir,
+		storage:    storage,
+		clusterID:  clusterID,
+		node:       n,
+		unixAddr:   cfg.Socket,
+		tcpAddr:    cfg.ListenAddr,
+		gs:         grpc.NewServer(grpcOpts...),
+		ctx:        ctx,
+		cancel:     cancel,
+		metrics:    metrics,
+		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:      pdCli,
+		cfg:        cfg,
 	}, nil
 }
 
@@ -179,80 +181,17 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 	return pdCli, errors.Trace(err)
 }
 
-// inits scans the dataDir to find all clusterIDs, and creates binlogger for each,
-// then adds them to dispathcer map
-func (s *Server) init() error {
-	// init cluster data dir if not exist
-	var err error
-	clusterDir := path.Join(s.dataDir, "clusters")
-	if !bf.Exist(clusterDir) {
-		if err := os.MkdirAll(clusterDir, file.PrivateDirMode); err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	s.dispatcher, err = s.getBinloggerToWrite()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
-func (s *Server) getBinloggerToWrite() (Binlogger, error) {
-	if s.dispatcher != nil {
-		return s.dispatcher, nil
-	}
-
-	// use tiStore's currentVersion method to get the ts from tso
-	addrs, err := flags.ParseHostPortAddr(s.cfg.KafkaAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs, s.cfg.KafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	switch s.cfg.WriteMode {
-	case kafkaWriteMode:
-		log.Debug("send binlog to kafka directly")
-		s.dispatcher = kb
-		return kb, nil
-	case mixedWriteMode:
-		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
-
-		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		cp, err := newCheckPoint(path.Join(binlogDir, "checkpoint"))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		s.cp = cp
-		s.dispatcher = newProxy(s.node.ID(), fb, kb, cp)
-		return s.dispatcher, nil
-
-	default:
-		return nil, errors.New("unsupport write mode")
-	}
-}
-
-func (s *Server) getBinloggerToRead() (Binlogger, error) {
-	if s.dispatcher != nil {
-		return s.dispatcher, nil
-	}
-	return nil, errors.NotFoundf("no binlogger of clusterID: %s", s.clusterID)
+// WriteBinlog implements the gRPC interface of pump server
+func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+	return s.writeBinlog(ctx, in, false)
 }
 
 // WriteBinlog implements the gRPC interface of pump server
-func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isFakeBinlog bool) (*binlog.WriteBinlogResp, error) {
 	var err error
 	beginTime := time.Now()
+	atomic.StoreInt64(&s.lastWriteBinlogUnixNano, beginTime.UnixNano())
+
 	defer func() {
 		var label string
 		if err != nil {
@@ -264,68 +203,88 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
-	s.needGenBinlog.Set(false)
-
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		return nil, errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
+	if in.ClusterID != s.clusterID {
+		err = errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
+		return nil, err
 	}
 
-	ret := &binlog.WriteBinlogResp{}
-	binlogger, err1 := s.getBinloggerToWrite()
-	if err1 != nil {
-		ret.Errmsg = err1.Error()
-		err = errors.Trace(err1)
-		return ret, err
+	ret := new(binlog.WriteBinlogResp)
+
+	blog := new(binlog.Binlog)
+	err = blog.Unmarshal(in.Payload)
+	if err != nil {
+		goto errHandle
 	}
 
-	if _, err1 := binlogger.WriteTail(&binlog.Entity{Payload: in.Payload}); err1 != nil {
-		lossBinlogCacheCounter.Add(1)
-		log.Errorf("write binlog error %v in %s mode", err1, s.cfg.WriteMode)
-
-		if !s.cfg.EnableTolerant {
-			ret.Errmsg = err1.Error()
-			err = errors.Trace(err1)
-			return ret, err
+	if !isFakeBinlog {
+		state := s.node.NodeStatus().State
+		if state != node.Online {
+			err = errors.Errorf("no online: %v", state)
+			goto errHandle
 		}
+	}
+
+	err = s.storage.WriteBinlog(blog)
+	if err != nil {
+		goto errHandle
 	}
 
 	return ret, nil
+
+errHandle:
+	lossBinlogCacheCounter.Add(1)
+	log.Errorf("write binlog error %v", err)
+	ret.Errmsg = err.Error()
+	return ret, err
 }
 
 // PullBinlogs sends binlogs in the streaming way
-// the rpc looks no use now, drainer read from kafka directly
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
-	cid := fmt.Sprintf("%d", in.ClusterID)
-	if cid != s.clusterID {
-		return errors.Errorf("cluster ID are mismatch, %v vs %v", cid, s.clusterID)
-	}
+	var err error
+	beginTime := time.Now()
 
-	binlogger, err := s.getBinloggerToRead()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	pos := in.StartFrom
-	sendBinlog := func(entity *binlog.Entity) error {
-		pos.Suffix = entity.Pos.Suffix
-		pos.Offset = entity.Pos.Offset
-		resp := &binlog.PullBinlogResp{Entity: *entity}
-		return errors.Trace(stream.Send(resp))
-	}
-
-	for {
-		err = binlogger.Walk(s.ctx, pos, sendBinlog)
+	log.Debug("get PullBinlogs req: ", in)
+	defer func() {
+		log.Debug("PullBinlogs req: ", in, " quit")
+		var label string
 		if err != nil {
-			return errors.Trace(err)
+			label = "fail"
+		} else {
+			label = "succ"
 		}
 
+		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
+	}()
+
+	if in.ClusterID != s.clusterID {
+		return errors.Errorf("cluster ID are mismatch, %v vs %v", in.ClusterID, s.clusterID)
+	}
+
+	// don't use pos.Suffix now, use offset like last commitTS
+	last := in.StartFrom.Offset
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+	binlogs := s.storage.PullCommitBinlog(ctx, last)
+
+	for {
 		select {
-		// walk return nil even if ctx is Done, so check and return here
-		case <-s.ctx.Done():
+		case data, ok := <-binlogs:
+			if !ok {
+				return nil
+			}
+			resp := new(binlog.PullBinlogResp)
+
+			resp.Entity.Payload = data
+			err = stream.Send(resp)
+			if err != nil {
+				log.Warn(err)
+				return err
+			}
+			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
+		case <-stream.Context().Done():
+			log.Debug("stream done: ", stream.Context().Err())
 			return nil
-		// sleep 50 ms to prevent cpu occupied
-		case <-time.After(pullBinlogInterval):
 		}
 	}
 }
@@ -333,18 +292,31 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
-	if err := s.node.Register(s.ctx); err != nil {
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
+	err = s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
+	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
+
 	// notify all cisterns
-	if err := s.node.Notify(s.ctx); err != nil {
-		// if fail, unregister this node
-		if err := s.node.Unregister(context.Background()); err != nil {
+	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
+	if err := s.node.Notify(ctx); err != nil {
+		// if fail, refresh this node's state to paused
+		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, s.storage.MaxCommitTS(), 0)
+		rerr := s.node.RefreshStatus(context.Background(), status)
+		if rerr != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
+
+	log.Debug("notify success")
 
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
@@ -355,10 +327,20 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	// init the server
-	if err := s.init(); err != nil {
-		return errors.Annotate(err, "fail to initialize pump server")
+	// start a UNIX listener
+	var unixLis net.Listener
+	if s.unixAddr != "" {
+		unixURL, err := url.Parse(s.unixAddr)
+		if err != nil {
+			return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
+		}
+		unixLis, err = net.Listen("unix", unixURL.Path)
+		if err != nil {
+			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
+		}
 	}
+
+	log.Debug("init success")
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -370,15 +352,6 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
 
-	// start a UNIX listener
-	unixURL, err := url.Parse(s.unixAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
-	}
-	unixLis, err := net.Listen("unix", unixURL.Path)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start UNIX listener on %s", unixURL.Path)
-	}
 	// start generate binlog if pump doesn't receive new binlogs
 	s.wg.Add(1)
 	go s.genForwardBinlog()
@@ -393,20 +366,31 @@ func (s *Server) Start() error {
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
-	go s.gs.Serve(unixLis)
+
+	if s.unixAddr != "" {
+		go s.gs.Serve(unixLis)
+	}
 
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
+	// sets a timeout for the read of matchers
+	m.SetReadTimeout(time.Second * 10)
+
 	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
 
-	http.HandleFunc("/status", s.Status)
-	http.HandleFunc("/drainers", s.AllDrainers)
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.Status).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
+	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
+
 	go http.Serve(httpL, nil)
 
+	log.Infof("start to server request on %s", s.tcpAddr)
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
@@ -416,7 +400,7 @@ func (s *Server) Start() error {
 }
 
 // gennerate rollback binlog can forward the drainer's latestCommitTs, and just be discarded without any side effects
-func (s *Server) genFakeBinlog() ([]byte, error) {
+func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 	ts, err := s.getTSO()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -427,75 +411,119 @@ func (s *Server) genFakeBinlog() ([]byte, error) {
 		Tp:       binlog.BinlogType_Rollback,
 		CommitTs: ts,
 	}
-	payload, err := bl.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	return payload, nil
+
+	return bl, nil
 }
 
-func (s *Server) writeFakeBinlog() {
-	// there are only one binlogger for the specified cluster
-	// so we can use only one needGenBinlog flag
-	if s.needGenBinlog.Get() {
-		binlogger, err := s.getBinloggerToWrite()
-		if err != nil {
-			log.Errorf("generate forward binlog, get binlogger err %v", err)
-			return
-		}
-		payload, err := s.genFakeBinlog()
-		if err != nil {
-			log.Errorf("generate forward binlog, generate binlog err %v", err)
-			return
-		}
-
-		_, err = binlogger.WriteTail(&binlog.Entity{Payload: payload})
-		if err != nil {
-			log.Errorf("generate forward binlog, write binlog err %v", err)
-			return
-		}
-
-		log.Infof("generate fake binlog successfully")
-
+func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
+	binlog, err := s.genFakeBinlog()
+	if err != nil {
+		err = errors.Annotate(err, "gennerate fake binlog err")
+		return nil, err
 	}
 
-	s.needGenBinlog.Set(true)
+	payload, err := binlog.Marshal()
+	if err != nil {
+		err = errors.Annotate(err, "gennerate fake binlog err")
+		return nil, err
+	}
+
+	req := new(pb.WriteBinlogReq)
+	req.Payload = payload
+
+	req.ClusterID = s.clusterID
+
+	resp, err := s.writeBinlog(s.ctx, req, true)
+
+	if err != nil {
+		err = errors.Annotate(err, "write fake binlog err")
+		return nil, err
+	}
+
+	if len(resp.Errmsg) > 0 {
+		err = errors.Errorf("write fake binlog err: %v", resp.Errmsg)
+		return nil, err
+	}
+
+	log.Debug("write fake binlog successful")
+	return binlog, nil
 }
 
 // we would generate binlog to forward the pump's latestCommitTs in drainer when there is no binlogs in this pump
 func (s *Server) genForwardBinlog() {
 	defer s.wg.Done()
 
-	s.needGenBinlog.Set(true)
 	genFakeBinlogInterval := time.Duration(s.cfg.GenFakeBinlogInterval) * time.Second
+	lastWriteBinlogUnixNano := atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
 	for {
 		select {
 		case <-s.ctx.Done():
 			log.Info("genFakeBinlog exit")
 			return
 		case <-time.After(genFakeBinlogInterval):
-			s.writeFakeBinlog()
+			// if no WriteBinlogReq, we write a fake binlog
+			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
+				_, err := s.writeFakeBinlog()
+				if err != nil {
+					log.Error("write fake binlog err: ", err)
+				}
+			}
+			lastWriteBinlogUnixNano = atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
 		}
 	}
 }
 
 func (s *Server) gcBinlogFile() {
 	defer s.wg.Done()
-	if s.gc == 0 {
-		return
-	}
 
 	for {
 		select {
 		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
-		case <-time.Tick(time.Hour):
-			if s.dispatcher != nil {
-				s.dispatcher.GC(s.gc, binlog.Pos{})
+		case <-time.After(time.Hour):
+			if s.gcDuration == 0 {
+				continue
 			}
+
+			safeTSO, err := s.getSaveGCTSOForDrainers()
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			log.Debug("safe tso for drainers: ", safeTSO)
+
+			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
+			gcTS := int64(oracle.EncodeTSO(millisecond))
+			if safeTSO < gcTS {
+				gcTS = safeTSO
+			}
+			log.Debug("gc tso: ", gcTS)
+			s.storage.GCTS(gcTS)
 		}
 	}
+}
+
+func (s *Server) getSaveGCTSOForDrainers() (int64, error) {
+	pumpNode := s.node.(*pumpNode)
+
+	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	var minTSO int64 = math.MaxInt64
+	for _, drainer := range drainers {
+		if drainer.State == node.Offline {
+			continue
+		}
+
+		if drainer.MaxCommitTS < minTSO {
+			minTSO = drainer.MaxCommitTS
+		}
+	}
+
+	return minTSO, nil
 }
 
 func (s *Server) startMetrics() {
@@ -517,7 +545,7 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "cisterns")
+	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "drainers")
 	if err != nil {
 		log.Errorf("get pumps error %v", err)
 	}
@@ -540,14 +568,11 @@ func (s *Server) PumpStatus() *HTTPStatus {
 		}
 	}
 
-	// get all pumps' latest binlog position
-	binlogPos := make(map[string]*LatestPos)
+	statusMap := make(map[string]*node.Status)
 	for _, st := range status {
-		binlogPos[st.NodeID] = &LatestPos{
-			FilePos:  st.LatestFilePos,
-			KafkaPos: st.LatestKafkaPos,
-		}
+		statusMap[st.NodeID] = st
 	}
+
 	// get ts from pd
 	commitTS, err := s.getTSO()
 	if err != nil {
@@ -558,39 +583,170 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	}
 
 	return &HTTPStatus{
-		BinlogPos:  binlogPos,
-		CommitTS:   commitTS,
-		CheckPoint: s.cp.pos(),
+		StatusMap: statusMap,
+		CommitTS:  commitTS,
 	}
 }
 
+// ChangeStateReq is the request struct for change state.
+type ChangeStateReq struct {
+	NodeID string `json:"nodeID"`
+	State  string `json:"state"`
+}
+
+// ApplyAction change the pump's state, now can be pause or close.
+func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
+	rd := render.New(render.Options{
+		IndentJSON: true,
+	})
+
+	nodeID := mux.Vars(r)["nodeID"]
+	action := mux.Vars(r)["action"]
+	log.Infof("node %s receive action %s", nodeID, action)
+
+	if nodeID != s.node.NodeStatus().NodeID {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		return
+	}
+
+	if s.node.NodeStatus().State != node.Online {
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		return
+	}
+
+	switch action {
+	case "pause":
+		log.Infof("pump %s's state change to pausing", nodeID)
+		s.node.NodeStatus().State = node.Pausing
+	case "close":
+		log.Infof("pump %s's state change to closing", nodeID)
+		s.node.NodeStatus().State = node.Closing
+	default:
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		return
+	}
+
+	go s.Close()
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+}
+
 func (s *Server) getTSO() (int64, error) {
-	now := time.Now()
-	physical, logical, err := s.pdCli.GetTS(context.Background())
+	ts, err := util.GetTSO(s.pdCli)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	dist := time.Since(now)
-	if dist > slowDist {
-		log.Warnf("get timestamp too slow: %s", dist)
-	}
-
-	ts := int64(composeTS(physical, logical))
 	// update latestTS by the way
 	latestTS = ts
 
 	return ts, nil
 }
 
+// return if and only if it's safe to offline or context is canceled
+func (s *Server) waitSafeToOffline(ctx context.Context) error {
+	var fakeBinlog *pb.Binlog
+	var err error
+
+	// write a fake binlog
+	for {
+		fakeBinlog, err = s.writeFakeBinlog()
+		if err != nil {
+			log.Error(err)
+
+			select {
+			case <-time.After(time.Second):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		break
+	}
+
+	// check storage has handle this fake binlog
+	for {
+		maxCommitTS := s.storage.MaxCommitTS()
+		if maxCommitTS < fakeBinlog.CommitTs {
+			log.Info("max commit TS in storage: %d, fake binlog commit ts: %d", maxCommitTS, fakeBinlog.CommitTs)
+			select {
+			case <-time.After(time.Second):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		break
+	}
+
+	log.Debug("start to check offline safe for drainers")
+
+	// check drainer has consume fake binlog we just write
+	for {
+		select {
+		case <-time.After(time.Second):
+			pumpNode := s.node.(*pumpNode)
+			drainers, err := pumpNode.Nodes(ctx, "drainers")
+			if err != nil {
+				log.Error(err)
+				return errors.Trace(err)
+			}
+			needByDrainer := false
+			for _, drainer := range drainers {
+				if drainer.State == node.Offline {
+					continue
+				}
+
+				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
+					log.Infof("wait for drainer: %v maxCommitTS: %d, pump maxCommitTS: %d", drainer.NodeID, drainer.MaxCommitTS, fakeBinlog.CommitTs)
+					needByDrainer = true
+					break
+				}
+			}
+			if !needByDrainer {
+				return nil
+			}
+
+			_, err = s.writeFakeBinlog()
+			if err != nil {
+				log.Errorf("write fake binlog error %v", err)
+			}
+
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
+	}
+}
+
+// commitStatus commit the node's last status to pd when close the server.
+func (s *Server) commitStatus() {
+	// update this node
+	var state string
+	switch s.node.NodeStatus().State {
+	case node.Pausing, node.Online:
+		state = node.Paused
+	case node.Closing:
+		s.waitSafeToOffline(context.Background())
+		log.Info("safe to offline now")
+		state = node.Offline
+	default:
+		log.Warnf("there must be something wrong, now the node status is %v", s.node.NodeStatus())
+		state = s.node.NodeStatus().State
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), 0)
+	err := s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
+		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
+	}
+	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)
+}
+
 // Close gracefully releases resource of pump server
 func (s *Server) Close() {
-	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
-
-	// update latest for offline ts in unregister process
-	if _, err := s.getTSO(); err != nil {
-		log.Errorf("get tso in close error %v", errors.ErrorStack(err))
+	log.Info("begin to close pump server")
+	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
+		log.Debug("server had closed")
+		return
 	}
 
 	// notify other goroutines to exit
@@ -598,27 +754,26 @@ func (s *Server) Close() {
 	s.wg.Wait()
 	log.Info("background goroutins are stopped")
 
-	// unregister this node
-	if err := s.node.Unregister(context.Background()); err != nil {
-		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
+	s.commitStatus()
+	log.Info("commit status done")
+
+	// stop the gRPC server
+	s.gs.GracefulStop()
+	log.Info("grpc is stopped")
+
+	if err := s.storage.Close(); err != nil {
+		log.Errorf("close storage error %v", errors.ErrorStack(err))
 	}
-	log.Info(s.node.ID, " has unregister")
+	log.Info("storage is closed")
+
+	if err := s.node.Quit(); err != nil {
+		log.Errorf("close pump node error %s", errors.Trace(err))
+	}
+	log.Info("pump node is closed")
+
 	// close tiStore
 	if s.pdCli != nil {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
-
-	// will write binlog to dispatcher if genFakeBinlog() is still running or the pump server is serving
-	// so close this at lastest
-	if s.dispatcher != nil {
-		if err := s.dispatcher.Close(); err != nil {
-			log.Errorf("close binlogger error %v", err)
-		}
-	}
-
-	err := s.node.Close()
-	if err != nil {
-		log.Error(err)
-	}
 }

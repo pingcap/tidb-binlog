@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"golang.org/x/net/context"
@@ -91,6 +92,8 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
+	storage.InitMetircs(registry)
+
 	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
 	registry.MustRegister(prometheus.NewGoCollector())
 

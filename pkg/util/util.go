@@ -1,19 +1,16 @@
 package util
 
 import (
-	"errors"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/types"
 )
-
-// TsToTimestamp translate ts to timestamp
-func TsToTimestamp(ts int64) int64 {
-	return ts >> 18 / 1000
-}
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
 func DefaultIP() (ip string, err error) {
@@ -55,6 +52,23 @@ func DefaultIP() (ip string, err error) {
 	return
 }
 
+// DefaultListenAddr returns default listen address with appointed port.
+func DefaultListenAddr(port int32) string {
+	defaultIP, err := DefaultIP()
+	if err != nil {
+		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+	}
+	return fmt.Sprintf("%s:%d", defaultIP, port)
+}
+
+// IsValidateListenHost judge the host is validate listen host or not.
+func IsValidateListenHost(host string) bool {
+	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+		return false
+	}
+	return true
+}
+
 // StdLogger implements samara.StdLogger
 type StdLogger struct {
 	prefix string
@@ -93,4 +107,31 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	}
 
 	return colTypeMap
+}
+
+// RetryOnError defines a action with retry when fn returns error
+func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
+	var err error
+	for i := 0; i < retryCount; i++ {
+		err = fn()
+		if err == nil {
+			break
+		}
+
+		log.Errorf("%s: %v", errStr, err)
+		time.Sleep(sleepTime)
+	}
+
+	return errors.Trace(err)
+}
+
+// QueryLatestTsFromPD returns the latest ts
+func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		log.Errorf("get current version error: %v", err)
+		return 0, errors.Trace(err)
+	}
+
+	return int64(version.Ver), nil
 }

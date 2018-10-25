@@ -2,7 +2,6 @@ package flags
 
 import (
 	"flag"
-	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -12,26 +11,6 @@ import (
 
 func flagToEnv(prefix, name string) string {
 	return prefix + "_" + strings.ToUpper(strings.Replace(name, "-", "_", -1))
-}
-
-func verifyEnv(prefix string, usedEnvKey, alreadySet map[string]bool) {
-	for _, env := range os.Environ() {
-		kv := strings.SplitN(env, "=", 2)
-		if len(kv) != 2 {
-			panic(fmt.Sprintf("found invalid env %s", env))
-		}
-		if usedEnvKey[kv[0]] {
-			continue
-		}
-		if alreadySet[kv[0]] {
-			// recognized environment variable, but unused: shadowed by corresponding flag
-			continue
-		}
-		if strings.HasPrefix(env, prefix) {
-			// unrecognized environment variable
-			continue
-		}
-	}
 }
 
 // SetFlagsFromEnv parses all registered flags in the given flagset,
@@ -49,8 +28,6 @@ func SetFlagsFromEnv(prefix string, fs *flag.FlagSet) error {
 	fs.VisitAll(func(f *flag.Flag) {
 		err = setFlagFromEnv(fs, prefix, f.Name, usedEnvKey, alreadySet)
 	})
-
-	verifyEnv(prefix, usedEnvKey, alreadySet)
 
 	return errors.Trace(err)
 }

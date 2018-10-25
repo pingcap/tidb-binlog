@@ -1,6 +1,8 @@
 ### Makefile for tidb-binlog
 .PHONY: build test check update clean pump drainer fmt diff reparo
 
+PROJECT=tidb-binlog
+
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
 	$(error Please set the environment variable GOPATH before running `make`)
@@ -10,15 +12,17 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
-GO        := go
-GOBUILD   := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST    := CGO_ENABLED=1 $(GO) test -p 3
+GO		:= go
+GOBUILD   := GO111MODULE=off CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST	:= GO111MODULE=off CGO_ENABLED=1 $(GO) test -p 3
 
-ARCH      := "`uname -s`"
-LINUX     := "Linux"
-MAC       := "Darwin"
-PACKAGES  := $$(go list ./...| grep -vE 'vendor|cmd|test|proto|diff')
-FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+ARCH	  := "`uname -s`"
+LINUX	 := "Linux"
+MAC	   := "Darwin"
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
+PACKAGES  := $$($(PACKAGE_LIST))
+PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
+FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -69,19 +73,24 @@ check:
 	@echo "gofmt (simplify)"
 	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
 
-update:
-	which glide >/dev/null || curl https://glide.sh/get | sh
-	which glide-vc || go get -v -u github.com/sgotti/glide-vc
-ifdef PKG
-	glide get -s -v --skip-test ${PKG}
-else
-	glide update -v
-endif
-	@echo "removing test files"
-	glide vc --use-lock-file --only-code --no-tests
+
+check-static:
+	gometalinter --disable-all --deadline 120s \
+		--enable megacheck \
+		--enable ineffassign \
+		$$($(PACKAGE_DIRECTORIES))
+
+update: update_vendor clean_vendor
+update_vendor:
+	rm -rf vendor/
+	GO111MODULE=on go mod verify
+	GO111MODULE=on go mod vendor
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
+
+clean_vendor:
+	hack/clean_vendor.sh
 
 

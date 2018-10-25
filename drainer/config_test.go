@@ -1,8 +1,17 @@
 package drainer
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 )
+
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
+
+var _ = Suite(&testDrainerSuite{})
+
+type testDrainerSuite struct{}
 
 func (t *testDrainerSuite) TestConfig(c *C) {
 	args := []string{

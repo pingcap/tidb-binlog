@@ -66,38 +66,6 @@ func pkHandleColumn(table *model.TableInfo) *model.ColumnInfo {
 	return nil
 }
 
-func pkIndexColumns(table *model.TableInfo) ([]*model.ColumnInfo, error) {
-	col := pkHandleColumn(table)
-	if col != nil {
-		return []*model.ColumnInfo{col}, nil
-	}
-
-	var cols []*model.ColumnInfo
-	for _, idx := range table.Indices {
-		if idx.Primary {
-			columns := make(map[string]*model.ColumnInfo)
-
-			for _, col := range table.Columns {
-				columns[col.Name.O] = col
-			}
-
-			for _, col := range idx.Columns {
-				if column, ok := columns[col.Name.O]; ok {
-					cols = append(cols, column)
-				}
-			}
-
-			if len(cols) == 0 {
-				return nil, errors.New("primay index is empty, but should not be empty")
-			}
-
-			return cols, nil
-		}
-	}
-
-	return cols, nil
-}
-
 func isNullable(colDef *ast.ColumnDef) bool {
 	if isPrimaryKeyColumn(colDef) {
 		return false
@@ -399,6 +367,9 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
 			mysqlTime, err = types.ParseTimeFromFloatString(&stmtctx.StatementContext{TimeZone: gotime.Local}, data.GetMysqlDecimal().String(), target.Tp, 0)
 		}
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		formatted, err := mysqlTime.DateFormat("%Y-%m-%d %H:%i:%S")
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -427,7 +398,7 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
 			// As TiDB allows string literal like '1998.0' to be year value, and ParseYear() will error out for it, we need to cast to integer by ourselves.
 			var d float64
-			_, err := fmt.Sscanf(data.GetString(), "%f", &d)
+			_, err = fmt.Sscanf(data.GetString(), "%f", &d)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -435,7 +406,8 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
 			year, err = types.ParseYear(fmt.Sprintf("%v", data.GetInt64()))
 		case mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-			d, err := data.GetMysqlDecimal().ToFloat64()
+			var d float64
+			d, err = data.GetMysqlDecimal().ToFloat64()
 			if err != nil {
 				return nil, errors.Trace(err)
 			}

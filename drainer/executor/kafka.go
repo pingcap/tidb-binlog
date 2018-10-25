@@ -8,25 +8,31 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
 
 type kafkaExecutor struct {
-	addr      []string
-	version   string
-	clusterID string
-	producer  sarama.SyncProducer
-	topic     string
+	addr     []string
+	version  string
+	producer sarama.SyncProducer
+	topic    string
 }
 
 func newKafka(cfg *DBConfig) (Executor, error) {
-	clusterIDStr := strconv.FormatUint(cfg.ClusterID, 10)
+	var topic string
+	if len(cfg.TopicName) == 0 {
+		clusterIDStr := strconv.FormatUint(cfg.ClusterID, 10)
+		topic = clusterIDStr + "_obinlog"
+	} else {
+		topic = cfg.TopicName
+	}
+
 	executor := &kafkaExecutor{
-		addr:      strings.Split(cfg.KafkaAddrs, ","),
-		version:   cfg.KafkaVersion,
-		clusterID: clusterIDStr,
-		topic:     clusterIDStr + "_obinlog",
+		addr:    strings.Split(cfg.KafkaAddrs, ","),
+		version: cfg.KafkaVersion,
+		topic:   topic,
 	}
 
 	var err error
@@ -62,9 +68,11 @@ func (p *kafkaExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		var tables []*obinlog.Table
 		for i := range args {
 			table := args[i][0].(*obinlog.Table)
+
 			var idx int
 			var preTable *obinlog.Table
-			for idx, preTable = range tables {
+			for idx = 0; idx < len(tables); idx++ {
+				preTable = tables[idx]
 				if preTable.GetSchemaName() == table.GetSchemaName() && preTable.GetTableName() == table.GetTableName() {
 					preTable.Mutations = append(preTable.Mutations, table.Mutations...)
 					break
@@ -87,6 +95,7 @@ func (p *kafkaExecutor) Close() error {
 }
 
 func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
+	log.Debug("save binlog: ", binlog.String())
 	data, err := binlog.Marshal()
 	if err != nil {
 		return errors.Trace(err)

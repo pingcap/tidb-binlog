@@ -83,7 +83,7 @@ func (f *fileSavepoint) flush() error {
 	return nil
 }
 
-func (f *fileSavepoint) Pos() Position {
+func (f *fileSavepoint) TS() Position {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.pos

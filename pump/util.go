@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -16,12 +15,6 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
-)
-
-const (
-	physicalShiftBits = 18
-	maxRetry          = 12
-	retryInterval     = 5 * time.Second
 )
 
 // AtomicBool is bool type that support atomic operator
@@ -94,20 +87,11 @@ func Exist(dirpath string) bool {
 	return len(names) != 0
 }
 
-func composeTS(physical, logical int64) uint64 {
-	return uint64((physical << physicalShiftBits) + logical)
-}
-
 // TopicName returns topic name
 func TopicName(clusterID string, nodeID string) string {
 	// ":" is not valide in kafka topic name
 	topicName := fmt.Sprintf("%s_%s", clusterID, strings.Replace(nodeID, ":", "_", -1))
 	return topicName
-}
-
-// DefaultTopicPartition returns Deault topic partition
-func DefaultTopicPartition() int32 {
-	return defaultPartition
 }
 
 // ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
@@ -128,10 +112,6 @@ func ComparePos(left, right binlog.Pos) int {
 
 func initializeSaramaGlobalConfig() {
 	sarama.MaxRequestSize = int32(GlobalConfig.maxMsgSize)
-}
-
-func createKafkaProducer(addr []string, kafkaVersion string) (sarama.SyncProducer, error) {
-	return util.CreateKafkaProducer(nil, addr, kafkaVersion, GlobalConfig.maxMsgSize, "pump.")
 }
 
 // combine suffix offset in one float
