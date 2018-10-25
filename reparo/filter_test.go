@@ -74,15 +74,24 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 }
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
-	r := &Reparo{
-		cfg: &Config{
-			StartDatetime: "2018-10-01 11:11:11",
+	reparos := []*Reparo{
+		{
+			cfg: &Config{
+				StartDatetime: "2018-10-01 11:11:11",
+				StopDatetime:  "2018-10-01 12:11:11",
+			},
+		},
+		{
+			cfg: &Config{
+				StopDatetime:  "2018-10-01 12:11:11",
+			},
+		},
+		{
+			cfg: &Config{
+				StartDatetime: "2018-10-01 11:11:11",
+			},
 		},
 	}
-
-	var err error
-	r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
-	c.Assert(err, IsNil)
 
 	fileNames := [][]string{
 		{
@@ -94,18 +103,33 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		{
 			"binlog-0000000000000000-20181001111111",
 			"binlog-0000000000000000-20181001111112",
+			"binlog-0000000000000000-20181001121111",
 		},
 		{
 			"binlog-0000000000000000-20181001111112",
 			"binlog-0000000000000000-20181001111113",
+			"binlog-0000000000000000-20181001211113",
 		},
 	}
 
-	expectNums := []int{1, 2, 2}
+	expectFileNums := [][]int{
+		{1, 3, 2},
+		{4, 3, 2},
+		{1, 3, 3},
+	}
 
-	for i, fs := range fileNames {
-		filterBinlogFile, err := r.filterFiles(fs)
+	var err error
+	for i, r := range reparos {
+		r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
 		c.Assert(err, IsNil)
-		c.Assert(len(filterBinlogFile), Equals, expectNums[i])
+		r.cfg.StopTSO, err = dateTimeToTSO(r.cfg.StopDatetime)
+		c.Assert(err, IsNil)
+		
+		for j, fs := range fileNames {
+			filterBinlogFile, err := r.filterFiles(fs)
+			c.Assert(err, IsNil)
+			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
+		}
+	
 	}
 }

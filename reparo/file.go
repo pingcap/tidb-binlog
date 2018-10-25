@@ -49,19 +49,23 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 			continue
 		}
 
+		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) > r.cfg.StopTSO && r.cfg.StopTSO != 0{
+			preBinlogFile = name
+			break
+		}
+
 		if preBinlogFile != "" {
 			fullpath := path.Join(r.cfg.Dir, preBinlogFile)
 			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
-			preBinlogFile = ""
-		} else {
-			preBinlogFile = name
-		}
+		} 
+		
+		preBinlogFile = name
 	}
 
-	fullpath := path.Join(r.cfg.Dir, fileNames[len(fileNames)-1])
+	fullpath := path.Join(r.cfg.Dir, preBinlogFile)
 	binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 
-	log.Infof("binlog files %+v, start tso: %d", binlogFiles, r.cfg.StartTSO)
+	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, r.cfg.StartTSO, r.cfg.StopTSO)
 
 	return binlogFiles, nil
 }

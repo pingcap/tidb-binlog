@@ -116,20 +116,17 @@ func (c *Config) Parse(args []string) (err error) {
 		return errors.Trace(err)
 	}
 
-	if c.StartDatetime != "" {
-		c.StartTSO, err = dateTimeToTSO(c.StartDatetime)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Infof("start tso %d", c.StartTSO)
+	c.StartTSO, err = dateTimeToTSO(c.StartDatetime)
+	if err != nil {
+		return errors.Trace(err)
 	}
-	if c.StopDatetime != "" {
-		c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Infof("stop tso %d", c.StopTSO)
+	log.Infof("start tso %d", c.StartTSO)
+	
+	c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
+	if err != nil {
+		return errors.Trace(err)
 	}
+	log.Infof("stop tso %d", c.StopTSO)
 
 	return errors.Trace(c.validate())
 }
@@ -168,6 +165,10 @@ func (c *Config) validate() error {
 }
 
 func dateTimeToTSO(dateTimeStr string) (int64, error) {
+	if dateTimeStr == "" {
+		return 0, nil
+	}
+
 	t, err := time.ParseInLocation(timeFormat, dateTimeStr, time.Local)
 	if err != nil {
 		return 0, errors.Trace(err)
