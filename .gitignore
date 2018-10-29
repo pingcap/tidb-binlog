@@ -31,3 +31,4 @@ bin
 cscope.*
 **/*.swp
 data*
+go.sum

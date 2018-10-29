@@ -17,8 +17,6 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
       path to the pump configuration file
   -data-dir string
       the path to store binlog data
-  -enable-tolerant
-      after enable tolerant, pump wouldn't return error if it fails to write binlog (default true)
   -gc int
       recycle binlog files older than gc days, zero means never recycle (default 7)
   -heartbeat-interval int

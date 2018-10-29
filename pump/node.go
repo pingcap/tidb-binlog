@@ -99,6 +99,10 @@ func (p *pumpNode) ID() string {
 	return p.status.NodeID
 }
 
+func (p *pumpNode) Close() error {
+	return errors.Trace(p.EtcdRegistry.Close())
+}
+
 func (p *pumpNode) ShortID() string {
 	if len(p.status.NodeID) <= shortIDLen {
 		return p.status.NodeID
