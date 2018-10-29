@@ -98,16 +98,6 @@ func (s *Syncer) Start(jobs []*model.Job) error {
 	return errors.Trace(err)
 }
 
-func (s *Schema) getSchemaTableAndEvit(version int64) (string, string, error) {
-	schemaTable, ok := s.version2SchemaTable[version]
-	if !ok {
-		return "", "", errors.NotFoundf("version: %d", version)
-	}
-	delete(s.version2SchemaTable, version)
-
-	return schemaTable.Schema, schemaTable.Table, nil
-}
-
 func (s *Syncer) addDMLCount(tp pb.MutationType, nums int) {
 	switch tp {
 	case pb.MutationType_Insert:
@@ -370,7 +360,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Debug("get ddl binlog ddl job: ", string(data))
+			log.Debug("get ddl binlog job: ", string(data))
 		}
 
 	}
@@ -429,7 +419,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Trace(err)
 			}
 		} else if jobID > 0 {
-			log.Debug("get ddl binlog ddl job: ", b.job)
+			log.Debug("get ddl binlog job: ", b.job)
 
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
@@ -443,7 +433,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 
 			log.Debug("ddl query: ", b.job.Query)
 			sql := b.job.Query
-			schema, table, err := s.schema.getSchemaTableAndEvit(b.job.BinlogInfo.SchemaVersion)
+			schema, table, err := s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
 			}

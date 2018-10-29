@@ -396,6 +396,16 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 	}
 }
 
+func (s *Schema) getSchemaTableAndDelete(version int64) (string, string, error) {
+	schemaTable, ok := s.version2SchemaTable[version]
+	if !ok {
+		return "", "", errors.NotFoundf("version: %d", version)
+	}
+	delete(s.version2SchemaTable, version)
+
+	return schemaTable.Schema, schemaTable.Table, nil
+}
+
 func addImplicitColumn(table *model.TableInfo) {
 	newColumn := &model.ColumnInfo{
 		ID:   implicitColID,
