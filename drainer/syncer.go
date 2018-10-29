@@ -644,7 +644,9 @@ func (s *Syncer) run(b *binlogItem) error {
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos pb.Pos, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
-	for _, mutation := range mutations {
+	for mutationIdx, mutation := range mutations {
+		isLastMutation := (mutationIdx == len(mutations)-1)
+
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			continue
@@ -706,7 +708,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			isCompleteBinlog := (idx == len(sequences)-1)
+			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
