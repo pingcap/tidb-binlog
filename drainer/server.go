@@ -97,9 +97,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
-	// remove this?
-	win := NewDepositWindow()
-
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
 	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
 	if err != nil {
@@ -113,7 +110,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	c, err := NewCollector(cfg, clusterID, win, syncer, cp)
+	c, err := NewCollector(cfg, clusterID, syncer, cp)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
