@@ -431,6 +431,8 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog ddl job: ", b.job)
 
+			// Notice: the version of DDL Binlog we receive are Monotonically increasing
+			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
 
 			log.Debug("DDL SchemaVersion: ", b.job.BinlogInfo.SchemaVersion)
