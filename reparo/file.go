@@ -34,11 +34,11 @@ func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
 
 func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 	binlogFiles := make([]binlogFile, 0, len(fileNames))
-	preBinlogFile := ""
+	latestBinlogFile := ""
 
 	for _, name := range fileNames {
 		fileNameItems := strings.Split(name, "-")
-		createTimeStr, err := formatTimeStr(fileNameItems[len(fileNameItems)-1])
+		createTimeStr, err := bf.FormatTimeStr(fileNameItems[len(fileNameItems)-1])
 		if err != nil {
 			return nil, errors.Annotatef(err, "analyse binlog file name error")
 		}
@@ -48,34 +48,26 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 		}
 
 		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) < r.cfg.StartTSO {
-			preBinlogFile = name
+			latestBinlogFile = name
 			continue
 		}
 
 		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) > r.cfg.StopTSO && r.cfg.StopTSO != 0 {
-			preBinlogFile = name
+			latestBinlogFile = name
 			break
 		}
 
 		if preBinlogFile != "" {
 			fullpath := path.Join(r.cfg.Dir, preBinlogFile)
-			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
+			latestBinlogFile = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 		}
 
-		preBinlogFile = name
+		latestBinlogFile = name
 	}
 
-	fullpath := path.Join(r.cfg.Dir, preBinlogFile)
+	fullpath := path.Join(r.cfg.Dir, latestBinlogFile)
 	binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 
 	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, r.cfg.StartTSO, r.cfg.StopTSO)
 	return binlogFiles, nil
-}
-
-func formatTimeStr(s string) (string, error) {
-	if len(s) != len("20180102010101") {
-		return "", errors.Errorf("%s is not a valid time string in binlog file", s)
-	}
-
-	return fmt.Sprintf("%s-%s-%sT%s:%s:%s", s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]), nil
 }
