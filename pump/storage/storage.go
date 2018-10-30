@@ -860,7 +860,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTS, endTS int64, sel
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
 				if err != nil {
-					log.Error(err)
 					panic(err)
 				}
 
