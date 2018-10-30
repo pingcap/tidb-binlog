@@ -831,10 +831,11 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if beginTs < gcTS {
 		log.Warnf("last ts %d less than gcTS %d", beginTs, gcTS)
-		if selectMode {
-			values <- []byte("end")
-			return values
-		}
+		//if selectMode {
+			//values <- []byte("end")
+			
+		//	return values
+		//}
 		beginTs = gcTS
 	}
 

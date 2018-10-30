@@ -839,6 +839,6 @@ SelectBinlog:
 		return
 	}
 
-	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %v", len(binlogInfos), fromTs, toTs, binlogInfos), nil))
+	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("find %d binlogs from %d to %d!, details: %s", len(binlogInfos), fromTs, toTs, strings.Join(binlogInfos, ", ")), nil))
 	return
 }

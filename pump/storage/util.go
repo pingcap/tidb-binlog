@@ -49,9 +49,12 @@ func (o *memOracle) getTS() int64 {
 func binlogInfo(binlog *pb.Binlog) ([]byte, error) {
 	var b bytes.Buffer
 
-	b.WriteString(fmt.Sprintf("{ Type: %s, ", binlog.Tp))
-	b.WriteString(fmt.Sprintf("startTs: %d, ", binlog.StartTs))
-	b.WriteString(fmt.Sprintf("commitTs: %d, ", binlog.CommitTs))
+	if binlog.StartTs == binlog.CommitTs {
+		b.WriteString(fmt.Sprintf("{ Type: fake binlog, commitTs: %d }", binlog.StartTs))
+		return b.Bytes(), nil
+	}
+
+	b.WriteString(fmt.Sprintf("{ Type: %s, startTs: %d, commitTs: %d, ", binlog.Tp, binlog.StartTs, binlog.CommitTs))
 	if len(binlog.PrewriteValue) != 0 {
 		b.WriteString("prewriteValue: { mutations: { ")
 		preWrite := &pb.PrewriteValue{}
@@ -63,7 +66,7 @@ func binlogInfo(binlog *pb.Binlog) ([]byte, error) {
 		b.WriteString(fmt.Sprintf("SchemaVersion: %d, ", preWrite.SchemaVersion))
 
 		for _, mutation := range preWrite.Mutations {
-			b.WriteString(fmt.Sprintf("[ tableID: %d, %d insertedRows, %d updatedRows, %d deletedRows], ", 
+			b.WriteString(fmt.Sprintf("[ tableID: %d, %d insertedRows, %d updatedRows, %d deletedRows ], ", 
 				mutation.TableId, len(mutation.InsertedRows), len(mutation.UpdatedRows), len(mutation.DeletedRows)))
 		}
 
@@ -71,14 +74,14 @@ func binlogInfo(binlog *pb.Binlog) ([]byte, error) {
 	}
 
 	if len(binlog.DdlQuery) != 0 {
-		b.WriteString(fmt.Sprintf("DDlQuery: %d, ", binlog.DdlQuery))
+		b.WriteString(fmt.Sprintf("DDlQuery: %s, ", binlog.DdlQuery))
 	}
 
 	if binlog.DdlJobId != 0 {
 		b.WriteString(fmt.Sprintf("DDLJobID: %d, ", binlog.DdlJobId))
 	}
 
-
+	b.WriteString("}")
 
 	return b.Bytes(), nil
 }
