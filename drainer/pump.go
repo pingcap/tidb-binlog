@@ -149,7 +149,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			select {
 			case ret <- item:
 				if binlog.CommitTs > last {
-					last = binlog.CommitTs + 1
+					last = binlog.CommitTs
 					p.latestTS = binlog.CommitTs
 				} else {
 					log.Errorf("[pump %s] receive unsort binlog", p.nodeID)

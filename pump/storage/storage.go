@@ -813,9 +813,10 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 	return nil
 }
 
-// PullCommitBinlog return commit binlog  > last
-func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, selectMode bool) <-chan []byte {
-	log.Debugf("new PullCommitBinlog beginTs: %d, endTs: %d", beginTs, endTs)
+// PullCommitBinlog returns commit binlogs > beginTS and <= endTS while selectMode is true,
+// otherwise returns commit binlogs > binlogTS and will run until process is close.
+func (a *Append) PullCommitBinlog(ctx context.Context, beginTS, endTS int64, selectMode bool) <-chan []byte {
+	log.Infof("new PullCommitBinlog beginTs: %d, endTs: %d, selectMode: %v", beginTS, endTS, selectMode)
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
@@ -829,14 +830,9 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 	values := make(chan []byte, 5)
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
-	if beginTs < gcTS {
-		log.Warnf("last ts %d less than gcTS %d", beginTs, gcTS)
-		//if selectMode {
-			//values <- []byte("end")
-			
-		//	return values
-		//}
-		beginTs = gcTS
+	if beginTS < gcTS {
+		log.Warnf("last ts %d less than gcTS %d", beginTS, gcTS)
+		beginTS = gcTS
 	}
 
 	irange := &util.Range{
@@ -845,16 +841,21 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 	}
 
 	go func() {
-		defer close(values)
+		defer func() {
+			close(values)
+			log.Info("PullCommitBinlog finished")
+		}()
 
 		for {
-			irange.Start = encodeTSKey(beginTs)
+			startTS := beginTS + 1
+
+			irange.Start = encodeTSKey(startTS)
 			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
-			for ok := iter.Seek(encodeTSKey(beginTs)); ok; ok = iter.Next() {
+			for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
@@ -899,12 +900,10 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 
 					if !selectMode {
 						value, err = binlog.Marshal()
-					} else { 
-						if binlog.CommitTs < endTs {
+					} else {
+						if binlog.CommitTs <= endTS {
 							value, err = binlogInfo(binlog)
-							log.Infof("select binlog: %s", string(value))
 						} else {
-							log.Info("select finished")
 							iter.Release()
 							return
 						}
@@ -918,13 +917,13 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 
 				select {
 				case values <- value:
-					log.Debug("send value success")
+					log.Debugf("send binlog %d success", binlog.CommitTs)
 				case <-ctx.Done():
 					iter.Release()
 					return
 				}
 
-				beginTs = decodeTSKey(iter.Key()) + 1
+				beginTS = decodeTSKey(iter.Key())
 			}
 			iter.Release()
 

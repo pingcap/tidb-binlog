@@ -236,7 +236,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				continue
 			}
 
-			commitTS := c.merger.GetLatestTS() + 1
+			commitTS := c.merger.GetLatestTS()
 			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
 			c.pumps[n.NodeID] = p
 			c.merger.AddSource(MergeSource{

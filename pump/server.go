@@ -225,10 +225,8 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		}
 	}
 
-	log.Infof("write binlog Tp: %s, startTS: %d, commitTS: %d, length: %d", blog.Tp, blog.StartTs, blog.CommitTs, len(blog.PrewriteValue))
 	err = s.storage.WriteBinlog(blog)
 	if err != nil {
-		log.Infof("write binlog error %v, Tp: %s, startTS: %d, commitTS: %d, length: %d", err, blog.Tp, blog.StartTs, blog.CommitTs, len(blog.PrewriteValue))
 		goto errHandle
 	}
 
@@ -236,7 +234,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 
 errHandle:
 	lossBinlogCacheCounter.Add(1)
-	log.Errorf("write binlog error %v", err)
+	log.Errorf("write binlog error %v, Tp: %s, startTS: %d, commitTS: %d, length: %d", err, blog.Tp, blog.StartTs, blog.CommitTs, len(blog.PrewriteValue))
 	ret.Errmsg = err.Error()
 	return ret, err
 }
@@ -782,7 +780,7 @@ func (s *Server) Close() {
 	log.Info("has closed pdCli")
 }
 
-// SelectBinlog
+// SelectBinlog selects binlog which's commitTS is between fromTS and toTS.
 func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 	rd := render.New(render.Options{
 		IndentJSON: true,
@@ -805,23 +803,17 @@ func (s *Server) SelectBinlog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, cancel := context.WithCancel(s.ctx)
-	defer cancel()
+	defer cancel()	
 
+	binlogs := s.storage.PullCommitBinlog(ctx, int64(fromTs)-1, int64(toTs), true)
+	binlogInfos := make([]string, 0, 5)
 	timeout := time.After(time.Second * 15)
 
-	binlogs := s.storage.PullCommitBinlog(ctx, int64(fromTs), int64(toTs), true)
-	binlogInfos := make([]string, 0, 5)
-	
 SelectBinlog:
 	for {
 		select {
 		case binlog, ok := <-binlogs:
 			if !ok {
-				log.Info("select binlog down")
-				break SelectBinlog
-			}
-			if string(binlog) == "end" {
-				log.Info("select binlog down")
 				break SelectBinlog
 			}
 			binlogInfos = append(binlogInfos, string(binlog))
@@ -835,7 +827,7 @@ SelectBinlog:
 	}
 
 	if len(binlogInfos) == 0 {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("not find binlog from %d to %d", fromTs, toTs))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("binlog from %d to %d not found", fromTs, toTs))
 		return
 	}
 

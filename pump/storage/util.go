@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"fmt"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/juju/errors"
@@ -45,7 +45,6 @@ func (o *memOracle) getTS() int64 {
 	return atomic.AddInt64(&o.ts, 1)
 }
 
-
 func binlogInfo(binlog *pb.Binlog) ([]byte, error) {
 	var b bytes.Buffer
 
@@ -66,7 +65,7 @@ func binlogInfo(binlog *pb.Binlog) ([]byte, error) {
 		b.WriteString(fmt.Sprintf("SchemaVersion: %d, ", preWrite.SchemaVersion))
 
 		for _, mutation := range preWrite.Mutations {
-			b.WriteString(fmt.Sprintf("[ tableID: %d, %d insertedRows, %d updatedRows, %d deletedRows ], ", 
+			b.WriteString(fmt.Sprintf("[ tableID: %d, %d insertedRows, %d updatedRows, %d deletedRows ], ",
 				mutation.TableId, len(mutation.InsertedRows), len(mutation.UpdatedRows), len(mutation.DeletedRows)))
 		}
 
