@@ -854,14 +854,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
 			for ok := iter.Seek(encodeTSKey(beginTs)); ok; ok = iter.Next() {
-				if endTs >= 0 && beginTs > endTs {
-					log.Info("select finished")
-					values <- []byte("end")
-					log.Info("select finished")
-					iter.Release()
-					return
-				}
-
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
@@ -906,8 +898,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, beginTs, endTs int64, sel
 
 					if !selectMode {
 						value, err = binlog.Marshal()
-					} else if binlog.CommitTs < endTs {
-						value, err = binlogInfo(binlog)
+					} else { 
+						if binlog.CommitTs < endTs {
+							value, err = binlogInfo(binlog)
+							log.Infof("select binlog: %s", string(value))
+						} else {
+							log.Info("select finished")
+							iter.Release()
+							return
+						}
 					}
 					if err != nil {
 						log.Error(err)
