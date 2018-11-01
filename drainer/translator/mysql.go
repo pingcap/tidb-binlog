@@ -48,7 +48,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
-	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s)", schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
 		//decode the pk value

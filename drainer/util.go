@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/tidb-binlog/pkg/dml"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 const (
@@ -117,9 +119,77 @@ func genDrainerID(listenAddr string) (string, error) {
 	return fmt.Sprintf("%s:%s", hostname, port), nil
 }
 
-func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
+func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, 
+		tableIDs []int64, sqlTypes []pb.MutationType, isDDL bool, combineSQL bool) error {
 	if len(sqls) == 0 {
 		return nil
+	}
+
+	log.Infof("%d sqls, isDDL: %s, combineSQL: %s", len(sqls), isDDL, combineSQL)
+	if !isDDL && combineSQL {
+		var (
+			latestTableID int64 
+			latestSQLType pb.MutationType
+			currentSql string
+			currentArgNum int
+			currentArgs []interface{}
+			combineNum int
+			startCombine bool
+		)
+		combineSQLs := make([]string, 0, len(sqls))
+		combineArgs := make([][]interface{}, 0, len(args))
+
+
+		for i := 0; i < len(sqls); i++ {
+			if i == 0 || !startCombine {
+				currentSql = sqls[i]
+				currentArgs = args[i]
+				currentArgNum = len(args[i])
+				combineNum = 1
+				startCombine = true
+			} else {
+				if sqlTypes[i] == pb.MutationType_Insert {
+					if tableIDs[i] == latestTableID && sqlTypes[i] == latestSQLType {
+						//currentSql = sqls[i]
+						//currentArgNum = len(args[i])
+						log.Info("combine sqls")
+						currentArgs = append(currentArgs, args[i]...)
+						combineNum++
+						startCombine = true
+					} else {
+						combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum , combineNum-1)))
+						combineArgs = append(combineArgs, currentArgs)
+						log.Infof("combineSQL: %s, combineArg: %v", combineSQLs[len(combineSQLs)-1], currentArgs)
+
+						startCombine = false
+					}
+				} else {
+					log.Infof("sqls: %s, args: %v", sqls[i], args[i])
+					combineSQLs = append(combineSQLs, sqls[i])
+					combineArgs = append(combineArgs, args[i])
+
+					startCombine = false
+				}
+			}
+
+			latestTableID = tableIDs[i]
+			latestSQLType = sqlTypes[i]
+		}
+		if len(currentArgs) != 0 {
+			if combineNum-1 == 0 {
+				combineSQLs = append(combineSQLs, currentSql)
+			} else {
+				combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum , combineNum-1)))
+			}
+			combineArgs = append(combineArgs, currentArgs)
+		}
+
+		beginTime := time.Now()
+		defer func() {
+			executeHistogram.Observe(time.Since(beginTime).Seconds())
+		}()
+
+		return executor.Execute(combineSQLs, combineArgs, commitTSs, isDDL)
 	}
 
 	beginTime := time.Now()
@@ -128,6 +198,16 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 	}()
 
 	return executor.Execute(sqls, args, commitTSs, isDDL)
+}
+
+// generatePlaceholders returns placeholders like (?, ?, ?),(?, ?, ?)
+func generatePlaceholders(i, j int) string {
+	placeholders := make([]string, 0, j)
+	for k := 0; k < j; k++ {
+		placeholders = append(placeholders, fmt.Sprintf("(%s)", dml.GenColumnPlaceholders(i)))
+	}
+	
+	return strings.Join(placeholders, ",")
 }
 
 func closeExecutors(executors ...executor.Executor) {
