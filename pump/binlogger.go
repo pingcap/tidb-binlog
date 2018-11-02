@@ -49,6 +49,9 @@ type Binlogger interface {
 
 	// Name tells the name of underlying file
 	Name() string
+
+	// Rotate creates a new file to write binlog
+	Rotate() error
 }
 
 // binlogger is a logical representation of the log storage
@@ -368,7 +371,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate()
+	err = b.Rotate()
 	return curOffset, errors.Trace(err)
 }
 
@@ -397,7 +400,7 @@ func (b *binlogger) Name() string {
 }
 
 // rotate creates a new file for append binlog
-func (b *binlogger) rotate() error {
+func (b *binlogger) Rotate() error {
 	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0

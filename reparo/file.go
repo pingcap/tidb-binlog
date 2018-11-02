@@ -1,15 +1,14 @@
 package repora
 
 import (
-	"fmt"
+	"bufio"
+	"io"
+	"os"
 	"path"
-	"strings"
-	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type binlogFile struct {
@@ -25,48 +24,66 @@ func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
 
-	if len(sortedNames) == 0 {
-		return nil, errors.Errorf("no binlog file found under %s", dir)
+	binlogFiles := make([]binlogFile, 0, len(sortedNames))
+	for _, name := range sortedNames {
+		fullpath := path.Join(r.cfg.Dir, name)
+		binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
 	}
 
-	return r.filterFiles(sortedNames)
+	return r.filterFiles(binlogFiles)
 }
 
-func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
-	binlogFiles := make([]binlogFile, 0, len(fileNames))
-	latestBinlogFile := ""
+func (r *Reparo) filterFiles(files []binlogFile) ([]binlogFile, error) {
+	binlogFiles := make([]binlogFile, 0, len(files))
+	var latestBinlogFile binlogFile
 
-	for _, name := range fileNames {
-		fileNameItems := strings.Split(name, "-")
-		createTimeStr, err := bf.FormatTimeStr(fileNameItems[len(fileNameItems)-1])
-		if err != nil {
-			return nil, errors.Annotatef(err, "analyse binlog file name error")
+	appendFile := func() {
+		if latestBinlogFile.fullpath != "" {
+			binlogFiles = append(binlogFiles, latestBinlogFile)
+			latestBinlogFile.fullpath = ""
 		}
-		fileCreateTime, err := time.ParseInLocation("2006-01-02T15:04:05", createTimeStr, time.Local)
+	}
+
+	for _, file := range files {
+		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
 		if err != nil {
-			return nil, errors.Annotatef(err, "analyse binlog file name error")
+			return nil, errors.Annotatef(err, "open file %s error", file.fullpath)
+		}
+		defer fd.Close()
+
+		// get the first binlog in file
+		br := bufio.NewReader(fd)
+		binlog, _, err := Decode(br)
+		if errors.Cause(err) == io.EOF {
+			fd.Close()
+			log.Infof("read file %s end", file.fullpath)
+			break
+		}
+		if err != nil {
+			return nil, errors.Annotatef(err, "decode binlog error")
 		}
 
-		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) < r.cfg.StartTSO {
-			latestBinlogFile = name
+		if binlog.CommitTs < r.cfg.StartTSO {
+			latestBinlogFile = file
 			continue
 		}
 
-		if int64(oracle.ComposeTS(fileCreateTime.Unix()*1000, 0)) > r.cfg.StopTSO && r.cfg.StopTSO != 0 {
-			latestBinlogFile = name
+		if binlog.CommitTs == r.cfg.StartTSO {
+			latestBinlogFile = file
+			appendFile()
+			continue
+		}
+
+		if binlog.CommitTs >= r.cfg.StopTSO && r.cfg.StopTSO != 0 {
+			appendFile()
+			latestBinlogFile = file
 			break
 		}
 
-		if preBinlogFile != "" {
-			fullpath := path.Join(r.cfg.Dir, preBinlogFile)
-			latestBinlogFile = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
-		}
-
-		latestBinlogFile = name
+		appendFile()
+		latestBinlogFile = file
 	}
-
-	fullpath := path.Join(r.cfg.Dir, latestBinlogFile)
-	binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
+	appendFile()
 
 	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, r.cfg.StartTSO, r.cfg.StopTSO)
 	return binlogFiles, nil

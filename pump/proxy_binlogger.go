@@ -122,6 +122,11 @@ func (p *Proxy) Name() string {
 	return "proxy"
 }
 
+// Rotate implemnets the Binlogger interface.
+func (p *Proxy) Rotate() error {
+	return nil
+}
+
 func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, error) {
 	if ComparePos(readPos, pos) > 0 {
 		// always return new position
