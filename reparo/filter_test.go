@@ -115,6 +115,13 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		{
 			cfg: &Config{
 				Dir:      binlogDir,
+				StartTSO: baseTS + 1,
+				StopTSO:  baseTS + 2,
+			},
+		},
+		{
+			cfg: &Config{
+				Dir:      binlogDir,
 				StartTSO: baseTS + 2,
 			},
 		},
@@ -126,7 +133,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		},
 	}
 
-	expectFileNums := []int{10, 8, 3}
+	expectFileNums := []int{10, 2, 8, 3}
 
 	for i, r := range reparos {
 		files, err := r.searchFiles(binlogDir)
