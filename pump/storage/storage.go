@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"golang.org/x/sys/unix"
 )
@@ -108,7 +109,28 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	metadata, err := leveldb.OpenFile(kvDir, nil)
+	var opt opt.Options
+	cf := options.Storage
+	if cf == nil {
+		cf = defaultStorageConfig
+	} else {
+		setDefaultStorageConfig(cf)
+	}
+
+	log.Infof("storage config: %+v", cf)
+
+	opt.BlockCacheCapacity = cf.BlockCacheCapacity
+	opt.BlockRestartInterval = cf.BlockRestartInterval
+	opt.BlockSize = cf.BlockSize
+	opt.CompactionL0Trigger = cf.CompactionL0Trigger
+	opt.CompactionTableSize = cf.CompactionTableSize
+	opt.CompactionTotalSize = cf.CompactionTotalSize
+	opt.CompactionTotalSizeMultiplier = cf.CompactionTotalSizeMultiplier
+	opt.WriteBuffer = cf.WriteBuffer
+	opt.WriteL0PauseTrigger = cf.WriteL0PauseTrigger
+	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
+
+	metadata, err := leveldb.OpenFile(kvDir, &opt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -959,4 +981,70 @@ func getStorageSize(dir string) (size storageSize, err error) {
 	size.capacity = int(stat.Blocks) * int(bSize)
 
 	return
+}
+
+// StorageConfig holds the configuration of storage
+type StorageConfig struct {
+	KVConfig `toml:"kv" json:"kv"`
+}
+
+type KVConfig struct {
+	BlockCacheCapacity            int     `toml:"block-cache-capacity" json:"block-cache-capacity"`
+	BlockRestartInterval          int     `toml:"block-restart-interval" json:"block-restart-interval"`
+	BlockSize                     int     `toml:"block-size" json:"block-size"`
+	CompactionL0Trigger           int     `toml:"compaction-L0-trigger" json:"compaction-L0-trigger"`
+	CompactionTableSize           int     `toml:"compaction-table-size" json:"compaction-table-size"`
+	CompactionTotalSize           int     `toml:"compaction-total-size" json:"compaction-total-size"`
+	CompactionTotalSizeMultiplier float64 `toml:"compaction-total-size-multiplier" json:"compaction-total-size-multiplier"`
+	WriteBuffer                   int     `toml:"write-buffer" json:"write-buffer"`
+	WriteL0PauseTrigger           int     `toml:"write-L0-pause-trigger" json:"write-L0-pause-trigger"`
+	WriteL0SlowdownTrigger        int     `toml:"write-L0-slowdown-trigger" json:"write-L0-slowdown-trigger"`
+}
+
+var defaultStorageConfig = &StorageConfig{
+	KVConfig: KVConfig{
+		BlockCacheCapacity:            8388608,
+		BlockRestartInterval:          16,
+		BlockSize:                     4096,
+		CompactionL0Trigger:           8,
+		CompactionTableSize:           67108864,
+		CompactionTotalSize:           536870912,
+		CompactionTotalSizeMultiplier: 8,
+		WriteBuffer:                   67108864,
+		WriteL0PauseTrigger:           24,
+		WriteL0SlowdownTrigger:        17,
+	},
+}
+
+func setDefaultStorageConfig(cf *StorageConfig) {
+	if cf.BlockCacheCapacity <= 0 {
+		cf.BlockCacheCapacity = defaultStorageConfig.BlockCacheCapacity
+	}
+	if cf.BlockRestartInterval <= 0 {
+		cf.BlockRestartInterval = defaultStorageConfig.BlockRestartInterval
+	}
+	if cf.BlockSize <= 0 {
+		cf.BlockSize = defaultStorageConfig.BlockSize
+	}
+	if cf.CompactionL0Trigger <= 0 {
+		cf.CompactionL0Trigger = defaultStorageConfig.CompactionL0Trigger
+	}
+	if cf.CompactionTableSize <= 0 {
+		cf.CompactionTableSize = defaultStorageConfig.CompactionTableSize
+	}
+	if cf.CompactionTotalSize <= 0 {
+		cf.CompactionTotalSize = defaultStorageConfig.CompactionTotalSize
+	}
+	if cf.CompactionTotalSizeMultiplier <= 0 {
+		cf.CompactionTotalSizeMultiplier = defaultStorageConfig.CompactionTotalSizeMultiplier
+	}
+	if cf.WriteBuffer <= 0 {
+		cf.WriteBuffer = defaultStorageConfig.WriteBuffer
+	}
+	if cf.WriteL0PauseTrigger <= 0 {
+		cf.WriteL0PauseTrigger = defaultStorageConfig.WriteL0PauseTrigger
+	}
+	if cf.WriteL0SlowdownTrigger <= 0 {
+		cf.WriteL0SlowdownTrigger = defaultStorageConfig.WriteL0SlowdownTrigger
+	}
 }

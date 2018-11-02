@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 )
 
 const (
@@ -76,6 +77,7 @@ type Config struct {
 	configFile      string
 	printVersion    bool
 	tls             *tls.Config
+	Storage         *storage.StorageConfig `toml:"storage" json:"storage"`
 }
 
 // NewConfig return an instance of configuration
