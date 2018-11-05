@@ -65,7 +65,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
-		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?)")
 		for index := range vals[0] {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
