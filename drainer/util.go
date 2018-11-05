@@ -15,11 +15,11 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
+	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
-	"github.com/pingcap/tidb-binlog/pkg/dml"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -119,26 +119,25 @@ func genDrainerID(listenAddr string) (string, error) {
 	return fmt.Sprintf("%s:%s", hostname, port), nil
 }
 
-func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, 
-		tableIDs []int64, sqlTypes []pb.MutationType, isDDL bool, combineSQL bool) error {
+func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64,
+	tableIDs []int64, sqlTypes []pb.MutationType, isDDL bool, combineSQL bool) error {
 	if len(sqls) == 0 {
 		return nil
 	}
 
-	log.Infof("%d sqls, isDDL: %s, combineSQL: %s", len(sqls), isDDL, combineSQL)
+	combineSQLs := make([]string, 0, len(sqls))
+	combineArgs := make([][]interface{}, 0, len(args))
+
 	if !isDDL && combineSQL {
 		var (
-			latestTableID int64 
+			latestTableID int64
 			latestSQLType pb.MutationType
-			currentSql string
+			currentSql    string
 			currentArgNum int
-			currentArgs []interface{}
-			combineNum int
-			startCombine bool
+			currentArgs   []interface{}
+			combineNum    int
+			startCombine  bool
 		)
-		combineSQLs := make([]string, 0, len(sqls))
-		combineArgs := make([][]interface{}, 0, len(args))
-
 
 		for i := 0; i < len(sqls); i++ {
 			if i == 0 || !startCombine {
@@ -148,23 +147,21 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 				combineNum = 1
 				startCombine = true
 			} else {
+				// TODO: now only support combine insert sql, we can combine delete sql later.
 				if sqlTypes[i] == pb.MutationType_Insert {
+					// only when table id and sql type is same can we combine sql
 					if tableIDs[i] == latestTableID && sqlTypes[i] == latestSQLType {
-						//currentSql = sqls[i]
-						//currentArgNum = len(args[i])
-						log.Info("combine sqls")
 						currentArgs = append(currentArgs, args[i]...)
 						combineNum++
 						startCombine = true
 					} else {
-						combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum , combineNum-1)))
+						combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum, combineNum-1)))
 						combineArgs = append(combineArgs, currentArgs)
 						log.Infof("combineSQL: %s, combineArg: %v", combineSQLs[len(combineSQLs)-1], currentArgs)
 
 						startCombine = false
 					}
 				} else {
-					log.Infof("sqls: %s, args: %v", sqls[i], args[i])
 					combineSQLs = append(combineSQLs, sqls[i])
 					combineArgs = append(combineArgs, args[i])
 
@@ -179,23 +176,21 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 			if combineNum-1 == 0 {
 				combineSQLs = append(combineSQLs, currentSql)
 			} else {
-				combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum , combineNum-1)))
+				combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum, combineNum-1)))
 			}
 			combineArgs = append(combineArgs, currentArgs)
 		}
-
-		beginTime := time.Now()
-		defer func() {
-			executeHistogram.Observe(time.Since(beginTime).Seconds())
-		}()
-
-		return executor.Execute(combineSQLs, combineArgs, commitTSs, isDDL)
+		log.Debugf("total %d sqls, after combine have %s sqls", len(sqls), len(combineSQLs))
 	}
 
 	beginTime := time.Now()
 	defer func() {
 		executeHistogram.Observe(time.Since(beginTime).Seconds())
 	}()
+
+	if len(combineSQLs) != 0 {
+		return executor.Execute(combineSQLs, combineArgs, commitTSs, isDDL)
+	}
 
 	return executor.Execute(sqls, args, commitTSs, isDDL)
 }
@@ -206,7 +201,7 @@ func generatePlaceholders(i, j int) string {
 	for k := 0; k < j; k++ {
 		placeholders = append(placeholders, fmt.Sprintf("(%s)", dml.GenColumnPlaceholders(i)))
 	}
-	
+
 	return strings.Join(placeholders, ",")
 }
 

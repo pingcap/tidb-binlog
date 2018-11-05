@@ -140,7 +140,7 @@ type job struct {
 	// set to true when this is the last job of a txn
 	// we will generate many job and call addJob(job) from a txn
 	isCompleteBinlog bool
-	tableID    int64
+	tableID          int64
 }
 
 func (j *job) String() string {
@@ -311,7 +311,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 
 			if job.binlogTp == translator.DDL {
 				// compute txn duration
-				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, nil, nil ,true, false)
+				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, nil, nil, true, false)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
 						log.Fatalf(errors.ErrorStack(err))
@@ -504,7 +504,6 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 			// the offset of specified type sql
 			offsets = make(map[pb.MutationType]int)
-
 
 			// the binlog dml sort
 			sequences = mutation.GetSequence()
