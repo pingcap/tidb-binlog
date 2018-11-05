@@ -66,6 +66,7 @@ host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
+# checkpoint-schema = "tidb_binlog"
 # Time and size limits for flash batch write
 # time-limit = "30s"
 # size-limit = "100000"
