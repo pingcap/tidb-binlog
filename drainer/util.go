@@ -180,7 +180,7 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 			}
 			combineArgs = append(combineArgs, currentArgs)
 		}
-		log.Debugf("total %d sqls, after combine have %s sqls", len(sqls), len(combineSQLs))
+		log.Debugf("total %d sqls, after combine have %d sqls", len(sqls), len(combineSQLs))
 	}
 
 	beginTime := time.Now()
