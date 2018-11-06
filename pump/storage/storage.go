@@ -26,6 +26,7 @@ import (
 
 const (
 	maxTxnTimeoutSecond int64 = 600
+	chanSize                  = 1 << 20
 )
 
 var (
@@ -135,7 +136,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	writeCh := make(chan *request, 1<<10)
+	writeCh := make(chan *request, chanSize)
 	append = &Append{
 		dir:            dir,
 		vlog:           vlog,
@@ -313,6 +314,9 @@ func (a *Append) updateStatus() {
 	defer updateSizeTicker.Stop()
 	updateSize := updateSizeTicker.C
 
+	logStatsTicker := time.NewTicker(time.Second * 10)
+	defer logStatsTicker.Stop()
+
 	for {
 		select {
 		case <-a.close:
@@ -331,6 +335,17 @@ func (a *Append) updateStatus() {
 			} else {
 				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
 				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+			}
+		case <-logStatsTicker.C:
+			var stats leveldb.DBStats
+			err := a.metadata.Stats(&stats)
+			if err != nil {
+				log.Error(err)
+			} else {
+				log.Infof("DBStats: %+v", stats)
+				if stats.WritePaused {
+					log.Warn("in WritePaused stat")
+				}
 			}
 		}
 	}
@@ -599,7 +614,7 @@ func (a *Append) writeToSorter(reqs chan *request) {
 }
 
 func (a *Append) writeToKV(reqs chan *request) chan *request {
-	done := make(chan *request, 1024)
+	done := make(chan *request, chanSize)
 
 	batchReqs := a.batchRequest(reqs, 128)
 
@@ -691,7 +706,7 @@ func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*reque
 }
 
 func (a *Append) writeToValueLog(reqs chan *request) chan *request {
-	done := make(chan *request, 1024)
+	done := make(chan *request, chanSize)
 
 	go func() {
 		defer close(done)
