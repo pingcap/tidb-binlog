@@ -76,8 +76,8 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),
 	}
 
-	if cfg.SyncerCfg.To.CheckpointSchema != "" {
-		checkpointCfg.Schema = cfg.SyncerCfg.To.CheckpointSchema
+	if cfg.SyncerCfg.To.Checkpoint.Schema != "" {
+		checkpointCfg.Schema = cfg.SyncerCfg.To.Checkpoint.Schema
 	}
 
 	return checkpointCfg
