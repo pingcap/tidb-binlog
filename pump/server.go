@@ -74,6 +74,9 @@ type Server struct {
 	pdCli                   pd.Client
 	cfg                     *Config
 
+	writeBinlogCount int64
+	alivePullerCount int64
+
 	isClosed int32
 }
 
@@ -183,6 +186,7 @@ func getPdClient(cfg *Config) (pd.Client, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+	atomic.AddInt64(&s.writeBinlogCount, 1)
 	return s.writeBinlog(ctx, in, false)
 }
 
@@ -242,6 +246,7 @@ errHandle:
 func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
 	var err error
 	beginTime := time.Now()
+	atomic.AddInt64(&s.alivePullerCount, 1)
 
 	log.Debug("get PullBinlogs req: ", in)
 	defer func() {
@@ -253,6 +258,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			label = "succ"
 		}
 
+		atomic.AddInt64(&s.alivePullerCount, -1)
 		rpcHistogram.WithLabelValues("PullBinlogs", label).Observe(time.Since(beginTime).Seconds())
 	}()
 
@@ -364,6 +370,9 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go s.startMetrics()
 
+	s.wg.Add(1)
+	go s.printServerInfo()
+
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 
@@ -473,6 +482,25 @@ func (s *Server) genForwardBinlog() {
 	}
 }
 
+func (s *Server) printServerInfo() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(time.Second * 10)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			log.Info("printServerInfo exit")
+			return
+		case <-ticker.C:
+			log.Infof("writeBinlogCount: %d, alivePullerCount: %d,  maxCommitTS: %d",
+				atomic.LoadInt64(&s.writeBinlogCount), atomic.LoadInt64(&s.alivePullerCount),
+				s.storage.MaxCommitTS())
+		}
+	}
+}
+
 func (s *Server) gcBinlogFile() {
 	defer s.wg.Done()
 
@@ -491,14 +519,14 @@ func (s *Server) gcBinlogFile() {
 				log.Warn(err)
 				continue
 			}
-			log.Debug("safe tso for drainers: ", safeTSO)
+			log.Info("safe ts for drainers: ", safeTSO)
 
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 			if safeTSO < gcTS {
 				gcTS = safeTSO
 			}
-			log.Debug("gc tso: ", gcTS)
+			log.Info("gc ts: ", gcTS)
 			s.storage.GCTS(gcTS)
 		}
 	}
