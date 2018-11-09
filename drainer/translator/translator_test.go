@@ -48,13 +48,15 @@ func (t *testTranslatorSuite) TestRegisterAndUnregister(c *C) {
 func (t *testTranslatorSuite) TestTranslater(c *C) {
 	s, err := New("mysql")
 	c.Assert(err, IsNil)
-	testGenInsertSQLs(c, s)
+	testGenInsertSQLs(c, s, true)
+	testGenInsertSQLs(c, s, false)
 	testGenUpdateSQLs(c, s)
 	testGenDeleteSQLs(c, s)
 	testGenDDLSQL(c, s)
 }
 
-func testGenInsertSQLs(c *C, s SQLTranslator) {
+func testGenInsertSQLs(c *C, s SQLTranslator, useInsert bool) {
+	s.SetConfig(false, false, useInsert)
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedKeys := []int{0, 2, 1}
@@ -65,7 +67,11 @@ func testGenInsertSQLs(c *C, s SQLTranslator) {
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
-		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		if useInsert {
+			c.Assert(sqls[0], Equals, "insert into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		} else {
+			c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		}
 		for index := range vals[0] {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
