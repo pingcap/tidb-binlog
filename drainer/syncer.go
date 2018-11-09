@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -56,6 +57,9 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
+
+	// safeMode is a mode for translate sql, will translate update to delete and insert/replace
+	safeMode int32
 }
 
 // NewSyncer returns a Drainer instance
@@ -93,6 +97,7 @@ func closeJobChans(jobChs []chan *job) {
 
 // Start starts to sync.
 func (s *Syncer) Start(jobs []*model.Job) error {
+	go s.enableSafeModeInitializationPhase(s.cfg.SafeMode)
 	err := s.run(jobs)
 
 	return errors.Trace(err)
@@ -127,6 +132,25 @@ func (s *Syncer) checkWait(job *job) bool {
 	}
 
 	return false
+}
+
+func (s *Syncer) enableSafeModeInitializationPhase(safeMode bool) {
+	atomic.StoreInt32(&s.safeMode, 1)
+
+	go func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer func() {
+			cancel()
+			if !safeMode {
+				atomic.StoreInt32(&s.safeMode, 0)
+			}
+		}()
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Minute):
+		}
+	}()
 }
 
 type job struct {
@@ -376,7 +400,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
+	s.translator.SetConfig(s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])
@@ -464,6 +488,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
+	safeMode := atomic.LoadInt32(&s.safeMode) == 1
 
 	for mutationIdx, mutation := range mutations {
 		isLastMutation := (mutationIdx == len(mutations)-1)
@@ -509,7 +534,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS, safeMode)
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -532,7 +557,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
 
 			// update is split to delete and insert
-			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
+			if dmlType == pb.MutationType_Update && safeMode && useMysqlProtocol {
 				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, false)
 				if err != nil {
 					return errors.Trace(err)

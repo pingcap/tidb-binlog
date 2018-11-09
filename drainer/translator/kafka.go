@@ -25,7 +25,7 @@ func init() {
 	Register("kafka", &kafkaTranslator{})
 }
 
-func (p *kafkaTranslator) SetConfig(bool, bool, bool) {
+func (p *kafkaTranslator) SetConfig(bool, bool) {
 	// do nothing
 }
 
@@ -54,7 +54,7 @@ func (p *kafkaTranslator) GenInsertSQLs(schema string, tableInfo *model.TableInf
 	return sqls, keys, values, nil
 }
 
-func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64, safeMode bool) ([]string, [][]string, [][]interface{}, error) {
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))

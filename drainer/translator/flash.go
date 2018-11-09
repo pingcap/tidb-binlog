@@ -27,7 +27,7 @@ func init() {
 }
 
 // Config set the configuration
-func (f *flashTranslator) SetConfig(bool, bool, bool) {
+func (f *flashTranslator) SetConfig(bool, bool) {
 }
 
 func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -113,7 +113,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, safeMode bool) ([]string, [][]string, [][]interface{}, error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {

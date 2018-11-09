@@ -25,13 +25,13 @@ var providers = make(map[string]SQLTranslator)
 // SQLTranslator is the interface for translating TiDB binlog to target sqls
 type SQLTranslator interface {
 	// Config set the configuration
-	SetConfig(bool, bool, bool)
+	SetConfig(bool, bool)
 
 	// GenInsertSQLs generates the insert sqls
 	GenInsertSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)
 
 	// GenUpdateSQLs generates the update sqls
-	GenUpdateSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)
+	GenUpdateSQLs(string, *model.TableInfo, [][]byte, int64, bool) ([]string, [][]string, [][]interface{}, error)
 
 	// GenDeleteSQLs generates the delete sqls by cols values
 	GenDeleteSQLs(string, *model.TableInfo, [][]byte, int64) ([]string, [][]string, [][]interface{}, error)

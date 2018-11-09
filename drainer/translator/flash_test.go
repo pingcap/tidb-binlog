@@ -71,7 +71,7 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 		oldRowDatas, _ := testFlashGenRowData(c, table, 1, false)
 		newRowDatas, newExpected := testFlashGenRowData(c, table, i, false)
 		binlog := testFlashGenUpdateBinlog(c, table, oldRowDatas, newRowDatas)
-		sqls, keys, vals, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog}, genCommitTS(i))
+		sqls, keys, vals, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog}, genCommitTS(i), false)
 		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
 			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
 		}
@@ -86,7 +86,7 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 	table := testGenTable("normal")
 	rowDatas, _ := testFlashGenRowData(c, table, 1, false)
 	binlog := testFlashGenUpdateBinlog(c, table, rowDatas, rowDatas)
-	_, _, _, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog[6:]}, 0)
+	_, _, _, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog[6:]}, 0, false)
 	c.Assert(err, NotNil)
 }
 
