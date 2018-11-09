@@ -22,11 +22,14 @@ const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct {
-	// safeMode is a mode for translate sql, will translate update to delete and replace
+	// safeMode is a mode for translate sql, will translate update to delete and insert/replace
 	safeMode bool
 
 	// hasImplicitCol is used for tidb implicit column
 	hasImplicitCol bool
+
+	// if set true, will generate SQL like 'insert into ...' for insert. otherwise, will generate SQL like 'replace into ...'
+	useInsert bool
 }
 
 func init() {
@@ -34,9 +37,10 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
+func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol, useInsert bool) {
 	m.safeMode = safeMode
 	m.hasImplicitCol = hasImplicitCol
+	m.useInsert = useInsert
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -48,7 +52,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
-	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+
+	insertStr := "replace"
+	if m.useInsert {
+		insertStr = "insert"
+	}
+	sql := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
 		//decode the pk value
@@ -208,8 +217,12 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		sqls = append(sqls, deleteSQL)
 		values = append(values, deleteValue)
 
-		// generate replace sql
-		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+		// generate insert sql
+		insertStr := "replace"
+		if m.useInsert {
+			insertStr = "insert"
+		}
+		replaceSQL := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
 		sqls = append(sqls, replaceSQL)
 		values = append(values, newValues)
 

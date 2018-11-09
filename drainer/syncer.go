@@ -376,7 +376,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])

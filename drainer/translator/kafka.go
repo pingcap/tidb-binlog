@@ -25,7 +25,7 @@ func init() {
 	Register("kafka", &kafkaTranslator{})
 }
 
-func (p *kafkaTranslator) SetConfig(safeMode, hasImplicitCol bool) {
+func (p *kafkaTranslator) SetConfig(bool, bool, bool) {
 	// do nothing
 }
 

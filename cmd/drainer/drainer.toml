@@ -38,6 +38,9 @@ disable-dispatch = false
 # safe mode will split update to delete and insert
 safe-mode = false
 
+# if set false, will generate SQL like 'replace into ...' for insert
+use-insert = false
+
 # downstream storage, equal to --dest-db-type
 # valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "mysql"
