@@ -213,12 +213,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		sqls = append(sqls, deleteSQL)
 		values = append(values, deleteValue)
 
-		// generate insert sql
-		insertStr := "replace"
-		if m.useInsert {
-			insertStr = "insert"
-		}
-		replaceSQL := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
+		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 		sqls = append(sqls, replaceSQL)
 		values = append(values, newValues)
 
