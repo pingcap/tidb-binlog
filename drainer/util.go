@@ -157,8 +157,6 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 					} else {
 						combineSQLs = append(combineSQLs, fmt.Sprintf("%s,%s", currentSql, generatePlaceholders(currentArgNum, combineNum-1)))
 						combineArgs = append(combineArgs, currentArgs)
-						log.Infof("combineSQL: %s, combineArg: %v", combineSQLs[len(combineSQLs)-1], currentArgs)
-
 						startCombine = false
 					}
 				} else {
@@ -196,10 +194,10 @@ func execute(executor executor.Executor, sqls []string, args [][]interface{}, co
 }
 
 // generatePlaceholders returns placeholders like (?, ?, ?),(?, ?, ?)
-func generatePlaceholders(i, j int) string {
-	placeholders := make([]string, 0, j)
-	for k := 0; k < j; k++ {
-		placeholders = append(placeholders, fmt.Sprintf("(%s)", dml.GenColumnPlaceholders(i)))
+func generatePlaceholders(argvNum, length int) string {
+	placeholders := make([]string, 0, length)
+	for k := 0; k < length; k++ {
+		placeholders = append(placeholders, fmt.Sprintf("(%s)", dml.GenColumnPlaceholders(argvNum)))
 	}
 
 	return strings.Join(placeholders, ",")

@@ -161,7 +161,7 @@ func (j *job) String() string {
 	}
 	builder.WriteString("]")
 
-	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v, isCompleteBinlog: %v}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID, j.isCompleteBinlog)
+	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v, isCompleteBinlog: %v, tableID: %d}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID, j.isCompleteBinlog, j.tableID)
 }
 
 func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string, isCompleteBinlog bool, tableID int64) *job {
@@ -177,7 +177,7 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 }
 
 func (s *Syncer) addJob(job *job) {
-	log.Debugf("add job: %s, tableID: %d", job, job.tableID)
+	log.Debugf("add job: %s", job)
 
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
