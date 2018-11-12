@@ -185,6 +185,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
+		s.causality.reset()
 		s.savePoint(job.commitTS, s.positions)
 	}
 }
@@ -194,6 +195,8 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+
+	log.Debugf("keys: %v, dispatch key: %v", keys, key)
 
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID, isCompleteBinlog)
 	s.addJob(job)
