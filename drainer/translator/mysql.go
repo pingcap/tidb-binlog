@@ -235,7 +235,6 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		keys = append(keys, key)
 	}
 
-	log.Infof("safe mode sqls: %+v", sqls)
 	return sqls, keys, values, nil
 }
 
