@@ -53,7 +53,7 @@ type Syncer struct {
 
 	filter *filter
 
-	c *causality
+	causality *causality
 
 	lastSyncTime time.Time
 }
@@ -68,7 +68,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS, _ = cp.Pos()
 	syncer.positions = make(map[string]pb.Pos)
-	syncer.c = newCausality()
+	syncer.causality = newCausality()
 	syncer.lastSyncTime = time.Now()
 	syncer.filter = newFilter(formatIgnoreSchemas(cfg.IgnoreSchemas), cfg.DoDBs, cfg.DoTables)
 
@@ -202,18 +202,18 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 		return keys[0], nil
 	}
 
-	if s.c.detectConflict(keys) {
+	if s.causality.detectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
-		s.c.reset()
+		s.causality.reset()
 	}
 
-	if err := s.c.add(keys); err != nil {
+	if err := s.causality.add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	return s.c.get(keys[0]), nil
+	return s.causality.get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {
