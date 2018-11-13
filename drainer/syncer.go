@@ -129,6 +129,24 @@ func (s *Syncer) checkWait(job *job) bool {
 	return false
 }
 
+func (s *Syncer) enableSafeModeInitializationPhase() {
+	// set safeMode to true and useInsert to flase at the first, and will use the config after 5 minutes.
+	s.translator.SetConfig(true)
+
+	go func() {
+		ctx, cancel := context.WithCancel(s.ctx)
+		defer func() {
+			cancel()
+			s.translator.SetConfig(s.cfg.SafeMode)
+		}()
+
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Minute):
+		}
+	}()
+}
+
 type job struct {
 	binlogTp   translator.OpType
 	mutationTp pb.MutationType
@@ -376,7 +394,8 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.DestDBType == "tidb")
+	s.translator.SetConfig(s.cfg.SafeMode)
+	go s.enableSafeModeInitializationPhase()
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])
@@ -484,6 +503,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		var (
+			safeMode bool
+
 			err  error
 			sqls = make(map[pb.MutationType][]string)
 
@@ -509,7 +530,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
@@ -532,7 +553,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
 
 			// update is split to delete and insert
-			if dmlType == pb.MutationType_Update && s.cfg.SafeMode && useMysqlProtocol {
+			if dmlType == pb.MutationType_Update && safeMode && useMysqlProtocol {
 				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, false)
 				if err != nil {
 					return errors.Trace(err)
