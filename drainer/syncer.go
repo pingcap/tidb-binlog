@@ -185,6 +185,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
+		s.causality.reset()
 		s.savePoint(job.commitTS, s.positions)
 	}
 }
@@ -194,6 +195,8 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
+
+	log.Debugf("keys: %v, dispatch key: %v", keys, key)
 
 	job := newDMLJob(tp, sql, args, key, commitTS, pos, nodeID, isCompleteBinlog)
 	s.addJob(job)
@@ -374,6 +377,13 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		binlog := b.binlog
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+
+		// there is safeForwardTime in the collector.go
+		// the first return binlog commitTS may less than s.initCommitTS
+		// there's no this problem in the new version binlog
+		if commitTS <= s.initCommitTS {
+			continue
+		}
 
 		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
