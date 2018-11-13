@@ -229,6 +229,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
+		s.causality.reset()
 		s.savePoint(job.commitTS)
 	}
 }
@@ -240,6 +241,8 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	}
 
 	job := newDMLJob(tp, sql, args, key, commitTS, nodeID, isCompleteBinlog)
+	log.Debugf("keys: %v, dispatch key: %v", keys, key)
+
 	s.addJob(job)
 	return nil
 }
@@ -421,15 +424,17 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		}
 
 		binlog := b.binlog
-		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		if startTS == commitTS {
-			// generate fake binlog job
-			s.addJob(newFakeJob(commitTS, b.nodeID))
+		// there is safeForwardTime in the collector.go
+		// the first return binlog commitTS may less than s.initCommitTS
+		// there's no this problem in the new version binlog
+		if commitTS <= s.initCommitTS {
+			continue
+		}
 
-		} else if jobID == 0 {
+		if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)

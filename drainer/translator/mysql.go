@@ -3,6 +3,7 @@ package translator
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -427,6 +428,38 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll boo
 	return uniqueCols, nil
 }
 
+func (m *mysqlTranslator) getIndexColumns(table *model.TableInfo) (indexColumns [][]*model.ColumnInfo, err error) {
+	col := m.pkHandleColumn(table)
+	if col != nil {
+		indexColumns = append(indexColumns, []*model.ColumnInfo{col})
+	}
+
+	columns := make(map[string]*model.ColumnInfo)
+	for _, col := range table.Columns {
+		columns[col.Name.O] = col
+	}
+
+	// if primary key is handle table.Indices will not contain the primary
+	// but if primary key is not handle, table.Indices will contain the primary
+	for _, idx := range table.Indices {
+		if idx.Unique {
+			var cols []*model.ColumnInfo
+			for _, col := range idx.Columns {
+				if column, ok := columns[col.Name.O]; ok {
+					cols = append(cols, column)
+				}
+			}
+
+			if len(cols) == 0 {
+				return nil, errors.New("primary or unique index is empty, but should not be empty")
+			}
+			indexColumns = append(indexColumns, cols)
+		}
+	}
+
+	return
+}
+
 // IsPKHandleColumn check if the column if the pk handle of tidb
 func IsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
 	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
@@ -452,27 +485,38 @@ func (m *mysqlTranslator) generateColumnAndValue(columns []*model.ColumnInfo, co
 	return newColumn, newColumnsValues, nil
 }
 
-func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) ([]string, error) {
-	var columnsValues []string
-	columns, err := m.uniqueIndexColumns(table, true)
+func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValues map[int64]types.Datum) (keys []string, err error) {
+	indexColumns, err := m.getIndexColumns(table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	for _, col := range columns {
-		val, ok := columnValues[col.ID]
-		if ok {
-			value, err := formatData(val, col.FieldType)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+	for _, cols := range indexColumns {
+		var columnsValues []string
+		for _, col := range cols {
+			val, ok := columnValues[col.ID]
+			if ok {
+				value, err := formatData(val, col.FieldType)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
 
-			columnsValues = append(columnsValues, fmt.Sprintf("[%s: %v]", col.Name, value.GetValue()))
-		} else {
-			columnsValues = append(columnsValues, fmt.Sprintf("[%s: %v]", col.Name, col.DefaultValue))
+				if value.GetValue() != nil {
+					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
+				}
+			} else {
+				if col.DefaultValue != nil {
+					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+				}
+			}
+		}
+		if len(columnValues) > 0 {
+			key := strings.Join(columnsValues, ",")
+			keys = append(keys, key)
 		}
 	}
-	return columnsValues, nil
+
+	return
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
