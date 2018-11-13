@@ -416,6 +416,8 @@ func (m *mysqlTranslator) getIndexColumns(table *model.TableInfo) (indexColumns 
 		columns[col.Name.O] = col
 	}
 
+	// if primary key is handle table.Indices will not contain the primary
+	// but if primary key is not handle, table.Indices will contain the primary
 	for _, idx := range table.Indices {
 		if idx.Unique {
 			var cols []*model.ColumnInfo
@@ -426,7 +428,7 @@ func (m *mysqlTranslator) getIndexColumns(table *model.TableInfo) (indexColumns 
 			}
 
 			if len(cols) == 0 {
-				return nil, errors.New("primay or unique index is empty, but should not be empty")
+				return nil, errors.New("primary or unique index is empty, but should not be empty")
 			}
 			indexColumns = append(indexColumns, cols)
 		}
