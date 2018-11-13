@@ -269,6 +269,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 		}
 	}
 
+	workerName := workerName(executorIdx % workerMetricsLimit)
 	var err error
 	for {
 		select {
@@ -279,8 +280,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			idx++
 
 			qsize := len(jobChan)
-			qid := executorIdx % workerMetricsLimit
-			queueSizeGauge.WithLabelValues(workerName(qid)).Set(float64(qsize))
+			queueSizeGauge.WithLabelValues(workerName).Set(float64(qsize))
 
 			if job.binlogTp == translator.DDL {
 				// compute txn duration
