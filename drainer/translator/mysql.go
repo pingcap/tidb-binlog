@@ -478,13 +478,19 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 					return nil, errors.Trace(err)
 				}
 
-				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
+				if value.GetValue() != nil {
+					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
+				}
 			} else {
-				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+				if col.DefaultValue != nil {
+					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+				}
 			}
 		}
-		key := strings.Join(columnsValues, ",")
-		keys = append(keys, key)
+		if len(columnValues) > 0 {
+			key := strings.Join(columnsValues, ",")
+			keys = append(keys, key)
+		}
 	}
 
 	return
