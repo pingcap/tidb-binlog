@@ -130,12 +130,15 @@ func (s *Syncer) checkWait(job *job) bool {
 }
 
 func (s *Syncer) enableSafeModeInitializationPhase(safeMode bool) {
+	// set safeMode to true at the first, and will change the safeMode after 5 minutes.
+	s.translator.SetConfig(true, s.cfg.UseInsert)
+
 	go func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer func() {
 			cancel()
 			if !safeMode {
-				s.translator.SetConfig(safeMode, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
+				s.translator.SetConfig(safeMode, s.cfg.UseInsert)
 			}
 		}()
 
@@ -393,8 +396,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	// set safeMode to true at the first, and will change the safeMode after 5 minutes.
-	s.translator.SetConfig(true, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.UseInsert)
 	go s.enableSafeModeInitializationPhase(s.cfg.SafeMode)
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
@@ -530,15 +532,11 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 			offsets[pb.MutationType_Update] = 0
-
-			if len(sqls[pb.MutationType_Update]) == 2*len(mutation.GetUpdatedRows()) {
-				safeMode = true
-			}
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {

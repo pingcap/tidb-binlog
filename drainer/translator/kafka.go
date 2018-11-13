@@ -25,7 +25,7 @@ func init() {
 	Register("kafka", &kafkaTranslator{})
 }
 
-func (p *kafkaTranslator) SetConfig(bool, bool, bool) {
+func (p *kafkaTranslator) SetConfig(bool, bool) {
 	// do nothing
 }
 
@@ -54,7 +54,7 @@ func (p *kafkaTranslator) GenInsertSQLs(schema string, tableInfo *model.TableInf
 	return sqls, keys, values, nil
 }
 
-func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -68,7 +68,7 @@ func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInf
 		var err error
 		tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(tableInfo, row)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, false, errors.Trace(err)
 		}
 
 		sqls = append(sqls, "")
@@ -76,7 +76,7 @@ func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInf
 		keys = append(keys, nil)
 	}
 
-	return sqls, keys, values, nil
+	return sqls, keys, values, false, nil
 }
 
 func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) {

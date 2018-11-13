@@ -27,7 +27,7 @@ func init() {
 }
 
 // Config set the configuration
-func (f *flashTranslator) SetConfig(bool, bool, bool) {
+func (f *flashTranslator) SetConfig(bool, bool) {
 }
 
 func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -113,7 +113,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
@@ -136,7 +136,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		newPkValue := newColumnValues[pkID]
 
 		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name.L)
+			return nil, nil, nil, false, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name.L)
 		}
 
 		if len(newColumnValues) == 0 {
@@ -145,7 +145,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		updateColumns, newValues, err = genColumnAndValue(table.Columns, newColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, false, errors.Trace(err)
 		}
 		// TODO: confirm column list should be the same across update
 		columnList := genColumnList(updateColumns)
@@ -163,18 +163,18 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		// find primary keys
 		oldKey, err := genDispatchKey(table, oldColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, false, errors.Trace(err)
 		}
 		newKey, err := genDispatchKey(table, newColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, false, errors.Trace(err)
 		}
 
 		key := append(newKey, oldKey...)
 		keys = append(keys, key)
 	}
 
-	return sqls, keys, totalValues, nil
+	return sqls, keys, totalValues, false, nil
 }
 
 func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
