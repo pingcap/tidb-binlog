@@ -22,6 +22,9 @@ const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct {
+	// safeMode is a mode for translate sql, will translate update to delete and replace
+	safeMode bool
+
 	// hasImplicitCol is used for tidb implicit column
 	hasImplicitCol bool
 
@@ -34,7 +37,8 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(hasImplicitCol, useInsert bool) {
+func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol, useInsert bool) {
+	m.safeMode = safeMode
 	m.hasImplicitCol = hasImplicitCol
 	m.useInsert = useInsert
 }
@@ -111,8 +115,8 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, safeMode bool) ([]string, [][]string, [][]interface{}, error) {
-	if safeMode {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+	if m.safeMode {
 		return m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
 	}
 

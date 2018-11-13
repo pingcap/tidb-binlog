@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -57,9 +56,6 @@ type Syncer struct {
 	c *causality
 
 	lastSyncTime time.Time
-
-	// safeMode is a mode for translate sql, will translate update to delete and insert/replace
-	safeMode int32
 }
 
 // NewSyncer returns a Drainer instance
@@ -97,7 +93,6 @@ func closeJobChans(jobChs []chan *job) {
 
 // Start starts to sync.
 func (s *Syncer) Start(jobs []*model.Job) error {
-	go s.enableSafeModeInitializationPhase(s.cfg.SafeMode)
 	err := s.run(jobs)
 
 	return errors.Trace(err)
@@ -135,14 +130,12 @@ func (s *Syncer) checkWait(job *job) bool {
 }
 
 func (s *Syncer) enableSafeModeInitializationPhase(safeMode bool) {
-	atomic.StoreInt32(&s.safeMode, 1)
-
 	go func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer func() {
 			cancel()
 			if !safeMode {
-				atomic.StoreInt32(&s.safeMode, 0)
+				s.translator.SetConfig(safeMode, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
 			}
 		}()
 
@@ -400,7 +393,9 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
+	// set safeMode to true at the first, and will change the safeMode after 5 minutes.
+	s.translator.SetConfig(true, s.cfg.DestDBType == "tidb", s.cfg.UseInsert)
+	go s.enableSafeModeInitializationPhase(s.cfg.SafeMode)
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
 		go s.sync(s.executors[i], s.jobCh[i])
@@ -488,7 +483,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
-	safeMode := atomic.LoadInt32(&s.safeMode) == 1
+	safeMode := false
 
 	for mutationIdx, mutation := range mutations {
 		isLastMutation := (mutationIdx == len(mutations)-1)
@@ -534,11 +529,15 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS, safeMode)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}
 			offsets[pb.MutationType_Update] = 0
+
+			if len(sqls[pb.MutationType_Update]) == 2*len(mutation.GetUpdatedRows()) {
+				safeMode = true
+			}
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
