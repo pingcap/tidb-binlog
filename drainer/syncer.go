@@ -483,7 +483,6 @@ func (s *Syncer) run(jobs []*model.Job) error {
 
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
-	safeMode := false
 
 	for mutationIdx, mutation := range mutations {
 		isLastMutation := (mutationIdx == len(mutations)-1)
@@ -504,6 +503,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		var (
+			safeMode bool
+
 			err  error
 			sqls = make(map[pb.MutationType][]string)
 
