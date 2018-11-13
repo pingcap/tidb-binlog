@@ -279,9 +279,8 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			idx++
 
 			qsize := len(jobChan)
-			if executorIdx < workerMetricsLimit {
-				queueSizeGauge.WithLabelValues(workerName(executorIdx)).Set(float64(qsize))
-			}
+			qid := executorIdx % workerMetricsLimit
+			queueSizeGauge.WithLabelValues(workerName(qid)).Set(float64(qsize))
 
 			if job.binlogTp == translator.DDL {
 				// compute txn duration
