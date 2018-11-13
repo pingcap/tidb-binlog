@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -23,11 +24,8 @@ const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct {
-	// safeMode is a mode for translate sql, will translate update to delete and replace
-	safeMode bool
-
-	// hasImplicitCol is used for tidb implicit column
-	hasImplicitCol bool
+	// safeMode is a mode for translate sql, will translate update to delete and replace, and translate insert to replace.
+	safeMode int32
 }
 
 func init() {
@@ -35,9 +33,12 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(safeMode, hasImplicitCol bool) {
-	m.safeMode = safeMode
-	m.hasImplicitCol = hasImplicitCol
+func (m *mysqlTranslator) SetConfig(safeMode bool) {
+	if safeMode {
+		atomic.StoreInt32(&m.safeMode, 1)
+	} else {
+		atomic.StoreInt32(&m.safeMode, 0)
+	}
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -49,7 +50,12 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
-	sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+
+	insertStr := "insert"
+	if atomic.LoadInt32(&m.safeMode) == 1 {
+		insertStr = "replace"
+	}
+	sql := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
 		//decode the pk value
@@ -107,9 +113,11 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
-	if m.safeMode {
-		return m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+	safeMode := atomic.LoadInt32(&m.safeMode) == 1
+	if safeMode {
+		sqls, keys, values, err := m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
+		return sqls, keys, values, safeMode, err
 	}
 
 	columns := table.Columns
@@ -125,7 +133,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
+			return nil, nil, nil, safeMode, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
 		if len(newColumnValues) == 0 {
@@ -134,13 +142,13 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 
 		updateColumns, oldValues, err = m.generateColumnAndValue(columns, oldColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, safeMode, errors.Trace(err)
 		}
 		whereColumns := updateColumns
 
 		updateColumns, newValues, err = m.generateColumnAndValue(columns, newColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, safeMode, errors.Trace(err)
 		}
 
 		var value []interface{}
@@ -150,7 +158,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var where string
 		where, oldValues, err = m.genWhere(table, whereColumns, oldValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, safeMode, errors.Trace(err)
 		}
 		value = append(value, oldValues...)
 		sql := fmt.Sprintf("update `%s`.`%s` set %s where %s limit 1;", schema, table.Name, kvs, where)
@@ -161,18 +169,18 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		// find primary keys
 		oldKey, err := m.generateDispatchKey(table, oldColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, safeMode, errors.Trace(err)
 		}
 		newKey, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, safeMode, errors.Trace(err)
 		}
 
 		key := append(newKey, oldKey...)
 		keys = append(keys, key)
 	}
 
-	return sqls, keys, values, nil
+	return sqls, keys, values, safeMode, nil
 }
 
 func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -210,9 +218,8 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		values = append(values, deleteValue)
 		keys = append(keys, deleteKey)
 
-		// generate replace sql
-		sql := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
-		sqls = append(sqls, sql)
+		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
+		sqls = append(sqls, replaceSQL)
 		values = append(values, newValues)
 
 		// generate dispatching key
