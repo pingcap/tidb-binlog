@@ -26,7 +26,7 @@ func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) SetConfig(safeMode, hasImplicitCol bool) {
+func (p *pbTranslator) SetConfig(bool) {
 	// do nothing
 }
 
@@ -95,7 +95,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
 	columns := table.Columns
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
@@ -105,7 +105,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 	for _, row := range rows {
 		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
 		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
+			return nil, nil, nil, false, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
 
 		if len(newColumnValues) == 0 {
@@ -124,11 +124,11 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 			if ok {
 				oldValue, err := formatData(oldColumnValues[col.ID], col.FieldType)
 				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
+					return nil, nil, nil, false, errors.Trace(err)
 				}
 				newValue, err := formatData(val, col.FieldType)
 				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
+					return nil, nil, nil, false, errors.Trace(err)
 				}
 				oldVals = append(oldVals, oldValue)
 				newVals = append(newVals, newValue)
@@ -140,7 +140,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 
 		rowData, err := encodeUpdateRow(oldVals, newVals, cols, tps, mysqlTypes)
 		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, false, errors.Trace(err)
 		}
 
 		sqls = append(sqls, "")
@@ -148,7 +148,7 @@ func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows
 		keys = append(keys, nil)
 	}
 
-	return sqls, keys, values, nil
+	return sqls, keys, values, false, nil
 }
 
 func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {

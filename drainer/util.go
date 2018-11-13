@@ -50,12 +50,18 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 		Password: cfg.SyncerCfg.To.Password,
 		Port:     cfg.SyncerCfg.To.Port,
 	}
-	return &checkpoint.Config{
+	checkpointCfg := &checkpoint.Config{
 		Db:              &dbCfg,
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
 		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),
 	}
+
+	if cfg.SyncerCfg.To.Checkpoint.Schema != "" {
+		checkpointCfg.Schema = cfg.SyncerCfg.To.Checkpoint.Schema
+	}
+
+	return checkpointCfg
 }
 
 func initializeSaramaGlobalConfig() {
