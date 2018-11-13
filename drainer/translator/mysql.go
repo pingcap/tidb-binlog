@@ -38,10 +38,14 @@ func init() {
 func (m *mysqlTranslator) SetConfig(safeMode, useInsert bool) {
 	if safeMode {
 		atomic.StoreInt32(&m.safeMode, 1)
+	} else {
+		atomic.StoreInt32(&m.safeMode, 0)
 	}
 
 	if useInsert {
 		atomic.StoreInt32(&m.useInsert, 1)
+	} else {
+		atomic.StoreInt32(&m.useInsert, 0)
 	}
 }
 
