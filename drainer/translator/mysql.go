@@ -417,7 +417,7 @@ func (m *mysqlTranslator) getIndexColumns(table *model.TableInfo) (indexColumns 
 	}
 
 	for _, idx := range table.Indices {
-		if idx.Primary || idx.Unique {
+		if idx.Unique {
 			var cols []*model.ColumnInfo
 			for _, col := range idx.Columns {
 				if column, ok := columns[col.Name.O]; ok {
