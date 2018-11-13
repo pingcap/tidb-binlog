@@ -55,8 +55,8 @@ func (t *testTranslatorSuite) TestTranslater(c *C) {
 	testGenDDLSQL(c, s)
 }
 
-func testGenInsertSQLs(c *C, s SQLTranslator, useInsert bool) {
-	s.SetConfig(false, useInsert)
+func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
+	s.SetConfig(safeMode)
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedKeys := []int{0, 2, 1}
@@ -67,10 +67,10 @@ func testGenInsertSQLs(c *C, s SQLTranslator, useInsert bool) {
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
-		if useInsert {
-			c.Assert(sqls[0], Equals, "insert into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
-		} else {
+		if safeMode {
 			c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		} else {
+			c.Assert(sqls[0], Equals, "insert into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
 		}
 		for index := range vals[0] {
 			c.Assert(vals[0][index], DeepEquals, expected[index])

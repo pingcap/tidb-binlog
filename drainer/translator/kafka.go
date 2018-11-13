@@ -25,7 +25,7 @@ func init() {
 	Register("kafka", &kafkaTranslator{})
 }
 
-func (p *kafkaTranslator) SetConfig(bool, bool) {
+func (p *kafkaTranslator) SetConfig(bool) {
 	// do nothing
 }
 

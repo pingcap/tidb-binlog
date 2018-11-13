@@ -51,7 +51,6 @@ type SyncerConfig struct {
 	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
 	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
-	UseInsert        bool               `toml:"use-insert" json:"use-insert"`
 }
 
 // Config holds the configuration of drainer
@@ -108,7 +107,6 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
-	fs.BoolVar(&cfg.SyncerCfg.UseInsert, "use-insert", true, "if set false, will generate SQL like 'replace into ...' for insert")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
 

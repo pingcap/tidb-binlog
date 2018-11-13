@@ -27,7 +27,7 @@ func init() {
 }
 
 // Config set the configuration
-func (f *flashTranslator) SetConfig(bool, bool) {
+func (f *flashTranslator) SetConfig(bool) {
 }
 
 func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {

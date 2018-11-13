@@ -131,13 +131,13 @@ func (s *Syncer) checkWait(job *job) bool {
 
 func (s *Syncer) enableSafeModeInitializationPhase() {
 	// set safeMode to true and useInsert to flase at the first, and will use the config after 5 minutes.
-	s.translator.SetConfig(true, false)
+	s.translator.SetConfig(true)
 
 	go func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer func() {
 			cancel()
-			s.translator.SetConfig(s.cfg.SafeMode, s.cfg.UseInsert)
+			s.translator.SetConfig(s.cfg.SafeMode)
 		}()
 
 		select {
@@ -394,7 +394,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.UseInsert)
+	s.translator.SetConfig(s.cfg.SafeMode)
 	go s.enableSafeModeInitializationPhase()
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {

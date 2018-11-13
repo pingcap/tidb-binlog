@@ -26,7 +26,7 @@ func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) SetConfig(bool, bool) {
+func (p *pbTranslator) SetConfig(bool) {
 	// do nothing
 }
 

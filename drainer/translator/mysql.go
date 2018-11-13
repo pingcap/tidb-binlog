@@ -23,11 +23,8 @@ const implicitColID = -1
 
 // mysqlTranslator translates TiDB binlog to mysql sqls
 type mysqlTranslator struct {
-	// safeMode is a mode for translate sql, will translate update to delete and replace
+	// safeMode is a mode for translate sql, will translate update to delete and replace, and translate insert to replace.
 	safeMode int32
-
-	// if set 1, will generate SQL like 'insert into ...' for insert. otherwise, will generate SQL like 'replace into ...'
-	useInsert int32
 }
 
 func init() {
@@ -35,17 +32,11 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(safeMode, useInsert bool) {
+func (m *mysqlTranslator) SetConfig(safeMode bool) {
 	if safeMode {
 		atomic.StoreInt32(&m.safeMode, 1)
 	} else {
 		atomic.StoreInt32(&m.safeMode, 0)
-	}
-
-	if useInsert {
-		atomic.StoreInt32(&m.useInsert, 1)
-	} else {
-		atomic.StoreInt32(&m.useInsert, 0)
 	}
 }
 
@@ -59,9 +50,9 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
 
-	insertStr := "replace"
-	if atomic.LoadInt32(&m.useInsert) == 1 {
-		insertStr = "insert"
+	insertStr := "insert"
+	if atomic.LoadInt32(&m.safeMode) == 1 {
+		insertStr = "replace"
 	}
 	sql := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
 
