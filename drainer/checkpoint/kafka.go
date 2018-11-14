@@ -3,7 +3,6 @@ package checkpoint
 import (
 	"math"
 	"sync"
-	"sync/atomic"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -23,16 +22,19 @@ type KafkaMeta struct {
 	// set to be the minimize commit ts of binlog if we have some binlog not having successful sent to kafka
 	// or set to be `math.MaxInt64`
 	safeTS int64
+
+	lock sync.Mutex
+	cond *sync.Cond
 }
 
 // SetSafeTS set the safe ts to be ts
 func (m *KafkaMeta) SetSafeTS(ts int64) {
-	atomic.StoreInt64(&m.safeTS, ts)
-}
+	log.Debug("set safe ts: ", ts)
 
-// GetSafeTS return the safe ts
-func (m *KafkaMeta) GetSafeTS() int64 {
-	return atomic.LoadInt64(&m.safeTS)
+	m.lock.Lock()
+	m.safeTS = ts
+	m.cond.Signal()
+	m.lock.Unlock()
 }
 
 var kafkaMeta *KafkaMeta
@@ -42,6 +44,7 @@ var kafkaMetaOnce sync.Once
 func GetKafkaMeta() *KafkaMeta {
 	kafkaMetaOnce.Do(func() {
 		kafkaMeta = new(KafkaMeta)
+		kafkaMeta.cond = sync.NewCond(&kafkaMeta.lock)
 	})
 
 	return kafkaMeta
@@ -63,11 +66,6 @@ func newKafka(cfg *Config) (CheckPoint, error) {
 	return cp, nil
 }
 
-// SetSafeTS set the safe ts to be ts
-func (cp *KafkaCheckpoint) SetSafeTS(ts int64) {
-	cp.meta.SetSafeTS(ts)
-}
-
 // Save implements CheckPoint.Save()
 func (cp *KafkaCheckpoint) Save(ts int64, pos map[string]binlog.Pos) error {
 	cp.Lock()
@@ -78,10 +76,12 @@ func (cp *KafkaCheckpoint) Save(ts int64, pos map[string]binlog.Pos) error {
 		return nil
 	}
 
-	if cp.meta.GetSafeTS() < ts {
-		log.Debug("skip save ts: ", ts)
-		return nil
+	cp.meta.lock.Lock()
+	for cp.meta.safeTS < ts {
+		log.Debugf("wait for ts: %d safe_ts: %d", ts, cp.meta.safeTS)
+		cp.meta.cond.Wait()
 	}
+	cp.meta.lock.Unlock()
 
 	return cp.PbCheckPoint.Save(ts, pos)
 }
