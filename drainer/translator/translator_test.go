@@ -65,11 +65,7 @@ func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
 		rowDatas, expected, expectedKeys := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog}, 0)
-		//if exceptedKeys[i] > 0 {
-		//	c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
-		//} else {
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[i]], ",")))
-		//}
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		if safeMode {
@@ -104,8 +100,6 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, _, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog}, 0)
 		c.Assert(err, IsNil)
-		//c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", append(changedKeys[:exceptedKeys[index]], whereKeys[:exceptedKeys[index]]...)))
-
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", []string{strings.Join(changedKeys[:exceptedKeys[index]], ","), strings.Join(whereKeys[:exceptedKeys[index]], ",")}))
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
