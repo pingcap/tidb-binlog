@@ -3,13 +3,13 @@ package drainer
 import (
 	"fmt"
 	"hash/crc32"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
-	"math/rand"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
@@ -159,12 +159,10 @@ func createExecutors(destDBType string, cfg *executor.DBConfig, count int) ([]ex
 	return executors, nil
 }
 
-func genHashKey(key string) uint32 {
-	if len(key) == 0 {
-		num := uint32(rand.Intn(1000))
-		log.Infof("key is empty, return a random number %d", num)
+func genHashKey(key string, random bool) uint32 {
+	if len(key) == 0 && random {
 		return uint32(rand.Intn(1000))
-	} 
+	}
 	return crc32.ChecksumIEEE([]byte(key))
 }
 

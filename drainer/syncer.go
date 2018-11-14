@@ -191,7 +191,7 @@ func (s *Syncer) addJob(job *job) {
 	}
 
 	s.jobWg.Add(1)
-	idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+	idx := int(genHashKey(job.key, s.cfg.RandomDispatch)) % s.cfg.WorkerCount
 	s.jobCh[idx] <- job
 	log.Debugf("job commit TS %d sql %s args %v key %s", job.commitTS, job.sql, job.args, job.key)
 

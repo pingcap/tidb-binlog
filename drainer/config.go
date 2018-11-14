@@ -51,6 +51,7 @@ type SyncerConfig struct {
 	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType       string             `toml:"db-type" json:"db-type"`
 	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	RandomDispatch   bool               `toml:"random-dispatch" json:"random-dispatch"`
 	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
 }
@@ -125,6 +126,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 1, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or pb or flash or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
+	fs.BoolVar(&cfg.SyncerCfg.RandomDispatch, "random-dispatch", false, "if set true, will dispatch sqls to random thread if without primary key or unique key")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
