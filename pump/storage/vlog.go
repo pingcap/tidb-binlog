@@ -28,6 +28,8 @@ const (
 type Options struct {
 	ValueLogFileSize int64
 	Sync             bool
+
+	Storage *StorageConfig
 }
 
 // DefaultOptions return the default options
@@ -36,6 +38,12 @@ func DefaultOptions() *Options {
 		ValueLogFileSize: 500 * (1 << 20),
 		Sync:             true,
 	}
+}
+
+// WithStorage set the StorageConfig
+func (o *Options) WithStorage(storage *StorageConfig) *Options {
+	o.Storage = storage
+	return o
 }
 
 // WithValueLogFileSize set the ValueLogFileSize
