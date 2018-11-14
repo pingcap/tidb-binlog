@@ -171,6 +171,7 @@ func (p *kafkaExecutor) run() {
 		select {
 		case msg := <-p.producer.Successes():
 			commitTs := msg.Metadata.(int64)
+			log.Debug("commitTs: ", commitTs, " return success from kafka")
 			p.lastSuccessTime = time.Now()
 
 			p.toBeAckCommitTSMu.Lock()
