@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"golang.org/x/net/context"
@@ -68,6 +69,15 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
+	queryHistogramVec = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "query_duration_time",
+			Help:      "Bucketed histogram of processing time (s) of a query to sync data to downstream.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"type"})
+
 	binlogReachDurationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -108,6 +118,8 @@ func init() {
 	registry.MustRegister(executeHistogram)
 	registry.MustRegister(binlogReachDurationHistogram)
 	registry.MustRegister(readBinlogSizeHistogram)
+	registry.MustRegister(queryHistogramVec)
+	executor.QueryHistogramVec = queryHistogramVec
 	registry.MustRegister(queueSizeGauge)
 }
 

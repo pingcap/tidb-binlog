@@ -3,9 +3,14 @@ package executor
 import (
 	"database/sql"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/juju/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
+
+// QueryHistogram get the sql query time
+var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
 	db *sql.DB
@@ -23,7 +28,7 @@ func newMysql(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	return pkgsql.ExecuteSQLs(m.db, sqls, args, isDDL)
+	return pkgsql.ExecuteSQLsWithHistogram(m.db, sqls, args, isDDL, QueryHistogramVec)
 }
 
 func (m *mysqlExecutor) Close() error {

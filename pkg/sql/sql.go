@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -25,10 +27,18 @@ var (
 	MaxDDLRetryCount = 5
 	// RetryWaitTime defines wait time when retrying.
 	RetryWaitTime = 3 * time.Second
+
+	// SlowWarnLog defines the duration to log warn log of sql when exec time greater than
+	SlowWarnLog = 100 * time.Millisecond
 )
 
 // ExecuteSQLs execute sqls in a transaction with retry.
 func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) error {
+	return ExecuteSQLsWithHistogram(db, sqls, args, isDDL, nil)
+}
+
+// ExecuteSQLsWithHistogram execute sqls in a transaction with retry.
+func ExecuteSQLsWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool, hist *prometheus.HistogramVec) error {
 	if len(sqls) == 0 {
 		return nil
 	}
@@ -45,7 +55,7 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 			time.Sleep(RetryWaitTime)
 		}
 
-		err = ExecuteTxn(db, sqls, args)
+		err = ExecuteTxnWithHistogram(db, sqls, args, hist)
 		if err == nil {
 			return nil
 		}
@@ -56,6 +66,11 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 
 // ExecuteTxn executes transaction
 func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
+	return ExecuteTxnWithHistogram(db, sqls, args, nil)
+}
+
+// ExecuteTxnWithHistogram executes transaction
+func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hist *prometheus.HistogramVec) error {
 	txn, err := db.Begin()
 	if err != nil {
 		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
@@ -64,6 +79,8 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 
 	for i := range sqls {
 		//log.Debugf("[exec][sql]%s[args]%v", sqls[i], args[i])
+
+		startTime := time.Now()
 
 		_, err = txn.Exec(sqls[i], args[i]...)
 		if err != nil {
@@ -74,12 +91,27 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 			}
 			return errors.Trace(err)
 		}
+
+		takeDuration := time.Since(startTime)
+		if hist != nil {
+			hist.WithLabelValues("exec").Observe(takeDuration.Seconds())
+		}
+		if takeDuration > SlowWarnLog {
+			log.Warnf("[exec slow log take %v][sql]%s[args]%v", takeDuration, sqls[i], args[i])
+		}
 	}
+
+	startTime := time.Now()
 
 	err = txn.Commit()
 	if err != nil {
 		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
 		return errors.Trace(err)
+	}
+
+	if hist != nil {
+		takeDuration := time.Since(startTime)
+		hist.WithLabelValues("commit").Observe(takeDuration.Seconds())
 	}
 
 	return nil
