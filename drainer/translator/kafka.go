@@ -300,7 +300,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 
 	// TiDB don't suppose now
 	case "geometry":
-		log.Warn("unknow mysql type: ", colInfo.Tp)
+		log.Warn("unknown mysql type: ", colInfo.Tp)
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 
@@ -308,7 +308,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.BytesValue = []byte(datum.GetMysqlJSON().String())
 
 	default:
-		log.Warn("unknow mysql type: ", colInfo.Tp)
+		log.Warn("unknown mysql type: ", colInfo.Tp)
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 

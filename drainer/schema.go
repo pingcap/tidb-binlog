@@ -370,7 +370,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
-		log.Infof("get unknow ddl type %v", job.Type)
+		log.Infof("get unknown ddl type %v", job.Type)
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
