@@ -23,6 +23,8 @@ import (
 var (
 	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
+
+	workerMetricsLimit = 10
 )
 
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
@@ -53,7 +55,7 @@ type Syncer struct {
 
 	filter *filter
 
-	c *causality
+	causality *causality
 
 	lastSyncTime time.Time
 }
@@ -68,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS = cp.TS()
 	syncer.positions = make(map[string]int64)
-	syncer.c = newCausality()
+	syncer.causality = newCausality()
 	syncer.lastSyncTime = time.Now()
 	syncer.filter = newFilter(formatIgnoreSchemas(cfg.IgnoreSchemas), cfg.DoDBs, cfg.DoTables)
 
@@ -193,6 +195,10 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
+func workerName(idx int) string {
+	return fmt.Sprintf("worker_%d", idx)
+}
+
 func (s *Syncer) addJob(job *job) {
 	log.Debugf("add job: %s", job)
 
@@ -223,6 +229,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
+		s.causality.reset()
 		s.savePoint(job.commitTS)
 	}
 }
@@ -234,6 +241,8 @@ func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, k
 	}
 
 	job := newDMLJob(tp, sql, args, key, commitTS, nodeID, isCompleteBinlog)
+	log.Debugf("keys: %v, dispatch key: %v", keys, key)
+
 	s.addJob(job)
 	return nil
 }
@@ -247,18 +256,18 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 		return keys[0], nil
 	}
 
-	if s.c.detectConflict(keys) {
+	if s.causality.detectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
-		s.c.reset()
+		s.causality.reset()
 	}
 
-	if err := s.c.add(keys); err != nil {
+	if err := s.causality.add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	return s.c.get(keys[0]), nil
+	return s.causality.get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {
@@ -282,7 +291,7 @@ func (s *Syncer) savePoint(ts int64) {
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 }
 
-func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
+func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx int) {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
@@ -311,6 +320,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 		}
 	}
 
+	workerName := workerName(executorIdx % workerMetricsLimit)
 	var err error
 	for {
 		select {
@@ -319,6 +329,9 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job) {
 				return
 			}
 			idx++
+
+			qsize := len(jobChan)
+			queueSizeGauge.WithLabelValues(workerName).Set(float64(qsize))
 
 			if job.binlogTp == translator.DDL {
 				// compute txn duration
@@ -380,7 +393,6 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		} else {
 			log.Debug("get ddl binlog job: ", string(data))
 		}
-
 	}
 	s.schema, err = NewSchema(jobs, s.cfg.DestDBType == "tidb")
 
@@ -398,7 +410,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 	go s.enableSafeModeInitializationPhase()
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {
-		go s.sync(s.executors[i], s.jobCh[i])
+		go s.sync(s.executors[i], s.jobCh[i], i)
 	}
 
 	var b *binlogItem
@@ -407,6 +419,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		case <-s.ctx.Done():
 			return nil
 		case b = <-s.input:
+			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
 			log.Debugf("consume binlogItem: %s", b)
 		}
 

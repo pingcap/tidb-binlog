@@ -95,6 +95,14 @@ var (
 			Help:      "Bucketed histogram of size of a binlog.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
 		}, []string{"nodeID"})
+
+	queueSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "queue_size",
+			Help:      "the size of queue",
+		}, []string{"name"})
 )
 
 var registry = prometheus.NewRegistry()
@@ -112,6 +120,7 @@ func init() {
 	registry.MustRegister(readBinlogSizeHistogram)
 	registry.MustRegister(queryHistogramVec)
 	executor.QueryHistogramVec = queryHistogramVec
+	registry.MustRegister(queueSizeGauge)
 }
 
 type metricClient struct {
