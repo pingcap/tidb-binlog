@@ -69,14 +69,14 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		})
 
-	queryHistogram = prometheus.NewHistogram(
+	queryHistogramVec = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
 			Subsystem: "drainer",
 			Name:      "query_duration_time",
 			Help:      "Bucketed histogram of processing time (s) of a query to sync data to downstream.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		})
+		}, []string{"type"})
 
 	binlogReachDurationHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -110,8 +110,8 @@ func init() {
 	registry.MustRegister(executeHistogram)
 	registry.MustRegister(binlogReachDurationHistogram)
 	registry.MustRegister(readBinlogSizeHistogram)
-	registry.MustRegister(queryHistogram)
-	executor.QueryHistogram = queryHistogram
+	registry.MustRegister(queryHistogramVec)
+	executor.QueryHistogramVec = queryHistogramVec
 }
 
 type metricClient struct {

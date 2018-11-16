@@ -29,7 +29,7 @@ var (
 	RetryWaitTime = 3 * time.Second
 
 	// SlowWarnLog defines the duration to log warn log of sql when exec time greater than
-	SlowWarnLog = 300 * time.Millisecond
+	SlowWarnLog = 100 * time.Millisecond
 )
 
 // ExecuteSQLs execute sqls in a transaction with retry.
@@ -38,7 +38,7 @@ func ExecuteSQLs(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool) er
 }
 
 // ExecuteSQLsWithHistogram execute sqls in a transaction with retry.
-func ExecuteSQLsWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool, hist prometheus.Histogram) error {
+func ExecuteSQLsWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, isDDL bool, hist *prometheus.HistogramVec) error {
 	if len(sqls) == 0 {
 		return nil
 	}
@@ -70,7 +70,7 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 }
 
 // ExecuteTxnWithHistogram executes transaction
-func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hist prometheus.Histogram) error {
+func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hist *prometheus.HistogramVec) error {
 	txn, err := db.Begin()
 	if err != nil {
 		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
@@ -94,17 +94,24 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 
 		takeDuration := time.Since(startTime)
 		if hist != nil {
-			hist.Observe(takeDuration.Seconds())
+			hist.WithLabelValues("exec").Observe(takeDuration.Seconds())
 		}
 		if takeDuration > SlowWarnLog {
-			log.Warnf("[exec slow log][sql]%s[args]%v", sqls[i], args[i])
+			log.Warnf("[exec slow log take %v][sql]%s[args]%v", takeDuration, sqls[i], args[i])
 		}
 	}
+
+	startTime := time.Now()
 
 	err = txn.Commit()
 	if err != nil {
 		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
 		return errors.Trace(err)
+	}
+
+	if hist != nil {
+		takeDuration := time.Since(startTime)
+		hist.WithLabelValues("commit").Observe(takeDuration.Seconds())
 	}
 
 	return nil

@@ -10,7 +10,7 @@ import (
 )
 
 // QueryHistogram get the sql query time
-var QueryHistogram prometheus.Histogram
+var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
 	db *sql.DB
@@ -28,7 +28,7 @@ func newMysql(cfg *DBConfig) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	return pkgsql.ExecuteSQLsWithHistogram(m.db, sqls, args, isDDL, QueryHistogram)
+	return pkgsql.ExecuteSQLsWithHistogram(m.db, sqls, args, isDDL, QueryHistogramVec)
 }
 
 func (m *mysqlExecutor) Close() error {
