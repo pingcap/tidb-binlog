@@ -424,17 +424,15 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		}
 
 		binlog := b.binlog
+		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		// there is safeForwardTime in the collector.go
-		// the first return binlog commitTS may less than s.initCommitTS
-		// there's no this problem in the new version binlog
-		if commitTS <= s.initCommitTS {
-			continue
-		}
+		if startTS == commitTS {
+			// generate fake binlog job
+			s.addJob(newFakeJob(commitTS, b.nodeID))
 
-		if jobID == 0 {
+		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
