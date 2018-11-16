@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"time"
@@ -64,7 +65,8 @@ func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
 		rowDatas, expected, expectedKeys := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog}, 0)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[i]], ",")))
+
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		if safeMode {
@@ -99,7 +101,17 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, _, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog}, 0)
 		c.Assert(err, IsNil)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", append(changedKeys[:exceptedKeys[index]], whereKeys[:exceptedKeys[index]]...)))
+
+		c.Logf("keys: %v, vals: %v", keys, vals)
+
+		var shouldBe []string
+		if strings.Join(changedKeys[:exceptedKeys[index]], ",") != "" {
+			shouldBe = append(shouldBe, strings.Join(changedKeys[:exceptedKeys[index]], ","))
+		}
+		if strings.Join(whereKeys[:exceptedKeys[index]], ",") != "" {
+			shouldBe = append(shouldBe, strings.Join(whereKeys[:exceptedKeys[index]], ","))
+		}
+		c.Assert(keys[0], DeepEquals, shouldBe)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals[0] {
@@ -130,7 +142,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		rowDatas, expected, expectedKeys := testGenRowData(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog}, 0)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[index]]))
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[index]], ",")))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
@@ -221,7 +233,7 @@ func testGenRowData(c *C, cols []*model.ColumnInfo, base int) ([]types.Datum, []
 		d, e := testGenDatum(c, col, base)
 		datas[index] = d
 		excepted[index] = e
-		keys[index] = fmt.Sprintf("[%s: %v]", col.Name, e)
+		keys[index] = fmt.Sprintf("(%s: %v)", col.Name, e)
 
 	}
 	return datas, excepted, keys
@@ -366,11 +378,12 @@ func testGenTable(tt string) *model.TableInfo {
 		})
 
 	case "hasPK":
-		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
+		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag | mysql.UniqueKeyFlag
 		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
 
 		t.Indices = append(t.Indices, &model.IndexInfo{
 			Primary: true,
+			Unique:  true,
 			Columns: []*model.IndexColumn{{Name: userIDCol.Name}, {Name: userNameCol.Name}},
 		})
 	}
