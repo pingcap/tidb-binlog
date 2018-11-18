@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/net/context"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 var (
@@ -382,7 +383,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	err = b.Rotate(binlog.GetCommitTs())
+	err = b.Rotate(binlog.GetCommitTs()+int64(1))
 	return curOffset, errors.Trace(err)
 }
 
