@@ -100,7 +100,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		binlogData, err := binlog.Marshal()
 		c.Assert(err, IsNil)
 		fb.WriteTail(&gb.Entity{Payload: binlogData})
-		err = fb.Rotate()
+		err = fb.Rotate(baseTS + int64(i+1))
 		c.Assert(err, IsNil)
 	}
 

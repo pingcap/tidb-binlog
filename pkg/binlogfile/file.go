@@ -154,12 +154,13 @@ func ParseBinlogName(str string) (index uint64, err error) {
 }
 
 // BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-
-func BinlogName(index uint64) string {
-	currentTime := time.Now()
-	return binlogNameWithDateTime(index, currentTime)
+func BinlogName(index uint64, ts int64) string {
+	// transfor ts to rough time 
+	t := time.Unix(ts>>18/1000, 0)
+	return binlogNameWithDateTime(index, t)
 }
 
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
+	return fmt.Sprintf("binlog-%016d-t%s", index, datetime.Format(datetimeFormat))
 }

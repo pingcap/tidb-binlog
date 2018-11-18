@@ -13,9 +13,9 @@ type pbExecutor struct {
 	binlogger pump.Binlogger
 }
 
-func newPB(cfg *DBConfig) (Executor, error) {
+func newPB(cfg *DBConfig, ts int64) (Executor, error) {
 	codec := compress.ToCompressionCodec(cfg.Compression)
-	binlogger, err := pump.OpenBinlogger(cfg.BinlogFileDir, codec)
+	binlogger, err := pump.OpenBinlogger(cfg.BinlogFileDir, codec, ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

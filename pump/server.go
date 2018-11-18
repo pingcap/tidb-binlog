@@ -16,6 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -191,7 +192,12 @@ func (s *Server) init() error {
 		}
 	}
 
-	s.dispatcher, err = s.getBinloggerToWrite()
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.dispatcher, err = s.getBinloggerToWrite(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -199,7 +205,7 @@ func (s *Server) init() error {
 	return nil
 }
 
-func (s *Server) getBinloggerToWrite() (Binlogger, error) {
+func (s *Server) getBinloggerToWrite(ts int64) (Binlogger, error) {
 	if s.dispatcher != nil {
 		return s.dispatcher, nil
 	}
@@ -223,7 +229,7 @@ func (s *Server) getBinloggerToWrite() (Binlogger, error) {
 	case mixedWriteMode:
 		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
 
-		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone, ts) // no compression now.
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -272,7 +278,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	ret := &binlog.WriteBinlogResp{}
-	binlogger, err1 := s.getBinloggerToWrite()
+	binlogger, err1 := s.getBinloggerToWrite(-1)
 	if err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)
@@ -438,7 +444,7 @@ func (s *Server) writeFakeBinlog() {
 	// there are only one binlogger for the specified cluster
 	// so we can use only one needGenBinlog flag
 	if s.needGenBinlog.Get() {
-		binlogger, err := s.getBinloggerToWrite()
+		binlogger, err := s.getBinloggerToWrite(-1)
 		if err != nil {
 			log.Errorf("generate forward binlog, get binlogger err %v", err)
 			return
