@@ -16,7 +16,6 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"

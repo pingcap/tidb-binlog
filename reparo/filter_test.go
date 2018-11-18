@@ -1,16 +1,17 @@
 package repora
 
 import (
-	"os"
+	"fmt"
+	//"os"
 	"testing"
-	"time"
+	//"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
+	//"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb-binlog/pump"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	gb "github.com/pingcap/tipb/go-binlog"
+	//"github.com/pingcap/tidb-binlog/pump"
+	//"github.com/pingcap/tidb/store/tikv/oracle"
+	//gb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -80,64 +81,128 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 }
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
-	binlogDir := "./reparo-test"
-
-	err := os.MkdirAll(binlogDir, 0755)
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(binlogDir)
-
-	fb, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone)
-	c.Assert(err, IsNil)
-	defer fb.Close()
-
-	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
-
-	// create binlog file
-	for i := 0; i < 10; i++ {
-		binlog := &pb.Binlog{
-			CommitTs: baseTS + int64(i),
-		}
-		binlogData, err := binlog.Marshal()
-		c.Assert(err, IsNil)
-		fb.WriteTail(&gb.Entity{Payload: binlogData})
-		err = fb.Rotate(baseTS + int64(i+1))
-		c.Assert(err, IsNil)
-	}
-
 	reparos := []*Reparo{
 		{
 			cfg: &Config{
-				Dir:      binlogDir,
-				StartTSO: baseTS,
-				StopTSO:  baseTS + 9,
+				StartDatetime: "2018-10-01 11:11:11",
+				StopDatetime: "2018-10-01 12:11:11",
 			},
 		},
 		{
 			cfg: &Config{
-				Dir:      binlogDir,
-				StartTSO: baseTS + 1,
-				StopTSO:  baseTS + 2,
+				StopDatetime: "2018-10-01 12:11:11",
 			},
 		},
 		{
 			cfg: &Config{
-				Dir:      binlogDir,
-				StartTSO: baseTS + 2,
-			},
-		},
-		{
-			cfg: &Config{
-				Dir:     binlogDir,
-				StopTSO: baseTS + 2,
+				StartDatetime: "2018-10-01 11:11:11",
 			},
 		},
 	}
 
-	expectFileNums := []int{10, 2, 8, 3}
+	fileNames := [][]string{
+		{
+			"binlog-0000000000000000-t20181001101111",
+			"binlog-0000000000000001-t20181001102111",
+			"binlog-0000000000000002-t20181001103111",
+			"binlog-0000000000000003-t20181001111110",
+		},
+		{
+			"binlog-0000000000000000-t20181001111111",
+			"binlog-0000000000000001-t20181001111112",
+			"binlog-0000000000000002-t20181001121111",
+		},
+		{
+			"binlog-0000000000000000-t20181001111112",
+			"binlog-0000000000000001-t20181001111113",
+			"binlog-0000000000000002-t20181001211113",
+		},
+	}
+
+	expectFileNums := [][]int{
+		{1, 3, 2},
+		{4, 3, 2},
+		{1, 3, 3},
+	}
+
+	var err error
 
 	for i, r := range reparos {
-		files, err := r.searchFiles(binlogDir)
-		c.Assert(err, IsNil)
-		c.Assert(len(files), Equals, expectFileNums[i])
+		if r.cfg.StartDatetime != "" {
+			r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
+			c.Assert(err, IsNil)
+		}
+
+		if r.cfg.StopDatetime != "" {
+			r.cfg.StopTSO, err = dateTimeToTSO(r.cfg.StopDatetime)
+			c.Assert(err, IsNil)
+		}
+
+		for j, fs := range fileNames {
+			filterBinlogFile, err := r.filterFiles(fs)
+			c.Assert(err, IsNil)
+			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
+		}
 	}
+	/*
+		binlogDir := "./reparo-test"
+
+		err := os.MkdirAll(binlogDir, 0755)
+		c.Assert(err, IsNil)
+		defer os.RemoveAll(binlogDir)
+
+		baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+		fb, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone, baseTS)
+		c.Assert(err, IsNil)
+		defer fb.Close()
+
+		// create binlog file
+		for i := 0; i < 10; i++ {
+			binlog := &pb.Binlog{
+				CommitTs: baseTS + int64(i),
+			}
+			binlogData, err := binlog.Marshal()
+			c.Assert(err, IsNil)
+			fb.WriteTail(&gb.Entity{Payload: binlogData})
+			err = fb.Rotate(baseTS + int64(i+1))
+			c.Assert(err, IsNil)
+		}
+
+		reparos := []*Reparo{
+			{
+				cfg: &Config{
+					Dir:      binlogDir,
+					StartTSO: baseTS,
+					StopTSO:  baseTS + 9,
+				},
+			},
+			{
+				cfg: &Config{
+					Dir:      binlogDir,
+					StartTSO: baseTS + 1,
+					StopTSO:  baseTS + 2,
+				},
+			},
+			{
+				cfg: &Config{
+					Dir:      binlogDir,
+					StartTSO: baseTS + 2,
+				},
+			},
+			{
+				cfg: &Config{
+					Dir:     binlogDir,
+					StopTSO: baseTS + 2,
+				},
+			},
+		}
+
+		expectFileNums := []int{10, 2, 8, 3}
+
+		for i, r := range reparos {
+			files, err := r.searchFiles(binlogDir)
+			c.Assert(err, IsNil)
+			c.Assert(len(files), Equals, expectFileNums[i])
+		}
+	*/
 }
