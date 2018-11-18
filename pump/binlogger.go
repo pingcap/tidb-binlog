@@ -38,6 +38,8 @@ type Binlogger interface {
 	// batch write binlog event, and returns current offset(if have).
 	WriteTail(entity *binlog.Entity) (int64, error)
 
+	AsyncWriteTail(entity *binlog.Entity, cb callback)
+
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
 	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error
 
@@ -162,14 +164,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 	err := b.Walk(ctx, from, func(entity *binlog.Entity) error {
 		if len(ents) < inums {
-			var dup binlog.Entity
-			dup.Pos = entity.Pos
-			dup.Payload = make([]byte, len(entity.Payload))
-			copy(dup.Payload, entity.Payload)
-			dup.Checksum = make([]byte, len(entity.Checksum))
-			copy(dup.Checksum, entity.Checksum)
-
-			ents = append(ents, dup)
+			ents = append(ents, *entity)
 		}
 
 		if len(ents) == inums {
@@ -183,7 +178,6 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
-// Note: entity is not safe to use after sendBinlog has return
 func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
 	log.Infof("[binlogger] walk from position %+v", from)
 	var (
@@ -279,7 +273,15 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
 			from.Offset = ent.Pos.Offset
-			err := sendBinlog(ent)
+
+			var dup binlog.Entity
+			dup.Pos = ent.Pos
+			dup.Payload = make([]byte, len(ent.Payload))
+			copy(dup.Payload, ent.Payload)
+			dup.Checksum = make([]byte, len(ent.Checksum))
+			copy(dup.Checksum, ent.Checksum)
+
+			err := sendBinlog(&dup)
 			binlogBufferPool.Put(buf)
 			if err != nil {
 				return errors.Trace(err)
@@ -370,6 +372,12 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 
 	err = b.rotate()
 	return curOffset, errors.Trace(err)
+}
+
+// AsyncWriteTail use WriteTail actually now
+func (b *binlogger) AsyncWriteTail(entity *binlog.Entity, cb callback) {
+	offset, err := b.WriteTail(entity)
+	cb(offset, err)
 }
 
 // Close closes the binlogger

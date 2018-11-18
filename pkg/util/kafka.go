@@ -68,6 +68,18 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 	return nil, errors.Trace(err)
 }
 
+// NewSaramaConfig return the default config and set the according version and metrics
+func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config, error) {
+	config := sarama.NewConfig()
+	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	config.Version = version
+	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
+	return config, nil
+}
+
 // CreateKafkaConsumer creates a kafka consumer
 func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
 	kafkaCfg := sarama.NewConfig()
@@ -83,4 +95,43 @@ func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
 
 	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+}
+
+// NewNeverFailAsyncProducer will set the retry number  to a pretty high number, and you should treat fail
+// when Producer.Successes don't return the msg after a reasonable time
+func NewNeverFailAsyncProducer(addrs []string, config *sarama.Config) (sarama.AsyncProducer, error) {
+	// maintain minimal set that has been necessary so far
+	// this also avoid take too much time in NewAsyncProducer if kafka is down
+	// because it will fetch metadata right away if setting Full = true, and we set
+	// config.Metadata.Retry.Max to be a pretty hight value
+	// maybe when this issue if fixed: https://github.com/Shopify/sarama/issues/1145
+	// we can avoid setting Metadata.Retry to be a pretty hight value too
+	config.Metadata.Full = false
+	config.Metadata.Retry.Max = 10000
+	config.Metadata.Retry.Backoff = 500 * time.Millisecond
+
+	// just set to a pretty high retry num, so we will not drop some msg and
+	// continue to push the laster msg, server need to quit after a reasonable time
+	// aim to avoid not continuity msg sent to kafka.. see: https://github.com/Shopify/sarama/issues/838
+	config.Producer.Retry.Max = 10000
+	config.Producer.Retry.Backoff = 500 * time.Millisecond
+
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+
+	producer, err := sarama.NewAsyncProducer(addrs, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	go func() {
+		for e := range producer.Errors() {
+			log.Error(e.Err, e.Msg)
+			log.Error("fail to push data to kafka after long time please check kafka is working")
+			// quit ASAP, or we may miss some msg and have had sent the later msg successfully
+			panic(e)
+		}
+	}()
+
+	return producer, err
 }
