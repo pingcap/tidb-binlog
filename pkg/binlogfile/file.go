@@ -153,7 +153,7 @@ func ParseBinlogName(str string) (index uint64, err error) {
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-
+// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-t20180101010101
 func BinlogName(index uint64, ts int64) string {
 	// transfor ts to rough time 
 	t := time.Unix(ts>>18/1000, 0)

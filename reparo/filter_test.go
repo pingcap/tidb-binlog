@@ -2,16 +2,15 @@ package repora
 
 import (
 	"fmt"
-	//"os"
+	"os"
 	"testing"
-	//"time"
+	"time"
 
 	. "github.com/pingcap/check"
-	//"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	//"github.com/pingcap/tidb-binlog/pump"
-	//"github.com/pingcap/tidb/store/tikv/oracle"
-	//gb "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tidb-binlog/pump"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	gb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -22,7 +21,7 @@ var _ = Suite(&testReparoSuite{})
 
 type testReparoSuite struct{}
 
-func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
+func (s *testReparoSuite) TestIsAcceptableBinlogNew(c *C) {
 	cases := []struct {
 		startTs  int64
 		endTs    int64
@@ -80,12 +79,13 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 	}
 }
 
-func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
+func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
+	// we can get the first binlog's commit ts by parse binlog file'name in new version.
 	reparos := []*Reparo{
 		{
 			cfg: &Config{
 				StartDatetime: "2018-10-01 11:11:11",
-				StopDatetime: "2018-10-01 12:11:11",
+				StopDatetime:  "2018-10-01 12:11:11",
 			},
 		},
 		{
@@ -144,65 +144,68 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
 		}
 	}
-	/*
-		binlogDir := "./reparo-test"
+}
 
-		err := os.MkdirAll(binlogDir, 0755)
+func (s *testReparoSuite) TestIsAcceptableBinlogFileOld(c *C) {
+	// we can get the first binlog's commit ts by decode data in binlog file.
+	binlogDir := "./reparo-test"
+
+	err := os.MkdirAll(binlogDir, 0755)
+	c.Assert(err, IsNil)
+	defer os.RemoveAll(binlogDir)
+
+	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+
+	// create binlog file
+	for i := 0; i < 10; i++ {
+		binlog := &pb.Binlog{
+			CommitTs: baseTS + int64(i),
+		}
+		binlogData, err := binlog.Marshal()
 		c.Assert(err, IsNil)
-		defer os.RemoveAll(binlogDir)
 
-		baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
-		fb, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone, baseTS)
+		// generate binlog file by old version's format.
+		binloger, err := pump.CreateBinloggerForTest(binlogDir, fmt.Sprintf("binlog-000000000000000%d-20180101010101", i))
 		c.Assert(err, IsNil)
-		defer fb.Close()
+		binloger.WriteTail(&gb.Entity{Payload: binlogData})
+		err = binloger.Close()
+		c.Assert(err, IsNil)
+	}
 
-		// create binlog file
-		for i := 0; i < 10; i++ {
-			binlog := &pb.Binlog{
-				CommitTs: baseTS + int64(i),
-			}
-			binlogData, err := binlog.Marshal()
-			c.Assert(err, IsNil)
-			fb.WriteTail(&gb.Entity{Payload: binlogData})
-			err = fb.Rotate(baseTS + int64(i+1))
-			c.Assert(err, IsNil)
-		}
+	reparos := []*Reparo{
+		{
+			cfg: &Config{
+				Dir:      binlogDir,
+				StartTSO: baseTS,
+				StopTSO:  baseTS + 9,
+			},
+		},
+		{
+			cfg: &Config{
+				Dir:      binlogDir,
+				StartTSO: baseTS + 1,
+				StopTSO:  baseTS + 2,
+			},
+		},
+		{
+			cfg: &Config{
+				Dir:      binlogDir,
+				StartTSO: baseTS + 2,
+			},
+		},
+		{
+			cfg: &Config{
+				Dir:     binlogDir,
+				StopTSO: baseTS + 2,
+			},
+		},
+	}
 
-		reparos := []*Reparo{
-			{
-				cfg: &Config{
-					Dir:      binlogDir,
-					StartTSO: baseTS,
-					StopTSO:  baseTS + 9,
-				},
-			},
-			{
-				cfg: &Config{
-					Dir:      binlogDir,
-					StartTSO: baseTS + 1,
-					StopTSO:  baseTS + 2,
-				},
-			},
-			{
-				cfg: &Config{
-					Dir:      binlogDir,
-					StartTSO: baseTS + 2,
-				},
-			},
-			{
-				cfg: &Config{
-					Dir:     binlogDir,
-					StopTSO: baseTS + 2,
-				},
-			},
-		}
+	expectFileNums := []int{10, 2, 8, 3}
 
-		expectFileNums := []int{10, 2, 8, 3}
-
-		for i, r := range reparos {
-			files, err := r.searchFiles(binlogDir)
-			c.Assert(err, IsNil)
-			c.Assert(len(files), Equals, expectFileNums[i])
-		}
-	*/
+	for i, r := range reparos {
+		files, err := r.searchFiles(binlogDir)
+		c.Assert(err, IsNil)
+		c.Assert(len(files), Equals, expectFileNums[i])
+	}
 }
