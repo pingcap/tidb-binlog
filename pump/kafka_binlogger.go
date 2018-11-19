@@ -100,4 +100,3 @@ func (k *kafkaBinloger) GC(days time.Duration, pos binlog.Pos) {}
 func (k *kafkaBinloger) Name() string {
 	return strings.Join(k.addr, ",")
 }
-

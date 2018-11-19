@@ -65,7 +65,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, 1)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -81,7 +81,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.rotate(), IsNil)
+		c.Assert(b.rotate(1), IsNil)
 	}
 
 	ents, err := bl.ReadFrom(binlog.Pos{}, 11)
