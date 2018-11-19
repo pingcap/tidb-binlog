@@ -103,7 +103,7 @@ func NewNeverFailAsyncProducer(addrs []string, config *sarama.Config) (sarama.As
 	// maintain minimal set that has been necessary so far
 	// this also avoid take too much time in NewAsyncProducer if kafka is down
 	// because it will fetch metadata right away if setting Full = true, and we set
-	// config.Metadata.Retry.Max to be a pretty hight value
+	// config.Metadata.Retry.Max to be a pretty high value
 	// maybe when this issue if fixed: https://github.com/Shopify/sarama/issues/1145
 	// we can avoid setting Metadata.Retry to be a pretty hight value too
 	config.Metadata.Full = false

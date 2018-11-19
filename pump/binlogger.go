@@ -274,14 +274,9 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 			from.Offset = ent.Pos.Offset
 
-			var dup binlog.Entity
-			dup.Pos = ent.Pos
-			dup.Payload = make([]byte, len(ent.Payload))
-			copy(dup.Payload, ent.Payload)
-			dup.Checksum = make([]byte, len(ent.Checksum))
-			copy(dup.Checksum, ent.Checksum)
+			dup := cloneEntity(ent)
 
-			err := sendBinlog(&dup)
+			err := sendBinlog(dup)
 			binlogBufferPool.Put(buf)
 			if err != nil {
 				return errors.Trace(err)
@@ -377,7 +372,9 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 // AsyncWriteTail use WriteTail actually now
 func (b *binlogger) AsyncWriteTail(entity *binlog.Entity, cb callback) {
 	offset, err := b.WriteTail(entity)
-	cb(offset, err)
+	if cb != nil {
+		cb(offset, err)
+	}
 }
 
 // Close closes the binlogger
@@ -439,4 +436,15 @@ func (b *binlogger) seq() uint64 {
 	}
 
 	return seq
+}
+
+func cloneEntity(ent *binlog.Entity) (dup *binlog.Entity) {
+	dup = new(binlog.Entity)
+	dup.Pos = ent.Pos
+	dup.Payload = make([]byte, len(ent.Payload))
+	copy(dup.Payload, ent.Payload)
+	dup.Checksum = make([]byte, len(ent.Checksum))
+	copy(dup.Checksum, ent.Checksum)
+
+	return
 }

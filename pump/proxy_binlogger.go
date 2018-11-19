@@ -3,7 +3,6 @@ package pump
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -68,7 +67,9 @@ func (p *Proxy) WriteTail(entity *binlog.Entity) (int64, error) {
 
 func (p *Proxy) AsyncWriteTail(entity *binlog.Entity, cb callback) {
 	offset, err := p.WriteTail(entity)
-	cb(offset, err)
+	if cb != nil {
+		cb(offset, err)
+	}
 }
 
 // Close closes the binlogger
@@ -145,7 +146,6 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 func (p *Proxy) sync() {
 	writePos := p.cp.pos()
 
-	var infilght int64
 	var saveMut sync.Mutex
 
 	syncBinlog := func(entity *binlog.Entity) error {
@@ -154,14 +154,11 @@ func (p *Proxy) sync() {
 		}
 
 		writePos = entity.Pos
-		atomic.AddInt64(&infilght, 1)
 
 		p.replicate.AsyncWriteTail(entity, func(_ int64, err error) {
 			if err != nil {
 				panic(err)
 			}
-
-			atomic.AddInt64(&infilght, -1)
 
 			saveMut.Lock()
 			defer saveMut.Unlock()

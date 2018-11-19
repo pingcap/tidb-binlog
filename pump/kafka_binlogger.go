@@ -130,7 +130,9 @@ func (k *kafkaBinloger) AsyncWriteTail(entity *binlog.Entity, cb callback) {
 	for i := 0; i < len(msgs); i++ {
 		// when the last msg successes, we call the callback
 		if i == len(msgs)-1 {
-			msgs[i].Metadata = cb
+			if cb != nil {
+				msgs[i].Metadata = cb
+			}
 		}
 		k.aproducer.Input() <- msgs[i]
 	}
