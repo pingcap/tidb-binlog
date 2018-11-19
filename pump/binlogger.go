@@ -51,9 +51,6 @@ type Binlogger interface {
 
 	// Name tells the name of underlying file
 	Name() string
-
-	// Rotate creates a new file to write binlog
-	Rotate(int64) error
 }
 
 // binlogger is a logical representation of the log storage
@@ -107,6 +104,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec, ts int64) (B
 	// if no binlog files, we create from binlog.0000000000000000
 	if len(names) == 0 {
 		if ts < 0 {
+			// it will nearly never happened
 			ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 		}
 		lastFileName = path.Join(dirpath, bf.BinlogName(0, ts))
@@ -411,7 +409,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	latestFilePos.Offset = curOffset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	if curOffset < GlobalConfig.segmentSizeBytes {
+	//if curOffset < GlobalConfig.segmentSizeBytes {
 		return curOffset, nil
 	}
 
@@ -421,7 +419,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	err = b.Rotate(binlog.GetCommitTs() + int64(1))
+	err = b.rotate(binlog.GetCommitTs() + int64(1))
 	return curOffset, errors.Trace(err)
 }
 
@@ -450,7 +448,7 @@ func (b *binlogger) Name() string {
 }
 
 // rotate creates a new file for append binlog
-func (b *binlogger) Rotate(ts int64) error {
+func (b *binlogger) rotate(ts int64) error {
 	filename := bf.BinlogName(b.seq()+1, ts)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0

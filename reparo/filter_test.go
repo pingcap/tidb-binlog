@@ -21,7 +21,7 @@ var _ = Suite(&testReparoSuite{})
 
 type testReparoSuite struct{}
 
-func (s *testReparoSuite) TestIsAcceptableBinlogNew(c *C) {
+func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 	cases := []struct {
 		startTs  int64
 		endTs    int64

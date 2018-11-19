@@ -101,7 +101,3 @@ func (k *kafkaBinloger) Name() string {
 	return strings.Join(k.addr, ",")
 }
 
-// Rotate implemnets the Binlogger interface.
-func (k *kafkaBinloger) Rotate(ts int64) error {
-	return nil
-}

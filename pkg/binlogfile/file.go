@@ -155,7 +155,7 @@ func ParseBinlogName(str string) (index uint64, err error) {
 
 // BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-t20180101010101
 func BinlogName(index uint64, ts int64) string {
-	// transfor ts to rough time 
+	// transfor ts to rough time
 	t := time.Unix(ts>>18/1000, 0)
 	return binlogNameWithDateTime(index, t)
 }
@@ -163,4 +163,13 @@ func BinlogName(index uint64, ts int64) string {
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
 	return fmt.Sprintf("binlog-%016d-t%s", index, datetime.Format(datetimeFormat))
+}
+
+// FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"
+func FormatDateTimeStr(s string) (string, error) {
+	if len(s) != len(datetimeFormat) {
+		return "", errors.Errorf("%s is not a valid time string in binlog file", s)
+	}
+
+	return fmt.Sprintf("%s-%s-%sT%s:%s:%s", s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]), nil
 }

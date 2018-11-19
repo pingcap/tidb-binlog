@@ -573,7 +573,6 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	s.genRegexMap()
 
-	log.Infof("initCommitTS: %d", s.initCommitTS)
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount, s.initCommitTS)
 	if err != nil {
 		return errors.Trace(err)

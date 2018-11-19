@@ -2,7 +2,6 @@ package repora
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -82,7 +81,7 @@ func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 
 	// new version's binlog file looks like binlog.00000000000000001-t20180101010101
 	if strings.HasPrefix(fileNameItems[len(fileNameItems)-1], "t") {
-		timeStr, err := formatTimeStr(fileNameItems[len(fileNameItems)-1][1:])
+		timeStr, err := bf.FormatDateTimeStr(fileNameItems[len(fileNameItems)-1][1:])
 		if err != nil {
 			return 0, errors.Annotatef(err, "analyse binlog file name error")
 		}
@@ -111,12 +110,4 @@ func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 
 		return binlog.CommitTs, nil
 	}
-}
-
-func formatTimeStr(s string) (string, error) {
-	if len(s) != len("20180102010101") {
-		return "", errors.Errorf("%s is not a valid time string in binlog file", s)
-	}
-
-	return fmt.Sprintf("%s-%s-%sT%s:%s:%s", s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]), nil
 }
