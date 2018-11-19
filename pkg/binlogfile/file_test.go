@@ -89,7 +89,7 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 		expectedIndex uint64
 		expectedError bool
 	}{
-		{"binlog-0000000000000001-20180315121212", 0000000000000001, false},
+		{"binlog-0000000000000001-t20180315121212", 0000000000000001, false},
 		{"binlog-0000000000000001", 0000000000000001, false},
 		{"binlog-index", 0, true},
 	}
@@ -112,5 +112,5 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	datetime, err := time.Parse(datetimeFormat, "20180315121212")
 	c.Assert(err, IsNil)
 	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
+	c.Assert(binlogName, Equals, "binlog-0000000000000001-t20180315121212")
 }
