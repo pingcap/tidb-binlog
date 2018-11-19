@@ -409,7 +409,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	latestFilePos.Offset = curOffset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	//if curOffset < GlobalConfig.segmentSizeBytes {
+	if curOffset < GlobalConfig.segmentSizeBytes {
 		return curOffset, nil
 	}
 
