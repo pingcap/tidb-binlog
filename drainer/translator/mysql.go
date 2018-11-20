@@ -3,6 +3,8 @@ package translator
 import (
 	"bytes"
 	"fmt"
+	"hash/crc32"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -476,31 +478,62 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 	}
 
 	for _, cols := range indexColumns {
-		var columnsValues []string
-		for _, col := range cols {
-			val, ok := columnValues[col.ID]
-			if ok {
-				value, err := formatData(val, col.FieldType)
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
-
-				if value.GetValue() != nil {
-					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
-				}
-			} else {
-				if col.DefaultValue != nil {
-					columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
-				}
-			}
+		key, err := extractFingerprint(cols, columnValues)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-		if len(columnValues) > 0 {
-			key := strings.Join(columnsValues, ",")
+		if len(key) > 0 {
 			keys = append(keys, key)
 		}
 	}
 
+	if len(keys) > 0 {
+		return
+	}
+
+	const checkSumKeyLen = 100
+
+	// use all row data as key
+	// later improve it to use some columns as fingerprint
+	key, err := extractFingerprint(table.Columns, columnValues)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(key) > 0 {
+		if len(key) > checkSumKeyLen {
+			key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		}
+		keys = append(keys, key)
+	}
+
 	return
+}
+
+func extractFingerprint(cols []*model.ColumnInfo, columnValues map[int64]types.Datum) (string, error) {
+	var columnsValues = make([]string, 0, len(cols))
+	for _, col := range cols {
+		val, ok := columnValues[col.ID]
+		if ok {
+			value, err := formatData(val, col.FieldType)
+			if err != nil {
+				return "", errors.Trace(err)
+			}
+
+			if value.GetValue() != nil {
+				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
+			}
+		} else {
+			if col.DefaultValue != nil {
+				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+			}
+		}
+	}
+
+	if len(columnValues) > 0 {
+		return strings.Join(columnsValues, ","), nil
+	}
+
+	return "", nil
 }
 
 func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
