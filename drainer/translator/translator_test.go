@@ -60,13 +60,12 @@ func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
 	s.SetConfig(safeMode)
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	exceptedKeys := []int{0, 2, 1}
+	exceptedKeys := []int{3, 2, 1}
 	for i, table := range tables {
 		rowDatas, expected, expectedKeys := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog}, 0)
 		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[i]], ",")))
-
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
 		if safeMode {
@@ -94,24 +93,14 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		"update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? limit 1;",
 	}
 	exceptedNum := []int{6, 5, 4}
-	exceptedKeys := []int{0, 2, 1}
+	exceptedKeys := []int{3, 2, 1}
 	for index, t := range tables {
 		oldRowDatas, whereExpected, whereKeys := testGenRowData(c, t.Columns, 1)
 		newRowDatas, changedExpected, changedKeys := testGenRowData(c, t.Columns, 2)
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
 		sqls, keys, vals, _, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog}, 0)
 		c.Assert(err, IsNil)
-
-		c.Logf("keys: %v, vals: %v", keys, vals)
-
-		var shouldBe []string
-		if strings.Join(changedKeys[:exceptedKeys[index]], ",") != "" {
-			shouldBe = append(shouldBe, strings.Join(changedKeys[:exceptedKeys[index]], ","))
-		}
-		if strings.Join(whereKeys[:exceptedKeys[index]], ",") != "" {
-			shouldBe = append(shouldBe, strings.Join(whereKeys[:exceptedKeys[index]], ","))
-		}
-		c.Assert(keys[0], DeepEquals, shouldBe)
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", []string{strings.Join(changedKeys[:exceptedKeys[index]], ","), strings.Join(whereKeys[:exceptedKeys[index]], ",")}))
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals[0] {
@@ -137,7 +126,7 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		"delete from `t`.`account` where `ID` = ? and `NAME` = ? limit 1;",
 	}
 	exceptedNum := []int{3, 2}
-	exceptedKeys := []int{0, 2}
+	exceptedKeys := []int{3, 2}
 	for index, t := range tables {
 		rowDatas, expected, expectedKeys := testGenRowData(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
