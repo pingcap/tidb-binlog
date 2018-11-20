@@ -3,6 +3,8 @@ package translator
 import (
 	"bytes"
 	"fmt"
+	"hash/crc32"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -489,6 +491,8 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 		return
 	}
 
+	const checkSumKeyLen = 100
+
 	// use all row data as key
 	// later improve it to use some columns as fingerprint
 	key, err := extractFingerprint(table.Columns, columnValues)
@@ -496,6 +500,9 @@ func (m *mysqlTranslator) generateDispatchKey(table *model.TableInfo, columnValu
 		return nil, errors.Trace(err)
 	}
 	if len(key) > 0 {
+		if len(key) > checkSumKeyLen {
+			key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		}
 		keys = append(keys, key)
 	}
 
