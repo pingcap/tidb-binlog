@@ -58,7 +58,8 @@ type Syncer struct {
 
 	causality *causality
 
-	lastSyncTime time.Time
+	lastSyncTime          time.Time
+	lastAddBinlogCommitTS int64
 }
 
 // NewSyncer returns a Drainer instance
@@ -570,9 +571,22 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, pos
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
+	// currently there maybe some duplicate binlog in kafka, and the *sorter unit* will add duplicate binlogItem
+	// the case may cause this:
+	// tidb may try rewrite binlog, so the local binlog file of pump may contains some duplicate binlog
+	// when push the local binlog file data to kafka, will push duplicate binlog too with retry now
+	if b.binlog.CommitTs == s.lastAddBinlogCommitTS {
+		log.Warnf("skip dup binlog %d, lastAddBinlogCommitTS: %d", b.binlog.CommitTs, s.lastAddBinlogCommitTS)
+		return
+	}
+	if b.binlog.CommitTs < s.lastAddBinlogCommitTS {
+		log.Warnf("skip less binlog %d, lastAddBinlogCommitTS: %d", b.binlog.CommitTs, s.lastAddBinlogCommitTS)
+		return
+	}
 	select {
 	case <-s.ctx.Done():
 	case s.input <- b:
+		s.lastAddBinlogCommitTS = b.binlog.CommitTs
 		log.Debugf("receive publish binlog item: %s", b)
 	}
 }
