@@ -195,6 +195,10 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
+func newCompleteJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.COMPLETE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
+}
+
 func workerName(idx int) string {
 	return fmt.Sprintf("worker_%d", idx)
 }
@@ -512,6 +516,10 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 		if s.filter.skipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
+			if isLastMutation {
+				job := newCompleteJob(commitTS, nodeID)
+				s.addJob(job)
+			}
 			continue
 		}
 
