@@ -36,9 +36,7 @@ func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
 }
 
 func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
-	data := encode(entity.Payload)
-
-	data, err := compress.Compress(data, e.codec)
+	data, err := encode(entity.Payload, e.codec)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -58,11 +56,16 @@ func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
 	return 0, errors.Trace(err)
 }
 
-func encode(payload []byte) []byte {
-	crc := crc32.Checksum(payload, crcTable)
+func encode(payload []byte, compression compress.CompressionCodec) ([]byte, error) {
+	compressPayload, err := compress.Compress(payload, compression)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	crc := crc32.Checksum(compressPayload, crcTable)
 
 	// length count payload
-	length := len(payload)
+	length := len(compressPayload)
 
 	// size is length of magic + size + crc + payload
 	size := length + 16
@@ -70,7 +73,7 @@ func encode(payload []byte) []byte {
 
 	binary.LittleEndian.PutUint32(data[:4], Magic)
 	binary.LittleEndian.PutUint64(data[4:12], uint64(length))
-	copy(data[12:size-4], payload)
+	copy(data[12:size-4], compressPayload)
 	binary.LittleEndian.PutUint32(data[size-4:], crc)
-	return data
+	return data, nil
 }
