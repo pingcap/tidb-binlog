@@ -68,7 +68,7 @@ port = 3306
 
 # Uncomment this if you want to use pb or sql as db-type.
 # Compress compresses output file, like pb and sql file. Now it supports "gzip" algorithm only. 
-# Values can be "gzip". Leave it empty to disable compression. 
+# Values can be "gzip" and "flate". Leave it empty to disable compression. 
 #[syncer.to]
 #dir = "data.drainer"
 #compression = "gzip"
