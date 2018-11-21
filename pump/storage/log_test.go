@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"bufio"
+	"bytes"
 	"hash/crc32"
+	"math/rand"
 	"os"
 	"path"
 	"strconv"
@@ -16,20 +19,26 @@ func init() {
 	log.SetLevel(log.LOG_LEVEL_ERROR)
 }
 
-type LogFileSuit struct{}
+type LogFileSuit struct {
+	fuzz *fuzz.Fuzzer
+	// max ts allocate by fuzz for pb.Binlog
+	maxTS int64
+
+	lf *logFile
+}
 
 var _ = check.Suite(&LogFileSuit{})
 
-func (lfs *LogFileSuit) TestLogFile(c *check.C) {
-	// max ts binlog save in file
-	var maxTS int64
-	fuzz := fuzz.New().NilChance(0).NumElements(200, 200).Funcs(
+func (lfs *LogFileSuit) SetUpTest(c *check.C) {
+	// set up fuzz
+	lfs.maxTS = 0
+	lfs.fuzz = fuzz.New().NilChance(0).NumElements(200, 200).Funcs(
 		func(r *Record, c fuzz.Continue) {
 			r.magic = recordMagic
 			binlog := new(pb.Binlog)
 			binlog.CommitTs = int64(c.Intn(10000))
-			if binlog.CommitTs > maxTS {
-				maxTS = binlog.CommitTs
+			if binlog.CommitTs > lfs.maxTS {
+				lfs.maxTS = binlog.CommitTs
 			}
 			binlog.Tp = pb.BinlogType_Commit
 			r.payload, _ = binlog.Marshal()
@@ -38,16 +47,136 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 		},
 	)
 
+	// set up logFile
 	fid := 0
 	name := path.Join(os.TempDir(), strconv.Itoa(fid))
-	defer os.Remove(name)
 
 	lf, err := newLogFile(uint32(fid), name)
 	c.Assert(err, check.IsNil)
+	lfs.lf = lf
+}
+
+func (lfs *LogFileSuit) TearDownTest(c *check.C) {
+	// delete log file
+	os.Remove(lfs.lf.path)
+}
+
+func (lfs *LogFileSuit) TestSeekToNextRecord(c *check.C) {
+	buffer := new(bytes.Buffer)
+
+	// first write a record
+	var payload = make([]byte, 100)
+	recordLen, err := encodeRecord(buffer, payload)
+	c.Log("record len: ", recordLen)
+	c.Assert(err, check.IsNil)
+	// write corruption data
+	_, err = buffer.Write(payload)
+	c.Assert(err, check.IsNil)
+	// write a record again
+	recordLen, err = encodeRecord(buffer, payload)
+	c.Assert(err, check.IsNil)
+
+	// data contains <record><payload len zero data><record>
+	data := buffer.Bytes()
+	firstStart := 0
+	secondStart := recordLen + len(payload)
+	c.Logf("data len: %d, firstStart: %d, secondStart: %d", len(data), firstStart, secondStart)
+
+	for idx := 0; idx < len(data); idx++ {
+		reader := bytes.NewReader(data[idx:])
+		bytes, err := seekToNextRecord(bufio.NewReader(reader))
+		if idx <= firstStart {
+			c.Assert(err, check.IsNil)
+			c.Assert(bytes, check.Equals, firstStart-idx)
+		} else if idx <= secondStart {
+			c.Assert(err, check.IsNil)
+			c.Assert(bytes, check.Equals, secondStart-idx)
+		} else {
+			c.Assert(err, check.NotNil)
+			c.Assert(bytes, check.Equals, len(data)-idx)
+		}
+
+	}
+}
+
+func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
+	lf := lfs.lf
+	var payload = make([]byte, 100)
+	// write one record
+	recordLen, err := encodeRecord(lf.fd, payload)
+	c.Assert(err, check.IsNil)
+
+	// truncate file
+	err = lf.fd.Truncate(int64(recordLen) / 2)
+	c.Assert(err, check.IsNil)
+
+	// write one record
+	recordLen, err = encodeRecord(lf.fd, payload)
+	c.Assert(err, check.IsNil)
+
+	// should get the later one record write
+	var recordGet *Record
+	lf.scan(0, func(vp valuePointer, record *Record) error {
+		if recordGet != nil {
+			c.Fatal("get more than on record")
+		}
+
+		recordGet = record
+		c.Assert(record.payload, check.BytesEquals, payload)
+
+		return nil
+	})
+
+	c.Assert(recordGet, check.NotNil)
+}
+
+func (lfs *LogFileSuit) TestCorruption(c *check.C) {
+	lf := lfs.lf
+	fuzz := lfs.fuzz
+
+	var payloads [][]byte
+	fuzz = fuzz.NumElements(4, 4)
+	fuzz.Fuzz(&payloads)
+	c.Logf("fuzz %d records in TestCorruption", len(payloads))
+
+	// var writeSuccessPayloads [][]byte
+	var expectPayloads [][]byte
+	var scanBackPayloads [][]byte
+
+	// the size of the log file
+	var size int
+	for idx, payload := range payloads {
+		n, err := encodeRecord(lf.fd, payload)
+		c.Assert(err, check.IsNil)
+		size += n
+
+		// truncate half of records
+		if idx%2 == 0 {
+			var truncateBytes int
+			truncateBytes = rand.Intn(n) + 1
+			size -= truncateBytes
+			err := lf.fd.Truncate(int64(size))
+			c.Assert(err, check.IsNil)
+		} else {
+			expectPayloads = append(expectPayloads, payload)
+		}
+	}
+
+	err := lf.scan(0, func(vp valuePointer, record *Record) error {
+		scanBackPayloads = append(scanBackPayloads, record.payload)
+		return nil
+	})
+	c.Assert(err, check.IsNil)
+
+	c.Assert(scanBackPayloads, check.DeepEquals, expectPayloads, check.Commentf("payloads: %x", payloads))
+}
+
+func (lfs *LogFileSuit) TestLogFile(c *check.C) {
+	lf := lfs.lf
 
 	// write some random records
 	var records []*Record
-	fuzz.Fuzz(&records)
+	lfs.fuzz.Fuzz(&records)
 	c.Logf("fuzz %d records", len(records))
 	c.Check(len(records), check.Greater, 0)
 
@@ -62,6 +191,7 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 
 	// read it back by specify offset and check if it's equal
 	var offset int64
+	var err error
 	for i := range records {
 		readRecords[i], err = lf.readRecord(offset)
 		c.Assert(err, check.IsNil)
@@ -91,5 +221,5 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	lf, err = newLogFile(lf.fid, lf.path)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(lf.maxTS, check.Equals, maxTS)
+	c.Assert(lf.maxTS, check.Equals, lfs.maxTS)
 }

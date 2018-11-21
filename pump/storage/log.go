@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"hash/crc32"
@@ -43,6 +44,11 @@ type logFile struct {
 	maxTS int64
 	// end means the file has a footer and can not append record to it anymore
 	end bool
+	// Some corruption was detected.  "bytes" is the approximate number
+	// of bytes dropped due to the corruption.
+	// If "corruptionReporter" is non-NULL, it is notified whenever some data is
+	// dropped due to a detected corruption when scan the log file.
+	corruptionReporter func(bytes int, reason error)
 }
 
 // Record is the format in the log file
@@ -112,10 +118,15 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 		return
 	}
 
+	logReporter := func(bytes int, reason error) {
+		log.Warnf("skip %d bytes because of %v", bytes, reason)
+	}
+
 	lf = &logFile{
-		fid:  fid,
-		fd:   fd,
-		path: name,
+		fid:                fid,
+		fd:                 fd,
+		path:               name,
+		corruptionReporter: logReporter,
 	}
 
 	if info.Size() >= fileFooterLength {
@@ -217,6 +228,7 @@ func (lf *logFile) recover() error {
 	return errors.Trace(err)
 }
 
+// thread-safe to read record at specify offset
 func (lf *logFile) readRecord(offset int64) (record *Record, err error) {
 	header := make([]byte, headerLength)
 	_, err = lf.fd.ReadAt(header, offset)
@@ -256,6 +268,70 @@ func (lf *logFile) readRecord(offset int64) (record *Record, err error) {
 	return
 }
 
+func readRecord(reader io.Reader) (record *Record, err error) {
+	record = new(Record)
+	err = record.readHeader(reader)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+
+	if record.magic != recordMagic {
+		return nil, ErrWrongMagic
+	}
+
+	// just avoid too long wrong data now, like when there's a partial write and later
+	// write another record
+	if record.length > (4 << 30) {
+		return nil, errors.Errorf("too big lenght: %d", record.length)
+	}
+	record.payload = make([]byte, record.length)
+
+	_, err = io.ReadFull(reader, record.payload)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+
+	if !record.isValid() {
+		err = errors.New("checksum mismatch")
+		return
+	}
+
+	return
+}
+
+// seek to the next record by recordMagic
+// return the bytes skip, if err = nil then it 's seek to a record
+func seekToNextRecord(reader *bufio.Reader) (bytes int, err error) {
+	var buf []byte
+	for {
+		buf, err = reader.Peek(4)
+		if err != nil {
+			bytes += len(buf)
+			err = errors.Trace(err)
+			return
+		}
+
+		magic := binary.LittleEndian.Uint32(buf)
+		if magic == recordMagic {
+			return
+		}
+
+		reader.Discard(1)
+		bytes++
+	}
+}
+
+func (lf *logFile) reportCorruption(bytes int, err error) {
+	if lf.corruptionReporter == nil {
+		return
+	}
+
+	lf.corruptionReporter(bytes, err)
+}
+
+// scan is *Not* thread safe
 func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Record) error) error {
 	info, err := lf.fd.Stat()
 	if err != nil {
@@ -269,17 +345,29 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 	}
 
 	offset := startOffset
+	var reader = bufio.NewReader(io.NewSectionReader(lf.fd, offset, size-offset))
 
 	for offset < size {
-		r, err := lf.readRecord(offset)
+		r, err := readRecord(reader)
 		if err != nil {
-			return err
+			offset = offset + 1
+			reader = bufio.NewReader(io.NewSectionReader(lf.fd, offset, size))
+			bytes, seekErr := seekToNextRecord(reader)
+			if seekErr == nil {
+				offset += int64(bytes + 1)
+				lf.reportCorruption(bytes+1, err)
+				continue
+			}
+
+			// reach file end
+			lf.reportCorruption(int(size)-int(offset), err)
+			return nil
 		}
 		err = fn(valuePointer{Fid: lf.fid, Offset: offset}, r)
-		offset += r.recordLength()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
+		offset += r.recordLength()
 	}
 
 	return nil

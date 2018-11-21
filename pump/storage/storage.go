@@ -366,7 +366,7 @@ func (a *Append) resolve(startTS int64) bool {
 
 	pbinlog, err := a.readBinlogByTS(startTS)
 	if err != nil {
-		log.Error(err)
+		log.Error(errors.ErrorStack(err))
 		return false
 	}
 
@@ -425,23 +425,23 @@ func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
 
 	vpData, err := a.metadata.Get(encodeTSKey(ts), nil)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "fail read binlog by ts: %d", ts)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "fail read binlog by ts: %d", ts)
 	}
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "fail read binlog by ts: %d", ts)
 	}
 
 	binlog := new(pb.Binlog)
 	err = binlog.Unmarshal(pvalue)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "fail read binlog by ts: %d", ts)
 	}
 
 	return binlog, nil
