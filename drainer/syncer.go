@@ -120,11 +120,13 @@ func (s *Syncer) checkWait(job *job) bool {
 		return false
 	}
 
-	if job.isCompleteBinlog && s.cp.Check(job.commitTS) {
+	if s.cp.Check(job.commitTS) {
+		log.Infof("checkWait pass")
 		return true
 	}
 
 	if job.binlogTp == translator.DDL {
+		log.Infof("checkWait pass")
 		return true
 	}
 
@@ -195,12 +197,16 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
+func newCompleteJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.COMPLETE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
+}
+
 func workerName(idx int) string {
 	return fmt.Sprintf("worker_%d", idx)
 }
 
 func (s *Syncer) addJob(job *job) {
-	log.Debugf("add job: %s", job)
+	log.Debugf("add job: %s, is fake job: %v", job, job.binlogTp == translator.FAKE)
 
 	// make all DMLs be executed before DDL
 	if job.binlogTp == translator.DDL {
@@ -353,7 +359,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				tpCnt[job.mutationTp]++
 			}
 
-			if job.binlogTp == translator.FLUSH ||
+			if job.binlogTp == translator.FLUSH || 
 				!s.cfg.DisableDispatch && idx >= count ||
 				s.cfg.DisableDispatch && job.isCompleteBinlog {
 				log.Infof("execute sqls: %v, args: %v, commitTSs: %v", sqls, args, commitTSs)
@@ -517,6 +523,10 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 		if s.filter.skipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
+			if isLastMutation {
+				job := newCompleteJob(commitTS, nodeID)
+				s.addJob(job)
+			}
 			continue
 		}
 
@@ -539,6 +549,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			sequences = mutation.GetSequence()
 		)
 
+		log.Infof("mutations length: %d, now: %d, insertrows: %d, updaterows: %d, deletedrows: %d, sequences: %d", len(mutations), mutationIdx, len(mutation.GetInsertedRows()), len(mutation.GetUpdatedRows()), len(mutation.GetDeletedRows()), len(sequences))
 		if len(mutation.GetInsertedRows()) > 0 {
 			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows(), commitTS)
 			if err != nil {
@@ -569,7 +580,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			}
 
 			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
-			log.Infof("isCompleteBinlog: %v", isCompleteBinlog)
+			log.Infof("mutations length: %d, now: %d, sequence: %d, now: %d, isCompleteBinlog: %v", len(mutations), mutationIdx, len(sequences), idx, isCompleteBinlog)
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && safeMode && useMysqlProtocol {
