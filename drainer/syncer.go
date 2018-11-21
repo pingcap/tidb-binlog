@@ -120,7 +120,7 @@ func (s *Syncer) checkWait(job *job) bool {
 		return false
 	}
 
-	if s.cp.Check(job.commitTS) {
+	if job.isCompleteBinlog && s.cp.Check(job.commitTS) {
 		return true
 	}
 
@@ -218,6 +218,7 @@ func (s *Syncer) addJob(job *job) {
 	if job.binlogTp != translator.FAKE {
 		s.jobWg.Add(1)
 		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+		log.Infof("send job to jobCh %d", idx)
 		s.jobCh[idx] <- job
 	}
 
@@ -355,6 +356,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			if job.binlogTp == translator.FLUSH ||
 				!s.cfg.DisableDispatch && idx >= count ||
 				s.cfg.DisableDispatch && job.isCompleteBinlog {
+				log.Infof("execute sqls: %v, args: %v, commitTSs: %v", sqls, args, commitTSs)
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					log.Fatalf(errors.ErrorStack(err))
@@ -362,8 +364,11 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				clearF()
 			}
 
+			log.Infof("is Flush: %v, idx >= count: %v, isCompleteBinlog: %v", job.binlogTp == translator.FLUSH, idx >= count, job.isCompleteBinlog)
+
 		default:
 			now := time.Now()
+			//log.Infof("lastSyncTime) >= maxExecutionWaitTime: %v, !s.cfg.DisableDispatch: %v, idx: %d", now.Sub(lastSyncTime) >= maxExecutionWaitTime, !s.cfg.DisableDispatch, idx)
 			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
@@ -564,6 +569,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			}
 
 			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
+			log.Infof("isCompleteBinlog: %v", isCompleteBinlog)
 
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && safeMode && useMysqlProtocol {
