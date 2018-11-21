@@ -1,28 +1,38 @@
 package repora
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"io/ioutil"
 
 	"github.com/juju/errors"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/pump"
 )
 
 var (
-	binlogMagic uint32 = 471532804
-	crcTable           = crc32.MakeTable(crc32.Castagnoli)
+	crcTable = crc32.MakeTable(crc32.Castagnoli)
 )
 
 // Decode decodes binlog from protobuf content.
-func Decode(r io.Reader) (*pb.Binlog, int64, error) {
+func Decode(r io.Reader, compression compress.CompressionCodec) (*pb.Binlog, int64, error) {
 	payload, length, err := decode(r)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
 
+	binlogData, err := decodePayload(payload, compression)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+
 	binlog := &pb.Binlog{}
-	err = binlog.Unmarshal(payload)
+	err = binlog.Unmarshal(binlogData)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -71,8 +81,8 @@ func decode(r io.Reader) ([]byte, int64, error) {
 }
 
 func checkMagic(magicNum uint32) error {
-	if magicNum != binlogMagic {
-		return errors.Errorf("expected magic %d but got %d", binlogMagic, magicNum)
+	if magicNum != pump.Magic {
+		return errors.Errorf("expected magic %d but got %d", pump.Magic, magicNum)
 	}
 	return nil
 }
@@ -87,4 +97,24 @@ func readInt32(r io.Reader) (uint32, error) {
 	var n uint32
 	err := binary.Read(r, binary.LittleEndian, &n)
 	return n, errors.Trace(err)
+}
+
+func decodePayload(data []byte, compression compress.CompressionCodec) ([]byte, error) {
+	switch compression {
+	case compress.CompressionNone:
+		return data, nil
+	case compress.CompressionGZIP:
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		return ioutil.ReadAll(reader)
+	case compress.CompressionFlate:
+		reader := flate.NewReader(bytes.NewReader(data))
+		defer reader.Close()
+		return ioutil.ReadAll(reader)
+	}
+
+	return nil, nil
 }

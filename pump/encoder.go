@@ -12,7 +12,7 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 )
 
-var magic uint32 = 471532804
+var Magic uint32 = 471532804
 
 //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //  | magic word (4 byte)| Size (8 byte, len(payload)) |    payload    |  crc  |
@@ -68,7 +68,7 @@ func encode(payload []byte) []byte {
 	size := length + 16
 	data := make([]byte, size)
 
-	binary.LittleEndian.PutUint32(data[:4], magic)
+	binary.LittleEndian.PutUint32(data[:4], Magic)
 	binary.LittleEndian.PutUint64(data[4:12], uint64(length))
 	copy(data[12:size-4], payload)
 	binary.LittleEndian.PutUint32(data[size-4:], crc)

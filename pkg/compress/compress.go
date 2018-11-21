@@ -34,6 +34,8 @@ func ToCompressionCodec(v string) CompressionCodec {
 		return CompressionNone
 	case "gzip":
 		return CompressionGZIP
+	case "flate":
+		return CompressionFlate
 	default:
 		log.Warnf("unknown codec %v, no compression.", v)
 		return CompressionNone

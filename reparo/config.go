@@ -34,6 +34,7 @@ type Config struct {
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
 	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
 	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
+	Compression   string `toml:"compression" json:"compression"`
 
 	DestType string             `toml:"dest-type" json:"dest-type"`
 	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -69,6 +70,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
+	fs.StringVar(&c.Compression, "compression", "", "the compression that binlog file used, value can be \"gzip\", \"flate\", or keep it empty if without compress")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")

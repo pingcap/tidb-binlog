@@ -9,6 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/reparo/executor"
 	"github.com/pingcap/tidb-binlog/reparo/translator"
@@ -56,6 +57,9 @@ func (r *Reparo) Process() error {
 		return errors.Trace(err)
 	}
 
+	compression := compress.ToCompressionCodec(r.cfg.Compression)
+	log.Infof("compression: %v", compression)
+
 	var offset int64
 	for _, file := range files {
 		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
@@ -74,7 +78,7 @@ func (r *Reparo) Process() error {
 		br := bufio.NewReader(fd)
 
 		for {
-			binlog, length, err := Decode(br)
+			binlog, length, err := Decode(br, compression)
 			if errors.Cause(err) == io.EOF {
 				fd.Close()
 				log.Infof("read file %s end", file.fullpath)
