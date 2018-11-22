@@ -24,7 +24,7 @@ func (t *testPumpServerSuite) TestSeekBinlog(c *C) {
 	c.Assert(err, IsNil)
 
 	testCase := make([]byte, 2048)
-	binary.LittleEndian.PutUint32(testCase[:4], magic)
+	binary.LittleEndian.PutUint32(testCase[:4], Magic)
 	for i := 4; i < 2048; i++ {
 		testCase[i] = 'a'
 	}

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -16,7 +17,10 @@ func (s *decoderSuite) TestDecode(c *check.C) {
 	buf := new(bytes.Buffer)
 
 	// write one record
-	_, err := buf.Write(encode([]byte("payload")))
+	payloadData, err := encode([]byte("payload"), compress.CompressionNone)
+	c.Assert(err, check.IsNil)
+
+	_, err = buf.Write(payloadData)
 	c.Assert(err, check.IsNil)
 
 	var ent binlog.Entity
