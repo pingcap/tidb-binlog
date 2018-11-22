@@ -195,10 +195,6 @@ func newFakeJob(commitTS int64, nodeID string) *job {
 	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
 }
 
-func newCompleteJob(commitTS int64, nodeID string) *job {
-	return &job{binlogTp: translator.COMPLETE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
-}
-
 func workerName(idx int) string {
 	return fmt.Sprintf("worker_%d", idx)
 }
@@ -498,30 +494,47 @@ func (s *Syncer) run(jobs []*model.Job) error {
 	}
 }
 
-func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
-	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
+func (s *Syncer) filterMutations(mutations []pb.TableMutation) ([]pb.TableMutation, []string, []string, []*model.TableInfo, error) {
+	fMutations := make([]pb.TableMutation, 0, len(mutations))
+	schemaNames := make([]string, 0, len(mutations))
+	tableNames := make([]string, 0, len(mutations))
+	tableInfos := make([]*model.TableInfo, 0, len(mutations))
 
-	for mutationIdx, mutation := range mutations {
-		isLastMutation := (mutationIdx == len(mutations)-1)
-
+	for _, mutation := range mutations {
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
-			return errors.Errorf("not found table id: %d", mutation.GetTableId())
+			return nil, nil, nil, nil, errors.Errorf("not found table id: %d", mutation.GetTableId())
 		}
 
 		schemaName, tableName, ok := s.schema.SchemaAndTableName(mutation.GetTableId())
 		if !ok {
-			return errors.Errorf("not found table id: %d", mutation.GetTableId())
+			return nil, nil, nil, nil, errors.Errorf("not found table id: %d", mutation.GetTableId())
 		}
 
 		if s.filter.skipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
-			if isLastMutation {
-				job := newCompleteJob(commitTS, nodeID)
-				s.addJob(job)
-			}
 			continue
 		}
+
+		fMutations = append(fMutations, mutation)
+		schemaNames = append(schemaNames, schemaName)
+		tableNames = append(tableNames, tableName)
+		tableInfos = append(tableInfos, table)
+	}
+
+	return fMutations, schemaNames, tableNames, tableInfos, nil
+}
+
+func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
+	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
+
+	fMutations, schemaNames, tableNames, tableInfos, err := s.filterMutations(mutations)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for mutationIdx, mutation := range fMutations {
+		isLastMutation := (mutationIdx == len(fMutations)-1)
 
 		var (
 			safeMode bool
@@ -543,25 +556,25 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		)
 
 		if len(mutation.GetInsertedRows()) > 0 {
-			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaName, table, mutation.GetInsertedRows(), commitTS)
+			sqls[pb.MutationType_Insert], keys[pb.MutationType_Insert], args[pb.MutationType_Insert], err = s.translator.GenInsertSQLs(schemaNames[mutationIdx], tableInfos[mutationIdx], mutation.GetInsertedRows(), commitTS)
 			if err != nil {
-				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+				return errors.Errorf("gen insert sqls failed: %v, schema: %s, table: %s", err, schemaNames[mutationIdx], tableNames[mutationIdx])
 			}
 			offsets[pb.MutationType_Insert] = 0
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaNames[mutationIdx], tableInfos[mutationIdx], mutation.GetUpdatedRows(), commitTS)
 			if err != nil {
-				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaNames[mutationIdx], tableNames[mutationIdx])
 			}
 			offsets[pb.MutationType_Update] = 0
 		}
 
 		if len(mutation.GetDeletedRows()) > 0 {
-			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaName, table, mutation.GetDeletedRows(), commitTS)
+			sqls[pb.MutationType_DeleteRow], keys[pb.MutationType_DeleteRow], args[pb.MutationType_DeleteRow], err = s.translator.GenDeleteSQLs(schemaNames[mutationIdx], tableInfos[mutationIdx], mutation.GetDeletedRows(), commitTS)
 			if err != nil {
-				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
+				return errors.Errorf("gen delete sqls failed: %v, schema: %s, table: %s", err, schemaNames[mutationIdx], tableNames[mutationIdx])
 			}
 			offsets[pb.MutationType_DeleteRow] = 0
 		}
@@ -596,7 +609,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 
 		for tp := range sqls {
 			if offsets[tp] != len(sqls[tp]) {
-				return errors.Errorf("binlog is corruption, item %v", mutations)
+				return errors.Errorf("binlog is corruption, item %v", fMutations)
 			}
 		}
 	}

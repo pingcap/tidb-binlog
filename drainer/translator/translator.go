@@ -18,8 +18,6 @@ const (
 	FLUSH
 	// FAKE is for fake binlog
 	FAKE
-	// COMPLETE means the end of a binlog.
-	COMPLETE
 )
 
 var providers = make(map[string]SQLTranslator)
