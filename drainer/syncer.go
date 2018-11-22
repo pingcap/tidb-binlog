@@ -218,7 +218,6 @@ func (s *Syncer) addJob(job *job) {
 	if job.binlogTp != translator.FAKE {
 		s.jobWg.Add(1)
 		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-		log.Infof("send job to jobCh %d", idx)
 		s.jobCh[idx] <- job
 	}
 
