@@ -58,7 +58,6 @@ func (r *Reparo) Process() error {
 	}
 
 	compression := compress.ToCompressionCodec(r.cfg.Compression)
-	log.Infof("compression: %v", compression)
 
 	var offset int64
 	for _, file := range files {
