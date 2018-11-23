@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"hash/crc32"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
 	"strconv"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -50,6 +53,7 @@ func (lfs *LogFileSuit) SetUpTest(c *check.C) {
 	// set up logFile
 	fid := 0
 	name := path.Join(os.TempDir(), strconv.Itoa(fid))
+	c.Log("file path: ", name)
 
 	lf, err := newLogFile(uint32(fid), name)
 	c.Assert(err, check.IsNil)
@@ -134,10 +138,15 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 	lf := lfs.lf
 	fuzz := lfs.fuzz
 
-	var payloads [][]byte
-	fuzz = fuzz.NumElements(4, 4)
-	fuzz.Fuzz(&payloads)
-	c.Logf("fuzz %d records in TestCorruption", len(payloads))
+	var err error
+
+	var payloads = make([][]byte, 100)
+
+	for i := 0; i < len(payloads); i++ {
+		r := new(Record)
+		fuzz.Fuzz(r)
+		payloads[i] = r.payload
+	}
 
 	// var writeSuccessPayloads [][]byte
 	var expectPayloads [][]byte
@@ -154,6 +163,7 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 		if idx%2 == 0 {
 			var truncateBytes int
 			truncateBytes = rand.Intn(n) + 1
+			c.Log("truncate: ", truncateBytes)
 			size -= truncateBytes
 			err := lf.fd.Truncate(int64(size))
 			c.Assert(err, check.IsNil)
@@ -162,13 +172,31 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 		}
 	}
 
-	err := lf.scan(0, func(vp valuePointer, record *Record) error {
+	err = lf.scan(0, func(vp valuePointer, record *Record) error {
 		scanBackPayloads = append(scanBackPayloads, record.payload)
 		return nil
 	})
 	c.Assert(err, check.IsNil)
 
+	rd := bufio.NewReader(io.NewSectionReader(lf.fd, 0, int64(size)))
+	data, err := ioutil.ReadAll(rd)
+	c.Log(data)
+
 	c.Assert(scanBackPayloads, check.DeepEquals, expectPayloads, check.Commentf("payloads: %x", payloads))
+}
+
+func (lfs *LogFileSuit) TestSeekToNextRecordReturnEOF(c *check.C) {
+	lf := lfs.lf
+
+	for size := 1; size < 10; size++ {
+		n, err := lf.fd.Write(make([]byte, size))
+		c.Assert(err, check.IsNil)
+		c.Assert(n, check.Equals, size)
+
+		reader := bufio.NewReader(io.NewSectionReader(lf.fd, 0, int64(size)))
+		_, err = seekToNextRecord(reader)
+		c.Assert(errors.Cause(err), check.Equals, io.EOF)
+	}
 }
 
 func (lfs *LogFileSuit) TestLogFile(c *check.C) {
@@ -204,13 +232,14 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 
 	// read by scan and check if if's equal
 	idx := 0
-	lf.scan(0, func(vp valuePointer, r *Record) error {
+	err = lf.scan(0, func(vp valuePointer, r *Record) error {
 		c.Assert(r.payload, check.DeepEquals, records[idx].payload)
 		c.Assert(recordOffsets[idx], check.Equals, vp.Offset)
 		idx++
 
 		return nil
 	})
+	c.Assert(err, check.IsNil)
 
 	c.Assert(idx, check.Equals, len(records))
 

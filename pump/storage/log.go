@@ -357,17 +357,21 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 		r, err := readRecord(reader)
 		if err != nil {
 			offset = offset + 1
-			reader = bufio.NewReader(io.NewSectionReader(lf.fd, offset, size))
+			reader = bufio.NewReader(io.NewSectionReader(lf.fd, offset, size-offset))
 			bytes, seekErr := seekToNextRecord(reader)
 			if seekErr == nil {
-				offset += int64(bytes + 1)
+				offset += int64(bytes)
 				lf.reportCorruption(bytes+1, err)
 				continue
 			}
 
 			// reach file end
-			lf.reportCorruption(int(size)-int(offset), err)
-			return nil
+			if errors.Cause(seekErr) == io.EOF {
+				lf.reportCorruption(int(size)-int(offset), err)
+				return nil
+			} else {
+				return errors.Trace(seekErr)
+			}
 		}
 		err = fn(valuePointer{Fid: lf.fid, Offset: offset}, r)
 		if err != nil {
