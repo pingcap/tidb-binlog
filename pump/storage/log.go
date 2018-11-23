@@ -280,17 +280,23 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 		return nil, ErrWrongMagic
 	}
 
-	// just avoid too long wrong data now, like when there's a partial write and later
-	// write another record
-	if record.length > (4 << 30) {
-		return nil, errors.Errorf("too big lenght: %d", record.length)
-	}
-	record.payload = make([]byte, record.length)
-
-	_, err = io.ReadFull(reader, record.payload)
-	if err != nil {
-		err = errors.Trace(err)
-		return
+	// read directly to record.payload if record.length is less than some value
+	// note the data may be corrupt and record.length is not the true value
+	if record.length < (4 << 30) {
+		record.payload = make([]byte, record.length)
+		_, err = io.ReadFull(reader, record.payload)
+		if err != nil {
+			err = errors.Trace(err)
+			return
+		}
+	} else {
+		buf := new(bytes.Buffer)
+		_, err = io.CopyN(buf, reader, int64(record.length))
+		if err != nil {
+			err = errors.Trace(err)
+			return
+		}
+		record.payload = buf.Bytes()
 	}
 
 	if !record.isValid() {
