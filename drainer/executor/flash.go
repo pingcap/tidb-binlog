@@ -2,7 +2,6 @@ package executor
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,13 +17,13 @@ import (
 
 var extraRowSize = 1024
 
-// flashRowBatch is an in-memory row batch caching rows about to passed to flash.
+// flashRowBatch is an in-memory row batch caching rows about to be passed to flash.
 // It's not thread-safe, so callers must take care of the synchronizing.
 type flashRowBatch struct {
 	sql            string
 	columnSize     int
 	capacity       int
-	rows           [][]driver.Value
+	rows           [][]interface{}
 	latestCommitTS int64
 }
 
@@ -33,7 +32,7 @@ func newFlashRowBatch(sql string, capacity int) *flashRowBatch {
 	values := sql[pos:]
 	columnSize := strings.Count(values, "?")
 	// Loosing the space to tolerant a little more rows being added.
-	rows := make([][]driver.Value, 0, capacity+extraRowSize)
+	rows := make([][]interface{}, 0, capacity+extraRowSize)
 	return &flashRowBatch{
 		sql:            sql,
 		columnSize:     columnSize,
@@ -48,11 +47,7 @@ func (batch *flashRowBatch) AddRow(args []interface{}, commitTS int64) error {
 	if len(args) != batch.columnSize {
 		return errors.Errorf("Row %v column size %d mismatches the row batch column size %d", args, len(args), batch.columnSize)
 	}
-	dargs := make([]driver.Value, 0, len(args))
-	for _, c := range args {
-		dargs = append(dargs, c)
-	}
-	batch.rows = append(batch.rows, dargs)
+	batch.rows = append(batch.rows, args)
 
 	if batch.latestCommitTS < commitTS {
 		batch.latestCommitTS = commitTS
@@ -117,7 +112,7 @@ func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 	defer stmt.Close()
 
 	for _, row := range batch.rows {
-		_, err = stmt.Exec(row)
+		_, err = stmt.Exec(row...)
 		if err != nil {
 			return batch.latestCommitTS, errors.Trace(err)
 		}
@@ -133,7 +128,7 @@ func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 
 	// Clearing all rows.
 	// Loosing the space to tolerant a little more rows being added.
-	batch.rows = make([][]driver.Value, 0, batch.capacity+extraRowSize)
+	batch.rows = make([][]interface{}, 0, batch.capacity+extraRowSize)
 
 	return batch.latestCommitTS, nil
 }
