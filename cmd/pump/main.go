@@ -57,7 +57,7 @@ func main() {
 	if err := p.Start(); err != nil {
 		log.Errorf("pump server error, %v", err)
 		// exit when start fail
-		return
+		os.Exit(2)
 	}
 
 	wg.Wait()
