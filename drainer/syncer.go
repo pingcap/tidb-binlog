@@ -116,15 +116,15 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.FLUSH || job.binlogTp == translator.DDL {
-		return true
-	}
-
-	if job.binlogTp != translator.COMPLETE && job.binlogTp != translator.FAKE {
+	if !job.IsCompleteBinlogEvent() {
 		return false
 	}
 
 	if s.cp.Check(job.commitTS) {
+		return true
+	}
+
+	if job.binlogTp == translator.DDL {
 		return true
 	}
 
@@ -157,6 +157,15 @@ type job struct {
 	key        string
 	commitTS   int64
 	nodeID     string
+}
+
+func (j *job) IsCompleteBinlogEvent() bool {
+	switch j.binlogTp {
+	case translator.FLUSH, translator.FAKE, translator.DDL, translator.COMPLETE:
+		return true
+	default:
+		return false
+	}
 }
 
 func (j *job) String() string {
