@@ -68,13 +68,15 @@ func (batch *flashRowBatch) Size() int {
 }
 
 // Flush writes all the rows in this row batch into CH, with retrying when failure.
-func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, err error) {
+func (batch *flashRowBatch) Flush(chDB *chDB) (commitTS int64, err error) {
 	for i := 0; i < pkgsql.MaxDMLRetryCount; i++ {
 		if i > 0 {
-			log.Warnf("[flush] Retrying %d flushing row batch %v", i, batch.sql)
+			log.Warnf("[flush] Retrying %d flushing row batch %v in %d seconds", i, batch.sql, pkgsql.RetryWaitTime)
 			time.Sleep(pkgsql.RetryWaitTime)
+			_ = chDB.DB.Close()
+			chDB.reopen()
 		}
-		commitTS, err = batch.flushInternal(conn)
+		commitTS, err = batch.flushInternal(chDB)
 		if err == nil {
 			return commitTS, nil
 		}
@@ -84,11 +86,11 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, e
 	return commitTS, errors.Trace(err)
 }
 
-func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, err error) {
+func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 	log.Debugf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql)
 	defer func() {
 		if err != nil {
-			log.Errorf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
+			log.Warnf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
 		} else {
 			log.Debugf("[flush] Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
 		}
@@ -98,43 +100,37 @@ func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, 
 		return batch.latestCommitTS, nil
 	}
 
-	tx, err := conn.Begin()
+	tx, err := chDB.DB.Begin()
 	if err != nil {
-		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
-	stmt, err := conn.Prepare(batch.sql)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(batch.sql)
 	if err != nil {
-		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	defer stmt.Close()
-	block, err := conn.Block()
-	if err != nil {
-		tx.Rollback()
-		return batch.latestCommitTS, errors.Trace(err)
-	}
+
 	for _, row := range batch.rows {
-		err = block.AppendRow(row)
+		_, err = stmt.Exec(row)
 		if err != nil {
-			tx.Rollback()
 			return batch.latestCommitTS, errors.Trace(err)
 		}
 	}
-	err = conn.WriteBlock(block)
-	if err != nil {
-		tx.Rollback()
-		return batch.latestCommitTS, errors.Trace(err)
-	}
 	err = tx.Commit()
 	if err != nil {
-		tx.Rollback()
 		if ce, ok := err.(*clickhouse.Exception); ok {
 			// Stack trace from server side could be very helpful for triaging problems.
 			log.Error("[flush] ", ce.StackTrace)
 		}
 		return batch.latestCommitTS, errors.Trace(err)
 	}
+
 	// Clearing all rows.
 	// Loosing the space to tolerant a little more rows being added.
 	batch.rows = make([][]driver.Value, 0, batch.capacity+extraRowSize)
@@ -142,13 +138,31 @@ func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, 
 	return batch.latestCommitTS, nil
 }
 
-// chDB keeps two connection to CH:
-// One through standard go SQL driver's DB, to leverage legacy pkgsql stuff.
-// The other through raw CH SQL driver's connection, to use CH's block interface.
-// A little bit ugly, but handy.
+// chDB wraps DB connection information and the long-live connection to CH.
+// Can be re-opened once retrying on error.
 type chDB struct {
+	hostAndPort pkgsql.CHHostAndPort
+	user          string
+	password      string
+	blockSize int
 	DB   *sql.DB
-	Conn clickhouse.Clickhouse
+}
+
+func openChDB(hostAndPort pkgsql.CHHostAndPort, user string, password string, blockSize int) (*chDB, error) {
+	chDB := &chDB{hostAndPort: hostAndPort, user: user, password: password, blockSize: blockSize}
+	err := chDB.reopen()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return chDB, nil
+}
+
+func (chDB *chDB) reopen() (err error) {
+	chDB.DB, err = pkgsql.OpenCH(chDB.hostAndPort.Host, chDB.hostAndPort.Port, chDB.user, chDB.password, "", chDB.blockSize)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 type flashExecutor struct {
@@ -158,7 +172,7 @@ type flashExecutor struct {
 	timeLimit time.Duration
 	sizeLimit int
 
-	chDBs      []chDB
+	chDBs      []*chDB
 	rowBatches map[string][]*flashRowBatch
 	metaCP     *flash.MetaCheckpoint
 
@@ -183,17 +197,13 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
-	chDBs := make([]chDB, 0, len(hostAndPorts))
+	chDBs := make([]*chDB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
-		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
+		chDB, err := openChDB(hostAndPort, cfg.User, cfg.Password, sizeLimit)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		conn, err := pkgsql.OpenCHDirect(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		chDBs = append(chDBs, chDB{db, conn})
+		chDBs = append(chDBs, chDB)
 	}
 
 	e := flashExecutor{
@@ -251,7 +261,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 
 			// Check if size limit exceeded.
 			if rb.Size() >= e.sizeLimit {
-				_, e.err = rb.Flush(e.chDBs[hashKey].Conn)
+				_, e.err = rb.Flush(e.chDBs[hashKey])
 				if e.err != nil {
 					return errors.Trace(e.err)
 				}
@@ -277,11 +287,6 @@ func (e *flashExecutor) Close() error {
 	hasError := false
 	for _, chDB := range e.chDBs {
 		err := chDB.DB.Close()
-		if err != nil {
-			hasError = true
-			log.Error("[close] ", err)
-		}
-		err = chDB.Conn.Close()
 		if err != nil {
 			hasError = true
 			log.Error("[close] ", err)
@@ -336,7 +341,7 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) {
 			if rb == nil {
 				continue
 			}
-			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
+			lastestCommitTS, err := rb.Flush(e.chDBs[i])
 			if err != nil {
 				e.err = errors.Trace(err)
 				return
