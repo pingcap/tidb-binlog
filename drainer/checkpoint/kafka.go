@@ -6,7 +6,6 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
 // KafkaCheckpoint is local CheckPoint struct.
@@ -67,7 +66,7 @@ func newKafka(cfg *Config) (CheckPoint, error) {
 }
 
 // Save implements CheckPoint.Save()
-func (cp *KafkaCheckpoint) Save(ts int64, pos map[string]binlog.Pos) error {
+func (cp *KafkaCheckpoint) Save(ts int64) error {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -83,5 +82,5 @@ func (cp *KafkaCheckpoint) Save(ts int64, pos map[string]binlog.Pos) error {
 	}
 	cp.meta.lock.Unlock()
 
-	return cp.PbCheckPoint.Save(ts, pos)
+	return cp.PbCheckPoint.Save(ts)
 }
