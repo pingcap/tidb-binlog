@@ -223,7 +223,7 @@ func composeCHDSN(host string, port int, username string, password string, dbNam
 	if len(dbName) > 0 {
 		dbDSN = fmt.Sprintf("%sdatabase=%s&", dbDSN, dbName)
 	}
-	if blockSize >= 0 {
+	if blockSize > 0 {
 		dbDSN = fmt.Sprintf("%sblock_size=%d&", dbDSN, blockSize)
 	}
 	return dbDSN
