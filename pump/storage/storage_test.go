@@ -55,16 +55,26 @@ func newAppendWithOptions(t Log, options *Options) *Append {
 	return append
 }
 
+func cleanAppend(append *Append) {
+	select {
+	case <-append.close:
+	default:
+		append.Close()
+	}
+
+	os.RemoveAll(append.dir)
+}
+
 func (as *AppendSuit) TestNewAppend(c *check.C) {
 	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+	defer cleanAppend(append)
 
 	append.Close()
 }
 
 func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+	defer cleanAppend(append)
 
 	err := append.Close()
 	c.Assert(err, check.IsNil)
@@ -93,6 +103,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	c.Assert(maxCommitTS, check.Equals, append.maxCommitTS)
 	c.Assert(headPointer, check.Equals, append.headPointer)
 	c.Assert(handlePointer, check.Equals, append.handlePointer)
+	append.Close()
 }
 
 func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
@@ -110,7 +121,7 @@ func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
 
 func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int32) {
 	appendStorage := newAppend(c)
-	defer os.RemoveAll(appendStorage.dir)
+	defer cleanAppend(appendStorage)
 
 	populateBinlog(c, appendStorage, prewriteValueSize, binlogNum)
 
@@ -152,12 +163,13 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 
 		cancel()
 	}
+	appendStorage.Close()
 }
 
 func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	var value = make([]byte, 10)
 	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+	defer cleanAppend(append)
 
 	var i int64
 	var n int64 = 1 << 11
@@ -181,7 +193,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 
 func (as *AppendSuit) TestReadWritePointer(c *check.C) {
 	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+	defer cleanAppend(append)
 
 	// check return zero valuePointer when the key not exist
 	var readVP valuePointer
@@ -213,7 +225,7 @@ func (as *AppendSuit) TestReadWritePointer(c *check.C) {
 
 func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 	append := newAppend(c)
-	defer os.RemoveAll(append.dir)
+	defer cleanAppend(append)
 
 	ts, err := append.readGCTSFromDB()
 	c.Assert(err, check.IsNil)
@@ -232,6 +244,7 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(append.gcTS, check.Equals, int64(100))
+	append.Close()
 }
 
 // test helper to write binlogNum binlog to append
