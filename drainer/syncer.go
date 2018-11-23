@@ -116,7 +116,7 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if job.binlogTp == translator.DDL {
+	if job.binlogTp == translator.FLUSH || job.binlogTp == translator.DDL {
 		return true
 	}
 
@@ -217,9 +217,13 @@ func (s *Syncer) addJob(job *job) {
 	}
 
 	if job.binlogTp != translator.FAKE {
-		s.jobWg.Add(1)
-		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-		s.jobCh[idx] <- job
+		if job.binlogTp == translator.COMPLETE && !s.cfg.DisableDispatch {
+			// complete job only used when DisableDispatch is true, don't need send to jobCh.
+		} else {
+			s.jobWg.Add(1)
+			idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+			s.jobCh[idx] <- job
+		}
 	}
 
 	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
