@@ -15,7 +15,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/terror"
-	"github.com/zanmato1984/clickhouse"
 )
 
 var (
@@ -213,7 +212,7 @@ func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
 	return result, nil
 }
 
-func composeCHDSN(host string, port int, username string, password string, dbName string) string {
+func composeCHDSN(host string, port int, username string, password string, dbName string, blockSize int) string {
 	dbDSN := fmt.Sprintf("tcp://%s:%d?", host, port)
 	if len(username) > 0 {
 		dbDSN = fmt.Sprintf("%susername=%s&", dbDSN, username)
@@ -224,12 +223,15 @@ func composeCHDSN(host string, port int, username string, password string, dbNam
 	if len(dbName) > 0 {
 		dbDSN = fmt.Sprintf("%sdatabase=%s&", dbDSN, dbName)
 	}
+	if blockSize >= 0 {
+		dbDSN = fmt.Sprintf("%sblock_size=%d&", dbDSN, blockSize)
+	}
 	return dbDSN
 }
 
 // OpenCH opens a connection to CH and returns the standard SQL driver's DB interface.
-func OpenCH(host string, port int, username string, password string, dbName string) (*sql.DB, error) {
-	dbDSN := composeCHDSN(host, port, username, password, dbName)
+func OpenCH(host string, port int, username string, password string, dbName string, blockSize int) (*sql.DB, error) {
+	dbDSN := composeCHDSN(host, port, username, password, dbName, blockSize)
 	log.Infof("Connecting to %s", dbDSN)
 	db, err := sql.Open("clickhouse", dbDSN)
 	if err != nil {
@@ -237,11 +239,4 @@ func OpenCH(host string, port int, username string, password string, dbName stri
 	}
 
 	return db, nil
-}
-
-// OpenCHDirect opens a connection to CH and returns the raw CH driver's connection interface.
-// It is mainly used for batch inserting which uses CH's block interface.
-func OpenCHDirect(host string, port int, username string, password string, dbName string) (clickhouse.Clickhouse, error) {
-	dbDSN := composeCHDSN(host, port, username, password, dbName)
-	return clickhouse.OpenDirect(dbDSN)
 }
