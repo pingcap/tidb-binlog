@@ -26,12 +26,6 @@ func initMetrics() {
 	exp.Exp(metricRegistry)
 }
 
-// GetParentMetricsRegistry get the metrics registry and expose the metrics while /debug/metrics
-func GetParentMetricsRegistry() metrics.Registry {
-	metricRegistryOnce.Do(initMetrics)
-	return metricRegistry
-}
-
 // CreateKafkaProducer create a sync producer
 func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion string, maxMsgSize int, metricsPrefix string) (sarama.SyncProducer, error) {
 	var (
@@ -68,15 +62,23 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 	return nil, errors.Trace(err)
 }
 
+// GetParentMetricsRegistry get the metrics registry and expose the metrics while /debug/metrics
+func GetParentMetricsRegistry() metrics.Registry {
+	metricRegistryOnce.Do(initMetrics)
+	return metricRegistry
+}
+
 // NewSaramaConfig return the default config and set the according version and metrics
 func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config, error) {
 	config := sarama.NewConfig()
+
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
 	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
+
 	return config, nil
 }
 

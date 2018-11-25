@@ -292,9 +292,15 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 	}
 
 	workerName := workerName(executorIdx % workerMetricsLimit)
+	executeErr := executor.Error()
+
 	var err error
 	for {
 		select {
+		case err := <-executeErr:
+			// FIXME more friendly quit, like update the state in pd before quit
+			log.Fatal(err)
+			return
 		case job, ok := <-jobChan:
 			if !ok {
 				return
@@ -309,6 +315,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
+						// FIXME more friendly quit, like update the state in pd before quit
 						log.Fatalf(errors.ErrorStack(err))
 					} else {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
@@ -328,16 +335,17 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				s.cfg.DisableDispatch && job.isCompleteBinlog {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
+					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
 			}
-
 		default:
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
+					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
