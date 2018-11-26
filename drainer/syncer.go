@@ -116,7 +116,7 @@ func (s *Syncer) addDDLCount() {
 }
 
 func (s *Syncer) checkWait(job *job) bool {
-	if !job.isCompleteBinlog {
+	if !job.IsCompleteBinlogEvent() {
 		return false
 	}
 
@@ -157,9 +157,15 @@ type job struct {
 	key        string
 	commitTS   int64
 	nodeID     string
-	// set to true when this is the last job of a txn
-	// we will generate many job and call addJob(job) from a txn
-	isCompleteBinlog bool
+}
+
+func (j *job) IsCompleteBinlogEvent() bool {
+	switch j.binlogTp {
+	case translator.FLUSH, translator.FAKE, translator.DDL, translator.COMPLETE:
+		return true
+	default:
+		return false
+	}
 }
 
 func (j *job) String() string {
@@ -180,19 +186,23 @@ func (j *job) String() string {
 	}
 	builder.WriteString("]")
 
-	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v, isCompleteBinlog: %v}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID, j.isCompleteBinlog)
+	return fmt.Sprintf("{binlogTp: %v, mutationTp: %v, sql: %v, args: %v, key: %v, commitTS: %v, nodeID: %v}", j.binlogTp, j.mutationTp, j.sql, builder.String(), j.key, j.commitTS, j.nodeID)
 }
 
-func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string, isCompleteBinlog bool) *job {
-	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: isCompleteBinlog}
+func newDMLJob(tp pb.MutationType, sql string, args []interface{}, key string, commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.DML, mutationTp: tp, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
 func newDDLJob(sql string, args []interface{}, key string, commitTS int64, nodeID string) *job {
-	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
+	return &job{binlogTp: translator.DDL, sql: sql, args: args, key: key, commitTS: commitTS, nodeID: nodeID}
 }
 
 func newFakeJob(commitTS int64, nodeID string) *job {
-	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID, isCompleteBinlog: true}
+	return &job{binlogTp: translator.FAKE, commitTS: commitTS, nodeID: nodeID}
+}
+
+func newCompleteJob(commitTS int64, nodeID string) *job {
+	return &job{binlogTp: translator.COMPLETE, commitTS: commitTS, nodeID: nodeID}
 }
 
 func workerName(idx int) string {
@@ -216,9 +226,13 @@ func (s *Syncer) addJob(job *job) {
 	}
 
 	if job.binlogTp != translator.FAKE {
-		s.jobWg.Add(1)
-		idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
-		s.jobCh[idx] <- job
+		if job.binlogTp == translator.COMPLETE && !s.cfg.DisableDispatch {
+			// complete job only used when DisableDispatch is true, don't need send to jobCh.
+		} else {
+			s.jobWg.Add(1)
+			idx := int(genHashKey(job.key)) % s.cfg.WorkerCount
+			s.jobCh[idx] <- job
+		}
 	}
 
 	if pos, ok := s.positions[job.nodeID]; !ok || job.commitTS > pos {
@@ -234,13 +248,13 @@ func (s *Syncer) addJob(job *job) {
 	}
 }
 
-func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, nodeID string, isCompleteBinlog bool) error {
+func (s *Syncer) commitJob(tp pb.MutationType, sql string, args []interface{}, keys []string, commitTS int64, nodeID string) error {
 	key, err := s.resolveCasuality(keys)
 	if err != nil {
 		return errors.Errorf("resolve karam error %v", err)
 	}
 
-	job := newDMLJob(tp, sql, args, key, commitTS, nodeID, isCompleteBinlog)
+	job := newDMLJob(tp, sql, args, key, commitTS, nodeID)
 	log.Debugf("keys: %v, dispatch key: %v", keys, key)
 
 	s.addJob(job)
@@ -321,9 +335,15 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 	}
 
 	workerName := workerName(executorIdx % workerMetricsLimit)
+	executeErr := executor.Error()
+
 	var err error
 	for {
 		select {
+		case err := <-executeErr:
+			// FIXME more friendly quit, like update the state in pd before quit
+			log.Fatal(err)
+			return
 		case job, ok := <-jobChan:
 			if !ok {
 				return
@@ -338,6 +358,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				err = execute(executor, []string{job.sql}, [][]interface{}{job.args}, []int64{job.commitTS}, true)
 				if err != nil {
 					if !pkgsql.IgnoreDDLError(err) {
+						// FIXME more friendly quit, like update the state in pd before quit
 						log.Fatalf(errors.ErrorStack(err))
 					} else {
 						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
@@ -353,20 +374,21 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			}
 
 			if job.binlogTp == translator.FLUSH ||
-				!s.cfg.DisableDispatch && idx >= count ||
-				s.cfg.DisableDispatch && job.isCompleteBinlog {
+				(!s.cfg.DisableDispatch && idx >= count) ||
+				(s.cfg.DisableDispatch && job.binlogTp == translator.COMPLETE) {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
+					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
 			}
-
 		default:
 			now := time.Now()
 			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
+					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
 				clearF()
@@ -497,9 +519,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nodeID string) error {
 	useMysqlProtocol := (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql")
 
-	for mutationIdx, mutation := range mutations {
-		isLastMutation := (mutationIdx == len(mutations)-1)
-
+	for _, mutation := range mutations {
 		table, ok := s.schema.TableByID(mutation.GetTableId())
 		if !ok {
 			return errors.Errorf("not found table id: %d", mutation.GetTableId())
@@ -558,27 +578,25 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			offsets[pb.MutationType_DeleteRow] = 0
 		}
 
-		for idx, dmlType := range sequences {
+		for _, dmlType := range sequences {
 			if offsets[dmlType] >= len(sqls[dmlType]) {
 				return errors.Errorf("gen sqls failed: sequence %v execution %s sqls %v", sequences, dmlType, sqls[dmlType])
 			}
 
-			isCompleteBinlog := (idx == len(sequences)-1) && isLastMutation
-
 			// update is split to delete and insert
 			if dmlType == pb.MutationType_Update && safeMode && useMysqlProtocol {
-				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, false)
+				err = s.commitJob(pb.MutationType_DeleteRow, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
 
-				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, nodeID, isCompleteBinlog)
+				err = s.commitJob(pb.MutationType_Insert, sqls[dmlType][offsets[dmlType]+1], args[dmlType][offsets[dmlType]+1], keys[dmlType][offsets[dmlType]+1], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
 				offsets[dmlType] = offsets[dmlType] + 2
 			} else {
-				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID, isCompleteBinlog)
+				err = s.commitJob(dmlType, sqls[dmlType][offsets[dmlType]], args[dmlType][offsets[dmlType]], keys[dmlType][offsets[dmlType]], commitTS, nodeID)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -592,6 +610,9 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			}
 		}
 	}
+
+	job := newCompleteJob(commitTS, nodeID)
+	s.addJob(job)
 
 	return nil
 }

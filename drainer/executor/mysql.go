@@ -14,6 +14,7 @@ var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
 	db *sql.DB
+	*baseError
 }
 
 func newMysql(cfg *DBConfig) (Executor, error) {
@@ -23,7 +24,8 @@ func newMysql(cfg *DBConfig) (Executor, error) {
 	}
 
 	return &mysqlExecutor{
-		db: db,
+		db:        db,
+		baseError: newBaseError(),
 	}, nil
 }
 
