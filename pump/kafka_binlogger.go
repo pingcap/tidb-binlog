@@ -8,6 +8,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -23,8 +24,9 @@ const defaultMaxBinlogItem = 1024 * 1024
 type kafkaBinloger struct {
 	topic string
 
-	producer sarama.SyncProducer
-	encoder  Encoder
+	producer  sarama.SyncProducer
+	encoder   *kafkaEncoder
+	aproducer sarama.AsyncProducer
 
 	sync.RWMutex
 	addr []string
@@ -37,13 +39,31 @@ func createKafkaBinlogger(clusterID string, node string, addr []string, kafkaVer
 		return nil, errors.Trace(err)
 	}
 
+	config, err := util.NewSaramaConfig(kafkaVersion, "pump-async-")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	aproducer, err := util.NewNeverFailAsyncProducer(addr, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	topic := TopicName(clusterID, node)
 	binlogger := &kafkaBinloger{
-		topic:    topic,
-		producer: producer,
-		encoder:  newKafkaEncoder(producer, topic, DefaultTopicPartition()),
-		addr:     addr,
+		topic:     topic,
+		producer:  producer,
+		aproducer: aproducer,
+		encoder:   newKafkaEncoder(producer, topic, DefaultTopicPartition()),
+		addr:      addr,
 	}
+
+	go binlogger.handleSuccess()
+
 	return binlogger, nil
 }
 
@@ -64,6 +84,7 @@ func (k *kafkaBinloger) WriteTail(entity *binlog.Entity) (int64, error) {
 	k.RLock()
 	defer k.RUnlock()
 
+	// when have empty payload?
 	if len(entity.Payload) == 0 {
 		return 0, nil
 	}
@@ -80,6 +101,61 @@ func (k *kafkaBinloger) WriteTail(entity *binlog.Entity) (int64, error) {
 	return offset, errors.Trace(err)
 }
 
+type callback func(offset int64, err error)
+
+func (k *kafkaBinloger) AsyncWriteTail(entity *binlog.Entity, cb callback) {
+	log.Debugf("AsyncWriteTail pos: %v payload len: %d", entity.Pos, len(entity.Payload))
+	beginTime := time.Now()
+	defer func() {
+		writeBinlogHistogram.WithLabelValues("kafka").Observe(time.Since(beginTime).Seconds())
+		writeBinlogSizeHistogram.WithLabelValues("kafka").Observe(float64(len(entity.Payload)))
+	}()
+
+	// for concurrency write
+	k.RLock()
+	defer k.RUnlock()
+
+	// when have empty payload?
+	if len(entity.Payload) == 0 {
+		cb(0, nil)
+		return
+	}
+
+	msgs, err := k.encoder.slicer.Generate(entity)
+	// should never happens
+	if err != nil {
+		panic(err)
+	}
+
+	for i := 0; i < len(msgs); i++ {
+		// when the last msg successes, we call the callback
+		if i == len(msgs)-1 {
+			if cb != nil {
+				msgs[i].Metadata = cb
+			}
+		}
+		k.aproducer.Input() <- msgs[i]
+	}
+
+	return
+}
+
+func (k *kafkaBinloger) handleSuccess() {
+	for msg := range k.aproducer.Successes() {
+		cb, ok := msg.Metadata.(callback)
+		if ok {
+			offset := msg.Offset
+
+			cb(offset, nil)
+			if offset > latestKafkaPos.Offset {
+				latestKafkaPos.Offset = offset
+			}
+		}
+	}
+
+	log.Debug("handleSuccess quit")
+}
+
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
 func (k *kafkaBinloger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
 	return nil
@@ -90,6 +166,7 @@ func (k *kafkaBinloger) Close() error {
 	k.Lock()
 	defer k.Unlock()
 
+	k.aproducer.AsyncClose()
 	return k.producer.Close()
 }
 
