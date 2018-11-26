@@ -137,10 +137,10 @@ func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 // Can be re-opened once retrying on error.
 type chDB struct {
 	hostAndPort pkgsql.CHHostAndPort
-	user          string
-	password      string
-	blockSize int
-	DB   *sql.DB
+	user        string
+	password    string
+	blockSize   int
+	DB          *sql.DB
 }
 
 func openChDB(hostAndPort pkgsql.CHHostAndPort, user string, password string, blockSize int) (*chDB, error) {
