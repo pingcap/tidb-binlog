@@ -32,7 +32,7 @@ type kafkaBinloger struct {
 	addr []string
 }
 
-func createKafkaBinlogger(clusterID string, node string, addr []string, kafkaVersion string) (Binlogger, error) {
+func createKafkaBinlogger(clusterID string, node string, addr []string, kafkaVersion string, kafkaMaxMessages int) (Binlogger, error) {
 	producer, err := createKafkaProducer(addr, kafkaVersion)
 	if err != nil {
 		log.Errorf("create kafka producer error: %v", err)
@@ -47,6 +47,8 @@ func createKafkaBinlogger(clusterID string, node string, addr []string, kafkaVer
 	config.Producer.MaxMessageBytes = GlobalConfig.maxMsgSize
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	config.Producer.Flush.MaxMessages = kafkaMaxMessages
 
 	aproducer, err := util.NewNeverFailAsyncProducer(addr, config)
 	if err != nil {
