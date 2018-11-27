@@ -63,15 +63,13 @@ func (batch *flashRowBatch) Size() int {
 }
 
 // Flush writes all the rows in this row batch into CH, with retrying when failure.
-func (batch *flashRowBatch) Flush(chDB *chDB) (commitTS int64, err error) {
+func (batch *flashRowBatch) Flush(db *sql.DB) (commitTS int64, err error) {
 	for i := 0; i < pkgsql.MaxDMLRetryCount; i++ {
 		if i > 0 {
 			log.Warnf("[flush] Retrying %d flushing row batch %v in %d seconds", i, batch.sql, pkgsql.RetryWaitTime)
 			time.Sleep(pkgsql.RetryWaitTime)
-			_ = chDB.DB.Close()
-			chDB.reopen()
 		}
-		commitTS, err = batch.flushInternal(chDB)
+		commitTS, err = batch.flushInternal(db)
 		if err == nil {
 			return commitTS, nil
 		}
@@ -81,7 +79,7 @@ func (batch *flashRowBatch) Flush(chDB *chDB) (commitTS int64, err error) {
 	return commitTS, errors.Trace(err)
 }
 
-func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
+func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
 	log.Debugf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql)
 	defer func() {
 		if err != nil {
@@ -95,7 +93,7 @@ func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 		return batch.latestCommitTS, nil
 	}
 
-	tx, err := chDB.DB.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		return batch.latestCommitTS, errors.Trace(err)
 	}
@@ -133,33 +131,6 @@ func (batch *flashRowBatch) flushInternal(chDB *chDB) (_ int64, err error) {
 	return batch.latestCommitTS, nil
 }
 
-// chDB wraps DB connection information and the long-live connection to CH.
-// Can be re-opened once retrying on error.
-type chDB struct {
-	hostAndPort pkgsql.CHHostAndPort
-	user        string
-	password    string
-	blockSize   int
-	DB          *sql.DB
-}
-
-func openChDB(hostAndPort pkgsql.CHHostAndPort, user string, password string, blockSize int) (*chDB, error) {
-	chDB := &chDB{hostAndPort: hostAndPort, user: user, password: password, blockSize: blockSize}
-	err := chDB.reopen()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return chDB, nil
-}
-
-func (chDB *chDB) reopen() (err error) {
-	chDB.DB, err = pkgsql.OpenCH(chDB.hostAndPort.Host, chDB.hostAndPort.Port, chDB.user, chDB.password, "", chDB.blockSize)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 type flashExecutor struct {
 	sync.Mutex
 	close chan bool
@@ -168,7 +139,7 @@ type flashExecutor struct {
 	timeLimit time.Duration
 	sizeLimit int
 
-	chDBs      []*chDB
+	dbs        []*sql.DB
 	rowBatches map[string][]*flashRowBatch
 	metaCP     *flash.MetaCheckpoint
 
@@ -193,20 +164,20 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
-	chDBs := make([]*chDB, 0, len(hostAndPorts))
+	dbs := make([]*sql.DB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
-		chDB, err := openChDB(hostAndPort, cfg.User, cfg.Password, sizeLimit)
+		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "", sizeLimit)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		chDBs = append(chDBs, chDB)
+		dbs = append(dbs, db)
 	}
 
 	e := flashExecutor{
 		close:      make(chan bool),
 		timeLimit:  timeLimit,
 		sizeLimit:  sizeLimit,
-		chDBs:      chDBs,
+		dbs:        dbs,
 		rowBatches: make(map[string][]*flashRowBatch),
 		metaCP:     flash.GetInstance(),
 		baseError:  newBaseError(),
@@ -234,8 +205,8 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
 		}
-		for _, chDB := range e.chDBs {
-			e.err = pkgsql.ExecuteSQLs(chDB.DB, sqls, args, isDDL)
+		for _, db := range e.dbs {
+			e.err = pkgsql.ExecuteSQLs(db, sqls, args, isDDL)
 			if e.err != nil {
 				return errors.Trace(e.err)
 			}
@@ -246,7 +217,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			sql := sqls[i]
 			args := row[1:]
 			if _, ok := e.rowBatches[sql]; !ok {
-				e.rowBatches[sql] = make([]*flashRowBatch, len(e.chDBs), len(e.chDBs))
+				e.rowBatches[sql] = make([]*flashRowBatch, len(e.dbs), len(e.dbs))
 			}
 			if e.rowBatches[sql][hashKey] == nil {
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)
@@ -259,7 +230,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 
 			// Check if size limit exceeded.
 			if rb.Size() >= e.sizeLimit {
-				_, e.err = rb.Flush(e.chDBs[hashKey])
+				_, e.err = rb.Flush(e.dbs[hashKey])
 				if e.err != nil {
 					return errors.Trace(e.err)
 				}
@@ -283,8 +254,8 @@ func (e *flashExecutor) Close() error {
 	close(e.close)
 
 	hasError := false
-	for _, chDB := range e.chDBs {
-		err := chDB.DB.Close()
+	for _, db := range e.dbs {
+		err := db.Close()
 		if err != nil {
 			hasError = true
 			log.Error("[close] ", err)
@@ -327,7 +298,7 @@ func (e *flashExecutor) flushRoutine() {
 
 // partition must be a index of dbs
 func (e *flashExecutor) partition(key int64) int {
-	return int(key) % len(e.chDBs)
+	return int(key) % len(e.dbs)
 }
 
 func (e *flashExecutor) flushAll(forceSaveCP bool) error {
@@ -341,7 +312,7 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) error {
 			if rb == nil {
 				continue
 			}
-			lastestCommitTS, err := rb.Flush(e.chDBs[i])
+			lastestCommitTS, err := rb.Flush(e.dbs[i])
 			if err != nil {
 				return errors.Trace(err)
 			}
