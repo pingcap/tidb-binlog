@@ -71,6 +71,7 @@ type Config struct {
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	KafkaAddrs        string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion      string `toml:"kafka-version" json:"kafka-version"`
+	KafkaMaxMessages  int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
 	ZkAddrs           string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	EtcdDialTimeout   time.Duration
 	DataDir           string          `toml:"data-dir" json:"data-dir"`
@@ -111,6 +112,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.KafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "a comma separated list of the kafka broker endpoints")
 	fs.StringVar(&cfg.KafkaVersion, "kafka-version", defaultKafkaVersion, "kafka version, looks like \"0.8.2.0\", \"0.8.2.1\", \"0.9.0.0\", \"0.10.2.0\", \"1.0.0\", default is \"0.8.2.0\"")
+	fs.IntVar(&cfg.KafkaMaxMessages, "kafka-max-messages", 1<<10, "The maximum number of messages the producer will send in a single broker request.")
 	fs.StringVar(&cfg.ZkAddrs, "zookeeper-addrs", "", "a comma separated list of the zookeeper broker endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
