@@ -26,7 +26,7 @@ import (
 
 // we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
 var waitMatchedTime = 3 * time.Second
-var fetchTimeout = 10 * time.Second
+var fetchTimeout = 1 * time.Minute
 
 type binlogEntity struct {
 	tp       pb.BinlogType
