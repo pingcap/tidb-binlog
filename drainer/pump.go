@@ -3,6 +3,7 @@ package drainer
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,6 +63,9 @@ type Pump struct {
 		commitItems   map[int64]*binlogItem
 	}
 
+	kafkaAddrs   []string
+	kafkaVersion string
+
 	asm        *assemble.Assembler
 	wg         sync.WaitGroup
 	ctx        context.Context
@@ -82,17 +86,19 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 	}
 
 	return &Pump{
-		nodeID:     nodeID,
-		clusterID:  clusterID,
-		consumer:   consumer,
-		currentPos: pos,
-		latestPos:  pos,
-		bh:         newBinlogHeap(maxBinlogItemCount),
-		tiStore:    tiStore,
-		window:     w,
-		timeout:    timeout,
-		binlogChan: make(chan *binlogEntity, maxBinlogItemCount),
-		asm:        assemble.NewAssembler(errorBinlogCount),
+		nodeID:       nodeID,
+		clusterID:    clusterID,
+		consumer:     consumer,
+		currentPos:   pos,
+		latestPos:    pos,
+		bh:           newBinlogHeap(maxBinlogItemCount),
+		tiStore:      tiStore,
+		window:       w,
+		timeout:      timeout,
+		kafkaAddrs:   kafkaAddrs,
+		kafkaVersion: kafkaVersion,
+		binlogChan:   make(chan *binlogEntity, maxBinlogItemCount),
+		asm:          assemble.NewAssembler(errorBinlogCount),
 	}, nil
 }
 
@@ -444,6 +450,22 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != context.Canceled {
 					log.Warningf("[pump %s] stream was closed at pos %+v, error %v", p.nodeID, pos, err)
 				}
+				if strings.Contains(err.Error(), "consumer hang") {
+					var err1 error
+					err1 = p.consumer.Close()
+					if err != nil {
+						log.Errorf("[pump %s] fail to close consumer with addrs %v error %v", p.nodeID, p.kafkaAddrs, err1)
+					}
+					for {
+						p.consumer, err1 = util.CreateKafkaConsumer(p.kafkaAddrs, p.kafkaVersion)
+						if err1 != nil {
+							log.Errorf("[pump %s] fail to create consumer with addrs %v error %v", p.nodeID, p.kafkaAddrs, err1)
+							time.Sleep(time.Second)
+							continue
+						}
+						break
+					}
+				}
 				time.Sleep(waitTime)
 				continue
 			}
@@ -469,7 +491,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
 		case <-time.After(fetchTimeout):
-			return pos, errors.Errorf("timeout: pull binlog from kafka")
+			return pos, errors.Errorf("consumer hang: pull binlog from kafka")
 		}
 	}
 }
