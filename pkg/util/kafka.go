@@ -14,9 +14,6 @@ import (
 const (
 	maxRetry      = 12
 	retryInterval = 5 * time.Second
-
-	defaultConsumerFetch    = 1024 * 1024 * 10
-	defaultConsumerWaitTime = 5 * time.Second
 )
 
 // don't use directly, call GetParentMetricsRegistry to get it
@@ -89,10 +86,6 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
-	// default is 1M, set to 10M
-	kafkaCfg.Consumer.Fetch.Default = defaultConsumerFetch
-	// default is 250 ms, set to 5s
-	kafkaCfg.Consumer.MaxWaitTime = defaultConsumerWaitTime
 
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
 	if err != nil {

@@ -3,7 +3,6 @@ package drainer
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +26,7 @@ import (
 // we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
 var waitMatchedTime = 3 * time.Second
 var fetchTimeout = 1 * time.Minute
+var errFetchTimeout = errors.Errorf("consumer hang: pull binlog from kafka")
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -450,7 +450,7 @@ func (p *Pump) pullBinlogs() {
 				if errors.Cause(err) != context.Canceled {
 					log.Warningf("[pump %s] stream was closed at pos %+v, error %v", p.nodeID, pos, err)
 				}
-				if strings.Contains(err.Error(), "consumer hang") {
+				if err == errFetchTimeout {
 					var err1 error
 					err1 = p.consumer.Close()
 					if err1 != nil {
@@ -491,7 +491,7 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
 		case <-time.After(fetchTimeout):
-			return pos, errors.Errorf("consumer hang: pull binlog from kafka")
+			return pos, errFetchTimeout
 		}
 	}
 }
