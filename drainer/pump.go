@@ -453,7 +453,7 @@ func (p *Pump) pullBinlogs() {
 				if strings.Contains(err.Error(), "consumer hang") {
 					var err1 error
 					err1 = p.consumer.Close()
-					if err != nil {
+					if err1 != nil {
 						log.Errorf("[pump %s] fail to close consumer with addrs %v error %v", p.nodeID, p.kafkaAddrs, err1)
 					}
 					for {
