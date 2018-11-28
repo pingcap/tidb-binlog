@@ -58,6 +58,8 @@ func newKafka(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
+	config.Producer.Flush.MaxMessages = cfg.KafkaMaxMessages
+
 	// maintain minimal set that has been necessary so far
 	// this also avoid take too much time in NewAsyncProducer if kafka is down
 	// because it will fetch metadata right away if setting Full = true, and we set
