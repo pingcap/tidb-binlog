@@ -67,6 +67,7 @@ package sarama
 import (
 	"io/ioutil"
 	"log"
+	"math"
 )
 
 // Logger is the instance of a StdLogger interface that Sarama writes connection
@@ -96,4 +97,4 @@ var MaxRequestSize int32 = 100 * 1024 * 1024
 // protect the client from running out of memory. Please note that brokers do not have any natural limit on
 // the size of responses they send. In particular, they can send arbitrarily large fetch responses to consumers
 // (see https://issues.apache.org/jira/browse/KAFKA-2063).
-var MaxResponseSize int32 = 100 * 1024 * 1024
+var MaxResponseSize int32 = math.MaxInt32

@@ -25,6 +25,7 @@ import (
 
 // we wait waitMatchedTime for the match C binlog, atfer waitMatchedTime we try to query the status from tikv
 var waitMatchedTime = 3 * time.Second
+var fetchTimeout = 10 * time.Second
 
 type binlogEntity struct {
 	tp       pb.BinlogType
@@ -451,7 +452,9 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
+	fetchMessageTicker := time.NewTicker(fetchTimeout)
 	defer func() {
+		fetchMessageTicker.Stop()
 		stream.Close()
 	}()
 
@@ -460,6 +463,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
+		case <-fetchMessageTicker.C:
+			return pos, errors.Errorf("timeout: pull binlog from kafka")
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("[pump %s] consumer %v", p.nodeID, consumerErr)
 		case msg := <-stream.Messages():
