@@ -452,9 +452,7 @@ func (p *Pump) pullBinlogs() {
 }
 
 func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Pos, error) {
-	fetchMessageTicker := time.NewTicker(fetchTimeout)
 	defer func() {
-		fetchMessageTicker.Stop()
 		stream.Close()
 	}()
 
@@ -463,8 +461,6 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 		select {
 		case <-p.ctx.Done():
 			return pos, p.ctx.Err()
-		case <-fetchMessageTicker.C:
-			return pos, errors.Errorf("timeout: pull binlog from kafka")
 		case consumerErr := <-stream.Errors():
 			return pos, errors.Errorf("[pump %s] consumer %v", p.nodeID, consumerErr)
 		case msg := <-stream.Messages():
@@ -472,6 +468,8 @@ func (p *Pump) receiveBinlog(stream sarama.PartitionConsumer, pos pb.Pos) (pb.Po
 			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(msg.Value)))
 			pos.Offset = msg.Offset
 			p.asm.Append(msg)
+		case <-time.After(fetchTimeout):
+			return pos, errors.Errorf("timeout: pull binlog from kafka")
 		}
 	}
 }
