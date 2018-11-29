@@ -62,7 +62,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		return nil, errors.Trace(err)
 	}
 
-	db, err := pkgsql.OpenCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "")
+	db, err := pkgsql.OpenCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "", 0)
 	if err != nil {
 		log.Errorf("open database error %v", err)
 		return nil, errors.Trace(err)
