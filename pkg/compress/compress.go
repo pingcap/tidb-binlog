@@ -24,7 +24,7 @@ const (
 
 	// DefaultCompressLevel means the default compress level of flate, levels range from 1 (BestSpeed) to 9 (BestCompression);
 	// higher levels typically run slower but compress more.
-	DefaultCompressLevel = 1
+	DefaultCompressLevel = flate.BestSpeed
 )
 
 // ToCompressionCodec converts v to CompressionCodec.
