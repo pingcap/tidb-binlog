@@ -62,11 +62,13 @@ require (
 	github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20171206051426-1c287c953996
+	github.com/pingcap/errors v0.11.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20161010101021-158edde5a354 // indirect
 	github.com/pingcap/kvproto v0.0.0-20181010074705-0ba3ca8a6e37 // indirect
+	github.com/pingcap/parser v0.0.0-20181210061630-27e9d3e251d4 // indirect
 	github.com/pingcap/pd v2.0.5+incompatible
 	github.com/pingcap/tidb v2.1.0-beta.0.20180823032518-ef6590e1899a+incompatible
-	github.com/pingcap/tidb-tools v0.0.0-20180913093950-ff0ddbf51b57
+	github.com/pingcap/tidb-tools v2.1.1-0.20181130053235-0206fdab9ef8+incompatible
 	github.com/pingcap/tipb v0.0.0-20180711115030-4141907f6909
 	github.com/pkg/errors v0.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

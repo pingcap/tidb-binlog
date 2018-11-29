@@ -30,11 +30,12 @@ const (
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout     = 5 * time.Second
 	defaultSyncedCheckTime = 5 // 5 minute
-	defaultKafkaAddrs      = "127.0.0.1:9092"
 	defaultKafkaVersion    = "0.8.2.0"
 )
 
 var (
+	defaultKafkaAddrs = "127.0.0.1:9092"
+
 	maxBinlogItemCount     int
 	defaultBinlogItemCount = 16 << 12
 )
@@ -109,6 +110,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	fs.StringVar(&defaultKafkaAddrs, "kafka-addrs", defaultKafkaAddrs, "kafka addrs when dest-db-type=kafka")
 
 	return cfg
 }
