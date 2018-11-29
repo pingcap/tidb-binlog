@@ -83,6 +83,8 @@ port = 3306
 # zookeeper-addrs = "127.0.0.1:2181"
 # kafka-addrs = "127.0.0.1:9092"
 # kafka-version = "0.8.2.0"
+# kafka-max-messages = 1024
+#
 #
 # the topic name drainer will push msg, the default name is <cluster-id>_obinlog
 # be careful don't use the same name if run multi drainer instances
