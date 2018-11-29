@@ -1,6 +1,7 @@
 package binlogfile
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -11,6 +12,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 func TestClient(t *testing.T) {
@@ -76,8 +78,8 @@ func (t *testFileSuite) TestExist(c *C) {
 }
 
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
-	names := []string{"binlog-0000000000000001-20180315121212", "test", "binlog-0000000000000002-20180315121212"}
-	excepted := []string{"binlog-0000000000000001-20180315121212", "binlog-0000000000000002-20180315121212"}
+	names := []string{"binlog-0000000000000001-20180315121212-404615461397069825", "test", "binlog-0000000000000002-20180315121212-404615461397069825"}
+	excepted := []string{"binlog-0000000000000001-20180315121212-404615461397069825", "binlog-0000000000000002-20180315121212-404615461397069825"}
 	res := FilterBinlogNames(names)
 	c.Assert(res, HasLen, len(excepted))
 	c.Assert(res, DeepEquals, excepted)
@@ -89,7 +91,7 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 		expectedIndex uint64
 		expectedError bool
 	}{
-		{"binlog-0000000000000001-t20180315121212", 0000000000000001, false},
+		{"binlog-0000000000000001-20180315121212-404615461397069825", 0000000000000001, false},
 		{"binlog-0000000000000001", 0000000000000001, false},
 		{"binlog-index", 0, true},
 	}
@@ -108,9 +110,12 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 }
 
 func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
+	datetimeStr := "20180315121212"
 	index := uint64(1)
-	datetime, err := time.Parse(datetimeFormat, "20180315121212")
+	datetime, err := time.Parse(datetimeFormat, datetimeStr)
 	c.Assert(err, IsNil)
-	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, "binlog-0000000000000001-t20180315121212")
+
+	ts := int64(oracle.ComposeTS(datetime.Unix()*1000, 0))
+	binlogName := binlogNameWithDateTime(index, ts)
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-0000000000000001-%s-%d", datetimeStr, ts))
 }

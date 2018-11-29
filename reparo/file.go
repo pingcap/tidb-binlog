@@ -5,13 +5,12 @@ import (
 	"io"
 	"os"
 	"path"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type binlogFile struct {
@@ -79,35 +78,34 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 	fileNameItems := strings.Split(filename, "-")
 
-	// new version's binlog file looks like binlog.00000000000000001-t20180101010101
-	if strings.HasPrefix(fileNameItems[len(fileNameItems)-1], "t") {
-		timeStr, err := bf.FormatDateTimeStr(fileNameItems[len(fileNameItems)-1][1:])
+	// old version's binlog file looks like binlog-00000000000000001-20180101010101
+	// new version's binlog file looks like binlog-00000000000000001-20180101010101-404615461397069825
+	if len(fileNameItems) == 4 {
+		ts, err := strconv.ParseInt(fileNameItems[2], 10, 64)
 		if err != nil {
 			return 0, errors.Annotatef(err, "analyse binlog file name error")
 		}
-		t, err := time.ParseInLocation("2006-01-02T15:04:05", timeStr, time.Local)
-		if err != nil {
-			return 0, errors.Annotatef(err, "analyse binlog file name error")
-		}
-		return int64(oracle.ComposeTS(t.Unix()*1000, 0)), nil
-	} else {
-		fd, err := os.OpenFile(path.Join(r.cfg.Dir, filename), os.O_RDONLY, 0600)
-		if err != nil {
-			return 0, errors.Annotatef(err, "open file %s error", filename)
-		}
-		defer fd.Close()
 
-		// get the first binlog in file
-		br := bufio.NewReader(fd)
-		binlog, _, err := Decode(br)
-		if errors.Cause(err) == io.EOF {
-			log.Warnf("no binlog find in %s", filename)
-			return 0, nil
-		}
-		if err != nil {
-			return 0, errors.Annotatef(err, "decode binlog error")
-		}
-
-		return binlog.CommitTs, nil
+		return ts, nil
 	}
+
+	fd, err := os.OpenFile(path.Join(r.cfg.Dir, filename), os.O_RDONLY, 0600)
+	if err != nil {
+		return 0, errors.Annotatef(err, "open file %s error", filename)
+	}
+	defer fd.Close()
+
+	// get the first binlog in file
+	br := bufio.NewReader(fd)
+	binlog, _, err := Decode(br)
+	if errors.Cause(err) == io.EOF {
+		log.Warnf("no binlog find in %s", filename)
+		return 0, nil
+	}
+	if err != nil {
+		return 0, errors.Annotatef(err, "decode binlog error")
+	}
+
+	return binlog.CommitTs, nil
+
 }

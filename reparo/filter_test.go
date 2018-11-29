@@ -3,6 +3,7 @@ package repora
 import (
 	"fmt"
 	"os"
+	"path"
 	"testing"
 	"time"
 
@@ -81,41 +82,45 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 	// we can get the first binlog's commit ts by parse binlog file'name in new version.
+	binlogDir := "./reparo-test1"
 	reparos := []*Reparo{
 		{
 			cfg: &Config{
-				StartDatetime: "2018-10-01 11:11:11",
-				StopDatetime:  "2018-10-01 12:11:11",
+				StartTSO: 20181001111111,
+				StopTSO:  20181001121111,
+				Dir:      binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
-				StopDatetime: "2018-10-01 12:11:11",
+				StopTSO: 20181001121111,
+				Dir:     binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
-				StartDatetime: "2018-10-01 11:11:11",
+				StartTSO: 20181001111111,
+				Dir:      binlogDir,
 			},
 		},
 	}
 
 	fileNames := [][]string{
 		{
-			"binlog-0000000000000000-t20181001101111",
-			"binlog-0000000000000001-t20181001102111",
-			"binlog-0000000000000002-t20181001103111",
-			"binlog-0000000000000003-t20181001111110",
+			"binlog-0000000000000000-20181001101111-20181001101111",
+			"binlog-0000000000000001-20181001102111-20181001102111",
+			"binlog-0000000000000002-20181001103111-20181001103111",
+			"binlog-0000000000000003-20181001111110-20181001111110",
 		},
 		{
-			"binlog-0000000000000000-t20181001111111",
-			"binlog-0000000000000001-t20181001111112",
-			"binlog-0000000000000002-t20181001121111",
+			"binlog-0000000000000000-20181001111111-20181001111111",
+			"binlog-0000000000000001-20181001111112-20181001111112",
+			"binlog-0000000000000002-20181001121111-20181001121111",
 		},
 		{
-			"binlog-0000000000000000-t20181001111112",
-			"binlog-0000000000000001-t20181001111113",
-			"binlog-0000000000000002-t20181001211113",
+			"binlog-0000000000000000-20181001111112-20181001111112",
+			"binlog-0000000000000001-20181001111113-20181001111113",
+			"binlog-0000000000000002-20181001211113-20181001211113",
 		},
 	}
 
@@ -125,30 +130,28 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 		{1, 3, 3},
 	}
 
-	var err error
+	for j, fs := range fileNames {
+		err := os.MkdirAll(binlogDir, 0755)
+		c.Assert(err, IsNil)
+		defer os.RemoveAll(binlogDir)
 
-	for i, r := range reparos {
-		if r.cfg.StartDatetime != "" {
-			r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
-			c.Assert(err, IsNil)
+		for _, f := range fs {
+			os.OpenFile(path.Join(binlogDir, f), os.O_RDONLY|os.O_CREATE, 0666)
 		}
 
-		if r.cfg.StopDatetime != "" {
-			r.cfg.StopTSO, err = dateTimeToTSO(r.cfg.StopDatetime)
-			c.Assert(err, IsNil)
-		}
-
-		for j, fs := range fileNames {
+		for i, r := range reparos {
 			filterBinlogFile, err := r.filterFiles(fs)
 			c.Assert(err, IsNil)
 			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
 		}
+
+		os.RemoveAll(binlogDir)
 	}
 }
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFileOld(c *C) {
 	// we can get the first binlog's commit ts by decode data in binlog file.
-	binlogDir := "./reparo-test"
+	binlogDir := "./reparo-test2"
 
 	err := os.MkdirAll(binlogDir, 0755)
 	c.Assert(err, IsNil)
