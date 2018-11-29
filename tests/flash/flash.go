@@ -8,8 +8,10 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/test/dailytest"
-	"github.com/pingcap/tidb-binlog/test/util"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/tests/dailytest"
+	"github.com/pingcap/tidb-binlog/tests/util"
+	_ "github.com/zanmato1984/clickhouse"
 )
 
 func main() {
@@ -56,7 +58,14 @@ create table ntest(
 	}
 	defer util.CloseDB(sourceDB)
 
-	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
+	targetAddr, err := pkgsql.ParseCHAddr(cfg.TargetDBCfg.Host)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(targetAddr) != 1 {
+		log.Fatal("only support 1 flash node so far.")
+	}
+	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+
+killall drainer || true
+
+echo "[$(date)] <<<<<< RUNNING TEST FOR: tests/$TEST_NAME/drainer.toml >>>>>>" >> "$OUT_DIR/drainer.log"
+
+config=${TEST_DIR-.}/drainer.toml
+
+drainer -config $config -log-file $OUT_DIR/drainer.log >> $OUT_DIR/drainer.log 2>&1

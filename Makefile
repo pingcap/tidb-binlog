@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt diff reparo
+.PHONY: build test check update clean pump drainer fmt diff reparo integration_test
 
 PROJECT=tidb-binlog
 
@@ -56,6 +56,10 @@ install:
 test:
 	@export log_level=error;\
 	$(GOTEST) -cover $(PACKAGES)
+
+integration_test:
+	@which bin/drainer
+	tests/run.sh
 
 fmt:
 	go fmt ./...
