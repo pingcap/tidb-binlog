@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"io/ioutil"
 	"strings"
 
 	"github.com/juju/errors"
@@ -43,7 +44,7 @@ func ToCompressionCodec(v string) CompressionCodec {
 }
 
 // Compress compresses payload based on the codec.
-func Compress(data []byte, codec CompressionCodec) (payload []byte, err error) {
+func Compress(data []byte, codec CompressionCodec, compressLevel int) (payload []byte, err error) {
 	var buf bytes.Buffer
 	switch codec {
 	case CompressionNone:
@@ -58,7 +59,7 @@ func Compress(data []byte, codec CompressionCodec) (payload []byte, err error) {
 		}
 		payload = buf.Bytes()
 	case CompressionFlate:
-		writer, err := flate.NewWriter(&buf, DefaultCompressLevel)
+		writer, err := flate.NewWriter(&buf, compressLevel)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -72,4 +73,25 @@ func Compress(data []byte, codec CompressionCodec) (payload []byte, err error) {
 	}
 
 	return payload, nil
+}
+
+// DeCompress decompresses payload based on the codec.
+func DeCompress(data []byte, codec CompressionCodec) (payload []byte, err error) {
+	switch codec {
+	case CompressionNone:
+		return data, nil
+	case CompressionGZIP:
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		return ioutil.ReadAll(reader)
+	case CompressionFlate:
+		reader := flate.NewReader(bytes.NewReader(data))
+		defer reader.Close()
+		return ioutil.ReadAll(reader)
+	}
+
+	return nil, nil
 }

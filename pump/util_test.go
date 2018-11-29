@@ -19,7 +19,7 @@ func (t *testPumpServerSuite) TestSeekBinlog(c *C) {
 		os.Remove(f.Name())
 	}()
 
-	encoder := newEncoder(f, compress.CompressionNone)
+	encoder := newEncoder(f, compress.CompressionNone, compress.DefaultCompressLevel)
 	_, err = encoder.Encode(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 
@@ -65,7 +65,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 

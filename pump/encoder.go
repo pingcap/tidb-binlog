@@ -24,19 +24,21 @@ type Encoder interface {
 }
 
 type encoder struct {
-	bw    io.Writer
-	codec compress.CompressionCodec
+	bw            io.Writer
+	codec         compress.CompressionCodec
+	compressLevel int
 }
 
-func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
+func newEncoder(w io.Writer, codec compress.CompressionCodec, compressLevel int) Encoder {
 	return &encoder{
-		bw:    w,
-		codec: codec,
+		bw:            w,
+		codec:         codec,
+		compressLevel: compressLevel,
 	}
 }
 
 func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
-	data, err := encode(entity.Payload, e.codec)
+	data, err := encode(entity.Payload, e.codec, e.compressLevel)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -56,8 +58,8 @@ func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
 	return 0, errors.Trace(err)
 }
 
-func encode(payload []byte, compression compress.CompressionCodec) ([]byte, error) {
-	compressPayload, err := compress.Compress(payload, compression)
+func encode(payload []byte, compression compress.CompressionCodec, compressLevel int) ([]byte, error) {
+	compressPayload, err := compress.Compress(payload, compression, compressLevel)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

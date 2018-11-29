@@ -59,7 +59,8 @@ type binlogger struct {
 	// encoder encodes binlog payload into bytes, and write to file
 	encoder Encoder
 
-	codec compress.CompressionCodec
+	codec         compress.CompressionCodec
+	compressLevel int
 
 	// file is the lastest file in the dir
 	file    *file.LockedFile
@@ -68,7 +69,7 @@ type binlogger struct {
 }
 
 //OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec, compressLevel int) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -132,12 +133,17 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	latestFilePos.Offset = offset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
+	if compressLevel < 1 || compressLevel > 9 {
+		compressLevel = compress.DefaultCompressLevel
+	}
+
 	binlog := &binlogger{
-		dir:     dirpath,
-		file:    f,
-		encoder: newEncoder(f, codec),
-		codec:   codec,
-		dirLock: dirLock,
+		dir:           dirpath,
+		file:          f,
+		encoder:       newEncoder(f, codec, compressLevel),
+		compressLevel: compressLevel,
+		codec:         codec,
+		dirLock:       dirLock,
 	}
 
 	return binlog, nil
@@ -415,7 +421,7 @@ func (b *binlogger) rotate() error {
 	}
 	b.file = newTail
 
-	b.encoder = newEncoder(b.file, b.codec)
+	b.encoder = newEncoder(b.file, b.codec, b.compressLevel)
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }

@@ -17,7 +17,7 @@ func (s *decoderSuite) TestDecode(c *check.C) {
 	buf := new(bytes.Buffer)
 
 	// write one record
-	payloadData, err := encode([]byte("payload"), compress.CompressionNone)
+	payloadData, err := encode([]byte("payload"), compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, check.IsNil)
 
 	_, err = buf.Write(payloadData)

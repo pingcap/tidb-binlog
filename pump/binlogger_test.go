@@ -32,7 +32,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 }
 
 func checkTest(c *C, dir string) {
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 	defer CloseBinlogger(bl)
 
@@ -47,7 +47,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 
 	b, ok := bl.(*binlogger)
@@ -58,7 +58,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	c.Assert(err, IsNil)
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir, compress.CompressionNone)
+	bl, err = OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 
 	b, ok = bl.(*binlogger)
@@ -86,7 +86,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 
 	ent := &binlog.Entity{Payload: []byte("binlogtest")}
@@ -106,7 +106,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir, compress.CompressionNone)
+	bl, err = OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 
 	binlogs, err := bl.ReadFrom(binlog.Pos{}, 1)
@@ -128,7 +128,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -170,7 +170,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -206,7 +206,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(dir)
 
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir, compress.CompressionNone, compress.DefaultCompressLevel)
 	c.Assert(err, IsNil)
 	defer CloseBinlogger(bl)
 

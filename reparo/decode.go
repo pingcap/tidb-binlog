@@ -1,13 +1,9 @@
 package repora
 
 import (
-	"bytes"
-	"compress/flate"
-	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -26,7 +22,7 @@ func Decode(r io.Reader, compression compress.CompressionCodec) (*pb.Binlog, int
 		return nil, 0, errors.Trace(err)
 	}
 
-	binlogData, err := decodePayload(payload, compression)
+	binlogData, err := compress.DeCompress(payload, compression)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -97,24 +93,4 @@ func readInt32(r io.Reader) (uint32, error) {
 	var n uint32
 	err := binary.Read(r, binary.LittleEndian, &n)
 	return n, errors.Trace(err)
-}
-
-func decodePayload(data []byte, compression compress.CompressionCodec) ([]byte, error) {
-	switch compression {
-	case compress.CompressionNone:
-		return data, nil
-	case compress.CompressionGZIP:
-		reader, err := gzip.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, err
-		}
-		defer reader.Close()
-		return ioutil.ReadAll(reader)
-	case compress.CompressionFlate:
-		reader := flate.NewReader(bytes.NewReader(data))
-		defer reader.Close()
-		return ioutil.ReadAll(reader)
-	}
-
-	return nil, nil
 }

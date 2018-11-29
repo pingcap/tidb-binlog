@@ -67,11 +67,14 @@ port = 3306
 #schema = "tidb_binlog"
 
 # Uncomment this if you want to use pb or sql as db-type.
-# Compress compresses output file, like pb and sql file. Now it supports "gzip" algorithm only. 
-# Values can be "gzip" and "flate". Leave it empty to disable compression. 
+# Compress compresses output file, like pb and sql file. Now it supports "gzip" and "flate" algorithm. 
+# Values can be "gzip" and "flate". Leave it empty to disable compression.
+# and you can set the compress level for flate, levels range from 1 (BestSpeed) to 9 (BestCompression),
+# higher levels typically run slower but compress more.
 #[syncer.to]
 #dir = "data.drainer"
 #compression = "gzip"
+#compress-level = 1
 
 
 # when db-type is kafka, you can uncomment this to config the down stream kafka, it will be the globle config kafka default
