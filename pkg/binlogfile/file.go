@@ -2,7 +2,6 @@ package binlogfile
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strings"
@@ -11,9 +10,11 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
+	version        = "v2.1"
 	datetimeFormat = "20060102150405"
 )
 
@@ -144,25 +145,33 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		return 0, ErrBadBinlogName
 	}
 
-	var datetime string
-	_, err = fmt.Sscanf(str, "binlog-%016d-%s", &index, &datetime)
-	// backward compatibility
-	if err == io.ErrUnexpectedEOF {
+	var version, datetime string
+	items := strings.Split(str, "-")
+	switch len(items) {
+	case 4:
+		_, err = fmt.Sscanf(str, "binlog-%s-%016d-%s", &version, &index, &datetime)
+	case 3:
+		// backward compatibility
+		_, err = fmt.Sscanf(str, "binlog-%016d-%s", &index, &datetime)
+	case 2:
+		// backward compatibility
 		_, err = fmt.Sscanf(str, "binlog-%016d", &index)
 	}
+
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20180101010101-404615461397069825
+// BinlogName creates a binlog file name. The file name format is like binlog-v2.1.0-0000000000000001-20180101010101
 func BinlogName(index uint64, ts int64) string {
-	return binlogNameWithDateTime(index, ts)
+	// transfor ts to rough time
+	t := time.Unix(oracle.ExtractPhysical(uint64(ts))/1000, 0)
+	return binlogNameWithDateTime(index, t)
 }
 
 // binlogNameWithDateTime creates a binlog file name.
-func binlogNameWithDateTime(index uint64, ts int64) string {
-	// transfor ts to rough time
-	t := time.Unix(ts>>18/1000, 0)
-	return fmt.Sprintf("binlog-%016d-%s-%d", index, t.Format(datetimeFormat), ts)
+func binlogNameWithDateTime(index uint64, datetime time.Time) string {
+
+	return fmt.Sprintf("binlog-v2.1.0-%016d-%s", index, datetime.Format(datetimeFormat))
 }
 
 // FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"

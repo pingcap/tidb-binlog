@@ -86,41 +86,41 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 	reparos := []*Reparo{
 		{
 			cfg: &Config{
-				StartTSO: 20181001111111,
-				StopTSO:  20181001121111,
-				Dir:      binlogDir,
+				StartDatetime: "2018-10-01 11:11:11",
+				StopDatetime:  "2018-10-01 12:11:11",
+				Dir:           binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
-				StopTSO: 20181001121111,
-				Dir:     binlogDir,
+				StopDatetime: "2018-10-01 12:11:11",
+				Dir:          binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
-				StartTSO: 20181001111111,
-				Dir:      binlogDir,
+				StartDatetime: "2018-10-01 11:11:11",
+				Dir:           binlogDir,
 			},
 		},
 	}
 
 	fileNames := [][]string{
 		{
-			"binlog-0000000000000000-20181001101111-20181001101111",
-			"binlog-0000000000000001-20181001102111-20181001102111",
-			"binlog-0000000000000002-20181001103111-20181001103111",
-			"binlog-0000000000000003-20181001111110-20181001111110",
+			"binlog-v2.1.0-0000000000000000-20181001101111",
+			"binlog-v2.1.0-0000000000000001-20181001102111",
+			"binlog-v2.1.0-0000000000000002-20181001103111",
+			"binlog-v2.1.0-0000000000000003-20181001111110",
 		},
 		{
-			"binlog-0000000000000000-20181001111111-20181001111111",
-			"binlog-0000000000000001-20181001111112-20181001111112",
-			"binlog-0000000000000002-20181001121111-20181001121111",
+			"binlog-v2.1.0-0000000000000000-20181001111111",
+			"binlog-v2.1.0-0000000000000001-20181001111112",
+			"binlog-v2.1.0-0000000000000002-20181001121111",
 		},
 		{
-			"binlog-0000000000000000-20181001111112-20181001111112",
-			"binlog-0000000000000001-20181001111113-20181001111113",
-			"binlog-0000000000000002-20181001211113-20181001211113",
+			"binlog-v2.1.0-0000000000000000-20181001111112",
+			"binlog-v2.1.0-0000000000000001-20181001111113",
+			"binlog-v2.1.0-0000000000000002-20181001211113",
 		},
 	}
 
@@ -140,6 +140,16 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 		}
 
 		for i, r := range reparos {
+			if r.cfg.StartDatetime != "" {
+				r.cfg.StartTSO, err = dateTimeToTSO(r.cfg.StartDatetime)
+				c.Assert(err, IsNil)
+			}
+
+			if r.cfg.StopDatetime != "" {
+				r.cfg.StopTSO, err = dateTimeToTSO(r.cfg.StopDatetime)
+				c.Assert(err, IsNil)
+			}
+
 			filterBinlogFile, err := r.filterFiles(fs)
 			c.Assert(err, IsNil)
 			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])

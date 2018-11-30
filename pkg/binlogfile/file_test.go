@@ -78,8 +78,8 @@ func (t *testFileSuite) TestExist(c *C) {
 }
 
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
-	names := []string{"binlog-0000000000000001-20180315121212-404615461397069825", "test", "binlog-0000000000000002-20180315121212-404615461397069825"}
-	excepted := []string{"binlog-0000000000000001-20180315121212-404615461397069825", "binlog-0000000000000002-20180315121212-404615461397069825"}
+	names := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "test", "binlog-v2.1.0-0000000000000002-20180315121212"}
+	excepted := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "binlog-v2.1.0-0000000000000002-20180315121212"}
 	res := FilterBinlogNames(names)
 	c.Assert(res, HasLen, len(excepted))
 	c.Assert(res, DeepEquals, excepted)
@@ -91,7 +91,7 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 		expectedIndex uint64
 		expectedError bool
 	}{
-		{"binlog-0000000000000001-20180315121212-404615461397069825", 0000000000000001, false},
+		{"binlog-v2.1.0-0000000000000001-20180315121212", 0000000000000001, false},
 		{"binlog-0000000000000001", 0000000000000001, false},
 		{"binlog-index", 0, true},
 	}
@@ -117,5 +117,5 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 
 	ts := int64(oracle.ComposeTS(datetime.Unix()*1000, 0))
 	binlogName := binlogNameWithDateTime(index, ts)
-	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-0000000000000001-%s-%d", datetimeStr, ts))
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version, datetimeStr))
 }
