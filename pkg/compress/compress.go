@@ -43,6 +43,16 @@ func ToCompressionCodec(v string) CompressionCodec {
 	}
 }
 
+// AdjustCompressLevel adjusts compress level.
+func AdjustCompressLevel(compressLevel int) int {
+	if compressLevel < flate.BestSpeed || compressLevel > flate.BestCompression {
+		log.Warnf("invalid compress level %d, use default compress level %d", compressLevel, DefaultCompressLevel)
+		compressLevel = DefaultCompressLevel
+	}
+
+	return compressLevel
+}
+
 // Compress compresses payload based on the codec.
 func Compress(data []byte, codec CompressionCodec, compressLevel int) (payload []byte, err error) {
 	var buf bytes.Buffer

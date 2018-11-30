@@ -133,10 +133,6 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec, compressLeve
 	latestFilePos.Offset = offset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	if compressLevel < 1 || compressLevel > 9 {
-		compressLevel = compress.DefaultCompressLevel
-	}
-
 	binlog := &binlogger{
 		dir:           dirpath,
 		file:          f,
