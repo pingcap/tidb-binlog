@@ -80,7 +80,7 @@ func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 	fileNameItems := strings.Split(filename, "-")
 
 	// old version's binlog file looks like binlog-00000000000000001-20180101010101
-	// new version's binlog file looks like binlog-v2.1.0-00000000000000001-20180101010101
+	// new version's binlog file looks like binlog-v2-00000000000000001-20180101010101
 	if len(fileNameItems) == 4 {
 		timeStr, err := bf.FormatDateTimeStr(fileNameItems[3])
 		if err != nil {

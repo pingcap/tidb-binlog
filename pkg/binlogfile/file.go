@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version        = "v2.1"
+	version        = "v2"
 	datetimeFormat = "20060102150405"
 )
 
@@ -170,8 +170,7 @@ func BinlogName(index uint64, ts int64) string {
 
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-
-	return fmt.Sprintf("binlog-v2.1.0-%016d-%s", index, datetime.Format(datetimeFormat))
+	return fmt.Sprintf("binlog-%s-%016d-%s", version, index, datetime.Format(datetimeFormat))
 }
 
 // FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"

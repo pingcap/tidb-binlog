@@ -2,6 +2,7 @@ package repora
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -82,45 +83,41 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 	// we can get the first binlog's commit ts by parse binlog file'name in new version.
-	binlogDir := "./reparo-test1"
 	reparos := []*Reparo{
 		{
 			cfg: &Config{
 				StartDatetime: "2018-10-01 11:11:11",
 				StopDatetime:  "2018-10-01 12:11:11",
-				Dir:           binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
 				StopDatetime: "2018-10-01 12:11:11",
-				Dir:          binlogDir,
 			},
 		},
 		{
 			cfg: &Config{
 				StartDatetime: "2018-10-01 11:11:11",
-				Dir:           binlogDir,
 			},
 		},
 	}
 
 	fileNames := [][]string{
 		{
-			"binlog-v2.1.0-0000000000000000-20181001101111",
-			"binlog-v2.1.0-0000000000000001-20181001102111",
-			"binlog-v2.1.0-0000000000000002-20181001103111",
-			"binlog-v2.1.0-0000000000000003-20181001111110",
+			"binlog-v2-0000000000000000-20181001101111",
+			"binlog-v2-0000000000000001-20181001102111",
+			"binlog-v2-0000000000000002-20181001103111",
+			"binlog-v2-0000000000000003-20181001111110",
 		},
 		{
-			"binlog-v2.1.0-0000000000000000-20181001111111",
-			"binlog-v2.1.0-0000000000000001-20181001111112",
-			"binlog-v2.1.0-0000000000000002-20181001121111",
+			"binlog-v2-0000000000000000-20181001111111",
+			"binlog-v2-0000000000000001-20181001111112",
+			"binlog-v2-0000000000000002-20181001121111",
 		},
 		{
-			"binlog-v2.1.0-0000000000000000-20181001111112",
-			"binlog-v2.1.0-0000000000000001-20181001111113",
-			"binlog-v2.1.0-0000000000000002-20181001211113",
+			"binlog-v2-0000000000000000-20181001111112",
+			"binlog-v2-0000000000000001-20181001111113",
+			"binlog-v2-0000000000000002-20181001211113",
 		},
 	}
 
@@ -131,7 +128,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 	}
 
 	for j, fs := range fileNames {
-		err := os.MkdirAll(binlogDir, 0755)
+		binlogDir, err := ioutil.TempDir("", "./reparo-test")
 		c.Assert(err, IsNil)
 		defer os.RemoveAll(binlogDir)
 
@@ -150,6 +147,8 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 				c.Assert(err, IsNil)
 			}
 
+			r.cfg.Dir = binlogDir
+
 			filterBinlogFile, err := r.filterFiles(fs)
 			c.Assert(err, IsNil)
 			c.Assert(len(filterBinlogFile), Equals, expectFileNums[i][j])
@@ -161,9 +160,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFileOld(c *C) {
 	// we can get the first binlog's commit ts by decode data in binlog file.
-	binlogDir := "./reparo-test2"
-
-	err := os.MkdirAll(binlogDir, 0755)
+	binlogDir, err := ioutil.TempDir("", "./reparo-test")
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(binlogDir)
 
