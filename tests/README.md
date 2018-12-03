@@ -2,24 +2,39 @@
 
 This folder contains all tests which relies on external service such as TiDB.
 
+## Preprations
 
+1. The flowing four executables must be copied or linked into these locations:
 
+   - `bin/pd-server`
+   - `bin/tikv-server`
+   - `bin/tidb-server`
 
+2. The following programs must be installed:
+
+   - `mysql`(the CLI client)
+
+3. The user executing the tests must have permission to create the folder
+
+   `/tmp/tidb_binlog_test/pump`. All test artifacts will be written into this folder.
 
 ## Running
 
 Run `make integration_test` to execute the integration tests. This command will
 
-1. Check `bin/drainer` executable exist.
-2. Execute `tests/run.sh`
+1. Check that all executables exist.
+2. Build `pump` and `drainer`
+3. Execute `tests/run.sh`
 
+If the first two steps are done before, you could also run `tests/run.sh directly.
 
+The scrip will
 
-you must make sure there's external services TiDB on port 4000 and mysql or TiDB on port 3306 now.
+1. Start PD, TiKV, TiDB, Pump, Drainer in backgroud
 
-`tests/run.sh` will run all scripts `tests/*/run.sh`
+2. Find out all `tests/*/run.sh` and run it.
 
-
+   Run `tests/run.sh --debug` to pause immediately after all servers are started.
 
 ## Writing new tests
 

@@ -57,8 +57,12 @@ test:
 	@export log_level=error;\
 	$(GOTEST) -cover $(PACKAGES)
 
-integration_test:
+integration_test: build
+	@which bin/tidb-server
+	@which bin/tikv-server
+	@which bin/pd-server
 	@which bin/drainer
+	@which bin/pump
 	tests/run.sh
 
 fmt:
