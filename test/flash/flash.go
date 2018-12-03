@@ -65,7 +65,7 @@ create table ntest(
 	if len(targetAddr) != 1 {
 		log.Fatal("only support 1 flash node so far.")
 	}
-	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
+	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
