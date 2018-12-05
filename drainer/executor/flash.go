@@ -2,7 +2,6 @@ package executor
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,13 +17,13 @@ import (
 
 var extraRowSize = 1024
 
-// flashRowBatch is an in-memory row batch caching rows about to passed to flash.
+// flashRowBatch is an in-memory row batch caching rows about to be passed to flash.
 // It's not thread-safe, so callers must take care of the synchronizing.
 type flashRowBatch struct {
 	sql            string
 	columnSize     int
 	capacity       int
-	rows           [][]driver.Value
+	rows           [][]interface{}
 	latestCommitTS int64
 }
 
@@ -33,7 +32,7 @@ func newFlashRowBatch(sql string, capacity int) *flashRowBatch {
 	values := sql[pos:]
 	columnSize := strings.Count(values, "?")
 	// Loosing the space to tolerant a little more rows being added.
-	rows := make([][]driver.Value, 0, capacity+extraRowSize)
+	rows := make([][]interface{}, 0, capacity+extraRowSize)
 	return &flashRowBatch{
 		sql:            sql,
 		columnSize:     columnSize,
@@ -48,11 +47,7 @@ func (batch *flashRowBatch) AddRow(args []interface{}, commitTS int64) error {
 	if len(args) != batch.columnSize {
 		return errors.Errorf("Row %v column size %d mismatches the row batch column size %d", args, len(args), batch.columnSize)
 	}
-	dargs := make([]driver.Value, 0, len(args))
-	for _, c := range args {
-		dargs = append(dargs, c)
-	}
-	batch.rows = append(batch.rows, dargs)
+	batch.rows = append(batch.rows, args)
 
 	if batch.latestCommitTS < commitTS {
 		batch.latestCommitTS = commitTS
@@ -68,13 +63,13 @@ func (batch *flashRowBatch) Size() int {
 }
 
 // Flush writes all the rows in this row batch into CH, with retrying when failure.
-func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, err error) {
+func (batch *flashRowBatch) Flush(db *sql.DB) (commitTS int64, err error) {
 	for i := 0; i < pkgsql.MaxDMLRetryCount; i++ {
 		if i > 0 {
-			log.Warnf("[flush] Retrying %d flushing row batch %v", i, batch.sql)
+			log.Warnf("[flush] Retrying %d flushing row batch %v in %d seconds", i, batch.sql, pkgsql.RetryWaitTime)
 			time.Sleep(pkgsql.RetryWaitTime)
 		}
-		commitTS, err = batch.flushInternal(conn)
+		commitTS, err = batch.flushInternal(db)
 		if err == nil {
 			return commitTS, nil
 		}
@@ -84,11 +79,11 @@ func (batch *flashRowBatch) Flush(conn clickhouse.Clickhouse) (commitTS int64, e
 	return commitTS, errors.Trace(err)
 }
 
-func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, err error) {
+func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
 	log.Debugf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql)
 	defer func() {
 		if err != nil {
-			log.Errorf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
+			log.Warnf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
 		} else {
 			log.Debugf("[flush] Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
 		}
@@ -98,57 +93,42 @@ func (batch *flashRowBatch) flushInternal(conn clickhouse.Clickhouse) (_ int64, 
 		return batch.latestCommitTS, nil
 	}
 
-	tx, err := conn.Begin()
+	tx, err := db.Begin()
 	if err != nil {
-		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
-	stmt, err := conn.Prepare(batch.sql)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	stmt, err := tx.Prepare(batch.sql)
 	if err != nil {
-		tx.Rollback()
 		return batch.latestCommitTS, errors.Trace(err)
 	}
 	defer stmt.Close()
-	block, err := conn.Block()
-	if err != nil {
-		tx.Rollback()
-		return batch.latestCommitTS, errors.Trace(err)
-	}
+
 	for _, row := range batch.rows {
-		err = block.AppendRow(row)
+		_, err = stmt.Exec(row...)
 		if err != nil {
-			tx.Rollback()
 			return batch.latestCommitTS, errors.Trace(err)
 		}
 	}
-	err = conn.WriteBlock(block)
-	if err != nil {
-		tx.Rollback()
-		return batch.latestCommitTS, errors.Trace(err)
-	}
 	err = tx.Commit()
 	if err != nil {
-		tx.Rollback()
 		if ce, ok := err.(*clickhouse.Exception); ok {
 			// Stack trace from server side could be very helpful for triaging problems.
 			log.Error("[flush] ", ce.StackTrace)
 		}
 		return batch.latestCommitTS, errors.Trace(err)
 	}
+
 	// Clearing all rows.
 	// Loosing the space to tolerant a little more rows being added.
-	batch.rows = make([][]driver.Value, 0, batch.capacity+extraRowSize)
+	batch.rows = make([][]interface{}, 0, batch.capacity+extraRowSize)
 
 	return batch.latestCommitTS, nil
-}
-
-// chDB keeps two connection to CH:
-// One through standard go SQL driver's DB, to leverage legacy pkgsql stuff.
-// The other through raw CH SQL driver's connection, to use CH's block interface.
-// A little bit ugly, but handy.
-type chDB struct {
-	DB   *sql.DB
-	Conn clickhouse.Clickhouse
 }
 
 type flashExecutor struct {
@@ -159,7 +139,7 @@ type flashExecutor struct {
 	timeLimit time.Duration
 	sizeLimit int
 
-	chDBs      []chDB
+	dbs        []*sql.DB
 	rowBatches map[string][]*flashRowBatch
 	metaCP     *flash.MetaCheckpoint
 
@@ -184,24 +164,20 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 		return nil, errors.Trace(err)
 	}
 
-	chDBs := make([]chDB, 0, len(hostAndPorts))
+	dbs := make([]*sql.DB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
-		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
+		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "", sizeLimit)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		conn, err := pkgsql.OpenCHDirect(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		chDBs = append(chDBs, chDB{db, conn})
+		dbs = append(dbs, db)
 	}
 
 	e := flashExecutor{
 		close:      make(chan bool),
 		timeLimit:  timeLimit,
 		sizeLimit:  sizeLimit,
-		chDBs:      chDBs,
+		dbs:        dbs,
 		rowBatches: make(map[string][]*flashRowBatch),
 		metaCP:     flash.GetInstance(),
 		baseError:  newBaseError(),
@@ -229,8 +205,8 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
 		}
-		for _, chDB := range e.chDBs {
-			e.err = pkgsql.ExecuteSQLs(chDB.DB, sqls, args, isDDL)
+		for _, db := range e.dbs {
+			e.err = pkgsql.ExecuteSQLs(db, sqls, args, isDDL)
 			if e.err != nil {
 				return errors.Trace(e.err)
 			}
@@ -241,7 +217,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			sql := sqls[i]
 			args := row[1:]
 			if _, ok := e.rowBatches[sql]; !ok {
-				e.rowBatches[sql] = make([]*flashRowBatch, len(e.chDBs))
+				e.rowBatches[sql] = make([]*flashRowBatch, len(e.dbs), len(e.dbs))
 			}
 			if e.rowBatches[sql][hashKey] == nil {
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)
@@ -254,7 +230,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 
 			// Check if size limit exceeded.
 			if rb.Size() >= e.sizeLimit {
-				_, e.err = rb.Flush(e.chDBs[hashKey].Conn)
+				_, e.err = rb.Flush(e.dbs[hashKey])
 				if e.err != nil {
 					return errors.Trace(e.err)
 				}
@@ -278,13 +254,8 @@ func (e *flashExecutor) Close() error {
 	close(e.close)
 
 	hasError := false
-	for _, chDB := range e.chDBs {
-		err := chDB.DB.Close()
-		if err != nil {
-			hasError = true
-			log.Error("[close] ", err)
-		}
-		err = chDB.Conn.Close()
+	for _, db := range e.dbs {
+		err := db.Close()
 		if err != nil {
 			hasError = true
 			log.Error("[close] ", err)
@@ -327,7 +298,7 @@ func (e *flashExecutor) flushRoutine() {
 
 // partition must be a index of dbs
 func (e *flashExecutor) partition(key int64) int {
-	return int(key) % len(e.chDBs)
+	return int(key) % len(e.dbs)
 }
 
 func (e *flashExecutor) flushAll(forceSaveCP bool) error {
@@ -341,7 +312,7 @@ func (e *flashExecutor) flushAll(forceSaveCP bool) error {
 			if rb == nil {
 				continue
 			}
-			lastestCommitTS, err := rb.Flush(e.chDBs[i].Conn)
+			lastestCommitTS, err := rb.Flush(e.dbs[i])
 			if err != nil {
 				return errors.Trace(err)
 			}
