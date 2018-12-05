@@ -84,7 +84,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			}
 		}
 
-		if columnValues == nil {
+		if len(columnValues) == 0 {
 			log.Warn("columnValues is nil")
 			continue
 		}

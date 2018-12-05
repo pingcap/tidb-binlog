@@ -96,7 +96,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			}
 		}
 
-		if columnValues == nil {
+		if len(columnValues) == 0 {
 			log.Warn("columnValues is nil")
 			continue
 		}
