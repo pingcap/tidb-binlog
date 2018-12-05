@@ -152,13 +152,19 @@ func (s *sorter) run() {
 		s.items.Remove(front)
 
 		if item.tp == pb.BinlogType_Prewrite {
+			getTime := time.Now()
+
 			for {
 				_, ok := s.waitStartTS[item.start]
 				if !ok {
 					break
 				}
-				if s.resolver != nil && s.resolver(item.start) {
-					break
+
+				// we may get the C binlog soon at start up time
+				if time.Since(getTime) > time.Second {
+					if s.resolver != nil && s.resolver(item.start) {
+						break
+					}
 				}
 
 				// quit if sorter is closed and still not get the according C binlog

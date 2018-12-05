@@ -374,7 +374,7 @@ func closeDBs(dbs []*sql.DB) {
 func RunTest(cfg *diff.Config, src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
-	timeout := time.After(time.Second * 15)
+	timeout := time.After(time.Second * 120)
 
 	for {
 		select {
