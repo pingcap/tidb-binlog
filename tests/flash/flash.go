@@ -3,14 +3,15 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/test/dailytest"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/tests/dailytest"
+	"github.com/pingcap/tidb-binlog/tests/util"
 	_ "github.com/zanmato1984/clickhouse"
 )
 
@@ -65,11 +66,23 @@ create table ntest(
 	if len(targetAddr) != 1 {
 		log.Fatal("only support 1 flash node so far.")
 	}
-	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, cfg.TargetDBCfg.Name)
+	targetDB, err := pkgsql.OpenCH(targetAddr[0].Host, targetAddr[0].Port, cfg.TargetDBCfg.User, cfg.TargetDBCfg.Password, "default", 0)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer util.CloseDB(targetDB)
+	_, err = targetDB.Exec(fmt.Sprintf("drop database if exists %s", cfg.TargetDBCfg.Name))
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = targetDB.Exec(fmt.Sprintf("create database %s", cfg.TargetDBCfg.Name))
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = targetDB.Exec(fmt.Sprintf("use %s", cfg.TargetDBCfg.Name))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// run the simple test case
 	dailytest.RunCase(&cfg.DiffConfig, sourceDB, targetDB)
