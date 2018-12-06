@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/ast"
@@ -97,7 +96,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		}
 
 		if len(columnValues) == 0 {
-			log.Fatal("columnValues is nil")
+			panic(errors.New("columnValues is nil"))
 		}
 
 		sqls = append(sqls, sql)
