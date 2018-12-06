@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+killall pump || true
+
+echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump.log"
+
+
+pump  -log-file $OUT_DIR/pump.log --addr=0.0.0.0:8250 \
+	--advertise-addr=localhost:8250 \
+	--pd-urls=http://localhost:2379 \
+	--data-dir=$OUT_DIR/pump \
+	--node-id=pump1:8215 >> $OUT_DIR/pump.log 2>&1
