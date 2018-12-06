@@ -9,7 +9,7 @@ killall drainer || true
 
 config=${TEST_DIR-.}/drainer.toml
 
-echo "[$(date)] <<<<<< RUNNING TEST FOR: $config >>>>>>" >> "$OUT_DIR/drainer.log"
+echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT_DIR/drainer.log"
 
 if [ -f "$config" ]
 then
