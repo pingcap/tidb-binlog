@@ -175,6 +175,10 @@ func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 		row.Columns = append(row.Columns, column)
 	}
 
+	if len(columnValues) == 0 {
+		log.Fatal("columnValues is nil")
+	}
+
 	return
 }
 

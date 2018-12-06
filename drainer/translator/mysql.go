@@ -97,8 +97,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		}
 
 		if len(columnValues) == 0 {
-			log.Warn("columnValues is nil")
-			continue
+			log.Fatal("columnValues is nil")
 		}
 
 		sqls = append(sqls, sql)
