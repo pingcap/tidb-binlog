@@ -10,8 +10,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/test/dailytest"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/tests/dailytest"
+	"github.com/pingcap/tidb-binlog/tests/util"
 	_ "github.com/zanmato1984/clickhouse"
 )
 

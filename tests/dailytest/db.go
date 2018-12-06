@@ -11,7 +11,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/diff"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/tests/util"
 	"github.com/pingcap/tidb/mysql"
 )
 
