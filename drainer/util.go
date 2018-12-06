@@ -138,10 +138,10 @@ func closeExecutors(executors ...executor.Executor) {
 	}
 }
 
-func createExecutors(destDBType string, cfg *executor.DBConfig, count int, ts int64) ([]executor.Executor, error) {
+func createExecutors(destDBType string, cfg *executor.DBConfig, count int) ([]executor.Executor, error) {
 	executors := make([]executor.Executor, 0, count)
 	for i := 0; i < count; i++ {
-		executor, err := executor.New(destDBType, cfg, ts)
+		executor, err := executor.New(destDBType, cfg)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

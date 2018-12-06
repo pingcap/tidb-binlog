@@ -12,7 +12,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 func TestClient(t *testing.T) {
@@ -92,7 +91,10 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 		expectedError bool
 	}{
 		{"binlog-v2.1.0-0000000000000001-20180315121212", 0000000000000001, false},
-		{"binlog-0000000000000001", 0000000000000001, false},
+		{"binlog-v2.1.0-index-20180315121212", 0, true},
+		{"binlog-0000000000000003-20180315121212", 0000000000000003, false},
+		{"binlog-index-20180315121212", 0, true},
+		{"binlog-0000000000000005", 0000000000000005, false},
 		{"binlog-index", 0, true},
 	}
 
@@ -115,7 +117,6 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	datetime, err := time.Parse(datetimeFormat, datetimeStr)
 	c.Assert(err, IsNil)
 
-	ts := int64(oracle.ComposeTS(datetime.Unix()*1000, 0))
-	binlogName := binlogNameWithDateTime(index, ts)
+	binlogName := binlogNameWithDateTime(index, datetime)
 	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version, datetimeStr))
 }

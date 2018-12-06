@@ -228,7 +228,7 @@ func (s *Server) getBinloggerToWrite(ts int64) (Binlogger, error) {
 	case mixedWriteMode:
 		binlogDir := path.Join(path.Join(s.dataDir, "clusters"), s.clusterID)
 
-		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone, ts) // no compression now.
+		fb, err := OpenBinlogger(binlogDir, compress.CompressionNone) // no compression now.
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

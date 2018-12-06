@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -70,7 +69,7 @@ type binlogger struct {
 }
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec, ts int64) (Binlogger, error) {
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -101,13 +100,10 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec, ts int64) (B
 
 	// ignore file not found error
 	names, _ := bf.ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog.0000000000000000
+	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
-		if ts < 0 {
-			// it will nearly never happened
-			ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
-		}
-		lastFileName = path.Join(dirpath, bf.BinlogName(0, ts))
+		// create a binlog file with ts = 0
+		lastFileName = path.Join(dirpath, bf.BinlogName(0, 1))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file
@@ -409,15 +405,24 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	latestFilePos.Offset = curOffset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	if curOffset < GlobalConfig.segmentSizeBytes {
+	//if curOffset < GlobalConfig.segmentSizeBytes {
+	//	return curOffset, nil
+	//}
+
+	if curOffset < 100 {
 		return curOffset, nil
 	}
 
+	log.Infof("entity pos is %d", entity.Pos)
 	binlog := &pb.Binlog{}
-	err = binlog.Unmarshal(entity.Payload)
-	if err != nil {
-		return 0, errors.Trace(err)
+	err1 := binlog.Unmarshal(entity.Payload)
+	if err1 != nil {
+		log.Infof("error: %v", err1)
+		//return 0, errors.Trace(err)
+		return curOffset, errors.Trace(err)
 	}
+
+	log.Infof("binlog commit ts is %d, entity pos is %d", binlog.GetCommitTs(), entity.Pos)
 
 	err = b.rotate(binlog.GetCommitTs() + int64(1))
 	return curOffset, errors.Trace(err)

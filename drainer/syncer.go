@@ -573,7 +573,7 @@ func (s *Syncer) run(b *binlogItem) error {
 
 	s.genRegexMap()
 
-	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount, s.initCommitTS)
+	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
 		return errors.Trace(err)
 	}
