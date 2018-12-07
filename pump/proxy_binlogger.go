@@ -65,6 +65,13 @@ func (p *Proxy) WriteTail(entity *binlog.Entity) (int64, error) {
 	return n, errors.Trace(err)
 }
 
+func (p *Proxy) AsyncWriteTail(entity *binlog.Entity, cb callback) {
+	offset, err := p.WriteTail(entity)
+	if cb != nil {
+		cb(offset, err)
+	}
+}
+
 // Close closes the binlogger
 func (p *Proxy) Close() error {
 	p.Lock()
@@ -137,20 +144,32 @@ func (p *Proxy) updatePosition(readPos binlog.Pos, pos binlog.Pos) (binlog.Pos, 
 }
 
 func (p *Proxy) sync() {
-	pos := p.cp.pos()
+	writePos := p.cp.pos()
+
+	var saveMut sync.Mutex
+
 	syncBinlog := func(entity *binlog.Entity) error {
 		if GlobalConfig.enableDebug {
-			printDebugBinlog(entity, pos)
+			printDebugBinlog(entity, entity.Pos)
 		}
 
-		_, err := p.replicate.WriteTail(entity)
-		if err != nil {
-			log.Errorf("write binlog to replicate error %v payload length %d", err, len(entity.Payload))
-			return errors.Trace(err)
-		}
+		writePos = entity.Pos
 
-		pos, err = p.updatePosition(entity.Pos, pos)
-		return errors.Trace(err)
+		p.replicate.AsyncWriteTail(entity, func(_ int64, err error) {
+			if err != nil {
+				panic(err)
+			}
+
+			saveMut.Lock()
+			defer saveMut.Unlock()
+			pos := p.cp.pos()
+			_, err = p.updatePosition(entity.Pos, pos)
+			if err != nil {
+				log.Error(err)
+			}
+		})
+
+		return nil
 	}
 
 	for {
@@ -159,10 +178,11 @@ func (p *Proxy) sync() {
 			log.Info("context cancel - sycner exists")
 			return
 		default:
-			err := p.master.Walk(p.ctx, pos, syncBinlog)
+			err := p.master.Walk(p.ctx, writePos, syncBinlog)
 			if err != nil {
 				log.Errorf("master walk error %v", errors.ErrorStack(err))
 			}
+			// FIXME avoid this latency...
 			time.Sleep(time.Second)
 		}
 	}

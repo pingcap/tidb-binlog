@@ -215,7 +215,7 @@ func (s *Server) getBinloggerToWrite(ts int64) (Binlogger, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs, s.cfg.KafkaVersion)
+	kb, err := createKafkaBinlogger(s.clusterID, s.node.ID(), addrs, s.cfg.KafkaVersion, s.cfg.KafkaMaxMessages)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

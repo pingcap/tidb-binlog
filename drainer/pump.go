@@ -139,7 +139,7 @@ func (p *Pump) match(ent *pb.Entity) *pb.Binlog {
 	if err != nil {
 		errorBinlogCount.Add(1)
 		// skip?
-		log.Errorf("[pump %s] unmarshal payload error, clusterID(%d), Pos(%v), error(%v)", p.nodeID, p.clusterID, ent.Pos, err)
+		log.Errorf("[pump %s] unmarshal payload error, clusterID(%d), Pos(%v), error(%v) payload(%v)", p.nodeID, p.clusterID, ent.Pos, err, ent.Payload)
 		return nil
 	}
 

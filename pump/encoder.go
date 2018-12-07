@@ -67,7 +67,7 @@ type kafkaEncoder struct {
 	slicer    *KafkaSlicer
 }
 
-func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) Encoder {
+func newKafkaEncoder(producer sarama.SyncProducer, topic string, partition int32) *kafkaEncoder {
 	return &kafkaEncoder{
 		producer:  producer,
 		topic:     topic,

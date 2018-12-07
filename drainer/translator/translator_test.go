@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"time"
@@ -48,24 +49,30 @@ func (t *testTranslatorSuite) TestRegisterAndUnregister(c *C) {
 func (t *testTranslatorSuite) TestTranslater(c *C) {
 	s, err := New("mysql")
 	c.Assert(err, IsNil)
-	testGenInsertSQLs(c, s)
+	testGenInsertSQLs(c, s, true)
+	testGenInsertSQLs(c, s, false)
 	testGenUpdateSQLs(c, s)
 	testGenDeleteSQLs(c, s)
 	testGenDDLSQL(c, s)
 }
 
-func testGenInsertSQLs(c *C, s SQLTranslator) {
+func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
+	s.SetConfig(safeMode)
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
-	exceptedKeys := []int{0, 2, 1}
+	exceptedKeys := []int{3, 2, 1}
 	for i, table := range tables {
 		rowDatas, expected, expectedKeys := testGenRowData(c, table.Columns, 1)
 		binlog := testGenInsertBinlog(c, table, rowDatas)
 		sqls, keys, vals, err := s.GenInsertSQLs(schema, table, [][]byte{binlog}, 0)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[i]]))
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[i]], ",")))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, 3)
-		c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		if safeMode {
+			c.Assert(sqls[0], Equals, "replace into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		} else {
+			c.Assert(sqls[0], Equals, "insert into `t`.`account` (`ID`,`NAME`,`SEX`) values (?,?,?);")
+		}
 		for index := range vals[0] {
 			c.Assert(vals[0][index], DeepEquals, expected[index])
 		}
@@ -86,14 +93,14 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 		"update `t`.`account` set `ID` = ?, `NAME` = ?, `SEX` = ? where `ID` = ? limit 1;",
 	}
 	exceptedNum := []int{6, 5, 4}
-	exceptedKeys := []int{0, 2, 1}
+	exceptedKeys := []int{3, 2, 1}
 	for index, t := range tables {
 		oldRowDatas, whereExpected, whereKeys := testGenRowData(c, t.Columns, 1)
 		newRowDatas, changedExpected, changedKeys := testGenRowData(c, t.Columns, 2)
 		binlog := testGenUpdateBinlog(c, t, oldRowDatas, newRowDatas)
-		sqls, keys, vals, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog}, 0)
+		sqls, keys, vals, _, err := s.GenUpdateSQLs(schema, t, [][]byte{binlog}, 0)
 		c.Assert(err, IsNil)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", append(changedKeys[:exceptedKeys[index]], whereKeys[:exceptedKeys[index]]...)))
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", []string{strings.Join(changedKeys[:exceptedKeys[index]], ","), strings.Join(whereKeys[:exceptedKeys[index]], ",")}))
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
 		for index := range vals[0] {
@@ -107,7 +114,7 @@ func testGenUpdateSQLs(c *C, s SQLTranslator) {
 
 	rowDatas, _, _ := testGenRowData(c, tables[0].Columns, 1)
 	binlog := testGenUpdateBinlog(c, tables[0], rowDatas, rowDatas)
-	_, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]}, 0)
+	_, _, _, _, err := s.GenUpdateSQLs(schema, tables[0], [][]byte{binlog[6:]}, 0)
 	c.Assert(err, NotNil)
 }
 
@@ -119,12 +126,12 @@ func testGenDeleteSQLs(c *C, s SQLTranslator) {
 		"delete from `t`.`account` where `ID` = ? and `NAME` = ? limit 1;",
 	}
 	exceptedNum := []int{3, 2}
-	exceptedKeys := []int{0, 2}
+	exceptedKeys := []int{3, 2}
 	for index, t := range tables {
 		rowDatas, expected, expectedKeys := testGenRowData(c, t.Columns, 1)
 		binlog := testGenDeleteBinlog(c, t, rowDatas)
 		sqls, keys, vals, err := s.GenDeleteSQLs(schema, t, [][]byte{binlog}, 0)
-		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("%v", expectedKeys[:exceptedKeys[index]]))
+		c.Assert(fmt.Sprintf("%v", keys[0]), Equals, fmt.Sprintf("[%s]", strings.Join(expectedKeys[:exceptedKeys[index]], ",")))
 		c.Assert(err, IsNil)
 		c.Assert(len(vals[0]), Equals, exceptedNum[index])
 		c.Assert(sqls[0], Equals, exceptedSQL[index])
@@ -215,7 +222,7 @@ func testGenRowData(c *C, cols []*model.ColumnInfo, base int) ([]types.Datum, []
 		d, e := testGenDatum(c, col, base)
 		datas[index] = d
 		excepted[index] = e
-		keys[index] = fmt.Sprintf("[%s: %v]", col.Name, e)
+		keys[index] = fmt.Sprintf("(%s: %v)", col.Name, e)
 
 	}
 	return datas, excepted, keys
@@ -360,11 +367,12 @@ func testGenTable(tt string) *model.TableInfo {
 		})
 
 	case "hasPK":
-		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
+		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag | mysql.UniqueKeyFlag
 		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
 
 		t.Indices = append(t.Indices, &model.IndexInfo{
 			Primary: true,
+			Unique:  true,
 			Columns: []*model.IndexColumn{{Name: userIDCol.Name}, {Name: userNameCol.Name}},
 		})
 	}
