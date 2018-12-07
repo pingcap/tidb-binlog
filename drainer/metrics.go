@@ -132,7 +132,12 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{
+		PidFn: func() (int, error) {
+			return os.Getpid(), nil
+		},
+		Namespace: "",
+	}))
 	registry.MustRegister(prometheus.NewGoCollector())
 
 	registry.MustRegister(windowGauge)
