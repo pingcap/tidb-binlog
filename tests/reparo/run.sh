@@ -4,6 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 
+mkdir data.drainer
 run_drainer &
 
 # according to the config, db name or table start with `do_start` or exact equals `do_name` will be synced to downstream
