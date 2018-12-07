@@ -18,7 +18,7 @@ log-level = "info"
 # dest-type choose a destination, which value can be "mysql", "print".
 # for print, it just prints decoded value.
 dest-type = "mysql"
-compression = "gzip"
+#compression = "gzip"
 
 # 如果指定的 dest-type 为 mysql 或 tidb，需要配置 dest-db。
 [dest-db]

@@ -36,6 +36,6 @@ db-type = "pb"
 
 [syncer.to]
 #dir = "/data/data.drainer"
-compression = "gzip"
+#compression = "gzip"
 
 
