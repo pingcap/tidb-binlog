@@ -48,8 +48,9 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
+
 		if columnValues == nil {
-			continue
+			columnValues = make(map[int64]types.Datum)
 		}
 
 		var (
@@ -80,6 +81,10 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 				}
 				vals = append(vals, val)
 			}
+		}
+
+		if len(columnValues) == 0 {
+			panic(errors.New("columnValues is nil"))
 		}
 
 		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)
