@@ -34,7 +34,7 @@ safe-mode = false
 # valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "pb"
 
-[syncer.to]
+#[syncer.to]
 #dir = "/data/data.drainer"
 #compression = "gzip"
 
