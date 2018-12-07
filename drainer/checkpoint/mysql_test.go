@@ -3,6 +3,7 @@ package checkpoint
 import (
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -40,6 +41,9 @@ func (*testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.Schema = "tidb_binlog"
 	cfg.Table = "checkpoint"
 	sp, err := newMysql("mysql", cfg)
+	if err != nil && strings.Contains(err.Error(), "connection refused") {
+		c.Skip("no mysql available")
+	}
 	c.Assert(err, IsNil)
 
 	testTs := int64(1)
