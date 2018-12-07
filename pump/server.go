@@ -277,7 +277,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 	}
 
 	ret := &binlog.WriteBinlogResp{}
-	binlogger, err1 := s.getBinloggerToWrite(-1)
+	binlogger, err1 := s.getBinloggerToWrite(1)
 	if err1 != nil {
 		ret.Errmsg = err1.Error()
 		err = errors.Trace(err1)

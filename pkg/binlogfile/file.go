@@ -160,7 +160,6 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
 	}
 
-	log.Infof("file: %s, index: %d, err: %v", str, index, err)
 	return index, errors.Trace(err)
 }
 

@@ -13,7 +13,7 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -410,18 +410,14 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	log.Infof("entity pos is %d", entity.Pos)
-	binlog := &pb.Binlog{}
-	err1 := binlog.Unmarshal(entity.Payload)
-	if err1 != nil {
-		log.Infof("error: %v", err1)
-		//return 0, errors.Trace(err)
-		return curOffset, errors.Trace(err)
+	ts := entity.Pos.Ts
+	if entity.Pos.Ts == 0 {
+		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 	}
 
-	log.Infof("binlog commit ts is %d, entity pos is %d", binlog.GetCommitTs(), entity.Pos)
+	log.Infof("entity pos ts: %d, use ts: %d", entity.Pos.Ts, ts)
 
-	err = b.rotate(binlog.GetCommitTs() + int64(1))
+	err = b.rotate(ts + 1)
 	return curOffset, errors.Trace(err)
 }
 
