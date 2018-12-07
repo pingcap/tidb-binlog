@@ -402,20 +402,15 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	latestFilePos.Offset = curOffset
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))
 
-	//if curOffset < GlobalConfig.segmentSizeBytes {
-	//	return curOffset, nil
-	//}
-
-	if curOffset < 100 {
+	if curOffset < GlobalConfig.segmentSizeBytes {
 		return curOffset, nil
 	}
 
 	ts := entity.Pos.Ts
+	// if entity's ts is 0, use ts transformed by time now.
 	if entity.Pos.Ts == 0 {
 		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 	}
-
-	log.Infof("entity pos ts: %d, use ts: %d", entity.Pos.Ts, ts)
 
 	err = b.rotate(ts + 1)
 	return curOffset, errors.Trace(err)
