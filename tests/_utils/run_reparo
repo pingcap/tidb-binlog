@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+killall reparo || true
+
+
+config=${TEST_DIR-.}/reparo.toml
+log=$OUT_DIR/reparo.log
+
+echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$log"
+
+if [ -f "$config" ]
+then
+	reparo -config $config -log-file $log >> $log 2>&1
+else
+	reapro -log-file $log >> $log 2>&1
+fi
