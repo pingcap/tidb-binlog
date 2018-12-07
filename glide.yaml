@@ -201,7 +201,8 @@ import:
   - util/sqlexec
   - util/stringutil
 - package: github.com/pingcap/tipb
-  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
+  version: a762ecf06987da81bd835ff6dcf01d6f98e85165
+  repo: https://github.com/WangXiangUSTC/tipb.git
   subpackages:
   - go-binlog
   - go-tipb
