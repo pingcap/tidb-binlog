@@ -122,7 +122,7 @@ func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error
 		p.latestTS = p.status.UpdateTS
 		p.latestTime = time.Now()
 	} else {
-		p.updateTS()
+		p.updateStatus()
 	}
 
 	err := p.UpdateNode(ctx, nodePrefix, status)
@@ -182,7 +182,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 				return
 			case <-time.After(p.heartbeatInterval):
 				p.Lock()
-				p.updateTS()
+				p.updateStatus()
 				err := p.UpdateNode(ctx, nodePrefix, p.status)
 				if err != nil {
 					errc <- errors.Trace(err)
@@ -194,7 +194,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 	return errc
 }
 
-func (p *pumpNode) updateTS() {
+func (p *pumpNode) updateStatus() {
 	p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
 	p.status.MaxCommitTS = p.getMaxCommitTs()
 }
