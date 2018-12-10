@@ -11,7 +11,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/diff"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/tests/util"
 	"github.com/pingcap/tidb/mysql"
 )
 
@@ -374,7 +374,7 @@ func closeDBs(dbs []*sql.DB) {
 func RunTest(cfg *diff.Config, src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
-	timeout := time.After(time.Second * 15)
+	timeout := time.After(time.Second * 120)
 
 	for {
 		select {

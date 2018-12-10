@@ -31,7 +31,7 @@ func main() {
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("creating pump server error, %v", err)
+		log.Fatalf("creating pump server error, %v", errors.ErrorStack(err))
 	}
 
 	sc := make(chan os.Signal, 1)
