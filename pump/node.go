@@ -40,12 +40,14 @@ type pumpNode struct {
 	// latestTS and latestTime is used for get approach ts
 	latestTS   int64
 	latestTime time.Time
+
+	getMaxCommitTs func() int64
 }
 
 var _ node.Node = &pumpNode{}
 
 // NewPumpNode returns a pumpNode obj that initialized by server config
-func NewPumpNode(cfg *Config) (node.Node, error) {
+func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 	if err := checkExclusive(cfg.DataDir); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -91,6 +93,7 @@ func NewPumpNode(cfg *Config) (node.Node, error) {
 		EtcdRegistry:      node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
 		status:            status,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
+		getMaxCommitTs:    getMaxCommitTs,
 	}
 	return node, nil
 }
@@ -193,6 +196,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 
 func (p *pumpNode) updateTS() {
 	p.status.UpdateTS = util.GetApproachTS(p.latestTS, p.latestTime)
+	p.status.MaxCommitTS = p.getMaxCommitTs()
 }
 
 func (p *pumpNode) Quit() error {

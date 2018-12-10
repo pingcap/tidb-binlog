@@ -94,11 +94,6 @@ func init() {
 
 // NewServer returns a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
-	n, err := NewPumpNode(cfg)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	var metrics *metricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
 		metrics = &metricClient{
@@ -140,6 +135,11 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	options := storage.DefaultOptions().WithStorage(cfg.Storage)
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	n, err := NewPumpNode(cfg, storage.MaxCommitTS)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
