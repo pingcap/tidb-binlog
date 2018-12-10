@@ -300,6 +300,11 @@ func (cfg *Config) adjustConfig() error {
 		if cfg.SyncerCfg.To.KafkaAddrs == "" {
 			cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
 		}
+
+		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
+			cfg.SyncerCfg.To.KafkaMaxMessages = 1024
+		}
+
 	}
 
 	return nil

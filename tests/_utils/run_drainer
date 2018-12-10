@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+killall drainer || true
+
+
+config=${TEST_DIR-.}/drainer.toml
+
+echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT_DIR/drainer.log"
+
+if [ -f "$config" ]
+then
+	drainer -config $config -log-file $OUT_DIR/drainer.log >> $OUT_DIR/drainer.log 2>&1
+else
+	drainer -log-file $OUT_DIR/drainer.log >> $OUT_DIR/drainer.log 2>&1
+fi
