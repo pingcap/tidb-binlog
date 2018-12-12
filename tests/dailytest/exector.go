@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/test/util"
+	"github.com/pingcap/tidb-binlog/tests/util"
 )
 
 // RunDailyTest generates insert/update/delete sqls and execute
