@@ -2,6 +2,7 @@ package offsets
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +45,11 @@ func (to *testOffsetSuite) TestOffset(c *C) {
 	config.Version = sarama.V1_0_0_0
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.Return.Successes = true
+
+	_, err := sarama.NewClient(strings.Split(kafkaAddr, ","), config)
+	if err != nil && strings.Contains(err.Error(), "client has run out of available brokers") {
+		c.Skip("no kafka available")
+	}
 
 	// clear previous tests produced
 	to.deleteTopic(kafkaAddr, config, topic, c)
