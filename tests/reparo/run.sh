@@ -6,9 +6,6 @@ cd "$(dirname "$0")"
 
 run_drainer &
 
-# according to the config, db name or table start with `do_start` or exact equals `do_name` will be synced to downstream
-# we use the name start with `do_no_start` and `do_not_name` to make sure other db or table will not be synced to downstream 
-
 run_sql "DROP DATABASE IF EXISTS reparo_test;"
 run_sql "CREATE DATABASE reparo_test"
 run_sql "CREATE TABLE reparo_test.test(id int, name varchar(10), PRIMARY KEY(id))"
