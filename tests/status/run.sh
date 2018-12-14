@@ -18,8 +18,8 @@ if ! grep -Fq "online" $statusLog; then
 fi
 
 # stop pump, and pump's state should be paused
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd stop-pump -node-id pump1:8215
-sleep 2
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
+sleep 5
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 if ! grep -Fq "paused" $statusLog; then
     cat $statusLog
@@ -31,7 +31,7 @@ run_drainer &
 
 sleep 2
 
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd stop-drainer -node-id drainer:123
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id drainer:123
 
 sleep 2
 
