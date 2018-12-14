@@ -11,8 +11,8 @@ tar zxvf tidb-tools-v2.1.0-linux-amd64.tar.gz
 statusLog="status.log"
 # pump's state should be online
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
+cat $statusLog
 if ! grep -Fq "online" $statusLog; then
-    cat $statusLog
     echo "pump is not online" 
 	exit 2
 fi
@@ -21,8 +21,8 @@ fi
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
 sleep 5
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
+cat $statusLog
 if ! grep -Fq "paused" $statusLog; then
-    cat $statusLog
     echo "pump is not paused"
 	exit 2
 fi
@@ -37,8 +37,8 @@ sleep 2
 
 # stop drainer, and drainer's state should be paused
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
+cat $statusLog
 if ! grep -Fq "paused" $statusLog; then
-    cat $statusLog
     echo "drainer is not paused"
 	exit 2
 fi
