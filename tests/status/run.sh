@@ -56,13 +56,16 @@ killall pump || true
 # update drainer's state to online, and then run pump, pump should exit with error.
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state online
 
-run_pump
+echo "run pump, and will notify drainer failed"
+run_pump &
 
 if [ "$?" -e "0" ]; then
     echo "pump should exit with code 2"
     exit 2
 fi
 
+cat /tmp/tidb_binlog_test/pump.log
+echo "clean up"
 # clean up
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state paused
 run_pump &
