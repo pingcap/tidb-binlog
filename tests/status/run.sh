@@ -54,7 +54,7 @@ fi
 kill all pump || true
 
 # update drainer's state to online, and then run pump, pump should exit with error.
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id drainer:123 -state online
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state online
 
 run_pump
 
@@ -64,7 +64,7 @@ if [ "$?" -e "0" ]; then
 fi
 
 # clean up
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id drainer:123 -state paused
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state paused
 run_pump &
 rm download.pingcap.org/tidb-tools-v2.1.0-linux-amd64.tar.gz
 rm -r tidb-tools-v2.1.0-linux-amd64
