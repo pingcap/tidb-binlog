@@ -51,7 +51,7 @@ if ! grep -Fq "paused" $statusLog; then
 	exit 2
 fi
 
-kill all pump || true
+killall pump || true
 
 # update drainer's state to online, and then run pump, pump should exit with error.
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state online
