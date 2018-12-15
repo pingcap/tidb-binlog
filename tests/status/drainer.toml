@@ -4,8 +4,6 @@
 # will register this addr into etcd
 # addr = "127.0.0.1:8249"
 
-node-id = "drainer:123"
-
 # the interval time (in seconds) of detect pumps' status
 detect-interval = 10
 

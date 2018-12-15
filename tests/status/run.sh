@@ -31,6 +31,13 @@ run_drainer &
 
 sleep 2
 
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
+cat $statusLog
+if ! grep -Fq "online" $statusLog; then
+    echo "drainer is not online"
+	exit 2
+fi
+
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id drainer:123
 
 sleep 2
