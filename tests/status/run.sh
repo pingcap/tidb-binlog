@@ -38,7 +38,8 @@ if ! grep -Fq "online" $statusLog; then
 	exit 2
 fi
 
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id drainer:123
+nodeid=`cat $statusLog | sed 's/.*NodeID:\([a-zA-Z0-9]*:[0-9]*\) .*/\1/g'`
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $nodeid
 
 sleep 2
 
