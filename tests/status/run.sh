@@ -27,18 +27,6 @@ if ! grep -Fq "paused" $statusLog; then
 	exit 2
 fi
 
-# offline pump, and pump's status should be offline
-run_pump &
-sleep 3
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
-sleep 3
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
-cat $statusLog
-if ! grep -Fq "offline" $statusLog; then
-    echo "pump is not offline"
-	exit 2
-fi
-
 # run drainer, and drainer's status should be online
 run_drainer &
 sleep 3
@@ -49,10 +37,22 @@ if ! grep -Fq "online" $statusLog; then
 	exit 2
 fi
 
-nodeid=`cat $statusLog | sed 's/.*NodeID:\([a-zA-Z0-9\-]*:[0-9]*\) .*/\1/g'`
+drainerNodeID=`cat $statusLog | sed 's/.*NodeID:\([a-zA-Z0-9\-]*:[0-9]*\) .*/\1/g'`
+
+# offline pump, and pump's status should be offline
+run_pump &
+sleep 3
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
+sleep 5
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
+cat $statusLog
+if ! grep -Fq "offline" $statusLog; then
+    echo "pump is not offline"
+	exit 2
+fi
 
 # stop drainer, and drainer's state should be paused
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $nodeid
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $drainerNodeID
 sleep 3
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
@@ -64,7 +64,7 @@ fi
 # offline drainer, and drainer's state should be offline
 run_drainer &
 sleep 3
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-drainer -node-id $nodeid
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-drainer -node-id $drainerNodeID
 sleep 3
 ./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
@@ -74,7 +74,7 @@ if ! grep -Fq "offline" $statusLog; then
 fi
 
 # update drainer's state to online, and then run pump, pump will notify drainer failed, pump's sttaus will be paused
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state online
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state online
 run_pump &
 sleep 3
 
@@ -86,7 +86,7 @@ if ! grep -Fq "paused" $statusLog; then
 fi
 
 # clean up
-./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $nodeid -state paused
+./tidb-tools-v2.1.0-linux-amd64/bin/binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused
 run_pump &
 rm tidb-tools-v2.1.0-linux-amd64.tar.gz || true
 rm -r tidb-tools-v2.1.0-linux-amd64 || true
