@@ -25,8 +25,7 @@ import (
 
 var (
 	kafkaAddr = flag.String("kafkaAddr", "127.0.0.1:9092", "kafkaAddr like 127.0.0.1:9092,127.0.0.1:9093")
-	clusterID = flag.String("clusterID", "", "clusterID")
-	topic     = flag.String("topic", "", "topic name to consume binlog, one of topic or clusterID must be set")
+	topic     = flag.String("topic", "", "topic name to consume binlog")
 	offset    = flag.Int64("offset", sarama.OffsetNewest, "offset")
 	commitTS  = flag.Int64("commitTS", 0, "commitTS")
 )
@@ -39,7 +38,6 @@ func main() {
 		Offset:    *offset,
 		CommitTS:  *commitTS,
 		Topic:     *topic,
-		ClusterID: *clusterID,
 	}
 
 	breader, err := reader.NewReader(cfg)

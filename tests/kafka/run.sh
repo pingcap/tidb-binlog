@@ -12,7 +12,6 @@ args="-initial-commit-ts=$ts"
 
 kafka_addr=${KAFKA_ADDRS-127.0.0.1:9092}
 
-args="$args -kafka-addrs=$kafka_addr"
 run_drainer "$args" &
 
 go build -o out
