@@ -40,7 +40,7 @@ func (t *testNodeSuite) TestNode(c *C) {
 		AdvertiseAddr:     listenAddr,
 	}
 
-	node, err := NewPumpNode(cfg)
+	node, err := NewPumpNode(cfg, func() int64 { return 0 })
 	c.Assert(err, IsNil)
 
 	testCheckNodeID(c, node, exceptedNodeID)
