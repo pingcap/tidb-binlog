@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-binlog/diff"
@@ -33,7 +34,11 @@ func (c *DBConfig) String() string {
 // CreateDB create a mysql fd
 func CreateDB(cfg DBConfig) (*sql.DB, error) {
 	// just set to the same timezone so the timestamp field of mysql will return the same value
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape("'+08:00'"))
+	// timestamp field will be display as the time zone of the Local time of drainer when write to kafka, so we set it to local time to pass CI now
+	zone, offset := time.Now().Zone()
+	zone = fmt.Sprintf("'+%02d:00'", offset/3600)
+
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape(zone))
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -56,4 +61,30 @@ func CheckSyncState(cfg *diff.Config, sourceDB, targetDB *sql.DB) bool {
 	}
 
 	return ok
+}
+
+// CreateSourceDB return source sql.DB for test
+func CreateSourceDB() (db *sql.DB, err error) {
+	cfg := DBConfig{
+		Host:     "127.0.0.1",
+		User:     "root",
+		Password: "",
+		Name:     "test",
+		Port:     4000,
+	}
+
+	return CreateDB(cfg)
+}
+
+// CreateSinkDB return sink sql.DB for test
+func CreateSinkDB() (db *sql.DB, err error) {
+	cfg := DBConfig{
+		Host:     "127.0.0.1",
+		User:     "root",
+		Password: "",
+		Name:     "test",
+		Port:     3306,
+	}
+
+	return CreateDB(cfg)
 }

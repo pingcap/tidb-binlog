@@ -13,7 +13,7 @@ echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT
 
 if [ -f "$config" ]
 then
-	drainer -config $config -log-file $OUT_DIR/drainer.log >> $OUT_DIR/drainer.log 2>&1
+	drainer -config $config -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
 else
-	drainer -log-file $OUT_DIR/drainer.log >> $OUT_DIR/drainer.log 2>&1
+	drainer -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
 fi
