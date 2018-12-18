@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"os"
 
@@ -24,32 +23,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	TableSQLs := []string{`
-create table ptest(
-	a int primary key, 
-	b double NOT NULL DEFAULT 2.0, 
-	c varchar(10) NOT NULL, 
-	d time unique
-);
-`,
-		`
-create table itest(
-	a int, 
-	b double NOT NULL DEFAULT 2.0, 
-	c varchar(10) NOT NULL, 
-	d time unique,
-	PRIMARY KEY(a, b)
-);
-`,
-		`
-create table ntest(
-	a int, 
-	b double NOT NULL DEFAULT 2.0, 
-	c varchar(10) NOT NULL, 
-	d time unique
-);
-`}
-
 	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
 	if err != nil {
 		log.Fatal(err)
@@ -62,23 +35,5 @@ create table ntest(
 	}
 	defer util.CloseDB(targetDB)
 
-	// run the simple test case
-	dailytest.RunCase(&cfg.DiffConfig, sourceDB, targetDB)
-
-	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
-		// generate insert/update/delete sqls and execute
-		dailytest.RunDailyTest(cfg.SourceDBCfg, TableSQLs, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
-	})
-
-	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
-		// truncate test data
-		dailytest.TruncateTestTable(cfg.SourceDBCfg, TableSQLs)
-	})
-
-	dailytest.RunTest(&cfg.DiffConfig, sourceDB, targetDB, func(src *sql.DB) {
-		// drop test table
-		dailytest.DropTestTable(cfg.SourceDBCfg, TableSQLs)
-	})
-
-	log.Info("test pass!!!")
+	dailytest.Run(sourceDB, targetDB, &cfg.DiffConfig, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }

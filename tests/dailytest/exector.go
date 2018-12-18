@@ -1,15 +1,15 @@
 package dailytest
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/tests/util"
 )
 
 // RunDailyTest generates insert/update/delete sqls and execute
-func RunDailyTest(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobCount int, batch int) {
+func RunDailyTest(db *sql.DB, tableSQLs []string, workerCount int, jobCount int, batch int) {
 	var wg sync.WaitGroup
 	wg.Add(len(tableSQLs))
 
@@ -23,18 +23,12 @@ func RunDailyTest(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobC
 				log.Fatal(err)
 			}
 
-			dbs, err := createDBs(dbCfg, workerCount)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer closeDBs(dbs)
-
-			err = execSQL(dbs[0], tableSQLs[i])
+			err = execSQL(db, tableSQLs[i])
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			doProcess(table, dbs, jobCount, workerCount, batch)
+			doProcess(table, db, jobCount, workerCount, batch)
 		}(i)
 	}
 
@@ -42,13 +36,7 @@ func RunDailyTest(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobC
 }
 
 // TruncateTestTable truncates test data
-func TruncateTestTable(dbCfg util.DBConfig, tableSQLs []string) {
-	db, err := util.CreateDB(dbCfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer util.CloseDB(db)
-
+func TruncateTestTable(db *sql.DB, tableSQLs []string) {
 	for i := range tableSQLs {
 		table := newTable()
 		err := parseTableSQL(table, tableSQLs[i])
@@ -64,13 +52,7 @@ func TruncateTestTable(dbCfg util.DBConfig, tableSQLs []string) {
 }
 
 // DropTestTable drops test table
-func DropTestTable(dbCfg util.DBConfig, tableSQLs []string) {
-	db, err := util.CreateDB(dbCfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer util.CloseDB(db)
-
+func DropTestTable(db *sql.DB, tableSQLs []string) {
 	for i := range tableSQLs {
 		table := newTable()
 		err := parseTableSQL(table, tableSQLs[i])
