@@ -96,7 +96,7 @@ func doWait(doneChan chan struct{}, start time.Time, jobCount int, workerCount i
 	close(doneChan)
 }
 
-func doDMLProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, batch int) {
+func doDMLProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch int) {
 	jobChan := make(chan struct{}, 16*workerCount)
 	doneChan := make(chan struct{}, workerCount)
 
@@ -104,7 +104,7 @@ func doDMLProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, ba
 	go addJobs(jobCount, jobChan)
 
 	for i := 0; i < workerCount; i++ {
-		go doJob(table, dbs[i], batch, jobChan, doneChan)
+		go doJob(table, db, batch, jobChan, doneChan)
 	}
 
 	doWait(doneChan, start, jobCount, workerCount)
@@ -149,12 +149,12 @@ func doDDLProcess(table *table, db *sql.DB) {
 	execSqls(db, []string{sql}, [][]interface{}{{}})
 }
 
-func doProcess(table *table, dbs []*sql.DB, jobCount int, workerCount int, batch int) {
+func doProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch int) {
 	if len(table.columns) <= 2 {
 		log.Fatal("column count must > 2, and the first and second column are for primary key")
 	}
 
-	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
-	doDDLProcess(table, dbs[0])
-	doDMLProcess(table, dbs, jobCount/2, workerCount, batch)
+	doDMLProcess(table, db, jobCount/2, workerCount, batch)
+	doDDLProcess(table, db)
+	doDMLProcess(table, db, jobCount/2, workerCount, batch)
 }
