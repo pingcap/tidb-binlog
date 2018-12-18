@@ -41,6 +41,7 @@ type pumpNode struct {
 	latestTS   int64
 	latestTime time.Time
 
+	// use this function to update max commit ts
 	getMaxCommitTs func() int64
 }
 
