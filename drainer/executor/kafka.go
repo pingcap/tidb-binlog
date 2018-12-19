@@ -139,7 +139,7 @@ func (p *kafkaExecutor) Close() error {
 }
 
 func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
-	log.Debug("save binlog: ", binlog.String())
+	// log.Debug("save binlog: ", binlog.String())
 	data, err := binlog.Marshal()
 	if err != nil {
 		return errors.Trace(err)
