@@ -19,6 +19,7 @@ clean_data() {
 	rm -rf $OUT_DIR/tidb || true
 	rm -rf $OUT_DIR/tikv || true
 	rm -rf $OUT_DIR/pump || true
+	rm -rf $OUT_DIR/data.drainer || true
 }
 
 stop_services() {
@@ -117,11 +118,19 @@ if [ "${1-}" = '--debug' ]; then
     read line
 fi
 
+# set to the case name you want to run only for debug
+do_case=""
+
 for script in ./*/run.sh; do
+	test_name="$(basename "$(dirname "$script")")"
+	if [[ $do_case != "" && $test_name != $do_case ]]; then
+		continue
+	fi
+
     echo "Running test $script..."
     PATH="$pwd/../bin:$pwd/_utils:$PATH" \
 	OUT_DIR=$OUT_DIR \
-    TEST_NAME="$(basename "$(dirname "$script")")" \
+    TEST_NAME=$test_name \
     sh "$script"
 done
 

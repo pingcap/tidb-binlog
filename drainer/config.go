@@ -270,9 +270,6 @@ func (cfg *Config) adjustConfig() error {
 		} else if cfg.SyncerCfg.DestDBType == "pb" {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
-		} else if cfg.SyncerCfg.DestDBType == "kafka" {
-			cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
-			cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
 		}
 	}
 
@@ -298,7 +295,12 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
 		}
 		if cfg.SyncerCfg.To.KafkaAddrs == "" {
-			cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
+			addrs := os.Getenv("KAFKA_ADDRS")
+			if len(addrs) > 0 {
+				cfg.SyncerCfg.To.KafkaAddrs = addrs
+			} else {
+				cfg.SyncerCfg.To.KafkaAddrs = defaultKafkaAddrs
+			}
 		}
 
 		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
