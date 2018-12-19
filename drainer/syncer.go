@@ -416,7 +416,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 			log.Debug("get ddl binlog job: ", string(data))
 		}
 	}
-	s.schema, err = NewSchema(jobs, s.cfg.DestDBType == "tidb")
+	s.schema, err = NewSchema(jobs, false)
 
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
