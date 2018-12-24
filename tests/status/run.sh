@@ -92,6 +92,4 @@ fi
 # clean up
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused
 run_pump &
-rm tidb-tools-v2.1.0-linux-amd64.tar.gz || true
-rm -r tidb-tools-v2.1.0-linux-amd64 || true
 rm $statusLog || true
