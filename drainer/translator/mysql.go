@@ -308,8 +308,30 @@ func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
 	var kvs bytes.Buffer
+
+	check := func(ucs []*model.ColumnInfo) bool {
+		ucsMap := make(map[int64]*model.ColumnInfo)
+		for _, col := range ucs {
+			ucsMap[col.ID] = col
+		}
+
+		for i, col := range columns {
+			_, ok := ucsMap[col.ID]
+			if !ok {
+				continue
+			}
+
+			// set to false, so we use all column as where condition
+			if data[i] == nil {
+				return false
+			}
+		}
+		return true
+	}
+
 	// if has unique key, use it to construct where condition
-	ucs, err := m.uniqueIndexColumns(table, false)
+	ucs, err := m.uniqueIndexColumns(table, check)
+
 	if err != nil {
 		return "", nil, errors.Trace(err)
 	}
@@ -384,7 +406,8 @@ func (m *mysqlTranslator) pkHandleColumn(table *model.TableInfo) *model.ColumnIn
 	return nil
 }
 
-func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll bool) ([]*model.ColumnInfo, error) {
+// return primary key columns or any unique index columns which check return true
+func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, check func([]*model.ColumnInfo) bool) ([]*model.ColumnInfo, error) {
 	// pkHandleCol may in table.Indices, use map to keep olny one same key.
 	uniqueColsMap := make(map[string]interface{})
 	uniqueCols := make([]*model.ColumnInfo, 0, 2)
@@ -394,9 +417,7 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll boo
 		uniqueColsMap[pkHandleCol.Name.O] = pkHandleCol
 		uniqueCols = append(uniqueCols, pkHandleCol)
 
-		if !findAll {
-			return uniqueCols, nil
-		}
+		return uniqueCols, nil
 	}
 
 	columns := make(map[string]*model.ColumnInfo)
@@ -404,8 +425,21 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll boo
 		columns[col.Name.O] = col
 	}
 
-	for _, idx := range table.Indices {
+	// put primary key at [0], so we get primary key first if table has primary key
+	indices := make([]*model.IndexInfo, len(table.Indices))
+	copy(indices, table.Indices)
+	for i := 0; i < len(indices); i++ {
+		if indices[i].Primary {
+			indices[i], indices[0] = indices[0], indices[i]
+			break
+		}
+	}
+
+	for _, idx := range indices {
 		if idx.Primary || idx.Unique {
+			uniqueCols = uniqueCols[:0]
+			// why need this? unique index should has no duplicate column
+			uniqueColsMap = make(map[string]interface{})
 			for _, col := range idx.Columns {
 				if column, ok := columns[col.Name.O]; ok {
 					if _, ok := uniqueColsMap[col.Name.O]; !ok {
@@ -419,13 +453,13 @@ func (m *mysqlTranslator) uniqueIndexColumns(table *model.TableInfo, findAll boo
 				return nil, errors.New("primay/unique index is empty, but should not be empty")
 			}
 
-			if !findAll {
+			if check == nil || check(uniqueCols) {
 				return uniqueCols, nil
 			}
 		}
 	}
 
-	return uniqueCols, nil
+	return uniqueCols[:0], nil
 }
 
 func (m *mysqlTranslator) getIndexColumns(table *model.TableInfo) (indexColumns [][]*model.ColumnInfo, err error) {
