@@ -36,7 +36,7 @@ all: dev install
 
 dev: check test build
 
-build: pump drainer
+build: pump drainer reparo
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
@@ -63,6 +63,7 @@ integration_test: build
 	@which bin/pd-server
 	@which bin/drainer
 	@which bin/pump
+	@which bin/reparo
 	tests/run.sh
 
 fmt:
