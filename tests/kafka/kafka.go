@@ -147,18 +147,21 @@ func tableToSQL(table *pb.Table) (sqls []string, sqlArgs [][]interface{}) {
 		sqlArgs = append(sqlArgs, args)
 	}
 
-	constructWhere := func() (sql string, usePK bool) {
+	constructWhere := func(args []interface{}) (sql string, usePK bool) {
 		var whereColumns []string
-		for _, col := range table.GetColumnInfo() {
+		var whereArgs []interface{}
+		for i, col := range table.GetColumnInfo() {
 			if col.GetIsPrimaryKey() {
 				whereColumns = append(whereColumns, col.GetName())
+				whereArgs = append(whereArgs, args[i])
 				usePK = true
 			}
 		}
 		// no primary key
 		if len(whereColumns) == 0 {
-			for _, col := range table.GetColumnInfo() {
+			for i, col := range table.GetColumnInfo() {
 				whereColumns = append(whereColumns, col.GetName())
+				whereArgs = append(whereArgs, args[i])
 			}
 		}
 
@@ -168,15 +171,17 @@ func tableToSQL(table *pb.Table) (sqls []string, sqlArgs [][]interface{}) {
 				sql += " and "
 			}
 
-			sql += fmt.Sprintf("%s = ? ", col)
+			if whereArgs[i] == nil {
+				sql += fmt.Sprintf("%s IS NULL ", col)
+			} else {
+				sql += fmt.Sprintf("%s = ? ", col)
+			}
 		}
 
 		sql += " limit 1"
 
 		return
 	}
-
-	where, usePK := constructWhere()
 
 	for _, mutation := range table.Mutations {
 		switch mutation.GetType() {
@@ -193,8 +198,6 @@ func tableToSQL(table *pb.Table) (sqls []string, sqlArgs [][]interface{}) {
 				sql += fmt.Sprintf("%s = ? ", col.Name)
 			}
 
-			sql += where
-
 			row := mutation.Row
 			changedRow := mutation.ChangeRow
 
@@ -204,8 +207,14 @@ func tableToSQL(table *pb.Table) (sqls []string, sqlArgs [][]interface{}) {
 				args = append(args, columnToArg(col))
 			}
 
+			where, usePK := constructWhere(args)
+			sql += where
+
 			// for where
 			for i, col := range changedRow.GetColumns() {
+				if columnToArg(col) == nil {
+					continue
+				}
 				if !usePK || columnInfo[i].GetIsPrimaryKey() {
 					args = append(args, columnToArg(col))
 				}
@@ -216,13 +225,21 @@ func tableToSQL(table *pb.Table) (sqls []string, sqlArgs [][]interface{}) {
 
 		case pb.MutationType_Delete:
 			columnInfo := table.GetColumnInfo()
-			where, usePK := constructWhere()
+			row := mutation.Row
+
+			var values []interface{}
+			for _, col := range row.GetColumns() {
+				values = append(values, columnToArg(col))
+			}
+			where, usePK := constructWhere(values)
 
 			sql := fmt.Sprintf("delete from `%s`.`%s` %s", table.GetSchemaName(), table.GetTableName(), where)
 
-			row := mutation.Row
 			var args []interface{}
 			for i, col := range row.GetColumns() {
+				if columnToArg(col) == nil {
+					continue
+				}
 				if !usePK || columnInfo[i].GetIsPrimaryKey() {
 					args = append(args, columnToArg(col))
 				}
