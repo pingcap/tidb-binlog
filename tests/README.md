@@ -9,6 +9,7 @@ This folder contains all tests which relies on external service such as TiDB.
    - `bin/pd-server`
    - `bin/tikv-server`
    - `bin/tidb-server`
+   - `bin/binlogctl`
 
 2. The following programs must be installed:
 
