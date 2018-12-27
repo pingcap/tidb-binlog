@@ -12,7 +12,7 @@ sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "online" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
      echo "drainer is not online"
     exit 2
 fi
@@ -23,7 +23,7 @@ drainerNodeID=`cat $statusLog | sed 's/.*NodeID:\([a-zA-Z0-9\-]*:[0-9]*\) .*/\1/
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "online" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
      echo "pump is not online"
     exit 2
 fi
@@ -34,7 +34,7 @@ sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "paused" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
     echo "pump is not paused"
     exit 2
 fi
@@ -47,7 +47,7 @@ sleep 5
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "offline" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
     echo "pump is not offline"
     exit 2
 fi
@@ -58,7 +58,7 @@ sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "paused" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
     echo "drainer is not paused"
     exit 2
 fi
@@ -71,7 +71,7 @@ sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "offline" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
     echo "drainer is not offline"
     exit 2
 fi
@@ -84,7 +84,7 @@ sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "paused" $statusLog`
-if [ count -ne 1 ]; then
+if [ $count -ne 1 ]; then
     echo "pump is not paused"
     exit 2
 fi

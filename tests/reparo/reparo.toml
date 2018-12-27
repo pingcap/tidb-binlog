@@ -1,5 +1,5 @@
 # drainer 输出的 protobuf 格式 binlog 文件的存储路径
-data-dir = "data.drainer"
+data-dir = "/tmp/tidb_binlog_test/data.drainer"
 
 # log-file = ""
 # log-rotate = "hour"

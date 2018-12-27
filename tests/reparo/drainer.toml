@@ -8,7 +8,7 @@
 detect-interval = 10
 
 # drainer meta data directory path
-data-dir = "data.drainer"
+data-dir = "/tmp/tidb_binlog_test/data.drainer"
 
 # a comma separated list of PD endpoints
 pd-urls = "http://127.0.0.1:2379"
