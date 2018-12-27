@@ -65,6 +65,28 @@ var case1Clean = []string{`
 	drop table binlog_case1`,
 }
 
+// https://internal.pingcap.net/jira/browse/TOOL-714
+var case2 = []string{`
+create table binlog_case2 (id int, a1 int, a3 int, unique key dex1(a1, a3));
+`,
+	`
+insert into binlog_case2(id, a1, a3) values(1, 1, NULL);
+`,
+	`
+insert into binlog_case2(id, a1, a3) values(2, 1, NULL);
+`,
+	`
+update binlog_case2 set id = 10 where id = 1;
+`,
+	`
+update binlog_case2 set id = 100 where id = 10;
+`,
+}
+
+var case2Clean = []string{`
+	drop table binlog_case2`,
+}
+
 // RunCase run some simple test case
 func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 	RunTest(cfg, src, dst, func(src *sql.DB) {
@@ -77,6 +99,22 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 	// clean table
 	RunTest(cfg, src, dst, func(src *sql.DB) {
 		err := execSQLs(src, case1Clean)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	// run case2
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case2)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	// clean table
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case2Clean)
 		if err != nil {
 			log.Fatal(err)
 		}
