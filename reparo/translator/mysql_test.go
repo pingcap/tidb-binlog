@@ -26,7 +26,8 @@ func (s *testTranslatorSuite) TestGenWhere(c *C) {
 	}
 
 	for _, t := range cases {
-		where := genWhere(t.cols, t.args)
+		where, args := genWhere(t.cols, t.args)
+		t.args = args
 		c.Assert(where, Equals, t.where)
 	}
 }
