@@ -22,7 +22,7 @@ func (s *testTranslatorSuite) TestGenWhere(c *C) {
 	}{
 		{[]string{"a"}, []interface{}{""}, "`a` = ?"},
 		{[]string{"a", "b"}, []interface{}{"", ""}, "`a` = ? AND `b` = ?"},
-		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS ? AND `b` = ?"},
+		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS NULL AND `b` = ?"},
 	}
 
 	for _, t := range cases {
