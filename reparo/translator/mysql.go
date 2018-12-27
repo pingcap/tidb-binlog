@@ -77,7 +77,7 @@ func (p *mysqlTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row []
 	}
 
 	kvs := genKVs(updatedColumns)
-	where := genWhere(allCols, oldValues)
+	where, oldValues := genWhere(allCols, oldValues)
 
 	args := make([]interface{}, 0, len(updatedValues)+len(oldValues))
 	args = append(args, updatedValues...)
@@ -97,7 +97,7 @@ func (p *mysqlTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row []
 		return "", nil, errors.Trace(err)
 	}
 
-	where := genWhere(cols, args)
+	where, args := genWhere(cols, args)
 	sql := fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s limit 1", schema, table, where)
 	log.Debugf("delete sql %s, args %+v", sql, args)
 	return sql, args, nil
@@ -135,18 +135,22 @@ func (p *mysqlTranslator) genColumnList(columns []string) string {
 	return strings.Join(columns, ",")
 }
 
-func genWhere(columns []string, args []interface{}) string {
+func genWhere(columns []string, args []interface{}) (string, []interface{}) {
 	items := make([]string, 0, len(columns))
+	newArgs := make([]interface{}, 0, len(args))
+	var item string
+
 	for i, col := range columns {
-		kvSplit := "="
 		if args[i] == nil {
-			kvSplit = "IS"
+			item = fmt.Sprintf("`%s` IS NULL", col)
+		} else {
+			item = fmt.Sprintf("`%s` = ?", col)
+			newArgs = append(newArgs, args[i])
 		}
-		item := fmt.Sprintf("`%s` %s ?", col, kvSplit)
 		items = append(items, item)
 	}
 
-	return strings.Join(items, " AND ")
+	return strings.Join(items, " AND "), newArgs
 }
 
 func genKVs(columns []string) string {

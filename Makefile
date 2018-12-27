@@ -63,6 +63,7 @@ integration_test: build
 	@which bin/pd-server
 	@which bin/drainer
 	@which bin/pump
+	@which bin/binlogctl
 	@which bin/reparo
 	tests/run.sh
 
