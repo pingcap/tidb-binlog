@@ -304,32 +304,13 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
-	// register this node
-	ts, err := s.getTSO()
-	if err != nil {
-		return errors.Annotate(err, "fail to get tso from pd")
-	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
-	err = s.node.RefreshStatus(context.Background(), status)
-	if err != nil {
-		return errors.Annotate(err, "fail to register node to etcd")
-	}
-
-	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
-
-	// notify all cisterns
+	// notify all drainers
 	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 	if err := s.node.Notify(ctx); err != nil {
-		// if fail, refresh this node's state to paused
-		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, s.storage.MaxCommitTS(), 0)
-		rerr := s.node.RefreshStatus(context.Background(), status)
-		if rerr != nil {
-			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
-		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
 
-	log.Debug("notify success")
+	log.Debug("notify drainer success")
 
 	errc := s.node.Heartbeat(s.ctx)
 	go func() {
@@ -352,8 +333,6 @@ func (s *Server) Start() error {
 			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
 		}
 	}
-
-	log.Debug("init success")
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -411,6 +390,19 @@ func (s *Server) Start() error {
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
 	}
+
+	// register this node
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
+	err = s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
+		return errors.Annotate(err, "fail to register node to etcd")
+	}
+
+	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
 
 	return err
 }
