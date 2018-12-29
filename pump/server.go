@@ -312,15 +312,6 @@ func (s *Server) Start() error {
 
 	log.Debug("notify drainer success")
 
-	errc := s.node.Heartbeat(s.ctx)
-	go func() {
-		for err := range errc {
-			if err != context.Canceled {
-				log.Errorf("send heartbeat error %v", err)
-			}
-		}
-	}()
-
 	// start a UNIX listener
 	var unixLis net.Listener
 	if s.unixAddr != "" {
@@ -366,6 +357,28 @@ func (s *Server) Start() error {
 		go s.gs.Serve(unixLis)
 	}
 
+	// register this node
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
+	err = s.node.RefreshStatus(context.Background(), status)
+	if err != nil {
+		return errors.Annotate(err, "fail to register node to etcd")
+	}
+
+	errc := s.node.Heartbeat(s.ctx)
+	go func() {
+		for err := range errc {
+			if err != context.Canceled {
+				log.Errorf("send heartbeat error %v", err)
+			}
+		}
+	}()
+
+	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
+
 	// grpc and http will use the same tcp connection
 	m := cmux.New(tcpLis)
 	// sets a timeout for the read of matchers
@@ -390,19 +403,6 @@ func (s *Server) Start() error {
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
 	}
-
-	// register this node
-	ts, err := s.getTSO()
-	if err != nil {
-		return errors.Annotate(err, "fail to get tso from pd")
-	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
-	err = s.node.RefreshStatus(context.Background(), status)
-	if err != nil {
-		return errors.Annotate(err, "fail to register node to etcd")
-	}
-
-	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
 
 	return err
 }
