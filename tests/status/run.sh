@@ -28,19 +28,7 @@ if [ $count -ne 1 ]; then
     exit 2
 fi
 
-# stop pump, and pump's state should be paused
-binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
-sleep 3
-binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
-cat $statusLog
-count=`grep -c "paused" $statusLog`
-if [ $count -ne 1 ]; then
-    echo "pump is not paused"
-    exit 2
-fi
-
 # offline pump, and pump's status should be offline
-run_pump &
 sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
 sleep 5
@@ -49,6 +37,19 @@ cat $statusLog
 count=`grep -c "offline" $statusLog`
 if [ $count -ne 1 ]; then
     echo "pump is not offline"
+    exit 2
+fi
+
+# stop pump, and pump's state should be paused
+run_pump &
+sleep 3
+binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
+sleep 3
+binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
+cat $statusLog
+count=`grep -c "paused" $statusLog`
+if [ $count -ne 1 ]; then
+    echo "pump is not paused"
     exit 2
 fi
 
