@@ -421,8 +421,11 @@ func addImplicitColumn(table *model.TableInfo) {
 	table.Indices = []*model.IndexInfo{newIndex}
 }
 
-// there's only two status will be in HistoryDDLJob(we fetch at start time): JobStateSynced and JobStateRollbackDone
-// If it fail to commit(to tikv) in 2pc phrase (when changing JobStateDone -> JobStateSynced and add to HistoryDDLJob), then is would't not be add to HistoryDDLJob, and we may get (prewrite + rollback binlog), this would binlog event would reach drainer, finally we will get a (p + commit binlog) when tidb retry and successfully commit
+// there's only two status will be in HistoryDDLJob(we fetch at start time):
+// JobStateSynced and JobStateRollbackDone
+// If it fail to commit(to tikv) in 2pc phrase (when changing JobStateDone -> JobStateSynced and add to HistoryDDLJob),
+// then is would't not be add to HistoryDDLJob, and we may get (prewrite + rollback binlog),
+// this binlog event would reach drainer, finally we will get a (p + commit binlog) when tidb retry and successfully commit
 func skipJob(job *model.Job) bool {
 	return !job.IsSynced()
 }
