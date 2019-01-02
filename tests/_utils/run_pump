@@ -4,7 +4,8 @@ set -ue
 
 OUT_DIR=/tmp/tidb_binlog_test
 
-killall pump || true
+
+killall -9 pump || true
 
 echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump.log"
 

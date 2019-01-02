@@ -18,13 +18,6 @@ drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID:\([a-zA-Z0-9\-]*:[0-9]*\) .*/\1
 echo "check pump's status, should be online"
 check_status pumps online
 
-max_commit_ts_1=`cat $STATUS_LOG | sed 's/.*MaxCommitTS:\([0-9]*\) .*/\1/g'`
-
-check_status pumps online
-
-max_commit_ts_2=`cat $STATUS_LOG | sed 's/.*MaxCommitTS:\([0-9]*\) .*/\1/g'`
-
-
 # stop pump, and pump's state should be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
 
@@ -38,7 +31,6 @@ binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
 
 echo "check pump's status, should be offline"
 check_status pumps offline
-
 
 # stop drainer, and drainer's state should be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $drainerNodeID
@@ -54,7 +46,7 @@ binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-drainer -node-id $drainerNodeID
 echo "check drainer's status, should be offline"
 check_status drainers offline
 
-# update drainer's state to online, and then run pump, pump will notify drainer failed, pump's sttaus will be paused
+# update drainer's state to online, and then run pump, pump will notify drainer failed, pump's status will be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state online
 run_pump &
 
