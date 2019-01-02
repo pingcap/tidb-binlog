@@ -2,6 +2,7 @@ package dailytest
 
 import (
 	"database/sql"
+	"strings"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/diff"
@@ -87,6 +88,21 @@ var case2Clean = []string{`
 	drop table binlog_case2`,
 }
 
+var case3 = []string{`
+create table a(id int primary key, a1 int);
+`,
+	`
+insert into a(id, a1) values(1,1),(2,1);
+`,
+	`
+alter table a add unique index aidx(a1);
+`,
+}
+
+var case3Clean = []string{`
+	drop table a`,
+}
+
 // RunCase run some simple test case
 func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 	RunTest(cfg, src, dst, func(src *sql.DB) {
@@ -115,6 +131,22 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 	// clean table
 	RunTest(cfg, src, dst, func(src *sql.DB) {
 		err := execSQLs(src, case2Clean)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
+	// run case3
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case3)
+		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
+			log.Fatal(err)
+		}
+	})
+
+	// clean table
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		err := execSQLs(src, case3Clean)
 		if err != nil {
 			log.Fatal(err)
 		}

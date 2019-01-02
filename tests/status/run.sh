@@ -43,7 +43,7 @@ fi
 run_pump &
 sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
-sleep 5
+sleep 10
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pumps > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "offline" $statusLog`
@@ -67,7 +67,7 @@ fi
 run_drainer &
 sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-drainer -node-id $drainerNodeID
-sleep 3
+sleep 10
 binlogctl -pd-urls 127.0.0.1:2379 -cmd drainers > $statusLog 2>&1
 cat $statusLog
 count=`grep -c "offline" $statusLog`

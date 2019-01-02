@@ -17,14 +17,14 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	colName := model.NewCIStr("A")
 	tbName := model.NewCIStr("T")
 
-	// check cancelled job
-	job := &model.Job{ID: 1, State: model.JobStateCancelled}
+	// check rollback done job
+	job := &model.Job{ID: 1, State: model.JobStateRollbackDone}
 	_, _, sql, err := s.schema.handleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
-	job = &model.Job{ID: 1, State: model.JobStateDone}
+	job = &model.Job{ID: 1, State: model.JobStateSynced}
 	_, _, sql, err = s.schema.handleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
@@ -82,6 +82,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 
 		job = &model.Job{
 			ID:         testCase.jobID,
+			State:      model.JobStateSynced,
 			SchemaID:   testCase.schemaID,
 			TableID:    testCase.tableID,
 			Type:       testCase.jobType,
