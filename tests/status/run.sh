@@ -56,4 +56,4 @@ check_status pumps paused
 # clean up
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused
 run_pump &
-rm $statusLog || true
+rm $STATUS_LOG || true
