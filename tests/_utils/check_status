@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -eu
+OUT_DIR=/tmp/tidb_binlog_test
+
+STATUS_LOG="${OUT_DIR}/status.log"
+
+for i in {1..15} 
+do    
+    binlogctl -pd-urls 127.0.0.1:2379 -cmd $1 > $STATUS_LOG 2>&1
+    cat $STATUS_LOG
+    count=`grep -c "$2" $STATUS_LOG`
+    if [ $count -ne 1 ]; then
+        sleep 1
+    else
+        exit 0
+    fi
+done
+
+echo "status is not $2"
+exit 2
