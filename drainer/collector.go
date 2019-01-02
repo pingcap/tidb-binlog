@@ -128,7 +128,14 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 						continue
 					}
 
-					if job.State == model.JobStateCancelled {
+					// according to DDL
+					// only when reach this two state will write binlog:
+					if job.State != model.JobStateSynced &&
+						job.State != model.JobStateRollbackDone {
+						log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
+					}
+
+					if skipJob(job) {
 						break
 					} else {
 						item.SetJob(job)
