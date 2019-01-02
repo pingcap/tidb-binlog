@@ -4,7 +4,8 @@
 
  cd "$(dirname "$0")"
 
-statusLog="status.log"
+OUT_DIR=/tmp/tidb_binlog_test
+STATUS_LOG="${OUT_DIR}/status.log"
 
 # run drainer, and drainer's status should be online
 run_drainer &
