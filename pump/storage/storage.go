@@ -132,9 +132,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
 
 	metadata, err := leveldb.OpenFile(kvDir, &opt)
-
 	if err != nil {
-		log.Infof("openfile %s error %v", kvDir, err)
 		return nil, errors.Trace(err)
 	}
 
