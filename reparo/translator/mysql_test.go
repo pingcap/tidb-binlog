@@ -22,11 +22,12 @@ func (s *testTranslatorSuite) TestGenWhere(c *C) {
 	}{
 		{[]string{"a"}, []interface{}{""}, "`a` = ?"},
 		{[]string{"a", "b"}, []interface{}{"", ""}, "`a` = ? AND `b` = ?"},
-		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS ? AND `b` = ?"},
+		{[]string{"a", "b"}, []interface{}{nil, ""}, "`a` IS NULL AND `b` = ?"},
 	}
 
 	for _, t := range cases {
-		where := genWhere(t.cols, t.args)
+		where, args := genWhere(t.cols, t.args)
+		t.args = args
 		c.Assert(where, Equals, t.where)
 	}
 }
