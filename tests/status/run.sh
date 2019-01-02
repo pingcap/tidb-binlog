@@ -39,6 +39,7 @@ binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
 echo "check pump's status, should be offline"
 check_status pumps offline
 
+
 # stop drainer, and drainer's state should be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $drainerNodeID
 
