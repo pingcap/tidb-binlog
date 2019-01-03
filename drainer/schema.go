@@ -212,7 +212,7 @@ func (s *Schema) addJob(job *model.Job) {
 func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
-		if s.jobs[i].State == model.JobStateCancelled {
+		if skipJob(s.jobs[i]) {
 			continue
 		}
 
@@ -248,7 +248,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
 func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
-	if job.State == model.JobStateCancelled {
+	if skipJob(job) {
 		return "", "", "", nil
 	}
 
@@ -419,4 +419,13 @@ func addImplicitColumn(table *model.TableInfo) {
 		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
 	}
 	table.Indices = []*model.IndexInfo{newIndex}
+}
+
+// there's only two status will be in HistoryDDLJob(we fetch at start time):
+// JobStateSynced and JobStateRollbackDone
+// If it fail to commit(to tikv) in 2pc phrase (when changing JobStateDone -> JobStateSynced and add to HistoryDDLJob),
+// then is would't not be add to HistoryDDLJob, and we may get (prewrite + rollback binlog),
+// this binlog event would reach drainer, finally we will get a (p + commit binlog) when tidb retry and successfully commit
+func skipJob(job *model.Job) bool {
+	return !job.IsSynced()
 }
