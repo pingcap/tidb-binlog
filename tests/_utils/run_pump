@@ -4,8 +4,17 @@ set -ue
 
 OUT_DIR=/tmp/tidb_binlog_test
 
-
-killall -9 pump || true
+# kill pump, util no pump process is running
+while :
+do
+        pump_num=`ps aux > temp && grep "pump -log-file" temp | wc -l && rm temp`
+        if [ $pump_num -ne 0 ]; then
+                killall pump || true
+                sleep 1
+        else
+                break
+        fi
+done
 
 echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump.log"
 
