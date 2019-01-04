@@ -4,8 +4,17 @@ set -ue
 
 OUT_DIR=/tmp/tidb_binlog_test
 
-killall drainer || true
-
+# kill drainer, util no drainer process is running
+while :
+do
+        drainer_num=`ps aux > temp && grep "drainer -log-file" temp | wc -l && rm temp`
+        if [ $drainer_num -ne 0 ]; then
+                killall drainer || true
+                sleep 1
+        else
+                break
+        fi
+done
 
 config=${TEST_DIR-.}/drainer.toml
 
@@ -13,7 +22,7 @@ echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT
 
 if [ -f "$config" ]
 then
-	drainer -config $config -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
+	drainer -log-file $OUT_DIR/drainer.log -config $config $* >> $OUT_DIR/drainer.log 2>&1
 else
 	drainer -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
 fi
