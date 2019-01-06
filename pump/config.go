@@ -33,6 +33,9 @@ const (
 
 	// default interval time to generate fake binlog, the unit is second
 	defaultGenFakeBinlogInterval = 3
+
+	// default max transaction time seted in tidb
+	defaultTxnTime = 600
 )
 
 // globalConfig is global config of pump to be used in any where
@@ -78,6 +81,8 @@ type Config struct {
 	printVersion    bool
 	tls             *tls.Config
 	Storage         *storage.StorageConfig `toml:"storage" json:"storage"`
+
+	TxnTime int `toml:"txn-time" json:"txn-time"`
 }
 
 // NewConfig return an instance of configuration
@@ -109,6 +114,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
+	fs.IntVar(&cfg.TxnTime, "txn-time", defaultTxnTime, "max transaction time seted in tidb, the unit is second")
 
 	// global config
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")

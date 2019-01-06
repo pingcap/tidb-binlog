@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	maxTxnTimeoutSecond int64 = 600
-	chanSize                  = 1 << 20
+	//maxTxnTimeoutSecond int64 = 600
+	chanSize = 1 << 20
 )
 
 var (
@@ -83,16 +83,18 @@ type Append struct {
 
 	close chan struct{}
 	wg    sync.WaitGroup
+
+	maxTxnTimeoutSecond int64
 }
 
 // NewAppend returns a instance of Append
-func NewAppend(dir string, options *Options) (append *Append, err error) {
-	return NewAppendWithResolver(dir, options, nil, nil)
+func NewAppend(dir string, txnTime int64, options *Options) (append *Append, err error) {
+	return NewAppendWithResolver(dir, txnTime, options, nil, nil)
 }
 
 // NewAppendWithResolver returns a instance of Append
 // if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txn is committed
-func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
+func NewAppendWithResolver(dir string, txnTime int64, options *Options, tiStore kv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
 	}
@@ -148,6 +150,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 		close:     make(chan struct{}),
 		sortItems: make(chan sortItem, 1024),
+
+		maxTxnTimeoutSecond: txnTime,
 	}
 
 	append.gcTS, err = append.readGCTSFromDB()
@@ -367,7 +371,7 @@ func (a *Append) resolve(startTS int64) bool {
 	startSecond := oracle.ExtractPhysical(uint64(startTS)) / int64(time.Second/time.Millisecond)
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
 
-	if maxSecond-startSecond <= maxTxnTimeoutSecond {
+	if maxSecond-startSecond <= a.maxTxnTimeoutSecond {
 		return false
 	}
 
@@ -533,7 +537,7 @@ func (a *Append) GCTS(ts int64) {
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
 	// so we forward a little bit to make sure we can get the according P binlog
-	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
+	a.doGCTS(ts - int64(oracle.EncodeTSO(a.maxTxnTimeoutSecond*1000)))
 }
 
 func (a *Append) doGCTS(ts int64) {

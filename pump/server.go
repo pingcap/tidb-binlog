@@ -134,7 +134,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	options := storage.DefaultOptions().WithStorage(cfg.Storage)
-	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
+	storage, err := storage.NewAppendWithResolver(cfg.DataDir, int64(cfg.TxnTime)+30, options, tiStore, lockResolver)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
