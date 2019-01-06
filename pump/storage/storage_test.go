@@ -47,7 +47,7 @@ func newAppendWithOptions(t Log, options *Options) *Append {
 		t.Fatal(err)
 	}
 
-	append, err := NewAppend(dir, options)
+	append, err := NewAppend(dir, 600, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	err := append.Close()
 	c.Assert(err, check.IsNil)
 
-	append, err = NewAppend(append.dir, append.options)
+	append, err = NewAppend(append.dir, 600, append.options)
 	c.Assert(err, check.IsNil)
 
 	// populate some data and close open back to check the status
@@ -96,7 +96,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	err = append.Close()
 	c.Assert(err, check.IsNil)
 
-	append, err = NewAppend(append.dir, append.options)
+	append, err = NewAppend(append.dir, 600, append.options)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(gcTS, check.Equals, append.gcTS)
@@ -131,7 +131,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 			err := appendStorage.Close()
 			c.Assert(err, check.IsNil)
 
-			appendStorage, err = NewAppend(appendStorage.dir, appendStorage.options)
+			appendStorage, err = NewAppend(appendStorage.dir, 600, appendStorage.options)
 			c.Assert(err, check.IsNil)
 		}
 
@@ -240,7 +240,7 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 
 	// close and open read again
 	append.Close()
-	append, err = NewAppend(append.dir, append.options)
+	append, err = NewAppend(append.dir, 600, append.options)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(append.gcTS, check.Equals, int64(100))
