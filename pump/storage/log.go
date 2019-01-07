@@ -369,9 +369,9 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 			if errors.Cause(seekErr) == io.EOF {
 				lf.reportCorruption(int(size)-int(offset), err)
 				return nil
-			} else {
-				return errors.Trace(seekErr)
 			}
+
+			return errors.Trace(seekErr)
 		}
 		err = fn(valuePointer{Fid: lf.fid, Offset: offset}, r)
 		if err != nil {

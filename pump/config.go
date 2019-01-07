@@ -77,7 +77,7 @@ type Config struct {
 	configFile      string
 	printVersion    bool
 	tls             *tls.Config
-	Storage         *storage.StorageConfig `toml:"storage" json:"storage"`
+	Storage         *storage.Config `toml:"storage" json:"storage"`
 }
 
 // NewConfig return an instance of configuration
