@@ -31,7 +31,7 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 txn-batch = 20
 
 # work count to execute binlogs
-# if the latency between drainer and downstream(mysql or tidb), you might want to increase this
+# if the latency between drainer and downstream(mysql or tidb) are too high, you might want to increase this
 # to get higher throughput by higher concurrent write to the downstream
 worker-count = 16
 
