@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	//maxTxnTimeoutSecond int64 = 600
 	chanSize = 1 << 20
 )
 
