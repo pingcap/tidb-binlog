@@ -28,10 +28,12 @@ pd-urls = "http://127.0.0.1:2379"
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
 # number of binlog events in a transaction batch
-txn-batch = 1
+txn-batch = 20
 
 # work count to execute binlogs
-worker-count = 1
+# if the latency between drainer and downstream(mysql or tidb), you might want to increase this
+# to get higher throughput by higher concurrent write to the downstream
+worker-count = 16
 
 disable-dispatch = false
 
@@ -60,10 +62,9 @@ host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
-# Time and size limits for flash batch write
-# time-limit = "30s"
-# size-limit = "100000"
+
 [syncer.to.checkpoint]
+# you can uncomment this to change the database to save checkpoint when the downstream is mysql or tidb
 #schema = "tidb_binlog"
 
 # Uncomment this if you want to use pb or sql as db-type.
