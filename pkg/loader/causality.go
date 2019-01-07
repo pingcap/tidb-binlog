@@ -11,30 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package drainer
+package loader
 
 import "github.com/juju/errors"
 
-// causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
+// Causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
 // causality groups sqls that maybe contain causal relationships, and syncer executes them linearly.
 // if some conflicts exist in more than one groups, then syncer waits all SQLs that are grouped be executed and reset causality.
 // this mechanism meets quiescent consistency to ensure correctness.
-type causality struct {
+type Causality struct {
 	relations map[string]string
 }
 
-func newCausality() *causality {
-	return &causality{
+func NewCausality() *Causality {
+	return &Causality{
 		relations: make(map[string]string),
 	}
 }
 
-func (c *causality) add(keys []string) error {
+func (c *Causality) Add(keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
 
-	if c.detectConflict(keys) {
+	if c.DetectConflict(keys) {
 		return errors.New("some conflicts in causality, must be resolved")
 	}
 	// find causal key
@@ -54,16 +54,16 @@ func (c *causality) add(keys []string) error {
 	return nil
 }
 
-func (c *causality) get(key string) string {
+func (c *Causality) Get(key string) string {
 	return c.relations[key]
 }
 
-func (c *causality) reset() {
+func (c *Causality) Reset() {
 	c.relations = make(map[string]string)
 }
 
-// detectConflict detects whether there is a conflict
-func (c *causality) detectConflict(keys []string) bool {
+// DetectConflict detects whether there is a conflict
+func (c *Causality) DetectConflict(keys []string) bool {
 	if len(keys) == 0 {
 		return false
 	}
