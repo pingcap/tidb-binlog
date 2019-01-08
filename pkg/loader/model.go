@@ -18,7 +18,7 @@ const (
 	DeleteDMLType DMLType = 3
 )
 
-// DML holds the dml fino
+// DML holds the dml info
 type DML struct {
 	Database string
 	Table    string
@@ -146,10 +146,9 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 }
 
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
-
 	var setNames []string
 	for name, arg := range dml.Values {
-		setNames = append(setNames, fmt.Sprintf("%s = ?", name))
+		setNames = append(setNames, fmt.Sprintf("%s = ?", quoteName(name)))
 		args = append(args, arg)
 	}
 
@@ -168,9 +167,9 @@ func (dml *DML) buildWhere() (str string, args []interface{}) {
 			str += " AND "
 		}
 		if wargs[i] == nil {
-			str += wnames[i] + " IS NULL"
+			str += quoteName(wnames[i]) + " IS NULL"
 		} else {
-			str += wnames[i] + " = ? "
+			str += quoteName(wnames[i]) + " = ? "
 			args = append(args, wargs[i])
 		}
 	}
@@ -217,8 +216,7 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
 	info := dml.info
-	cols := strings.Join(info.columns, ",")
-	sql = fmt.Sprintf("REPLACE into %s(%s) VALUES(%s)", quoteSchema(dml.Database, dml.Table), cols, holderString(len(info.columns)))
+	sql = fmt.Sprintf("REPLACE into %s(%s) VALUES(%s)", quoteSchema(dml.Database, dml.Table), buildColumnList(info.columns), holderString(len(info.columns)))
 	for _, name := range info.columns {
 		v := dml.Values[name]
 		args = append(args, v)

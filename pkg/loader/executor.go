@@ -107,7 +107,7 @@ func (e *executor) bulkMergeSQL(updates []*DML) error {
 
 	// look like float type has bug fail to update
 	// https://github.com/pingcap/tidb/issues/8934
-	builder.WriteString(fmt.Sprintf("INSERT INTO %s(%s) VALUES %s ON DUPLICATE KEY UPDATE ", quoteSchema(dbName, tableName), strings.Join(info.columns, ","), strings.Join(holders, ",")))
+	builder.WriteString(fmt.Sprintf("INSERT INTO %s(%s) VALUES %s ON DUPLICATE KEY UPDATE ", quoteSchema(dbName, tableName), buildColumnList(info.columns), strings.Join(holders, ",")))
 
 	for i, name := range info.columns {
 		if i > 0 {
@@ -152,7 +152,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	tableName := inserts[0].Table
 
 	builder := new(strings.Builder)
-	builder.WriteString(fmt.Sprintf("REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), strings.Join(info.columns, ",")))
+	builder.WriteString(fmt.Sprintf("REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), buildColumnList(info.columns)))
 
 	var holders []string
 	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
@@ -175,8 +175,9 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	}
 	_, err = tx.Exec(builder.String(), args...)
 	if err != nil {
-		log.Error("exec fail sql: %s, args: %v", builder.String(), args)
+		log.Errorf("exec fail sql: %s, args: %v", builder.String(), args)
 		tx.Rollback()
+		return errors.Trace(err)
 	}
 	err = tx.Commit()
 	if err != nil {

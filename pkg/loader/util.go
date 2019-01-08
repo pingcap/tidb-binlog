@@ -131,6 +131,10 @@ func quoteSchema(schema string, table string) string {
 	return fmt.Sprintf("`%s`.`%s`", schema, table)
 }
 
+func quoteName(name string) string {
+	return "`" + name + "`"
+}
+
 func holderString(n int) string {
 	builder := new(strings.Builder)
 	for i := 0; i < n; i++ {
@@ -156,4 +160,16 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 		res = append(res, dmls[i:end])
 	}
 	return
+}
+
+func buildColumnList(names []string) string {
+	b := new(strings.Builder)
+	for i, name := range names {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString("`" + name + "`")
+	}
+
+	return b.String()
 }
