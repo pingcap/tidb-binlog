@@ -186,6 +186,12 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 
 }
 
+// we merge dmls by primary key, after merge by key, we
+// have only one dml for one primary key which contains the newest value(like a kv store),
+// to avoid other column's duplicate entry, we should apply delete dmls first, then insert&update
+// use replace to handle the update unique index case(see https://github.com/pingcap/tidb-binlog/pull/437/files)
+// or we can simply check if it update unique index column or not, and for update change to (delete + insert)
+// the final result should has no duplicate entry or the origin dmls is wrong.
 func (e *executor) execTableBatch(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
