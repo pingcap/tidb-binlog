@@ -12,10 +12,10 @@ type DMLType int
 
 // DMLType types
 const (
-	UnknowDMLType DMLType = 0
-	InsertDMLType DMLType = 1
-	UpdateDMLType DMLType = 2
-	DeleteDMLType DMLType = 3
+	UnknownDMLType DMLType = 0
+	InsertDMLType  DMLType = 1
+	UpdateDMLType  DMLType = 2
+	DeleteDMLType  DMLType = 3
 )
 
 // DML holds the dml info
@@ -224,10 +224,16 @@ func (dml *DML) replaceSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) insertSQL() (sql string, args []interface{}) {
+	sql, args = dml.replaceSQL()
+	sql = strings.Replace(sql, "REPLACE", "INSERT", 1)
+	return
+}
+
 func (dml *DML) sql() (sql string, args []interface{}) {
 	switch dml.Tp {
 	case InsertDMLType:
-		return dml.replaceSQL()
+		return dml.insertSQL()
 	case UpdateDMLType:
 		return dml.updateSQL()
 	case DeleteDMLType:

@@ -23,6 +23,5 @@ func (cs *LoadSuite) TestNewClose(c *check.C) {
 	loader, err := NewLoader(db, 10, 10)
 	c.Assert(err, check.IsNil)
 
-	err = loader.Close()
-	c.Assert(err, check.IsNil)
+	loader.Close()
 }

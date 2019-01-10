@@ -35,7 +35,7 @@ type Loader struct {
 	successTxn chan *Txn
 
 	// change update -> delete + insert
-	// always use replace instead of insert
+	// insert -> replace
 	safeMode int32
 
 	// always true now
@@ -95,10 +95,9 @@ func (s *Loader) Successes() <-chan *Txn {
 
 // Close close the Loader, no more Txn can be push into Input()
 // Run will quit when all data is drained
-func (s *Loader) Close() error {
+func (s *Loader) Close() {
 	close(s.input)
 
-	return nil
 }
 
 func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
@@ -164,7 +163,7 @@ func (s *Loader) execDDL(ddl *DDL) error {
 			continue
 		}
 
-		log.Info("exec ddl success")
+		log.Info("exec ddl success: ", ddl.SQL)
 		return nil
 	}
 

@@ -112,7 +112,7 @@ func mergeByKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 			}
 
 		default:
-			return nil, errors.Errorf("unknow tp: %v", dml.Tp)
+			return nil, errors.Errorf("unknown tp: %v", dml.Tp)
 		}
 	}
 

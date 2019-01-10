@@ -206,64 +206,45 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 	log.Debugf("dmls: %v after merge: %v", dmls, types)
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
-		errg, _ := errgroup.WithContext(context.Background())
-
-		for _, deletes := range splitDMLs(allDeletes, e.batchSize) {
-
-			deletes := deletes
-
-			errg.Go(func() error {
-				err := e.bulkDelete(deletes)
-				return errors.Trace(err)
-			})
-		}
-
-		err := errg.Wait()
+		err := e.splitExecDML(allDeletes, e.bulkDelete)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allInserts, ok := types[InsertDMLType]; ok {
-		errg, _ := errgroup.WithContext(context.Background())
-
-		for _, inserts := range splitDMLs(allInserts, e.batchSize) {
-			inserts := inserts
-			errg.Go(func() error {
-				err := e.bulkReplace(inserts)
-				return errors.Trace(err)
-			})
-		}
-
-		err := errg.Wait()
+		err := e.splitExecDML(allInserts, e.bulkReplace)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
-		errg, _ := errgroup.WithContext(context.Background())
-
-		for _, updates := range splitDMLs(allUpdates, e.batchSize) {
-
-			updates := updates
-
-			errg.Go(func() error {
-				// err := e.bulkMergeSQL(updates)
-				err := e.bulkReplace(updates)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				return nil
-			})
-		}
-		err := errg.Wait()
+		err := e.splitExecDML(allUpdates, e.bulkReplace)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	return nil
+}
+
+// splitExecDML split dmls to size of e.batchSize and call exec concurrently
+func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error {
+	errg, _ := errgroup.WithContext(context.Background())
+
+	for _, split := range splitDMLs(dmls, e.batchSize) {
+		split := split
+		errg.Go(func() error {
+			err := exec(split)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			return nil
+		})
+	}
+
+	return errors.Trace(errg.Wait())
 }
 
 func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
@@ -314,7 +295,15 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 				tx.Rollback()
 				return errors.Trace(err)
 			}
-
+		} else if safeMode && dml.Tp == InsertDMLType {
+			sql, args := dml.replaceSQL()
+			log.Debugf("exec dml sql: %s, args: %v", sql, args)
+			_, err := tx.Exec(sql, args...)
+			if err != nil {
+				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
+				tx.Rollback()
+				return errors.Trace(err)
+			}
 		} else {
 			sql, args := dml.sql()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
