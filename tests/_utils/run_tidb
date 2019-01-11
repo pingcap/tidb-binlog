@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+PORT=$1
+STORE_TYPE=$2
+let STATUS_PORT=$PORT+10
+
+tidb-server \
+    -P $PORT \
+    --store $STORE_TYPE \
+    --path 127.0.0.1:2379 \
+    --status=$STATUS_PORT \
+	--enable-binlog=true \
+    --log-file "$OUT_DIR/tidb_$PORT.log" &

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+tikv-server \
+    --pd 127.0.0.1:2379 \
+    -A 127.0.0.1:20160 \
+    --log-file "$OUT_DIR/tikv.log" \
+    -C "$OUT_DIR/tikv-config.toml" \
+    -s "$OUT_DIR/tikv" &

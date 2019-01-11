@@ -25,7 +25,7 @@ echo "check pump's status, should be paused"
 check_status pumps paused
 
 # offline pump, and pump's status should be offline
-run_pump &
+run_pump 8250&
 sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
 
@@ -48,12 +48,12 @@ check_status drainers offline
 
 # update drainer's state to online, and then run pump, pump will notify drainer failed, pump's status will be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state online
-run_pump &
+run_pump 8250 &
 
 echo "check pump's status, should be paused"
 check_status pumps paused
 
 # clean up
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused
-run_pump &
+run_pump 8250 &
 rm $STATUS_LOG || true

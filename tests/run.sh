@@ -36,10 +36,8 @@ start_services() {
 	clean_data
 
     echo "Starting PD..."
-    pd-server \
-        --client-urls http://127.0.0.1:2379 \
-        --log-file "$OUT_DIR/pd.log" \
-        --data-dir "$OUT_DIR/pd" &
+    run_pd &
+    
     # wait until PD is online...
     while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
         sleep 1
@@ -54,28 +52,17 @@ max-open-files = 4096
 EOF
 
     echo "Starting TiKV..."
-    tikv-server \
-        --pd 127.0.0.1:2379 \
-        -A 127.0.0.1:20160 \
-        --log-file "$OUT_DIR/tikv.log" \
-        -C "$OUT_DIR/tikv-config.toml" \
-        -s "$OUT_DIR/tikv" &
+    run_tikv &
     sleep 1
 
-
     echo "Starting Pump..."
-	run_pump &
+	run_pump 8250 &
 
 	sleep 5
 
 
     echo "Starting TiDB..."
-    tidb-server \
-        -P 4000 \
-        --store tikv \
-        --path 127.0.0.1:2379 \
-		--enable-binlog=true \
-        --log-file "$OUT_DIR/tidb.log" &
+    run_tidb 4000 tikv &
 
     echo "Verifying TiDB is started..."
     i=0
@@ -89,11 +76,7 @@ EOF
     done
 
     echo "Starting Downstream TiDB..."
-    tidb-server \
-        -P 3306 \
-		--path=$OUT_DIR/tidb \
-		--status=20080 \
-        --log-file "$OUT_DIR/down_tidb.log" &
+    run_tidb 3306 mocktikv &
 
     echo "Verifying Downstream TiDB is started..."
     i=0

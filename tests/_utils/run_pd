@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -ue
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+pd-server \
+    --client-urls http://127.0.0.1:2379 \
+    --log-file "$OUT_DIR/pd.log" \
+    --data-dir "$OUT_DIR/pd" &
