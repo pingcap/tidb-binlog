@@ -17,7 +17,7 @@ func getDML(key bool, tp DMLType) *DML {
 	}
 
 	if key {
-		info.indexs = append(info.indexs, indexType{"PRIMARY", []string{"id"}})
+		info.uniqueKeys = append(info.uniqueKeys, indexInfo{"PRIMARY", []string{"id"}})
 	}
 
 	dml := new(DML)

@@ -34,7 +34,7 @@ type Loader struct {
 	input      chan *Txn
 	successTxn chan *Txn
 
-	// change update -> delete + insert
+	// change update -> delete + replace
 	// insert -> replace
 	safeMode int32
 
@@ -83,7 +83,7 @@ func (s *Loader) markSuccess(txns ...*Txn) {
 	}
 }
 
-// Input return a channel return push Txn into Loader
+// Input returns input channel which used to put Txn into Loader
 func (s *Loader) Input() chan<- *Txn {
 	return s.input
 }
@@ -97,7 +97,6 @@ func (s *Loader) Successes() <-chan *Txn {
 // Run will quit when all data is drained
 func (s *Loader) Close() {
 	close(s.input)
-
 }
 
 func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
@@ -106,8 +105,8 @@ func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo,
 		return info, errors.Trace(err)
 	}
 
-	if len(info.indexs) == 0 {
-		log.Warnf("%s has no unique index", quoteSchema(schema, table))
+	if len(info.uniqueKeys) == 0 {
+		log.Warnf("table %s has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key for table", quoteSchema(schema, table))
 	}
 
 	s.tableInfos.Store(quoteSchema(schema, table), info)
@@ -170,44 +169,6 @@ func (s *Loader) execDDL(ddl *DDL) error {
 	return errors.Trace(err)
 }
 
-// txns should hold only dmls or ddls
-func (s *Loader) exec(txns []*Txn) error {
-	if len(txns) == 0 {
-		return nil
-	}
-
-	log.Debug("exec: ", txns)
-
-	var dmls []*DML
-
-	for _, txn := range txns {
-		if txn.isDDL() {
-			err := s.execDDL(txn.DDL)
-			if err != nil {
-				if !pkgsql.IgnoreDDLError(err) {
-					log.Error(err)
-					return errors.Trace(err)
-				}
-				log.Warnf("ignore ddl error: %v, ddl: %v", err, txn.DDL)
-			}
-
-			s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
-		} else {
-			dmls = append(dmls, txn.DMLs...)
-		}
-	}
-
-	err := s.execDMLs(dmls)
-	if err != nil {
-		log.Error(err)
-		return errors.Trace(err)
-	}
-
-	s.markSuccess(txns...)
-
-	return nil
-}
-
 func (s *Loader) execByHash(executor *executor, byHash [][]*DML) error {
 	errg, _ := errgroup.WithContext(context.Background())
 
@@ -236,7 +197,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 
 	for _, dml := range dmls {
 		keys := getKeys(dml)
-		log.Debug("keys: ", keys)
+		log.Debugf("dml: %v keys: %v", dml, keys)
 		conflict := causality.DetectConflict(keys)
 		if conflict {
 			log.Info("causality.DetectConflict")
@@ -268,6 +229,14 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 	}
 
 	log.Debug("exec dml: ", dmls)
+
+	for _, dml := range dmls {
+		var err error
+		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	tables := groupByTable(dmls)
 
@@ -306,7 +275,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-// Run will quit when meet any error, or all the txn are drain
+// Run will quit when meet any error, or all the txn are drained
 func (s *Loader) Run() error {
 	defer func() {
 		log.Info("Run()... in Loader quit")
@@ -314,11 +283,63 @@ func (s *Loader) Run() error {
 	}()
 
 	var err error
-	var txns []*Txn
-	dmlNumber := 0
 
-	execNow := func() bool {
-		return dmlNumber >= s.batchSize*s.workerCount*3
+	// the txns and according dmls we accumulate to execute later
+	var txns []*Txn
+	var dmls []*DML
+
+	execDML := func() error {
+		err := s.execDMLs(dmls)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		s.markSuccess(txns...)
+		txns = txns[:0]
+		dmls = dmls[:0]
+		return nil
+	}
+
+	execDDL := func(txn *Txn) error {
+		err := s.execDDL(txn.DDL)
+		if err != nil {
+			if !pkgsql.IgnoreDDLError(err) {
+				log.Errorf("exe ddl: %s fail: %v", txn.DDL.SQL, err)
+				return errors.Trace(err)
+			}
+			log.Warnf("ignore ddl error: %v, ddl: %v", err, txn.DDL)
+		}
+
+		s.markSuccess(txn)
+		s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
+		return nil
+	}
+
+	handleTxn := func(txn *Txn) error {
+		// we always executor the previous dmls when we meet ddl,
+		// and executor ddl one by one.
+		if txn.isDDL() {
+			if err = execDML(); err != nil {
+				return errors.Trace(err)
+			}
+
+			err = execDDL(txn)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		} else {
+			dmls = append(dmls, txn.DMLs...)
+			txns = append(txns, txn)
+
+			// reach a limit size to exec
+			if len(dmls) >= s.batchSize*s.workerCount*3 {
+				if err = execDML(); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+
+		return nil
 	}
 
 	for {
@@ -326,52 +347,23 @@ func (s *Loader) Run() error {
 		case txn, ok := <-s.input:
 			if !ok {
 				log.Info("loader closed quit running")
-				err = s.exec(txns)
-				if err != nil {
+				if err = execDML(); err != nil {
 					return errors.Trace(err)
 				}
 				return nil
 			}
 
-			if txn.isDDL() {
-				err = s.exec(txns)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				dmlNumber = 0
-				txns = txns[:0]
-
-				err = s.exec([]*Txn{txn})
-				if err != nil {
-					return errors.Trace(err)
-				}
-			} else {
-				dmlNumber += len(txn.DMLs)
-				for _, dml := range txn.DMLs {
-					var err error
-					dml.info, err = s.getTableInfo(dml.Database, dml.Table)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-				txns = append(txns, txn)
-				if execNow() {
-					err = s.exec(txns)
-					if err != nil {
-						return errors.Trace(err)
-					}
-					dmlNumber = 0
-					txns = txns[:0]
-				}
+			if err = handleTxn(txn); err != nil {
+				return errors.Trace(err)
 			}
+
 		default:
-			if len(txns) > 0 {
-				err = s.exec(txns)
-				if err != nil {
+			// excute dmls ASAP if no more txn we can get
+			if len(dmls) > 0 {
+				if err = execDML(); err != nil {
 					return errors.Trace(err)
 				}
-				dmlNumber = 0
-				txns = txns[:0]
+
 				continue
 			}
 
@@ -380,21 +372,9 @@ func (s *Loader) Run() error {
 			if !ok {
 				return nil
 			}
-			if txn.isDDL() {
-				err = s.exec([]*Txn{txn})
-				if err != nil {
-					return errors.Trace(err)
-				}
-			} else {
-				dmlNumber += len(txn.DMLs)
-				for _, dml := range txn.DMLs {
-					var err error
-					dml.info, err = s.getTableInfo(dml.Database, dml.Table)
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
-				txns = append(txns, txn)
+
+			if err = handleTxn(txn); err != nil {
+				return errors.Trace(err)
 			}
 		}
 	}

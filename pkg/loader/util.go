@@ -10,11 +10,13 @@ import (
 )
 
 type tableInfo struct {
-	columns []string
-	indexs  []indexType
+	columns    []string
+	primaryKey *indexInfo
+	// include primary key if have
+	uniqueKeys []indexInfo
 }
 
-type indexType struct {
+type indexInfo struct {
 	name    string
 	columns []string
 }
@@ -26,6 +28,17 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	info = new(tableInfo)
 
 	// get column info
+	//
+	// mysql> SHOW COLUMNS FROM City;
+	// +-------------+----------+------+-----+---------+----------------+
+	// | Field       | Type     | Null | Key | Default | Extra          |
+	// +-------------+----------+------+-----+---------+----------------+
+	// | ID          | int(11)  | NO   | PRI | NULL    | auto_increment |
+	// | Name        | char(35) | NO   |     |         |                |
+	// | CountryCode | char(3)  | NO   | MUL |         |                |
+	// | District    | char(20) | NO   |     |         |                |
+	// | Population  | int(11)  | NO   |     | 0       |                |
+	// +-------------+----------+------+-----+---------+----------------+
 	sql := fmt.Sprintf("show columns from %s", quoteSchema(schema, table))
 	rows, err := db.Query(sql)
 	if err != nil {
@@ -55,6 +68,14 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	}
 
 	// get index info
+	//
+	// mysql> show index from a;
+	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+	// | Table | Non_unique | Key_name | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment |
+	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
+	// | a     |          0 | PRIMARY  |            1 | id          | A         |           0 |     NULL | NULL   |      | BTREE      |         |               |
+	// | a     |          1 | a1       |            1 | a1          | A         |           0 |     NULL | NULL   | YES  | BTREE      |         |               |
+	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
 	sql = fmt.Sprintf("show index from %s", quoteSchema(schema, table))
 	rows, err = db.Query(sql)
 	if err != nil {
@@ -74,8 +95,10 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		var nonUnique int
 		var keyName string
 		var columnName string
+		var seqInIndex int // start at 1
 		cols[1] = &nonUnique
 		cols[2] = &keyName
+		cols[3] = &seqInIndex
 		cols[4] = &columnName
 
 		err = rows.Scan(cols...)
@@ -89,22 +112,29 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		}
 
 		var i int
-		for i = 0; i < len(info.indexs); i++ {
-			if info.indexs[i].name == keyName {
-				info.indexs[i].columns = append(info.indexs[i].columns, columnName)
+		// set columns in the order by Seq_In_Index
+		for i = 0; i < len(info.uniqueKeys); i++ {
+			if info.uniqueKeys[i].name == keyName {
+				// expand columns size
+				for seqInIndex > len(info.uniqueKeys[i].columns) {
+					info.uniqueKeys[i].columns = append(info.uniqueKeys[i].columns, "")
+				}
+				info.uniqueKeys[i].columns[seqInIndex-1] = columnName
 				break
 			}
 		}
-		if i == len(info.indexs) {
-			info.indexs = append(info.indexs, indexType{keyName, []string{columnName}})
+		if i == len(info.uniqueKeys) {
+			info.uniqueKeys = append(info.uniqueKeys, indexInfo{keyName, []string{columnName}})
 		}
 
 	}
 
 	// put primary key at first place
-	for i := 0; i < len(info.indexs); i++ {
-		if info.indexs[i].name == "PRIMARY" {
-			info.indexs[i], info.indexs[0] = info.indexs[0], info.indexs[i]
+	// and set primaryKey
+	for i := 0; i < len(info.uniqueKeys); i++ {
+		if info.uniqueKeys[i].name == "PRIMARY" {
+			info.uniqueKeys[i], info.uniqueKeys[0] = info.uniqueKeys[0], info.uniqueKeys[i]
+			info.primaryKey = &info.uniqueKeys[0]
 			break
 		}
 	}

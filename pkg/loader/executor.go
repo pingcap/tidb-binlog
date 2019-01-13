@@ -198,7 +198,7 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 		return nil
 	}
 
-	types, err := mergeByKey(dmls)
+	types, err := mergeByPrimaryKey(dmls)
 	if err != nil {
 		return errors.Trace(err)
 	}

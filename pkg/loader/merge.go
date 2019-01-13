@@ -17,7 +17,7 @@ import (
 // update + delete -> delete
 // update + update -> update
 // update + insert -> -       invalid
-func mergeByKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
+func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 	if len(dmls) < 0 {
 		return
 	}

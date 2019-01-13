@@ -48,8 +48,9 @@ func (cs *UtilSuite) TestGetTableInfo(c *check.C) {
 	c.Assert(info, check.NotNil)
 
 	c.Assert(info, check.DeepEquals, &tableInfo{
-		columns: []string{"id", "a1", "a2", "a3", "a4"},
-		indexs: []indexType{{"PRIMARY", []string{"id"}},
+		columns:    []string{"id", "a1", "a2", "a3", "a4"},
+		primaryKey: &indexInfo{"PRIMARY", []string{"id"}},
+		uniqueKeys: []indexInfo{{"PRIMARY", []string{"id"}},
 			{"dex1", []string{"a1"}},
 			{"dex2", []string{"a2", "a3"}},
 		}})

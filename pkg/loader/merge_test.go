@@ -4,12 +4,9 @@ import (
 	"math"
 	"math/rand"
 
-	fuzz "github.com/google/gofuzz"
 	"github.com/ngaut/log"
 	check "github.com/pingcap/check"
 )
-
-var _ fuzz.Fuzzer
 
 type modelSuite struct {
 }
@@ -19,9 +16,10 @@ var _ = check.Suite(&modelSuite{})
 func (m *modelSuite) TestMerge(c *check.C) {
 	log.SetLevelByString("error")
 	info := &tableInfo{
-		columns: []string{"k", "v"},
-		indexs:  []indexType{{"PRIMARY", []string{"k"}}},
+		columns:    []string{"k", "v"},
+		uniqueKeys: []indexInfo{{"PRIMARY", []string{"k"}}},
 	}
+	info.primaryKey = &info.uniqueKeys[0]
 
 	apply := func(kv map[int]int, dmls []*DML) map[int]int {
 		for _, dml := range dmls {
@@ -110,30 +108,26 @@ func (m *modelSuite) TestMerge(c *check.C) {
 		if end > len(dmls) {
 			end = len(dmls)
 		}
-		c.Log("**nomerge: ")
 		logDMLs(dmls[i:end], c)
 		kv = apply(kv, dmls[i:end])
 
-		res, err := mergeByKey(dmls[i:end])
+		res, err := mergeByPrimaryKey(dmls[i:end])
 		c.Assert(err, check.IsNil)
 
 		noMergeNumber := end - i
 		mergeNumber := 0
 		if mdmls, ok := res[DeleteDMLType]; ok {
-			c.Log("**delete: ")
 			logDMLs(mdmls, c)
 			kvMerge = apply(kvMerge, mdmls)
 			mergeNumber += len(mdmls)
 		}
 		if mdmls, ok := res[InsertDMLType]; ok {
-			c.Log("**insert: ")
 			logDMLs(mdmls, c)
 			kvMerge = apply(kvMerge, mdmls)
 			c.Logf("kvMerge: %v", kvMerge)
 			mergeNumber += len(mdmls)
 		}
 		if mdmls, ok := res[UpdateDMLType]; ok {
-			c.Log("**update: ")
 			logDMLs(mdmls, c)
 			kvMerge = apply(kvMerge, mdmls)
 			mergeNumber += len(mdmls)

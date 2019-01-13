@@ -2,6 +2,8 @@ package loader
 
 import (
 	"fmt"
+	"hash/crc32"
+	"strconv"
 	"strings"
 
 	"github.com/ngaut/log"
@@ -78,13 +80,11 @@ func (t *Txn) isDDL() bool {
 }
 
 func (dml *DML) primaryKeys() []string {
-	for _, index := range dml.info.indexs {
-		if index.name == "PRIMARY" {
-			return index.columns
-		}
+	if dml.info.primaryKey == nil {
+		return nil
 	}
 
-	return nil
+	return dml.info.primaryKey.columns
 }
 
 func (dml *DML) primaryKeyValues() []interface{} {
@@ -190,7 +190,7 @@ func (dml *DML) whereValues(names []string) (values []interface{}) {
 }
 
 func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
-	for _, index := range dml.info.indexs {
+	for _, index := range dml.info.uniqueKeys {
 		values := dml.whereValues(index.columns)
 		var i int
 		for i = 0; i < len(values); i++ {
@@ -279,7 +279,7 @@ func getKeys(dml *DML) (keys []string) {
 	var addOldKey int
 	var addNewKey int
 
-	for _, index := range info.indexs {
+	for _, index := range info.uniqueKeys {
 		key := getKey(index.columns, dml.Values)
 		if len(key) > 0 {
 			addNewKey++
@@ -288,7 +288,7 @@ func getKeys(dml *DML) (keys []string) {
 	}
 
 	if dml.Tp == UpdateDMLType {
-		for _, index := range info.indexs {
+		for _, index := range info.uniqueKeys {
 			key := getKey(index.columns, dml.OldValues)
 			if len(key) > 0 {
 				addOldKey++
@@ -298,13 +298,15 @@ func getKeys(dml *DML) (keys []string) {
 	}
 
 	if addNewKey == 0 {
-		keys = append(keys, getKey(info.columns, dml.Values)+tableName)
+		key := getKey(info.columns, dml.Values) + tableName
+		key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		keys = append(keys, key)
 	}
 
 	if dml.Tp == UpdateDMLType && addOldKey == 0 {
-		if len(keys) == 0 {
-			keys = append(keys, getKey(info.columns, dml.OldValues)+tableName)
-		}
+		key := getKey(info.columns, dml.OldValues) + tableName
+		key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		keys = append(keys, key)
 	}
 
 	return
