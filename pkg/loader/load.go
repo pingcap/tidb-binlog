@@ -280,7 +280,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 		log.Debugf("dml: %v keys: %v", dml, keys)
 		conflict := causality.DetectConflict(keys)
 		if conflict {
-			log.Info("causality.DetectConflict")
+			log.Info("causality.DetectConflict exec now")
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)
@@ -290,12 +290,12 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 			for i := 0; i < len(byHash); i++ {
 				byHash[i] = byHash[i][:0]
 			}
-		} else {
-			causality.Add(keys)
-			key := causality.Get(keys[0])
-			idx := int(genHashKey(key)) % len(byHash)
-			byHash[idx] = append(byHash[idx], dml)
 		}
+
+		causality.Add(keys)
+		key := causality.Get(keys[0])
+		idx := int(genHashKey(key)) % len(byHash)
+		byHash[idx] = append(byHash[idx], dml)
 
 	}
 
