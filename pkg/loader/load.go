@@ -324,7 +324,8 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 	var singleDMLs []*DML
 
 	for tableName, tableDMLs := range tables {
-		if len(tableDMLs[0].primaryKeys()) > 0 && s.merge {
+		info := tableDMLs[0].info
+		if info.primaryKey != nil && len(info.uniqueKeys) == 0 && s.merge {
 			batchTables[tableName] = tableDMLs
 		} else {
 			singleDMLs = append(singleDMLs, tableDMLs...)
