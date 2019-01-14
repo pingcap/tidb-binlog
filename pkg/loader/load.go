@@ -186,7 +186,7 @@ func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo,
 	}
 
 	if len(info.uniqueKeys) == 0 {
-		log.Warnf("table %s has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key for table", quoteSchema(schema, table))
+		log.Warnf("table %s has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key or unique key for table", quoteSchema(schema, table))
 	}
 
 	s.tableInfos.Store(quoteSchema(schema, table), info)
@@ -280,7 +280,8 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 		log.Debugf("dml: %v keys: %v", dml, keys)
 		conflict := causality.DetectConflict(keys)
 		if conflict {
-			log.Info("causality.DetectConflict exec now")
+			log.Infof("meet causality.DetectConflict exec now table: %v, keys: %v",
+				quoteSchema(dml.Database, dml.Table), keys)
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)

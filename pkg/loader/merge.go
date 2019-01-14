@@ -106,7 +106,7 @@ func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 					res[key] = dml
 				} else if oldDML.Tp == DeleteDMLType {
 					// delete + update -> invalid
-					log.Warn("unmoral case delete + update, just remain update now")
+					log.Warn("abnormal case delete + update, just remain update now")
 					res[key] = dml
 				}
 			}

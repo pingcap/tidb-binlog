@@ -209,14 +209,14 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	whereStr, whereArgs := dml.buildWhere()
-	sql = fmt.Sprintf("DELETE from %s WHERE %s LIMIT 1", quoteSchema(dml.Database, dml.Table), whereStr)
+	sql = fmt.Sprintf("DELETE FROM %s WHERE %s LIMIT 1", quoteSchema(dml.Database, dml.Table), whereStr)
 	args = whereArgs
 	return
 }
 
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
 	info := dml.info
-	sql = fmt.Sprintf("REPLACE into %s(%s) VALUES(%s)", quoteSchema(dml.Database, dml.Table), buildColumnList(info.columns), holderString(len(info.columns)))
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", quoteSchema(dml.Database, dml.Table), buildColumnList(info.columns), holderString(len(info.columns)))
 	for _, name := range info.columns {
 		v := dml.Values[name]
 		args = append(args, v)

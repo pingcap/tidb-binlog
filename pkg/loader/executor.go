@@ -139,57 +139,6 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 	return nil
 }
 
-// no use now
-// use INSERT INTO ON DUPLICATE KEY UPDATE
-func (e *executor) bulkMergeSQL(updates []*DML) error {
-	info := updates[0].info
-	dbName := updates[0].Database
-	tableName := updates[0].Table
-
-	builder := new(strings.Builder)
-	var holders []string
-	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
-	for i := 0; i < len(updates); i++ {
-		holders = append(holders, holder)
-	}
-
-	// look like float type has bug fail to update
-	// https://github.com/pingcap/tidb/issues/8934
-	builder.WriteString(fmt.Sprintf("INSERT INTO %s(%s) VALUES %s ON DUPLICATE KEY UPDATE ", quoteSchema(dbName, tableName), buildColumnList(info.columns), strings.Join(holders, ",")))
-
-	for i, name := range info.columns {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString(fmt.Sprintf("%s=VALUES(%s)", name, name))
-	}
-
-	var args []interface{}
-	for _, insert := range updates {
-		for _, name := range info.columns {
-			v := insert.Values[name]
-			args = append(args, v)
-		}
-	}
-
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	_, err = tx.exec(builder.String(), args...)
-	if err != nil {
-		log.Errorf("exec fail sql: %s, args: %v", builder.String(), args)
-		tx.Rollback()
-		return errors.Trace(err)
-	}
-	err = tx.commit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
 func (e *executor) bulkReplace(inserts []*DML) error {
 	if len(inserts) == 0 {
 		return nil
