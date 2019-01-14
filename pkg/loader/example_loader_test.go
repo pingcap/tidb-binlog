@@ -10,9 +10,7 @@ func Example() {
 	}
 
 	// init loader
-	var workerCount = 16
-	var batchSize = 128
-	loader, err := NewLoader(db, workerCount, batchSize)
+	loader, err := NewLoader(db, WorkerCount(16), BatchSize(128))
 	if err != nil {
 		log.Fatal(err)
 	}

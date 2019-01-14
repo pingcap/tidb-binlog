@@ -9,14 +9,16 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
 
 var defaultBatchSize = 128
 
 type executor struct {
-	db        *gosql.DB
-	batchSize int
+	db                *gosql.DB
+	batchSize         int
+	queryHistogramVec *prometheus.HistogramVec
 }
 
 func newExecutor(db *gosql.DB) *executor {
@@ -30,6 +32,11 @@ func newExecutor(db *gosql.DB) *executor {
 
 func (e *executor) withBatchSize(batchSize int) *executor {
 	e.batchSize = batchSize
+	return e
+}
+
+func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
+	e.queryHistogramVec = queryHistogramVec
 	return e
 }
 
@@ -64,6 +71,47 @@ func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.D
 	return errors.Trace(err)
 }
 
+// a wrap of *sql.Tx with metrics
+type tx struct {
+	*gosql.Tx
+	queryHistogramVec *prometheus.HistogramVec
+}
+
+// wrap of sql.Tx.Exec()
+func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
+	start := time.Now()
+	res, err := tx.Tx.Exec(query, args...)
+	if tx.queryHistogramVec != nil {
+		tx.queryHistogramVec.WithLabelValues("exec").Observe(time.Since(start).Seconds())
+	}
+
+	return res, err
+}
+
+// wrap of sql.Tx.Commit()
+func (tx *tx) commit() error {
+	start := time.Now()
+	err := tx.Tx.Commit()
+	if tx.queryHistogramVec != nil {
+		tx.queryHistogramVec.WithLabelValues("commit").Observe(time.Since(start).Seconds())
+	}
+
+	return errors.Trace(err)
+}
+
+// return a wrap of sql.Tx
+func (s *executor) begin() (*tx, error) {
+	sqlTx, err := s.db.Begin()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &tx{
+		Tx:                sqlTx,
+		queryHistogramVec: s.queryHistogramVec,
+	}, nil
+}
+
 func (e *executor) bulkDelete(deletes []*DML) error {
 	var sqls []string
 	var argss []interface{}
@@ -73,18 +121,18 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 		sqls = append(sqls, sql)
 		argss = append(argss, args...)
 	}
-	tx, err := e.db.Begin()
+	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.Exec(strings.Join(sqls, ";"), argss...)
+	_, err = tx.exec(strings.Join(sqls, ";"), argss...)
 	if err != nil {
 		log.Error("exec fail sql: %s, args: %v", strings.Join(sqls, ";"), argss)
 		tx.Rollback()
 		return errors.Trace(err)
 	}
 
-	err = tx.Commit()
+	err = tx.commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -124,17 +172,17 @@ func (e *executor) bulkMergeSQL(updates []*DML) error {
 		}
 	}
 
-	tx, err := e.db.Begin()
+	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.Exec(builder.String(), args...)
+	_, err = tx.exec(builder.String(), args...)
 	if err != nil {
 		log.Errorf("exec fail sql: %s, args: %v", builder.String(), args)
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	err = tx.Commit()
+	err = tx.commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -169,17 +217,17 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		}
 	}
 
-	tx, err := e.db.Begin()
+	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.Exec(builder.String(), args...)
+	_, err = tx.exec(builder.String(), args...)
 	if err != nil {
-		log.Errorf("exec fail sql: %s, args: %v", builder.String(), args)
+		log.Errorf("exec fail sql: %s, args: %v, err: %v", builder.String(), args, err)
 		tx.Rollback()
 		return errors.Trace(err)
 	}
-	err = tx.Commit()
+	err = tx.commit()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -271,7 +319,7 @@ func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, 
 }
 
 func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
-	tx, err := e.db.Begin()
+	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -280,7 +328,7 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err := tx.Exec(sql, args...)
+			_, err := tx.exec(sql, args...)
 			if err != nil {
 				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
 				tx.Rollback()
@@ -289,7 +337,7 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 
 			sql, args = dml.replaceSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err = tx.Exec(sql, args...)
+			_, err = tx.exec(sql, args...)
 			if err != nil {
 				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
 				tx.Rollback()
@@ -298,7 +346,7 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.Exec(sql, args...)
+			_, err := tx.exec(sql, args...)
 			if err != nil {
 				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
 				tx.Rollback()
@@ -307,7 +355,7 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		} else {
 			sql, args := dml.sql()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.Exec(sql, args...)
+			_, err := tx.exec(sql, args...)
 			if err != nil {
 				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
 				tx.Rollback()
@@ -316,6 +364,6 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		}
 	}
 
-	err = tx.Commit()
+	err = tx.commit()
 	return errors.Trace(err)
 }

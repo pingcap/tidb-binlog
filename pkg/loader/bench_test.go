@@ -108,7 +108,7 @@ func newRunner(merge bool) (r *runner, err error) {
 		return nil, errors.Trace(err)
 	}
 
-	loader, err := NewLoader(db, 16, 128)
+	loader, err := NewLoader(db, WorkerCount(16), BatchSize(128))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

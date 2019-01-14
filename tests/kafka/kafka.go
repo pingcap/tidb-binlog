@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// start sync to mysql from kafka
-	ld, err := loader.NewLoader(sinkDB, 16, 128)
+	ld, err := loader.NewLoader(sinkDB, loader.WorkerCount(16), loader.BatchSize(128))
 	if err != nil {
 		panic(err)
 	}

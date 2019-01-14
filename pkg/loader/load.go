@@ -10,6 +10,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -34,6 +35,8 @@ type Loader struct {
 	input      chan *Txn
 	successTxn chan *Txn
 
+	metrics *MetricsGroup
+
 	// change update -> delete + replace
 	// insert -> replace
 	safeMode int32
@@ -43,21 +46,98 @@ type Loader struct {
 	merge bool
 }
 
+// MetricsGroup contains metrics of Loader
+type MetricsGroup struct {
+	EventCounterVec   *prometheus.CounterVec
+	QueryHistogramVec *prometheus.HistogramVec
+}
+
+type options struct {
+	workerCount int
+	batchSize   int
+	metrics     *MetricsGroup
+}
+
+var defaultLoaderOptions = options{
+	workerCount: 16,
+	batchSize:   20,
+	metrics:     nil,
+}
+
+// A LoaderOption sets options such batch size, worker count etc.
+type LoaderOption func(*options)
+
+// WorkerCount set worker count of loader
+func WorkerCount(n int) LoaderOption {
+	return func(o *options) {
+		o.workerCount = n
+	}
+}
+
+// BatchSize set batch size of loader
+func BatchSize(n int) LoaderOption {
+	return func(o *options) {
+		o.batchSize = n
+	}
+}
+
+// Metrics set metrics of loader
+func Metrics(m *MetricsGroup) LoaderOption {
+	return func(o *options) {
+		o.metrics = m
+	}
+}
+
 // NewLoader return a Loader
 // db must support multi statement and interpolateParams
-func NewLoader(db *gosql.DB, workerCount int, batchSize int) (*Loader, error) {
+func NewLoader(db *gosql.DB, opt ...LoaderOption) (*Loader, error) {
+	opts := defaultLoaderOptions
+	for _, o := range opt {
+		o(&opts)
+	}
+
 	s := &Loader{
 		db:          db,
-		workerCount: workerCount,
-		batchSize:   batchSize,
+		workerCount: opts.workerCount,
+		batchSize:   opts.batchSize,
+		metrics:     opts.metrics,
 		input:       make(chan *Txn, 1024),
 		successTxn:  make(chan *Txn, 1024),
 		merge:       true,
 	}
 
-	db.SetMaxOpenConns(workerCount)
+	db.SetMaxOpenConns(opts.workerCount)
 
 	return s, nil
+}
+
+func (s *Loader) metricsInputTxn(txn *Txn) {
+	if s.metrics == nil {
+		return
+	}
+
+	s.metrics.EventCounterVec.WithLabelValues("Txn").Add(1)
+
+	if txn.isDDL() {
+		s.metrics.EventCounterVec.WithLabelValues("DDL").Add(1)
+	} else {
+		var insertEvent float64
+		var deleteEvent float64
+		var updateEvent float64
+		for _, dml := range txn.DMLs {
+			switch dml.Tp {
+			case InsertDMLType:
+				insertEvent++
+			case UpdateDMLType:
+				updateEvent++
+			case DeleteDMLType:
+				deleteEvent++
+			}
+		}
+		s.metrics.EventCounterVec.WithLabelValues("Insert").Add(insertEvent)
+		s.metrics.EventCounterVec.WithLabelValues("Update").Add(updateEvent)
+		s.metrics.EventCounterVec.WithLabelValues("Delete").Add(deleteEvent)
+	}
 }
 
 // SetSafeMode set safe mode
@@ -255,6 +335,9 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 
 	errg, _ := errgroup.WithContext(context.Background())
 	executor := newExecutor(s.db).withBatchSize(s.batchSize)
+	if s.metrics != nil {
+		executor = executor.withQueryHistogramVec(s.metrics.QueryHistogramVec)
+	}
 
 	for _, dmls := range batchTables {
 		// https://golang.org/doc/faq#closures_and_goroutines
@@ -316,6 +399,8 @@ func (s *Loader) Run() error {
 	}
 
 	handleTxn := func(txn *Txn) error {
+		s.metricsInputTxn(txn)
+
 		// we always executor the previous dmls when we meet ddl,
 		// and executor ddl one by one.
 		if txn.isDDL() {

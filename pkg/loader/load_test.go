@@ -20,7 +20,7 @@ func (cs *LoadSuite) TestNewClose(c *check.C) {
 	db, _, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 
-	loader, err := NewLoader(db, 10, 10)
+	loader, err := NewLoader(db)
 	c.Assert(err, check.IsNil)
 
 	loader.Close()
