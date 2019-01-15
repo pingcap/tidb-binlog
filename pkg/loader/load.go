@@ -157,10 +157,10 @@ func (s *Loader) GetSafeMode() bool {
 }
 
 func (s *Loader) markSuccess(txns ...*Txn) {
-	log.Debug("markSuccess: ", txns)
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
+	log.Debugf("markSuccess %d txns", len(txns))
 }
 
 // Input returns input channel which used to put Txn into Loader
@@ -309,8 +309,6 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		return nil
 	}
 
-	log.Debug("exec dml: ", dmls)
-
 	for _, dml := range dmls {
 		var err error
 		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
@@ -333,7 +331,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		}
 	}
 
-	log.Debugf("exec by tables: %v by single: %v", batchTables, singleDMLs)
+	log.Debugf("exec by tables: %d tables, by single: %d dmls", len(batchTables), len(singleDMLs))
 
 	errg, _ := errgroup.WithContext(context.Background())
 	executor := newExecutor(s.db).withBatchSize(s.batchSize)
