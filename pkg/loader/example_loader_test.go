@@ -48,6 +48,10 @@ func Example() {
 		DMLs: []*DML{{Database: "test", Table: "test", Tp: InsertDMLType, Values: newValues, OldValues: values}},
 	}
 
+	// you can set safe mode or not at run time
+	// which use replace for insert event and delete + replace for update make it be idempotent
+	loader.SetSafeMode(true)
+
 	// push one delete dml txn
 	loader.Input() <- &Txn{
 		DMLs: []*DML{{Database: "test", Table: "test", Tp: InsertDMLType, Values: newValues}},
