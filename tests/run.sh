@@ -51,6 +51,9 @@ start_services() {
 max-open-files = 4096
 [raftdb]
 max-open-files = 4096
+[raftstore]
+# true (default value) for high reliability, this can prevent data loss when power failure.
+sync-log = false
 EOF
 
     echo "Starting TiKV..."
