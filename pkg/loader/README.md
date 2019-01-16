@@ -16,7 +16,7 @@ Loader splits the upstream transaction DML events and concurrently (shared by pr
 
 ## Optimization
 #### Large Operation
-Instead of execute DML one by one, we can combine many small operations into a single large operation like use INSERT statements with multiple VALUES lists to insert several rows at a time, this may get [high-speed](https://medium.com/@benmorel/high-speed-inserts-with-mysql-9d3dcd76f723) compare to insert one by one.
+Instead of executing DML one by one, we can combine many small operations into a single large operation, like using INSERT statements with multiple VALUES lists to insert several rows at a time. This is [faster](https://medium.com/@benmorel/high-speed-inserts-with-mysql-9d3dcd76f723) than inserting one by one.
 
 #### Merge by Primary Key
 You may want to read [log-compaction](https://kafka.apache.org/documentation/#compaction) of kafka.
