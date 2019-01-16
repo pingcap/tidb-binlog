@@ -33,30 +33,33 @@ func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 	var tmpDmls []*DML
 	for _, dml := range dmls {
 		if dml.Tp == UpdateDMLType && dml.updateKey() {
-			deleteDML := new(DML)
-			deleteDML.Database = dml.Database
-			deleteDML.Table = dml.Table
-			deleteDML.Tp = DeleteDMLType
-			deleteDML.Values = dml.OldValues
-			deleteDML.info = dml.info
+			deleteDML := &DML{
+				Database: dml.Database,
+				Table:    dml.Table,
+				Tp:       DeleteDMLType,
+				Values:   dml.OldValues,
+				info:     dml.info,
+			}
 			tmpDmls = append(tmpDmls, deleteDML)
 
-			insertDML := new(DML)
-			insertDML.Database = dml.Database
-			insertDML.Table = dml.Table
-			insertDML.Tp = InsertDMLType
-			insertDML.Values = dml.Values
-			insertDML.OldValues = nil
-			insertDML.info = dml.info
+			insertDML := &DML{
+				Database:  dml.Database,
+				Table:     dml.Table,
+				Tp:        InsertDMLType,
+				Values:    dml.Values,
+				OldValues: nil,
+				info:      dml.info,
+			}
 			tmpDmls = append(tmpDmls, insertDML)
 		} else {
-			tmpDML := new(DML)
-			tmpDML.Database = dml.Database
-			tmpDML.Table = dml.Table
-			tmpDML.Tp = dml.Tp
-			tmpDML.Values = dml.Values
-			tmpDML.OldValues = dml.OldValues
-			tmpDML.info = dml.info
+			tmpDML := &DML{
+				Database:  dml.Database,
+				Table:     dml.Table,
+				Tp:        dml.Tp,
+				Values:    dml.Values,
+				OldValues: dml.OldValues,
+				info:      dml.info,
+			}
 
 			tmpDmls = append(tmpDmls, tmpDML)
 		}
@@ -64,52 +67,37 @@ func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 	dmls = tmpDmls
 
 	for _, dml := range dmls {
-		log.Debug(dml)
-
 		key := dml.formatKey()
-		log.Debug("key: ", key)
+		oldDML, ok := res[key]
+		if !ok {
+			res[key] = dml
+			continue
+		}
+
 		switch dml.Tp {
 		case InsertDMLType:
-			oldDML, ok := res[key]
-			if !ok {
-				res[key] = dml
-			} else {
-				// ignore the previous delete
-				if oldDML.Tp == DeleteDMLType {
-					res[key] = dml
-				} else if oldDML.Tp == UpdateDMLType || oldDML.Tp == InsertDMLType {
-					log.Warnf("update-insert/insert-insert happen. before: %+v, after: %+v", oldDML, dml)
-					res[key] = dml
-				}
+			// ignore the previous delete
+			if oldDML.Tp == DeleteDMLType {
+			} else if oldDML.Tp == UpdateDMLType || oldDML.Tp == InsertDMLType {
+				log.Warnf("update-insert/insert-insert happen. before: %+v, after: %+v", oldDML, dml)
 			}
+			res[key] = dml
 		case DeleteDMLType:
-			_, ok := res[key]
-			if !ok {
-				res[key] = dml
-			} else {
-				// insert/update -> delete
-				res[key] = dml
-			}
+			// insert/update + delete -> delete
+			res[key] = dml
 		case UpdateDMLType:
-			oldDML, ok := res[key]
-			if !ok {
-				res[key] = dml
-			} else {
-				if oldDML.Tp == InsertDMLType {
-					// insert-update -> insert
-					dml.Tp = InsertDMLType
-					dml.OldValues = nil
-					res[key] = dml
-				} else if oldDML.Tp == UpdateDMLType {
-					// update-update -> update
-					dml.OldValues = oldDML.OldValues
-					res[key] = dml
-				} else if oldDML.Tp == DeleteDMLType {
-					// delete + update -> invalid
-					log.Warn("abnormal case delete + update, just remain update now")
-					res[key] = dml
-				}
+			if oldDML.Tp == InsertDMLType {
+				// insert-update -> insert
+				dml.Tp = InsertDMLType
+				dml.OldValues = nil
+			} else if oldDML.Tp == UpdateDMLType {
+				// update-update -> update
+				dml.OldValues = oldDML.OldValues
+			} else if oldDML.Tp == DeleteDMLType {
+				// delete + update -> invalid
+				log.Warn("abnormal case delete + update, just remain update now")
 			}
+			res[key] = dml
 
 		default:
 			return nil, errors.Errorf("unknown tp: %v", dml.Tp)
@@ -118,7 +106,6 @@ func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 
 	types = make(map[DMLType][]*DML)
 	for _, dml := range res {
-		log.Debug(dml)
 		dmls = types[dml.Tp]
 		dmls = append(dmls, dml)
 		types[dml.Tp] = dmls
