@@ -58,7 +58,7 @@ func Example() {
 	}
 	//...
 
-	// Close close the Loader, no more Txn can be push into Input())
+	// Close the Loader. No more Txn can be push into Input()
 	// Run will quit when all data is drained
 	loader.Close()
 }
