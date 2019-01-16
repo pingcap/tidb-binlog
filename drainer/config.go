@@ -247,50 +247,26 @@ func (cfg *Config) adjustConfig() error {
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
 		cfg.SyncerCfg.To = new(executor.DBConfig)
-		if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
-			host := os.Getenv("MYSQL_HOST")
-			if host == "" {
-				host = "localhost"
-			}
-			port, _ := strconv.Atoi(os.Getenv("MYSQL_PORT"))
-			if port == 0 {
-				port = 3306
-			}
-			user := os.Getenv("MYSQL_USER")
-			if user == "" {
-				user = "root"
-			}
-			pswd := os.Getenv("MYSQL_PSWD")
-
-			cfg.SyncerCfg.To.Host = host
-			cfg.SyncerCfg.To.Port = port
-			cfg.SyncerCfg.To.User = user
-			cfg.SyncerCfg.To.Password = pswd
-			log.Infof("mysql use config: %s@%s:%d", user, host, port)
-		} else if cfg.SyncerCfg.DestDBType == "pb" {
-			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
-		}
-	}
-
-	// get KafkaAddrs from zookeeper if ZkAddrs is setted
-	if cfg.SyncerCfg.To.ZKAddrs != "" {
-		zkClient, err := zk.NewFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		defer zkClient.Close()
-
-		kafkaUrls, err := zkClient.KafkaUrls()
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		// use kafka address get from zookeeper to reset the config
-		log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
-		cfg.SyncerCfg.To.KafkaAddrs = kafkaUrls
 	}
 	if cfg.SyncerCfg.DestDBType == "kafka" {
+		// get KafkaAddrs from zookeeper if ZkAddrs is setted
+		if cfg.SyncerCfg.To.ZKAddrs != "" {
+			zkClient, err := zk.NewFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			defer zkClient.Close()
+
+			kafkaUrls, err := zkClient.KafkaUrls()
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			// use kafka address get from zookeeper to reset the config
+			log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+			cfg.SyncerCfg.To.KafkaAddrs = kafkaUrls
+		}
+
 		if cfg.SyncerCfg.To.KafkaVersion == "" {
 			cfg.SyncerCfg.To.KafkaVersion = defaultKafkaVersion
 		}
@@ -306,7 +282,36 @@ func (cfg *Config) adjustConfig() error {
 		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
 			cfg.SyncerCfg.To.KafkaMaxMessages = 1024
 		}
-
+	} else if cfg.SyncerCfg.DestDBType == "pb" {
+		if len(cfg.SyncerCfg.To.BinlogFileDir) == 0 {
+			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
+			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+		}
+	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
+		if len(cfg.SyncerCfg.To.Host) == 0 {
+			host := os.Getenv("MYSQL_HOST")
+			if host == "" {
+				host = "localhost"
+			}
+			cfg.SyncerCfg.To.Host = host
+		}
+		if cfg.SyncerCfg.To.Port == 0 {
+			port, _ := strconv.Atoi(os.Getenv("MYSQL_PORT"))
+			if port == 0 {
+				port = 3306
+			}
+			cfg.SyncerCfg.To.Port = port
+		}
+		if len(cfg.SyncerCfg.To.User) == 0 {
+			user := os.Getenv("MYSQL_USER")
+			if user == "" {
+				user = "root"
+			}
+			cfg.SyncerCfg.To.User = user
+		}
+		if len(cfg.SyncerCfg.To.Password) == 0 {
+			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
+		}
 	}
 
 	return nil
