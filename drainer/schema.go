@@ -134,6 +134,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
 
+	log.Debugf("create schema %s, schema id %d", db.Name.O, db.ID)
 	return nil
 }
 
@@ -150,6 +151,8 @@ func (s *Schema) DropTable(id int64) (string, error) {
 
 	delete(s.tables, id)
 	delete(s.tableIDToName, id)
+
+	log.Debugf("drop table %s, table id %d", table.Name.O, id)
 	return table.Name.O, nil
 }
 
@@ -168,6 +171,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 
+	log.Debugf("create table %s.%s, table id %d", schema.Name.O, table.Name.O, table.ID)
 	return nil
 }
 
@@ -213,11 +217,13 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
 		if skipJob(s.jobs[i]) {
+			log.Debugf("skip ddl job %v", s.jobs[i])
 			continue
 		}
 
 		if s.jobs[i].BinlogInfo.SchemaVersion <= version {
 			if s.jobs[i].BinlogInfo.SchemaVersion <= s.currentVersion {
+				log.Warnf("ddl job %v schema version is less than current version %d, skip this ddl job", s.jobs[i], s.currentVersion)
 				continue
 			}
 
@@ -230,6 +236,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 
 			_, _, _, err = s.handleDDL(s.jobs[i])
 			if err != nil {
+				log.Infof("handle ddl meet error %v, the schema info: %s", err, s)
 				return errors.Trace(err)
 			}
 		} else {
@@ -252,7 +259,6 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 		return "", "", "", nil
 	}
 
-	// log.Infof("ddl query %s", job.Query)
 	sql := job.Query
 	if sql == "" {
 		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
@@ -370,7 +376,6 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 		return schema.Name.O, table.Name.O, sql, nil
 
 	default:
-		log.Infof("get unknown ddl type %v", job.Type)
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
