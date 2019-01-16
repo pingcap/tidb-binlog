@@ -7,7 +7,7 @@ import (
 )
 
 func (t *testCheckPointSuite) TestPb(c *C) {
-	fileName := "test"
+	fileName := "/tmp/test"
 	notExistFileName := "test_not_exist"
 	cfg := new(Config)
 	cfg.CheckPointFile = fileName
