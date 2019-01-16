@@ -19,7 +19,7 @@ Loader splits the upstream transaction DML events and concurrently (shared by pr
 Instead of executing DML one by one, we can combine many small operations into a single large operation, like using INSERT statements with multiple VALUES lists to insert several rows at a time. This is [faster](https://medium.com/@benmorel/high-speed-inserts-with-mysql-9d3dcd76f723) than inserting one by one.
 
 #### Merge by Primary Key
-You may want to read [log-compaction](https://kafka.apache.org/documentation/#compaction) of kafka.
+You may want to read [log-compaction](https://kafka.apache.org/documentation/#compaction) of Kafka.
 
 Let's say for a table with Primary Key, we can treat it like a KV-store, to reload the table with the change history of table, we only need the last value for every key. 
 
