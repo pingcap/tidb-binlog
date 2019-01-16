@@ -78,7 +78,7 @@ func (m *modelSuite) TestMerge(c *check.C) {
 				dml.Values["k"] = k
 				dml.Values["v"] = newv
 				// check whether to update k
-				if float64(rand.Uint32())/float64(math.MaxUint32) < updateKeyProbability {
+				if rand.Float64() < updateKeyProbability {
 					for try := 0; try < 10; try++ {
 						newk := rand.Intn(maxKey)
 						if _, ok := kv[newk]; !ok {
