@@ -11,7 +11,7 @@ A package to load data into MySQL in real-time, aimed to be used by *reparo*, *d
 
 
 ## Overview
-Loader will split the upstream transaction DML events and concurrently(shared by primary key or unique key) load data to mysql, it will solve the causality by [causality.go](./causality.go).
+Loader splits the upstream transaction DML events and concurrently (shared by primary key or unique key) loads data into MySQL. It respects causality with [causality.go](./causality.go).
 
 
 ## Optimization
