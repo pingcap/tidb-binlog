@@ -116,7 +116,7 @@ func (s *Loader) metricsInputTxn(txn *Txn) {
 		return
 	}
 
-	s.metrics.EventCounterVec.WithLabelValues("Txn").Add(1)
+	s.metrics.EventCounterVec.WithLabelValues("Txn").Inc()
 
 	if txn.isDDL() {
 		s.metrics.EventCounterVec.WithLabelValues("DDL").Add(1)
