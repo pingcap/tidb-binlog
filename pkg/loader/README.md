@@ -1,7 +1,7 @@
 loader
 ======
 
-A pkg to load data to mysql in real-time, aim to be used by *reparo*, *drainer* etc unified.
+A package to load data into MySQL in real-time, aimed to be used by *reparo*, *drainer* etc unified.
 
 
 ### Getting started
