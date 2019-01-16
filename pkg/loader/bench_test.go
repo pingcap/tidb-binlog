@@ -162,13 +162,15 @@ func loadTable(db *sql.DB, loader *Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
-		dml := new(DML)
-		dml.Database = "test"
-		dml.Table = "test1"
-		dml.Tp = InsertDMLType
-		dml.Values = make(map[string]interface{})
-		dml.Values["id"] = i
-		dml.Values["a1"] = i
+		dml := &DML{
+			Database: "test",
+			Table:    "test1",
+			Tp:       InsertDMLType,
+			Values: map[string]interface{}{
+				"id": i,
+				"a1": i,
+			},
+		}
 
 		txn.AppendDML(dml)
 		txns = append(txns, txn)
@@ -185,17 +187,19 @@ func updateTable(db *sql.DB, loader *Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
-		dml := new(DML)
-		dml.Database = "test"
-		dml.Table = "test1"
-		dml.Tp = UpdateDMLType
-		dml.OldValues = make(map[string]interface{})
-		dml.OldValues["id"] = i
-		dml.OldValues["a1"] = i
-
-		dml.Values = make(map[string]interface{})
-		dml.Values["id"] = i
-		dml.Values["a1"] = i * 10
+		dml := &DML{
+			Database: "test",
+			Table:    "test1",
+			Tp:       UpdateDMLType,
+			Values: map[string]interface{}{
+				"id": i,
+				"a1": i * 10,
+			},
+			OldValues: map[string]interface{}{
+				"id": i,
+				"a1": i,
+			},
+		}
 
 		txn.AppendDML(dml)
 		txns = append(txns, txn)
@@ -212,13 +216,15 @@ func deleteTable(db *sql.DB, loader *Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
-		dml := new(DML)
-		dml.Database = "test"
-		dml.Table = "test1"
-		dml.Tp = DeleteDMLType
-		dml.Values = make(map[string]interface{})
-		dml.Values["id"] = i
-		dml.Values["a1"] = i
+		dml := &DML{
+			Database: "test",
+			Table:    "test1",
+			Tp:       DeleteDMLType,
+			Values: map[string]interface{}{
+				"id": i,
+				"a1": i,
+			},
+		}
 
 		txn.AppendDML(dml)
 		txns = append(txns, txn)

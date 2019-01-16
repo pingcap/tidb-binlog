@@ -2,7 +2,6 @@ package loader
 
 import (
 	"fmt"
-	"hash/crc32"
 	"strconv"
 	"strings"
 
@@ -146,30 +145,38 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 }
 
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
-	var setNames []string
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "UPDATE %s SET ", quoteSchema(dml.Database, dml.Table))
+
 	for name, arg := range dml.Values {
-		setNames = append(setNames, fmt.Sprintf("%s = ?", quoteName(name)))
+		if len(args) > 0 {
+			builder.WriteByte(',')
+		}
+		fmt.Fprintf(builder, "%s = ?", quoteName(name))
 		args = append(args, arg)
 	}
 
-	whereStr, whereArgs := dml.buildWhere()
+	builder.WriteString(" WHERE ")
+
+	whereArgs := dml.buildWhere(builder)
 	args = append(args, whereArgs...)
 
-	sql = fmt.Sprintf("UPDATE %s SET %s WHERE %s LIMIT 1", quoteSchema(dml.Database, dml.Table), strings.Join(setNames, ","), whereStr)
-
+	builder.WriteString(" LIMIT 1")
+	sql = builder.String()
 	return
 }
 
-func (dml *DML) buildWhere() (str string, args []interface{}) {
+func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
 	for i := 0; i < len(wnames); i++ {
 		if i > 0 {
-			str += " AND "
+			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			str += quoteName(wnames[i]) + " IS NULL"
+			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
 		} else {
-			str += quoteName(wnames[i]) + " = ? "
+			builder.WriteString(quoteName(wnames[i]) + " = ? ")
 			args = append(args, wargs[i])
 		}
 	}
@@ -208,9 +215,13 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
-	whereStr, whereArgs := dml.buildWhere()
-	sql = fmt.Sprintf("DELETE FROM %s WHERE %s LIMIT 1", quoteSchema(dml.Database, dml.Table), whereStr)
-	args = whereArgs
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", quoteSchema(dml.Database, dml.Table))
+	args = dml.buildWhere(builder)
+	builder.WriteString(" LIMIT 1")
+
+	sql = builder.String()
 	return
 }
 
@@ -251,7 +262,7 @@ func formatKey(values []interface{}) string {
 		if i != 0 {
 			builder.WriteString("--")
 		}
-		builder.WriteString(fmt.Sprintf("%v", v))
+		fmt.Fprintf(builder, "%v", v)
 	}
 
 	return builder.String()
@@ -265,7 +276,7 @@ func getKey(names []string, values map[string]interface{}) string {
 			continue
 		}
 
-		builder.WriteString(fmt.Sprintf("(%s: %v)", name, v))
+		fmt.Fprintf(builder, "(%s: %v)", name, v)
 	}
 
 	return builder.String()
@@ -299,13 +310,13 @@ func getKeys(dml *DML) (keys []string) {
 
 	if addNewKey == 0 {
 		key := getKey(info.columns, dml.Values) + tableName
-		key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		key = strconv.Itoa(int(genHashKey(key)))
 		keys = append(keys, key)
 	}
 
 	if dml.Tp == UpdateDMLType && addOldKey == 0 {
 		key := getKey(info.columns, dml.OldValues) + tableName
-		key = strconv.Itoa(int(crc32.ChecksumIEEE([]byte(key))))
+		key = strconv.Itoa(int(genHashKey(key)))
 		keys = append(keys, key)
 	}
 

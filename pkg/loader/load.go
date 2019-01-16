@@ -19,6 +19,8 @@ import (
 const (
 	maxDMLRetryCount = 100
 	maxDDLRetryCount = 5
+
+	execLimitMultiple = 3
 )
 
 // Loader is used to load data to mysql
@@ -220,7 +222,7 @@ func (s *Loader) execDDL(ddl *DDL) error {
 		}
 
 		if len(ddl.Database) > 0 {
-			_, err = tx.Exec(fmt.Sprintf("use %s;", ddl.Database))
+			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				log.Error(err)
 				tx.Rollback()
@@ -417,7 +419,7 @@ func (s *Loader) Run() error {
 			txns = append(txns, txn)
 
 			// reach a limit size to exec
-			if len(dmls) >= s.batchSize*s.workerCount*3 {
+			if len(dmls) >= s.batchSize*s.workerCount*execLimitMultiple {
 				if err = execDML(); err != nil {
 					return errors.Trace(err)
 				}

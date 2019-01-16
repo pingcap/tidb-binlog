@@ -45,7 +45,7 @@ func Example() {
 	// push one update dml txn
 	newValues := map[string]interface{}{"id": 2}
 	loader.Input() <- &Txn{
-		DMLs: []*DML{{Database: "test", Table: "test", Tp: InsertDMLType, Values: newValues, OldValues: values}},
+		DMLs: []*DML{{Database: "test", Table: "test", Tp: UpdateDMLType, Values: newValues, OldValues: values}},
 	}
 
 	// you can set safe mode or not at run time
@@ -54,7 +54,7 @@ func Example() {
 
 	// push one delete dml txn
 	loader.Input() <- &Txn{
-		DMLs: []*DML{{Database: "test", Table: "test", Tp: InsertDMLType, Values: newValues}},
+		DMLs: []*DML{{Database: "test", Table: "test", Tp: DeleteDMLType, Values: newValues}},
 	}
 	//...
 

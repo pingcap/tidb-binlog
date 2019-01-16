@@ -21,11 +21,11 @@ Instead of executing DML one by one, we can combine many small operations into a
 #### Merge by Primary Key
 You may want to read [log-compaction](https://kafka.apache.org/documentation/#compaction) of Kafka.
 
-Let's say for a table with Primary Key, we can treat it like a KV-store, to reload the table with the change history of table, we only need the last value for every key. 
+We can treat a table with Primary Key like a KV-store. To reload the table with the change history of the table, we only need the last value of every key.
 
-While syncing data into downstream at real-time, we can get DML events from upstream in batch and merge by key, after merge, there's only one event for one key, at downstream, we don't need doing as many events as upstream, this also help we to use batch insert operation.
+While synchronizing data into downstream at real-time, we can get DML events from upstream in batchs and merge by key. After merging, there's only one event for each key, so at downstream, we don't need to do as many events as upstream. This also help we to use batch insert operation.
 
- We should consider secondary unique key here, see *execTableBatch* in [executor.go](./executor.go). currently, we only merge by primary key and do batch operation if the table have primary key and no unique key.
+We should also consider secondary unique key here, see *execTableBatch* in [executor.go](./executor.go). Currently, we only merge by primary key and do batch operation if the table have primary key and no unique key.
 
 
 

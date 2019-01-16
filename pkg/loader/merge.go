@@ -18,7 +18,7 @@ import (
 // update + update -> update
 // update + insert -> -       invalid
 func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
-	if len(dmls) < 0 {
+	if len(dmls) == 0 {
 		return
 	}
 

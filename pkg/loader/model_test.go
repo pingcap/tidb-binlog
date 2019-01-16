@@ -52,9 +52,10 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	c.Assert(names, check.DeepEquals, []string{"id"})
 	c.Assert(args, check.DeepEquals, []interface{}{1})
 
-	str, args := dml.buildWhere()
+	builder := new(strings.Builder)
+	args = dml.buildWhere(builder)
 	c.Assert(args, check.DeepEquals, []interface{}{1})
-	c.Assert(strings.Count(str, "?"), check.Equals, len(args))
+	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 
 	// no pk
 	dml = getDML(false, tp)
@@ -68,13 +69,15 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	c.Assert(names, check.DeepEquals, []string{"id", "a1"})
 	c.Assert(args, check.DeepEquals, []interface{}{1, 1})
 
-	str, args = dml.buildWhere()
+	builder.Reset()
+	args = dml.buildWhere(builder)
 	c.Assert(args, check.DeepEquals, []interface{}{1, 1})
-	c.Assert(strings.Count(str, "?"), check.Equals, len(args))
+	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 
 	// set a1 to NULL value
 	values["a1"] = nil
-	str, args = dml.buildWhere()
+	builder.Reset()
+	args = dml.buildWhere(builder)
 	c.Assert(args, check.DeepEquals, []interface{}{1})
-	c.Assert(strings.Count(str, "?"), check.Equals, len(args))
+	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 }

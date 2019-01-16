@@ -202,7 +202,8 @@ func buildColumnList(names []string) string {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString("`" + name + "`")
+		b.WriteString(quoteName(name))
+
 	}
 
 	return b.String()

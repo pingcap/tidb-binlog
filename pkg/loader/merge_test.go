@@ -1,7 +1,6 @@
 package loader
 
 import (
-	"math"
 	"math/rand"
 
 	"github.com/ngaut/log"

@@ -113,21 +113,23 @@ func (s *executor) begin() (*tx, error) {
 }
 
 func (e *executor) bulkDelete(deletes []*DML) error {
-	var sqls []string
+	var sqls strings.Builder
 	var argss []interface{}
 
 	for _, dml := range deletes {
 		sql, args := dml.sql()
-		sqls = append(sqls, sql)
+		sqls.WriteString(sql)
+		sqls.WriteByte(';')
 		argss = append(argss, args...)
 	}
 	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.exec(strings.Join(sqls, ";"), argss...)
+	sql := sqls.String()
+	_, err = tx.exec(sql, argss...)
 	if err != nil {
-		log.Error("exec fail sql: %s, args: %v", strings.Join(sqls, ";"), argss)
+		log.Error("exec fail sql: %s, args: %v", sql, argss)
 		tx.Rollback()
 		return errors.Trace(err)
 	}
@@ -151,12 +153,13 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	builder := new(strings.Builder)
 	builder.WriteString(fmt.Sprintf("REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), buildColumnList(info.columns)))
 
-	var holders []string
 	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
 	for i := 0; i < len(inserts); i++ {
-		holders = append(holders, holder)
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(holder)
 	}
-	builder.WriteString(strings.Join(holders, ","))
 
 	var args []interface{}
 	for _, insert := range inserts {
