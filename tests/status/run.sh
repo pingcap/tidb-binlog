@@ -25,7 +25,7 @@ echo "check pump's status, should be paused"
 check_status pumps paused
 
 # offline pump, and pump's status should be offline
-run_pump 8250&
+run_pump 8250 &
 sleep 3
 binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
 

@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -eu
+
+CONFIG_FILE=$1
+sync_diff_inspector -config=$CONFIG_FILE
+if [ $? -ne 0 ]; then
+        exit 1
+fi
