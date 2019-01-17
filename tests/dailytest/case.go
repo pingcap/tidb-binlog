@@ -168,6 +168,49 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 		}
 	})
 
+	// swap unique index value
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		_, err := src.Exec("create table uindex(id int primary key, a1 int unique)")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = src.Exec("insert into uindex(id, a1) values(1, 10),(2,20)")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		tx, err := src.Begin()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = src.Exec("drop table uindex")
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+
 	// test big binlog msg
 	RunTest(cfg, src, dst, func(src *sql.DB) {
 		_, err := src.Query("create table binlog_big(id int primary key, data longtext);")
