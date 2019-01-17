@@ -151,7 +151,8 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	tableName := inserts[0].Table
 
 	builder := new(strings.Builder)
-	builder.WriteString(fmt.Sprintf("REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), buildColumnList(info.columns)))
+
+	fmt.Fprintf(builder, "REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), buildColumnList(info.columns))
 
 	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
 	for i := 0; i < len(inserts); i++ {
