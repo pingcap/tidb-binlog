@@ -2,8 +2,12 @@ package dailytest
 
 import (
 	"database/sql"
+	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
+	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/diff"
 )
@@ -144,6 +148,18 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 		}
 	})
 
+	// random op on have both pk and uk table
+	RunTest(cfg, src, dst, func(src *sql.DB) {
+		start := time.Now()
+
+		err := updatePKUK(src, 1000)
+		if err != nil {
+			log.Fatal(errors.ErrorStack(err))
+		}
+
+		log.Info(" updatePKUK take: ", time.Since(start))
+	})
+
 	// clean table
 	RunTest(cfg, src, dst, func(src *sql.DB) {
 		err := execSQLs(src, case3Clean)
@@ -185,4 +201,103 @@ func RunCase(cfg *diff.Config, src *sql.DB, dst *sql.DB) {
 		}
 	})
 
+}
+
+// updatePKUK create a table with primary key and unique key
+// then do opNum randomly DML
+func updatePKUK(db *sql.DB, opNum int) error {
+	maxKey := 20
+	_, err := db.Exec("create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var pks []int
+	addPK := func(pk int) {
+		pks = append(pks, pk)
+	}
+	removePK := func(pk int) {
+		var tmp []int
+		for _, v := range pks {
+			if v != pk {
+				tmp = append(tmp, v)
+			}
+		}
+		pks = tmp
+	}
+	hasPK := func(pk int) bool {
+		for _, v := range pks {
+			if v == pk {
+				return true
+			}
+		}
+		return false
+	}
+
+	for i := 0; i < opNum; {
+		var sql string
+		pk := rand.Intn(maxKey)
+		uk := rand.Intn(maxKey)
+		v := rand.Intn(10000)
+		oldPK := rand.Intn(maxKey)
+
+		// try randomly insert&update&delete
+		op := rand.Intn(3)
+		switch op {
+		case 0:
+			if len(pks) == maxKey {
+				continue
+			}
+			for hasPK(pk) {
+				log.Info(pks)
+				pk = rand.Intn(maxKey)
+			}
+			sql = fmt.Sprintf("insert into pkuk(pk, uk, v) values(%d,%d,%d)", pk, uk, v)
+		case 1:
+			if len(pks) == 0 {
+				continue
+			}
+			for !hasPK(oldPK) {
+				log.Info(pks)
+				oldPK = rand.Intn(maxKey)
+			}
+			sql = fmt.Sprintf("update pkuk set pk = %d, uk = %d, v = %d where pk = %d", pk, uk, v, oldPK)
+		case 2:
+			if len(pks) == 0 {
+				continue
+			}
+			for !hasPK(pk) {
+				log.Info(pks)
+				pk = rand.Intn(maxKey)
+			}
+			sql = fmt.Sprintf("delete from pkuk where pk = %d", pk)
+		}
+
+		_, err := db.Exec(sql)
+		if err != nil {
+			// for insert and update, we didn't check for uk's duplicate
+			if strings.Contains(err.Error(), "Duplicate entry") {
+				continue
+			}
+			return errors.Trace(err)
+		}
+
+		switch op {
+		case 0:
+			addPK(pk)
+		case 1:
+			removePK(oldPK)
+			addPK(pk)
+		case 2:
+			removePK(pk)
+		}
+		i++
+	}
+
+	_, err = db.Exec("drop table pkuk")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }

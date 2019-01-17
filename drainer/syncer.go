@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -55,7 +56,7 @@ type Syncer struct {
 
 	filter *filter
 
-	causality *causality
+	causality *loader.Causality
 
 	lastSyncTime time.Time
 }
@@ -70,7 +71,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.initCommitTS = cp.TS()
 	syncer.positions = make(map[string]int64)
-	syncer.causality = newCausality()
+	syncer.causality = loader.NewCausality()
 	syncer.lastSyncTime = time.Now()
 	syncer.filter = newFilter(formatIgnoreSchemas(cfg.IgnoreSchemas), cfg.DoDBs, cfg.DoTables)
 
@@ -243,7 +244,7 @@ func (s *Syncer) addJob(job *job) {
 	if wait {
 		eventCounter.WithLabelValues("savepoint").Add(1)
 		s.jobWg.Wait()
-		s.causality.reset()
+		s.causality.Reset()
 		s.savePoint(job.commitTS)
 	}
 }
@@ -270,18 +271,18 @@ func (s *Syncer) resolveCasuality(keys []string) (string, error) {
 		return keys[0], nil
 	}
 
-	if s.causality.detectConflict(keys) {
+	if s.causality.DetectConflict(keys) {
 		if err := s.flushJobs(); err != nil {
 			return "", errors.Trace(err)
 		}
-		s.causality.reset()
+		s.causality.Reset()
 	}
 
-	if err := s.causality.add(keys); err != nil {
+	if err := s.causality.Add(keys); err != nil {
 		return "", errors.Trace(err)
 	}
 
-	return s.causality.get(keys[0]), nil
+	return s.causality.Get(keys[0]), nil
 }
 
 func (s *Syncer) flushJobs() error {
