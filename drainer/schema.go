@@ -236,8 +236,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 
 			_, _, _, err = s.handleDDL(s.jobs[i])
 			if err != nil {
-				log.Errorf("handle ddl meet error %v, the schema info: %s", err, s)
-				return errors.Trace(err)
+				return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 			}
 		} else {
 			break
