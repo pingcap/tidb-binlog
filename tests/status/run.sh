@@ -12,7 +12,7 @@ run_drainer &
 echo "check drainer's status, should be online"
 check_status drainers online
 
-drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID:\([a-zA-Z0-9\-]*:[0-9]*\) .*/\1/g'`
+drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID: \([a-zA-Z0-9\-]*:[0-9]*\),.*/\1/g'`
 
 # pump's state should be online
 echo "check pump's status, should be online"
