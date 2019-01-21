@@ -80,7 +80,6 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 	// set reader to read binlog from kafka
 	readerCfg := &reader.Config{
 		KafkaAddr: strings.Split(up.KafkaAddrs, ","),
-		Offset:    up.Offset,
 		CommitTS:  srv.finishTS,
 		Topic:     up.Topic,
 	}
@@ -105,10 +104,10 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 	}
 
 	// set metrics
-	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
+	if cfg.Metrics.Addr != "" && cfg.Metrics.Interval != 0 {
 		srv.metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
+			addr:     cfg.Metrics.Addr,
+			interval: cfg.Metrics.Interval,
 		}
 	}
 

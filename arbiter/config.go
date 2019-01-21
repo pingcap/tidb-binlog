@@ -1,7 +1,6 @@
 package arbiter
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
@@ -23,20 +21,23 @@ const (
 // Config is the configuration of Server
 type Config struct {
 	*flag.FlagSet `json:"-"`
-	LogLevel      string          `toml:"log-level" json:"log-level"`
-	ListenAddr    string          `toml:"addr" json:"addr"`
-	LogFile       string          `toml:"log-file" json:"log-file"`
-	LogRotate     string          `toml:"log-rotate" json:"log-rotate"`
-	Security      security.Config `toml:"security" json:"security"`
+	LogLevel      string `toml:"log-level" json:"log-level"`
+	ListenAddr    string `toml:"addr" json:"addr"`
+	LogFile       string `toml:"log-file" json:"log-file"`
+	LogRotate     string `toml:"log-rotate" json:"log-rotate"`
 
 	Up   UpConfig   `toml:"up" json:"up"`
 	Down DownConfig `toml:"down" json:"down"`
 
-	MetricsAddr     string
-	MetricsInterval int
-	configFile      string
-	printVersion    bool
-	tls             *tls.Config
+	Metrics      Metrics `toml:"metrics" json:"metrics"`
+	configFile   string
+	printVersion bool
+}
+
+// Metrics is configuration of metrics
+type Metrics struct {
+	Addr     string `toml:"addr" json:"addr"`
+	Interval int    `toml:"interval" json:"interval"`
 }
 
 // UpConfig is configuration of upstream
@@ -73,8 +74,8 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print version info")
-	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
-	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
+	fs.StringVar(&cfg.Metrics.Addr, "metrics.addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
+	fs.IntVar(&cfg.Metrics.Interval, "metrics.interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
@@ -127,11 +128,6 @@ func (cfg *Config) Parse(args []string) error {
 	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
 	if err != nil {
 		return errors.Trace(err)
-	}
-
-	cfg.tls, err = cfg.Security.ToTLSConfig()
-	if err != nil {
-		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
 	if err = cfg.adjustConfig(); err != nil {
