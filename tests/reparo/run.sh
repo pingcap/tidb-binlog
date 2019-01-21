@@ -20,7 +20,7 @@ sleep 5
 
 run_reparo &
 
-sleep 5
+sleep 15
 
 down_run_sql "SELECT count(*) FROM reparo_test.test"
 check_contains "count(*): 4"
