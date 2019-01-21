@@ -103,7 +103,7 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// jobs from GetAllHistoryDDLJobs is sort by job id, need sort by schema version
+	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
 	sorter := &jobsSorter{jobs: jobs}
 	sort.Sort(sorter)
 
