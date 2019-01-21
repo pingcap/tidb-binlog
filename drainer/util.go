@@ -178,3 +178,20 @@ func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struc
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
 }
+
+// jobsSorter implements the sort.Interface interface.
+type jobsSorter struct {
+	jobs []*model.Job
+}
+
+func (s *jobsSorter) Swap(i, j int) {
+	s.jobs[i], s.jobs[j] = s.jobs[j], s.jobs[i]
+}
+
+func (s *jobsSorter) Len() int {
+	return len(s.jobs)
+}
+
+func (s *jobsSorter) Less(i, j int) bool {
+	return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
+}
