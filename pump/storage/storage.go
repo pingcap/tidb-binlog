@@ -50,6 +50,9 @@ type Storage interface {
 
 	MaxCommitTS() int64
 
+	// GetBinlog return the binlog of ts
+	GetBinlog(ts int64) (binlog *pb.Binlog, err error)
+
 	// PullCommitBinlog return the chan to consume the binlog
 	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
@@ -425,6 +428,10 @@ func (a *Append) resolve(startTS int64) bool {
 
 	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTS)
 	return false
+}
+
+func (a *Append) GetBinlog(ts int64) (*pb.Binlog, error) {
+	return a.readBinlogByTS(ts)
 }
 
 func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
