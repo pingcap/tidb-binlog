@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -101,6 +102,11 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
+	sorter := &jobsSorter{jobs: jobs}
+	sort.Sort(sorter)
+
 	return jobs, nil
 }
 
@@ -178,4 +184,21 @@ func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
 func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
 	_, ok := ignoreSchemaNames[schema.Name.L]
 	return ok
+}
+
+// jobsSorter implements the sort.Interface interface.
+type jobsSorter struct {
+	jobs []*model.Job
+}
+
+func (s *jobsSorter) Swap(i, j int) {
+	s.jobs[i], s.jobs[j] = s.jobs[j], s.jobs[i]
+}
+
+func (s *jobsSorter) Len() int {
+	return len(s.jobs)
+}
+
+func (s *jobsSorter) Less(i, j int) bool {
+	return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
 }
