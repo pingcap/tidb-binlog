@@ -68,7 +68,7 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	srv.finishTS = up.InitialCommitTS
 
-	ts, _, err := srv.checkpoint.Load()
+	ts, status, err := srv.checkpoint.Load()
 	if err != nil {
 		if errors.IsNotFound(err) {
 			err = nil
@@ -103,6 +103,17 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 		}))
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	// set safe mode in first 5 min if abnormal quit last time
+	if status == StatusRunning {
+		log.Info("set safe mode to be true")
+		srv.load.SetSafeMode(true)
+		go func() {
+			time.Sleep(time.Minute * 5)
+			srv.load.SetSafeMode(false)
+			log.Info("set safe mode to be false")
+		}()
 	}
 
 	// set metrics
