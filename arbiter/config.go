@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 )

@@ -1,10 +1,12 @@
 package arbiter
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 
-	"github.com/juju/errors"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+
+	"github.com/pingcap/errors"
 )
 
 const (
@@ -18,12 +20,12 @@ const (
 type Checkpoint struct {
 	database  string
 	table     string
-	db        *sql.DB
+	db        *gosql.DB
 	topicName string
 }
 
 // NewCheckpoint creates a Checkpoint
-func NewCheckpoint(db *sql.DB, topicName string) (cp *Checkpoint, err error) {
+func NewCheckpoint(db *gosql.DB, topicName string) (cp *Checkpoint, err error) {
 	cp = &Checkpoint{
 		db:        db,
 		database:  "tidb_binlog",
@@ -40,15 +42,15 @@ func NewCheckpoint(db *sql.DB, topicName string) (cp *Checkpoint, err error) {
 }
 
 func (c *Checkpoint) createSchemaIfNeed() error {
-	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", c.database)
+	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", pkgsql.QuoteName(c.database))
 	_, err := c.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	sql = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.%s(
-		topic_name VARCHAR(255) PRIMARY KEY, ts BIGINT, status INT)`,
-		c.database, c.table)
+	sql = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s(
+		topic_name VARCHAR(255) PRIMARY KEY, ts BIGINT NOT NULL, status INT NOT NULL)`,
+		pkgsql.QuoteSchema(c.database, c.table))
 	_, err = c.db.Exec(sql)
 	if err != nil {
 		return errors.Trace(err)
@@ -59,10 +61,8 @@ func (c *Checkpoint) createSchemaIfNeed() error {
 
 // Save saves the ts and status
 func (c *Checkpoint) Save(ts int64, status int) error {
-	sql := fmt.Sprintf(`INSERT INTO %s.%s(topic_name, ts, status) VALUES(?,?,?)
-						ON DUPLICATE KEY UPDATE
-						ts = VALUES(ts), status = VALUES(status)`,
-		c.database, c.table)
+	sql := fmt.Sprintf("REPLACE INTO %s(topic_name, ts, status) VALUES(?,?,?)",
+		pkgsql.QuoteSchema(c.database, c.table))
 	_, err := c.db.Exec(sql, c.topicName, ts, status)
 	if err != nil {
 		return errors.Annotatef(err, "exec fail: '%s', args: %s %d, %d", sql, c.topicName, ts, status)
@@ -73,21 +73,17 @@ func (c *Checkpoint) Save(ts int64, status int) error {
 
 // Load return ts and status, if no record in checkpoint, return err = errors.NotFoundf
 func (c *Checkpoint) Load() (ts int64, status int, err error) {
-	sql := fmt.Sprintf("SELECT ts, status FROM %s.%s WHERE topic_name = '%s'",
-		c.database, c.table, c.topicName)
+	sql := fmt.Sprintf("SELECT ts, status FROM %s WHERE topic_name = ?",
+		pkgsql.QuoteSchema(c.database, c.table))
 
-	rows, err := c.db.Query(sql)
+	row := c.db.QueryRow(sql, c.topicName)
+
+	err = row.Scan(&ts, &status)
 	if err != nil {
-		return 0, 0, errors.Annotatef(err, "exec fail: '%s'", sql)
-	}
-
-	if rows.Next() {
-		err := rows.Scan(&ts, &status)
-		if err != nil {
-			return 0, 0, errors.Trace(err)
+		if errors.Cause(err) == gosql.ErrNoRows {
+			return 0, 0, errors.NotFoundf("no checkpoint for: %s", c.topicName)
 		}
-	} else {
-		return 0, 0, errors.NotFoundf("no checkpoint for: %s", c.topicName)
+		return 0, 0, errors.Trace(err)
 	}
 
 	return

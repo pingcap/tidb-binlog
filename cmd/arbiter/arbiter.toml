@@ -13,10 +13,10 @@ kafka-version = "0.8.2.0"
 
 
 [down]
-host=localhost
-port=3306
-user=root
-password=
+host = "localhost"
+port = 3306
+user = "root"
+password = ""
 # max concurrent write to downstream
 # worker-count = 16
 # max DML operation in a transaction when write to downstream

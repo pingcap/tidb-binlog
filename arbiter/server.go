@@ -3,13 +3,14 @@ package arbiter
 import (
 	"context"
 	"database/sql"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -41,11 +42,12 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 	srv = new(Server)
 	srv.cfg = cfg
 
-	seps := strings.Split(cfg.ListenAddr, ":")
-	if len(seps) < 2 {
-		return nil, errors.Errorf("wrong ListenAddr: %s", cfg.ListenAddr)
+	_, port, err := net.SplitHostPort(cfg.ListenAddr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "wrong ListenAddr: %s", cfg.ListenAddr)
 	}
-	srv.port, err = strconv.Atoi(seps[1])
+
+	srv.port, err = strconv.Atoi(port)
 	if err != nil {
 		return nil, errors.Annotatef(err, "ListenAddr: %s", cfg.ListenAddr)
 	}
