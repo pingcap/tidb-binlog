@@ -15,9 +15,9 @@ do
     count=`grep -c "$2" $STATUS_LOG` || true
 
     if [ $i -eq 1 ]; then
-        max_commit_ts_old=`cat $STATUS_LOG | sed 's/.*MaxCommitTS:\([0-9]*\) .*/\1/g'`
+        max_commit_ts_old=`cat $STATUS_LOG | sed 's/.*MaxCommitTS: \([0-9]*\), .*/\1/g'`
     else
-        max_commit_ts_new=`cat $STATUS_LOG | sed 's/.*MaxCommitTS:\([0-9]*\) .*/\1/g'`
+        max_commit_ts_new=`cat $STATUS_LOG | sed 's/.*MaxCommitTS: \([0-9]*\), .*/\1/g'`
     fi
 
     # if status is online, will check the max commit ts, the new max commit ts should greater than the old one.

@@ -2,6 +2,7 @@ module github.com/pingcap/tidb-binlog
 
 require (
 	github.com/BurntSushi/toml v0.3.1
+	github.com/DATA-DOG/go-sqlmock v1.3.0
 	github.com/Shopify/sarama v1.18.0
 	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
 	github.com/beorn7/perks v0.0.0-20160229213445-3ac7bf7a47d1 // indirect
@@ -70,7 +71,7 @@ require (
 	github.com/pingcap/tidb v2.1.0-beta.0.20180823032518-ef6590e1899a+incompatible
 	github.com/pingcap/tidb-tools v2.1.1-0.20181130053235-0206fdab9ef8+incompatible
 	github.com/pingcap/tipb v0.0.0-20180711115030-4141907f6909
-	github.com/pkg/errors v0.8.0 // indirect
+	github.com/pkg/errors v0.8.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v0.8.0
 	github.com/prometheus/client_model v0.0.0-20150212101744-fa8ad6fec335 // indirect
@@ -97,7 +98,7 @@ require (
 	golang.org/x/crypto v0.0.0-20150218234220-1351f936d976 // indirect
 	golang.org/x/lint v0.0.0-20181011164241-5906bd5c48cd // indirect
 	golang.org/x/net v0.0.0-20180724234803-3673e40ba225
-	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
+	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 	golang.org/x/sys v0.0.0-20161006025142-8d1157a43547
 	golang.org/x/time v0.0.0-20170420181420-c06e80d9300e // indirect
 	golang.org/x/tools v0.0.0-20181012201414-c0eb142035b5 // indirect
