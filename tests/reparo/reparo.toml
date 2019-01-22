@@ -1,0 +1,28 @@
+# where the protobuf format binlog files saved by drainer
+data-dir = "data.drainer"
+
+# log-file = ""
+# log-rotate = "hour"
+log-level = "info"
+
+# start-datetime and stop-datetime enable you to pick a range of binlog to reparo.
+# The datetime format is like '2018-02-28 12:12:12'.
+#start-datetime = "2018-10-24 00:00:00"
+#stop-datetime = "2018-11-26 00:00:00"
+
+# Start-tso is similar to start-datetime, but in pd-server tso format. e.g.  395181938313123110
+# Stop-tso is is similar to stop-datetime, but in pd-server tso format. e.g. 395181938313123110
+# start-tso = 0
+# stop-tso = 0
+
+# dest-type choose a destination, which value can be "mysql", "print".
+# for print, it just prints decoded value.
+dest-type = "mysql"
+#compression = "gzip"
+
+# if dest-type is "mysql" or "tidb", need set dest-db.
+[dest-db]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = ""
