@@ -9,6 +9,7 @@ This folder contains all tests which relies on external service such as TiDB.
    - `bin/pd-server`
    - `bin/tikv-server`
    - `bin/tidb-server`
+   - `bin/binlogctl`
 
 2. The following programs must be installed:
 
@@ -53,3 +54,4 @@ Serveral convenient commands are provided:
   (in `-E` format)
 - `check_not_contains <TEXT>` — Checks if the previous `run_sql` result does not contain the given
   text (in `-E` format)
+- `check_status <NODE_TYPE> <STATUS>` — Checks if the node's status is STATUS
