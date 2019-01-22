@@ -1,4 +1,4 @@
-# drainer 输出的 protobuf 格式 binlog 文件的存储路径
+# where the protobuf format binlog files saved by drainer
 data-dir = "data.drainer"
 
 # log-file = ""
@@ -20,7 +20,7 @@ log-level = "info"
 dest-type = "mysql"
 #compression = "gzip"
 
-# 如果指定的 dest-type 为 mysql 或 tidb，需要配置 dest-db。
+# if dest-type is "mysql" or "tidb", need set dest-db.
 [dest-db]
 host = "127.0.0.1"
 port = 3306
