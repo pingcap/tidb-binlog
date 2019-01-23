@@ -600,7 +600,7 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 	tsStr := mux.Vars(r)["ts"]
 	ts, err := strconv.ParseInt(tsStr, 10, 64)
 	if err != nil {
-		w.Write([]byte("wrong ts param"))
+		w.Write([]byte(fmt.Sprintf("invalid parameter ts: %s", tsStr)))
 		return
 	}
 
