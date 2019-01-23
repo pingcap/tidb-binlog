@@ -12,6 +12,8 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -75,8 +77,10 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	pLog := util.NewLog()
 	labelReceive := "receive binlog"
 	labelCreateConn := "create conn"
+	labelPaused := "pump paused"
 	pLog.Add(labelReceive, 10*time.Second)
 	pLog.Add(labelCreateConn, 10*time.Second)
+	pLog.Add(labelPaused, 30*time.Second)
 
 	ret := make(chan MergeItem, binlogChanSize)
 
@@ -99,13 +103,16 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			if atomic.LoadInt32(&p.isPaused) == 1 {
 				// this pump is paused, wait until it can pull binlog again
-				log.Debugf("[pump %s] is paused", p.nodeID)
+				pLog.Print(labelPaused, func() {
+					log.Debugf("[pump %s] is paused", p.nodeID)
+				})
+
 				time.Sleep(time.Second)
 				continue
 			}
 
 			if p.grpcConn == nil || needReCreateConn {
-				log.Info("old connection is unavaliable, create pull binlogs client again")
+				log.Infof("[pump %s] create pull binlogs client", p.nodeID)
 				err := p.createPullBinlogsClient(pctx, last)
 				if err != nil {
 					log.Errorf("[pump %s] create pull binlogs client error %v", p.nodeID, err)
@@ -118,9 +125,11 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			resp, err := p.pullCli.Recv()
 			if err != nil {
-				pLog.Print(labelReceive, func() {
-					log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
-				})
+				if status.Code(err) != codes.Canceled {
+					pLog.Print(labelReceive, func() {
+						log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
+					})
+				}
 
 				needReCreateConn = true
 
