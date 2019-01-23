@@ -22,6 +22,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	// `createSchema` job
 	job := &model.Job{
 		ID:         3,
+		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
@@ -29,6 +30,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	}
 	jobDup := &model.Job{
 		ID:         3,
+		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
@@ -36,8 +38,8 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	}
 	jobs = append(jobs, job)
 
-	// construct a cancelled job
-	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateCancelled})
+	// construct a rollbackdone job
+	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateRollbackDone})
 
 	// reconstruct the local schema
 	schema, err := NewSchema(jobs, false)
@@ -46,7 +48,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	c.Assert(err, IsNil)
 
 	// test drop schema
-	jobs = append(jobs, &model.Job{ID: 6, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{3, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(jobs, &model.Job{ID: 6, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{3, nil, nil, 123}, Query: "drop database test"})
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(3)
@@ -64,7 +66,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 
 	// test schema drop schema error
 	jobs = jobs[:0]
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{1, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{1, nil, nil, 123}, Query: "drop database test"})
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(1)
@@ -116,6 +118,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	// `createSchema` job
 	job := &model.Job{
 		ID:         5,
+		State:      model.JobStateSynced,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
 		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
@@ -126,6 +129,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	// `createTable` job
 	job = &model.Job{
 		ID:         6,
+		State:      model.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
@@ -138,6 +142,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	tblInfo.Columns = []*model.ColumnInfo{colInfo}
 	job = &model.Job{
 		ID:         7,
+		State:      model.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
@@ -150,6 +155,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	tblInfo.Indices = []*model.IndexInfo{idxInfo}
 	job = &model.Job{
 		ID:         8,
+		State:      model.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
@@ -178,7 +184,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{5, nil, tblInfo1, 123}, Query: "truncate table " + tbName.O})
+	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{5, nil, tblInfo1, 123}, Query: "truncate table " + tbName.O})
 	schema1, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema1.handlePreviousDDLJobIfNeed(5)
@@ -189,7 +195,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, SchemaID: 3, TableID: 9, Type: model.ActionDropTable, BinlogInfo: &model.HistoryInfo{6, nil, nil, 123}, Query: "drop table " + tbName.O})
+	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 9, Type: model.ActionDropTable, BinlogInfo: &model.HistoryInfo{6, nil, nil, 123}, Query: "drop table " + tbName.O})
 	schema2, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema2.handlePreviousDDLJobIfNeed(6)
