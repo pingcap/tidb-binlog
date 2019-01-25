@@ -73,7 +73,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ListenAddr, "addr", "127.0.0.1:8251", "addr (i.e. 'host:port') to listen on for arbiter connections")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the configuration file")
-	fs.BoolVar(&cfg.printVersion, "V", false, "print version info")
+	fs.BoolVar(&cfg.printVersion, "V", false, "print version information and exit")
 	fs.StringVar(&cfg.Metrics.Addr, "metrics.addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.Metrics.Interval, "metrics.interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
@@ -119,11 +119,13 @@ func (cfg *Config) Parse(args []string) error {
 			return errors.Trace(err)
 		}
 	}
+
 	// parse again to replace with command line options
 	cfg.FlagSet.Parse(args)
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
+
 	// replace with environment vars
 	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
 	if err != nil {
