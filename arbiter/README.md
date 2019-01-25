@@ -1,19 +1,19 @@
 Arbiter
 ==========
 
-**Arbiter** 是一个从 Kafka 获取 Binlog 增量同步数据到 TiDB 的工具.
+**Arbiter** is a tool used for syncing data from Kafka to TiDB incrementally.
 
 ![](./arbiter.png)
 
-整体工作原理如下：
+The complete import process is as follows:
 
-1. 读取 Kafka 的 [Protobuf](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/slave_binlog_proto/proto/binlog.proto) 格式 Binlog 。
-2. 达到一定数据量后 根据 Binlog 构造对应 SQL 并发写入下游（注意 Arbiter 会拆分上游事务)。
-3. 保存 checkpoint 。
+1. Read Binlog from Kafka in the format of [Protobuf](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/slave_binlog_proto/proto/binlog.proto).
+2. While reaching a limit data size, construct the SQL according the Binlog and wirte to downstream concurrently(notice: Arbiter will split the upstream transaction).
+3. Save the checkpoint.
 
 
 ## Checkpoint
-`arbiter` 会在下游 TiDB `tidb_binlog.arbiter_checkpoint` 表里保存一条 checkpoint 记录。
+`arbiter` will write a record to the table `tidb_binlog.arbiter_checkpoint` at downstream TiDB.
 ```
 mysql> select * from tidb_binlog.arbiter_checkpoint;
 +-------------+--------------------+--------+
@@ -22,46 +22,46 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 | test_kafka4 | 405809779094585347 |      1 |
 +-------------+--------------------+--------+
 ```
-- topic_name: 消费的 Kafka 主题名。
-- ts: 当前同步到了哪个 ts
+- topic_name: the topic name of Kafka to consume.
+- ts: the timestamp checkpoint
 - status:
 	* 0
-	正常退出后，表示 <= ts 的数据都同步到下游了。
+	if quit normally, all Binlog data <= ts has synced to downstream.
 	* 1
-	运行中或者异常退出，> ts 后的部分 Binlog 可能同步到下游。
+	means `Arbiter` is running or quit unexpectedly, Binlog with timestamp bigger than ts may partially synced to downstream.
 
 
 
-## 监控
+## Monitor
 
-Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。
+Arbiter supports metrics collection via [Prometheus](https://prometheus.io/).
 
-###度量
+###Metrics
 
-* **`binlog_arbiter_checkpoint_tso`** (测量仪)
+* **`binlog_arbiter_checkpoint_tso`** (Gauge)
 
-	对应 `tidb_binlog.arbiter_checkpoint` 表里的 ts
+	Corresponding to ts in table `tidb_binlog.arbiter_checkpoint`
 
-* **`binlog_arbiter_query_duration_time`** (直方图)
+* **`binlog_arbiter_query_duration_time`** (Histogram)
 
-	写下游需时的直方图。标签:
+	Bucketed histogram of the time needed to wirte to downstream. Labels:
 
-	* **type**: `exec` `commit` 执行 SQL 跟提交时的花时。
+	* **type**: `exec` `commit` time takes to execute and commit SQL.
 
-* **`binlog_arbiter_event`** (计数器)
+* **`binlog_arbiter_event`** (Counter)
 
-	计算事件次数
+	Event times counter. Labels:
 
-	* **type**: `DDL` `Insert` `Update` `Delete` `Txn`
+	* **type**: e.g. `DDL` `Insert` `Update` `Delete` `Txn`
 
-* **`binlog_arbiter_queue_size`** (测量仪)
+* **`binlog_arbiter_queue_size`** (Gauge)
 
-	内部队列数据囤积大小。标签：
+	Queue size. Labels:
 	
-	* **name**: `kafka_reader` `loader_input`
+	* **name**: e.g. `kafka_reader` `loader_input`
 
-* **`binlog_arbiter_txn_latency_seconds`** (直方图)
+* **`binlog_arbiter_txn_latency_seconds`** (Histogram)
 
-	上游事务提交(commitTS物理时间) 到对应事务写入下游的花时。
+	Bucketed histogram of the time duration between the time write to downstream and commit time of upstream transactiton(phsical part of commitTS).
 
 
