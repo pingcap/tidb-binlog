@@ -434,6 +434,11 @@ func (p *Pump) pullBinlogs() {
 			stream, err = p.consumer.ConsumePartition(topic, pump.DefaultTopicPartition(), pos.Offset)
 			if err != nil {
 				log.Warningf("[pump %s] get consumer partition client error %v", p.nodeID, err)
+				if errors.Cause(err) == sarama.ErrOffsetOutOfRange {
+					log.Warningf("[pump %s] consume from %d meet error ErrOffsetOutOfRange, will consume from the oldest offset", p.nodeID, pos.Offset)
+					pos.Offset = sarama.OffsetOldest
+				}
+
 				time.Sleep(waitTime)
 				continue
 			}
