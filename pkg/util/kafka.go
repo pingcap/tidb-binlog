@@ -83,12 +83,12 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 }
 
 // CreateKafkaConsumer creates a kafka consumer
-func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
+func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, sarama.Client, error) {
 	kafkaCfg := sarama.NewConfig()
 	kafkaCfg.Consumer.Return.Errors = true
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 	kafkaCfg.Version = version
 	log.Infof("kafka consumer version %v", version)
@@ -96,7 +96,17 @@ func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 	registry := GetParentMetricsRegistry()
 	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
 
-	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	client, err := sarama.NewClient(kafkaAddrs, kafkaCfg)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	return consumer, client, nil
 }
 
 // NewNeverFailAsyncProducer will set the retry number  to a pretty high number, and you should treat fail

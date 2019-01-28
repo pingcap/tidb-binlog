@@ -12,6 +12,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	cp "github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
@@ -38,6 +39,7 @@ type Pump struct {
 	nodeID    string
 	clusterID uint64
 	consumer  sarama.Consumer
+	saramaCli sarama.Client
 	// the current position that collector is working on
 	currentPos pb.Pos
 	// the latest binlog position that pump had handled
@@ -70,7 +72,7 @@ type Pump struct {
 
 // NewPump returns an instance of Pump with opened gRPC connection
 func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion string, timeout time.Duration, w *DepositWindow, tiStore kv.Storage, pos pb.Pos) (*Pump, error) {
-	consumer, err := util.CreateKafkaConsumer(kafkaAddrs, kafkaVersion)
+	consumer, saramaClient, err := util.CreateKafkaConsumer(kafkaAddrs, kafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -84,6 +86,7 @@ func NewPump(nodeID string, clusterID uint64, kafkaAddrs []string, kafkaVersion 
 		nodeID:     nodeID,
 		clusterID:  clusterID,
 		consumer:   consumer,
+		saramaCli:  saramaClient,
 		currentPos: pos,
 		latestPos:  pos,
 		bh:         newBinlogHeap(maxBinlogItemCount),
@@ -435,8 +438,18 @@ func (p *Pump) pullBinlogs() {
 			if err != nil {
 				log.Warningf("[pump %s] get consumer partition client error %v", p.nodeID, err)
 				if errors.Cause(err) == sarama.ErrOffsetOutOfRange {
-					log.Warningf("[pump %s] consume from %d meet error ErrOffsetOutOfRange, will consume from the oldest offset", p.nodeID, pos.Offset)
-					pos.Offset = sarama.OffsetOldest
+					oldestOffset, err := p.saramaCli.GetOffset(topic, pump.DefaultTopicPartition(), sarama.OffsetOldest)
+					if err != nil {
+						log.Errorf("[pump %s] get oldest offset from topic %s partition %d failed %v", p.nodeID, topic, pump.DefaultTopicPartition(), err)
+					} else {
+						if oldestOffset <= pos.Offset+cp.SafeKafkaOffset {
+							log.Infof("[pump %s] consume from the oldest offset %d", p.nodeID, oldestOffset)
+							pos.Offset = sarama.OffsetOldest
+						} else {
+							log.Errorf("[pump %s] consume offset %d is out of range in kafka, now the oldest offset is %d, some data may lost", p.nodeID, pos.Offset, oldestOffset)
+							return
+						}
+					}
 				}
 
 				time.Sleep(waitTime)
