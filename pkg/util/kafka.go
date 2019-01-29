@@ -78,7 +78,9 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 		return nil, errors.Trace(err)
 	}
 
+	config.ClientID = "tidb_binlog"
 	config.Version = version
+	log.Debugf("kafka consumer version %v", version)
 	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
 
 	return config, nil
@@ -86,18 +88,12 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 
 // CreateKafkaConsumer creates a kafka consumer
 func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
-	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.ClientID = "tidb_binlog"
-	kafkaCfg.Consumer.Return.Errors = true
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	kafkaCfg, err := NewSaramaConfig(kafkaVersion, "drainer.")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	kafkaCfg.Version = version
-	log.Infof("kafka consumer version %v", version)
 
-	registry := GetParentMetricsRegistry()
-	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
+	kafkaCfg.Consumer.Return.Errors = true
 
 	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
 }
