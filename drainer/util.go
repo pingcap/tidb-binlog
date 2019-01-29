@@ -67,7 +67,8 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 
 func initializeSaramaGlobalConfig() {
 	sarama.MaxResponseSize = int32(maxMsgSize)
-	sarama.MaxRequestSize = int32(maxMsgSize)
+	// add 1 to avoid confused log: Producer.MaxMessageBytes must be smaller than MaxRequestSize; it will be ignored
+	sarama.MaxRequestSize = int32(maxMsgSize) + 1
 }
 
 func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {

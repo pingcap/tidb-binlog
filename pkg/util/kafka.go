@@ -86,6 +86,7 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 // CreateKafkaConsumer creates a kafka consumer
 func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
 	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.ClientID = "tidb_binlog"
 	kafkaCfg.Consumer.Return.Errors = true
 	version, err := sarama.ParseKafkaVersion(kafkaVersion)
 	if err != nil {
