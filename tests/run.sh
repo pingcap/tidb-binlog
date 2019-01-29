@@ -18,7 +18,7 @@ clean_data() {
 	rm -rf $OUT_DIR/pd || true
 	rm -rf $OUT_DIR/tidb || true
 	rm -rf $OUT_DIR/tikv || true
-	rm -rf $OUT_DIR/pump_* || true
+	rm -rf $OUT_DIR/pump || true
 	rm -rf $OUT_DIR/data.drainer || true
 }
 
