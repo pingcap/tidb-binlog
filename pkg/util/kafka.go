@@ -37,6 +37,7 @@ func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion stri
 	if config == nil {
 		config = sarama.NewConfig()
 	}
+	config.ClientID = "tidb_binlog"
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = maxMsgSize
 	config.Producer.Return.Successes = true
