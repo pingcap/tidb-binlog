@@ -96,12 +96,12 @@ func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consu
 	registry := GetParentMetricsRegistry()
 	kafkaCfg.MetricRegistry = metrics.NewPrefixedChildRegistry(registry, "drainer.")
 
-	consumer, err := sarama.NewConsumer(kafkaAddrs, kafkaCfg)
+	client, err := sarama.NewClient(kafkaAddrs, kafkaCfg)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(kafkaAddrs, kafkaCfg)
+	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
