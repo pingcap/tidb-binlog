@@ -13,6 +13,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
 )
@@ -26,7 +27,7 @@ func main() {
 		log.Fatalf("verifying flags error, %v. See 'pump --help'.", errors.ErrorStack(err))
 	}
 
-	pump.InitLogger(cfg)
+	util.InitLogger(cfg.LogLevel, cfg.LogFile, cfg.LogRotate)
 	version.PrintVersionInfo()
 
 	p, err := pump.NewServer(cfg)

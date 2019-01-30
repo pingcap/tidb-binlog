@@ -273,3 +273,17 @@ func OpenCH(host string, port int, username string, password string, dbName stri
 
 	return db, nil
 }
+
+// QuoteSchema quote like `dbname`.`table` name
+func QuoteSchema(schema string, table string) string {
+	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
+}
+
+// QuoteName quote name like `name`
+func QuoteName(name string) string {
+	return "`" + escapeName(name) + "`"
+}
+
+func escapeName(name string) string {
+	return strings.Replace(name, "`", "``", -1)
+}

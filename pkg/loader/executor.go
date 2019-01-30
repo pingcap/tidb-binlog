@@ -100,15 +100,15 @@ func (tx *tx) commit() error {
 }
 
 // return a wrap of sql.Tx
-func (s *executor) begin() (*tx, error) {
-	sqlTx, err := s.db.Begin()
+func (e *executor) begin() (*tx, error) {
+	sqlTx, err := e.db.Begin()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &tx{
 		Tx:                sqlTx,
-		queryHistogramVec: s.queryHistogramVec,
+		queryHistogramVec: e.queryHistogramVec,
 	}, nil
 }
 

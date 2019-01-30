@@ -12,6 +12,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
@@ -24,7 +25,7 @@ func main() {
 		log.Fatalf("verifying flags error, See 'drainer --help'. %s", errors.ErrorStack(err))
 	}
 
-	drainer.InitLogger(cfg)
+	util.InitLogger(cfg.LogLevel, cfg.LogFile, cfg.LogRotate)
 	version.PrintVersionInfo()
 	log.Infof("use config: %+v", cfg)
 

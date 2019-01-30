@@ -23,12 +23,14 @@ type Causality struct {
 	relations map[string]string
 }
 
+// NewCausality return a instance of Causality
 func NewCausality() *Causality {
 	return &Causality{
 		relations: make(map[string]string),
 	}
 }
 
+// Add add keys to Causality
 func (c *Causality) Add(keys []string) error {
 	if len(keys) == 0 {
 		return nil
@@ -54,10 +56,12 @@ func (c *Causality) Add(keys []string) error {
 	return nil
 }
 
+// Get gets the token of key
 func (c *Causality) Get(key string) string {
 	return c.relations[key]
 }
 
+// Reset reset Causality
 func (c *Causality) Reset() {
 	c.relations = make(map[string]string)
 }
