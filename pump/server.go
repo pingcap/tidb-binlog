@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -400,6 +401,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/status", s.Status).Methods("GET")
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
+	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", prometheus.Handler())
@@ -591,6 +593,31 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 // Status exposes pumps' status to HTTP handler.
 func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 	s.PumpStatus().Status(w, r)
+}
+
+// BinlogByTS exposes api get get binlog by ts
+func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
+	tsStr := mux.Vars(r)["ts"]
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		w.Write([]byte(fmt.Sprintf("invalid parameter ts: %s", tsStr)))
+		return
+	}
+
+	binlog, err := s.storage.GetBinlog(ts)
+	if err != nil {
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Write([]byte(binlog.String()))
+	if len(binlog.PrewriteValue) > 0 {
+		prewriteValue := new(pb.PrewriteValue)
+		prewriteValue.Unmarshal(binlog.PrewriteValue)
+
+		w.Write([]byte("\n\n PrewriteValue: \n"))
+		w.Write([]byte(prewriteValue.String()))
+	}
 }
 
 // PumpStatus returns all pumps' status.
