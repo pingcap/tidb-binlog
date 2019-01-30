@@ -155,9 +155,9 @@ func (sp *FlashCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 
 	for nodeID, pos := range safePoss {
 		newPos := pb.Pos{}
-		if pos.Offset > 5000 {
+		if pos.Offset > SafeKafkaOffset {
 			newPos.Suffix = pos.Suffix
-			newPos.Offset = pos.Offset - 5000
+			newPos.Offset = pos.Offset - SafeKafkaOffset
 		}
 		sp.Positions[nodeID] = newPos
 	}

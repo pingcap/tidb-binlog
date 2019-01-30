@@ -6,6 +6,11 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+const (
+	// SafeKafkaOffset is the safe offset.
+	SafeKafkaOffset = 5000
+)
+
 // CheckPoint is the binlog sync pos meta.
 // When syncer restarts, we should reload meta info to guarantee continuous transmission.
 type CheckPoint interface {

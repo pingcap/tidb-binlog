@@ -471,7 +471,6 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				log.Infof("[ddl][end]%s[commit ts]%v[pos]%v", sql, commitTS, b.pos)
 			}
 		}
-
 	}
 }
 
