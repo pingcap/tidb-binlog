@@ -803,7 +803,6 @@ func (s *Server) commitStatus() {
 	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)
 }
 
-// Close gracefully releases resource of pump server
 func (s *Server) Close() {
 	log.Info("begin to close pump server")
 	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
