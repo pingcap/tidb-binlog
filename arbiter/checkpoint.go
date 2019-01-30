@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	// StatusNormal is server quit normally, data <= ts is synced to downstream
+	// StatusNormal means server quit normally, data <= ts is synced to downstream
 	StatusNormal int = 0
-	// StatusRunning is server running or quit abnormally, part of data may or may not been synced to downstream
+	// StatusRunning means server running or quit abnormally, part of data may or may not been synced to downstream
 	StatusRunning int = 1
 )
 

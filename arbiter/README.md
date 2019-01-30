@@ -26,7 +26,7 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 - ts: the timestamp checkpoint
 - status:
 	* 0
-	if quit normally, all Binlog data <= ts has synced to downstream.
+	All Binlog data <= ts has synced to downstream.
 	* 1
 	means `Arbiter` is running or quit unexpectedly, Binlog with timestamp bigger than ts may partially synced to downstream.
 
@@ -62,6 +62,6 @@ Arbiter supports metrics collection via [Prometheus](https://prometheus.io/).
 
 * **`binlog_arbiter_txn_latency_seconds`** (Histogram)
 
-	Bucketed histogram of the time duration between the time write to downstream and commit time of upstream transactiton(phsical part of commitTS).
+	Bucketed histogram of the time duration between the time write to downstream and commit time of upstream transaction(phsical part of commitTS).
 
 
