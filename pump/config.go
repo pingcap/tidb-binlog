@@ -77,7 +77,7 @@ type Config struct {
 	configFile      string
 	printVersion    bool
 	tls             *tls.Config
-	Storage         *storage.StorageConfig `toml:"storage" json:"storage"`
+	Storage         *storage.Config `toml:"storage" json:"storage"`
 }
 
 // NewConfig return an instance of configuration
@@ -105,7 +105,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
-	fs.BoolVar(&cfg.printVersion, "V", false, "print pump version info")
+	fs.BoolVar(&cfg.printVersion, "V", false, "print version information and exit")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")

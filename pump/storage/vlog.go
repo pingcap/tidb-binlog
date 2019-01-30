@@ -29,7 +29,7 @@ type Options struct {
 	ValueLogFileSize int64
 	Sync             bool
 
-	Storage *StorageConfig
+	Storage *Config
 }
 
 // DefaultOptions return the default options
@@ -40,8 +40,8 @@ func DefaultOptions() *Options {
 	}
 }
 
-// WithStorage set the StorageConfig
-func (o *Options) WithStorage(storage *StorageConfig) *Options {
+// WithStorage set the Config
+func (o *Options) WithStorage(storage *Config) *Options {
 	o.Storage = storage
 	return o
 }

@@ -3,6 +3,9 @@ package util
 import (
 	"sync"
 	"time"
+
+	"github.com/Shopify/sarama"
+	"github.com/ngaut/log"
 )
 
 // Log prints log only after a certain amount of time
@@ -37,4 +40,21 @@ func (l *Log) Print(label string, fn func()) {
 		fn()
 		l.lastTime[label] = time.Now()
 	}
+}
+
+// InitLogger initalizes logger
+func InitLogger(level string, file string, rotate string) {
+	log.SetLevelByString(level)
+
+	if len(file) > 0 {
+		log.SetOutputByName(file)
+
+		if rotate == "hour" {
+			log.SetRotateByHour()
+		} else {
+			log.SetRotateByDay()
+		}
+	}
+
+	sarama.Logger = NewStdLogger("[sarama] ")
 }

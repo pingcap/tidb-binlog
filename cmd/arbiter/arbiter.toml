@@ -1,0 +1,23 @@
+# Arbiter Configuration.
+
+# addr (i.e. 'host:port') to listen on for Arbiter connections
+# addr = "127.0.0.1:8249"
+
+[up]
+# if arbiter donesn't have checkpoint, use initial commitTS to initial checkpoint
+initial-commit-ts = 0
+kafka-addrs = "127.0.0.1:9092"
+kafka-version = "0.8.2.0"
+# topic name of kafka to consume binlog
+#topic = ""
+
+
+[down]
+host = "localhost"
+port = 3306
+user = "root"
+password = ""
+# max concurrent write to downstream
+# worker-count = 16
+# max DML operation in a transaction when write to downstream
+# batch-size = 64

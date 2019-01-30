@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb-binlog/diff"
 )
 
+// Run runs the daily test
 func Run(sourceDB *sql.DB, targetDB *sql.DB, diffCfg *diff.Config, workerCount int, jobCount int, batch int) {
 
 	TableSQLs := []string{`

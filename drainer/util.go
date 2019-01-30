@@ -16,7 +16,6 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/model"
@@ -25,23 +24,6 @@ import (
 const (
 	maxMsgSize = 1024 * 1024 * 1024
 )
-
-// InitLogger initalizes Pump's logger.
-func InitLogger(cfg *Config) {
-	log.SetLevelByString(cfg.LogLevel)
-
-	if len(cfg.LogFile) > 0 {
-		log.SetOutputByName(cfg.LogFile)
-
-		if cfg.LogRotate == "hour" {
-			log.SetRotateByHour()
-		} else {
-			log.SetRotateByDay()
-		}
-	}
-
-	sarama.Logger = util.NewStdLogger("[sarama] ")
-}
 
 // GenCheckPointCfg returns an CheckPoint config instance
 func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
