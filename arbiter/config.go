@@ -53,7 +53,7 @@ type UpConfig struct {
 type DownConfig struct {
 	Host     string `toml:"host" json:"host"`
 	Port     int    `toml:"port" json:"port"`
-	User     string `toml:"User" json:"User"`
+	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
 
 	WorkerCount int `toml:"worker-count" json:"worker-count"`

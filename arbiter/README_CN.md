@@ -26,7 +26,7 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 - ts: 当前同步到了哪个 ts
 - status:
 	* 0
-	正常退出后，表示 <= ts 的数据都同步到下游了。
+	表示 <= ts 的数据都同步到下游了。
 	* 1
 	运行中或者异常退出，> ts 后的部分 Binlog 可能同步到下游。
 
@@ -36,7 +36,7 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 
 Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。
 
-###度量
+### 度量
 
 * **`binlog_arbiter_checkpoint_tso`** (测量仪)
 
@@ -46,7 +46,7 @@ Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。
 
 	写下游需时的直方图。标签:
 
-	* **type**: `exec` `commit` 执行 SQL 跟提交时的花时。
+	* **type**: `exec` `commit` 执行 SQL 跟提交时的耗时。
 
 * **`binlog_arbiter_event`** (计数器)
 
