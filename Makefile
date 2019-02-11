@@ -60,7 +60,7 @@ test:
 	@export log_level=error;\
 	$(GOTEST) -cover $(PACKAGES)
 
-integration_test: build
+integration_test: build diff
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
