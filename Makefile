@@ -61,7 +61,7 @@ integration_test: build
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
-	@which bin/sync_diff_inspector
+	@which bin/diff
 	@which bin/drainer
 	@which bin/pump
 	@which bin/binlogctl

@@ -22,7 +22,7 @@ run_reparo &
 
 sleep 5
 
-check_data ./sync_diff_inspector.toml 
+check_data "reparo_test" 
 
 # clean up
 run_sql "DROP DATABASE IF EXISTS reparo_test"

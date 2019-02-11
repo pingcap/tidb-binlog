@@ -3,8 +3,9 @@
 set -eu
 OUT_DIR=/tmp/tidb_binlog_test
 
-CONFIG_FILE=$1
-sync_diff_inspector -config=$CONFIG_FILE > $OUT_DIR/diff.log 2>&1
+DATABASES=$1
+
+diff -url1="root@127.0.0.1:3306" -url2="root@127.0.0.1:4000" -databases="$DATABASES"
 if [ $? -ne 0 ]; then
         cat $OUT_DIR/diff.log
         exit 1
