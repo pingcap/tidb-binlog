@@ -49,7 +49,7 @@ func main() {
 		}
 		if !eq {
 			fmt.Println("false")
-			return
+			os.Exit(1)
 		}
 	}
 	fmt.Println("true")
