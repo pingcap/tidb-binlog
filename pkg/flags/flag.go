@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 )
 
 func flagToEnv(prefix, name string) string {
@@ -27,6 +28,9 @@ func SetFlagsFromEnv(prefix string, fs *flag.FlagSet) error {
 	usedEnvKey := make(map[string]bool)
 	fs.VisitAll(func(f *flag.Flag) {
 		err = setFlagFromEnv(fs, prefix, f.Name, usedEnvKey, alreadySet)
+		if err != nil {
+			log.Error(err)
+		}
 	})
 
 	return errors.Trace(err)
@@ -45,7 +49,7 @@ func setFlagFromEnv(fs flagSetter, prefix, fname string, usedEnvKey, alreadySet 
 			if serr := fs.Set(fname, val); serr != nil {
 				return errors.Errorf("invalid environment value %q for %s: %v", val, key, serr)
 			}
-			// recognized and used environment variable key=val
+			log.Infof("recognized and used environment variable %s=%s flag name: %s", key, val, fname)
 		}
 	}
 	return nil

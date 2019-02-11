@@ -66,25 +66,25 @@ var defaultLoaderOptions = options{
 	metrics:     nil,
 }
 
-// A LoaderOption sets options such batch size, worker count etc.
-type LoaderOption func(*options)
+// A Option sets options such batch size, worker count etc.
+type Option func(*options)
 
 // WorkerCount set worker count of loader
-func WorkerCount(n int) LoaderOption {
+func WorkerCount(n int) Option {
 	return func(o *options) {
 		o.workerCount = n
 	}
 }
 
 // BatchSize set batch size of loader
-func BatchSize(n int) LoaderOption {
+func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
 	}
 }
 
 // Metrics set metrics of loader
-func Metrics(m *MetricsGroup) LoaderOption {
+func Metrics(m *MetricsGroup) Option {
 	return func(o *options) {
 		o.metrics = m
 	}
@@ -92,7 +92,7 @@ func Metrics(m *MetricsGroup) LoaderOption {
 
 // NewLoader return a Loader
 // db must support multi statement and interpolateParams
-func NewLoader(db *gosql.DB, opt ...LoaderOption) (*Loader, error) {
+func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
 	opts := defaultLoaderOptions
 	for _, o := range opt {
 		o(&opts)

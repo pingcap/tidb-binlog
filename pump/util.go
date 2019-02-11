@@ -11,9 +11,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/errors"
-	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -32,23 +30,6 @@ func (b *AtomicBool) Set(v bool) {
 // Get returns the value
 func (b *AtomicBool) Get() bool {
 	return atomic.LoadInt32((*int32)(b)) == 1
-}
-
-// InitLogger initalizes Pump's logger.
-func InitLogger(cfg *Config) {
-	log.SetLevelByString(cfg.LogLevel)
-
-	if len(cfg.LogFile) > 0 {
-		log.SetOutputByName(cfg.LogFile)
-
-		if cfg.LogRotate == "hour" {
-			log.SetRotateByHour()
-		} else {
-			log.SetRotateByDay()
-		}
-	}
-
-	sarama.Logger = util.NewStdLogger("[sarama] ")
 }
 
 // KRand is an algorithm that compute rand nums
