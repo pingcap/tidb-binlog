@@ -4,11 +4,11 @@ import (
 	"database/sql"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
+	"github.com/pingcap/tidb-tools/pkg/diff"
 )
 
 // Run runs the daily test
-func Run(sourceDB *sql.DB, targetDB *sql.DB, diffCfg *diff.Config, workerCount int, jobCount int, batch int) {
+func Run(sourceDB *sql.DB, targetDB *sql.DB, workerCount int, jobCount int, batch int) {
 
 	TableSQLs := []string{`
 create table ptest(

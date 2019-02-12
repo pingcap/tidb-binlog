@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-binlog/diff"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/diff"
 )
 
 // DBConfig is the DB configuration.
@@ -53,14 +54,44 @@ func CloseDB(db *sql.DB) error {
 }
 
 // CheckSyncState check if srouceDB and targetDB has the same table and data
-func CheckSyncState(cfg *diff.Config, sourceDB, targetDB *sql.DB) bool {
-	d := diff.New(cfg, sourceDB, targetDB)
-	ok, err := d.Equal()
+func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
+	//
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tables, err := dbutil.GetTables(ctx, sourceDB, "test")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return ok
+	for _, table := range tables {
+		sourceTableInstance := &TableInstance{
+			Conn:   sourceDB,
+			Schema: "test",
+			Table:  table,
+		}
+
+		targetTableInstance := &TableInstance{
+			Conn:   targetDB,
+			Schema: "test",
+			Table:  table,
+		}
+		tableDiff := &TableDiff{
+			SourceTables: []*TableInstance{sourceTableInstance},
+			TargetTable:  targetTableInstance,
+		}
+		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
+			log.Warnf(sql)
+			return nil
+		})
+
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !structEqual || !dataEqual {
+			return false
+		}
+	}
+	return true
 }
 
 // CreateSourceDB return source sql.DB for test
