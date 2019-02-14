@@ -1,7 +1,7 @@
 package checkpoint
 
 import (
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 )
 

@@ -3,7 +3,7 @@ package repora
 import (
 	"path"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 )

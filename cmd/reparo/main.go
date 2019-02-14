@@ -10,7 +10,7 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	reparo "github.com/pingcap/tidb-binlog/reparo"

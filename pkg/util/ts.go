@@ -3,7 +3,7 @@ package util
 import (
 	"time"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb/store/tikv/oracle"

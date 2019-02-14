@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/juju/errors"
+import "github.com/pingcap/errors"
 
 var (
 	// ErrWrongMagic means the magic number mismatch

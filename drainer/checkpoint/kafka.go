@@ -4,7 +4,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 )
 

@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/bitmap"
 	"github.com/pingcap/tidb-binlog/pkg/slicer"

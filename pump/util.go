@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Shopify/sarama"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	binlog "github.com/pingcap/tipb/go-binlog"
 )

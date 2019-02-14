@@ -6,7 +6,7 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/integration"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	. "github.com/pingcap/check"
 	"golang.org/x/net/context"
 )

@@ -5,7 +5,7 @@ import (
 	"database/sql/driver"
 	"testing"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	. "github.com/pingcap/check"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )

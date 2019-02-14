@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"strings"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 )
 

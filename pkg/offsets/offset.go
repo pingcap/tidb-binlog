@@ -2,7 +2,7 @@ package offsets
 
 import (
 	"github.com/Shopify/sarama"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
 	"golang.org/x/net/context"
 )
