@@ -6,7 +6,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 )
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {

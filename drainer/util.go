@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 )
 
 const (

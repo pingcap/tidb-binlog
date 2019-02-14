@@ -8,10 +8,10 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/parser/opcode"
+	"github.com/pingcap/parser/opcode"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -264,8 +264,9 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 		shouldQuote = true
 	}
 	switch e := expr.(type) {
-	case *ast.ValueExpr:
-		value := *e.GetDatum()
+	case ast.ValueExpr:
+		value := new(types.Datum)
+		value.SetValue(e.GetValue())
 		if value.GetValue() == nil {
 			return "NULL", false, nil
 		}
@@ -276,7 +277,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 			// TiDB doesn't allow default value for JSON types, and doesn't have Geometry at all.
 		default:
 			// Do conversion.
-			converted, err := convertValueType(value, expr.GetType(), ft)
+			converted, err := convertValueType(*value, expr.GetType(), ft)
 			if err != nil {
 				return "", false, errors.Trace(err)
 			}
@@ -381,11 +382,11 @@ func convertValueType(data types.Datum, source *types.FieldType, target *types.F
 		var err error
 		switch source.Tp {
 		case mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob, mysql.TypeVarString, mysql.TypeString:
-			duration, err = types.ParseDuration(data.GetString(), 0)
+			duration, err = types.ParseDuration(new(stmtctx.StatementContext), data.GetString(), 0)
 		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24:
-			duration, err = types.ParseDuration(fmt.Sprintf("%v", data.GetInt64()), 0)
+			duration, err = types.ParseDuration(new(stmtctx.StatementContext), fmt.Sprintf("%v", data.GetInt64()), 0)
 		case mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-			duration, err = types.ParseDuration(data.GetMysqlDecimal().String(), 0)
+			duration, err = types.ParseDuration(new(stmtctx.StatementContext), data.GetMysqlDecimal().String(), 0)
 		}
 		if err != nil {
 			return nil, errors.Trace(err)

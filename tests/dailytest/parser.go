@@ -7,8 +7,8 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser"
 	"github.com/pingcap/tidb/types"
 )
 

@@ -15,8 +15,9 @@ import (
 	"github.com/ngaut/log"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	//pmysql"github.com/pingcap/parser/mysql"
 	tmysql "github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/terror"
+	"github.com/pingcap/parser/terror"
 )
 
 var (
@@ -133,6 +134,7 @@ func IgnoreDDLError(err error) bool {
 	if !ok {
 		return false
 	}
+
 	// we can get error code from:
 	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
 	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go

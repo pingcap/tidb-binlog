@@ -3,12 +3,12 @@ package repora
 import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser"
 )
 
 func parseDDL(sql string) (node ast.Node, table Table, err error) {
-	nodes, err := parser.New().Parse(sql, "", "")
+	nodes, _, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return nil, table, errors.Trace(err)
 	}
