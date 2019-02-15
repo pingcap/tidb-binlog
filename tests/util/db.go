@@ -55,13 +55,13 @@ func CloseDB(db *sql.DB) error {
 }
 
 // CheckSyncState check if srouceDB and targetDB has the same table and data
-func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
-	//
+func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	tables, err := dbutil.GetTables(ctx, sourceDB, "test")
+	tables, err := dbutil.GetTables(ctx, sourceDB, schema)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return false
 	}
 
 	for _, table := range tables {
@@ -87,8 +87,9 @@ func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
 		})
 
 		if err != nil {
-			log.Fatal(err)
+			return false
 		}
+
 		if !structEqual || !dataEqual {
 			return false
 		}

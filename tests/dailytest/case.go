@@ -107,8 +107,8 @@ var case3Clean = []string{`
 }
 
 // RunCase run some simple test case
-func RunCase(src *sql.DB, dst *sql.DB) {
-	RunTest(src, dst, func(src *sql.DB) {
+func RunCase(src *sql.DB, dst *sql.DB, schema string) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case1)
 		if err != nil {
 			log.Fatal(err)
@@ -116,7 +116,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// clean table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case1Clean)
 		if err != nil {
 			log.Fatal(err)
@@ -124,7 +124,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// run case2
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case2)
 		if err != nil {
 			log.Fatal(err)
@@ -132,7 +132,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// clean table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case2Clean)
 		if err != nil {
 			log.Fatal(err)
@@ -140,7 +140,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// run case3
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case3)
 		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
 			log.Fatal(err)
@@ -148,7 +148,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// random op on have both pk and uk table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		start := time.Now()
 
 		err := updatePKUK(src, 1000)
@@ -160,7 +160,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// clean table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		err := execSQLs(src, case3Clean)
 		if err != nil {
 			log.Fatal(err)
@@ -168,7 +168,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// swap unique index value
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		_, err := src.Exec("create table uindex(id int primary key, a1 int unique)")
 		if err != nil {
 			log.Fatal(err)
@@ -211,7 +211,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 	})
 
 	// test big binlog msg
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		_, err := src.Query("create table binlog_big(id int primary key, data longtext);")
 		if err != nil {
 			log.Fatal(err)
@@ -236,7 +236,7 @@ func RunCase(src *sql.DB, dst *sql.DB) {
 		}
 	})
 	// clean table
-	RunTest(src, dst, func(src *sql.DB) {
+	RunTest(src, dst, schema, func(src *sql.DB) {
 		_, err := src.Query("drop table binlog_big;")
 		if err != nil {
 			log.Fatal(err)

@@ -84,5 +84,5 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	dailytest.Run(sourceDB, sinkDB, 10, 1000, 10)
+	dailytest.Run(sourceDB, sinkDB, "test", 10, 1000, 10)
 }

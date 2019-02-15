@@ -370,7 +370,7 @@ func closeDBs(dbs []*sql.DB) {
 }
 
 // RunTest will call writeSrc and check if src is contisitent with dst
-func RunTest(src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
+func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
 	timeout := time.After(time.Second * 1200)
@@ -378,12 +378,12 @@ func RunTest(src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
 	for {
 		select {
 		case <-time.Tick(time.Millisecond * 1000):
-			if util.CheckSyncState(src, dst) {
+			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
 		case <-timeout:
 			// check last time
-			if !util.CheckSyncState(src, dst) {
+			if !util.CheckSyncState(src, dst, schema) {
 				log.Fatal("sourceDB don't equal targetDB")
 			} else {
 				return
