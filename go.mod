@@ -7,7 +7,7 @@ require (
 	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
 	github.com/cloudfoundry-incubator/candiedyaml v0.0.0-20160429080125-99c3df83b515 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
-	github.com/coreos/etcd v3.2.18+incompatible
+	github.com/coreos/etcd 2b3aa7e1d49dd8484138c95ac9ab7dfc8e1e7dc0
 	github.com/cznic/golex v0.0.0-20160422121650-da5a7153a510 // indirect
 	github.com/cznic/parser v0.0.0-20160622100904-31edd927e5b1 // indirect
 	github.com/cznic/strutil v0.0.0-20150430124730-1eb03e3cc9d3 // indirect
