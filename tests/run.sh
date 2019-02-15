@@ -31,6 +31,29 @@ stop_services() {
     killall -9 drainer || true
 }
 
+start_upstream_tidb() {
+	port=${1-4000}
+    echo "Starting TiDB at port: $port..."
+    tidb-server \
+        -P $port \
+        --store tikv \
+        --path 127.0.0.1:2379 \
+		--enable-binlog=true \
+        --log-file "$OUT_DIR/tidb.log" &
+
+    echo "Verifying TiDB is started..."
+    i=0
+    while ! mysql -uroot -h127.0.0.1 -P$port --default-character-set utf8 -e 'select * from mysql.tidb;'; do
+        i=$((i+1))
+        if [ "$i" -gt 40 ]; then
+            echo 'Failed to start TiDB'
+            exit 1
+        fi
+        sleep 3
+    done
+
+}
+
 start_services() {
     stop_services
 	clean_data
@@ -71,25 +94,8 @@ EOF
 
 	sleep 5
 
-
-    echo "Starting TiDB..."
-    tidb-server \
-        -P 4000 \
-        --store tikv \
-        --path 127.0.0.1:2379 \
-		--enable-binlog=true \
-        --log-file "$OUT_DIR/tidb.log" &
-
-    echo "Verifying TiDB is started..."
-    i=0
-    while ! mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e 'select * from mysql.tidb;'; do
-        i=$((i+1))
-        if [ "$i" -gt 40 ]; then
-            echo 'Failed to start TiDB'
-            exit 1
-        fi
-        sleep 3
-    done
+	start_upstream_tidb 4000
+	start_upstream_tidb 4001
 
     echo "Starting Downstream TiDB..."
     tidb-server \
@@ -110,7 +116,7 @@ EOF
     done
 
 	echo "Starting Drainer..."
-	run_drainer &
+	run_drainer -L debug &
 }
 
 trap stop_services EXIT
@@ -137,4 +143,5 @@ for script in ./*/run.sh; do
     sh "$script"
 done
 
-echo "<<< Run all test success >>>"
+# with color
+echo "\033[0;36m<<< Run all test success >>>\033[0m"

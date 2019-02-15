@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
@@ -67,6 +68,7 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		for _, col := range columns {
 			val, ok := columnValues[col.ID]
 			if !ok {
+				log.Infof("get default value: %+v from schema directly", col.DefaultValue)
 				vals = append(vals, col.DefaultValue)
 			} else {
 				value, err := formatData(val, col.FieldType)

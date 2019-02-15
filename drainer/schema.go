@@ -21,6 +21,8 @@ type Schema struct {
 	schemas map[int64]*model.DBInfo
 	tables  map[int64]*model.TableInfo
 
+	truncateTableID map[int64]struct{}
+
 	schemaMetaVersion int64
 
 	hasImplicitCol bool
@@ -41,6 +43,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
+		truncateTableID:     make(map[int64]struct{}),
 		jobs:                jobs,
 	}
 
@@ -253,12 +256,12 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
+func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
 	if skipJob(job) {
 		return "", "", "", nil
 	}
 
-	sql := job.Query
+	sql = job.Query
 	if sql == "" {
 		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
 	}
@@ -275,17 +278,16 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, "", sql, nil
+		schemaName = schema.Name.O
 
 	case model.ActionDropSchema:
-		schemaName, err := s.DropSchema(job.SchemaID)
+		schemaName, err = s.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schemaName, ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schemaName, "", sql, nil
 
 	case model.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
@@ -312,7 +314,8 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
+		schemaName = schema.Name.O
+		tableName = table.Name.O
 
 	case model.ActionCreateTable:
 		table := job.BinlogInfo.TableInfo
@@ -332,7 +335,8 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
+		schemaName = schema.Name.O
+		tableName = table.Name.O
 
 	case model.ActionDropTable:
 		schema, ok := s.SchemaByID(job.SchemaID)
@@ -340,14 +344,14 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		tableName, err := s.DropTable(job.TableID)
+		tableName, err = s.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tableName}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, tableName, sql, nil
+		schemaName = schema.Name.O
 
 	case model.ActionTruncateTable:
 		schema, ok := s.SchemaByID(job.SchemaID)
@@ -355,6 +359,7 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
+		// job.TableID is the old table id, different from table.ID
 		_, err := s.DropTable(job.TableID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
@@ -372,7 +377,9 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, table.Name.O, sql, nil
+		schemaName = schema.Name.O
+		tableName = table.Name.O
+		s.truncateTableID[job.TableID] = struct{}{}
 
 	default:
 		binlogInfo := job.BinlogInfo
@@ -396,8 +403,17 @@ func (s *Schema) handleDDL(job *model.Job) (string, string, string, error) {
 
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tbInfo.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
-		return schema.Name.O, tbInfo.Name.O, sql, nil
+		schemaName = schema.Name.O
+		tableName = tbInfo.Name.O
 	}
+
+	return
+}
+
+// IsTruncateTableID return if the table id is truncate by truncate table DDL
+func (s *Schema) IsTruncateTableID(id int64) bool {
+	_, ok := s.truncateTableID[id]
+	return ok
 }
 
 func (s *Schema) getSchemaTableAndDelete(version int64) (string, string, error) {
@@ -425,11 +441,10 @@ func addImplicitColumn(table *model.TableInfo) {
 	table.Indices = []*model.IndexInfo{newIndex}
 }
 
-// there's only two status will be in HistoryDDLJob(we fetch at start time):
-// JobStateSynced and JobStateRollbackDone
-// If it fail to commit(to tikv) in 2pc phrase (when changing JobStateDone -> JobStateSynced and add to HistoryDDLJob),
-// then is would't not be add to HistoryDDLJob, and we may get (prewrite + rollback binlog),
-// this binlog event would reach drainer, finally we will get a (p + commit binlog) when tidb retry and successfully commit
+// TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
+// For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
+// Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
+// At state *done*, it will be always and only changed to *synced*.
 func skipJob(job *model.Job) bool {
-	return !job.IsSynced()
+	return !job.IsSynced() && !job.IsDone()
 }

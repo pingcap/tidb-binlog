@@ -24,7 +24,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
-	job = &model.Job{ID: 1, State: model.JobStateSynced}
+	job = &model.Job{ID: 1, State: model.JobStateDone}
 	_, _, sql, err = s.schema.handleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
@@ -82,7 +82,7 @@ func (t *testDrainerSuite) TestHandleDDL(c *C) {
 
 		job = &model.Job{
 			ID:         testCase.jobID,
-			State:      model.JobStateSynced,
+			State:      model.JobStateDone,
 			SchemaID:   testCase.schemaID,
 			TableID:    testCase.tableID,
 			Type:       testCase.jobType,
