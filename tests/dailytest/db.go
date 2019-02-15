@@ -11,7 +11,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/tests/util"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb/mysql"
 )
 
@@ -374,17 +373,17 @@ func closeDBs(dbs []*sql.DB) {
 func RunTest(src *sql.DB, dst *sql.DB, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
-	timeout := time.After(time.Second * 120)
+	timeout := time.After(time.Second * 1200)
 
 	for {
 		select {
-		case <-time.Tick(time.Millisecond * 100):
-			if util.CheckSyncState(cfg, src, dst) {
+		case <-time.Tick(time.Millisecond * 1000):
+			if util.CheckSyncState(src, dst) {
 				return
 			}
 		case <-timeout:
 			// check last time
-			if !util.CheckSyncState(cfg, src, dst) {
+			if !util.CheckSyncState(src, dst) {
 				log.Fatal("sourceDB don't equal targetDB")
 			} else {
 				return

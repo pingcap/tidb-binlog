@@ -12,7 +12,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 )
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 )
 
 // NewConfig creates a new config.

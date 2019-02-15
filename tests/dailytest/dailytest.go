@@ -4,7 +4,6 @@ import (
 	"database/sql"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 )
 
 // Run runs the daily test
@@ -37,19 +36,19 @@ create table ntest(
 `}
 
 	// run the simple test case
-	RunCase(diffCfg, sourceDB, targetDB)
+	RunCase(sourceDB, targetDB)
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, func(src *sql.DB) {
 		// generate insert/update/delete sqls and execute
 		RunDailyTest(sourceDB, TableSQLs, workerCount, jobCount, batch)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, func(src *sql.DB) {
 		// truncate test data
 		TruncateTestTable(sourceDB, TableSQLs)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, func(src *sql.DB) {
 		// drop test table
 		DropTestTable(sourceDB, TableSQLs)
 	})

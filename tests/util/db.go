@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"time"
+	"context"
 
 	"github.com/juju/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -64,23 +65,24 @@ func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
 	}
 
 	for _, table := range tables {
-		sourceTableInstance := &TableInstance{
+		sourceTableInstance := &diff.TableInstance{
 			Conn:   sourceDB,
 			Schema: "test",
 			Table:  table,
 		}
 
-		targetTableInstance := &TableInstance{
+		targetTableInstance := &diff.TableInstance{
 			Conn:   targetDB,
 			Schema: "test",
 			Table:  table,
 		}
-		tableDiff := &TableDiff{
-			SourceTables: []*TableInstance{sourceTableInstance},
+		tableDiff := &diff.TableDiff{
+			SourceTables: []*diff.TableInstance{sourceTableInstance},
 			TargetTable:  targetTableInstance,
+			UseChecksum:  true,
 		}
 		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
-			log.Warnf(sql)
+			log.Print(sql)
 			return nil
 		})
 
