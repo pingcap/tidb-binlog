@@ -11,8 +11,8 @@ import (
 	"math/rand"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/errors"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/assemble"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tipb/go-binlog"

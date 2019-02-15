@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb/kv"

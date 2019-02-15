@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 )

@@ -11,8 +11,8 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"

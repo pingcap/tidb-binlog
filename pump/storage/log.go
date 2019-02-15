@@ -9,8 +9,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 

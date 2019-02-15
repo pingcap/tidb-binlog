@@ -4,8 +4,8 @@ import (
 	"math"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 )
 
 // KafkaCheckpoint is local CheckPoint struct.

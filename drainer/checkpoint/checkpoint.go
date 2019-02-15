@@ -1,8 +1,8 @@
 package checkpoint
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 )
 
 // CheckPoint is the binlog sync pos meta.

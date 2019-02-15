@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"

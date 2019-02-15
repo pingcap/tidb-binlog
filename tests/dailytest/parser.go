@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/types"

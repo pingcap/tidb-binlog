@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"golang.org/x/net/context"
 )

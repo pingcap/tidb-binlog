@@ -5,8 +5,8 @@ import (
 	"database/sql/driver"
 	"testing"
 
-	"github.com/pingcap/errors"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"

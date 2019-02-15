@@ -5,8 +5,8 @@ import (
 	"compress/gzip"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 )
 
 // CompressionCodec defines type of compression.

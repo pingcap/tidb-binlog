@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/pd/pd-client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"

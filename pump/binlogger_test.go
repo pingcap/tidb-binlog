@@ -7,8 +7,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/pingcap/errors"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tipb/go-binlog"

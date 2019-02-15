@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/reparo/executor"

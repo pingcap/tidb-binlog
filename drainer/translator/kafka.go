@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/model"

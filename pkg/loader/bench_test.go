@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 )
 
 func getTestDB() (db *sql.DB, err error) {

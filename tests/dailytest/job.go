@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 )

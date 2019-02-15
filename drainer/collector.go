@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"

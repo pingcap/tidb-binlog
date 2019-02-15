@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
