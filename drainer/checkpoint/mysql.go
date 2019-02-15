@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"

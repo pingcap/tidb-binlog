@@ -6,8 +6,8 @@ import (
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"

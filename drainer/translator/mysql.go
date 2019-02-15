@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/ast"

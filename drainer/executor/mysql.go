@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 

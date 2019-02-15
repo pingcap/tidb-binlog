@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"

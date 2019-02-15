@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/reparo/executor"
 	"github.com/pingcap/tidb-binlog/reparo/translator"
