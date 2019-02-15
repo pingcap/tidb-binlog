@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 )
 
 // URLs defines a slice of URLs as a type

@@ -2,7 +2,7 @@ package loader
 
 import (
 	"github.com/ngaut/log"
-	"github.com/pkg/errors"
+	"github.com/pingcap/errors"
 )
 
 // all DML must be the same table

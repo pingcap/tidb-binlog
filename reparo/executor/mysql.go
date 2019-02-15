@@ -5,7 +5,7 @@ package executor
 import (
 	"database/sql"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 

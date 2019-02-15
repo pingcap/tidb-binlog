@@ -1,7 +1,7 @@
 package executor
 
 import (
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 )
 
 // Executor is the interface for execute TiDB binlog's sql

@@ -5,7 +5,7 @@ import (
 	"hash/crc32"
 	"io"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
