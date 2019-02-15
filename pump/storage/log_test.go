@@ -12,9 +12,9 @@ import (
 	"strconv"
 
 	fuzz "github.com/google/gofuzz"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
