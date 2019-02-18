@@ -70,7 +70,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20181210061630-27e9d3e251d4 // indirect
 	github.com/pingcap/pd v2.0.5+incompatible
 	github.com/pingcap/tidb v2.1.0-beta.0.20180823032518-ef6590e1899a+incompatible
-	github.com/pingcap/tidb-tools v2.1.1-0.20181130053235-0206fdab9ef8+incompatible
+	github.com/pingcap/tidb-tools v2.1.3-0.20190215110732-23405d82dbe6+incompatible
 	github.com/pingcap/tipb v0.0.0-20180711115030-4141907f6909
 	github.com/pkg/errors v0.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -81,7 +81,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20161005110831-1e9ce2a5ac40
-	github.com/sirupsen/logrus v0.0.0-20180830201151-78fa2915c1fa // indirect
+	github.com/sirupsen/logrus v0.0.0-20180830201151-78fa2915c1fa
 	github.com/soheilhy/cmux v0.1.2
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72 // indirect
 	github.com/stretchr/testify v1.2.2 // indirect
@@ -111,7 +111,7 @@ require (
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.0.0-20170407172122-cd8b52f8269e // indirect
 )

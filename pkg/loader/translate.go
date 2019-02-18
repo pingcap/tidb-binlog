@@ -34,7 +34,7 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn) {
 				dml.Values = make(map[string]interface{})
 				for i, col := range mut.Row.GetColumns() {
 					name := table.ColumnInfo[i].Name
-					arg := columnToArg(col)
+					arg := columnToArg(table.ColumnInfo[i].GetMysqlType(), col)
 					dml.Values[name] = arg
 				}
 
@@ -43,7 +43,7 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn) {
 					dml.OldValues = make(map[string]interface{})
 					for i, col := range mut.ChangeRow.GetColumns() {
 						name := table.ColumnInfo[i].Name
-						arg := columnToArg(col)
+						arg := columnToArg(table.ColumnInfo[i].GetMysqlType(), col)
 						dml.OldValues[name] = arg
 					}
 				}
@@ -53,7 +53,7 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn) {
 	return
 }
 
-func columnToArg(c *pb.Column) (arg interface{}) {
+func columnToArg(mysqlType string, c *pb.Column) (arg interface{}) {
 	if c.GetIsNull() {
 		return nil
 	}
@@ -71,6 +71,13 @@ func columnToArg(c *pb.Column) (arg interface{}) {
 	}
 
 	if c.BytesValue != nil {
+		// https://github.com/go-sql-driver/mysql/issues/819
+		// for downstream = mysql
+		// it work for tidb to use binary
+		if mysqlType == "json" {
+			var str string = string(c.GetBytesValue())
+			return str
+		}
 		return c.GetBytesValue()
 	}
 
