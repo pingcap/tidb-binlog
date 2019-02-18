@@ -26,43 +26,6 @@ func initMetrics() {
 	exp.Exp(metricRegistry)
 }
 
-// CreateKafkaProducer create a sync producer
-func CreateKafkaProducer(config *sarama.Config, addr []string, kafkaVersion string, maxMsgSize int, metricsPrefix string) (sarama.SyncProducer, error) {
-	var (
-		client sarama.SyncProducer
-		err    error
-	)
-
-	// initial kafka client to use manual partitioner
-	if config == nil {
-		config = sarama.NewConfig()
-	}
-	config.ClientID = "tidb_binlog"
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = maxMsgSize
-	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	config.Version = version
-	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
-
-	log.Infof("kafka producer version %v", version)
-	for i := 0; i < maxRetry; i++ {
-		client, err = sarama.NewSyncProducer(addr, config)
-		if err != nil {
-			log.Errorf("create kafka client error %v", err)
-			time.Sleep(retryInterval)
-			continue
-		}
-		return client, nil
-	}
-
-	return nil, errors.Trace(err)
-}
-
 // GetParentMetricsRegistry get the metrics registry and expose the metrics while /debug/metrics
 func GetParentMetricsRegistry() metrics.Registry {
 	metricRegistryOnce.Do(initMetrics)
