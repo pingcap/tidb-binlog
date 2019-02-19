@@ -6,12 +6,12 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -206,7 +206,7 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 }
 
 func (p *pbTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmts, err := parser.New().Parse(sql, "", "")
+	stmts, _, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}

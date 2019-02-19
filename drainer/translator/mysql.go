@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -292,7 +292,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmts, err := parser.New().Parse(sql, "", "")
+	stmts, _, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}

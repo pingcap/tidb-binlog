@@ -2,7 +2,7 @@ package drainer
 
 import (
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 )

@@ -430,6 +430,7 @@ func (a *Append) resolve(startTS int64) bool {
 	return false
 }
 
+// GetBinlog gets binlog by ts
 func (a *Append) GetBinlog(ts int64) (*pb.Binlog, error) {
 	return a.readBinlogByTS(ts)
 }
