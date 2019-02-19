@@ -12,6 +12,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
 	"github.com/pingcap/tidb/util/codec"
+	_ "github.com/pingcap/tidb/types/parser_driver"
 )
 
 var tidbRowID = int64(11)
