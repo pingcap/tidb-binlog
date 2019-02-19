@@ -24,6 +24,7 @@ require (
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v1.6.2
+	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20180820150422-93bf4626fba7 // indirect
 	github.com/juju/errors v0.0.0-20160809030848-6f54ff631840 // indirect
@@ -51,7 +52,9 @@ require (
 	github.com/sirupsen/logrus v0.0.0-20180830201151-78fa2915c1fa
 	github.com/soheilhy/cmux v0.1.2
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72 // indirect
+	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/syndtr/goleveldb v0.0.0-20180708030551-c4c61651e9e3
+	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/uber-go/atomic v1.3.2 // indirect
 	github.com/unrolled/render v0.0.0-20180807193321-4206df6ff701
 	github.com/urfave/negroni v1.0.0 // indirect
