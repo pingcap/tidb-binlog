@@ -231,6 +231,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 		key := append(deleteKey, replaceKey...)
 		// one is for delete sql, another for replace sql
 		keys = append(keys, key)
+		keys = append(keys, key)
 	}
 
 	return sqls, keys, values, nil
