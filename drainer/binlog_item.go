@@ -3,7 +3,7 @@ package drainer
 import (
 	"fmt"
 
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
