@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/diff"
+	"github.com/pingcap/errors"
 )
 
 // DBConfig is the DB configuration.

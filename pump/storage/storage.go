@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -430,7 +430,7 @@ func (a *Append) resolve(startTS int64) bool {
 	return false
 }
 
-// GetBinlog get binlog by ts
+// GetBinlog gets binlog by ts
 func (a *Append) GetBinlog(ts int64) (*pb.Binlog, error) {
 	return a.readBinlogByTS(ts)
 }

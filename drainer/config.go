@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"

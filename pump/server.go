@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/pd/pd-client"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"

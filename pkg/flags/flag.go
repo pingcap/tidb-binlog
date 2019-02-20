@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 )
 
 func flagToEnv(prefix, name string) string {

@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -15,7 +16,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"

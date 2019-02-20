@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"

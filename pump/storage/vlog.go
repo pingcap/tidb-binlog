@@ -12,8 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 
 	pb "github.com/pingcap/tipb/go-binlog"
 )

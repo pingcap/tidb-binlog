@@ -8,8 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/tests/util"
 	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb/mysql"

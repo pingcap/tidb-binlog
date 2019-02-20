@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 )
 

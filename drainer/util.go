@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/model"
 )
 
 const (
@@ -49,7 +49,8 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 
 func initializeSaramaGlobalConfig() {
 	sarama.MaxResponseSize = int32(maxMsgSize)
-	sarama.MaxRequestSize = int32(maxMsgSize)
+	// add 1 to avoid confused log: Producer.MaxMessageBytes must be smaller than MaxRequestSize; it will be ignored
+	sarama.MaxRequestSize = int32(maxMsgSize) + 1
 }
 
 func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {

@@ -1,9 +1,9 @@
 package translator
 
 import (
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
 )
 
 // OpType represents type of the operation

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-tools/pkg/diff"
+	"github.com/pingcap/errors"
 )
 
 // test different data type of mysql

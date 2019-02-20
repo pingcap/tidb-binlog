@@ -5,12 +5,13 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/types/json"
+	_ "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -478,7 +479,7 @@ func (t *testTranslatorSuite) TestFlashFormatData(c *C) {
 	c.Assert(err, IsNil)
 	check(mysql.TypeBit, types.NewMysqlBitDatum(bl), uint64(5))
 	// Duration.
-	d, err := types.ParseDuration("101:10:11", 1)
+	d, err := types.ParseDuration(new(stmtctx.StatementContext), "101:10:11", 1)
 	c.Assert(err, IsNil)
 	check(mysql.TypeDuration, types.NewDurationDatum(d), int64(1011011))
 	// Time types.

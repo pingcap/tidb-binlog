@@ -1,7 +1,7 @@
 package repora
 
 import (
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 

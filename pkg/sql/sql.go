@@ -11,12 +11,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/terror"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/terror"
 )
 
 var (

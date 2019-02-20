@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -210,7 +210,7 @@ func (p *pumpNode) Quit() error {
 func readLocalNodeID(dataDir string) (string, error) {
 	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
 	if _, err := CheckFileExist(nodeIDPath); err != nil {
-		return "", errors.NewNotFound(err, "local nodeID file not exist")
+		return "", errors.NotFoundf("local nodeID file not exist: %v", err)
 	}
 	data, err := ioutil.ReadFile(nodeIDPath)
 	if err != nil {
