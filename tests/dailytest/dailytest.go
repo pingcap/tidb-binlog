@@ -8,7 +8,7 @@ import (
 )
 
 // Run runs the daily test
-func Run(sourceDB *sql.DB, targetDB *sql.DB, workerCount int, jobCount int, batch int) {
+func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, jobCount int, batch int) {
 
 	TableSQLs := []string{`
 create table ptest(
@@ -37,19 +37,19 @@ create table ntest(
 `}
 
 	// run the simple test case
-	RunCase(diffCfg, sourceDB, targetDB)
+	RunCase(diffCfg, sourceDB, targetDB, schema)
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(diffCfg, sourceDB, targetDB, schema, func(src *sql.DB) {
 		// generate insert/update/delete sqls and execute
 		RunDailyTest(sourceDB, TableSQLs, workerCount, jobCount, batch)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(diffCfg, sourceDB, targetDB, schema, func(src *sql.DB) {
 		// truncate test data
 		TruncateTestTable(sourceDB, TableSQLs)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(diffCfg, sourceDB, targetDB, schema, func(src *sql.DB) {
 		// drop test table
 		DropTestTable(sourceDB, TableSQLs)
 	})

@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/diff"
-	"github.com/pingcap/errors"
 )
 
 // DBConfig is the DB configuration.
@@ -54,13 +54,13 @@ func CloseDB(db *sql.DB) error {
 }
 
 // CheckSyncState check if srouceDB and targetDB has the same table and data
-func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
-	//
+func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	tables, err := dbutil.GetTables(ctx, sourceDB, "test")
+	tables, err := dbutil.GetTables(ctx, sourceDB, schema)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return false
 	}
 
 	for _, table := range tables {
@@ -80,12 +80,13 @@ func CheckSyncState(sourceDB, targetDB *sql.DB) bool {
 			TargetTable:  targetTableInstance,
 		}
 		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
-			log.Warnf(sql)
+			log.Print(sql)
 			return nil
 		})
 
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			return false
 		}
 		if !structEqual || !dataEqual {
 			return false

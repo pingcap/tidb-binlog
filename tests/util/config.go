@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/diff"
 )
 
 // NewConfig creates a new config.
