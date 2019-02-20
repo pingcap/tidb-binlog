@@ -206,12 +206,11 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 }
 
 func (p *pbTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmts, _, err := parser.New().Parse(sql, "", "")
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
-	stmt := stmts[0]
 	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 	if isCreateDatabase {
 		return fmt.Sprintf("%s;", sql), nil

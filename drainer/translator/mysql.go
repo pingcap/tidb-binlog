@@ -216,6 +216,7 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 		sqls = append(sqls, deleteSQL)
 		values = append(values, deleteValue)
+		keys = append(keys, deleteKey)
 
 		replaceSQL := fmt.Sprintf("replace into `%s`.`%s` (%s) values (%s);", schema, table.Name, columnList, columnPlaceholders)
 		sqls = append(sqls, replaceSQL)
@@ -223,14 +224,11 @@ func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.Tabl
 
 		// generate dispatching key
 		// find primary keys
-		replaceKey, err := m.generateDispatchKey(table, newColumnValues)
+		key, err := m.generateDispatchKey(table, newColumnValues)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
 		}
 
-		key := append(deleteKey, replaceKey...)
-		// one is for delete sql, another for replace sql
-		keys = append(keys, key)
 		keys = append(keys, key)
 	}
 
@@ -292,12 +290,11 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmts, _, err := parser.New().Parse(sql, "", "")
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
-	stmt := stmts[0]
 	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 	if isCreateDatabase {
 		return fmt.Sprintf("%s;", sql), nil

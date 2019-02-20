@@ -211,12 +211,11 @@ func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 
 func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	schema = strings.ToLower(schema)
-	stmts, _, err := parser.New().Parse(sql, "", "")
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
-	stmt := stmts[0]
 	switch stmt.(type) {
 	case *ast.CreateDatabaseStmt:
 		createDatabaseStmt, _ := stmt.(*ast.CreateDatabaseStmt)
