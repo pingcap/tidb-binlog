@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 run_drainer &
 
-go build -o out
+GO111MODULE=on go build -o out
 
 ./out -config ./config.toml > ${OUT_DIR-/tmp}/$TEST_NAME.out 2>&1
 
