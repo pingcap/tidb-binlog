@@ -7,9 +7,11 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/ast"
-	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/types"
+	// import parser_drive to avoid panic
+	_ "github.com/pingcap/tidb/types/parser_driver"
 )
 
 type column struct {
@@ -98,7 +100,7 @@ func (col *column) parseColumnOptions(ops []*ast.ColumnOption) {
 		case ast.ColumnOptionPrimaryKey, ast.ColumnOptionAutoIncrement, ast.ColumnOptionUniqKey:
 			col.table.uniqIndices[col.name] = col
 		case ast.ColumnOptionComment:
-			col.comment = op.Expr.GetDatum().GetString()
+			col.comment = op.Expr.(ast.ValueExpr).GetDatumString()
 		}
 	}
 }
