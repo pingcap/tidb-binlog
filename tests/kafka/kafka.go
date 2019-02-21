@@ -9,11 +9,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 )
 
@@ -86,5 +84,5 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	dailytest.Run(sourceDB, sinkDB, 10, 1000, 10)
+	dailytest.Run(sourceDB, sinkDB, "test", 10, 1000, 10)
 }

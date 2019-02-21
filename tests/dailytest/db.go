@@ -10,9 +10,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/tests/util"
-	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb/mysql"
 )
 
@@ -380,12 +378,12 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 	for {
 		select {
 		case <-time.Tick(time.Millisecond * 100):
-			if util.CheckSyncState(cfg, src, dst, schema) {
+			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
 		case <-timeout:
 			// check last time
-			if !util.CheckSyncState(cfg, src, dst, schema) {
+			if !util.CheckSyncState(src, dst, schema) {
 				log.Fatal("sourceDB don't equal targetDB")
 			} else {
 				return

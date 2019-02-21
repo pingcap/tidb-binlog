@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -64,20 +65,21 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	}
 
 	for _, table := range tables {
-		sourceTableInstance := &TableInstance{
+		sourceTableInstance := &diff.TableInstance{
 			Conn:   sourceDB,
-			Schema: "test",
+			Schema: schema,
 			Table:  table,
 		}
 
-		targetTableInstance := &TableInstance{
+		targetTableInstance := &diff.TableInstance{
 			Conn:   targetDB,
-			Schema: "test",
+			Schema: schema,
 			Table:  table,
 		}
-		tableDiff := &TableDiff{
-			SourceTables: []*TableInstance{sourceTableInstance},
+		tableDiff := &diff.TableDiff{
+			SourceTables: []*diff.TableInstance{sourceTableInstance},
 			TargetTable:  targetTableInstance,
+			UseChecksum:  true,
 		}
 		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
 			log.Print(sql)

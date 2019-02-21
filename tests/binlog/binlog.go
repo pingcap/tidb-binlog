@@ -35,5 +35,5 @@ func main() {
 	}
 	defer util.CloseDB(targetDB)
 
-	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, &cfg.DiffConfig, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }
