@@ -1,5 +1,5 @@
-hash: 394ccbae2133d5cefebe11f408e97a42030c3eb86f1d330a39f60f9ac943f058
-updated: 2018-12-07T11:22:56.388414655+08:00
+hash: b953e65fc649a8121153eaffb361ad2327b512571d097a0363b980744244bc45
+updated: 2019-02-21T15:42:43.855794+08:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -11,8 +11,6 @@ imports:
   version: 99c3df83b51532e3615f851d8c2dbb638f5313bf
 - name: github.com/cockroachdb/cmux
   version: 112f0506e7743d64a6eb8fedbcff13d9979bbf92
-- name: github.com/codahale/hdrhistogram
-  version: 3a0bb77429bd3a61596f5e8a3172445844342120
 - name: github.com/coreos/bbolt
   version: 32c383e75ce054674c53b5a07e55de85332aee14
 - name: github.com/coreos/etcd
@@ -116,7 +114,7 @@ imports:
 - name: github.com/dgrijalva/jwt-go
   version: d2709f9f1f31ebcda9651b03077758c1f3a0018c
 - name: github.com/eapache/go-resiliency
-  version: ea41b0fad31007accc7f806884dcdf3da98b79ce
+  version: 842e16ec2c98ef0c59eebfe60d2d3500a793ba19
   subpackages:
   - breaker
 - name: github.com/eapache/go-xerial-snappy
@@ -155,7 +153,7 @@ imports:
 - name: github.com/google/btree
   version: 316fb6d3f031ae8f4d457c6c5186b9e3ded70435
 - name: github.com/grpc-ecosystem/go-grpc-middleware
-  version: 3304cc8863525cd0b328fbfd5bf745bbd38e7106
+  version: f849b5445de4819127e123ca96ba0eeb62b5e479
   subpackages:
   - tags
   - tracing/opentracing
@@ -187,7 +185,7 @@ imports:
 - name: github.com/ngaut/sync2
   version: 7a24ed77b2efb460c1468b7dc917821c66e80e55
 - name: github.com/onsi/gomega
-  version: e0d4387cf37d6cc3baeb80f61bd24a37e5dfae26
+  version: 5533ce8a0da374da682cd53d70ddcc54adf1a710
   subpackages:
   - format
   - internal/assertion
@@ -201,7 +199,7 @@ imports:
   - matchers/support/goraph/util
   - types
 - name: github.com/opentracing/opentracing-go
-  version: 8b5a441dc60e8d9bb9bf9d22060b6d94fa599983
+  version: 25a84ff92183e2f8ac018ba1db54f8a07b3c0e04
   subpackages:
   - ext
   - log
@@ -210,7 +208,7 @@ imports:
   subpackages:
   - llrb
 - name: github.com/pierrec/lz4
-  version: 623b5a2f4d2a41e411730dcdfbfdaeb5c0c4564e
+  version: 7f42fed96396aa858623e7e51628123cda496462
   subpackages:
   - internal/xxh32
 - name: github.com/pingcap/goleveldb
@@ -325,20 +323,19 @@ imports:
   - util/sqlexec
   - util/stringutil
 - name: github.com/pingcap/tidb-tools
-  version: 0a51ecb01dbd670d719e740bb3f2d3f5505ca821
+  version: 515a74c8fb267b68e74c1148284e910e3f7b5530
   subpackages:
-  - tidb_binlog/slave_binlog_proto/go-binlog
+  - tidb-binlog/slave_binlog_proto/go-binlog
 - name: github.com/pingcap/tipb
-  version: a762ecf06987da81bd835ff6dcf01d6f98e85165
-  repo: https://github.com/WangXiangUSTC/tipb.git
+  version: aa146c1ab9bb2b7ec5e00e8904aa95465f3f106b
   subpackages:
   - go-binlog
   - go-tipb
   - sharedbytes
 - name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+  version: ba968bfe8b2f7e042a574c888954fccecfa385b4
 - name: github.com/prometheus/client_golang
-  version: abad2d1bd44235a26707c172eab6bca5bf2dbad3
+  version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
   - prometheus
   - prometheus/internal
@@ -372,7 +369,7 @@ imports:
   subpackages:
   - ioutil2
 - name: github.com/sirupsen/logrus
-  version: 29d7eb25e8ffa54207ff5a9a5c3d63e95be2cc39
+  version: 4f5fd631f16452fbd023813c1eb7dbd67130cb0c
 - name: github.com/soheilhy/cmux
   version: bf4a8ede9e87c006fe1d4278c6c7f2b8be1fa84c
 - name: github.com/spaolacci/murmur3
@@ -380,7 +377,7 @@ imports:
 - name: github.com/twinj/uuid
   version: 70cac2bcd273ef6a371bb96cde363d28b68734c3
 - name: github.com/uber/jaeger-client-go
-  version: 7df3a19391621162a641c017e549fbc40ca6c914
+  version: 64f57863bf63d3842dbe79cdc793d57baaff9ab5
   subpackages:
   - config
   - internal/baggage
@@ -399,7 +396,7 @@ imports:
   - transport
   - utils
 - name: github.com/uber/jaeger-lib
-  version: ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5
+  version: 0e30338a695636fe5bcf7301e8030ce8dd2a8530
   subpackages:
   - metrics
 - name: github.com/ugorji/go
@@ -471,7 +468,7 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/appengine
-  version: a37df1387b4521194676d88c79230c613610d5f4
+  version: 54a98f90d1c46b7731eb8fb305d2a321c30ef610
   subpackages:
   - cloudsql
 - name: google.golang.org/genproto
@@ -512,4 +509,4 @@ imports:
   version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports:
 - name: github.com/pingcap/check
-  version: 1c287c953996ab3a0bf535dba9d53d809d3dc0b6
+  version: 67f458068fc864dabf17e38d4d337f28430d13ed
