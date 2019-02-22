@@ -406,9 +406,9 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	ts := entity.Pos.Ts
+	ts := entity.Meta.CommitTs
 	// if entity's ts is 0, use ts transformed by time now.
-	if entity.Pos.Ts == 0 {
+	if entity.Meta.CommitTs == 0 {
 		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 	}
 
