@@ -35,22 +35,11 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
-		//decode the pk value
-		remain, pk, err := codec.DecodeOne(row)
+		_, columnValues, err := insertRowToDatums(table, row)
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
-		}
-
-		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
-		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
-		}
-
-		if columnValues == nil {
-			columnValues = make(map[int64]types.Datum)
 		}
 
 		var (
@@ -60,10 +49,6 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
-			if IsPKHandleColumn(table, col) {
-				columnValues[col.ID] = pk
-			}
-
 			cols = append(cols, col.Name.O)
 			tps = append(tps, col.Tp)
 			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
@@ -81,10 +66,6 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 				}
 				vals = append(vals, val)
 			}
-		}
-
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
 		}
 
 		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)

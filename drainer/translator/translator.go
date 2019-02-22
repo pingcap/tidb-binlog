@@ -1,9 +1,15 @@
 package translator
 
 import (
+	"time"
+
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 // OpType represents type of the operation
@@ -68,4 +74,32 @@ func New(providerName string) (SQLTranslator, error) {
 	}
 
 	return translator, nil
+}
+
+func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datums map[int64]types.Datum, err error) {
+	colsTypeMap := util.ToColumnTypeMap(table.Columns)
+
+	// decode the pk value
+	var remain []byte
+	remain, pk, err = codec.DecodeOne(row)
+	if err != nil {
+		return types.Datum{}, nil, errors.Trace(err)
+	}
+
+	datums, err = tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
+	if err != nil {
+		return types.Datum{}, nil, errors.Trace(err)
+	}
+
+	if datums == nil {
+		datums = make(map[int64]types.Datum)
+	}
+
+	for _, col := range table.Columns {
+		if IsPKHandleColumn(table, col) {
+			datums[col.ID] = pk
+		}
+	}
+
+	return
 }

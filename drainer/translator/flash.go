@@ -16,7 +16,6 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 // flashTranslator translates TiDB binlog to flash sqls
@@ -42,7 +41,6 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
-	colsTypeMap := toFlashColumnTypeMap(columns)
 	columnList := genColumnList(columns)
 	// addition 2 holder is for del flag and version
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns) + 2)
@@ -50,34 +48,16 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 
 	for _, row := range rows {
 		//decode the pk value
-		remain, pk, err := codec.DecodeOne(row)
+		pk, columnValues, err := insertRowToDatums(table, row)
+		if err != nil {
+			return nil, nil, nil, errors.Trace(err)
+		}
+
 		hashKey := pk.GetInt64()
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, gotime.Local)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		if columnValues == nil {
-			columnValues = make(map[int64]types.Datum)
-		}
 
 		var vals []interface{}
 		vals = append(vals, hashKey)
 		for _, col := range columns {
-			if IsPKHandleColumn(table, col) {
-				columnValues[col.ID] = pk
-				pkVal, err := formatFlashData(&pk, &col.FieldType)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-				vals = append(vals, pkVal)
-				continue
-			}
-
 			val, ok := columnValues[col.ID]
 			if !ok {
 				vals = append(vals, col.DefaultValue)

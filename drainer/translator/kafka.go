@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 // kafkaTranslator translates TiDB binlog to self-description protobuf
@@ -129,38 +128,12 @@ func (p *kafkaTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 }
 
 func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
+	_, columnValues, err := insertRowToDatums(tableInfo, raw)
 	columns := tableInfo.Columns
-
-	remain, pk, err := codec.DecodeOne(raw)
-	if err != nil {
-		log.Error(err)
-		err = errors.Trace(err)
-		return
-	}
-
-	log.Debugf("decode pk: %+v", pk)
-
-	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
-	if err != nil {
-		log.Error(err)
-		err = errors.Trace(err)
-		return
-	}
-
-	// log.Debugf("decodeRow: %+v\n", columnValues)
-	// maybe only the pk column value
-	if columnValues == nil {
-		columnValues = make(map[int64]types.Datum)
-	}
 
 	row = new(obinlog.Row)
 
 	for _, col := range columns {
-		if IsPKHandleColumn(tableInfo, col) {
-			columnValues[col.ID] = pk
-		}
-
 		var column *obinlog.Column
 		val, ok := columnValues[col.ID]
 		if ok {
@@ -173,10 +146,6 @@ func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 			}
 		}
 		row.Columns = append(row.Columns, column)
-	}
-
-	if len(columnValues) == 0 {
-		panic(errors.New("columnValues is nil"))
 	}
 
 	return
