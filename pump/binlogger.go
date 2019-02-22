@@ -13,6 +13,7 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -69,7 +70,7 @@ type binlogger struct {
 	mutex   sync.Mutex
 }
 
-//OpenBinlogger returns a binlogger for write, then it can be appended
+// OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
@@ -101,9 +102,10 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := bf.ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog.0000000000000000
+	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
-		lastFileName = path.Join(dirpath, bf.BinlogName(0))
+		// create a binlog file with ts = 0
+		lastFileName = path.Join(dirpath, bf.BinlogName(0, 1))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file
@@ -145,9 +147,48 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	return binlog, nil
 }
 
-//CloseBinlogger closes the binlogger
+// CloseBinlogger closes the binlogger
 func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
+}
+
+// CreateBinloggerForTest creates a Binlogger just for test.
+func CreateBinloggerForTest(dirpath, filename string) (Binlogger, error) {
+	var (
+		err     error
+		dirLock *file.LockedFile
+		f       *file.LockedFile
+	)
+
+	// lock directory firstly
+	dirLockFile := path.Join(dirpath, ".lock")
+	dirLock, err = file.LockFile(dirLockFile, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		if err != nil && dirLock != nil {
+			if err1 := dirLock.Close(); err1 != nil {
+				log.Errorf("failed to unlock directory %s: %v with return error %v", dirpath, err1, err)
+			}
+		}
+	}()
+
+	fullFilename := path.Join(dirpath, filename)
+	f, err = file.TryLockFile(fullFilename, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	binlog := &binlogger{
+		dir:     dirpath,
+		file:    f,
+		encoder: newEncoder(f, compress.CompressionNone),
+		codec:   compress.CompressionNone,
+		dirLock: dirLock,
+	}
+
+	return binlog, nil
 }
 
 // ReadFrom reads `nums` binlogs from the given binlog position
@@ -365,7 +406,13 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate()
+	ts := entity.Pos.Ts
+	// if entity's ts is 0, use ts transformed by time now.
+	if entity.Pos.Ts == 0 {
+		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+	}
+
+	err = b.rotate(ts + 1)
 	return curOffset, errors.Trace(err)
 }
 
@@ -402,8 +449,8 @@ func (b *binlogger) Name() string {
 }
 
 // rotate creates a new file for append binlog
-func (b *binlogger) rotate() error {
-	filename := bf.BinlogName(b.seq() + 1)
+func (b *binlogger) rotate(ts int64) error {
+	filename := bf.BinlogName(b.seq()+1, ts)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))

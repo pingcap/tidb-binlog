@@ -81,7 +81,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.rotate(), IsNil)
+		c.Assert(b.rotate(1), IsNil)
 	}
 
 	ents, err := bl.ReadFrom(binlog.Pos{}, 11)

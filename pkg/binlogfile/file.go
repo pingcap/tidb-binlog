@@ -2,7 +2,6 @@ package binlogfile
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strings"
@@ -11,9 +10,11 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
+	version        = "v2"
 	datetimeFormat = "20060102150405"
 )
 
@@ -144,22 +145,41 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		return 0, ErrBadBinlogName
 	}
 
-	var datetime string
-	_, err = fmt.Sscanf(str, "binlog-%016d-%s", &index, &datetime)
-	// backward compatibility
-	if err == io.ErrUnexpectedEOF {
-		_, err = fmt.Sscanf(str, "binlog-%016d", &index)
+	items := strings.Split(str, "-")
+	switch len(items) {
+	case 4:
+		// binlog file format like: binlog-v2.1-0000000000000001-20181010101010
+		_, err = fmt.Sscanf(items[2], "%016d", &index)
+	case 3:
+		// backward compatibility
+		// binlog file format like: binlog-0000000000000001-20181010101010
+		_, err = fmt.Sscanf(items[1], "%016d", &index)
+	case 2:
+		// backward compatibility
+		// binlog file format like: binlog-0000000000000001
+		_, err = fmt.Sscanf(items[1], "%016d", &index)
 	}
+
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-
-func BinlogName(index uint64) string {
-	currentTime := time.Now()
-	return binlogNameWithDateTime(index, currentTime)
+// BinlogName creates a binlog file name. The file name format is like binlog-v2.1.0-0000000000000001-20180101010101
+func BinlogName(index uint64, ts int64) string {
+	// transfor ts to rough time
+	t := time.Unix(oracle.ExtractPhysical(uint64(ts))/1000, 0)
+	return binlogNameWithDateTime(index, t)
 }
 
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
+	return fmt.Sprintf("binlog-%s-%016d-%s", version, index, datetime.Format(datetimeFormat))
+}
+
+// FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"
+func FormatDateTimeStr(s string) (string, error) {
+	if len(s) != len(datetimeFormat) {
+		return "", errors.Errorf("%s is not a valid time string in binlog file", s)
+	}
+
+	return fmt.Sprintf("%s-%s-%sT%s:%s:%s", s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]), nil
 }

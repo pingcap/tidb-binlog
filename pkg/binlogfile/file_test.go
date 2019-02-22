@@ -1,6 +1,7 @@
 package binlogfile
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -76,8 +77,8 @@ func (t *testFileSuite) TestExist(c *C) {
 }
 
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
-	names := []string{"binlog-0000000000000001-20180315121212", "test", "binlog-0000000000000002-20180315121212"}
-	excepted := []string{"binlog-0000000000000001-20180315121212", "binlog-0000000000000002-20180315121212"}
+	names := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "test", "binlog-v2.1.0-0000000000000002-20180315121212"}
+	excepted := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "binlog-v2.1.0-0000000000000002-20180315121212"}
 	res := FilterBinlogNames(names)
 	c.Assert(res, HasLen, len(excepted))
 	c.Assert(res, DeepEquals, excepted)
@@ -89,8 +90,11 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 		expectedIndex uint64
 		expectedError bool
 	}{
-		{"binlog-0000000000000001-20180315121212", 0000000000000001, false},
-		{"binlog-0000000000000001", 0000000000000001, false},
+		{"binlog-v2.1.0-0000000000000001-20180315121212", 0000000000000001, false},
+		{"binlog-v2.1.0-index-20180315121212", 0, true},
+		{"binlog-0000000000000003-20180315121212", 0000000000000003, false},
+		{"binlog-index-20180315121212", 0, true},
+		{"binlog-0000000000000005", 0000000000000005, false},
 		{"binlog-index", 0, true},
 	}
 
@@ -101,16 +105,18 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	}
 
 	index := uint64(1)
-	name := BinlogName(index)
+	name := BinlogName(index, 1)
 	gotIndex, err := ParseBinlogName(name)
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
 }
 
 func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
+	datetimeStr := "20180315121212"
 	index := uint64(1)
-	datetime, err := time.Parse(datetimeFormat, "20180315121212")
+	datetime, err := time.Parse(datetimeFormat, datetimeStr)
 	c.Assert(err, IsNil)
+
 	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version, datetimeStr))
 }
