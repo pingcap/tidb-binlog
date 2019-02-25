@@ -661,7 +661,7 @@ func (s *Syncer) GetLatestCommitTS() int64 {
 // see https://github.com/pingcap/tidb/issues/9304
 // currently, we only drop the data which table id is truncated.
 func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
-	var mutations []pb.TableMutation
+	var mutations = make([]pb.TableMutation, 0, len(pv.GetMutations()))
 	for _, mutation := range pv.GetMutations() {
 		if s.schema.IsTruncateTableID(mutation.TableId) {
 			log.Infof("skip old version truncate dml, table id: %d", mutation.TableId)
