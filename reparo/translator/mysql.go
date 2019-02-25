@@ -132,7 +132,17 @@ func (p *mysqlTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, er
 }
 
 func (p *mysqlTranslator) genColumnList(columns []string) string {
-	return strings.Join(columns, ",")
+	var columnList strings.Builder
+	for i, column := range columns {
+		name := fmt.Sprintf("`%s`", column)
+		columnList.WriteString(name)
+
+		if i != len(columns)-1 {
+			columnList.WriteString(",")
+		}
+	}
+
+	return columnList.String()
 }
 
 func genWhere(columns []string, args []interface{}) (string, []interface{}) {
