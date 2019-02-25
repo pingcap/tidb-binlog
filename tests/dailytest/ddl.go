@@ -26,15 +26,13 @@ func mustCreateTableWithConn(conn *sql.Conn) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = conn.ExecContext(context.Background(), "create table if not exists test.test1(id int primary key, v1 int default 0)")
+	_, err = conn.ExecContext(context.Background(), "create table if not exists test.test1(id int primary key, v1 int default null)")
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
-	var err error
-
 	/*
 	   mysql> use test;
 	   Database changed
@@ -52,17 +50,17 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 	*/
 	// drop the database used will make the session become No database selected
 	// this make later code use *sql.DB* fail as expected
-	// so we SetMaxIdleConns to be 0 to close idle connection temperately, and set back to the default value of driver
+	// so we setback the used db before close the conn
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
-		// what if just don't Close this conn?
+		_, err := conn.ExecContext(context.Background(), "use test")
+		if err != nil {
+			log.Fatal(err)
+		}
 		conn.Close()
-		db.SetMaxIdleConns(0)
-		// set back to the default value of driver
-		db.SetMaxIdleConns(2)
 	}()
 
 	for {
@@ -75,7 +73,7 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 
 		time.Sleep(time.Millisecond)
 
-		_, err = db.Exec("drop database test")
+		_, err = conn.ExecContext(context.Background(), "drop database test")
 		if err != nil {
 			log.Fatal(err)
 		}

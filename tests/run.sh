@@ -15,11 +15,11 @@ export PATH=$PATH:$(dirname $pwd)/bin
 
 
 clean_data() {
-	rm -rf $OUT_DIR/pd || true
-	rm -rf $OUT_DIR/tidb || true
-	rm -rf $OUT_DIR/tikv || true
-	rm -rf $OUT_DIR/pump || true
-	rm -rf $OUT_DIR/data.drainer || true
+    rm -rf $OUT_DIR/pd || true
+    rm -rf $OUT_DIR/tidb || true
+    rm -rf $OUT_DIR/tikv || true
+    rm -rf $OUT_DIR/pump || true
+    rm -rf $OUT_DIR/data.drainer || true
 }
 
 stop_services() {
@@ -32,13 +32,13 @@ stop_services() {
 }
 
 start_upstream_tidb() {
-	port=${1-4000}
+    port=${1-4000}
     echo "Starting TiDB at port: $port..."
     tidb-server \
         -P $port \
         --store tikv \
         --path 127.0.0.1:2379 \
-		--enable-binlog=true \
+        --enable-binlog=true \
         --log-file "$OUT_DIR/tidb.log" &
 
     echo "Verifying TiDB is started..."
@@ -56,7 +56,7 @@ start_upstream_tidb() {
 
 start_services() {
     stop_services
-	clean_data
+    clean_data
 
     echo "Starting PD..."
     pd-server \
@@ -90,18 +90,18 @@ EOF
 
 
     echo "Starting Pump..."
-	run_pump &
+    run_pump &
 
-	sleep 5
+    sleep 5
 
-	start_upstream_tidb 4000
-	start_upstream_tidb 4001
+    start_upstream_tidb 4000
+    start_upstream_tidb 4001
 
     echo "Starting Downstream TiDB..."
     tidb-server \
         -P 3306 \
-		--path=$OUT_DIR/tidb \
-		--status=20080 \
+        --path=$OUT_DIR/tidb \
+        --status=20080 \
         --log-file "$OUT_DIR/down_tidb.log" &
 
     echo "Verifying Downstream TiDB is started..."
@@ -115,8 +115,8 @@ EOF
         sleep 3
     done
 
-	echo "Starting Drainer..."
-	run_drainer -L debug &
+    echo "Starting Drainer..."
+    run_drainer -L debug &
 }
 
 trap stop_services EXIT
@@ -131,14 +131,14 @@ fi
 do_case=""
 
 for script in ./*/run.sh; do
-	test_name="$(basename "$(dirname "$script")")"
-	if [[ $do_case != "" && $test_name != $do_case ]]; then
-		continue
-	fi
+    test_name="$(basename "$(dirname "$script")")"
+    if [[ $do_case != "" && $test_name != $do_case ]]; then
+        continue
+    fi
 
     echo "Running test $script..."
     PATH="$pwd/../bin:$pwd/_utils:$PATH" \
-	OUT_DIR=$OUT_DIR \
+    OUT_DIR=$OUT_DIR \
     TEST_NAME=$test_name \
     sh "$script"
 done
