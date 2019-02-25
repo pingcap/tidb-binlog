@@ -410,7 +410,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 	return
 }
 
-// IsTruncateTableID return if the table id is truncate by truncate table DDL
+// IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
 func (s *Schema) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
 	return ok
