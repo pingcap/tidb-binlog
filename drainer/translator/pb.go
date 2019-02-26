@@ -11,7 +11,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -258,21 +257,4 @@ func packEvent(schemaName, tableName string, tp pb.EventType, rowData [][]byte) 
 	}
 
 	return []interface{}{event}
-}
-
-func getColDefaultValueFromNil(col *model.ColumnInfo) (types.Datum, error) {
-	if !mysql.HasNotNullFlag(col.Flag) {
-		return types.Datum{}, nil
-	}
-	if col.Tp == mysql.TypeEnum {
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0]), nil
-	}
-	if mysql.HasAutoIncrementFlag(col.Flag) {
-		// Auto increment column doesn't has default value and we should not return error.
-		return types.Datum{}, nil
-	}
-
-	return types.Datum{}, errors.Errorf("Field '%s' doesn't have a default value", col.Name)
 }
