@@ -136,7 +136,7 @@ func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = types.NewDatum(col.DefaultValue)
+			val = getDefaultOrZeroValue(col)
 		}
 
 		column := DatumToColumn(col, val)
@@ -164,7 +164,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = types.NewDatum(col.DefaultValue)
+			val = getDefaultOrZeroValue(col)
 		}
 
 		column := DatumToColumn(col, val)
@@ -188,13 +188,13 @@ func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, c
 		var ok bool
 
 		if val, ok = newDatums[col.ID]; !ok {
-			val = types.NewDatum(col.DefaultValue)
+			getDefaultOrZeroValue(col)
 		}
 		column := DatumToColumn(col, val)
 		row.Columns = append(row.Columns, column)
 
 		if val, ok = oldDatums[col.ID]; !ok {
-			val = types.NewDatum(col.DefaultValue)
+			getDefaultOrZeroValue(col)
 		}
 		column = DatumToColumn(col, val)
 		changedRow.Columns = append(changedRow.Columns, column)

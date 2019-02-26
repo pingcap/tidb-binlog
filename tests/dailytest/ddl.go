@@ -3,6 +3,7 @@ package dailytest
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"reflect"
 	"runtime"
 	"sync"
@@ -139,7 +140,14 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 			log.Fatal(err)
 		}
 		time.Sleep(time.Millisecond)
-		_, err = db.Exec("alter table test.test1 add column v1 int default ?", value)
+
+		// use not null one half
+		var notNULL string
+		if value%2 == 0 {
+			notNULL = "not null"
+		}
+
+		_, err = db.Exec(fmt.Sprintf("alter table test.test1 add column v1 int default ? %s", notNULL), value)
 		if err != nil {
 			log.Fatal(err)
 		}

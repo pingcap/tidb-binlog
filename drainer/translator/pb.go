@@ -53,19 +53,15 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			tps = append(tps, col.Tp)
 			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			val, ok := columnValues[col.ID]
-			if ok {
-				value, err := formatData(val, col.FieldType)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-				vals = append(vals, value)
-			} else if col.DefaultValue == nil {
-				val, err := getColDefaultValueFromNil(col)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-				vals = append(vals, val)
+			if !ok {
+				val = getDefaultOrZeroValue(col)
 			}
+
+			value, err := formatData(val, col.FieldType)
+			if err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
+			vals = append(vals, value)
 		}
 
 		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)

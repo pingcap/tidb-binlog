@@ -7,6 +7,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -91,6 +93,7 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 		return types.Datum{}, nil, errors.Trace(err)
 	}
 
+	// if only one column and IsPKHandleColumn then datums contains no any columns.
 	if datums == nil {
 		datums = make(map[int64]types.Datum)
 	}
@@ -102,4 +105,22 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 	}
 
 	return
+}
+
+func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
+	if col.DefaultValue != nil {
+		return types.NewDatum(col.DefaultValue)
+	}
+
+	if !mysql.HasNotNullFlag(col.Flag) {
+		return types.NewDatum(nil)
+	}
+
+	if col.Tp == mysql.TypeEnum {
+		// For enum type, if no default value and not null is set,
+		// the default value is the first element of the enum list
+		return types.NewDatum(col.FieldType.Elems[0])
+	}
+
+	return table.GetZeroValue(col)
 }
