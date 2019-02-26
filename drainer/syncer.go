@@ -660,6 +660,9 @@ func (s *Syncer) GetLatestCommitTS() int64 {
 
 // see https://github.com/pingcap/tidb/issues/9304
 // currently, we only drop the data which table id is truncated.
+// because of online DDL, different TiDB instance may see the different schema,
+// it can't be treated simply as one timeline consider both DML and DDL,
+// we must carefully handle every DDL type now and need to find a better design.
 func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
 	var mutations = make([]pb.TableMutation, 0, len(pv.GetMutations()))
 	for _, mutation := range pv.GetMutations() {
