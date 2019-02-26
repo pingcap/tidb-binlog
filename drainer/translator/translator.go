@@ -108,12 +108,15 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 }
 
 func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
-	if col.DefaultValue != nil {
-		return types.NewDatum(col.DefaultValue)
-	}
-
+	// see https://github.com/pingcap/tidb/issues/9304
+	// must use null if TiDB not write the column value when default value is null
+	// and the value is null
 	if !mysql.HasNotNullFlag(col.Flag) {
 		return types.NewDatum(nil)
+	}
+
+	if col.DefaultValue != nil {
+		return types.NewDatum(col.DefaultValue)
 	}
 
 	if col.Tp == mysql.TypeEnum {
