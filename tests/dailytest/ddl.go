@@ -141,13 +141,22 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		}
 		time.Sleep(time.Millisecond)
 
-		// use not null one half
 		var notNULL string
-		if value%2 == 0 {
+		var defaultValue interface{}
+
+		if value%5 == 0 {
+			// use default <value> not null
 			notNULL = "not null"
+			defaultValue = value
+		} else if value%5 == 1 {
+			// use default null
+			defaultValue = nil
+		} else {
+			// use default <value>
+			defaultValue = value
 		}
 
-		_, err = db.Exec(fmt.Sprintf("alter table test.test1 add column v1 int default ? %s", notNULL), value)
+		_, err = db.Exec(fmt.Sprintf("alter table test.test1 add column v1 int default ? %s", notNULL), defaultValue)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -161,11 +170,19 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 
 	mustCreateTable(db)
 
-	for defaultValue := 0; ; defaultValue++ {
+	for value := 1; ; value++ {
 		select {
 		case <-ctx.Done():
 			return
 		default:
+		}
+
+		var defaultValue interface{}
+		// use default null per five modify
+		if value%5 == 0 {
+			defaultValue = nil
+		} else {
+			defaultValue = value
 		}
 
 		_, err = db.Exec("alter table test.test1 modify column v1 int default ?", defaultValue)
