@@ -59,7 +59,6 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 
 		if ts == r.cfg.StartTSO {
 			latestBinlogFile = file
-			appendFile()
 			continue
 		}
 
