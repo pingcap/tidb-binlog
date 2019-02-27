@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 // kafkaTranslator translates TiDB binlog to self-description protobuf
@@ -129,54 +128,19 @@ func (p *kafkaTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 }
 
 func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
+	_, columnValues, err := insertRowToDatums(tableInfo, raw)
 	columns := tableInfo.Columns
-
-	remain, pk, err := codec.DecodeOne(raw)
-	if err != nil {
-		log.Error(err)
-		err = errors.Trace(err)
-		return
-	}
-
-	log.Debugf("decode pk: %+v", pk)
-
-	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
-	if err != nil {
-		log.Error(err)
-		err = errors.Trace(err)
-		return
-	}
-
-	// log.Debugf("decodeRow: %+v\n", columnValues)
-	// maybe only the pk column value
-	if columnValues == nil {
-		columnValues = make(map[int64]types.Datum)
-	}
 
 	row = new(obinlog.Row)
 
 	for _, col := range columns {
-		if IsPKHandleColumn(tableInfo, col) {
-			columnValues[col.ID] = pk
-		}
-
-		var column *obinlog.Column
 		val, ok := columnValues[col.ID]
-		if ok {
-			column = DatumToColumn(col, val)
-		} else {
-			if col.DefaultValue == nil {
-				column = nullColumn()
-			} else {
-				log.Fatal("can't find value col: ", col, "default value: ", col.DefaultValue)
-			}
+		if !ok {
+			val = getDefaultOrZeroValue(col)
 		}
-		row.Columns = append(row.Columns, column)
-	}
 
-	if len(columnValues) == 0 {
-		panic(errors.New("columnValues is nil"))
+		column := DatumToColumn(col, val)
+		row.Columns = append(row.Columns, column)
 	}
 
 	return
@@ -198,17 +162,12 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	row = new(obinlog.Row)
 
 	for _, col := range columns {
-		var column *obinlog.Column
 		val, ok := columnValues[col.ID]
-		if ok {
-			column = DatumToColumn(col, val)
-		} else {
-			if col.DefaultValue == nil {
-				column = nullColumn()
-			} else {
-				log.Fatal("can't find value col: ", col, "default value: ", col.DefaultValue)
-			}
+		if !ok {
+			val = getDefaultOrZeroValue(col)
 		}
+
+		column := DatumToColumn(col, val)
 		row.Columns = append(row.Columns, column)
 	}
 
@@ -225,28 +184,20 @@ func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, c
 	row = new(obinlog.Row)
 	changedRow = new(obinlog.Row)
 	for _, col := range tableInfo.Columns {
-		if val, ok := newDatums[col.ID]; ok {
-			column := DatumToColumn(col, val)
-			row.Columns = append(row.Columns, column)
-		} else {
-			if col.DefaultValue == nil {
-				column := nullColumn()
-				row.Columns = append(row.Columns, column)
-			} else {
-				log.Fatal("can't find value col: ", col, "default value: ", col.DefaultValue)
-			}
+		var val types.Datum
+		var ok bool
+
+		if val, ok = newDatums[col.ID]; !ok {
+			getDefaultOrZeroValue(col)
 		}
-		if val, ok := oldDatums[col.ID]; ok {
-			column := DatumToColumn(col, val)
-			changedRow.Columns = append(changedRow.Columns, column)
-		} else {
-			if col.DefaultValue == nil {
-				column := nullColumn()
-				row.Columns = append(row.Columns, column)
-			} else {
-				log.Fatal("can't find value col: ", col, "default value: ", col.DefaultValue)
-			}
+		column := DatumToColumn(col, val)
+		row.Columns = append(row.Columns, column)
+
+		if val, ok = oldDatums[col.ID]; !ok {
+			getDefaultOrZeroValue(col)
 		}
+		column = DatumToColumn(col, val)
+		changedRow.Columns = append(changedRow.Columns, column)
 	}
 
 	return
@@ -317,13 +268,6 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.StringValue = proto.String(str)
 
 	}
-
-	return
-}
-
-func nullColumn() (col *obinlog.Column) {
-	col = new(obinlog.Column)
-	col.IsNull = proto.Bool(true)
 
 	return
 }

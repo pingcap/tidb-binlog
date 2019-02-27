@@ -48,7 +48,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 
-	colsTypeMap := util.ToColumnTypeMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders((len(columns)))
 
@@ -59,44 +58,25 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	sql := fmt.Sprintf("%s into `%s`.`%s` (%s) values (%s);", insertStr, schema, table.Name, columnList, columnPlaceholders)
 
 	for _, row := range rows {
-		//decode the pk value
-		remain, pk, err := codec.DecodeOne(row)
+		_, columnValues, err := insertRowToDatums(table, row)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)
-		}
-
-		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		if columnValues == nil {
-			columnValues = make(map[int64]types.Datum)
 		}
 
 		var vals []interface{}
 		for _, col := range columns {
-			if IsPKHandleColumn(table, col) {
-				columnValues[col.ID] = pk
-				vals = append(vals, pk.GetValue())
-				continue
-			}
-
 			val, ok := columnValues[col.ID]
 			if !ok {
-				vals = append(vals, col.DefaultValue)
-			} else {
-				value, err := formatData(val, col.FieldType)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-
-				vals = append(vals, value.GetValue())
+				val = getDefaultOrZeroValue(col)
 			}
-		}
 
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
+			value, err := formatData(val, col.FieldType)
+			if err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
+
+			vals = append(vals, value.GetValue())
+
 		}
 
 		sqls = append(sqls, sql)
@@ -570,8 +550,8 @@ func extractFingerprint(cols []*model.ColumnInfo, columnValues map[int64]types.D
 				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
 			}
 		} else {
-			if col.DefaultValue != nil {
-				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+			if col.GetDefaultValue() != nil {
+				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.GetDefaultValue()))
 			}
 		}
 	}
