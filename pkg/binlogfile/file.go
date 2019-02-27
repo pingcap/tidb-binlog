@@ -180,7 +180,7 @@ func binlogNameWithDateTime(index uint64, datetime time.Time) string {
 // FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"
 func FormatDateTimeStr(s string) (string, error) {
 	if len(s) != len(datetimeFormat) {
-		return "", errors.Errorf("%s is not a valid time string in binlog file", s)
+		return "", errors.NotValidf("time string %s in binlog file name", s)
 	}
 
 	return fmt.Sprintf("%s-%s-%sT%s:%s:%s", s[0:4], s[4:6], s[6:8], s[8:10], s[10:12], s[12:14]), nil
