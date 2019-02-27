@@ -11,8 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"

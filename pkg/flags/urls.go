@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/types"
 )
 

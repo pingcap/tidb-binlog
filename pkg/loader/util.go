@@ -6,7 +6,7 @@ import (
 	"hash/crc32"
 	"strings"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 )
 
 type tableInfo struct {

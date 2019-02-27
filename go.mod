@@ -47,10 +47,11 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.3.1 // indirect
 	github.com/hpcloud/tail v1.0.0 // indirect
 	github.com/jonboulle/clockwork v0.1.0 // indirect
-	github.com/juju/errors v0.0.0-20160809030848-6f54ff631840
+	github.com/juju/errors v0.0.0-20160809030848-6f54ff631840 // indirect
 	github.com/juju/loggo v0.0.0-20180524022052-584905176618 // indirect
 	github.com/juju/testing v0.0.0-20180920084828-472a3e8b2073 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
+	github.com/kshvakov/clickhouse v1.3.5 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/montanaflynn/stats v0.0.0-20180911141734-db72e6cae808 // indirect
 	github.com/ngaut/deadline v0.0.0-20150302045450-fae8f9dfd704 // indirect
@@ -71,7 +72,7 @@ require (
 	github.com/pingcap/tidb v2.1.0-beta.0.20180823032518-ef6590e1899a+incompatible
 	github.com/pingcap/tidb-tools v2.1.3-0.20190215110732-23405d82dbe6+incompatible
 	github.com/pingcap/tipb v0.0.0-20180711115030-4141907f6909
-	github.com/pkg/errors v0.8.0
+	github.com/pkg/errors v0.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v0.8.0
 	github.com/prometheus/client_model v0.0.0-20150212101744-fa8ad6fec335 // indirect
@@ -93,7 +94,7 @@ require (
 	github.com/unrolled/render v0.0.0-20180807193321-4206df6ff701
 	github.com/urfave/negroni v1.0.0 // indirect
 	github.com/xiang90/probing v0.0.0-20160813154853-07dd2e8dfe18 // indirect
-	github.com/zanmato1984/clickhouse v0.0.0-20180829183406-6c32f7b4cd79
+	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.uber.org/atomic v1.3.2 // indirect
 	golang.org/x/crypto v0.0.0-20150218234220-1351f936d976 // indirect
 	golang.org/x/lint v0.0.0-20181011164241-5906bd5c48cd // indirect

@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/onsi/gomega"
+	"github.com/pingcap/errors"
 )
 
 // Diff contains two sql DB, used for comparing.
@@ -132,7 +132,7 @@ func (df *Diff) equalCreateTable(tblName string) (bool, error) {
 	_, err1 := getCreateTable(df.db1, tblName)
 	_, err2 := getCreateTable(df.db2, tblName)
 
-	if errors.IsNotFound(err1) && errors.IsNotFound(err2) {
+	if err1 != nil && errors.IsNotFound(err1) && err2 != nil && errors.IsNotFound(err2) {
 		return true, nil
 	}
 	if err1 != nil {
@@ -308,7 +308,7 @@ func getCreateTable(db *sql.DB, tn string) (string, error) {
 		err := rs.Scan(&name, &cs)
 		return cs, errors.Trace(err)
 	}
-	return "", errors.NewNotFound(nil, "table not exist")
+	return "", errors.NotFoundf("table not exist")
 }
 
 type comparableSQLRow interface {

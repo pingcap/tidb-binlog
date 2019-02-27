@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errors"
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/zanmato1984/clickhouse"
