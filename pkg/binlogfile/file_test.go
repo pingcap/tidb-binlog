@@ -77,8 +77,9 @@ func (t *testFileSuite) TestExist(c *C) {
 }
 
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
-	names := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "test", "binlog-v2.1.0-0000000000000002-20180315121212"}
-	excepted := []string{"binlog-v2.1.0-0000000000000001-20180315121212", "binlog-v2.1.0-0000000000000002-20180315121212"}
+	names := []string{"binlog-0000000000000001-20180315121212", "test", "binlog-0000000000000002-20180315121212", "binlog-v2.1.0-0000000000000003-20180315121212", "binlog-v2.1.0-0000000000000004-20180315121212"}
+	excepted := []string{"binlog-0000000000000001-20180315121212", "binlog-0000000000000002-20180315121212", "binlog-v2.1.0-0000000000000003-20180315121212", "binlog-v2.1.0-0000000000000004-20180315121212"}
+	
 	res := FilterBinlogNames(names)
 	c.Assert(res, HasLen, len(excepted))
 	c.Assert(res, DeepEquals, excepted)

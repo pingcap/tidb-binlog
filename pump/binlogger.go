@@ -105,7 +105,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
 		// create a binlog file with ts = 0
-		lastFileName = path.Join(dirpath, bf.BinlogName(0, 1))
+		lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file

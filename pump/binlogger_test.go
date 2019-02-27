@@ -27,7 +27,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 	checkTest(c, dir)
 
 	// // check create binloger with empty directory
-	c.Assert(os.RemoveAll(path.Join(dir, bf.BinlogName(0, 1))), IsNil)
+	c.Assert(os.RemoveAll(path.Join(dir, bf.BinlogName(0, 0))), IsNil)
 	checkTest(c, dir)
 }
 
@@ -38,7 +38,7 @@ func checkTest(c *C, dir string) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(0, 1))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(0, 0))
 	bl.Close()
 }
 
@@ -64,7 +64,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	b, ok = bl.(*binlogger)
 	curFile := b.file
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(curFile.Name()), Equals, bf.BinlogName(1, 1))
+	c.Assert(path.Base(curFile.Name()), Equals, bf.BinlogName(1, 0))
 	latestPos := &binlog.Pos{Suffix: 1}
 	c.Assert(latestPos.Suffix, Equals, uint64(1))
 
@@ -99,7 +99,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	err = b.rotate(1)
 	c.Assert(err, IsNil)
-	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1, 1))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1, 0))
 
 	_, err = bl.WriteTail(ent)
 	c.Assert(err, IsNil)
@@ -186,7 +186,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 		c.Assert(b.rotate(1), IsNil)
 	}
 
-	file := path.Join(dir, bf.BinlogName(1, 1))
+	file := path.Join(dir, bf.BinlogName(1, 0))
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0600)
 	c.Assert(err, IsNil)
 
@@ -220,6 +220,6 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	names, err := bf.ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 2)
-	c.Assert(names[0], Equals, bf.BinlogName(0, 1))
-	c.Assert(names[1], Equals, bf.BinlogName(1, 1))
+	c.Assert(names[0], Equals, bf.BinlogName(0, 0))
+	c.Assert(names[1], Equals, bf.BinlogName(1, 0))
 }
