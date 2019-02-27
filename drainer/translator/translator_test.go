@@ -8,7 +8,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/model"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
@@ -267,7 +267,7 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 		d.SetBytes([]byte(val))
 		e = []byte(val)
 	case mysql.TypeDuration:
-		duration, err := types.ParseDuration("10:10:10", 0)
+		duration, err := types.ParseDuration(new(stmtctx.StatementContext), "10:10:10", 0)
 		c.Assert(err, IsNil)
 		d.SetMysqlDuration(duration)
 		e = "10:10:10"
