@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 )
 
 func mustCreateTable(db *sql.DB) {
@@ -206,7 +205,7 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 	}()
 
 	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL} {
-		RunTest(diffCfg, srcs[0], targetDB, func(_ *sql.DB) {
+		RunTest(srcs[0], targetDB, schema, func(_ *sql.DB) {
 			log.Info("running ddl test: ", getFunctionName(ddlFunc))
 
 			var wg sync.WaitGroup
