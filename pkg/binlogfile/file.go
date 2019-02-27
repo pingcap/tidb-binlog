@@ -11,10 +11,10 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
 const (
-	version        = "v2"
 	datetimeFormat = "20060102150405"
 )
 
@@ -172,7 +172,9 @@ func BinlogName(index uint64, ts int64) string {
 
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%s-%016d-%s", version, index, datetime.Format(datetimeFormat))
+	// version.ReleaseVersion looks like "v1.1-97-gca98789-dirty", it is too long, just need use the prefix
+	versionItems := strings.Split(version.ReleaseVersion, "-")
+	return fmt.Sprintf("binlog-%s-%016d-%s", versionItems[0], index, datetime.Format(datetimeFormat))
 }
 
 // FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"
