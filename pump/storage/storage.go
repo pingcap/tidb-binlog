@@ -1012,11 +1012,12 @@ func getStorageSize(dir string) (size storageSize, err error) {
 	return
 }
 
-// StorageConfig holds the configuration of storage
-type StorageConfig struct {
+// Config holds the configuration of storage
+type Config struct {
 	KVConfig `toml:"kv" json:"kv"`
 }
 
+// KVConfig if the configuration of goleveldb
 type KVConfig struct {
 	BlockCacheCapacity            int     `toml:"block-cache-capacity" json:"block-cache-capacity"`
 	BlockRestartInterval          int     `toml:"block-restart-interval" json:"block-restart-interval"`
@@ -1030,7 +1031,7 @@ type KVConfig struct {
 	WriteL0SlowdownTrigger        int     `toml:"write-L0-slowdown-trigger" json:"write-L0-slowdown-trigger"`
 }
 
-var defaultStorageConfig = &StorageConfig{
+var defaultStorageConfig = &Config{
 	KVConfig: KVConfig{
 		BlockCacheCapacity:            8388608,
 		BlockRestartInterval:          16,
@@ -1045,7 +1046,7 @@ var defaultStorageConfig = &StorageConfig{
 	},
 }
 
-func setDefaultStorageConfig(cf *StorageConfig) {
+func setDefaultStorageConfig(cf *Config) {
 	if cf.BlockCacheCapacity <= 0 {
 		cf.BlockCacheCapacity = defaultStorageConfig.BlockCacheCapacity
 	}

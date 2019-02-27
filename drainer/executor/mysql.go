@@ -9,7 +9,7 @@ import (
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
-// QueryHistogram get the sql query time
+// QueryHistogramVec get the sql query time
 var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
