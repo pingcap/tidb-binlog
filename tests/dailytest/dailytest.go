@@ -7,6 +7,11 @@ import (
 	"github.com/pingcap/tidb-binlog/diff"
 )
 
+// RunMultiSource runs the test that need multi instance TiDB, one instance for one *sql.DB* in srcs
+func RunMultiSource(srcs []*sql.DB, targetDB *sql.DB, diffCfg *diff.Config) {
+	runDDLTest(srcs, targetDB, diffCfg)
+}
+
 // Run runs the daily test
 func Run(sourceDB *sql.DB, targetDB *sql.DB, diffCfg *diff.Config, workerCount int, jobCount int, batch int) {
 

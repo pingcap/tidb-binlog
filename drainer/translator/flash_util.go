@@ -87,15 +87,6 @@ func isHandleTypeColumn(colDef *ast.ColumnDef) bool {
 		tp == mysql.TypeLonglong
 }
 
-func toFlashColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
-	colTypeMap := make(map[int64]*types.FieldType)
-	for _, col := range columns {
-		colTypeMap[col.ID] = &col.FieldType
-	}
-
-	return colTypeMap
-}
-
 func makeRow(pk int64, values []interface{}, version uint64, delFlag uint8) []interface{} {
 	var row []interface{}
 	row = append(row, pk)

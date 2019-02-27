@@ -52,15 +52,53 @@ func CloseDB(db *sql.DB) error {
 	return errors.Trace(db.Close())
 }
 
+// CloseDBs close the mysql fd
+func CloseDBs(dbs []*sql.DB) error {
+	for _, db := range dbs {
+		err := db.Close()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // CheckSyncState check if srouceDB and targetDB has the same table and data
 func CheckSyncState(cfg *diff.Config, sourceDB, targetDB *sql.DB) bool {
 	d := diff.New(cfg, sourceDB, targetDB)
 	ok, err := d.Equal()
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return false
 	}
 
 	return ok
+}
+
+// CreateSourceDBs return source sql.DB for test
+// we create two TiDB instance now in tests/run.sh, change it if needed
+func CreateSourceDBs() (dbs []*sql.DB, err error) {
+	cfg := DBConfig{
+		Host:     "127.0.0.1",
+		User:     "root",
+		Password: "",
+		Name:     "test",
+		Port:     4000,
+	}
+
+	src1, err := CreateDB(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cfg.Port = 4001
+	src2, err := CreateDB(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	dbs = append(dbs, src1, src2)
+	return
 }
 
 // CreateSourceDB return source sql.DB for test
