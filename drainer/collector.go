@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -309,6 +310,11 @@ func (c *Collector) LoadHistoryDDLJobs() ([]*model.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
+	sorter := &jobsSorter{jobs: jobs}
+	sort.Sort(sorter)
+
 	return jobs, nil
 }
 

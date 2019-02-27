@@ -5,9 +5,51 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/ngaut/log"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto/go-binlog"
 )
 
+var bytes = make([]byte, 5*(1<<10))
+var table = &obinlog.Table{
+	SchemaName: proto.String("test"),
+	TableName:  proto.String("test"),
+	ColumnInfo: []*obinlog.ColumnInfo{
+		&obinlog.ColumnInfo{Name: "id", MysqlType: "int"},
+		&obinlog.ColumnInfo{Name: "a1", MysqlType: "blob"},
+	},
+	Mutations: []*obinlog.TableMutation{
+		&obinlog.TableMutation{
+			Type: obinlog.MutationType_Insert.Enum(),
+			Row: &obinlog.Row{
+				Columns: []*obinlog.Column{
+					&obinlog.Column{
+						Int64Value: proto.Int64(1),
+					},
+					&obinlog.Column{
+						BytesValue: bytes,
+					},
+				},
+			},
+		},
+	},
+}
+
+// with bytes = 5KB
+// BenchmarkBinlogMarshal-4          100000            573941 ns/op
+// means only 1742 op/second
+func BenchmarkBinlogMarshal(b *testing.B) {
+	binlog := &obinlog.Binlog{
+		DmlData: &obinlog.DMLData{
+			Tables: []*obinlog.Table{table},
+		},
+	}
+	for i := 0; i < b.N; i++ {
+		binlog.String()
+	}
+}
+
+// with bytes = 5KB
+// BenchmarkKafka-4         1000000             42384 ns/op
+// means 23593 op/second
 func BenchmarkKafka(b *testing.B) {
 	log.SetLevelByString("error")
 
@@ -20,31 +62,6 @@ func BenchmarkKafka(b *testing.B) {
 	executor, err := newKafka(cfg)
 	if err != nil {
 		b.Fatal(err)
-	}
-
-	bytes := make([]byte, 128)
-	table := &obinlog.Table{
-		SchemaName: proto.String("test"),
-		TableName:  proto.String("test"),
-		ColumnInfo: []*obinlog.ColumnInfo{
-			{Name: "id", MysqlType: "int"},
-			{Name: "a1", MysqlType: "blob"},
-		},
-		Mutations: []*obinlog.TableMutation{
-			{
-				Type: obinlog.MutationType_Insert.Enum(),
-				Row: &obinlog.Row{
-					Columns: []*obinlog.Column{
-						{
-							Int64Value: proto.Int64(1),
-						},
-						{
-							BytesValue: bytes,
-						},
-					},
-				},
-			},
-		},
 	}
 
 	b.ResetTimer()

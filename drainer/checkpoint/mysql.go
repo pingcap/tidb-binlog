@@ -9,6 +9,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -125,9 +126,9 @@ func (sp *MysqlCheckPoint) Save(ts int64, poss map[string]pb.Pos) error {
 
 	for nodeID, pos := range poss {
 		newPos := pb.Pos{}
-		if pos.Offset > 5000 {
+		if pos.Offset > SafeKafkaOffset {
 			newPos.Suffix = pos.Suffix
-			newPos.Offset = pos.Offset - 5000
+			newPos.Offset = pos.Offset - SafeKafkaOffset
 		}
 		sp.Positions[nodeID] = newPos
 	}
