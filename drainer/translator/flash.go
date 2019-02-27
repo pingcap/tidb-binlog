@@ -60,7 +60,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		for _, col := range columns {
 			val, ok := columnValues[col.ID]
 			if !ok {
-				vals = append(vals, col.DefaultValue)
+				vals = append(vals, col.GetDefaultValue())
 			} else {
 				value, err := formatFlashData(&val, &col.FieldType)
 				if err != nil {

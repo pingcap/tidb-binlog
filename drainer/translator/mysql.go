@@ -550,8 +550,8 @@ func extractFingerprint(cols []*model.ColumnInfo, columnValues map[int64]types.D
 				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, value.GetValue()))
 			}
 		} else {
-			if col.DefaultValue != nil {
-				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.DefaultValue))
+			if col.GetDefaultValue() != nil {
+				columnsValues = append(columnsValues, fmt.Sprintf("(%s: %v)", col.Name, col.GetDefaultValue()))
 			}
 		}
 	}

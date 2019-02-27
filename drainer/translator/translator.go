@@ -115,8 +115,8 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 		return types.NewDatum(nil)
 	}
 
-	if col.DefaultValue != nil {
-		return types.NewDatum(col.DefaultValue)
+	if col.GetDefaultValue() != nil {
+		return types.NewDatum(col.GetDefaultValue())
 	}
 
 	if col.Tp == mysql.TypeEnum {
