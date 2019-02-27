@@ -164,7 +164,12 @@ func ParseBinlogName(str string) (index uint64, err error) {
 }
 
 // BinlogName creates a binlog file name. The file name format is like binlog-v2.1.0-0000000000000001-20180101010101
+// if ts is 0, will use a ts transfored from now's time.
 func BinlogName(index uint64, ts int64) string {
+	if ts == 0 {
+		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+	}
+
 	// transfor ts to rough time
 	t := time.Unix(oracle.ExtractPhysical(uint64(ts))/1000, 0)
 	return binlogNameWithDateTime(index, t)

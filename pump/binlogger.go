@@ -13,7 +13,6 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 )
@@ -406,13 +405,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	ts := entity.Meta.CommitTs
-	// if entity's ts is 0, use ts transformed by time now.
-	if entity.Meta.CommitTs == 0 {
-		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
-	}
-
-	err = b.rotate(ts + 1)
+	err = b.rotate(entity.Meta.CommitTs)
 	return curOffset, errors.Trace(err)
 }
 
@@ -450,6 +443,11 @@ func (b *binlogger) Name() string {
 
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate(ts int64) error {
+	if ts != 0 {
+		// should use a bigger ts as the start for the new binlog file 
+		ts++
+	}
+
 	filename := bf.BinlogName(b.seq()+1, ts)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0

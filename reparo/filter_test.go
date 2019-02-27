@@ -104,17 +104,26 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 
 	fileNames := [][]string{
 		{
+			// all files' time less than the reparo config1's start time
+			// all files' time less than the reparo config2's stop time
+			// the max time is less than the reparo config3's start time
 			"binlog-v2-0000000000000000-20181001101111",
 			"binlog-v2-0000000000000001-20181001102111",
 			"binlog-v2-0000000000000002-20181001103111",
 			"binlog-v2-0000000000000003-20181001111110",
 		},
 		{
+			// the min time is equal to the reparo config1's start time, the max time is equal to the reparo config1's stop time
+			// the max time is equal to the reparo config2's stop time
+			// the min time is equal to the reparo config3's start time
 			"binlog-v2-0000000000000000-20181001111111",
 			"binlog-v2-0000000000000001-20181001111112",
 			"binlog-v2-0000000000000002-20181001121111",
 		},
 		{
+			// the min time is greater than the reparo config1's start time, the max time is greater than the reparo config1's stop time
+			// the max time is greater than the reparo config2's stop time
+			// the min time is greater than the reparo config3's start time
 			"binlog-v2-0000000000000000-20181001111112",
 			"binlog-v2-0000000000000001-20181001111113",
 			"binlog-v2-0000000000000002-20181001211113",
