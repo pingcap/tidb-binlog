@@ -444,7 +444,7 @@ func (b *binlogger) Name() string {
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate(ts int64) error {
 	if ts != 0 {
-		// should use a bigger ts as the start for the new binlog file 
+		// should use a bigger ts as the start for the new binlog file
 		ts++
 	}
 

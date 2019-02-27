@@ -52,7 +52,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate(1)
+	b.rotate(0)
 
 	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
@@ -97,7 +97,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
 
-	err = b.rotate(1)
+	err = b.rotate(0)
 	c.Assert(err, IsNil)
 	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1, 0))
 
@@ -141,7 +141,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.rotate(1), IsNil)
+		c.Assert(b.rotate(0), IsNil)
 	}
 
 	ents, err := bl.ReadFrom(binlog.Pos{}, 11)
@@ -183,7 +183,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.rotate(1), IsNil)
+		c.Assert(b.rotate(0), IsNil)
 	}
 
 	file := path.Join(dir, bf.BinlogName(1, 0))
@@ -212,7 +212,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate(1)
+	b.rotate(0)
 
 	time.Sleep(10 * time.Millisecond)
 	b.GC(time.Millisecond, binlog.Pos{})

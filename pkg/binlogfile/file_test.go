@@ -12,6 +12,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
 func TestClient(t *testing.T) {
@@ -79,7 +80,7 @@ func (t *testFileSuite) TestExist(c *C) {
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
 	names := []string{"binlog-0000000000000001-20180315121212", "test", "binlog-0000000000000002-20180315121212", "binlog-v2.1.0-0000000000000003-20180315121212", "binlog-v2.1.0-0000000000000004-20180315121212"}
 	excepted := []string{"binlog-0000000000000001-20180315121212", "binlog-0000000000000002-20180315121212", "binlog-v2.1.0-0000000000000003-20180315121212", "binlog-v2.1.0-0000000000000004-20180315121212"}
-	
+
 	res := FilterBinlogNames(names)
 	c.Assert(res, HasLen, len(excepted))
 	c.Assert(res, DeepEquals, excepted)
@@ -119,5 +120,5 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	c.Assert(err, IsNil)
 
 	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version, datetimeStr))
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version.ReleaseVersion, datetimeStr))
 }

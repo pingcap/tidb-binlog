@@ -104,36 +104,85 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileNew(c *C) {
 
 	fileNames := [][]string{
 		{
-			// all files' time less than the reparo config1's start time
-			// all files' time less than the reparo config2's stop time
-			// the max time is less than the reparo config3's start time
-			"binlog-v2-0000000000000000-20181001101111",
-			"binlog-v2-0000000000000001-20181001102111",
-			"binlog-v2-0000000000000002-20181001103111",
-			"binlog-v2-0000000000000003-20181001111110",
+			// config1: all files' time are greater than the start time and less than the stop time
+			// config2: all files' time are less than the stop time
+			// config3: all files' time are greater than the start time
+			"binlog-v2-0000000000000000-20181001111112",
+			"binlog-v2-0000000000000001-20181001111113",
+			"binlog-v2-0000000000000002-20181001111114",
 		},
 		{
-			// the min time is equal to the reparo config1's start time, the max time is equal to the reparo config1's stop time
-			// the max time is equal to the reparo config2's stop time
-			// the min time is equal to the reparo config3's start time
+			// config1: the min time is equal to the start time and all file are less than the stop time
+			// config2: all files' time are less than the stop time
+			// config3: the min time are equal to the start time
+			"binlog-v2-0000000000000000-20181001111111",
+			"binlog-v2-0000000000000001-20181001111112",
+			"binlog-v2-0000000000000002-20181001111113",
+		},
+		{
+			// config1: the max time is equal to the stop time and all file are greater than the start time
+			// config2: the max time are equal to the stop time
+			// config3: all files' time are greater than the start time
+			"binlog-v2-0000000000000000-20181001111112",
+			"binlog-v2-0000000000000001-20181001111113",
+			"binlog-v2-0000000000000002-20181001121111",
+		},
+		{
+			// config1: the min time is equal to the start time and the max time is equal to the stop time
+			// config2: the max time are equal to the stop time
+			// config3: the min time are equal to the start time
 			"binlog-v2-0000000000000000-20181001111111",
 			"binlog-v2-0000000000000001-20181001111112",
 			"binlog-v2-0000000000000002-20181001121111",
 		},
 		{
-			// the min time is greater than the reparo config1's start time, the max time is greater than the reparo config1's stop time
-			// the max time is greater than the reparo config2's stop time
-			// the min time is greater than the reparo config3's start time
+			// config1: the max time is less than the start time
+			// config2: the max time is less than the stop time
+			// config3: the max time is less than the start time
+			"binlog-v2-0000000000000000-20181001101111",
+			"binlog-v2-0000000000000001-20181001101112",
+			"binlog-v2-0000000000000002-20181001111111",
+		},
+		{
+			// config1: the min time is greater than the stop time
+			// config2: the min time is greater than the stop time
+			// config3: the min time is greater than the start time
+			"binlog-v2-0000000000000000-20181001121112",
+			"binlog-v2-0000000000000001-20181001121113",
+			"binlog-v2-0000000000000002-20181001121114",
+		},
+		{
+			// config1: the min time is equal to the stop time
+			// config2: the min time is equal to the stop time
+			// config3: the min time is greater than the start time
+			"binlog-v2-0000000000000000-20181001121111",
+			"binlog-v2-0000000000000001-20181001121112",
+			"binlog-v2-0000000000000002-20181001121113",
+		},
+		{
+			// config1: the max time is equal to the start time
+			// config2: the max time is less than the stop time
+			// config3: the max time is equal to the start time
+			"binlog-v2-0000000000000000-20181001101111",
+			"binlog-v2-0000000000000001-20181001101112",
+			"binlog-v2-0000000000000002-20181001111111",
+		},
+		{
+			// config1: some file's time are less than the start time or greater than the stop time
+			// config2: some file's time are greater than the stop time
+			// config3: some file's time are less than the start time
+			"binlog-v2-0000000000000000-20181001101111",
+			"binlog-v2-0000000000000000-20181001111111",
 			"binlog-v2-0000000000000000-20181001111112",
-			"binlog-v2-0000000000000001-20181001111113",
-			"binlog-v2-0000000000000002-20181001211113",
+			"binlog-v2-0000000000000000-20181001121111",
+			"binlog-v2-0000000000000000-20181001131111",
 		},
 	}
 
 	expectFileNums := [][]int{
-		{1, 3, 2},
-		{4, 3, 2},
-		{1, 3, 3},
+		{3, 3, 3, 3, 1, 0, 1, 1, 3},
+		{3, 3, 3, 3, 3, 0, 1, 3, 4},
+		{3, 3, 3, 3, 1, 3, 3, 1, 4},
 	}
 
 	for j, fs := range fileNames {

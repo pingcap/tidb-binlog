@@ -10,8 +10,8 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
