@@ -2,6 +2,7 @@ module github.com/pingcap/tidb-binlog
 
 require (
 	github.com/BurntSushi/toml v0.3.1
+	github.com/DATA-DOG/go-sqlmock v1.3.2
 	github.com/Shopify/sarama v1.18.0
 	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
 	github.com/beorn7/perks v0.0.0-20160229213445-3ac7bf7a47d1 // indirect
@@ -62,15 +63,15 @@ require (
 	github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20171206051426-1c287c953996
-	github.com/pingcap/errors v0.11.0 // indirect
+	github.com/pingcap/errors v0.11.0
 	github.com/pingcap/goleveldb v0.0.0-20161010101021-158edde5a354 // indirect
 	github.com/pingcap/kvproto v0.0.0-20181010074705-0ba3ca8a6e37 // indirect
 	github.com/pingcap/parser v0.0.0-20181210061630-27e9d3e251d4 // indirect
 	github.com/pingcap/pd v2.0.5+incompatible
 	github.com/pingcap/tidb v2.1.0-beta.0.20180823032518-ef6590e1899a+incompatible
-	github.com/pingcap/tidb-tools v2.1.1-0.20181130053235-0206fdab9ef8+incompatible
+	github.com/pingcap/tidb-tools v2.1.3-0.20190215110732-23405d82dbe6+incompatible
 	github.com/pingcap/tipb v0.0.0-20180711115030-4141907f6909
-	github.com/pkg/errors v0.8.0 // indirect
+	github.com/pkg/errors v0.8.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v0.8.0
 	github.com/prometheus/client_model v0.0.0-20150212101744-fa8ad6fec335 // indirect
@@ -79,7 +80,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20161005110831-1e9ce2a5ac40
-	github.com/sirupsen/logrus v0.0.0-20180830201151-78fa2915c1fa // indirect
+	github.com/sirupsen/logrus v0.0.0-20180830201151-78fa2915c1fa
 	github.com/soheilhy/cmux v0.1.2
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72 // indirect
 	github.com/stretchr/testify v1.2.2 // indirect
@@ -97,7 +98,7 @@ require (
 	golang.org/x/crypto v0.0.0-20150218234220-1351f936d976 // indirect
 	golang.org/x/lint v0.0.0-20181011164241-5906bd5c48cd // indirect
 	golang.org/x/net v0.0.0-20180724234803-3673e40ba225
-	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect
+	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 	golang.org/x/sys v0.0.0-20161006025142-8d1157a43547
 	golang.org/x/time v0.0.0-20170420181420-c06e80d9300e // indirect
 	golang.org/x/tools v0.0.0-20181012201414-c0eb142035b5 // indirect
@@ -109,7 +110,7 @@ require (
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20180705113604-9856a29383ce // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.0.0-20170407172122-cd8b52f8269e // indirect
 )
