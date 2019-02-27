@@ -6,6 +6,11 @@ import (
 	"github.com/ngaut/log"
 )
 
+// RunMultiSource runs the test that need multi instance TiDB, one instance for one *sql.DB* in srcs
+func RunMultiSource(srcs []*sql.DB, targetDB *sql.DB, schema string) {
+	runDDLTest(srcs, targetDB, schema)
+}
+
 // Run runs the daily test
 func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, jobCount int, batch int) {
 

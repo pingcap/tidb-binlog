@@ -40,12 +40,17 @@ func main() {
 		panic(err)
 	}
 
-	sourceDB, err := util.CreateSourceDB()
+	sourceDBs, err := util.CreateSourceDBs()
 	if err != nil {
 		panic(err)
 	}
 
 	sinkDB, err := util.CreateSinkDB()
+	if err != nil {
+		panic(err)
+	}
+
+	sinkDBForDiff, err := util.CreateSinkDB()
 	if err != nil {
 		panic(err)
 	}
@@ -84,5 +89,6 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	dailytest.Run(sourceDB, sinkDB, "test", 10, 1000, 10)
+	dailytest.RunMultiSource(sourceDBs, sinkDBForDiff, "test")
+	dailytest.Run(sourceDBs[0], sinkDBForDiff, "test", 10, 1000, 10)
 }
