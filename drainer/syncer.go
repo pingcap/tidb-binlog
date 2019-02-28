@@ -48,9 +48,6 @@ type Syncer struct {
 	positions    map[string]int64
 	initCommitTS int64
 
-	// because TiDB is case-insensitive, only lower-case here.
-	ignoreSchemaNames map[string]struct{}
-
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -418,6 +415,9 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		}
 	}
 	s.schema, err = NewSchema(jobs, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
 	if err != nil {
@@ -436,6 +436,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		go s.sync(s.executors[i], s.jobCh[i], i)
 	}
 
+	var lastDDLSchemaVersion int64
 	var b *binlogItem
 	for {
 		select {
@@ -463,7 +464,16 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
 			}
 
+			err = s.rewriteForOldVersion(preWrite)
+			if err != nil {
+				return errors.Annotate(err, "rewrite for old version fail")
+			}
+
 			log.Debug("DML SchemaVersion: ", preWrite.SchemaVersion)
+			if preWrite.SchemaVersion < lastDDLSchemaVersion {
+				log.Debug("encounter older schema dml")
+			}
+
 			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
@@ -481,6 +491,8 @@ func (s *Syncer) run(jobs []*model.Job) error {
 			s.schema.addJob(b.job)
 
 			log.Debug("DDL SchemaVersion: ", b.job.BinlogInfo.SchemaVersion)
+			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
+
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
@@ -644,4 +656,24 @@ func (s *Syncer) GetLastSyncTime() time.Time {
 // GetLatestCommitTS returns the latest commit ts.
 func (s *Syncer) GetLatestCommitTS() int64 {
 	return s.cp.TS()
+}
+
+// see https://github.com/pingcap/tidb/issues/9304
+// currently, we only drop the data which table id is truncated.
+// because of online DDL, different TiDB instance may see the different schema,
+// it can't be treated simply as one timeline consider both DML and DDL,
+// we must carefully handle every DDL type now and need to find a better design.
+func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
+	var mutations = make([]pb.TableMutation, 0, len(pv.GetMutations()))
+	for _, mutation := range pv.GetMutations() {
+		if s.schema.IsTruncateTableID(mutation.TableId) {
+			log.Infof("skip old version truncate dml, table id: %d", mutation.TableId)
+			continue
+		}
+
+		mutations = append(mutations, mutation)
+	}
+	pv.Mutations = mutations
+
+	return nil
 }

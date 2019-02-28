@@ -11,7 +11,6 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -35,22 +34,11 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(columns)
 
 	for _, row := range rows {
-		//decode the pk value
-		remain, pk, err := codec.DecodeOne(row)
+		_, columnValues, err := insertRowToDatums(table, row)
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
-		}
-
-		columnValues, err := tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
-		if err != nil {
-			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
-		}
-
-		if columnValues == nil {
-			columnValues = make(map[int64]types.Datum)
 		}
 
 		var (
@@ -60,31 +48,19 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			mysqlTypes = make([]string, 0, len(columns))
 		)
 		for _, col := range columns {
-			if IsPKHandleColumn(table, col) {
-				columnValues[col.ID] = pk
-			}
-
 			cols = append(cols, col.Name.O)
 			tps = append(tps, col.Tp)
 			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 			val, ok := columnValues[col.ID]
-			if ok {
-				value, err := formatData(val, col.FieldType)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-				vals = append(vals, value)
-			} else if col.DefaultValue == nil {
-				val, err := getColDefaultValueFromNil(col)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-				vals = append(vals, val)
+			if !ok {
+				val = getDefaultOrZeroValue(col)
 			}
-		}
 
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
+			value, err := formatData(val, col.FieldType)
+			if err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
+			vals = append(vals, value)
 		}
 
 		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)
@@ -281,21 +257,4 @@ func packEvent(schemaName, tableName string, tp pb.EventType, rowData [][]byte) 
 	}
 
 	return []interface{}{event}
-}
-
-func getColDefaultValueFromNil(col *model.ColumnInfo) (types.Datum, error) {
-	if !mysql.HasNotNullFlag(col.Flag) {
-		return types.Datum{}, nil
-	}
-	if col.Tp == mysql.TypeEnum {
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0]), nil
-	}
-	if mysql.HasAutoIncrementFlag(col.Flag) {
-		// Auto increment column doesn't has default value and we should not return error.
-		return types.Datum{}, nil
-	}
-
-	return types.Datum{}, errors.Errorf("Field '%s' doesn't have a default value", col.Name)
 }

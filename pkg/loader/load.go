@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -206,6 +208,17 @@ func (s *Loader) getTableInfo(schema string, table string) (info *tableInfo, err
 	return s.refreshTableInfo(schema, table)
 }
 
+func isCreateDatabaseDDL(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Errorf("parse [%s] err: %v", sql, err)
+		return false
+	}
+
+	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
+	return isCreateDatabase
+}
+
 func (s *Loader) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl: ", ddl)
 	var err error
@@ -221,7 +234,7 @@ func (s *Loader) execDDL(ddl *DDL) error {
 			continue
 		}
 
-		if len(ddl.Database) > 0 {
+		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				log.Error(err)

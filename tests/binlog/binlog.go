@@ -35,5 +35,12 @@ func main() {
 	}
 	defer util.CloseDB(targetDB)
 
+	sourceDBs, err := util.CreateSourceDBs()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer util.CloseDBs(sourceDBs)
+
+	dailytest.RunMultiSource(sourceDBs, targetDB, &cfg.DiffConfig)
 	dailytest.Run(sourceDB, targetDB, &cfg.DiffConfig, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }
