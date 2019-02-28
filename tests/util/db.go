@@ -92,13 +92,13 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 			TargetTable:  targetTableInstance,
 			UseChecksum:  true,
 		}
-		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
+		structEqual, dataEqual, err := tableDiff.Equal(ctx, func(sql string) error {
 			log.Print(sql)
 			return nil
 		})
 
 		if err != nil {
-			log.Print(err)
+			log.Print(errors.Trace(err))
 			return false
 		}
 		if !structEqual || !dataEqual {
