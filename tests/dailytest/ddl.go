@@ -209,7 +209,8 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 			log.Info("running ddl test: ", getFunctionName(ddlFunc))
 
 			var wg sync.WaitGroup
-			ctx, _ := context.WithTimeout(context.Background(), runTime)
+			ctx, cancel := context.WithTimeout(context.Background(), runTime)
+			defer cancel()
 
 			for idx, src := range srcs {
 				wg.Add(1)
@@ -238,5 +239,4 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 			}
 		})
 	}
-
 }
