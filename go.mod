@@ -42,7 +42,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20190118033454-a52e5bde3bd2
 	github.com/pingcap/pd v2.1.3+incompatible
 	github.com/pingcap/tidb v2.1.3+incompatible
-	github.com/pingcap/tidb-tools v2.1.3-0.20190131080057-1e1754144120+incompatible
+	github.com/pingcap/tidb-tools v2.1.5+incompatible
 	github.com/pingcap/tipb v0.0.0-20190107072121-abbec73437b7
 	github.com/prometheus/client_golang v0.8.0
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165

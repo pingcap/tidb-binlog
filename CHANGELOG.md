@@ -14,3 +14,13 @@ All notable changes to this project are documented in this file.
 + Other
 	- Add integration test for node status [#416](https://github.com/pingcap/tidb-binlog/pull/416)
 
+## [2.1.4]
+- Nothing's changed
+
+## [2.1.5]
+- Update the DDL binlog replication plan to guarantee the correctness of DDL [#466](https://github.com/pingcap/tidb-binlog/pull/466)
+- Switch juju/errors to pingcap/error [#464](https://github.com/pingcap/tidb-binlog/pull/464)
+- Open go mod and update despondencies [#475](https://github.com/pingcap/tidb-binlog/pull/475)
+- Add package pkg/loader [#471](https://github.com/pingcap/tidb-binlog/pull/471)
+- Add tool Arbiter sync from Kafka to Mysql [#441](https://github.com/pingcap/tidb-binlog/pull/441)
+
