@@ -15,7 +15,7 @@ All notable changes to this project are documented in this file.
 	- Add integration test for node status [#416](https://github.com/pingcap/tidb-binlog/pull/416)
 
 ## [2.1.4]
-	nothing change
+	Nothing's changed
 
 ## [2.1.5]
 	- Update the DDL binlog replication plan to guarantee the correctness of DDL [#466](https://github.com/pingcap/tidb-binlog/pull/466)
