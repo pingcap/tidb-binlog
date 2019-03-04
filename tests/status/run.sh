@@ -1,8 +1,9 @@
 #!/bin/sh
 
- set -e
 
- cd "$(dirname "$0")"
+set -e
+
+cd "$(dirname "$0")"
 
 OUT_DIR=/tmp/tidb_binlog_test
 STATUS_LOG="${OUT_DIR}/status.log"
@@ -13,24 +14,25 @@ echo "check drainer's status, should be online"
 check_status drainers online
 
 drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID: \([a-zA-Z0-9\-]*:[0-9]*\),.*/\1/g'`
+pumpNodeID="pump:8250"
 
 # pump's state should be online
 echo "check pump's status, should be online"
-check_status pumps online
+check_status pumps $pumpNodeID online
 
 # stop pump, and pump's state should be paused
-binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump1:8215
+binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id $pumpNodeID
 
 echo "check pump's status, should be paused"
-check_status pumps paused
+check_status pumps $pumpNodeID paused
 
 # offline pump, and pump's status should be offline
 run_pump &
 sleep 3
-binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump1:8215
+binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id $pumpNodeID
 
 echo "check pump's status, should be offline"
-check_status pumps offline
+check_status pumps $pumpNodeID offline
 
 # stop drainer, and drainer's state should be paused
 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $drainerNodeID
@@ -51,7 +53,7 @@ binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -s
 run_pump &
 
 echo "check pump's status, should be paused"
-check_status pumps paused
+check_status pumps $pumpNodeID paused
 
 # clean up
 binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused

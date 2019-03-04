@@ -2,6 +2,15 @@
 
 set -eu
 
+NODE_KIND=$1
+if [ $NODE_KIND == "pumps" ]; then
+	NODE_ID=$2
+	STATE=$3
+else
+	NODE_ID="drainer"
+	STATE=$2
+fi
+
 OUT_DIR=/tmp/tidb_binlog_test
 STATUS_LOG="${OUT_DIR}/status.log"
 max_commit_ts_old=0
@@ -9,10 +18,14 @@ max_commit_ts_new=0
 
 for i in {1..15}
 do
-    binlogctl -pd-urls 127.0.0.1:2379 -cmd $1 > $STATUS_LOG 2>&1
+    binlogctl -pd-urls 127.0.0.1:2379 -cmd $NODE_KIND > $STATUS_LOG 2>&1
     cat $STATUS_LOG
 
-    count=`grep -c "$2" $STATUS_LOG` || true
+    if [ $NODE_KIND == "pumps" ]; then 
+        count=`grep "$NODE_ID" $STATUS_LOG | grep -c "$STATE" || true`
+    else
+        count=`grep -c "$STATE" $STATUS_LOG || true`
+    fi
 
     if [ $i -eq 1 ]; then
         max_commit_ts_old=`cat $STATUS_LOG | sed 's/.*MaxCommitTS: \([0-9]*\), .*/\1/g'`
@@ -21,9 +34,9 @@ do
     fi
 
     # if status is online, will check the max commit ts, the new max commit ts should greater than the old one.
-    if [ $count -ne 1 ] || ([ $2 == "online" ] && [ $max_commit_ts_new -le $max_commit_ts_old ]); then
+    if [ $count -ne 1 ] || ([ $STATE == "online" ] && [ $max_commit_ts_new -le $max_commit_ts_old ]); then
         if [ $i -eq 15 ]; then
-            echo "status is not $2, or max commit ts is not update, old max commit ts is $max_commit_ts_old, new max commit ts is $max_commit_ts_new"
+            echo "${NODE_ID}'s status is not $STATE, or max commit ts is not update, old max commit ts is $max_commit_ts_old, new max commit ts is $max_commit_ts_new"
             exit 2
         else
             sleep 1
