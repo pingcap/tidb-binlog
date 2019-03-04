@@ -10,6 +10,7 @@ This folder contains all tests which relies on external service such as TiDB.
    - `bin/tikv-server`
    - `bin/tidb-server`
    - `bin/binlogctl`
+   - `bin/sync_diff_inspector`
 
 2. The following programs must be installed:
 
@@ -55,3 +56,4 @@ Serveral convenient commands are provided:
 - `check_not_contains <TEXT>` — Checks if the previous `run_sql` result does not contain the given
   text (in `-E` format)
 - `check_status <NODE_TYPE> <STATUS>` — Checks if the node's status is STATUS
+- `check_data <CONFIG_FILE>` - Checks data between TiDB and downstream by sync_diff_inspector, this tool can download from [tidb-enterprise-tools-latest-linux-amd64.tar.gz](https://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz)

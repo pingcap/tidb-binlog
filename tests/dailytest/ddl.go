@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 )
 
 func mustCreateTable(db *sql.DB) {
@@ -198,7 +197,7 @@ func getFunctionName(i interface{}) string {
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
-func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, diffCfg *diff.Config) {
+func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 	runTime := time.Second * 3
 	start := time.Now()
 	defer func() {
@@ -206,11 +205,12 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, diffCfg *diff.Config) {
 	}()
 
 	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL} {
-		RunTest(diffCfg, srcs[0], targetDB, func(_ *sql.DB) {
+		RunTest(srcs[0], targetDB, schema, func(_ *sql.DB) {
 			log.Info("running ddl test: ", getFunctionName(ddlFunc))
 
 			var wg sync.WaitGroup
-			ctx, _ := context.WithTimeout(context.Background(), runTime)
+			ctx, cancel := context.WithTimeout(context.Background(), runTime)
+			defer cancel()
 
 			for idx, src := range srcs {
 				wg.Add(1)
@@ -232,12 +232,11 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, diffCfg *diff.Config) {
 		})
 
 		// just cleanup
-		RunTest(diffCfg, srcs[0], targetDB, func(db *sql.DB) {
+		RunTest(srcs[0], targetDB, schema, func(db *sql.DB) {
 			_, err := db.Exec("drop table if exists test1")
 			if err != nil {
 				log.Fatal(err)
 			}
 		})
 	}
-
 }

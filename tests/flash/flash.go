@@ -57,5 +57,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dailytest.Run(sourceDB, targetDB, &cfg.DiffConfig, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	dailytest.Run(sourceDB, targetDB, cfg.TargetDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }

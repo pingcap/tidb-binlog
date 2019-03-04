@@ -41,6 +41,6 @@ func main() {
 	}
 	defer util.CloseDBs(sourceDBs)
 
-	dailytest.RunMultiSource(sourceDBs, targetDB, &cfg.DiffConfig)
-	dailytest.Run(sourceDB, targetDB, &cfg.DiffConfig, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
+	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }
