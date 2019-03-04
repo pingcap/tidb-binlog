@@ -41,8 +41,6 @@ var (
 		})
 )
 
-var registry = prometheus.NewRegistry()
-
 // InitMetircs register the metrics to registry
 func InitMetircs(registry *prometheus.Registry) {
 	registry.MustRegister(writeBinlogSizeHistogram)

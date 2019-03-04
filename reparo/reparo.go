@@ -1,116 +1,126 @@
 package repora
 
 import (
-	"bufio"
 	"io"
-	"os"
-	"regexp"
 	"time"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb-binlog/reparo/executor"
-	"github.com/pingcap/tidb-binlog/reparo/translator"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 // Reparo i the main part of the recovery tool.
 type Reparo struct {
-	cfg        *Config
-	translator translator.Translator
-	executor   executor.Executor
+	cfg    *Config
+	syncer syncer.Syncer
 
-	reMap map[string]*regexp.Regexp
+	filter *filter.Filter
 }
 
 // New creates a Reparo object.
 func New(cfg *Config) (*Reparo, error) {
-	reporaExecutor, err := executor.New(cfg.DestType, cfg.DestDB)
+	log.Infof("cfg %+v", cfg)
+
+	syncer, err := syncer.New(cfg.DestType, cfg.DestDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Infof("cfg %+v", cfg)
-	return &Reparo{
-		cfg:        cfg,
-		translator: translator.New(cfg.DestType, false),
-		executor:   reporaExecutor,
-		reMap:      make(map[string]*regexp.Regexp),
-	}, nil
-}
 
-func (r *Reparo) prepare() error {
-	r.GenRegexMap()
-	return nil
+	filter := filter.NewFilter(cfg.IgnoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
+
+	return &Reparo{
+		cfg:    cfg,
+		syncer: syncer,
+		filter: filter,
+	}, nil
 }
 
 // Process runs the main procedure.
 func (r *Reparo) Process() error {
-	if err := r.prepare(); err != nil {
-		return errors.Trace(err)
-	}
-
-	dir := r.cfg.Dir
-	files, err := r.searchFiles(dir)
+	pbReader, err := newDirPbReader(r.cfg.Dir)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "new reader failed dir: %s", r.cfg.Dir)
 	}
+	defer pbReader.close()
 
-	var offset int64
-	for _, file := range files {
-		fd, err := os.OpenFile(file.fullpath, os.O_RDONLY, 0600)
+	for {
+		binlog, err := pbReader.read()
 		if err != nil {
-			return errors.Annotatef(err, "open file %s error", file.fullpath)
-		}
-		defer fd.Close()
+			if errors.Cause(err) == io.EOF {
+				return nil
+			}
 
-		offset += file.offset
-		ret, err := fd.Seek(file.offset, io.SeekStart)
-		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Infof("seek to file %s offset %d got %d", file.fullpath, file.offset, ret)
 
-		br := bufio.NewReader(fd)
+		if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
+			continue
+		}
 
-		for {
-			binlog, length, err := Decode(br)
-			if errors.Cause(err) == io.EOF {
-				fd.Close()
-				log.Infof("read file %s end", file.fullpath)
-				offset = 0
-				break
-			}
-			if err != nil {
-				return errors.Annotatef(err, "decode binlog error")
-			}
-			offset += length
+		ignore, err := filterBinlog(r.filter, binlog)
+		if err != nil {
+			return errors.Annotate(err, "filter binlog failed")
+		}
 
-			sqls, args, isDDL, err := r.Translate(binlog)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if len(sqls) == 0 {
-				continue
-			}
+		if ignore {
+			continue
+		}
 
-			err = r.executor.Execute(sqls, args, isDDL)
-			if err != nil {
-				if !pkgsql.IgnoreDDLError(err) {
-					return errors.Trace(err)
-				}
-				log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", sqls, args, err)
-			}
-
+		err = r.syncer.Sync(binlog, func(binlog *pb.Binlog) {
 			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
-			log.Infof("offset %d ts %d, datetime %s", offset, binlog.CommitTs, dt.String())
+			log.Infof("ts %d, datetime %s", binlog.CommitTs, dt)
+		})
+
+		if err != nil {
+			return errors.Annotate(err, "sync failed")
 		}
 	}
-
-	return nil
 }
 
 // Close closes the Reparo object.
 func (r *Reparo) Close() error {
-	return errors.Trace(r.executor.Close())
+	return errors.Trace(r.syncer.Close())
+}
+
+// may drop some DML event of binlog
+// return true if the whole binlog should be ignored
+func filterBinlog(afilter *filter.Filter, binlog *pb.Binlog) (ignore bool, err error) {
+	switch binlog.Tp {
+	case pb.BinlogType_DDL:
+		var table filter.TableName
+		_, table, err = parseDDL(string(binlog.GetDdlQuery()))
+		if err != nil {
+			return false, errors.Annotatef(err, "parse ddl: %s failed", string(binlog.GetDdlQuery()))
+		}
+
+		if afilter.SkipSchemaAndTable(table.Schema, table.Table) {
+			return true, nil
+		}
+
+		return
+	case pb.BinlogType_DML:
+		var events []pb.Event
+		for _, event := range binlog.DmlData.GetEvents() {
+			if afilter.SkipSchemaAndTable(event.GetSchemaName(), event.GetTableName()) {
+				continue
+			}
+
+			events = append(events, event)
+		}
+
+		binlog.DmlData.Events = events
+		if len(events) == 0 {
+			ignore = true
+		}
+		return
+	default:
+		return false, errors.Errorf("unknown type: %d", binlog.Tp)
+	}
+}
+
+func isAcceptableBinlog(binlog *pb.Binlog, startTs, endTs int64) bool {
+	return binlog.CommitTs >= startTs && (endTs == 0 || binlog.CommitTs <= endTs)
 }

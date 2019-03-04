@@ -135,14 +135,12 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 						log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
 					}
 
-					if skipJob(job) {
-						break
-					} else {
+					if !skipJob(job) {
 						item.SetJob(job)
 						c.syncer.Add(item)
 						ddlJobsCounter.Add(float64(1))
-						break
 					}
+					break
 				}
 			} else {
 				c.syncer.Add(item)

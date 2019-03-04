@@ -9,6 +9,7 @@ import (
 )
 
 // Decode decodes binlog from protobuf content.
+// return *pb.Binlog and how many bytes read from reader
 func Decode(r io.Reader) (*pb.Binlog, int64, error) {
 	payload, length, err := binlogfile.Decode(r)
 	if err != nil {

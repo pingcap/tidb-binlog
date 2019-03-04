@@ -15,6 +15,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -51,7 +52,7 @@ type Syncer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	filter *filter
+	filter *filter.Filter
 
 	causality *loader.Causality
 
@@ -70,7 +71,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
 	syncer.lastSyncTime = time.Now()
-	syncer.filter = newFilter(formatIgnoreSchemas(cfg.IgnoreSchemas), cfg.DoDBs, cfg.DoTables)
+	syncer.filter = filter.NewFilter(strings.Split(cfg.IgnoreSchemas, ","), nil, cfg.DoDBs, cfg.DoTables)
 
 	return syncer, nil
 }
@@ -358,9 +359,9 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 					if !pkgsql.IgnoreDDLError(err) {
 						// FIXME more friendly quit, like update the state in pd before quit
 						log.Fatalf(errors.ErrorStack(err))
-					} else {
-						log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 					}
+
+					log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 				}
 				s.addDDLCount()
 				clearF()
@@ -505,7 +506,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Trace(err)
 			}
 
-			if s.filter.skipSchemaAndTable(schema, table) {
+			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d", schema, table, sql, commitTS)
 			} else if sql != "" {
 				sql, err = s.translator.GenDDLSQL(sql, schema, commitTS)
@@ -543,7 +544,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			return errors.Errorf("not found table id: %d", mutation.GetTableId())
 		}
 
-		if s.filter.skipSchemaAndTable(schemaName, tableName) {
+		if s.filter.SkipSchemaAndTable(schemaName, tableName) {
 			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
 			continue
 		}
