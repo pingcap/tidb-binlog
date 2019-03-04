@@ -10,6 +10,7 @@ This folder contains all tests which relies on external service such as TiDB.
    - `bin/tikv-server`
    - `bin/tidb-server`
    - `bin/binlogctl`
+   - `bin/sync_diff_inspector`
 
 2. The following programs must be installed:
 
