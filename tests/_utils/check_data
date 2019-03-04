@@ -1,0 +1,10 @@
+#!/bin/sh
+
+OUT_DIR=/tmp/tidb_binlog_test
+
+CONFIG_FILE=$1
+sync_diff_inspector -config=$CONFIG_FILE > $OUT_DIR/diff.log 2>&1
+if [ $? -ne 0 ]; then
+        cat $OUT_DIR/diff.log
+        exit 1
+fi
