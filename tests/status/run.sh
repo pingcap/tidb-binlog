@@ -10,6 +10,7 @@ STATUS_LOG="${OUT_DIR}/status.log"
 
 # run drainer, and drainer's status should be online
 run_drainer &
+sleep 2
 echo "check drainer's status, should be online"
 check_status drainers online
 
