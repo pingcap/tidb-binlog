@@ -20,7 +20,7 @@ sleep 5
 
 run_reparo &
 
-sleep 5
+sleep 15
 
 check_data ./sync_diff_inspector.toml 
 
