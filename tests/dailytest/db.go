@@ -373,11 +373,11 @@ func closeDBs(dbs []*sql.DB) {
 func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
-	timeout := time.After(time.Second * 120)
+	timeout := time.After(time.Second * 180)
 
 	for {
 		select {
-		case <-time.Tick(time.Millisecond * 100):
+		case <-time.Tick(time.Second):
 			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
