@@ -115,7 +115,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// write one record
-	recordLen, err = encodeRecord(lf.fd, payload)
+	_, err = encodeRecord(lf.fd, payload)
 	c.Assert(err, check.IsNil)
 
 	// should get the later one record write
@@ -161,8 +161,7 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 
 		// truncate half of records
 		if idx%2 == 0 {
-			var truncateBytes int
-			truncateBytes = rand.Intn(n) + 1
+			truncateBytes := rand.Intn(n) + 1
 			c.Log("truncate: ", truncateBytes)
 			size -= truncateBytes
 			err := lf.fd.Truncate(int64(size))
@@ -180,6 +179,7 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 
 	rd := bufio.NewReader(io.NewSectionReader(lf.fd, 0, int64(size)))
 	data, err := ioutil.ReadAll(rd)
+	c.Assert(err, check.IsNil)
 	c.Log(data)
 
 	c.Assert(scanBackPayloads, check.DeepEquals, expectPayloads, check.Commentf("payloads: %x", payloads))

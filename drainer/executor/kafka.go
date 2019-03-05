@@ -19,11 +19,10 @@ import (
 var maxWaitTimeToSendMSG = time.Second * 30
 
 type kafkaExecutor struct {
-	addr      []string
-	version   string
-	clusterID string
-	producer  sarama.AsyncProducer
-	topic     string
+	addr     []string
+	version  string
+	producer sarama.AsyncProducer
+	topic    string
 
 	meta *checkpoint.KafkaMeta
 

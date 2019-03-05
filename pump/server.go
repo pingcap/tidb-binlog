@@ -40,14 +40,7 @@ var notifyDrainerTimeout = time.Second * 10
 var GlobalConfig *globalConfig
 
 const (
-	mib           = 1024 * 1024
 	pdReconnTimes = 30
-)
-
-// use latestPos and latestTS to record the latest binlog position and ts the pump works on
-var (
-	latestFilePos binlog.Pos
-	latestTS      int64
 )
 
 // Server implements the gRPC interface,
@@ -86,10 +79,7 @@ func init() {
 	// it must be set before any real grpc operation.
 	grpc.EnableTracing = false
 	GlobalConfig = &globalConfig{
-		maxMsgSize:        defautMaxKafkaSize,
-		segmentSizeBytes:  defaultSegmentSizeBytes,
-		SlicesSize:        defaultBinlogSliceSize,
-		sendKafKaRetryNum: defaultSendKafKaRetryNum,
+		maxMsgSize: defautMaxKafkaSize,
 	}
 }
 
@@ -697,8 +687,6 @@ func (s *Server) getTSO() (int64, error) {
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	// update latestTS by the way
-	latestTS = ts
 
 	return ts, nil
 }

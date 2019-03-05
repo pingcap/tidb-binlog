@@ -2,21 +2,20 @@ package executor
 
 import (
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb-binlog/pump"
-	tb "github.com/pingcap/tipb/go-binlog"
 )
 
 type pbExecutor struct {
 	dir       string
-	binlogger pump.Binlogger
+	binlogger binlogfile.Binlogger
 	*baseError
 }
 
 func newPB(cfg *DBConfig) (Executor, error) {
 	codec := compress.ToCompressionCodec(cfg.Compression)
-	binlogger, err := pump.OpenBinlogger(cfg.BinlogFileDir, codec)
+	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, codec)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -60,8 +59,6 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
-	_, err = p.binlogger.WriteTail(&tb.Entity{
-		Payload: data,
-	})
+	_, err = p.binlogger.WriteTail(data)
 	return errors.Trace(err)
 }

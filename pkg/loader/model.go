@@ -102,10 +102,6 @@ func (dml *DML) formatKey() string {
 	return formatKey(dml.primaryKeyValues())
 }
 
-func (dml *DML) formatOldKey() string {
-	return formatKey(dml.oldPrimaryKeyValues())
-}
-
 func (dml *DML) updateKey() bool {
 	if len(dml.OldValues) == 0 {
 		return false
