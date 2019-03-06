@@ -2,25 +2,26 @@
 
 set -ue
 
+PORT=${1-8250}
+
 OUT_DIR=/tmp/tidb_binlog_test
 
 # kill pump, util no pump process is running
 while :
 do
-        pump_num=`ps aux > temp && grep "pump -log-file" temp | wc -l && rm temp`
+        pump_num=`ps aux > temp && grep "pump -log-file ${OUT_DIR}/pump_${PORT}.log" temp | wc -l && rm temp`
         if [ $pump_num -ne 0 ]; then
-                killall pump || true
+                binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump:$PORT	
                 sleep 1
         else
                 break
         fi
 done
 
-echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump.log"
+echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump_$PORT.log"
 
-
-pump  -log-file $OUT_DIR/pump.log --addr=0.0.0.0:8250 \
-	--advertise-addr=localhost:8250 \
-	--pd-urls=http://localhost:2379 \
-	--data-dir=$OUT_DIR/pump \
-	--node-id=pump1:8215 >> $OUT_DIR/pump.log 2>&1
+pump -log-file $OUT_DIR/pump_$PORT.log --addr=0.0.0.0:$PORT \
+        --advertise-addr=127.0.0.1:$PORT \
+        --pd-urls=http://127.0.0.1:2379 \
+        --data-dir=$OUT_DIR/pump_$PORT \
+        --node-id=pump:$PORT >> $OUT_DIR/pump_$PORT.log 2>&1
