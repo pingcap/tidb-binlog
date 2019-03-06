@@ -35,11 +35,11 @@ echo "after kill insert, check data"
 i=0
 while ! check_data ./sync_diff_inspector.toml; do
     i=$((i+1))
-        if [ "$i" -gt 20 ]; then
-            echo 'data is not equal'
-            exit 1
-        fi
-        sleep 2
+    if [ "$i" -gt 20 ]; then
+        echo 'data is not equal'
+        exit 1
+    fi
+    sleep 2
 done
 
 echo "data is equal"
