@@ -10,12 +10,14 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
 	datetimeFormat = "20060102150405"
+
+	// Version is the binlog file's version
+	Version = "v2"
 )
 
 var (
@@ -158,6 +160,8 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		// backward compatibility
 		// binlog file format like: binlog-0000000000000001
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
+	default:
+		return 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
 	}
 
 	return index, errors.Trace(err)
@@ -167,7 +171,7 @@ func ParseBinlogName(str string) (index uint64, err error) {
 // if ts is 0, will use a ts transfored from now's time.
 func BinlogName(index uint64, ts int64) string {
 	if ts == 0 {
-		ts = int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+		return binlogName(index)
 	}
 
 	// transfor ts to rough time
@@ -175,11 +179,14 @@ func BinlogName(index uint64, ts int64) string {
 	return binlogNameWithDateTime(index, t)
 }
 
-// binlogNameWithDateTime creates a binlog file name.
+// binlogName creates a binlog file name with index
+func binlogName(index uint64) string {
+	return fmt.Sprintf("binlog-%016d", index)
+}
+
+// binlogNameWithDateTime creates a binlog file name with version, index and datetime
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	// version.ReleaseVersion looks like "v1.1-97-gca98789-dirty", it is too long, just need use the prefix
-	versionItems := strings.Split(version.ReleaseVersion, "-")
-	return fmt.Sprintf("binlog-%s-%016d-%s", versionItems[0], index, datetime.Format(datetimeFormat))
+	return fmt.Sprintf("binlog-%s-%016d-%s", Version, index, datetime.Format(datetimeFormat))
 }
 
 // FormatDateTimeStr formate datatime string to standard format like "2018-10-01T01:01:01"

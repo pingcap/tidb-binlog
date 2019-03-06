@@ -12,7 +12,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
 func TestClient(t *testing.T) {
@@ -120,5 +119,5 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	c.Assert(err, IsNil)
 
 	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", version.ReleaseVersion, datetimeStr))
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-%s-0000000000000001-%s", Version, datetimeStr))
 }

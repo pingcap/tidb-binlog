@@ -12,7 +12,7 @@ var (
 	// BuildTS and BuildTS will be set during make
 	BuildTS = "Not provided (use make build instead of go build)"
 	// ReleaseVersion will be set during make, default value is v1.0
-	ReleaseVersion = "v1.0"
+	ReleaseVersion = "Not provided (use make build instead of go build)"
 )
 
 // PrintVersionInfo show version info to Stdout
