@@ -52,12 +52,7 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 			return nil, errors.Trace(err)
 		}
 
-		if ts < r.cfg.StartTSO {
-			latestBinlogFile = file
-			continue
-		}
-
-		if ts == r.cfg.StartTSO {
+		if ts <= r.cfg.StartTSO {
 			latestBinlogFile = file
 			continue
 		}

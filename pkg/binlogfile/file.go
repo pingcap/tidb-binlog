@@ -152,13 +152,9 @@ func ParseBinlogName(str string) (index uint64, err error) {
 	case 4:
 		// binlog file format like: binlog-v2.1-0000000000000001-20181010101010
 		_, err = fmt.Sscanf(items[2], "%016d", &index)
-	case 3:
+	case 2, 3:
 		// backward compatibility
-		// binlog file format like: binlog-0000000000000001-20181010101010
-		_, err = fmt.Sscanf(items[1], "%016d", &index)
-	case 2:
-		// backward compatibility
-		// binlog file format like: binlog-0000000000000001
+		// binlog file format like: binlog-0000000000000001-20181010101010 or binlog-0000000000000001
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
 	default:
 		return 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
