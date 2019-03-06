@@ -174,7 +174,7 @@ func BinlogName(index uint64, ts int64) string {
 		return binlogName(index)
 	}
 
-	// transfor ts to rough time
+	// transform ts to rough time
 	t := time.Unix(oracle.ExtractPhysical(uint64(ts))/1000, 0)
 	return binlogNameWithDateTime(index, t)
 }
