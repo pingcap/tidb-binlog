@@ -69,8 +69,8 @@ type binlogger struct {
 	mutex   sync.Mutex
 }
 
-// OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+// CreateBinlogger returns a binlogger for write, then it can be appended, if fileName is not empty, will use this file, otherwise will find a valide file under this dirpath.
+func CreateBinlogger(dirpath string, fileName string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -99,24 +99,30 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		}
 	}()
 
-	// ignore file not found error
-	names, _ := bf.ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog-0000000000000000
-	if len(names) == 0 {
-		// create a binlog file with ts = 0
-		lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
+	if len(fileName) != 0 {
+		lastFileName = path.Join(dirpath, fileName)
 		lastFileSuffix = 0
-	} else {
-		// check binlog files and find last binlog file
-		if !bf.IsValidBinlog(names) {
-			err = ErrFileContentCorruption
-			return nil, errors.Trace(err)
-		}
 
-		lastFileName = path.Join(dirpath, names[len(names)-1])
-		lastFileSuffix, err = bf.ParseBinlogName(names[len(names)-1])
-		if err != nil {
-			return nil, errors.Trace(err)
+	} else {
+		// ignore file not found error
+		names, _ := bf.ReadBinlogNames(dirpath)
+		// if no binlog files, we create from binlog-0000000000000000
+		if len(names) == 0 {
+			// create a binlog file with ts = 0
+			lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
+			lastFileSuffix = 0
+		} else {
+			// check binlog files and find last binlog file
+			if !bf.IsValidBinlog(names) {
+				err = ErrFileContentCorruption
+				return nil, errors.Trace(err)
+			}
+
+			lastFileName = path.Join(dirpath, names[len(names)-1])
+			lastFileSuffix, err = bf.ParseBinlogName(names[len(names)-1])
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 
@@ -146,48 +152,14 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	return binlog, nil
 }
 
+// OpenBinlogger returns a binlogger for write, then it can be appended
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+	return CreateBinlogger(dirpath, "", codec)
+}
+
 // CloseBinlogger closes the binlogger
 func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
-}
-
-// CreateBinloggerForTest creates a Binlogger just for test.
-func CreateBinloggerForTest(dirpath, filename string) (Binlogger, error) {
-	var (
-		err     error
-		dirLock *file.LockedFile
-		f       *file.LockedFile
-	)
-
-	// lock directory firstly
-	dirLockFile := path.Join(dirpath, ".lock")
-	dirLock, err = file.LockFile(dirLockFile, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err != nil && dirLock != nil {
-			if err1 := dirLock.Close(); err1 != nil {
-				log.Errorf("failed to unlock directory %s: %v with return error %v", dirpath, err1, err)
-			}
-		}
-	}()
-
-	fullFilename := path.Join(dirpath, filename)
-	f, err = file.TryLockFile(fullFilename, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	binlog := &binlogger{
-		dir:     dirpath,
-		file:    f,
-		encoder: newEncoder(f, compress.CompressionNone),
-		codec:   compress.CompressionNone,
-		dirLock: dirLock,
-	}
-
-	return binlog, nil
 }
 
 // ReadFrom reads `nums` binlogs from the given binlog position

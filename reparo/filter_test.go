@@ -12,6 +12,7 @@ import (
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 	gb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -233,7 +234,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFileOld(c *C) {
 		c.Assert(err, IsNil)
 
 		// generate binlog file by old version's format.
-		binloger, err := pump.CreateBinloggerForTest(binlogDir, fmt.Sprintf("binlog-000000000000000%d-20180101010101", i))
+		binloger, err := pump.CreateBinlogger(binlogDir, fmt.Sprintf("binlog-000000000000000%d-20180101010101", i), compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
 		err = binloger.Close()

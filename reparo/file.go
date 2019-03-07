@@ -76,12 +76,7 @@ func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 	// old version's binlog file looks like binlog-00000000000000001-20180101010101
 	// new version's binlog file looks like binlog-v2-00000000000000001-20180101010101
 	if len(fileNameItems) == 4 {
-		timeStr, err := bf.FormatDateTimeStr(fileNameItems[3])
-		if err != nil {
-			return 0, errors.Annotatef(err, "analyse binlog file name error")
-		}
-
-		t, err := time.ParseInLocation("2006-01-02T15:04:05", timeStr, time.Local)
+		t, err := time.ParseInLocation("20060102150405", fileNameItems[3], time.Local)
 		if err != nil {
 			return 0, errors.Annotatef(err, "analyse binlog file name error")
 		}
