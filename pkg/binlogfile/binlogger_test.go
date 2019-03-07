@@ -54,7 +54,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	c.Assert(ok, IsTrue)
 	b.rotate()
 
-	_, err = bl.WriteTail([]byte("binlogtest"))
+	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 	bl.Close()
 
@@ -71,7 +71,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	curOffset, err := curFile.Seek(0, io.SeekCurrent)
 	c.Assert(err, IsNil)
 
-	_, err = b.WriteTail([]byte("binlogtest"))
+	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
 
 	nowOffset, err := curFile.Seek(0, io.SeekCurrent)
@@ -91,7 +91,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	payload := []byte("binlogtest")
 
-	_, err = bl.WriteTail(payload)
+	_, err = bl.WriteTail(&binlog.Entity{Payload: payload})
 	c.Assert(err, IsNil)
 
 	b, ok := bl.(*binlogger)
@@ -101,7 +101,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(path.Base(b.file.Name()), Equals, BinlogName(1))
 
-	_, err = bl.WriteTail(payload)
+	_, err = bl.WriteTail(&binlog.Entity{Payload: payload})
 	c.Assert(err, IsNil)
 
 	bl.Close()
@@ -137,7 +137,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 
 	for i := 0; i < 10; i++ {
 		for i := 0; i < 20; i++ {
-			_, err = bl.WriteTail([]byte("binlogtest"))
+			_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 			c.Assert(err, IsNil)
 		}
 
@@ -179,7 +179,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 
 	for i := 0; i < 3; i++ {
 		for i := 0; i < 4; i++ {
-			_, err = bl.WriteTail([]byte("binlogtest"))
+			_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 			c.Assert(err, IsNil)
 		}
 
@@ -287,7 +287,7 @@ func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 
 	for i := 0; i < 10; i++ {
 		for i := 0; i < 20; i++ {
-			_, err = bl.WriteTail([]byte("binlogtest"))
+			_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 			c.Assert(err, IsNil)
 
 			_, err = b.file.Write([]byte("test"))

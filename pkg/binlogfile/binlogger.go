@@ -38,7 +38,7 @@ type Binlogger interface {
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// batch write binlog event, and returns current offset(if have).
-	WriteTail(payload []byte) (int64, error)
+	WriteTail(entity *binlog.Entity) (int64, error)
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
 	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error
@@ -332,8 +332,9 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(payload []byte) (int64, error) {
+func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	beginTime := time.Now()
+	payload := entity.Payload
 	defer func() {
 		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
