@@ -1,15 +1,12 @@
-package pump
+package binlogfile
 
 import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
-	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tipb/go-binlog"
 )
 
 var magic uint32 = 471532804
@@ -20,23 +17,25 @@ var magic uint32 = 471532804
 
 // Encoder is an interface wraps basic Encode method which encodes payload and write it, and returns offset.
 type Encoder interface {
-	Encode(entity *binlog.Entity) (int64, error)
+	Encode(payload []byte) (int64, error)
 }
 
 type encoder struct {
-	bw    io.Writer
-	codec compress.CompressionCodec
+	bw     io.Writer
+	codec  compress.CompressionCodec
+	offset int64
 }
 
-func newEncoder(w io.Writer, codec compress.CompressionCodec) Encoder {
+func NewEncoder(w io.Writer, initOffset int64, codec compress.CompressionCodec) Encoder {
 	return &encoder{
-		bw:    w,
-		codec: codec,
+		bw:     w,
+		codec:  codec,
+		offset: initOffset,
 	}
 }
 
-func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
-	data := encode(entity.Payload)
+func (e *encoder) Encode(payload []byte) (int64, error) {
+	data := Encode(payload)
 
 	data, err := compress.Compress(data, e.codec)
 	if err != nil {
@@ -47,18 +46,12 @@ func (e *encoder) Encode(entity *binlog.Entity) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	if file, ok := e.bw.(*pkgfile.LockedFile); ok {
-		curOffset, err := file.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		return curOffset, nil
-	}
-	log.Warn("bw is not *file.Lockedfile, unexpected!")
-	return 0, errors.Trace(err)
+	e.offset += int64(len(data))
+
+	return e.offset, nil
 }
 
-func encode(payload []byte) []byte {
+func Encode(payload []byte) []byte {
 	crc := crc32.Checksum(payload, crcTable)
 
 	// length count payload

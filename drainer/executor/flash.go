@@ -217,7 +217,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 			sql := sqls[i]
 			args := row[1:]
 			if _, ok := e.rowBatches[sql]; !ok {
-				e.rowBatches[sql] = make([]*flashRowBatch, len(e.dbs), len(e.dbs))
+				e.rowBatches[sql] = make([]*flashRowBatch, len(e.dbs))
 			}
 			if e.rowBatches[sql][hashKey] == nil {
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)

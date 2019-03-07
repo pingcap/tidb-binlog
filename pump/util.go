@@ -1,18 +1,14 @@
 package pump
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"strings"
 	"sync/atomic"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	binlog "github.com/pingcap/tipb/go-binlog"
 )
 
 // AtomicBool is bool type that support atomic operator
@@ -73,77 +69,4 @@ func TopicName(clusterID string, nodeID string) string {
 	// ":" is not valide in kafka topic name
 	topicName := fmt.Sprintf("%s_%s", clusterID, strings.Replace(nodeID, ":", "_", -1))
 	return topicName
-}
-
-// ComparePos compares the two positions of binlog items, return 0 when the left equal to the right,
-// return -1 if the left is ahead of the right, oppositely return 1.
-func ComparePos(left, right binlog.Pos) int {
-	if left.Suffix < right.Suffix {
-		return -1
-	} else if left.Suffix > right.Suffix {
-		return 1
-	} else if left.Offset < right.Offset {
-		return -1
-	} else if left.Offset > right.Offset {
-		return 1
-	} else {
-		return 0
-	}
-}
-
-func initializeSaramaGlobalConfig() {
-	sarama.MaxRequestSize = int32(GlobalConfig.maxMsgSize)
-}
-
-// combine suffix offset in one float
-func posToFloat(pos *binlog.Pos) float64 {
-	return float64(pos.Suffix)*float64(GlobalConfig.segmentSizeBytes*10) + float64(pos.Offset)
-}
-
-// use magic code to find next binlog and skips corruption data
-// seekBinlog seeks one binlog from current offset
-func seekBinlog(f *os.File, offset int64) (int64, error) {
-	var (
-		batchSize    = 1024
-		headerLength = 3 // length of magic code - 1
-		tailLength   = batchSize - headerLength
-		buff         = make([]byte, batchSize)
-		header       = buff[0:headerLength]
-		tail         = buff[headerLength:]
-	)
-
-	_, err := f.Seek(offset, io.SeekStart)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	// read header firstly
-	_, err = io.ReadFull(f, header)
-	if err != nil {
-		return 0, err
-	}
-
-	for {
-		// read tail
-		n, err := io.ReadFull(f, tail)
-		// maybe it meets EOF and dont read fully
-		for i := 0; i < n; i++ {
-			// forward one byte and compute magic
-			magicNum := binary.LittleEndian.Uint32(buff[i : i+4])
-			if checkMagic(magicNum) == nil {
-				offset = offset + int64(i)
-				if _, err1 := f.Seek(offset, io.SeekStart); err1 != nil {
-					return 0, errors.Trace(err1)
-				}
-				return offset, nil
-			}
-		}
-		if err != nil {
-			return 0, err
-		}
-
-		// hard code
-		offset += int64(tailLength)
-		header[0], header[1], header[2] = tail[tailLength-3], tail[tailLength-2], tail[tailLength-1]
-	}
 }
