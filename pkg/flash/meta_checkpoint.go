@@ -81,7 +81,7 @@ func (f *MetaCheckpoint) PushPendingCP(commitTS int64, pos map[string]pb.Pos) {
 	// Deep copy the pos.
 	newPos := make(map[string]pb.Pos)
 	for node, poss := range pos {
-		newPos[node] = pb.Pos{poss.Suffix, poss.Offset}
+		newPos[node] = pb.Pos{Suffix: poss.Suffix, Offset: poss.Offset}
 	}
 	f.pendingCPs = append(f.pendingCPs, &checkpoint{commitTS, newPos})
 

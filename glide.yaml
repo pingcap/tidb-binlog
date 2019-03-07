@@ -201,7 +201,7 @@ import:
   - util/sqlexec
   - util/stringutil
 - package: github.com/pingcap/tipb
-  version: 4141907f6909f62af0378aa1c891c46f34aed0a7
+  version: aa146c1ab9bb2b7ec5e00e8904aa95465f3f106b
   subpackages:
   - go-binlog
   - go-tipb
@@ -302,5 +302,5 @@ testImports:
   version: v1.4.0
 - package: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
-- package: github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto
-  version: 347725a566f4a7d897aa0d6addb710c77395c640
+- package: github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto
+  version: 515a74c8fb267b68e74c1148284e910e3f7b5530
