@@ -233,6 +233,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 			var payload []byte
 			var offset int64
+			beginTime := time.Now()
 			payload, offset, err = decoder.Decode()
 
 			if err != nil {
@@ -245,6 +246,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 				// seek next binlog and report metrics
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
+					corruptionBinlogCounter.Add(1)
 					log.Errorf("decode %+v binlog error %v", from, err)
 					// offset + 1 to skip magic code of current binlog
 					offset, err1 := seekBinlog(f, from.Offset+1)
@@ -261,6 +263,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				}
 				break
 			}
+			readBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
 
 			from.Offset = offset
 
@@ -330,6 +333,12 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 // Writes appends the binlog
 // if size of current file is bigger than SegmentSizeBytes, then rotate a new file
 func (b *binlogger) WriteTail(payload []byte) (int64, error) {
+	beginTime := time.Now()
+	defer func() {
+		writeBinlogHistogram.WithLabelValues("local").Observe(time.Since(beginTime).Seconds())
+		writeBinlogSizeHistogram.WithLabelValues("local").Observe(float64(len(payload)))
+	}()
+
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
