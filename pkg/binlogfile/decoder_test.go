@@ -1,12 +1,14 @@
-package pump
+package binlogfile
 
 import (
 	"bytes"
 	"io"
+	"testing"
 
 	"github.com/pingcap/check"
-	binlog "github.com/pingcap/tipb/go-binlog"
 )
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 type decoderSuite struct{}
 
@@ -16,22 +18,19 @@ func (s *decoderSuite) TestDecode(c *check.C) {
 	buf := new(bytes.Buffer)
 
 	// write one record
-	_, err := buf.Write(encode([]byte("payload")))
+	_, err := buf.Write(Encode([]byte("payload")))
 	c.Assert(err, check.IsNil)
 
-	var ent binlog.Entity
-	binlogBuffer := new(binlogBuffer)
-
-	decoder := NewDecoder(binlog.Pos{}, buf)
+	decoder := NewDecoder(buf, 0)
 
 	// read the record back and check
-	err = decoder.Decode(&ent, binlogBuffer)
+	payload, _, err := decoder.Decode()
 	c.Assert(err, check.IsNil)
-	c.Assert(ent.Payload, check.BytesEquals, []byte("payload"))
+	c.Assert(payload, check.BytesEquals, []byte("payload"))
 
 	// only one byte will reach io.ErrUnexpectedEOF error
 	err = buf.WriteByte(1)
 	c.Assert(err, check.IsNil)
-	err = decoder.Decode(&ent, binlogBuffer)
+	_, _, err = decoder.Decode()
 	c.Assert(err, check.Equals, io.ErrUnexpectedEOF)
 }

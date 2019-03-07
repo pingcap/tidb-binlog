@@ -143,9 +143,7 @@ func (r *runner) close() {
 }
 
 func createTable(db *sql.DB, loader *Loader) error {
-	var sql string
-
-	sql = "create table test1(id int primary key, a1 int)"
+	sql := "create table test1(id int primary key, a1 int)"
 	// sql = "create table test1(id int, a1 int, UNIQUE KEY `id` (`id`))"
 	loader.Input() <- NewDDLTxn("test", "test1", sql)
 
