@@ -5,13 +5,10 @@ import (
 	"io"
 	"os"
 	"path"
-	"strings"
-	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type binlogFile struct {
@@ -71,19 +68,6 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 }
 
 func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
-	fileNameItems := strings.Split(filename, "-")
-
-	// old version's binlog file looks like binlog-00000000000000001-20180101010101
-	// new version's binlog file looks like binlog-v2-00000000000000001-20180101010101
-	if len(fileNameItems) == 4 {
-		t, err := time.ParseInLocation("20060102150405", fileNameItems[3], time.Local)
-		if err != nil {
-			return 0, errors.Annotatef(err, "analyse binlog file name error")
-		}
-
-		return int64(oracle.ComposeTS(t.Unix()*1000, 0)), nil
-	}
-
 	fd, err := os.OpenFile(path.Join(r.cfg.Dir, filename), os.O_RDONLY, 0600)
 	if err != nil {
 		return 0, errors.Annotatef(err, "open file %s error", filename)

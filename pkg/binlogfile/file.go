@@ -184,4 +184,3 @@ func binlogName(index uint64) string {
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
 	return fmt.Sprintf("binlog-%s-%016d-%s", Version, index, datetime.Format(datetimeFormat))
 }
-
