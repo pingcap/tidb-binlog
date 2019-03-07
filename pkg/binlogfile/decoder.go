@@ -93,6 +93,9 @@ func Decode(r io.Reader) (payload []byte, length int64, err error) {
 	data := make([]byte, size+4)
 	// read payload+crc
 	if _, err = io.ReadFull(r, data); err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
 		return
 	}
 	payload = data[:size]

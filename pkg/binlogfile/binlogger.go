@@ -29,7 +29,7 @@ var (
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-	segmentSizeBytes = 512 * 1024 * 1024
+	segmentSizeBytes int64 = 512 * 1024 * 1024
 )
 
 // Binlogger is the interface that for append and read binlog
@@ -345,7 +345,7 @@ func (b *binlogger) WriteTail(payload []byte) (int64, error) {
 
 	b.lastOffset = curOffset
 
-	if curOffset < int64(segmentSizeBytes) {
+	if curOffset < segmentSizeBytes {
 		return curOffset, nil
 	}
 

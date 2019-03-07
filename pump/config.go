@@ -100,12 +100,9 @@ func NewConfig() *Config {
 	// global config
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
 	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
-	var dumpI64 int64
-	fs.Int64Var(&dumpI64, "binlog-file-size", 0, "DEPRECATED")
-	var dumpBool bool
-	fs.BoolVar(&dumpBool, "enable-binlog-slice", false, "DEPRECATED")
-	var dumpInt int
-	fs.IntVar(&dumpInt, "binlog-slice-size", 0, "DEPRECATED")
+	fs.Int64Var(new(int64), "binlog-file-size", 0, "DEPRECATED")
+	fs.BoolVar(new(bool), "enable-binlog-slice", false, "DEPRECATED")
+	fs.IntVar(new(int), "binlog-slice-size", 0, "DEPRECATED")
 
 	return cfg
 }
