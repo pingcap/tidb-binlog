@@ -179,3 +179,8 @@ func (k *kafkaBinloger) GC(days time.Duration, pos binlog.Pos) {}
 func (k *kafkaBinloger) Name() string {
 	return strings.Join(k.addr, ",")
 }
+
+// Rotate implements the Binlogger interface.
+func (k *kafkaBinloger) Rotate(int64) error {
+	return nil
+}

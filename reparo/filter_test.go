@@ -1,9 +1,6 @@
 package repora
 
 import (
-	"fmt"
-	"io/ioutil"
-	"os"
 	"testing"
 	"time"
 
@@ -84,8 +81,6 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 	// we can get the first binlog's commit ts by decode data in binlog file.
 	binlogDir := c.MkDir()
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(binlogDir)
 
 	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 
@@ -98,9 +93,10 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		c.Assert(err, IsNil)
 
 		// generate binlog file.
-		binloger, err := pump.CreateBinlogger(binlogDir, fmt.Sprintf("binlog-%016d-20180101010101", i), compress.CompressionNone)
+		binloger, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
+		binloger.Rotate(0)
 		err = binloger.Close()
 		c.Assert(err, IsNil)
 	}

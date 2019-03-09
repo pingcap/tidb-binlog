@@ -51,6 +51,9 @@ type Binlogger interface {
 
 	// Name tells the name of underlying file
 	Name() string
+
+	// Rotate rotates binlog file
+	Rotate(ts int64) error
 }
 
 // binlogger is a logical representation of the log storage
@@ -69,8 +72,8 @@ type binlogger struct {
 	mutex   sync.Mutex
 }
 
-// CreateBinlogger returns a binlogger for write, then it can be appended, if fileName is not empty, will use this file, otherwise will find a valide file under this dirpath.
-func CreateBinlogger(dirpath string, fileName string, codec compress.CompressionCodec) (Binlogger, error) {
+// OpenBinlogger returns a binlogger for write, then it can be appended
+func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -99,30 +102,24 @@ func CreateBinlogger(dirpath string, fileName string, codec compress.Compression
 		}
 	}()
 
-	if len(fileName) != 0 {
-		lastFileName = path.Join(dirpath, fileName)
+	// ignore file not found error
+	names, _ := bf.ReadBinlogNames(dirpath)
+	// if no binlog files, we create from binlog-0000000000000000
+	if len(names) == 0 {
+		// create a binlog file with ts = 0
+		lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
 		lastFileSuffix = 0
-
 	} else {
-		// ignore file not found error
-		names, _ := bf.ReadBinlogNames(dirpath)
-		// if no binlog files, we create from binlog-0000000000000000
-		if len(names) == 0 {
-			// create a binlog file with ts = 0
-			lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
-			lastFileSuffix = 0
-		} else {
-			// check binlog files and find last binlog file
-			if !bf.IsValidBinlog(names) {
-				err = ErrFileContentCorruption
-				return nil, errors.Trace(err)
-			}
+		// check binlog files and find last binlog file
+		if !bf.IsValidBinlog(names) {
+			err = ErrFileContentCorruption
+			return nil, errors.Trace(err)
+		}
 
-			lastFileName = path.Join(dirpath, names[len(names)-1])
-			lastFileSuffix, err = bf.ParseBinlogName(names[len(names)-1])
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+		lastFileName = path.Join(dirpath, names[len(names)-1])
+		lastFileSuffix, err = bf.ParseBinlogName(names[len(names)-1])
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 
@@ -150,11 +147,6 @@ func CreateBinlogger(dirpath string, fileName string, codec compress.Compression
 	}
 
 	return binlog, nil
-}
-
-// OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
-	return CreateBinlogger(dirpath, "", codec)
 }
 
 // CloseBinlogger closes the binlogger
@@ -377,7 +369,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate(entity.Meta.CommitTs)
+	err = b.Rotate(entity.Meta.CommitTs)
 	return curOffset, errors.Trace(err)
 }
 
@@ -413,8 +405,8 @@ func (b *binlogger) Name() string {
 	return b.file.Name()
 }
 
-// rotate creates a new file for append binlog
-func (b *binlogger) rotate(ts int64) error {
+// Rotate creates a new file for append binlog
+func (b *binlogger) Rotate(ts int64) error {
 	if ts != 0 {
 		// should use a bigger ts as the start for the new binlog file
 		ts++
