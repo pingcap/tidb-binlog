@@ -15,9 +15,6 @@ import (
 
 const (
 	datetimeFormat = "20060102150405"
-
-	// Version is the binlog file's version
-	Version = "v2"
 )
 
 var (
@@ -149,9 +146,6 @@ func ParseBinlogName(str string) (index uint64, err error) {
 
 	items := strings.Split(str, "-")
 	switch len(items) {
-	case 4:
-		// binlog file format like: binlog-v2.1-0000000000000001-20181010101010
-		_, err = fmt.Sscanf(items[2], "%016d", &index)
 	case 2, 3:
 		// backward compatibility
 		// binlog file format like: binlog-0000000000000001-20181010101010 or binlog-0000000000000001
@@ -163,7 +157,7 @@ func ParseBinlogName(str string) (index uint64, err error) {
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-v2.1.0-0000000000000001-20180101010101
+// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20180101010101
 // if ts is 0, will return file name like binlog-0000000000000001
 func BinlogName(index uint64, ts int64) string {
 	if ts == 0 {
@@ -180,7 +174,7 @@ func binlogName(index uint64) string {
 	return fmt.Sprintf("binlog-%016d", index)
 }
 
-// binlogNameWithDateTime creates a binlog file name with version, index and datetime
+// binlogNameWithDateTime creates a binlog file name with index and datetime
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%s-%016d-%s", Version, index, datetime.Format(datetimeFormat))
+	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
 }

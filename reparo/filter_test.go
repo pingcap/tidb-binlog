@@ -98,7 +98,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		c.Assert(err, IsNil)
 
 		// generate binlog file.
-		binloger, err := pump.CreateBinlogger(binlogDir, fmt.Sprintf("binlog-000000000000000%d-20180101010101", i), compress.CompressionNone)
+		binloger, err := pump.CreateBinlogger(binlogDir, fmt.Sprintf("binlog-%016d-20180101010101", i), compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
 		err = binloger.Close()
