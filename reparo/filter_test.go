@@ -83,7 +83,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlog(c *C) {
 
 func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 	// we can get the first binlog's commit ts by decode data in binlog file.
-	binlogDir, err := ioutil.TempDir("", "./reparo-test")
+	binlogDir := c.MkDir()
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(binlogDir)
 
