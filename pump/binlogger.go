@@ -407,7 +407,8 @@ func (b *binlogger) Name() string {
 
 // Rotate creates a new file for append binlog
 func (b *binlogger) Rotate(ts int64) error {
-	if ts != 0 {
+	// if ts is less or equal to 0, means the rotate binlog file should not contain time string
+	if ts > 0 {
 		// should use a bigger ts as the start for the new binlog file
 		ts++
 	}
