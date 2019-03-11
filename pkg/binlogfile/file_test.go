@@ -3,11 +3,11 @@ package binlogfile
 import (
 	"io/ioutil"
 	"os"
-	"time"
 	"path"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
@@ -115,6 +115,6 @@ func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	index := uint64(1)
 	datetime, err := time.Parse(datetimeFormat, "20180315121212")
 	c.Assert(err, IsNil)
-	binlogName := binlogNameWithDateTime(index, datetime)		
-	 c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
+	binlogName := binlogNameWithDateTime(index, datetime)
+	c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
 }

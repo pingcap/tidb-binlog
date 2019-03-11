@@ -3,9 +3,9 @@ package binlogfile
 import (
 	"fmt"
 	"os"
-	"time"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
@@ -162,7 +162,7 @@ func BinlogName(index uint64) string {
 	return binlogNameWithDateTime(index, currentTime)
 }
 
-// binlogNameWithDateTime creates a binlog file name.		
-func binlogNameWithDateTime(index uint64, datetime time.Time) string {		
-	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))		
+// binlogNameWithDateTime creates a binlog file name.
+func binlogNameWithDateTime(index uint64, datetime time.Time) string {
+	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
 }
