@@ -1,9 +1,9 @@
 package binlogfile
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 	"path"
 	"reflect"
 	"strings"
@@ -111,8 +111,10 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	c.Assert(gotIndex, Equals, index)
 }
 
-func (t *testFileSuite) TestBinlogName(c *C) {
+func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
 	index := uint64(1)
-	binlogName := BinlogName(index)
-	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-0000000000000001"))
+	datetime, err := time.Parse(datetimeFormat, "20180315121212")
+	c.Assert(err, IsNil)
+	binlogName := binlogNameWithDateTime(index, datetime)		
+	 c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
 }
