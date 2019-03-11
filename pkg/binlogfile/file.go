@@ -5,12 +5,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
@@ -157,24 +155,7 @@ func ParseBinlogName(str string) (index uint64, err error) {
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20180101010101
-// if ts is 0, will return file name like binlog-0000000000000001
-func BinlogName(index uint64, ts int64) string {
-	if ts == 0 {
-		return binlogName(index)
-	}
-
-	// transform ts to rough time
-	t := time.Unix(oracle.ExtractPhysical(uint64(ts))/1000, 0)
-	return binlogNameWithDateTime(index, t)
-}
-
-// binlogName creates a binlog file name with index
-func binlogName(index uint64) string {
+// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001
+func BinlogName(index uint64) string {
 	return fmt.Sprintf("binlog-%016d", index)
-}
-
-// binlogNameWithDateTime creates a binlog file name with index and datetime
-func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
 }

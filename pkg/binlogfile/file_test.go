@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
@@ -106,18 +105,14 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	}
 
 	index := uint64(1)
-	name := BinlogName(index, 1)
+	name := BinlogName(index)
 	gotIndex, err := ParseBinlogName(name)
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
 }
 
-func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
-	datetimeStr := "20180315121212"
+func (t *testFileSuite) TestBinlogName(c *C) {
 	index := uint64(1)
-	datetime, err := time.Parse(datetimeFormat, datetimeStr)
-	c.Assert(err, IsNil)
-
-	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-0000000000000001-%s", datetimeStr))
+	binlogName := BinlogName(index)
+	c.Assert(binlogName, Equals, fmt.Sprintf("binlog-0000000000000001"))
 }

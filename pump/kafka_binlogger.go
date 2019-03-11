@@ -181,6 +181,6 @@ func (k *kafkaBinloger) Name() string {
 }
 
 // Rotate implements the Binlogger interface.
-func (k *kafkaBinloger) Rotate(int64) error {
+func (k *kafkaBinloger) Rotate() error {
 	return nil
 }

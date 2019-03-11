@@ -53,7 +53,7 @@ type Binlogger interface {
 	Name() string
 
 	// Rotate rotates binlog file
-	Rotate(ts int64) error
+	Rotate() error
 }
 
 // binlogger is a logical representation of the log storage
@@ -107,7 +107,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
 		// create a binlog file with ts = 0
-		lastFileName = path.Join(dirpath, bf.BinlogName(0, 0))
+		lastFileName = path.Join(dirpath, bf.BinlogName(0))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file
@@ -369,7 +369,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.Rotate(entity.Meta.CommitTs)
+	err = b.Rotate()
 	return curOffset, errors.Trace(err)
 }
 
@@ -406,14 +406,8 @@ func (b *binlogger) Name() string {
 }
 
 // Rotate creates a new file for append binlog
-func (b *binlogger) Rotate(ts int64) error {
-	// if ts is less or equal to 0, means the rotate binlog file should not contain time string
-	if ts > 0 {
-		// should use a bigger ts as the start for the new binlog file
-		ts++
-	}
-
-	filename := bf.BinlogName(b.seq()+1, ts)
+func (b *binlogger) Rotate() error {
+	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
 	checkpointGauge.WithLabelValues("latest").Set(posToFloat(&latestFilePos))

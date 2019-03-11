@@ -27,7 +27,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 	checkTest(c, dir)
 
 	// // check create binloger with empty directory
-	c.Assert(os.RemoveAll(path.Join(dir, bf.BinlogName(0, 0))), IsNil)
+	c.Assert(os.RemoveAll(path.Join(dir, bf.BinlogName(0))), IsNil)
 	checkTest(c, dir)
 }
 
@@ -38,7 +38,7 @@ func checkTest(c *C, dir string) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(0, 0))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(0))
 	bl.Close()
 }
 
@@ -52,7 +52,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.Rotate(0)
+	b.Rotate()
 
 	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
@@ -64,7 +64,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	b, ok = bl.(*binlogger)
 	curFile := b.file
 	c.Assert(ok, IsTrue)
-	c.Assert(path.Base(curFile.Name()), Equals, bf.BinlogName(1, 0))
+	c.Assert(path.Base(curFile.Name()), Equals, bf.BinlogName(1))
 	latestPos := &binlog.Pos{Suffix: 1}
 	c.Assert(latestPos.Suffix, Equals, uint64(1))
 
@@ -97,9 +97,9 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
 
-	err = b.Rotate(0)
+	err = b.Rotate()
 	c.Assert(err, IsNil)
-	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1, 0))
+	c.Assert(path.Base(b.file.Name()), Equals, bf.BinlogName(1))
 
 	_, err = bl.WriteTail(ent)
 	c.Assert(err, IsNil)
@@ -141,7 +141,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.Rotate(0), IsNil)
+		c.Assert(b.Rotate(), IsNil)
 	}
 
 	ents, err := bl.ReadFrom(binlog.Pos{}, 11)
@@ -183,10 +183,10 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 			c.Assert(err, IsNil)
 		}
 
-		c.Assert(b.Rotate(0), IsNil)
+		c.Assert(b.Rotate(), IsNil)
 	}
 
-	file := path.Join(dir, bf.BinlogName(1, 0))
+	file := path.Join(dir, bf.BinlogName(1))
 	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE, 0600)
 	c.Assert(err, IsNil)
 
@@ -212,7 +212,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.Rotate(0)
+	b.Rotate()
 
 	time.Sleep(10 * time.Millisecond)
 	b.GC(time.Millisecond, binlog.Pos{})
@@ -220,6 +220,6 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	names, err := bf.ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 2)
-	c.Assert(names[0], Equals, bf.BinlogName(0, 0))
-	c.Assert(names[1], Equals, bf.BinlogName(1, 0))
+	c.Assert(names[0], Equals, bf.BinlogName(0))
+	c.Assert(names[1], Equals, bf.BinlogName(1))
 }

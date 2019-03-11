@@ -130,7 +130,7 @@ func (p *Proxy) Name() string {
 }
 
 // Rotate implements the Binlogger interface.
-func (p *Proxy) Rotate(int64) error {
+func (p *Proxy) Rotate() error {
 	return nil
 }
 

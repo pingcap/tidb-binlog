@@ -96,7 +96,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		binloger, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
-		binloger.Rotate(0)
+		binloger.Rotate()
 		err = binloger.Close()
 		c.Assert(err, IsNil)
 	}
