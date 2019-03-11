@@ -22,7 +22,7 @@ TiDB-Binlog is a commercial tool used to collect [TiDB's](https://github.com/pin
 
 ## Documentation
 
-+ [简体中文](https://github.com/pingcap/docs-cn/blob/master/tools/tidb-binlog-cluster.md)
++ [简体中文](https://pingcap.com/docs-cn/tools/tidb-binlog-cluster/)
 
 ## Architecture
 
