@@ -5,7 +5,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/ngaut/log"
-	obinlog "github.com/pingcap/tidb-tools/tidb_binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
 
 var bytes = make([]byte, 5*(1<<10))
@@ -13,18 +13,18 @@ var table = &obinlog.Table{
 	SchemaName: proto.String("test"),
 	TableName:  proto.String("test"),
 	ColumnInfo: []*obinlog.ColumnInfo{
-		&obinlog.ColumnInfo{Name: "id", MysqlType: "int"},
-		&obinlog.ColumnInfo{Name: "a1", MysqlType: "blob"},
+		{Name: "id", MysqlType: "int"},
+		{Name: "a1", MysqlType: "blob"},
 	},
 	Mutations: []*obinlog.TableMutation{
-		&obinlog.TableMutation{
+		{
 			Type: obinlog.MutationType_Insert.Enum(),
 			Row: &obinlog.Row{
 				Columns: []*obinlog.Column{
-					&obinlog.Column{
+					{
 						Int64Value: proto.Int64(1),
 					},
-					&obinlog.Column{
+					{
 						BytesValue: bytes,
 					},
 				},

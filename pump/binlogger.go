@@ -51,6 +51,9 @@ type Binlogger interface {
 
 	// Name tells the name of underlying file
 	Name() string
+
+	// Rotate rotates binlog file
+	Rotate() error
 }
 
 // binlogger is a logical representation of the log storage
@@ -69,7 +72,7 @@ type binlogger struct {
 	mutex   sync.Mutex
 }
 
-//OpenBinlogger returns a binlogger for write, then it can be appended
+// OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
@@ -101,8 +104,9 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := bf.ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog.0000000000000000
+	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
+		// create a binlog file with ts = 0
 		lastFileName = path.Join(dirpath, bf.BinlogName(0))
 		lastFileSuffix = 0
 	} else {
@@ -145,7 +149,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	return binlog, nil
 }
 
-//CloseBinlogger closes the binlogger
+// CloseBinlogger closes the binlogger
 func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
@@ -365,7 +369,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate()
+	err = b.Rotate()
 	return curOffset, errors.Trace(err)
 }
 
@@ -401,8 +405,8 @@ func (b *binlogger) Name() string {
 	return b.file.Name()
 }
 
-// rotate creates a new file for append binlog
-func (b *binlogger) rotate() error {
+// Rotate creates a new file for append binlog
+func (b *binlogger) Rotate() error {
 	filename := bf.BinlogName(b.seq() + 1)
 	latestFilePos.Suffix = b.seq() + 1
 	latestFilePos.Offset = 0
