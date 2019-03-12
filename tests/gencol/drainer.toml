@@ -1,0 +1,18 @@
+detect-interval = 10
+data-dir = '/tmp/tidb_binlog_test/data.drainer'
+pd-urls = 'http://127.0.0.1:2379'
+
+[syncer]
+ignore-schemas = 'INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql'
+txn-batch = 1
+worker-count = 1
+disable-dispatch = false
+safe-mode = false
+db-type = 'mysql'
+replicate-do-db = ['gencol']
+
+[syncer.to]
+host = '127.0.0.1'
+user = 'root'
+password = ''
+port = 3306

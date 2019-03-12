@@ -43,7 +43,7 @@ func (m *mysqlTranslator) SetConfig(safeMode bool) {
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
-	columns := table.Columns
+	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -346,6 +346,18 @@ func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.Colu
 	}
 
 	return kvs.String(), conditionValues, nil
+}
+
+// writableColumns returns all columns which can be written. This excludes
+// generated and non-public columns.
+func writableColumns(table *model.TableInfo) []*model.ColumnInfo {
+	cols := make([]*model.ColumnInfo, 0, len(table.Columns))
+	for _, col := range table.Columns {
+		if col.State == model.StatePublic && !col.IsGenerated() {
+			cols = append(cols, col)
+		}
+	}
+	return cols
 }
 
 func (m *mysqlTranslator) genColumnList(columns []*model.ColumnInfo) string {
