@@ -1,5 +1,7 @@
 # TiDB-Binlog
 
+[![Coverage Status](https://coveralls.io/repos/github/pingcap/tidb-binlog/badge.svg?branch=HEAD&t=9Zn2om)](https://coveralls.io/github/pingcap/tidb-binlog?branch=HEAD)
+
 ## TiDB-Binlog introduction
 
 TiDB-Binlog is a commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
