@@ -12,6 +12,8 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
+TEST_DIR := /tmp/tidb_binlog_test
+
 GO		:= go
 GOBUILD   := GO111MODULE=on CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
 GOTEST	:= GO111MODULE=on CGO_ENABLED=1 $(GO) test -p 3
@@ -54,8 +56,9 @@ install:
 	go install ./...
 
 test:
+	mkdir -p "$(TEST_DIR)"
 	@export log_level=error;\
-	$(GOTEST) -cover $(PACKAGES)
+	$(GOTEST) -cover -covermode=count -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
 
 integration_test: build
 	@which bin/tidb-server
@@ -83,6 +86,17 @@ check:
 	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | grep -vE 'vendor' | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "gofmt (simplify)"
 	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
+
+coverage:
+	GO111MODULE=off go get github.com/wadey/gocovmerge
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go" > "$(TEST_DIR)/all_cov.out"
+ifeq ("$(JenkinsCI)", "1")
+	GO111MODULE=off go get github.com/mattn/goveralls
+	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
+else
+	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
+	grep -F '<option' "$(TEST_DIR)/all_cov.html"
+endif
 
 
 check-static:
