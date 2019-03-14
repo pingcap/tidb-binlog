@@ -18,8 +18,9 @@ func newMemSyncer() (*MemSyncer, error) {
 }
 
 // Sync implement interface of Syncer
-func (m *MemSyncer) Sync(pbBinlog *pb.Binlog) error {
+func (m *MemSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
 	m.binlogs = append(m.binlogs, pbBinlog)
+	cb(pbBinlog)
 
 	return nil
 }

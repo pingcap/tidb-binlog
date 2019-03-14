@@ -17,14 +17,16 @@ func newPrintSyncer() (*printSyncer, error) {
 	return &printSyncer{}, nil
 }
 
-func (p *printSyncer) Sync(pbBinlog *pb.Binlog) error {
+func (p *printSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
 	switch pbBinlog.Tp {
 	case pb.BinlogType_DDL:
 		printDDL(pbBinlog)
+		cb(pbBinlog)
 	case pb.BinlogType_DML:
 		for _, event := range pbBinlog.GetDmlData().GetEvents() {
 			printEvent(&event)
 		}
+		cb(pbBinlog)
 	default:
 		return errors.Errorf("unknown type: %v", pbBinlog.Tp)
 

@@ -46,25 +46,26 @@ func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
 	return syncer, nil
 }
 
-func (m *mysqlSyncer) Sync(pbBinlog *pb.Binlog) error {
+type item struct {
+	binlog *pb.Binlog
+	cb     func(binlog *pb.Binlog)
+}
+
+func (m *mysqlSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
 	txn, err := pbBinlogToTxn(pbBinlog)
 	if err != nil {
 		return errors.Annotate(err, "pbBinlogToTxn failed")
 	}
 
+	item := &item{binlog: pbBinlog, cb: cb}
+	txn.Metadata = item
+
 	select {
 	case <-m.loaderQuit:
 		return m.loaderErr
 	case m.loader.Input() <- txn:
-	}
-
-	select {
-	case <-m.loaderQuit:
-		return m.loaderErr
-	case <-m.loader.Successes():
 		return nil
 	}
-
 }
 
 func (m *mysqlSyncer) Close() error {
@@ -74,6 +75,13 @@ func (m *mysqlSyncer) Close() error {
 }
 
 func (m *mysqlSyncer) runLoader() {
+	go func() {
+		for txn := range m.loader.Successes() {
+			item := txn.Metadata.(*item)
+			item.cb(item.binlog)
+		}
+	}()
+
 	m.loaderQuit = make(chan struct{})
 	m.loaderErr = nil
 	go func() {
