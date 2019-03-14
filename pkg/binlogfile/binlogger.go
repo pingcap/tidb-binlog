@@ -29,7 +29,7 @@ var (
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-	segmentSizeBytes int64 = 512 * 1024 * 1024
+	SegmentSizeBytes int64 = 512 * 1024 * 1024
 )
 
 // Binlogger is the interface that for append and read binlog
@@ -48,9 +48,6 @@ type Binlogger interface {
 
 	// GC recycles the old binlog file
 	GC(days time.Duration, pos binlog.Pos)
-
-	// Rotate rotates binlog file
-	Rotate() error
 }
 
 // binlogger is a logical representation of the log storage
@@ -358,11 +355,11 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 
 	b.lastOffset = curOffset
 
-	if curOffset < segmentSizeBytes {
+	if curOffset < SegmentSizeBytes {
 		return curOffset, nil
 	}
 
-	err = b.Rotate()
+	err = b.rotate()
 	return curOffset, errors.Trace(err)
 }
 
@@ -386,8 +383,8 @@ func (b *binlogger) Close() error {
 	return nil
 }
 
-// Rotate creates a new file for append binlog
-func (b *binlogger) Rotate() error {
+// rotate creates a new file for append binlog
+func (b *binlogger) rotate() error {
 	filename := BinlogName(b.seq() + 1)
 	b.lastSuffix = b.seq() + 1
 	b.lastOffset = 0

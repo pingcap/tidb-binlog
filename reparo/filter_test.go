@@ -83,6 +83,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 	binlogDir := c.MkDir()
 
 	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+	binlogfile.SegmentSizeBytes = 1
 
 	// create binlog file
 	for i := 0; i < 10; i++ {
@@ -96,7 +97,6 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		binloger, err := binlogfile.OpenBinlogger(binlogDir, compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
-		binloger.Rotate()
 		err = binloger.Close()
 		c.Assert(err, IsNil)
 	}
