@@ -196,22 +196,17 @@ func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 		return "", errors.Trace(err)
 	}
 
-	switch stmt.(type) {
+	switch stmt := stmt.(type) {
 	case *ast.CreateDatabaseStmt:
-		createDatabaseStmt, _ := stmt.(*ast.CreateDatabaseStmt)
-		return extractCreateDatabase(createDatabaseStmt)
+		return extractCreateDatabase(stmt)
 	case *ast.DropDatabaseStmt:
-		dropDatabaseStmt, _ := stmt.(*ast.DropDatabaseStmt)
-		return extractDropDatabase(dropDatabaseStmt)
+		return extractDropDatabase(stmt)
 	case *ast.DropTableStmt:
-		dropTableStmt, _ := stmt.(*ast.DropTableStmt)
-		return extractDropTable(dropTableStmt, schema)
+		return extractDropTable(stmt, schema)
 	case *ast.CreateTableStmt:
-		createTableStmt, _ := stmt.(*ast.CreateTableStmt)
-		return extractCreateTable(createTableStmt, schema)
+		return extractCreateTable(stmt, schema)
 	case *ast.AlterTableStmt:
-		alterTableStmt, _ := stmt.(*ast.AlterTableStmt)
-		alterSQL, err := extractAlterTable(alterTableStmt, schema)
+		alterSQL, err := extractAlterTable(stmt, schema)
 		if err != nil {
 			return alterSQL, err
 		}
@@ -220,11 +215,9 @@ func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (
 		}
 		return alterSQL, nil
 	case *ast.RenameTableStmt:
-		renameTableStmt, _ := stmt.(*ast.RenameTableStmt)
-		return extractRenameTable(renameTableStmt, schema)
+		return extractRenameTable(stmt, schema)
 	case *ast.TruncateTableStmt:
-		truncateTableStmt, _ := stmt.(*ast.TruncateTableStmt)
-		return extractTruncateTable(truncateTableStmt, schema), nil
+		return extractTruncateTable(stmt, schema), nil
 	default:
 		// TODO: hacking around empty sql, should bypass in upper level
 		return genEmptySQL(sql), nil
