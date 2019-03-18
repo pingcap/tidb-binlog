@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
 	"golang.org/x/net/context"
@@ -335,7 +336,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
-	http.Handle("/metrics", prometheus.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
 

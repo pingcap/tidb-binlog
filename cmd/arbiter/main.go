@@ -15,6 +15,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 
 func startHTTPServer(addr string) {
 	prometheus.DefaultGatherer = arbiter.Registry
-	http.Handle("/metrics", prometheus.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 
 	err := http.ListenAndServe(addr, nil)
 	if err != nil {
