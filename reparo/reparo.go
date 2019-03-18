@@ -40,7 +40,7 @@ func New(cfg *Config) (*Reparo, error) {
 
 // Process runs the main procedure.
 func (r *Reparo) Process() error {
-	pbReader, err := newDirPbReader(r.cfg.Dir)
+	pbReader, err := newDirPbReader(r.cfg.Dir, r.cfg.StartTSO, r.cfg.StopTSO)
 	if err != nil {
 		return errors.Annotatef(err, "new reader failed dir: %s", r.cfg.Dir)
 	}
@@ -54,10 +54,6 @@ func (r *Reparo) Process() error {
 			}
 
 			return errors.Trace(err)
-		}
-
-		if !isAcceptableBinlog(binlog, r.cfg.StartTSO, r.cfg.StopTSO) {
-			continue
 		}
 
 		ignore, err := filterBinlog(r.filter, binlog)

@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
@@ -50,6 +51,21 @@ func writeBinlogsInDir(dir string, c *check.C) (binlogs []*pb.Binlog) {
 	return binlogs
 }
 
+func readAll(reader PbReader) (binlogs []*pb.Binlog, err error) {
+	var binlog *pb.Binlog
+	for {
+		binlog, err = reader.read()
+		if err != nil {
+			if errors.Cause(err) == io.EOF {
+				err = nil
+			}
+			return
+		}
+
+		binlogs = append(binlogs, binlog)
+	}
+}
+
 func (s *testReadSuite) TestReader(c *check.C) {
 	dir := c.MkDir()
 
@@ -57,19 +73,23 @@ func (s *testReadSuite) TestReader(c *check.C) {
 
 	// read back all binlogs in directory
 	var readBackBinlogs []*pb.Binlog
-	reader, err := newDirPbReader(dir)
+	reader, err := newDirPbReader(dir, 0, 0)
 	c.Assert(err, check.IsNil)
 
-	for {
-		binlog, err := reader.read()
-		if len(readBackBinlogs) == len(binlogs) {
-			c.Assert(err, check.Equals, io.EOF)
-			break
-		}
+	readBackBinlogs, err = readAll(reader)
+	c.Assert(err, check.IsNil)
+	c.Assert(readBackBinlogs, check.DeepEquals, binlogs)
 
-		c.Assert(err, check.IsNil)
-		readBackBinlogs = append(readBackBinlogs, binlog)
+	// we write the binlog with commit ts start at one(1,2,3,4...)
+	for start := 1; start <= len(binlogs); start++ {
+		for end := start; end <= len(binlogs)+1; end++ {
+			reader, err := newDirPbReader(dir, int64(start), int64(end))
+			c.Assert(err, check.IsNil)
+
+			readBackBinlogs, err = readAll(reader)
+			c.Assert(err, check.IsNil)
+			c.Assert(len(readBackBinlogs), check.Equals, end-start)
+		}
 	}
 
-	c.Assert(readBackBinlogs, check.DeepEquals, binlogs)
 }

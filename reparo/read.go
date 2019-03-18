@@ -20,6 +20,9 @@ type dirPbReader struct {
 	dir   string
 	files []string
 
+	startTS int64
+	endTS   int64
+
 	file   *os.File
 	reader *bufio.Reader
 	idx    int // index of next file to read in files
@@ -27,16 +30,24 @@ type dirPbReader struct {
 
 var _ PbReader = &dirPbReader{}
 
-func newDirPbReader(dir string) (r *dirPbReader, err error) {
+// newDirPbReader return a Reader to read binlogs with commit ts in [startTS, endTS)
+func newDirPbReader(dir string, startTS int64, endTS int64) (r *dirPbReader, err error) {
 	files, err := searchFiles(dir)
 	if err != nil {
 		return nil, errors.Annotate(err, "searchFiles failed")
 	}
 
+	files, err = filterFiles(files, startTS, endTS)
+	if err != nil {
+		return nil, errors.Annotate(err, "filterFiles failed")
+	}
+
 	r = &dirPbReader{
-		dir:   dir,
-		files: files,
-		idx:   0,
+		startTS: startTS,
+		endTS:   endTS,
+		dir:     dir,
+		files:   files,
+		idx:     0,
 	}
 
 	// if empty files id dir, return success and later `Read` will return `io.EOF`
@@ -87,6 +98,10 @@ func (r *dirPbReader) read() (binlog *pb.Binlog, err error) {
 	for {
 		binlog, _, err = Decode(r.reader)
 		if err == nil {
+			if !isAcceptableBinlog(binlog, r.startTS, r.endTS) {
+				continue
+			}
+
 			return
 		}
 

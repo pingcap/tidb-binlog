@@ -71,7 +71,7 @@ func NewConfig() *Config {
 }
 
 // Parse parses keys/values from command line flags and toml configuration file.
-func (c *Config) Parse(args []string) error {
+func (c *Config) Parse(args []string) (err error) {
 	// Parse first to get config file
 	perr := c.FlagSet.Parse(args)
 	switch perr {
@@ -112,20 +112,18 @@ func (c *Config) Parse(args []string) error {
 	}
 
 	if c.StartDatetime != "" {
-		startTime, err := time.ParseInLocation(timeFormat, c.StartDatetime, time.Local)
+		c.StartTSO, err = dateTimeToTSO(c.StartDatetime)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		c.StartTSO = int64(oracle.ComposeTS(startTime.Unix()*1000, 0))
 		log.Infof("start tso %d", c.StartTSO)
 	}
 	if c.StopDatetime != "" {
-		stopTime, err := time.ParseInLocation(timeFormat, c.StopDatetime, time.Local)
+		c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		c.StopTSO = int64(oracle.ComposeTS(stopTime.Unix()*1000, 0))
 		log.Infof("stop tso %d", c.StopTSO)
 	}
 
@@ -165,6 +163,15 @@ func (c *Config) validate() error {
 	default:
 		return errors.Errorf("dest type %s is not supported", c.DestType)
 	}
+}
+
+func dateTimeToTSO(dateTimeStr string) (int64, error) {
+	t, err := time.ParseInLocation(timeFormat, dateTimeStr, time.Local)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return int64(oracle.ComposeTS(t.Unix()*1000, 0)), nil
 }
 
 // InitLogger initalizes Pump's logger.
