@@ -377,7 +377,7 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 
 	for {
 		select {
-		case <-time.Tick(time.Second*5):
+		case <-time.Tick(time.Second * 5):
 			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
