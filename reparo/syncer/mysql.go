@@ -4,7 +4,9 @@ package syncer
 
 import (
 	"database/sql"
+	"sync"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
@@ -71,15 +73,23 @@ func (m *mysqlSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) erro
 func (m *mysqlSyncer) Close() error {
 	m.loader.Close()
 
-	return m.db.Close()
+	<-m.loaderQuit
+
+	m.db.Close()
+
+	return m.loaderErr
 }
 
 func (m *mysqlSyncer) runLoader() {
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*item)
 			item.cb(item.binlog)
 		}
+		log.Info("Successes chan quit")
+		wg.Done()
 	}()
 
 	m.loaderQuit = make(chan struct{})
@@ -89,6 +99,7 @@ func (m *mysqlSyncer) runLoader() {
 		if err != nil {
 			m.loaderErr = err
 		}
+		wg.Wait()
 		close(m.loaderQuit)
 	}()
 }
