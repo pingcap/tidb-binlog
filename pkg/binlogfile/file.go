@@ -2,7 +2,6 @@ package binlogfile
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"sort"
 	"strings"
@@ -144,16 +143,20 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		return 0, ErrBadBinlogName
 	}
 
-	var datetime string
-	_, err = fmt.Sscanf(str, "binlog-%016d-%s", &index, &datetime)
-	// backward compatibility
-	if err == io.ErrUnexpectedEOF {
-		_, err = fmt.Sscanf(str, "binlog-%016d", &index)
+	items := strings.Split(str, "-")
+	switch len(items) {
+	case 2, 3:
+		// backward compatibility
+		// binlog file format like: binlog-0000000000000001-20181010101010 or binlog-0000000000000001
+		_, err = fmt.Sscanf(items[1], "%016d", &index)
+	default:
+		return 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
 	}
+
 	return index, errors.Trace(err)
 }
 
-// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-
+// BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20181010101010
 func BinlogName(index uint64) string {
 	currentTime := time.Now()
 	return binlogNameWithDateTime(index, currentTime)
