@@ -38,12 +38,8 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 				}
 			case pb.EventType_Update:
 				dml.Tp = loader.UpdateDMLType
-
-				newCols := make([]string, 0)
-				newValues := make([]interface{}, 0)
-
-				oldCols := make([]string, 0)
-				oldValues := make([]interface{}, 0)
+				dml.Values = make(map[string]interface{})
+				dml.OldValues = make(map[string]interface{})
 
 				for _, c := range event.GetRow() {
 					col := &pb.Column{}
@@ -51,34 +47,27 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
-					newCols = append(newCols, col.Name)
 
-					_, newValue, err := codec.DecodeOne(col.Value)
+					_, newDatum, err := codec.DecodeOne(col.Value)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
-					_, oldValue, err := codec.DecodeOne(col.ChangedValue)
+					_, oldDatum, err := codec.DecodeOne(col.ChangedValue)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
 
 					tp := col.Tp[0]
-					newDatum := formatValue(newValue, tp)
-					newValues = append(newValues, newDatum.GetValue())
-					oldDatum := formatValue(oldValue, tp)
+					newDatum = formatValue(newDatum, tp)
+					newValue := newDatum.GetValue()
+					oldDatum = formatValue(oldDatum, tp)
+					oldValue := oldDatum.GetValue()
 
-					log.Debugf("%s(%s %v): %v => %v", col.Name, col.MysqlType, tp, oldDatum.GetValue(), newDatum.GetValue())
+					log.Debugf("%s(%s %v): %v => %v", col.Name, col.MysqlType, tp, oldValue, newValue)
 
-					oldCols = append(oldCols, col.Name)
-					oldValues = append(oldValues, oldDatum.GetValue())
+					dml.Values[col.Name] = newValue
+					dml.OldValues[col.Name] = oldValue
 				}
-				dml.Values = make(map[string]interface{})
-				dml.OldValues = make(map[string]interface{})
-				for i := 0; i < len(newCols); i++ {
-					dml.Values[newCols[i]] = newValues[i]
-					dml.OldValues[oldCols[i]] = oldValues[i]
-				}
-
 			case pb.EventType_Delete:
 				dml.Tp = loader.DeleteDMLType
 

@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"bufio"
@@ -29,7 +29,7 @@ func searchFiles(dir string) ([]string, error) {
 }
 
 // filterFiles assume fileNames is sorted by commit time stamp,
-// and may filter files not not overlap with [startTS, endTS)
+// and may filter files not not overlap with [startTS, endTS]
 func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, error) {
 	binlogFiles := make([]string, 0, len(fileNames))
 	var latestBinlogFile string

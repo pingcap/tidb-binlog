@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"io"
@@ -82,13 +82,13 @@ func (s *testReadSuite) TestReader(c *check.C) {
 
 	// we write the binlog with commit ts start at one(1,2,3,4...)
 	for start := 1; start <= len(binlogs); start++ {
-		for end := start; end <= len(binlogs)+1; end++ {
+		for end := start; end <= len(binlogs); end++ {
 			reader, err := newDirPbReader(dir, int64(start), int64(end))
 			c.Assert(err, check.IsNil)
 
 			readBackBinlogs, err = readAll(reader)
 			c.Assert(err, check.IsNil)
-			c.Assert(len(readBackBinlogs), check.Equals, end-start)
+			c.Assert(len(readBackBinlogs), check.Equals, end-start+1)
 		}
 	}
 

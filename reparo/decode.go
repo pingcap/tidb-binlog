@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"io"

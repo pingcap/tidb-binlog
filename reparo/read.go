@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"bufio"
@@ -30,7 +30,7 @@ type dirPbReader struct {
 
 var _ PbReader = &dirPbReader{}
 
-// newDirPbReader return a Reader to read binlogs with commit ts in [startTS, endTS)
+// newDirPbReader return a Reader to read binlogs with commit ts in [startTS, endTS]
 func newDirPbReader(dir string, startTS int64, endTS int64) (r *dirPbReader, err error) {
 	files, err := searchFiles(dir)
 	if err != nil {
