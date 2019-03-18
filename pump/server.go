@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
 	"golang.org/x/net/context"
@@ -394,7 +395,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
-	http.Handle("/metrics", prometheus.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
 
