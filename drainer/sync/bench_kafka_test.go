@@ -1,4 +1,4 @@
-package executor
+package sync
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/ngaut/log"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	ti "github.com/pingcap/tipb/go-binlog"
 )
 
 var bytes = make([]byte, 5*(1<<10))
@@ -43,7 +44,7 @@ func BenchmarkBinlogMarshal(b *testing.B) {
 		},
 	}
 	for i := 0; i < b.N; i++ {
-		binlog.String()
+		var _ = binlog.String()
 	}
 }
 
@@ -59,20 +60,31 @@ func BenchmarkKafka(b *testing.B) {
 		ClusterID:    99900,
 	}
 
-	executor, err := newKafka(cfg)
+	binlog := &obinlog.Binlog{
+		DmlData: &obinlog.DMLData{
+			Tables: []*obinlog.Table{table},
+		},
+	}
+
+	item := &Item{Binlog: &ti.Binlog{}}
+
+	syncer, err := NewKafka(cfg, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
-	var arg = []interface{}{table}
-	var args = [][]interface{}{arg}
+
+	go func() {
+		for range syncer.Successes() {
+
+		}
+	}()
 
 	for i := 0; i < b.N; i++ {
-		err = executor.Execute([]string{""}, args, []int64{int64(i)}, false)
+		err = syncer.saveBinlog(binlog, item)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
-
 }

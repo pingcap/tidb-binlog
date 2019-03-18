@@ -48,9 +48,6 @@ func (t *testSequenceIteratorSuite) TestIterator(c *C) {
 		}
 
 		c.Assert(err, IsNil)
-			c.Fail()
-			break
-		}
 
 		getTps = append(getTps, tp)
 		getRows = append(getRows, row)

@@ -1,4 +1,4 @@
-package executor
+package sync
 
 import (
 	// mysql driver
@@ -29,4 +29,30 @@ type DBConfig struct {
 // CheckpointConfig is the Checkpoint configuration.
 type CheckpointConfig struct {
 	Schema string `toml:"schema" json:"schema"`
+}
+
+func newBaseError() *baseError {
+	return &baseError{
+		errCh: make(chan struct{}),
+	}
+}
+
+type baseError struct {
+	err   error
+	errCh chan struct{}
+}
+
+func (b *baseError) Error() <-chan error {
+	ret := make(chan error, 1)
+	go func() {
+		<-b.errCh
+		ret <- b.err
+	}()
+
+	return ret
+}
+
+func (b *baseError) SetErr(err error) {
+	b.err = err
+	close(b.errCh)
 }

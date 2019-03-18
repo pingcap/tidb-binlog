@@ -1,40 +1,43 @@
-package executor
+package sync
 
 import (
-	"math"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/gogo/protobuf/proto"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
 
 var maxWaitTimeToSendMSG = time.Second * 30
 
-type kafkaExecutor struct {
+var _ Syncer = &KafkaSyncer{}
+
+// KafkaSyncer sync data to kafka
+type KafkaSyncer struct {
 	addr     []string
-	version  string
 	producer sarama.AsyncProducer
 	topic    string
-
-	meta *checkpoint.KafkaMeta
 
 	toBeAckCommitTSMu sync.Mutex
 	toBeAckCommitTS   map[int64]struct{}
 
 	lastSuccessTime time.Time
 
-	*baseError
+	shutdown chan struct{}
+	*baseSyncer
 }
 
-func newKafka(cfg *DBConfig) (Executor, error) {
+// newAsyncProducer will only be changed in unit test for mock
+var newAsyncProducer = sarama.NewAsyncProducer
+
+// NewKafka return a instance of KafkaSyncer
+func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*KafkaSyncer, error) {
 	var topic string
 	if len(cfg.TopicName) == 0 {
 		clusterIDStr := strconv.FormatUint(cfg.ClusterID, 10)
@@ -43,16 +46,15 @@ func newKafka(cfg *DBConfig) (Executor, error) {
 		topic = cfg.TopicName
 	}
 
-	executor := &kafkaExecutor{
+	executor := &KafkaSyncer{
 		addr:            strings.Split(cfg.KafkaAddrs, ","),
-		version:         cfg.KafkaVersion,
 		topic:           topic,
-		meta:            checkpoint.GetKafkaMeta(),
 		toBeAckCommitTS: make(map[int64]struct{}),
-		baseError:       newBaseError(),
+		shutdown:        make(chan struct{}),
+		baseSyncer:      newBaseSyncer(tableInfoGetter),
 	}
 
-	config, err := util.NewSaramaConfig(executor.version, "kafka.")
+	config, err := util.NewSaramaConfig(cfg.KafkaVersion, "kafka.")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -80,7 +82,7 @@ func newKafka(cfg *DBConfig) (Executor, error) {
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
-	executor.producer, err = sarama.NewAsyncProducer(executor.addr, config)
+	executor.producer, err = newAsyncProducer(executor.addr, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -90,54 +92,31 @@ func newKafka(cfg *DBConfig) (Executor, error) {
 	return executor, nil
 }
 
-func (p *kafkaExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	if len(sqls) == 0 {
-		return nil
+// Sync implements Syncer interface
+func (p *KafkaSyncer) Sync(item *Item) error {
+	slaveBinlog, err := translator.TiBinlogToSlaveBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
-	binlog := new(obinlog.Binlog)
-	if isDDL {
-		binlog.Type = obinlog.BinlogType_DDL
-		binlog.CommitTs = commitTSs[0]
-		binlog.DdlData = new(obinlog.DDLData)
-		binlog.DdlData.SchemaName = proto.String(args[0][0].(string))
-		binlog.DdlData.TableName = proto.String(args[0][1].(string))
-		binlog.DdlData.DdlQuery = []byte(sqls[0])
-	} else {
-		binlog.Type = obinlog.BinlogType_DML
-		binlog.CommitTs = commitTSs[0]
-		binlog.DmlData = new(obinlog.DMLData)
-
-		var tables []*obinlog.Table
-		for i := range args {
-			table := args[i][0].(*obinlog.Table)
-
-			var idx int
-			var preTable *obinlog.Table
-			for idx = 0; idx < len(tables); idx++ {
-				preTable = tables[idx]
-				if preTable.GetSchemaName() == table.GetSchemaName() && preTable.GetTableName() == table.GetTableName() {
-					preTable.Mutations = append(preTable.Mutations, table.Mutations...)
-					break
-				}
-			}
-
-			if idx == len(tables) {
-				tables = append(tables, table)
-			}
-		}
-
-		binlog.DmlData.Tables = tables
+	err = p.saveBinlog(slaveBinlog, item)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
-	return errors.Trace(p.saveBinlog(binlog))
+	return nil
 }
 
-func (p *kafkaExecutor) Close() error {
-	return p.producer.Close()
+// Close implements Syncer interface
+func (p *KafkaSyncer) Close() error {
+	close(p.shutdown)
+
+	err := <-p.Error()
+
+	return err
 }
 
-func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
+func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 	// log.Debug("save binlog: ", binlog.String())
 	data, err := binlog.Marshal()
 	if err != nil {
@@ -145,12 +124,11 @@ func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
 	}
 
 	msg := &sarama.ProducerMessage{Topic: p.topic, Key: nil, Value: sarama.ByteEncoder(data), Partition: 0}
-	msg.Metadata = binlog.CommitTs
+	msg.Metadata = item
 
 	p.toBeAckCommitTSMu.Lock()
 	if len(p.toBeAckCommitTS) == 0 {
 		p.lastSuccessTime = time.Now()
-		p.meta.SetSafeTS(binlog.CommitTs - 1)
 	}
 	p.toBeAckCommitTS[binlog.CommitTs] = struct{}{}
 	p.toBeAckCommitTSMu.Unlock()
@@ -164,27 +142,44 @@ func (p *kafkaExecutor) saveBinlog(binlog *obinlog.Binlog) error {
 
 }
 
-func (p *kafkaExecutor) run() {
+func (p *KafkaSyncer) run() {
+	var wg sync.WaitGroup
+
+	// handle successs from producer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for msg := range p.producer.Successes() {
+			item := msg.Metadata.(*Item)
+			commitTs := item.Binlog.GetCommitTs()
+			log.Debug("commitTs: ", commitTs, " return success from kafka")
+
+			p.toBeAckCommitTSMu.Lock()
+			p.lastSuccessTime = time.Now()
+			delete(p.toBeAckCommitTS, commitTs)
+			p.toBeAckCommitTSMu.Unlock()
+
+			p.success <- item
+		}
+		close(p.success)
+	}()
+
+	// handle errors from producer
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for err := range p.producer.Errors() {
+			panic(err)
+		}
+	}()
+
 	checkTick := time.NewTicker(time.Second)
 	defer checkTick.Stop()
 
 	for {
 		select {
-		case msg := <-p.producer.Successes():
-			commitTs := msg.Metadata.(int64)
-			log.Debug("commitTs: ", commitTs, " return success from kafka")
-			p.lastSuccessTime = time.Now()
-
-			p.toBeAckCommitTSMu.Lock()
-			delete(p.toBeAckCommitTS, commitTs)
-			if len(p.toBeAckCommitTS) == 0 {
-				p.meta.SetSafeTS(math.MaxInt64)
-			} else {
-				p.meta.SetSafeTS(commitTs)
-			}
-			p.toBeAckCommitTSMu.Unlock()
-		case err := <-p.producer.Errors():
-			panic(err)
 		case <-checkTick.C:
 			p.toBeAckCommitTSMu.Lock()
 			if len(p.toBeAckCommitTS) > 0 && time.Since(p.lastSuccessTime) > maxWaitTimeToSendMSG {
@@ -195,6 +190,12 @@ func (p *kafkaExecutor) run() {
 				return
 			}
 			p.toBeAckCommitTSMu.Unlock()
+		case <-p.shutdown:
+			err := p.producer.Close()
+			p.SetErr(err)
+
+			wg.Wait()
+			return
 		}
 	}
 }

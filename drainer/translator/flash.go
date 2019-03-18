@@ -2,201 +2,198 @@ package translator
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	gotime "time"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
-	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	tipb "github.com/pingcap/tipb/go-binlog"
 )
 
-// flashTranslator translates TiDB binlog to flash sqls
-type flashTranslator struct {
-	sqlMode parsermysql.SQLMode
+// GenFlashSQLs generate the SQL need to execute syncing this binlog to Flash
+func GenFlashSQLs(infoGetter TableInfoGetter, pv *tipb.PrewriteValue, commitTS int64) (sqls []string, argss [][]interface{}, err error) {
+	for _, mut := range pv.GetMutations() {
+		var info *model.TableInfo
+		var ok bool
+		info, ok = infoGetter.TableByID(mut.GetTableId())
+		if !ok {
+			return nil, nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
+		}
+
+		var schema string
+		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
+		if !ok {
+			return nil, nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
+		}
+
+		iter := newSequenceIterator(&mut)
+		for {
+			mutType, row, err := iter.next()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return nil, nil, errors.Trace(err)
+			}
+
+			switch mutType {
+			case tipb.MutationType_Insert:
+				sql, args, err := GenFlashInsertSQL(schema, info, row, commitTS)
+				if err != nil {
+					return nil, nil, errors.Annotate(err, "gen insert sql fail")
+				}
+				sqls = append(sqls, sql)
+				argss = append(argss, args)
+			case tipb.MutationType_Update:
+				sql, args, err := GenFlashUpdateSQL(schema, info, row, commitTS)
+				if err != nil {
+					return nil, nil, errors.Annotate(err, "gen update sql fail")
+				}
+				sqls = append(sqls, sql)
+				argss = append(argss, args)
+
+			case tipb.MutationType_DeleteRow:
+				sql, args, err := GenFlashDeleteSQL(schema, info, row, commitTS)
+				if err != nil {
+					return nil, nil, errors.Annotate(err, "gen delete sql fail")
+				}
+				sqls = append(sqls, sql)
+				argss = append(argss, args)
+
+			default:
+				return nil, nil, errors.Errorf("unknown mutation type: %v", mutType)
+			}
+		}
+
+	}
+
+	return
 }
 
-func init() {
-	Register("flash", &flashTranslator{})
-}
-
-// Config set the configuration
-func (f *flashTranslator) SetConfig(_ bool, sqlMode parsermysql.SQLMode) {
-	f.sqlMode = sqlMode
-}
-
-func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+// GenFlashInsertSQL generate the SQL need to execute syncing this insert row to Flash
+func GenFlashInsertSQL(schema string, table *model.TableInfo, row []byte, commitTS int64) (sql string, args []interface{}, err error) {
 	schema = strings.ToLower(schema)
 	if pkHandleColumn(table) == nil {
 		fakeImplicitColumn(table)
 	}
 	columns := table.Columns
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
 	columnList := genColumnList(columns)
 	// addition 2 holder is for del flag and version
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns) + 2)
-	sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
+	sql = fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
 
-	for _, row := range rows {
-		//decode the pk value
-		pk, columnValues, err := insertRowToDatums(table, row)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		hashKey := pk.GetInt64()
-
-		var vals []interface{}
-		vals = append(vals, hashKey)
-		for _, col := range columns {
-			val, ok := columnValues[col.ID]
-			if !ok {
-				vals = append(vals, col.GetDefaultValue())
-			} else {
-				value, err := formatFlashData(&val, &col.FieldType)
-				if err != nil {
-					return nil, nil, nil, errors.Trace(err)
-				}
-
-				vals = append(vals, value)
-			}
-		}
-		vals = append(vals, version)
-		vals = append(vals, delFlag)
-
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
-		}
-
-		sqls = append(sqls, sql)
-		values = append(values, vals)
-		var key []string
-		// generate dispatching key
-		// find primary keys
-		key, err = genDispatchKey(table, columnValues)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-		keys = append(keys, key)
+	//decode the pk value
+	pk, columnValues, err := insertRowToDatums(table, row)
+	if err != nil {
+		return "", nil, errors.Trace(err)
 	}
 
-	return sqls, keys, values, nil
+	hashKey := pk.GetInt64()
+
+	var vals []interface{}
+	vals = append(vals, hashKey)
+	for _, col := range columns {
+		val, ok := columnValues[col.ID]
+		if !ok {
+			vals = append(vals, col.GetDefaultValue())
+		} else {
+			value, err := formatFlashData(&val, &col.FieldType)
+			if err != nil {
+				return "", nil, errors.Trace(err)
+			}
+
+			vals = append(vals, value)
+		}
+	}
+	vals = append(vals, version)
+	vals = append(vals, delFlag)
+
+	if len(columnValues) == 0 {
+		panic(errors.New("columnValues is nil"))
+	}
+
+	args = vals
+
+	return
 }
 
-func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+// GenFlashUpdateSQL generate the SQL need to execute syncing this update row to Flash
+func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commitTS int64) (sql string, args []interface{}, err error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
 		pkColumn = fakeImplicitColumn(table)
 	}
 	pkID := pkColumn.ID
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	totalValues := make([][]interface{}, 0, len(rows))
 	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
-	for _, row := range rows {
-		var updateColumns []*model.ColumnInfo
-		var newValues []interface{}
+	var updateColumns []*model.ColumnInfo
+	var newValues []interface{}
 
-		// TODO: Make updating pk working
-		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, gotime.Local)
-		newPkValue := newColumnValues[pkID]
+	// TODO: Make updating pk working
+	_, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, gotime.Local)
+	newPkValue := newColumnValues[pkID]
 
-		if err != nil {
-			return nil, nil, nil, false, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name.L)
-		}
-
-		if len(newColumnValues) == 0 {
-			continue
-		}
-
-		updateColumns, newValues, err = genColumnAndValue(table.Columns, newColumnValues)
-		if err != nil {
-			return nil, nil, nil, false, errors.Trace(err)
-		}
-		// TODO: confirm column list should be the same across update
-		columnList := genColumnList(updateColumns)
-		// addition 2 holder is for del flag and version
-		columnPlaceholders := dml.GenColumnPlaceholders(len(table.Columns) + 2)
-
-		sql := fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
-
-		sqls = append(sqls, sql)
-		totalValues = append(totalValues, makeRow(newPkValue.GetInt64(), newValues, version, delFlag))
-
-		// generate dispatching key
-		// find primary keys
-		// generate dispatching key
-		// find primary keys
-		oldKey, err := genDispatchKey(table, oldColumnValues)
-		if err != nil {
-			return nil, nil, nil, false, errors.Trace(err)
-		}
-		newKey, err := genDispatchKey(table, newColumnValues)
-		if err != nil {
-			return nil, nil, nil, false, errors.Trace(err)
-		}
-
-		key := append(newKey, oldKey...)
-		keys = append(keys, key)
+	if err != nil {
+		return "", nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name.L)
 	}
 
-	return sqls, keys, totalValues, false, nil
+	updateColumns, newValues, err = genColumnAndValue(table.Columns, newColumnValues)
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+	// TODO: confirm column list should be the same across update
+	columnList := genColumnList(updateColumns)
+	// addition 2 holder is for del flag and version
+	columnPlaceholders := dml.GenColumnPlaceholders(len(table.Columns) + 2)
+
+	sql = fmt.Sprintf("IMPORT INTO `%s`.`%s` (%s) values (%s);", schema, table.Name.L, columnList, columnPlaceholders)
+
+	args = makeRow(newPkValue.GetInt64(), newValues, version, delFlag)
+	return
 }
 
-func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+// GenFlashDeleteSQL generate the SQL need to execute syncing this delete row to Flash
+func GenFlashDeleteSQL(schema string, table *model.TableInfo, row []byte, commitTS int64) (sql string, args []interface{}, err error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
 		pkColumn = fakeImplicitColumn(table)
 	}
 	columns := table.Columns
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	for _, row := range rows {
-		columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, gotime.Local)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-		if columnValues == nil {
-			continue
-		}
-
-		sql, value, key, err := genDeleteSQL(schema, table, pkColumn.ID, columnValues, commitTS)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-		values = append(values, value)
-		sqls = append(sqls, sql)
-		keys = append(keys, key)
+	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, gotime.Local)
+	if err != nil {
+		return "", nil, errors.Trace(err)
 	}
 
-	return sqls, keys, values, nil
+	sql, args, _, err = genDeleteSQL(schema, table, pkColumn.ID, columnValues, commitTS)
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+
+	return
 }
 
-func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
+// GenFlashDDLSQL generate the SQL need to execute syncing this DDL to Flash
+func GenFlashDDLSQL(sql string, schema string) (string, error) {
 	schema = strings.ToLower(schema)
-	ddlParser := parser.New()
-	ddlParser.SetSQLMode(f.sqlMode)
+	ddlParser := getParser()
 	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)

@@ -30,7 +30,7 @@ type PbCheckPoint struct {
 }
 
 // NewPb creates a new Pb.
-func newPb(cfg *Config) (CheckPoint, error) {
+func NewPb(cfg *Config) (CheckPoint, error) {
 	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, saveTime: time.Now()}
 	err := pb.Load()
 	if err != nil {

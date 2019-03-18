@@ -17,7 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 
-	"github.com/pingcap/tidb-binlog/drainer/executor"
+	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -51,7 +51,7 @@ type SyncerConfig struct {
 	IgnoreTables     []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *executor.DBConfig `toml:"to" json:"to"`
+	To               *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables         []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType       string             `toml:"db-type" json:"db-type"`
@@ -269,7 +269,7 @@ func (cfg *Config) adjustConfig() error {
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
-		cfg.SyncerCfg.To = new(executor.DBConfig)
+		cfg.SyncerCfg.To = new(dsync.DBConfig)
 	}
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted

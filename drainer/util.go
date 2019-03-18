@@ -2,20 +2,16 @@ package drainer
 
 import (
 	"fmt"
-	"hash/crc32"
 	"net"
 	"net/url"
 	"os"
 	"path"
 	"sort"
-	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
-	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 )
@@ -110,44 +106,4 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
-}
-
-func execute(executor executor.Executor, sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	if len(sqls) == 0 {
-		return nil
-	}
-
-	beginTime := time.Now()
-	defer func() {
-		executeHistogram.Observe(time.Since(beginTime).Seconds())
-	}()
-
-	return executor.Execute(sqls, args, commitTSs, isDDL)
-}
-
-func closeExecutors(executors ...executor.Executor) {
-	for _, e := range executors {
-		err := e.Close()
-		if err != nil {
-			log.Errorf("close db failed - %v", err)
-		}
-	}
-}
-
-func createExecutors(destDBType string, cfg *executor.DBConfig, count int, sqlMODE *string) ([]executor.Executor, error) {
-	executors := make([]executor.Executor, 0, count)
-	for i := 0; i < count; i++ {
-		executor, err := executor.New(destDBType, cfg, sqlMODE)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		executors = append(executors, executor)
-	}
-
-	return executors, nil
-}
-
-func genHashKey(key string) uint32 {
-	return crc32.ChecksumIEEE([]byte(key))
 }
