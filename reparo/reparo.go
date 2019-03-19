@@ -2,7 +2,6 @@ package reparo
 
 import (
 	"io"
-	"time"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
@@ -66,7 +65,7 @@ func (r *Reparo) Process() error {
 		}
 
 		err = r.syncer.Sync(binlog, func(binlog *pb.Binlog) {
-			dt := time.Unix(oracle.ExtractPhysical(uint64(binlog.CommitTs))/1000, 0)
+			dt := oracle.GetTimeFromTS(uint64(binlog.CommitTs))
 			log.Infof("ts %d, datetime %s", binlog.CommitTs, dt)
 		})
 

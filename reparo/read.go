@@ -50,7 +50,7 @@ func newDirPbReader(dir string, startTS int64, endTS int64) (r *dirPbReader, err
 		idx:     0,
 	}
 
-	// if empty files id dir, return success and later `Read` will return `io.EOF`
+	// if empty files in dir, return success and later `Read` will return `io.EOF`
 	if len(files) > 0 {
 		err = r.nextFile()
 		if err != nil {

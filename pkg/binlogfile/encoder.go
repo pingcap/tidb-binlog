@@ -26,7 +26,7 @@ type encoder struct {
 	offset int64
 }
 
-// NewEncoder create a Encoder instance
+// NewEncoder creates a Encoder instance
 func NewEncoder(w io.Writer, initOffset int64, codec compress.CompressionCodec) Encoder {
 	return &encoder{
 		bw:     w,
@@ -35,7 +35,7 @@ func NewEncoder(w io.Writer, initOffset int64, codec compress.CompressionCodec) 
 	}
 }
 
-// Encode implement interface of Encoder
+// Encode implements interface of Encoder
 func (e *encoder) Encode(payload []byte) (int64, error) {
 	data := Encode(payload)
 
@@ -53,7 +53,7 @@ func (e *encoder) Encode(payload []byte) (int64, error) {
 	return e.offset, nil
 }
 
-// Encode the payload
+// Encode encodes the payload
 func Encode(payload []byte) []byte {
 	crc := crc32.Checksum(payload, crcTable)
 
