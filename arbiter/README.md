@@ -8,7 +8,7 @@ Arbiter
 The complete import process is as follows:
 
 1. Read Binlog from Kafka in the format of [Protobuf](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/slave_binlog_proto/proto/binlog.proto).
-2. While reaching a limit data size, construct the SQL according the Binlog and wirte to downstream concurrently(notice: Arbiter will split the upstream transaction).
+2. While reaching a limit data size, construct the SQL according the Binlog and write to downstream concurrently(notice: Arbiter will split the upstream transaction).
 3. Save the checkpoint.
 
 

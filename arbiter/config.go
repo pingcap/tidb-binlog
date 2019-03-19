@@ -18,6 +18,10 @@ const (
 	defaultKafkaVersion = "0.8.2.0"
 )
 
+var (
+	errUpTopicNotSpecified = errors.Errorf("up.topic not config, please config the topic name")
+)
+
 // Config is the configuration of Server
 type Config struct {
 	*flag.FlagSet `json:"-"`
@@ -79,7 +83,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
-	fs.Int64Var(&cfg.Up.InitialCommitTS, "up.initial-commit-ts", 0, "if arbiter donesn't have checkpoint, use initial commitTS to initial checkpoint")
+	fs.Int64Var(&cfg.Up.InitialCommitTS, "up.initial-commit-ts", 0, "if arbiter doesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.StringVar(&cfg.Up.Topic, "up.topic", "", "topic name of kafka")
 
 	fs.IntVar(&cfg.Down.WorkerCount, "down.worker-count", 16, "concurrency write to downstream")
@@ -142,7 +146,7 @@ func (cfg *Config) Parse(args []string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	if len(cfg.Up.Topic) == 0 {
-		return errors.Errorf("up.topic not config, please config the topic name")
+		return errUpTopicNotSpecified
 	}
 
 	return nil
