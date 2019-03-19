@@ -307,7 +307,7 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 // hasPK:  create table t(id int, name varchar(45), sex enum("male", "female"), PRIMARY KEY(id, name));
 // normal: create table t(id int, name varchar(45), sex enum("male", "female"));
 func testGenTable(tt string) *model.TableInfo {
-	t := &model.TableInfo{}
+	t := &model.TableInfo{State: model.StatePublic}
 	t.Name = model.NewCIStr("account")
 
 	// the hard values are from TiDB :-), so just ingore them
@@ -323,6 +323,7 @@ func testGenTable(tt string) *model.TableInfo {
 			Charset: "binary",
 			Collate: "binary",
 		},
+		State: model.StatePublic,
 	}
 
 	userNameCol := &model.ColumnInfo{
@@ -337,6 +338,7 @@ func testGenTable(tt string) *model.TableInfo {
 			Charset: "utf8",
 			Collate: "utf8_unicode_ci",
 		},
+		State: model.StatePublic,
 	}
 
 	sexCol := &model.ColumnInfo{
@@ -352,6 +354,7 @@ func testGenTable(tt string) *model.TableInfo {
 			Collate: "binary",
 			Elems:   []string{"male", "female"},
 		},
+		State: model.StatePublic,
 	}
 
 	t.Columns = []*model.ColumnInfo{userIDCol, userNameCol, sexCol}
