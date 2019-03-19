@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -150,23 +149,6 @@ func createExecutors(destDBType string, cfg *executor.DBConfig, count int) ([]ex
 
 func genHashKey(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
-}
-
-func formatIgnoreSchemas(ignoreSchemas string) map[string]struct{} {
-	ignoreSchemas = strings.ToLower(ignoreSchemas)
-	schemas := strings.Split(ignoreSchemas, ",")
-
-	ignoreSchemaNames := make(map[string]struct{})
-	for _, schema := range schemas {
-		ignoreSchemaNames[schema] = struct{}{}
-	}
-
-	return ignoreSchemaNames
-}
-
-func filterIgnoreSchema(schema *model.DBInfo, ignoreSchemaNames map[string]struct{}) bool {
-	_, ok := ignoreSchemaNames[schema.Name.L]
-	return ok
 }
 
 // jobsSorter implements the sort.Interface interface.

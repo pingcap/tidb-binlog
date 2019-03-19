@@ -224,7 +224,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	c.Assert(names[1], Equals, BinlogName(1))
 }
 
-func (t *testBinloggerSuite) TestSeekBinlog(c *C) {
+func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 	f, err := ioutil.TempFile(os.TempDir(), "testOffset")
 	c.Assert(err, IsNil)
 	defer func() {

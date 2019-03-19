@@ -385,9 +385,9 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 			// check last time
 			if !util.CheckSyncState(src, dst, schema) {
 				log.Fatal("sourceDB don't equal targetDB")
-			} else {
-				return
 			}
+
+			return
 		}
 	}
 }
