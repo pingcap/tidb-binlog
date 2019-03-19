@@ -111,12 +111,27 @@ func (s *testReparoSuite) TestFilterBinlog(c *C) {
 				Events: []pb.Event{pb.Event{SchemaName: proto.String("do_db")}},
 			},
 		}: false,
+		&pb.Binlog{
+			Tp: pb.BinlogType_DML,
+			DmlData: &pb.DMLData{
+				Events: []pb.Event{
+					pb.Event{SchemaName: proto.String("do_db")},
+					pb.Event{SchemaName: proto.String("ignore_db")},
+				}},
+		}: false,
 	}
 
 	for binlog, ignore := range dmlBinlogs {
 		getIgnore, err := filterBinlog(afilter, binlog)
 		c.Assert(err, IsNil)
 		c.Assert(getIgnore, Equals, ignore)
+
+		// should no schema with ignore_db
+		for _, e := range binlog.DmlData.GetEvents() {
+			if e.GetSchemaName() == "ignore_db" {
+				c.Fail()
+			}
+		}
 	}
 
 }
