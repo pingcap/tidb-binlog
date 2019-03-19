@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"bufio"
@@ -11,49 +11,47 @@ import (
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 )
 
-type binlogFile struct {
-	fullpath string
-	offset   int64
-}
-
-// searchFiles return matched file and it's offset
-func (r *Reparo) searchFiles(dir string) ([]binlogFile, error) {
+// searchFiles return matched file with full path
+func searchFiles(dir string) ([]string, error) {
 	// read all file names
 	sortedNames, err := bf.ReadBinlogNames(dir)
 	if err != nil {
 		return nil, errors.Annotatef(err, "read binlog file name error")
 	}
 
-	if len(sortedNames) == 0 {
-		return nil, errors.Errorf("no binlog file found under %s", dir)
+	binlogFiles := make([]string, 0, len(sortedNames))
+	for _, name := range sortedNames {
+		fullpath := path.Join(dir, name)
+		binlogFiles = append(binlogFiles, fullpath)
 	}
 
-	return r.filterFiles(sortedNames)
+	return binlogFiles, nil
 }
 
-func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
-	binlogFiles := make([]binlogFile, 0, len(fileNames))
+// filterFiles assume fileNames is sorted by commit time stamp,
+// and may filter files not not overlap with [startTS, endTS]
+func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, error) {
+	binlogFiles := make([]string, 0, len(fileNames))
 	var latestBinlogFile string
 
 	appendFile := func() {
 		if latestBinlogFile != "" {
-			fullpath := path.Join(r.cfg.Dir, latestBinlogFile)
-			binlogFiles = append(binlogFiles, binlogFile{fullpath: fullpath, offset: 0})
+			binlogFiles = append(binlogFiles, latestBinlogFile)
 			latestBinlogFile = ""
 		}
 	}
 
 	for _, file := range fileNames {
-		ts, err := r.getFirstBinlogCommitTS(file)
+		ts, err := getFirstBinlogCommitTS(file)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if ts <= r.cfg.StartTSO {
+		if ts <= startTS {
 			latestBinlogFile = file
 			continue
 		}
 
-		if ts > r.cfg.StopTSO && r.cfg.StopTSO != 0 {
+		if ts > endTS && endTS != 0 {
 			break
 		}
 
@@ -62,12 +60,12 @@ func (r *Reparo) filterFiles(fileNames []string) ([]binlogFile, error) {
 	}
 	appendFile()
 
-	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, r.cfg.StartTSO, r.cfg.StopTSO)
+	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, startTS, endTS)
 	return binlogFiles, nil
 }
 
-func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
-	fd, err := os.OpenFile(path.Join(r.cfg.Dir, filename), os.O_RDONLY, 0600)
+func getFirstBinlogCommitTS(filename string) (int64, error) {
+	fd, err := os.OpenFile(filename, os.O_RDONLY, 0600)
 	if err != nil {
 		return 0, errors.Annotatef(err, "open file %s error", filename)
 	}
@@ -85,5 +83,4 @@ func (r *Reparo) getFirstBinlogCommitTS(filename string) (int64, error) {
 	}
 
 	return binlog.CommitTs, nil
-
 }

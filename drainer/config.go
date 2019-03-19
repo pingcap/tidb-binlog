@@ -16,6 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -45,7 +46,7 @@ type SyncerConfig struct {
 	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
 	To               *executor.DBConfig `toml:"to" json:"to"`
-	DoTables         []TableName        `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoTables         []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType       string             `toml:"db-type" json:"db-type"`
 	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`

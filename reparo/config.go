@@ -1,4 +1,4 @@
-package repora
+package reparo
 
 import (
 	"flag"
@@ -10,21 +10,16 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
-	"github.com/pingcap/tidb-binlog/reparo/executor"
+	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 const (
 	timeFormat = "2006-01-02 15:04:05"
 )
-
-// Table stores the table and schema name
-type Table struct {
-	Schema string `toml:"db-name" json:"db-name"`
-	Name   string `toml:"tbl-name" json:"tbl-name"`
-}
 
 // Config is the main configuration for the retore tool.
 type Config struct {
@@ -35,14 +30,14 @@ type Config struct {
 	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
 	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
 
-	DestType string             `toml:"dest-type" json:"dest-type"`
-	DestDB   *executor.DBConfig `toml:"dest-db" json:"dest-db"`
+	DestType string           `toml:"dest-type" json:"dest-type"`
+	DestDB   *syncer.DBConfig `toml:"dest-db" json:"dest-db"`
 
-	DoTables []Table  `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs    []string `toml:"replicate-do-db" json:"replicate-do-db"`
+	DoTables []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs    []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 
-	IgnoreTables []Table  `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
-	IgnoreDBs    []string `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
+	IgnoreTables []filter.TableName `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
+	IgnoreDBs    []string           `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
 
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
@@ -137,7 +132,7 @@ func (c *Config) Parse(args []string) (err error) {
 
 func (c *Config) adjustDoDBAndTable() {
 	for i := 0; i < len(c.DoTables); i++ {
-		c.DoTables[i].Name = strings.ToLower(c.DoTables[i].Name)
+		c.DoTables[i].Table = strings.ToLower(c.DoTables[i].Table)
 		c.DoTables[i].Schema = strings.ToLower(c.DoTables[i].Schema)
 	}
 	for i := 0; i < len(c.DoDBs); i++ {
@@ -162,6 +157,8 @@ func (c *Config) validate() error {
 		}
 		return nil
 	case "print":
+		return nil
+	case "memory":
 		return nil
 	default:
 		return errors.Errorf("dest type %s is not supported", c.DestType)

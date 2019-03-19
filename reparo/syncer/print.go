@@ -1,45 +1,58 @@
-package translator
+package syncer
 
 import (
 	"fmt"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/util/codec"
 )
 
-type printTranslator struct {
+type printSyncer struct{}
+
+var _ Syncer = &printSyncer{}
+
+func newPrintSyncer() (*printSyncer, error) {
+	return &printSyncer{}, nil
 }
 
-func newPrintTranslator() Translator {
-	return &printTranslator{}
+func (p *printSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
+	switch pbBinlog.Tp {
+	case pb.BinlogType_DDL:
+		printDDL(pbBinlog)
+		cb(pbBinlog)
+	case pb.BinlogType_DML:
+		for _, event := range pbBinlog.GetDmlData().GetEvents() {
+			printEvent(&event)
+		}
+		cb(pbBinlog)
+	default:
+		return errors.Errorf("unknown type: %v", pbBinlog.Tp)
+
+	}
+
+	return nil
 }
 
-func (p *printTranslator) TransInsert(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	printHeader(binlog, event)
-	printInsertAndDeleteEvent(row)
-	return "", nil, nil
+func (p *printSyncer) Close() error {
+	return nil
 }
 
-func (p *printTranslator) TransUpdate(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	printHeader(binlog, event)
-	printUpdateEvent(row)
-	return "", nil, nil
+func printEvent(event *pb.Event) {
+	printHeader(event)
+
+	switch event.GetTp() {
+	case pb.EventType_Insert:
+		printInsertOrDeleteEvent(event.Row)
+	case pb.EventType_Update:
+		printUpdateEvent(event.Row)
+	case pb.EventType_Delete:
+		printInsertOrDeleteEvent(event.Row)
+	}
 }
 
-func (p *printTranslator) TransDelete(binlog *pb.Binlog, event *pb.Event, row [][]byte) (string, []interface{}, error) {
-	printHeader(binlog, event)
-	printInsertAndDeleteEvent(row)
-	return "", nil, nil
-
-}
-
-func (p *printTranslator) TransDDL(binlog *pb.Binlog) (string, []interface{}, error) {
-	printDDL(binlog)
-	return "", nil, nil
-}
-
-func printHeader(binlog *pb.Binlog, event *pb.Event) {
+func printHeader(event *pb.Event) {
 	printEventHeader(event)
 }
 
@@ -77,7 +90,7 @@ func printUpdateEvent(row [][]byte) {
 	}
 }
 
-func printInsertAndDeleteEvent(row [][]byte) {
+func printInsertOrDeleteEvent(row [][]byte) {
 	for _, c := range row {
 		col := &pb.Column{}
 		err := col.Unmarshal(c)

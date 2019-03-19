@@ -931,27 +931,26 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 				if binlog.Tp == pb.BinlogType_Prewrite {
 					continue
-				} else {
-					if binlog.CommitTs == binlog.StartTs {
-						// this should be a fake binlog, drainer should ignore this when push binlog to the downstream
-						log.Debug("get fake c binlog: ", binlog.CommitTs)
-					} else {
-						err = a.feedPreWriteValue(binlog)
-						if err != nil {
-							errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
-							log.Error(err)
-							iter.Release()
-							return
-						}
-					}
+				}
 
-					value, err = binlog.Marshal()
+				if binlog.CommitTs == binlog.StartTs {
+					// this should be a fake binlog, drainer should ignore this when push binlog to the downstream
+					log.Debug("get fake c binlog: ", binlog.CommitTs)
+				} else {
+					err = a.feedPreWriteValue(binlog)
 					if err != nil {
+						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
 						log.Error(err)
 						iter.Release()
 						return
 					}
+				}
 
+				value, err = binlog.Marshal()
+				if err != nil {
+					log.Error(err)
+					iter.Release()
+					return
 				}
 
 				select {
