@@ -1,7 +1,7 @@
 # Arbiter Configuration.
 
 # addr (i.e. 'host:port') to listen on for Arbiter connections
-# addr = "127.0.0.1:8249"
+# addr = "127.0.0.1:8251"
 
 [up]
 # if arbiter donesn't have checkpoint, use initial commitTS to initial checkpoint
