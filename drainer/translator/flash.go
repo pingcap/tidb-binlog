@@ -111,7 +111,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var newValues []interface{}
 
 		// TODO: Make updating pk working
-		oldColumnValues, newColumnValues, err := decodeFlashOldAndNewRow(row, colsTypeMap, gotime.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, gotime.Local)
 		newPkValue := newColumnValues[pkID]
 
 		if err != nil {
