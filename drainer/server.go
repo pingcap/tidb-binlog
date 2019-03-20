@@ -16,9 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -35,7 +33,6 @@ var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
 	clusterID         uint64
-	pdReconnTimes     = 30
 )
 
 // Server implements the gRPC interface,
@@ -80,7 +77,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := getPdClient(cfg)
+	pdCli, err := util.GetPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -147,31 +144,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		latestTS:   latestTS,
 		latestTime: latestTime,
 	}, nil
-}
-
-func getPdClient(cfg *Config) (pd.Client, error) {
-	// lockResolver and tikvStore doesn't exposed a method to get clusterID
-	// so have to create a PD client temporarily.
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var pdCli pd.Client
-	for i := 1; i < pdReconnTimes; i++ {
-		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
-			CAPath:   cfg.Security.SSLCA,
-			CertPath: cfg.Security.SSLCert,
-			KeyPath:  cfg.Security.SSLKey,
-		})
-		if err != nil {
-			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
-		} else {
-			break
-		}
-	}
-
-	return pdCli, errors.Trace(err)
 }
 
 // DumpBinlog implements the gRPC interface of drainer server

@@ -40,10 +40,6 @@ var notifyDrainerTimeout = time.Second * 10
 // GlobalConfig is global config of pump
 var GlobalConfig *globalConfig
 
-const (
-	pdReconnTimes = 30
-)
-
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
 type Server struct {
@@ -95,7 +91,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := getPdClient(cfg)
+	pdCli, err := util.GetPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -151,30 +147,6 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 	}, nil
-}
-
-func getPdClient(cfg *Config) (pd.Client, error) {
-	// use tiStore's currentVersion method to get the ts from tso
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var pdCli pd.Client
-	for i := 1; i < pdReconnTimes; i++ {
-		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
-			CAPath:   cfg.Security.SSLCA,
-			CertPath: cfg.Security.SSLCert,
-			KeyPath:  cfg.Security.SSLKey,
-		})
-		if err != nil {
-			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
-		} else {
-			break
-		}
-	}
-
-	return pdCli, errors.Trace(err)
 }
 
 // WriteBinlog implements the gRPC interface of pump server
