@@ -223,14 +223,8 @@ func (cfg *Config) validate() error {
 	}
 
 	// check EtcdEndpoints
-	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
-	if err != nil {
+	if _, err := flags.NewURLsValue(cfg.EtcdURLs); err != nil {
 		return errors.Errorf("parse EtcdURLs error: %s, %v", cfg.EtcdURLs, err)
-	}
-	for _, u := range urlv.URLSlice() {
-		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
-		}
 	}
 
 	return nil
