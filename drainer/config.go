@@ -78,7 +78,6 @@ type Config struct {
 
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
-
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
 		SyncerCfg:   new(SyncerConfig),

@@ -72,7 +72,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if err1 := os.MkdirAll(cfg.DataDir, 0700); err1 != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
 	}
 
