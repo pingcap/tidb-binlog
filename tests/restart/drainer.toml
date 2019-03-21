@@ -17,7 +17,7 @@ pd-urls = "http://127.0.0.1:2379"
 [syncer]
 
 # disable sync these schema
-ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"
 
 # number of binlog events in a transaction batch
 txn-batch = 100
