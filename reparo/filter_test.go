@@ -5,7 +5,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -83,7 +83,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 	binlogDir := c.MkDir()
 
 	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
-	binlogfile.SegmentSizeBytes = 1
+	pump.SegmentSizeBytes = 1
 
 	// create binlog file
 	for i := 0; i < 10; i++ {
@@ -94,7 +94,7 @@ func (s *testReparoSuite) TestIsAcceptableBinlogFile(c *C) {
 		c.Assert(err, IsNil)
 
 		// generate binlog file.
-		binloger, err := binlogfile.OpenBinlogger(binlogDir, compress.CompressionNone)
+		binloger, err := pump.OpenBinlogger(binlogDir, compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
 		err = binloger.Close()
