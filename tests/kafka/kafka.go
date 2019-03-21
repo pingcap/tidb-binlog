@@ -9,7 +9,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/diff"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
@@ -90,13 +89,6 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	// run the dailytest
-	diffCfg := &diff.Config{
-		EqualIndex:       true,
-		EqualCreateTable: true,
-		EqualRowCount:    true,
-		EqualData:        true,
-	}
-	dailytest.RunMultiSource(sourceDBs, sinkDBForDiff, diffCfg)
-	dailytest.Run(sourceDBs[0], sinkDBForDiff, diffCfg, 10, 1000, 10)
+	dailytest.RunMultiSource(sourceDBs, sinkDBForDiff, "test")
+	dailytest.Run(sourceDBs[0], sinkDBForDiff, "test", 10, 1000, 10)
 }

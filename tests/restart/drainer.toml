@@ -34,28 +34,9 @@ safe-mode = false
 # valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "mysql"
 
-##replicate-do-db priority over replicate-do-table if have same db name
-##and we support regex expression , start with '~' declare use regex expression.
-#
-replicate-do-db = ["~^do_start.*","do_name"]
-[[syncer.replicate-do-table]]
-db-name ="test"
-tbl-name = "do_name"
-
-[[syncer.replicate-do-table]]
-db-name ="test"
-tbl-name = "~^do_start.*"
-
 # the downstream mysql protocol database
 [syncer.to]
 host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
-# Time and size limits for flash batch write
-# time-limit = "30s"
-# size-limit = "100000"
-[syncer.to.checkpoint]
-#schema = "tidb_binlog"
-
-

@@ -22,8 +22,7 @@ run_reparo &
 
 sleep 15
 
-down_run_sql "SELECT count(*) FROM \`reparo_test\`.\`test\`"
-check_contains "count(*): 4"
+check_data ./sync_diff_inspector.toml 
 
 # clean up
 run_sql "DROP DATABASE IF EXISTS \`reparo_test\`"

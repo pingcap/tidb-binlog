@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt diff reparo integration_test arbiter
+.PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter
 
 PROJECT=tidb-binlog
 
@@ -11,6 +11,8 @@ endif
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
+
+TEST_DIR := /tmp/tidb_binlog_test
 
 GO		:= go
 GOBUILD   := GO111MODULE=on CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
@@ -47,9 +49,6 @@ drainer:
 arbiter:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/arbiter cmd/arbiter/main.go
 
-diff:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/diff cmd/diff/main.go
-
 reparo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go	
 
@@ -57,13 +56,15 @@ install:
 	go install ./...
 
 test:
+	mkdir -p "$(TEST_DIR)"
 	@export log_level=error;\
-	$(GOTEST) -cover $(PACKAGES)
+	$(GOTEST) -cover -covermode=count -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
 
 integration_test: build
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
+	@which bin/sync_diff_inspector
 	@which bin/drainer
 	@which bin/pump
 	@which bin/binlogctl
@@ -85,6 +86,17 @@ check:
 	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | grep -vE 'vendor' | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "gofmt (simplify)"
 	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
+
+coverage:
+	GO111MODULE=off go get github.com/wadey/gocovmerge
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go" > "$(TEST_DIR)/all_cov.out"
+ifeq ("$(JenkinsCI)", "1")
+	GO111MODULE=off go get github.com/mattn/goveralls
+	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
+else
+	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
+	grep -F '<option' "$(TEST_DIR)/all_cov.html"
+endif
 
 
 check-static:

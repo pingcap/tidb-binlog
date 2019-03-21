@@ -4,16 +4,15 @@ import (
 	"database/sql"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/diff"
 )
 
 // RunMultiSource runs the test that need multi instance TiDB, one instance for one *sql.DB* in srcs
-func RunMultiSource(srcs []*sql.DB, targetDB *sql.DB, diffCfg *diff.Config) {
-	runDDLTest(srcs, targetDB, diffCfg)
+func RunMultiSource(srcs []*sql.DB, targetDB *sql.DB, schema string) {
+	runDDLTest(srcs, targetDB, schema)
 }
 
 // Run runs the daily test
-func Run(sourceDB *sql.DB, targetDB *sql.DB, diffCfg *diff.Config, workerCount int, jobCount int, batch int) {
+func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, jobCount int, batch int) {
 
 	TableSQLs := []string{`
 create table ptest(
@@ -42,19 +41,19 @@ create table ntest(
 `}
 
 	// run the simple test case
-	RunCase(diffCfg, sourceDB, targetDB)
+	RunCase(sourceDB, targetDB, schema)
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
 		// generate insert/update/delete sqls and execute
 		RunDailyTest(sourceDB, TableSQLs, workerCount, jobCount, batch)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
 		// truncate test data
 		TruncateTestTable(sourceDB, TableSQLs)
 	})
 
-	RunTest(diffCfg, sourceDB, targetDB, func(src *sql.DB) {
+	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
 		// drop test table
 		DropTestTable(sourceDB, TableSQLs)
 	})

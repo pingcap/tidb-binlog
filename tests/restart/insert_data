@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -e
+
+run_sql "DROP DATABASE IF EXISTS RESTART_TEST;"
+run_sql "CREATE DATABASE RESTART_TEST;"
+run_sql "CREATE TABLE RESTART_TEST.TEST(a int);"
+
+# don't forget kill this process
+end=$((SECONDS+20))
+while [ $SECONDS -lt $end ]; do
+    run_sql "INSERT INTO RESTART_TEST.TEST VALUES(1);"
+    sleep 0.05
+done
