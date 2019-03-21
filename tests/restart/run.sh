@@ -9,6 +9,7 @@ STATUS_LOG="${OUT_DIR}/status.log"
 
 # run drainer, and drainer's status should be online
 run_drainer &
+sleep 5
 
 # run a new pump
 run_pump 8251 &
