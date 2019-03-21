@@ -8,6 +8,9 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 )
@@ -134,4 +137,29 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	}
 
 	return int64(version.Ver), nil
+}
+
+func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
+	urlv, err := flags.NewURLsValue(etcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	pdReconnTimes := 30
+
+	var pdCli pd.Client
+	for i := 1; i < pdReconnTimes; i++ {
+		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+			CAPath:   securityConfig.SSLCA,
+			CertPath: securityConfig.SSLCert,
+			KeyPath:  securityConfig.SSLKey,
+		})
+		if err != nil {
+			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
+		} else {
+			break
+		}
+	}
+
+	return pdCli, errors.Trace(err)
 }
