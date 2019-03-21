@@ -114,6 +114,9 @@ EOF
         fi
         sleep 3
     done
+
+    echo "Starting Drainer..."
+    run_drainer -L debug &
 }
 
 trap stop_services EXIT
