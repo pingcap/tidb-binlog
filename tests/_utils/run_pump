@@ -11,7 +11,7 @@ while :
 do
         pump_num=`ps aux > temp && grep "pump -log-file ${OUT_DIR}/pump_${PORT}.log" temp | wc -l && rm temp`
         if [ $pump_num -ne 0 ]; then
-                binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump:$PORT	
+                binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump:$PORT || true
                 sleep 1
         else
                 break
