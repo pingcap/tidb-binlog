@@ -35,6 +35,8 @@ var (
 	clusterID         uint64
 )
 
+type drainerKeyType string
+
 // Server implements the gRPC interface,
 // and maintains the runtime status
 type Server struct {
@@ -83,6 +85,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, drainerKeyType("compressor"), cfg.Compressor)
+
 	clusterID = pdCli.GetClusterID(ctx)
 	// update latestTS and latestTime
 	latestTS, err := util.GetTSO(pdCli)
