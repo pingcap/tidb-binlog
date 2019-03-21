@@ -10,5 +10,5 @@ run_sql "CREATE TABLE RESTART_TEST.TEST(a int);"
 end=$((SECONDS+20))
 while [ $SECONDS -lt $end ]; do
     run_sql "INSERT INTO RESTART_TEST.TEST VALUES(1);"
-    sleep 0.05
+    sleep 0.1
 done
