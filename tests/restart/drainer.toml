@@ -20,10 +20,10 @@ pd-urls = "http://127.0.0.1:2379"
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"
 
 # number of binlog events in a transaction batch
-txn-batch = 100
+txn-batch = 200
 
 # work count to execute binlogs
-worker-count = 10
+worker-count = 20
 
 disable-dispatch = false
 
