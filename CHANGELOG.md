@@ -24,3 +24,14 @@ All notable changes to this project are documented in this file.
 - Add package pkg/loader [#471](https://github.com/pingcap/tidb-binlog/pull/471)
 - Add tool Arbiter sync from Kafka to Mysql [#441](https://github.com/pingcap/tidb-binlog/pull/441)
 
+## [2.1.6]
+- Nothing's changed
+
+## [2.1.7]
+- Use sync-diff-inspector check data and add pump restart test [#489](https://github.com/pingcap/tidb-binlog/pull/489)
+- Support generated columns [#491](https://github.com/pingcap/tidb-binlog/pull/491)
+- Cleanup useless code and outdated docs, Fix lint[#490](https://github.com/pingcap/tidb-binlog/pull/490)
+- reparo:/ refactor some code[#489](https://github.com/pingcap/tidb-binlog/pull/498)
+	- Skip scanning whole relative file for recovery.
+	- Improve code and test, write to downstream concurrently by using `pkg/loader` 
+
