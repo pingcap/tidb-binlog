@@ -6,6 +6,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/mysql"
 )
 
@@ -33,10 +34,7 @@ type Schema struct {
 }
 
 // TableName stores the table and schema name
-type TableName struct {
-	Schema string `toml:"db-name" json:"db-name"`
-	Table  string `toml:"tbl-name" json:"tbl-name"`
-}
+type TableName = filter.TableName
 
 // NewSchema returns the Schema object
 func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {

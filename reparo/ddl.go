@@ -1,13 +1,14 @@
-package repora
+package reparo
 
 import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 )
 
-func parseDDL(sql string) (node ast.Node, table Table, err error) {
+func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
 	nodes, _, err := parser.New().Parse(sql, "", "")
 	if err != nil {
 		return nil, table, errors.Trace(err)
@@ -55,11 +56,11 @@ func parseDDL(sql string) (node ast.Node, table Table, err error) {
 	return
 }
 
-func setSchemaIfExists(table *Table, schemaName string, tableName string) {
+func setSchemaIfExists(table *filter.TableName, schemaName string, tableName string) {
 	if schemaName != "" {
 		table.Schema = schemaName
 	}
 	if tableName != "" {
-		table.Name = tableName
+		table.Table = tableName
 	}
 }

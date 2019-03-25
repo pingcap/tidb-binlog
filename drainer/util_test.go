@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -29,21 +28,4 @@ func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 	ok = sql.IgnoreDDLError(err2)
 	c.Assert(ok, IsFalse)
 
-}
-
-func (t *testDrainerSuite) TestFormatIgnoreSchemas(c *C) {
-	ignoreDBs := formatIgnoreSchemas("test1,test2")
-	ignoreList := make(map[string]struct{})
-	ignoreList["test1"] = struct{}{}
-	ignoreList["test2"] = struct{}{}
-	c.Assert(ignoreDBs, DeepEquals, ignoreList)
-}
-
-func (t *testDrainerSuite) TestFilterIgnoreSchema(c *C) {
-	ignoreList := make(map[string]struct{})
-	ignoreList["test"] = struct{}{}
-	ignoreList["test1"] = struct{}{}
-
-	c.Assert(filterIgnoreSchema(&model.DBInfo{Name: model.NewCIStr("test1")}, ignoreList), IsTrue)
-	c.Assert(filterIgnoreSchema(&model.DBInfo{Name: model.NewCIStr("test2")}, ignoreList), IsFalse)
 }

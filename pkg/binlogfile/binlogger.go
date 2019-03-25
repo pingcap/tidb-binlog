@@ -29,7 +29,7 @@ var (
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-	segmentSizeBytes int64 = 512 * 1024 * 1024
+	SegmentSizeBytes int64 = 512 * 1024 * 1024
 )
 
 // Binlogger is the interface that for append and read binlog
@@ -69,7 +69,7 @@ type binlogger struct {
 	mutex   sync.Mutex
 }
 
-//OpenBinlogger returns a binlogger for write, then it can be appended
+// OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
@@ -100,7 +100,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog.0000000000000000
+	// if no binlog files, we create from binlog-0000000000000000
 	if len(names) == 0 {
 		lastFileName = path.Join(dirpath, BinlogName(0))
 		lastFileSuffix = 0
@@ -142,7 +142,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	return binlog, nil
 }
 
-//CloseBinlogger closes the binlogger
+// CloseBinlogger closes the binlogger
 func CloseBinlogger(binlogger Binlogger) error {
 	return binlogger.Close()
 }
@@ -355,7 +355,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 
 	b.lastOffset = curOffset
 
-	if curOffset < segmentSizeBytes {
+	if curOffset < SegmentSizeBytes {
 		return curOffset, nil
 	}
 
