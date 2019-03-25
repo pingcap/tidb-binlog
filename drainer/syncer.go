@@ -45,8 +45,7 @@ type Syncer struct {
 
 	executors []executor.Executor
 
-	positions    map[string]int64
-	initCommitTS int64
+	positions map[string]int64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -66,7 +65,6 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
 	syncer.jobCh = newJobChans(cfg.WorkerCount)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
-	syncer.initCommitTS = cp.TS()
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
 	syncer.lastSyncTime = time.Now()

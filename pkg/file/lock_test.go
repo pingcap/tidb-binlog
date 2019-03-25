@@ -3,12 +3,15 @@ package file
 import (
 	"io/ioutil"
 	"os"
+	"testing"
 	"time"
 
 	. "github.com/pingcap/check"
 )
 
 var _ = Suite(&testLockSuite{})
+
+func Test(t *testing.T) { TestingT(t) }
 
 type testLockSuite struct{}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"golang.org/x/net/context"
@@ -121,6 +122,9 @@ func init() {
 	registry.MustRegister(queryHistogramVec)
 	executor.QueryHistogramVec = queryHistogramVec
 	registry.MustRegister(queueSizeGauge)
+
+	// for pb using it
+	bf.InitMetircs(registry)
 }
 
 type metricClient struct {

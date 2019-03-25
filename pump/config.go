@@ -20,16 +20,13 @@ import (
 )
 
 const (
-	defaultEtcdDialTimeout         = 5 * time.Second
-	defaultEtcdURLs                = "http://127.0.0.1:2379"
-	defaultListenAddr              = "127.0.0.1:8250"
-	defautMaxKafkaSize             = 1024 * 1024 * 1024
-	defaultHeartbeatInterval       = 2
-	defaultGC                      = 7
-	defaultDataDir                 = "data.pump"
-	defaultBinlogSliceSize         = 10 * 1024 * 1024
-	defaultSegmentSizeBytes  int64 = 512 * 1024 * 1024
-	defaultSendKafKaRetryNum int   = 10
+	defaultEtcdDialTimeout   = 5 * time.Second
+	defaultEtcdURLs          = "http://127.0.0.1:2379"
+	defaultListenAddr        = "127.0.0.1:8250"
+	defautMaxKafkaSize       = 1024 * 1024 * 1024
+	defaultHeartbeatInterval = 2
+	defaultGC                = 7
+	defaultDataDir           = "data.pump"
 
 	// default interval time to generate fake binlog, the unit is second
 	defaultGenFakeBinlogInterval = 3
@@ -41,16 +38,6 @@ type globalConfig struct {
 	enableDebug bool
 	// max binlog message size limit
 	maxMsgSize int
-
-	// enable binlogger to split large binlog into small binlog slices
-	EnableBinlogSlice bool
-	// size of one binlog slice
-	SlicesSize int
-	// retry to send to kafka
-	sendKafKaRetryNum int
-
-	// segmentSizeBytes is the max threshold of binlog segment file size
-	segmentSizeBytes int64
 }
 
 // Config holds the configuration of pump
@@ -113,9 +100,9 @@ func NewConfig() *Config {
 	// global config
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
 	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
-	fs.Int64Var(&GlobalConfig.segmentSizeBytes, "binlog-file-size", defaultSegmentSizeBytes, "binlog-file-size is the max threshold of binlog segment file size")
-	fs.BoolVar(&GlobalConfig.EnableBinlogSlice, "enable-binlog-slice", false, "enable pump to split large binlog into small binlog slices")
-	fs.IntVar(&GlobalConfig.SlicesSize, "binlog-slice-size", defaultBinlogSliceSize, "size of one binlog slice")
+	fs.Int64Var(new(int64), "binlog-file-size", 0, "DEPRECATED")
+	fs.BoolVar(new(bool), "enable-binlog-slice", false, "DEPRECATED")
+	fs.IntVar(new(int), "binlog-slice-size", 0, "DEPRECATED")
 
 	return cfg
 }
@@ -168,7 +155,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
-	initializeSaramaGlobalConfig()
 
 	return cfg.validate()
 }

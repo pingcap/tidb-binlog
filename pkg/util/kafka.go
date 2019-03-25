@@ -2,18 +2,12 @@ package util
 
 import (
 	"sync"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
-)
-
-const (
-	maxRetry      = 12
-	retryInterval = 5 * time.Second
 )
 
 // don't use directly, call GetParentMetricsRegistry to get it

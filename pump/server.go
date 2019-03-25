@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
 	"golang.org/x/net/context"
@@ -40,14 +41,7 @@ var notifyDrainerTimeout = time.Second * 10
 var GlobalConfig *globalConfig
 
 const (
-	mib           = 1024 * 1024
 	pdReconnTimes = 30
-)
-
-// use latestPos and latestTS to record the latest binlog position and ts the pump works on
-var (
-	latestFilePos binlog.Pos
-	latestTS      int64
 )
 
 // Server implements the gRPC interface,
@@ -86,10 +80,7 @@ func init() {
 	// it must be set before any real grpc operation.
 	grpc.EnableTracing = false
 	GlobalConfig = &globalConfig{
-		maxMsgSize:        defautMaxKafkaSize,
-		segmentSizeBytes:  defaultSegmentSizeBytes,
-		SlicesSize:        defaultBinlogSliceSize,
-		sendKafKaRetryNum: defaultSendKafKaRetryNum,
+		maxMsgSize: defautMaxKafkaSize,
 	}
 }
 
@@ -404,7 +395,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
-	http.Handle("/metrics", prometheus.Handler())
+	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
 
@@ -697,8 +688,6 @@ func (s *Server) getTSO() (int64, error) {
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	// update latestTS by the way
-	latestTS = ts
 
 	return ts, nil
 }
