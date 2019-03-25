@@ -31,7 +31,7 @@ All notable changes to this project are documented in this file.
 - Use sync-diff-inspector check data and add pump restart test [#489](https://github.com/pingcap/tidb-binlog/pull/489)
 - Support generated columns [#491](https://github.com/pingcap/tidb-binlog/pull/491)
 - Cleanup useless code and outdated docs, Fix lint[#490](https://github.com/pingcap/tidb-binlog/pull/490)
-- reparo:/ refactor some code[#489](https://github.com/pingcap/tidb-binlog/pull/498)
+- reparo: refactor some code[#489](https://github.com/pingcap/tidb-binlog/pull/498)
 	- Skip scanning whole relative file for recovery.
 	- Improve code and test, write to downstream concurrently by using `pkg/loader` 
 
