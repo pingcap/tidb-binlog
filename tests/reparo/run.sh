@@ -8,8 +8,8 @@ cd "$(dirname "$0")"
 ms=$(date +'%s')
 ts=$(($ms*1000<<18))
 args="-initial-commit-ts=$ts"
-down_run_sql "DROP DATABASE tidb_binlog" || true
-rm /tmp/tidb_binlog_test/data.drainer || true
+down_run_sql "DROP DATABASE IF EXISTS tidb_binlog"
+rm -rf /tmp/tidb_binlog_test/data.drainer
 
 run_drainer "$args" &
 
