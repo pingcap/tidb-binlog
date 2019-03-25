@@ -14,7 +14,8 @@ sleep 2
 echo "check drainer's status, should be online"
 check_status drainers online
 
-drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID: \([a-zA-Z0-9\-\.]*:[0-9]*\),.*/\1/g'`
+# TODO improve it, let binlogctl output formatted data
+drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID: \(.*:[0-9]*\), Addr:.*/\1/g'`
 echo "get drainer node id: $drainerNodeID"
 
 pumpNodeID="pump:8250"
