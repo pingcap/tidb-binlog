@@ -26,14 +26,7 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 
 	binlogNum := 9
 	sourceNum := 5
-	sources := make([]MergeSource, sourceNum)
-	for i := 0; i < sourceNum; i++ {
-		source := MergeSource{
-			ID:     strconv.Itoa(i),
-			Source: make(chan MergeItem),
-		}
-		sources[i] = source
-	}
+	sources := createMergeSources(sourceNum, 0)
 	merger := NewMerger(0, strategy, sources...)
 
 	// get output from merger
@@ -121,4 +114,70 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 		c.Assert(ts > currentTs, Equals, true)
 		currentTs = ts
 	}
+}
+
+func (s *testMergerSuite) TestRemoveSourceWithPendingLogs(c *C) {
+	numSources := 5
+	sources := createMergeSources(numSources, binlogChanSize)
+	merger := NewMerger(-1, heapStrategy, sources...)
+
+	var wg sync.WaitGroup
+	for i, src := range sources {
+		wg.Add(1)
+		go func(id int, src MergeSource) {
+			for j := 0; j < binlogChanSize; j++ {
+				binlog := new(pb.Binlog)
+				binlog.CommitTs = int64(id + j*numSources)
+				binlogItem := newBinlogItem(binlog, src.ID)
+				c.Logf("[source %s] adding binlog %d", src.ID, binlog.CommitTs)
+				src.Source <- binlogItem
+			}
+			wg.Done()
+		}(i, src)
+	}
+	merger.Stop()
+	c.Log("Merger stopped")
+	wg.Wait()
+	c.Log("All binlogs written to source channels")
+
+	// binlogChanSize` and the buffer size of the `output` channel are both `10`,
+	// so all sources should have pending logs in the channel at this point
+	for _, src := range sources[2:] {
+		c.Assert(len(src.Source) > 0, Equals, true)
+		close(src.Source)
+		merger.RemoveSource(src.ID)
+	}
+	merger.Continue()
+
+	// It takes only one empty source to block the goroutine executing merger.run,
+	// due to the way we add our binlogs in this tests, we can't read the last `numSources`
+	// binlogs
+	numReadableBinlogs := binlogChanSize*numSources - numSources
+	output := merger.Output()
+	for i := 0; i < numReadableBinlogs; i++ {
+		timeout := time.After(time.Second * 3)
+		select {
+		case item, ok := <-output:
+			if !ok {
+				c.Fatalf("Merger output channel closed, last read ts: %d", i-1)
+			} else {
+				c.Logf("Receive %d from merger", item.GetCommitTs())
+				c.Assert(item.GetCommitTs(), Equals, int64(i))
+			}
+		case <-timeout:
+			c.Fatal("Timeout consuming merger output")
+		}
+	}
+}
+
+func createMergeSources(sourceNum int, bufferSize int) []MergeSource {
+	sources := make([]MergeSource, sourceNum)
+	for i := 0; i < sourceNum; i++ {
+		source := MergeSource{
+			ID:     strconv.Itoa(i),
+			Source: make(chan MergeItem, bufferSize),
+		}
+		sources[i] = source
+	}
+	return sources
 }

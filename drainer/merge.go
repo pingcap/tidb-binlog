@@ -210,13 +210,20 @@ func (m *Merger) AddSource(source MergeSource) {
 	m.Unlock()
 }
 
-// RemoveSource removes a source from Merger
+// RemoveSource removes a source from Merger,
+// it's the caller's responsibility to make sure the source channel is closed.
 func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
+	defer m.Unlock()
+	src, ok := m.sources[sourceID]
+	if !ok {
+		log.Errorf("Can't remove nonexistent source: %s", sourceID)
+		return
+	}
+	m.exhaustSource(src)
 	delete(m.sources, sourceID)
-	log.Infof("merger remove source %s", sourceID)
+	log.Infof("Merger remove source %s", sourceID)
 	m.setSourceChanged()
-	m.Unlock()
 }
 
 func (m *Merger) run() {
@@ -350,4 +357,19 @@ func (m *Merger) resetSourceChanged() {
 
 func (m *Merger) isSourceChanged() bool {
 	return atomic.LoadInt32(&m.sourceChanged) == 1
+}
+
+func (m *Merger) exhaustSource(src MergeSource) {
+	for {
+		select {
+		case binlog, ok := <-src.Source:
+			if !ok {
+				return
+			}
+			m.strategy.Push(binlog)
+		case <-time.After(time.Second * 2):
+			log.Errorf("Timeout when reading from removed source: %s", src.ID)
+			return
+		}
+	}
 }

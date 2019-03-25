@@ -262,8 +262,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 			case node.Offline:
 				// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
 				// so when the pump is offline, we can remove this pump directly.
-				c.merger.RemoveSource(n.NodeID)
 				c.pumps[n.NodeID].Close()
+				c.merger.RemoveSource(n.NodeID)
 				delete(c.pumps, n.NodeID)
 				log.Infof("node(%s) of cluster(%d) has been removed and release the connection to it",
 					p.nodeID, p.clusterID)
