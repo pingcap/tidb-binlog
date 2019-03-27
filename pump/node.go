@@ -209,8 +209,13 @@ func (p *pumpNode) Quit() error {
 // in this case, the caller should invoke generateLocalNodeID()
 func readLocalNodeID(dataDir string) (string, error) {
 	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
-	if _, err := CheckFileExist(nodeIDPath); err != nil {
-		return "", errors.NotFoundf("local nodeID file not exist: %v", err)
+	if fi, err := os.Stat(nodeIDPath); err != nil {
+		if os.IsNotExist(err) {
+			return "", errors.NotFoundf("Local nodeID file not exist: %v", err)
+		}
+		return "", err
+	} else if fi.IsDir() {
+		return "", errors.Errorf("Local nodeID path is a directory: %s", dataDir)
 	}
 	data, err := ioutil.ReadFile(nodeIDPath)
 	if err != nil {

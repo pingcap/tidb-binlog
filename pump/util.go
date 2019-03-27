@@ -3,11 +3,9 @@ package pump
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"strings"
 	"sync/atomic"
 
-	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 )
 
@@ -42,18 +40,6 @@ func KRand(size int, kind int) []byte {
 	return result
 }
 
-// CheckFileExist chekcs the file exist status and wether it is a file
-func CheckFileExist(filepath string) (string, error) {
-	fi, err := os.Stat(filepath)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if fi.IsDir() {
-		return "", errors.Errorf("filepath: %s, is a directory, not a file", filepath)
-	}
-	return filepath, nil
-}
-
 // Exist checks the dir exist, that it should have some file
 func Exist(dirpath string) bool {
 	names, err := bf.ReadDir(dirpath)
@@ -66,7 +52,7 @@ func Exist(dirpath string) bool {
 
 // TopicName returns topic name
 func TopicName(clusterID string, nodeID string) string {
-	// ":" is not valide in kafka topic name
+	// ":" is not a valid kafka topic name
 	topicName := fmt.Sprintf("%s_%s", clusterID, strings.Replace(nodeID, ":", "_", -1))
 	return topicName
 }
