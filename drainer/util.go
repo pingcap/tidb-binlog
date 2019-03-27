@@ -86,8 +86,9 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	}
 
 	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
-	sorter := &jobsSorter{jobs: jobs}
-	sort.Sort(sorter)
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].BinlogInfo.SchemaVersion < jobs[j].BinlogInfo.SchemaVersion
+	})
 
 	return jobs, nil
 }
@@ -149,21 +150,4 @@ func createExecutors(destDBType string, cfg *executor.DBConfig, count int) ([]ex
 
 func genHashKey(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
-}
-
-// jobsSorter implements the sort.Interface interface.
-type jobsSorter struct {
-	jobs []*model.Job
-}
-
-func (s *jobsSorter) Swap(i, j int) {
-	s.jobs[i], s.jobs[j] = s.jobs[j], s.jobs[i]
-}
-
-func (s *jobsSorter) Len() int {
-	return len(s.jobs)
-}
-
-func (s *jobsSorter) Less(i, j int) bool {
-	return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
 }
