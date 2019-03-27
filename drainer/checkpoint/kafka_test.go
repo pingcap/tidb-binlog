@@ -5,6 +5,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 func (t *testCheckPointSuite) TestKafka(c *C) {
@@ -40,4 +41,12 @@ func (t *testCheckPointSuite) TestKafka(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cp.TS(), Equals, newTs)
 	c.Assert(time.Since(begin).Seconds(), Greater, 0.49) // ~ 0.5
+
+	// close the checkpoint
+	err = cp.Close()
+	c.Assert(err, IsNil)
+	c.Assert(errors.Cause(cp.Load()), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(cp.Save(0)), Equals, ErrCheckPointClosed)
+	c.Assert(cp.Check(0), IsFalse)
+	c.Assert(errors.Cause(cp.Close()), Equals, ErrCheckPointClosed)
 }

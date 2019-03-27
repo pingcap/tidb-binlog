@@ -9,6 +9,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
@@ -78,6 +79,14 @@ func (t *testCheckPointSuite) TestnewMysql(c *C) {
 	c.Assert(sp1.Check(0), IsFalse)
 	sp2.saveTime = sp2.saveTime.Add(-maxSaveTime - time.Second) // hack the `saveTime`
 	c.Assert(sp1.Check(0), IsTrue)
+
+	// close the checkpoint
+	err = sp.Close()
+	c.Assert(err, IsNil)
+	c.Assert(errors.Cause(sp.Load()), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(sp.Save(0)), Equals, ErrCheckPointClosed)
+	c.Assert(sp.Check(0), IsFalse)
+	c.Assert(errors.Cause(sp.Close()), Equals, ErrCheckPointClosed)
 
 	// test for TsMap (use MySQL as TiDB)
 	spTiDB, err := newMysql("tidb", cfg)

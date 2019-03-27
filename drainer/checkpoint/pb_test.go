@@ -5,6 +5,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 func (t *testCheckPointSuite) TestPb(c *C) {
@@ -53,4 +54,12 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	c.Assert(ok, IsTrue)
 	meta2.saveTime = meta2.saveTime.Add(-maxSaveTime - time.Second) // hack the `saveTime`
 	c.Assert(meta.Check(0), IsTrue)
+
+	// close the checkpoint
+	err = meta.Close()
+	c.Assert(err, IsNil)
+	c.Assert(errors.Cause(meta.Load()), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(meta.Save(0)), Equals, ErrCheckPointClosed)
+	c.Assert(meta.Check(0), IsFalse)
+	c.Assert(errors.Cause(meta.Close()), Equals, ErrCheckPointClosed)
 }

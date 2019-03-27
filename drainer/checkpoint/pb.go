@@ -20,6 +20,7 @@ var (
 // PbCheckPoint is local CheckPoint struct.
 type PbCheckPoint struct {
 	sync.RWMutex
+	closed          bool
 	initialCommitTS int64
 
 	name     string
@@ -42,11 +43,16 @@ func newPb(cfg *Config) (CheckPoint, error) {
 // Load implements CheckPointor.Load interface.
 func (sp *PbCheckPoint) Load() error {
 	sp.Lock()
+	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
 	defer func() {
 		if sp.CommitTS == 0 {
 			sp.CommitTS = sp.initialCommitTS
 		}
-		sp.Unlock()
 	}()
 
 	file, err := os.Open(sp.name)
@@ -70,6 +76,10 @@ func (sp *PbCheckPoint) Load() error {
 func (sp *PbCheckPoint) Save(ts int64) error {
 	sp.Lock()
 	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
 
 	sp.CommitTS = ts
 
@@ -96,6 +106,10 @@ func (sp *PbCheckPoint) Check(int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
+	if sp.closed {
+		return false
+	}
+
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
@@ -105,6 +119,18 @@ func (sp *PbCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+func (sp *PbCheckPoint) Close() error {
+	sp.Lock()
+	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
+	sp.closed = true
+	return nil
 }
 
 // String implements CheckPoint.String interface
