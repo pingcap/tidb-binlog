@@ -40,6 +40,7 @@ const (
 var (
 	maxBinlogItemCount     int
 	defaultBinlogItemCount = 16 << 12
+	supportedCompressors   = [...]string{"gzip"}
 )
 
 // SyncerConfig is the Syncer's configuration.
@@ -73,6 +74,7 @@ type Config struct {
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
 	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
+	Compressor      string          `toml:"compressor" json:"compressor"`
 	EtcdTimeout     time.Duration
 	MetricsAddr     string
 	MetricsInterval int
@@ -106,6 +108,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.Int64Var(&cfg.InitialCommitTS, "initial-commit-ts", 0, "if drainer donesn't have checkpoint, use initial commitTS to initial checkpoint")
+	fs.StringVar(&cfg.Compressor, "compressor", "", "use the specified compressor to compress payload between pump and drainer, only 'gzip' is supported now (default \"\", ie. compression disabled.)")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
@@ -242,6 +245,20 @@ func (cfg *Config) validate() error {
 	for _, u := range urlv.URLSlice() {
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
 			return errors.Errorf("bad EtcdURL host format: %s, %v", u.Host, err)
+		}
+	}
+
+	if cfg.Compressor != "" {
+		found := false
+		for _, c := range supportedCompressors {
+			if cfg.Compressor == c {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.Errorf(
+				"Invalid compressor: %v, must be one of these: %v", cfg.Compressor, supportedCompressors)
 		}
 	}
 
