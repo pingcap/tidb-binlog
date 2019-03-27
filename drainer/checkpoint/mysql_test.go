@@ -47,11 +47,14 @@ func (t *testCheckPointSuite) TestnewMysql(c *C) {
 	cfg.Table = "checkpoint"
 
 	// in test cases, we drop the checkpoint schema first
-	t.dropMysqlSchema(c, cfg)
+	skip := t.dropMysqlSchema(c, cfg)
+	if skip {
+		return
+	}
 
 	// zero (initial) CommitTs
 	sp, err := newMysql("mysql", cfg)
-	skip := t.skipRefusedCase(c, err)
+	skip = t.skipRefusedCase(c, err)
 	if skip {
 		return
 	}
@@ -106,11 +109,11 @@ func (t *testCheckPointSuite) TestnewMysql(c *C) {
 	c.Assert(spTiDB2.TsMap["slave-ts"], Greater, int64(0))
 }
 
-func (t *testCheckPointSuite) dropMysqlSchema(c *C, cfg *Config) {
+func (t *testCheckPointSuite) dropMysqlSchema(c *C, cfg *Config) bool {
 	db, err := pkgsql.OpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	skip := t.skipRefusedCase(c, err)
 	if skip {
-		return
+		return skip
 	}
 	c.Assert(err, IsNil)
 	defer db.Close()
@@ -118,6 +121,7 @@ func (t *testCheckPointSuite) dropMysqlSchema(c *C, cfg *Config) {
 	query := fmt.Sprintf("DROP SCHEMA IF EXISTS %s", cfg.Schema)
 	_, err = db.Exec(query)
 	c.Assert(err, IsNil)
+	return false
 }
 
 func (t *testCheckPointSuite) skipRefusedCase(c *C, err error) bool {
