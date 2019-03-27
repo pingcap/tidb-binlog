@@ -1,20 +1,20 @@
 package checkpoint
 
 import (
-	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/pingcap/check"
 )
 
 func (t *testCheckPointSuite) TestKafka(c *C) {
-	fileName := "/tmp/test_kafka"
+	dir := c.MkDir()
+	fileName := filepath.Join(dir, "test_kafka")
 	cfg := new(Config)
 	cfg.CheckPointFile = fileName
 	cp, err := newKafka(cfg)
 	c.Assert(err, IsNil)
 	c.Assert(cp.TS(), Equals, int64(0))
-	defer os.RemoveAll(fileName)
 
 	testTs := int64(1)
 	err = cp.Save(testTs)
