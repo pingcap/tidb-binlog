@@ -36,7 +36,7 @@ func NewURLs(strs []string) (URLs, error) {
 		all[i] = *u
 	}
 	us := URLs(all)
-	us.Sort()
+	sort.Slice(us, func(i, j int) bool { return us[i].String() < us[j].String() })
 
 	return us, nil
 }
@@ -45,20 +45,6 @@ func NewURLs(strs []string) (URLs, error) {
 func (us URLs) String() string {
 	return strings.Join(us.StringSlice(), ",")
 }
-
-// Sort sorts the URLs
-func (us *URLs) Sort() {
-	sort.Sort(us)
-}
-
-// Len return the lenght of URL slice
-func (us URLs) Len() int { return len(us) }
-
-// Less compares two URL and return the less one
-func (us URLs) Less(i, j int) bool { return us[i].String() < us[j].String() }
-
-// Swap swaps two URLs in the slice
-func (us URLs) Swap(i, j int) { us[i], us[j] = us[j], us[i] }
 
 // StringSlice return a slice of formatted string of URL
 func (us URLs) StringSlice() []string {

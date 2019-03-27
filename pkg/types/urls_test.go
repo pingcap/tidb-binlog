@@ -17,6 +17,11 @@ type testTypesSuite struct{}
 
 func (s *testTypesSuite) TestURLs(c *C) {
 	urlstrs := []string{
+		"http://www.google.com:12306",
+		"http://192.168.199.111:1080",
+		"http://hostname:9000",
+	}
+	sorted := []string{
 		"http://192.168.199.111:1080",
 		"http://hostname:9000",
 		"http://www.google.com:12306",
@@ -24,7 +29,7 @@ func (s *testTypesSuite) TestURLs(c *C) {
 
 	urls, err := NewURLs(urlstrs)
 	c.Assert(err, IsNil)
-	c.Assert(urls.String(), Equals, strings.Join(urlstrs, ","))
+	c.Assert(urls.String(), Equals, strings.Join(sorted, ","))
 }
 
 func (s *testTypesSuite) TestBadURLs(c *C) {
