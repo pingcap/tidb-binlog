@@ -94,13 +94,12 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 }
 
 // NewAppendWithResolver returns a instance of Append
-// if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txn is committed
+// if tiStore and tiLockResolver is not nil, we will try to query tikv to know whether a txn is committed
 func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
 	}
 
-	kvDir := path.Join(dir, "kv")
 	valueDir := path.Join(dir, "value")
 	err = os.MkdirAll(valueDir, 0755)
 	if err != nil {
@@ -113,28 +112,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	var opt opt.Options
-	cf := options.Storage
-	if cf == nil {
-		cf = defaultStorageConfig
-	} else {
-		setDefaultStorageConfig(cf)
-	}
-
-	log.Infof("storage config: %+v", cf)
-
-	opt.BlockCacheCapacity = cf.BlockCacheCapacity
-	opt.BlockRestartInterval = cf.BlockRestartInterval
-	opt.BlockSize = cf.BlockSize
-	opt.CompactionL0Trigger = cf.CompactionL0Trigger
-	opt.CompactionTableSize = cf.CompactionTableSize
-	opt.CompactionTotalSize = cf.CompactionTotalSize
-	opt.CompactionTotalSizeMultiplier = cf.CompactionTotalSizeMultiplier
-	opt.WriteBuffer = cf.WriteBuffer
-	opt.WriteL0PauseTrigger = cf.WriteL0PauseTrigger
-	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
-
-	metadata, err := leveldb.OpenFile(kvDir, &opt)
+	kvDir := path.Join(dir, "kv")
+	metadata, err := openMetadataDB(kvDir, options.Storage)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -229,7 +208,6 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 	append.wg.Add(1)
 	go append.updateStatus()
-
 	return
 }
 
@@ -1077,4 +1055,28 @@ func setDefaultStorageConfig(cf *Config) {
 	if cf.WriteL0SlowdownTrigger <= 0 {
 		cf.WriteL0SlowdownTrigger = defaultStorageConfig.WriteL0SlowdownTrigger
 	}
+}
+
+func openMetadataDB(kvDir string, cf *Config) (*leveldb.DB, error) {
+	if cf == nil {
+		cf = defaultStorageConfig
+	} else {
+		setDefaultStorageConfig(cf)
+	}
+
+	log.Infof("Storage config: %+v", cf)
+
+	var opt opt.Options
+	opt.BlockCacheCapacity = cf.BlockCacheCapacity
+	opt.BlockRestartInterval = cf.BlockRestartInterval
+	opt.BlockSize = cf.BlockSize
+	opt.CompactionL0Trigger = cf.CompactionL0Trigger
+	opt.CompactionTableSize = cf.CompactionTableSize
+	opt.CompactionTotalSize = cf.CompactionTotalSize
+	opt.CompactionTotalSizeMultiplier = cf.CompactionTotalSizeMultiplier
+	opt.WriteBuffer = cf.WriteBuffer
+	opt.WriteL0PauseTrigger = cf.WriteL0PauseTrigger
+	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
+
+	return leveldb.OpenFile(kvDir, &opt)
 }
