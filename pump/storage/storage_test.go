@@ -305,3 +305,32 @@ func (as *AppendSuit) TestResolve(c *check.C) {
 	// TODO test the case we query tikv to know weather a txn a commit
 	// is there a fake or mock kv.Storage and tikv.LockResolver to easy the test?
 }
+
+type OpenDBSuit struct {
+	dir string
+}
+
+var _ = check.Suite(&OpenDBSuit{})
+
+func (s *OpenDBSuit) SetUpTest(c *check.C) {
+	s.dir = c.MkDir()
+}
+
+func (s *OpenDBSuit) TestWhenConfigIsNotProvided(c *check.C) {
+	_, err := openMetadataDB(s.dir, nil)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *OpenDBSuit) TestProvidedConfigValsNotOverwritten(c *check.C) {
+	cf := Config{
+		KVConfig: KVConfig{
+			BlockRestartInterval: 32,
+			WriteL0PauseTrigger:  12,
+		},
+	}
+	_, err := openMetadataDB(s.dir, &cf)
+	c.Assert(err, check.IsNil)
+	c.Assert(cf.BlockRestartInterval, check.Equals, 32)
+	c.Assert(cf.WriteL0PauseTrigger, check.Equals, 12)
+	c.Assert(cf.BlockCacheCapacity, check.Equals, defaultStorageConfig.BlockCacheCapacity)
+}
