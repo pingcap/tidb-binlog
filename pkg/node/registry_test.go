@@ -107,3 +107,28 @@ func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *Status) 
 	c.Assert(err, IsNil)
 	c.Assert(ns, DeepEquals, status)
 }
+
+type checkNodeExistsSuite struct{}
+var _ = Suite(&checkNodeExistsSuite{})
+
+func (s *checkNodeExistsSuite) TestNotExist(c *C) {
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
+	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+
+	exist, err := r.checkNodeExists(context.Background(), "drainer", "404")
+	c.Assert(err, IsNil)
+	c.Assert(exist, IsFalse)
+}
+
+func (s *checkNodeExistsSuite) TestExist(c *C) {
+	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
+	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+
+	ctx := context.Background()
+	if err := r.client.Create(ctx, "drainer/1", "testing", nil); err != nil {
+		c.Fatal("Can't create node for testing")
+	}
+	exist, err := r.checkNodeExists(ctx, "drainer", "1")
+	c.Assert(err, IsNil)
+	c.Assert(exist, IsTrue)
+}

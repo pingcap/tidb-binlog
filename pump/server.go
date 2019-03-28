@@ -152,7 +152,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
-	// pump client will write some empty Payload to detect weather pump is working, should avoid this
+	// pump client will write some empty Payload to detect whether pump is working, should avoid this
 	if in.Payload == nil {
 		ret := new(binlog.WriteBinlogResp)
 		return ret, nil
