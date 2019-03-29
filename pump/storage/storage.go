@@ -100,7 +100,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		options = DefaultOptions()
 	}
 
-	log.Info("syn-log: ", options.Sync)
+	log.Infof("options: %+v", options)
 
 	valueDir := path.Join(dir, "value")
 	err = os.MkdirAll(valueDir, 0755)
