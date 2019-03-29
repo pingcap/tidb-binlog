@@ -100,6 +100,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		options = DefaultOptions()
 	}
 
+	log.Info("syn-log: ", options.Sync)
+
 	valueDir := path.Join(dir, "value")
 	err = os.MkdirAll(valueDir, 0755)
 	if err != nil {
@@ -113,7 +115,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	}
 
 	kvDir := path.Join(dir, "kv")
-	metadata, err := openMetadataDB(kvDir, options.Storage)
+	metadata, err := openMetadataDB(kvDir, options.KVConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -992,7 +994,8 @@ func getStorageSize(dir string) (size storageSize, err error) {
 
 // Config holds the configuration of storage
 type Config struct {
-	KVConfig `toml:"kv" json:"kv"`
+	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
+	KV      *KVConfig `toml:"kv" json:"kv"`
 }
 
 // KVConfig if the configuration of goleveldb
@@ -1009,57 +1012,55 @@ type KVConfig struct {
 	WriteL0SlowdownTrigger        int     `toml:"write-L0-slowdown-trigger" json:"write-L0-slowdown-trigger"`
 }
 
-var defaultStorageConfig = &Config{
-	KVConfig: KVConfig{
-		BlockCacheCapacity:            8388608,
-		BlockRestartInterval:          16,
-		BlockSize:                     4096,
-		CompactionL0Trigger:           8,
-		CompactionTableSize:           67108864,
-		CompactionTotalSize:           536870912,
-		CompactionTotalSizeMultiplier: 8,
-		WriteBuffer:                   67108864,
-		WriteL0PauseTrigger:           24,
-		WriteL0SlowdownTrigger:        17,
-	},
+var defaultStorageKVConfig = &KVConfig{
+	BlockCacheCapacity:            8388608,
+	BlockRestartInterval:          16,
+	BlockSize:                     4096,
+	CompactionL0Trigger:           8,
+	CompactionTableSize:           67108864,
+	CompactionTotalSize:           536870912,
+	CompactionTotalSizeMultiplier: 8,
+	WriteBuffer:                   67108864,
+	WriteL0PauseTrigger:           24,
+	WriteL0SlowdownTrigger:        17,
 }
 
-func setDefaultStorageConfig(cf *Config) {
+func setDefaultStorageConfig(cf *KVConfig) {
 	if cf.BlockCacheCapacity <= 0 {
-		cf.BlockCacheCapacity = defaultStorageConfig.BlockCacheCapacity
+		cf.BlockCacheCapacity = defaultStorageKVConfig.BlockCacheCapacity
 	}
 	if cf.BlockRestartInterval <= 0 {
-		cf.BlockRestartInterval = defaultStorageConfig.BlockRestartInterval
+		cf.BlockRestartInterval = defaultStorageKVConfig.BlockRestartInterval
 	}
 	if cf.BlockSize <= 0 {
-		cf.BlockSize = defaultStorageConfig.BlockSize
+		cf.BlockSize = defaultStorageKVConfig.BlockSize
 	}
 	if cf.CompactionL0Trigger <= 0 {
-		cf.CompactionL0Trigger = defaultStorageConfig.CompactionL0Trigger
+		cf.CompactionL0Trigger = defaultStorageKVConfig.CompactionL0Trigger
 	}
 	if cf.CompactionTableSize <= 0 {
-		cf.CompactionTableSize = defaultStorageConfig.CompactionTableSize
+		cf.CompactionTableSize = defaultStorageKVConfig.CompactionTableSize
 	}
 	if cf.CompactionTotalSize <= 0 {
-		cf.CompactionTotalSize = defaultStorageConfig.CompactionTotalSize
+		cf.CompactionTotalSize = defaultStorageKVConfig.CompactionTotalSize
 	}
 	if cf.CompactionTotalSizeMultiplier <= 0 {
-		cf.CompactionTotalSizeMultiplier = defaultStorageConfig.CompactionTotalSizeMultiplier
+		cf.CompactionTotalSizeMultiplier = defaultStorageKVConfig.CompactionTotalSizeMultiplier
 	}
 	if cf.WriteBuffer <= 0 {
-		cf.WriteBuffer = defaultStorageConfig.WriteBuffer
+		cf.WriteBuffer = defaultStorageKVConfig.WriteBuffer
 	}
 	if cf.WriteL0PauseTrigger <= 0 {
-		cf.WriteL0PauseTrigger = defaultStorageConfig.WriteL0PauseTrigger
+		cf.WriteL0PauseTrigger = defaultStorageKVConfig.WriteL0PauseTrigger
 	}
 	if cf.WriteL0SlowdownTrigger <= 0 {
-		cf.WriteL0SlowdownTrigger = defaultStorageConfig.WriteL0SlowdownTrigger
+		cf.WriteL0SlowdownTrigger = defaultStorageKVConfig.WriteL0SlowdownTrigger
 	}
 }
 
-func openMetadataDB(kvDir string, cf *Config) (*leveldb.DB, error) {
+func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	if cf == nil {
-		cf = defaultStorageConfig
+		cf = defaultStorageKVConfig
 	} else {
 		setDefaultStorageConfig(cf)
 	}

@@ -122,7 +122,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	options := storage.DefaultOptions().WithStorage(cfg.Storage)
+	options := storage.DefaultOptions()
+	if cfg.Storage.KV != nil {
+		options = options.WithKVConfig(cfg.Storage.KV)
+	}
+	if cfg.Storage.SyncLog != nil {
+		options = options.WithSync(*cfg.Storage.SyncLog)
+	}
+
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {
 		return nil, errors.Trace(err)
