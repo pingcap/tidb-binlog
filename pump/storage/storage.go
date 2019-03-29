@@ -998,6 +998,15 @@ type Config struct {
 	KV      *KVConfig `toml:"kv" json:"kv"`
 }
 
+// GetSyncLog return sync-log config option
+func (c *Config) GetSyncLog() bool {
+	if c.SyncLog == nil {
+		return true
+	}
+
+	return *c.SyncLog
+}
+
 // KVConfig if the configuration of goleveldb
 type KVConfig struct {
 	BlockCacheCapacity            int     `toml:"block-cache-capacity" json:"block-cache-capacity"`
