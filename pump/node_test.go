@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
 	"golang.org/x/net/context"
 )
@@ -71,4 +73,36 @@ func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *pkgnode.
 	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
 	c.Assert(err, IsNil)
 	c.Assert(ns, DeepEquals, status)
+}
+
+type ReadLocalNodeIDSuite struct{}
+
+var _ = Suite(&ReadLocalNodeIDSuite{})
+
+func (s *ReadLocalNodeIDSuite) TestReturnNotFoundErr(c *C) {
+	dir := c.MkDir()
+	_, err := readLocalNodeID(dir)
+	c.Assert(errors.IsNotFound(err), IsTrue)
+}
+
+func (s *ReadLocalNodeIDSuite) TestIsDirectory(c *C) {
+	dir := c.MkDir()
+	nodeIDPath := filepath.Join(dir, nodeIDFile)
+	if err := os.Mkdir(nodeIDPath, 0755); err != nil {
+		c.Fatal("Fail to create dir for testing")
+	}
+	_, err := readLocalNodeID(dir)
+	c.Assert(err, NotNil)
+	c.Assert(errors.IsNotFound(err), IsFalse)
+}
+
+func (s *ReadLocalNodeIDSuite) TestCanReadNodeID(c *C) {
+	dir := c.MkDir()
+	nodeIDPath := filepath.Join(dir, nodeIDFile)
+	if err := ioutil.WriteFile(nodeIDPath, []byte(" this-node\n"), 0644); err != nil {
+		c.Fatal("Fail to write file for testing")
+	}
+	nodeID, err := readLocalNodeID(dir)
+	c.Assert(err, IsNil)
+	c.Assert(nodeID, Equals, "this-node")
 }
