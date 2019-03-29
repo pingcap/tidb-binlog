@@ -29,7 +29,7 @@ type Options struct {
 	ValueLogFileSize int64
 	Sync             bool
 
-	Storage *Config
+	KVConfig *KVConfig
 }
 
 // DefaultOptions return the default options
@@ -41,8 +41,8 @@ func DefaultOptions() *Options {
 }
 
 // WithStorage set the Config
-func (o *Options) WithStorage(storage *Config) *Options {
-	o.Storage = storage
+func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
+	o.KVConfig = kvConfig
 	return o
 }
 
