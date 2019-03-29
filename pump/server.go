@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -122,7 +121,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	options := storage.DefaultOptions().WithStorage(cfg.Storage)
+	options := storage.DefaultOptions().WithStorage(cfg.Storage).WithSync(cfg.SyncLog)
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -151,10 +150,10 @@ func NewServer(cfg *Config) (*Server, error) {
 }
 
 // WriteBinlog implements the gRPC interface of pump server
-func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
+func (s *Server) WriteBinlog(ctx context.Context, in *pb.WriteBinlogReq) (*pb.WriteBinlogResp, error) {
 	// pump client will write some empty Payload to detect weather pump is working, should avoid this
 	if in.Payload == nil {
-		ret := new(binlog.WriteBinlogResp)
+		ret := new(pb.WriteBinlogResp)
 		return ret, nil
 	}
 
@@ -163,7 +162,7 @@ func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*b
 }
 
 // WriteBinlog implements the gRPC interface of pump server
-func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isFakeBinlog bool) (*binlog.WriteBinlogResp, error) {
+func (s *Server) writeBinlog(ctx context.Context, in *pb.WriteBinlogReq, isFakeBinlog bool) (*pb.WriteBinlogResp, error) {
 	var err error
 	beginTime := time.Now()
 	atomic.StoreInt64(&s.lastWriteBinlogUnixNano, beginTime.UnixNano())
@@ -184,9 +183,9 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		return nil, err
 	}
 
-	ret := new(binlog.WriteBinlogResp)
+	ret := new(pb.WriteBinlogResp)
 
-	blog := new(binlog.Binlog)
+	blog := new(pb.Binlog)
 	err = blog.Unmarshal(in.Payload)
 	if err != nil {
 		goto errHandle
@@ -215,7 +214,7 @@ errHandle:
 }
 
 // PullBinlogs sends binlogs in the streaming way
-func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBinlogsServer) error {
+func (s *Server) PullBinlogs(in *pb.PullBinlogReq, stream pb.Pump_PullBinlogsServer) error {
 	var err error
 	beginTime := time.Now()
 	atomic.AddInt64(&s.alivePullerCount, 1)
@@ -251,7 +250,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			if !ok {
 				return nil
 			}
-			resp := new(binlog.PullBinlogResp)
+			resp := new(pb.PullBinlogResp)
 
 			resp.Entity.Payload = data
 			err = stream.Send(resp)
@@ -346,7 +345,7 @@ func (s *Server) Start() error {
 	go s.printServerInfo()
 
 	// register pump with gRPC server and start to serve listeners
-	binlog.RegisterPumpServer(s.gs, s)
+	pb.RegisterPumpServer(s.gs, s)
 
 	if s.unixAddr != "" {
 		go s.gs.Serve(unixLis)
@@ -388,9 +387,9 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 		return nil, errors.Trace(err)
 	}
 
-	bl := &binlog.Binlog{
+	bl := &pb.Binlog{
 		StartTs:  ts,
-		Tp:       binlog.BinlogType_Rollback,
+		Tp:       pb.BinlogType_Rollback,
 		CommitTs: ts,
 	}
 

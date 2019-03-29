@@ -56,6 +56,7 @@ type Config struct {
 	LogFile           string          `toml:"log-file" json:"log-file"`
 	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
+	SyncLog           bool            `toml:"sync-log" json:"sync-log"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
 
@@ -71,6 +72,7 @@ type Config struct {
 func NewConfig() *Config {
 	cfg := &Config{
 		EtcdDialTimeout: defaultEtcdDialTimeout,
+		SyncLog:         true,
 	}
 
 	cfg.FlagSet = flag.NewFlagSet("pump", flag.ContinueOnError)
