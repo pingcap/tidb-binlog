@@ -31,8 +31,9 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.TxnBatch, Equals, 1)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "mysql")
 	c.Assert(cfg.SyncerCfg.To.Host, Equals, "127.0.0.1")
-	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, mysql.DefaultSQLMode)
-	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.ModeStrictTransTables|mysql.ModeNoEngineSubstitution)
+	var strSQLMode *string
+	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, strSQLMode)
+	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
 }
 
 func (t *testDrainerSuite) TestValidate(c *C) {

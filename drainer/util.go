@@ -134,7 +134,7 @@ func closeExecutors(executors ...executor.Executor) {
 	}
 }
 
-func createExecutors(destDBType string, cfg *executor.DBConfig, count int, sqlMODE string) ([]executor.Executor, error) {
+func createExecutors(destDBType string, cfg *executor.DBConfig, count int, sqlMODE *string) ([]executor.Executor, error) {
 	executors := make([]executor.Executor, 0, count)
 	for i := 0; i < count; i++ {
 		executor, err := executor.New(destDBType, cfg, sqlMODE)

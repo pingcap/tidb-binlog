@@ -17,7 +17,7 @@ type mysqlExecutor struct {
 	*baseError
 }
 
-func newMysql(cfg *DBConfig, sqlMode string) (Executor, error) {
+func newMysql(cfg *DBConfig, sqlMode *string) (Executor, error) {
 	db, err := pkgsql.OpenDBWithSQLMode("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
