@@ -70,6 +70,7 @@ func (t *testCheckPointSuite) TestnewMysql(c *C) {
 
 	sp1, ero := newMysql("mysql", cfg)
 	c.Assert(ero, IsNil)
+	c.Assert(sp1.TS(), Equals, ts) // checkpoint's priority is greater than initial-commit-ts
 	err = sp1.Load()
 	c.Assert(err, IsNil)
 	sp2 := sp1.(*MysqlCheckPoint)
