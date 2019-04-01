@@ -15,6 +15,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/mysql"
+
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -63,6 +65,8 @@ type Config struct {
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
+	StrSQLMode      string          `toml:"sql-mode" json:"sql-mode"`
+	SQLMode         mysql.SQLMode   `toml:"-" json:"-"`
 	LogFile         string          `toml:"log-file" json:"log-file"`
 	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
@@ -83,6 +87,7 @@ func NewConfig() *Config {
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
 		SyncerCfg:   new(SyncerConfig),
+		StrSQLMode:  mysql.DefaultSQLMode,
 	}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
@@ -156,6 +161,11 @@ func (cfg *Config) Parse(args []string) error {
 	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	cfg.SQLMode, err = mysql.GetSQLMode(cfg.StrSQLMode)
+	if err != nil {
+		return errors.New("invalid config: `sql-mode` must be a valid SQL_MODE")
 	}
 
 	cfg.tls, err = cfg.Security.ToTLSConfig()

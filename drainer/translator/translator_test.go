@@ -9,6 +9,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
@@ -57,7 +58,7 @@ func (t *testTranslatorSuite) TestTranslater(c *C) {
 }
 
 func testGenInsertSQLs(c *C, s SQLTranslator, safeMode bool) {
-	s.SetConfig(safeMode)
+	s.SetConfig(safeMode, parsermysql.ModeStrictTransTables|parsermysql.ModeNoEngineSubstitution)
 	schema := "t"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	exceptedKeys := []int{3, 2, 1}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 )
 
 // Hook up gocheck into the "go test" runner.
@@ -30,6 +31,8 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.TxnBatch, Equals, 1)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "mysql")
 	c.Assert(cfg.SyncerCfg.To.Host, Equals, "127.0.0.1")
+	c.Assert(cfg.StrSQLMode, Equals, mysql.DefaultSQLMode)
+	c.Assert(cfg.SQLMode, Equals, mysql.ModeStrictTransTables|mysql.ModeNoEngineSubstitution)
 }
 
 func (t *testDrainerSuite) TestValidate(c *C) {
@@ -52,4 +55,3 @@ func (t *testDrainerSuite) TestValidate(c *C) {
 	err = cfg.validate()
 	c.Assert(err, IsNil)
 }
-
