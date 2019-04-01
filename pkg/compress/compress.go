@@ -1,11 +1,13 @@
 package compress
 
 import (
-	"bytes"
-	"compress/gzip"
+	"os"
+	"io"
 	"strings"
+	"compress/gzip"
 
 	"github.com/ngaut/log"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/errors"
 )
 
@@ -17,6 +19,8 @@ const (
 	CompressionNone CompressionCodec = iota
 	// CompressionGZIP means using GZIP compression.
 	CompressionGZIP
+
+	gzipFileSuffix = ".tar.gz"
 )
 
 // ToCompressionCodec converts v to CompressionCodec.
@@ -33,22 +37,52 @@ func ToCompressionCodec(v string) CompressionCodec {
 	}
 }
 
-// Compress compresses payload based on the codec.
-func Compress(data []byte, codec CompressionCodec) (payload []byte, err error) {
+func CompressFile(filename string, codec CompressionCodec) (string, error) {
 	switch codec {
 	case CompressionNone:
-		payload = data
+		return filename, nil
 	case CompressionGZIP:
-		var buf bytes.Buffer
-		writer := gzip.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, errors.Trace(err)
-		}
-		payload = buf.Bytes()
+		return CompressGZIPFile(filename)
+	default:
+		return "", errors.NotSupportedf("compression codec")
+	}
+}
+
+func CompressGZIPFile(filename string) (string, error) {
+	fileLock, err := file.TryLockFile(filename, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
+	if err != nil {
+		return "", err
+	}
+	defer file.UnLockFile(fileLock)
+
+	newGzipFileName := filename + gzipFileSuffix
+	newGzipFile, err := os.Create(newGzipFileName)
+	if err != nil {
+		return "", err
+	}
+	defer newGzipFile.Close()
+	
+	gzipWriter := gzip.NewWriter(newGzipFile)
+	defer gzipWriter.Close()
+	
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+		
+	if _, err = io.Copy(gzipWriter, file); err != nil {
+		return "", err
 	}
 
-	return payload, nil
+	if err = os.Remove(filename); err != nil {
+		return "", err
+	}
+
+	return newGzipFileName, err
+} 
+
+// IsCompressFile returns true if file name end with ".tar.gz"
+func IsGzipCompressFile(filename string) bool {
+	return strings.HasSuffix(filename, gzipFileSuffix)
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"syscall"
+
+	"github.com/ngaut/log"
 )
 
 var (
@@ -23,6 +25,7 @@ type LockedFile struct{ *os.File }
 
 // TryLockFile tries to open the file with the file lock, it's unblock
 func TryLockFile(path string, flag int, perm os.FileMode) (*LockedFile, error) {
+	log.Debugf("TryLockFile %s", path)
 	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
 		return nil, err
@@ -48,4 +51,14 @@ func LockFile(path string, flag int, perm os.FileMode) (*LockedFile, error) {
 		return nil, err
 	}
 	return &LockedFile{f}, err
+}
+
+// UnLockFile unlock a file
+func UnLockFile(lockedFile *LockedFile) error {
+	err := syscall.Flock(int(lockedFile.Fd()), syscall.LOCK_UN)
+	if err != nil {
+		return err
+	}
+
+	return lockedFile.Close()
 }

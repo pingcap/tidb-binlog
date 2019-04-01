@@ -43,7 +43,7 @@ func (t *testLockSuite) TestLockAndUnlock(c *C) {
 	}
 
 	// unlock the file
-	err = l.Close()
+	err = UnLockFile(l)
 	c.Assert(err, IsNil)
 
 	// try lock the unlocked file

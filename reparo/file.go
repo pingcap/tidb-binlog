@@ -1,7 +1,6 @@
 package reparo
 
 import (
-	"bufio"
 	"io"
 	"os"
 	"path"
@@ -72,8 +71,12 @@ func getFirstBinlogCommitTS(filename string) (int64, error) {
 	defer fd.Close()
 
 	// get the first binlog in file
-	br := bufio.NewReader(fd)
-	binlog, _, err := Decode(br)
+	r, err := bf.NewReader(fd)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	binlog, _, err := Decode(r)
 	if errors.Cause(err) == io.EOF {
 		log.Warnf("no binlog find in %s", filename)
 		return 0, nil

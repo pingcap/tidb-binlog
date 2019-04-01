@@ -5,8 +5,11 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"os"
+	"compress/gzip"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 )
 
 // Decoder is an interface wraps basic Decode method which decode binlog.Entity into binlogBuffer.
@@ -27,6 +30,31 @@ func NewDecoder(r io.Reader, initOffset int64) Decoder {
 		br:     reader,
 		offset: initOffset,
 	}
+}
+
+func NewDecoderFromFile(f *os.File , initOffset int64) (Decoder, error) {
+	r, err := NewReader(f)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &decoder{
+		br:     bufio.NewReader(r),
+		offset: initOffset,
+	}, nil
+}
+
+func NewReader(f *os.File) (r io.Reader, err error) {
+	if compress.IsGzipCompressFile(f.Name()) {
+		r, err = gzip.NewReader(f)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		r = io.Reader(f)
+	}
+
+	return r, nil
 }
 
 // Decode implements the Decoder interface.

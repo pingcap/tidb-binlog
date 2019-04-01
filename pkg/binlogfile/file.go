@@ -118,8 +118,7 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 }
 
 // FilterBinlogNames filter binlog names from names.
-func FilterBinlogNames(names []string) []string {
-	var fnames []string
+func FilterBinlogNames(names []string) (fnames []string) {
 	for _, name := range names {
 		if strings.HasSuffix(name, "checkpoint") || strings.HasSuffix(name, ".lock") {
 			continue
@@ -134,7 +133,7 @@ func FilterBinlogNames(names []string) []string {
 		fnames = append(fnames, name)
 	}
 
-	return fnames
+	return
 }
 
 // ParseBinlogName parse binlog file name and return binlog index.

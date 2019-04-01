@@ -124,10 +124,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 }
 
 func (s *testBinloggerSuite) TestRead(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
+	dir := c.MkDir()
 	bl, err := OpenBinlogger(dir, compress.CompressionNone)
 	c.Assert(err, IsNil)
 	defer bl.Close()
@@ -163,6 +160,29 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(ents, HasLen, 20)
 	c.Assert(ents[19].Pos, Equals, binlog.Pos{Offset: 26, Suffix: 6})
+}
+
+func (s *testBinloggerSuite) TestReadGzipFile(c *C) {
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir, compress.CompressionGZIP)
+	c.Assert(err, IsNil)
+	defer bl.Close()
+
+	b, ok := bl.(*binlogger)
+	c.Assert(ok, IsTrue)
+
+	payload := []byte("binlogtest")
+	for i := 0; i < 10; i++ {
+		_, err = bl.WriteTail(&binlog.Entity{Payload: payload})
+		c.Assert(err, IsNil)
+		c.Assert(b.rotate(), IsNil)
+	}
+	c.Assert(b.rotate(), IsNil)
+
+	ents, err := bl.ReadFrom(binlog.Pos{}, 10)
+	c.Assert(err, IsNil)
+	c.Assert(ents, HasLen, 10)
+	c.Assert(ents[9].Payload, DeepEquals, payload)
 }
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {
@@ -232,7 +252,7 @@ func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 		os.Remove(f.Name())
 	}()
 
-	encoder := NewEncoder(f, 0, compress.CompressionNone)
+	encoder := NewEncoder(f, 0)
 	_, err = encoder.Encode([]byte("binlogtest"))
 	c.Assert(err, IsNil)
 

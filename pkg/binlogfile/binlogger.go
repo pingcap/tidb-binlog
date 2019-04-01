@@ -132,7 +132,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	binlog := &binlogger{
 		dir:        dirpath,
 		file:       fileLock,
-		encoder:    NewEncoder(fileLock, offset, codec),
+		encoder:    NewEncoder(fileLock, offset),
 		codec:      codec,
 		dirLock:    dirLock,
 		lastSuffix: lastFileSuffix,
@@ -221,7 +221,10 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 		}
 
-		decoder = NewDecoder(io.Reader(f), from.Offset)
+		decoder, err = NewDecoderFromFile(f, from.Offset)
+		if err != nil {
+			return errors.Trace(err)
+		}
 
 		for {
 			select {
@@ -252,7 +255,8 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 					offset, err1 := seekBinlog(f, from.Offset+1)
 					if err1 == nil {
 						from.Offset = offset
-						decoder = NewDecoder(io.Reader(f), from.Offset)
+						decoder, err = NewDecoderFromFile(f, from.Offset)
+
 						continue
 					}
 					if err1 == io.EOF || err1 == io.ErrUnexpectedEOF {
@@ -385,6 +389,18 @@ func (b *binlogger) Close() error {
 
 // rotate creates a new file for append binlog
 func (b *binlogger) rotate() error {
+	if err := b.file.Close(); err != nil {
+		log.Errorf("failed to unlock during closing file: %s", err)
+	}
+	if b.codec != compress.CompressionNone {
+		startT := time.Now()
+		_, err := compress.CompressFile(b.file.Name(), b.codec)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Infof("compress file %s cost %v", b.file.Name(), time.Since(startT))
+	}
+
 	filename := BinlogName(b.seq() + 1)
 	b.lastSuffix = b.seq() + 1
 	b.lastOffset = 0
@@ -396,13 +412,10 @@ func (b *binlogger) rotate() error {
 		return errors.Trace(err)
 	}
 
-	if err = b.file.Close(); err != nil {
-		log.Errorf("failed to unlock during closing file: %s", err)
-	}
 	b.file = newTail
-
-	b.encoder = NewEncoder(b.file, 0, b.codec)
+	b.encoder = NewEncoder(b.file, 0)
 	log.Infof("segmented binlog file %v is created", fpath)
+
 	return nil
 }
 

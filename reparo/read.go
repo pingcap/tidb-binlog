@@ -1,12 +1,12 @@
 package reparo
 
 import (
-	"bufio"
 	"io"
 	"os"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
@@ -24,7 +24,7 @@ type dirPbReader struct {
 	endTS   int64
 
 	file   *os.File
-	reader *bufio.Reader
+	reader io.Reader
 	idx    int // index of next file to read in files
 }
 
@@ -83,7 +83,10 @@ func (r *dirPbReader) nextFile() (err error) {
 		return errors.Annotatef(err, "open file %s error", bfile)
 	}
 
-	r.reader = bufio.NewReader(r.file)
+	r.reader, err = bf.NewReader(r.file)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	r.idx++
 

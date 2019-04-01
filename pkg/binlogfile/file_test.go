@@ -76,12 +76,12 @@ func (t *testFileSuite) TestExist(c *C) {
 }
 
 func (t *testFileSuite) TestFilterBinlogNames(c *C) {
-	names := []string{"binlog-0000000000000001", "test", "binlog-0000000000000002-20180315121212", "savepoint"}
-	excepted := []string{"binlog-0000000000000001", "binlog-0000000000000002-20180315121212"}
+	names := []string{"binlog-0000000000000001", "test", "binlog-0000000000000002-20180315121212", "savepoint", "binlog-0000000000000003-20180315121212.tar.gz"}
+	exceptedNames := []string{"binlog-0000000000000001", "binlog-0000000000000002-20180315121212", "binlog-0000000000000003-20180315121212.tar.gz"}
 
-	res := FilterBinlogNames(names)
-	c.Assert(res, HasLen, len(excepted))
-	c.Assert(res, DeepEquals, excepted)
+	fnames := FilterBinlogNames(names)
+	c.Assert(fnames, HasLen, len(exceptedNames))
+	c.Assert(fnames, DeepEquals, exceptedNames)
 }
 
 func (t *testFileSuite) TestParseBinlogName(c *C) {
