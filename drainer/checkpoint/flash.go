@@ -206,8 +206,11 @@ func (sp *FlashCheckPoint) Close() error {
 		return errors.Trace(ErrCheckPointClosed)
 	}
 
-	sp.closed = true
-	return errors.Trace(sp.db.Close())
+	err := sp.db.Close()
+	if err == nil {
+		sp.closed = true
+	}
+	return errors.Trace(err)
 }
 
 // String implements CheckPoint.String interface
