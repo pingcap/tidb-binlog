@@ -169,3 +169,30 @@ func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) 
 	etcd := NewClient(cluster.RandClient(), "binlog")
 	return context.Background(), etcd, cluster
 }
+
+type parseToDirTreeSuite struct{}
+
+var _ = Suite(&parseToDirTreeSuite{})
+
+func (s *parseToDirTreeSuite) TestReturnFound(c *C) {
+	root := &Node{
+		Childs: map[string]*Node{
+			"drainer": &Node{
+				Childs: map[string]*Node{
+					"1": &Node{Value: []byte("alive")},
+				},
+			},
+		},
+	}
+	target := parseToDirTree(root, "drainer/1")
+	c.Assert(target.Value, BytesEquals, []byte("alive"))
+}
+
+func (s *parseToDirTreeSuite) TestCreateNew(c *C) {
+	root := new(Node)
+	target := parseToDirTree(root, "drainer/mysql/42")
+	target.Value = []byte("hello")
+	c.Assert(len(root.Childs), Equals, 1)
+	stored := root.Childs["drainer"].Childs["mysql"].Childs["42"]
+	c.Assert(string(stored.Value), Equals, "hello")
+}
