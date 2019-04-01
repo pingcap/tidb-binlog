@@ -24,6 +24,11 @@ pd-urls = "http://127.0.0.1:2379"
 # syncer Configuration.
 [syncer]
 
+# Assume the upstream sql-mode.
+# If this is setted , will use the same sql-mode to parse DDL statment, and set the same sql-mode at downstream when db-type is mysql.
+# If this is not setted, it will not set any sql-mode.
+# sql-mode = "STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
+
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 

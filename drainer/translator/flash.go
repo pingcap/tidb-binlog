@@ -11,6 +11,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/mysql"
@@ -19,14 +20,17 @@ import (
 )
 
 // flashTranslator translates TiDB binlog to flash sqls
-type flashTranslator struct{}
+type flashTranslator struct {
+	sqlMode parsermysql.SQLMode
+}
 
 func init() {
 	Register("flash", &flashTranslator{})
 }
 
 // Config set the configuration
-func (f *flashTranslator) SetConfig(bool) {
+func (f *flashTranslator) SetConfig(_ bool, sqlMode parsermysql.SQLMode) {
+	f.sqlMode = sqlMode
 }
 
 func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -191,7 +195,9 @@ func (f *flashTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, r
 
 func (f *flashTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	schema = strings.ToLower(schema)
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	ddlParser := parser.New()
+	ddlParser.SetSQLMode(f.sqlMode)
+	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}

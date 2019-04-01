@@ -6,6 +6,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/table"
@@ -35,7 +36,7 @@ var providers = make(map[string]SQLTranslator)
 // SQLTranslator is the interface for translating TiDB binlog to target sqls
 type SQLTranslator interface {
 	// Config set the configuration
-	SetConfig(safeMode bool)
+	SetConfig(safeMode bool, sqlMode parsermysql.SQLMode)
 
 	// GenInsertSQLs generates the insert sqls
 	GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error)
