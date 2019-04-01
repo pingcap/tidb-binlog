@@ -7,20 +7,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/parser/mysql"
 	"golang.org/x/net/context"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	pb "github.com/pingcap/tipb/go-binlog"
+
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
@@ -35,8 +35,7 @@ type Syncer struct {
 	schema *Schema
 	cp     checkpoint.CheckPoint
 
-	sqlMode mysql.SQLMode
-	cfg     *SyncerConfig
+	cfg *SyncerConfig
 
 	translator translator.SQLTranslator
 
@@ -61,9 +60,8 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, sqlMode mysql.SQLMode, cfg *SyncerConfig) (*Syncer, error) {
+func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig) (*Syncer, error) {
 	syncer := new(Syncer)
-	syncer.sqlMode = sqlMode
 	syncer.cfg = cfg
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
@@ -133,13 +131,13 @@ func (s *Syncer) checkWait(job *job) bool {
 
 func (s *Syncer) enableSafeModeInitializationPhase() {
 	// set safeMode to true and useInsert to flase at the first, and will use the config after 5 minutes.
-	s.translator.SetConfig(true, s.sqlMode)
+	s.translator.SetConfig(true, s.cfg.SQLMode)
 
 	go func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer func() {
 			cancel()
-			s.translator.SetConfig(s.cfg.SafeMode, s.sqlMode)
+			s.translator.SetConfig(s.cfg.SafeMode, s.cfg.SQLMode)
 		}()
 
 		select {
@@ -431,7 +429,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode, s.sqlMode)
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.SQLMode)
 	go s.enableSafeModeInitializationPhase()
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {

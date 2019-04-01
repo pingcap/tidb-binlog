@@ -107,7 +107,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(cp.TS()))))
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SQLMode, cfg.SyncerCfg)
+	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
