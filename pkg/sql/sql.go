@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -116,15 +117,25 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 	return nil
 }
 
-// OpenDB creates an instance of sql.DB.
-func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+// OpenDBWithSQLMode creates an instance of sql.DB.
+func OpenDBWithSQLMode(proto string, host string, port int, username string, password string, sqlMode string) (*sql.DB, error) {
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&multiStatements=true", username, password, host, port)
+	if len(sqlMode) > 0 {
+		log.Info("set sql mode: ", sqlMode)
+		// same as "set sql_mode = '<sqlMode>'"
+		dbDSN += "&sql_mode='" + url.QueryEscape(sqlMode) + "'"
+	}
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return db, nil
+}
+
+// OpenDB creates an instance of sql.DB.
+func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+	return OpenDBWithSQLMode(proto, host, port, username, password, "")
 }
 
 // IgnoreDDLError checks the error can be ignored or not.
