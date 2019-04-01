@@ -170,8 +170,8 @@ func testSetup(t *testing.T) (context.Context, *Client, *integration.ClusterV3) 
 	return context.Background(), etcd, cluster
 }
 
-
 type parseToDirTreeSuite struct{}
+
 var _ = Suite(&parseToDirTreeSuite{})
 
 func (s *parseToDirTreeSuite) TestReturnFound(c *C) {
@@ -179,13 +179,13 @@ func (s *parseToDirTreeSuite) TestReturnFound(c *C) {
 		Childs: map[string]*Node{
 			"drainer": &Node{
 				Childs: map[string]*Node{
-					"1": &Node { Value: []byte("alive") },
+					"1": &Node{Value: []byte("alive")},
 				},
 			},
 		},
 	}
 	target := parseToDirTree(root, "drainer/1")
-	c.Assert(string(target.Value), Equals, "alive")
+	c.Assert(target.Value, BytesEquals, []byte("alive"))
 }
 
 func (s *parseToDirTreeSuite) TestCreateNew(c *C) {

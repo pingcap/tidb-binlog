@@ -125,10 +125,10 @@ func (s *checkNodeExistsSuite) TestExist(c *C) {
 	r := NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 
 	ctx := context.Background()
-	if err := r.client.Create(ctx, "drainer/1", "testing", nil); err != nil {
+	if err := r.client.Create(ctx, "/tidb-binlog/v1", "pump", nil); err != nil {
 		c.Fatal("Can't create node for testing")
 	}
-	exist, err := r.checkNodeExists(ctx, "drainer", "1")
+	exist, err := r.checkNodeExists(ctx, "/tidb-binlog", "v1")
 	c.Assert(err, IsNil)
 	c.Assert(exist, IsTrue)
 }
