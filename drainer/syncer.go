@@ -12,14 +12,15 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	pb "github.com/pingcap/tipb/go-binlog"
+
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/executor"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 var (
@@ -130,13 +131,13 @@ func (s *Syncer) checkWait(job *job) bool {
 
 func (s *Syncer) enableSafeModeInitializationPhase() {
 	// set safeMode to true and useInsert to flase at the first, and will use the config after 5 minutes.
-	s.translator.SetConfig(true)
+	s.translator.SetConfig(true, s.cfg.SQLMode)
 
 	go func() {
 		ctx, cancel := context.WithCancel(s.ctx)
 		defer func() {
 			cancel()
-			s.translator.SetConfig(s.cfg.SafeMode)
+			s.translator.SetConfig(s.cfg.SafeMode, s.cfg.SQLMode)
 		}()
 
 		select {
@@ -418,7 +419,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount)
+	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount, s.cfg.StrSQLMode)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -428,7 +429,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.translator.SetConfig(s.cfg.SafeMode)
+	s.translator.SetConfig(s.cfg.SafeMode, s.cfg.SQLMode)
 	go s.enableSafeModeInitializationPhase()
 
 	for i := 0; i < s.cfg.WorkerCount; i++ {

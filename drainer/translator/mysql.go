@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/mysql"
@@ -27,6 +28,7 @@ const implicitColID = -1
 type mysqlTranslator struct {
 	// safeMode is a mode for translate sql, will translate update to delete and replace, and translate insert to replace.
 	safeMode int32
+	sqlMode  parsermysql.SQLMode
 }
 
 func init() {
@@ -34,12 +36,13 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(safeMode bool) {
+func (m *mysqlTranslator) SetConfig(safeMode bool, sqlMode parsermysql.SQLMode) {
 	if safeMode {
 		atomic.StoreInt32(&m.safeMode, 1)
 	} else {
 		atomic.StoreInt32(&m.safeMode, 0)
 	}
+	m.sqlMode = sqlMode
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -272,7 +275,9 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	ddlParser := parser.New()
+	ddlParser.SetSQLMode(m.sqlMode)
+	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
