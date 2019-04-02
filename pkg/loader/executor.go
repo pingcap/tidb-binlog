@@ -162,14 +162,13 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		builder.WriteString(holder)
 	}
 
-	var args []interface{}
+	args := make([]interface{}, 0, len(inserts)*len(info.columns))
 	for _, insert := range inserts {
 		for _, name := range info.columns {
 			v := insert.Values[name]
 			args = append(args, v)
 		}
 	}
-
 	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
