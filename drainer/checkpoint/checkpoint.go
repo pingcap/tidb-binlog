@@ -5,6 +5,11 @@ import (
 	"github.com/pingcap/errors"
 )
 
+var (
+	// ErrCheckPointClosed indicates the CheckPoint already closed.
+	ErrCheckPointClosed = errors.New("CheckPoint already closed")
+)
+
 // CheckPoint is the binlog sync pos meta.
 // When syncer restarts, we should reload meta info to guarantee continuous transmission.
 type CheckPoint interface {
@@ -19,6 +24,9 @@ type CheckPoint interface {
 
 	// Pos gets position information.
 	TS() int64
+
+	// Close closes the CheckPoint and release resources, after closed other methods should not be called again.
+	Close() error
 
 	// String returns CommitTS and Offset
 	String() string

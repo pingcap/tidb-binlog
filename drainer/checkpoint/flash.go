@@ -16,6 +16,7 @@ import (
 // FlashCheckPoint is a local savepoint struct for flash
 type FlashCheckPoint struct {
 	sync.RWMutex
+	closed          bool
 	clusterID       uint64
 	initialCommitTS int64
 
@@ -102,6 +103,10 @@ func (sp *FlashCheckPoint) Load() error {
 	sp.Lock()
 	defer sp.Unlock()
 
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
 	sql := fmt.Sprintf("SELECT `checkpoint` from `%s`.`%s` WHERE `clusterid` = %d", sp.schema, sp.table, sp.clusterID)
 	rows, err := querySQL(sp.db, sql)
 	if err != nil {
@@ -139,6 +144,10 @@ func (sp *FlashCheckPoint) Save(ts int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
 	sp.saveTime = time.Now()
 
 	// Init CP using metaCP's safe CP.
@@ -171,6 +180,10 @@ func (sp *FlashCheckPoint) Check(ts int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
+	if sp.closed {
+		return false
+	}
+
 	sp.metaCP.PushPendingCP(ts)
 
 	return time.Since(sp.saveTime) >= maxSaveTime
@@ -182,6 +195,22 @@ func (sp *FlashCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// Close implements CheckPoint.Close interface.
+func (sp *FlashCheckPoint) Close() error {
+	sp.Lock()
+	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
+	err := sp.db.Close()
+	if err == nil {
+		sp.closed = true
+	}
+	return errors.Trace(err)
 }
 
 // String implements CheckPoint.String interface

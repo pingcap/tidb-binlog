@@ -52,6 +52,7 @@ type Server struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	syncer    *Syncer
+	cp        checkpoint.CheckPoint
 	isClosed  int32
 
 	statusMu sync.RWMutex
@@ -143,6 +144,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:       ctx,
 		cancel:    cancel,
 		syncer:    syncer,
+		cp:        cp,
 		status:    status,
 
 		latestTS:   latestTS,
@@ -426,6 +428,11 @@ func (s *Server) Close() {
 	s.cancel()
 	// waiting for goroutines exit
 	s.wg.Wait()
+	// close the CheckPoint
+	err := s.cp.Close()
+	if err != nil {
+		log.Errorf("close checkpoint error %s", errors.ErrorStack(err))
+	}
 
 	// stop gRPC server
 	s.gs.Stop()
