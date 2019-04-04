@@ -70,7 +70,11 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
 	syncer.lastSyncTime = time.Now()
-	syncer.filter = filter.NewFilter(strings.Split(cfg.IgnoreSchemas, ","), nil, cfg.DoDBs, cfg.DoTables)
+	var ignoreDBs []string
+	if len(cfg.IgnoreSchemas) > 0 {
+		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
+	}
+	syncer.filter = filter.NewFilter(ignoreDBs, nil, cfg.DoDBs, cfg.DoTables)
 
 	return syncer, nil
 }
@@ -348,8 +352,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			}
 			idx++
 
-			qsize := len(jobChan)
-			queueSizeGauge.WithLabelValues(workerName).Set(float64(qsize))
+			queueSizeGauge.WithLabelValues(workerName).Set(float64(len(jobChan)))
 
 			if job.binlogTp == translator.DDL {
 				// compute txn duration
