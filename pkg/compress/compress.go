@@ -44,7 +44,7 @@ func CompressFile(filename string, codec CompressionCodec) (string, error) {
 	case CompressionGZIP:
 		return CompressGZIPFile(filename)
 	default:
-		return "", errors.NotSupportedf("compression codec")
+		return "", errors.NotSupported("compression codec %v", codec)
 	}
 }
 
