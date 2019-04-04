@@ -16,13 +16,6 @@ pd-urls = "http://127.0.0.1:2379"
 # syncer Configuration.
 [syncer]
 
-# disable sync these schema
-ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
-
-[[syncer.ignore-table]]
-db-name = "test"
-tbl-name = "do_ignore_name"
-
 # number of binlog events in a transaction batch
 txn-batch = 1
 
@@ -38,10 +31,14 @@ safe-mode = false
 # valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "mysql"
 
+# disable sync these schema
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regex expression , start with '~' declare use regex expression.
 #
 replicate-do-db = ["~^do_start.*","do_name"]
+
 [[syncer.replicate-do-table]]
 db-name ="test"
 tbl-name = "do_name"
@@ -53,6 +50,10 @@ tbl-name = "do_ignore_name"
 [[syncer.replicate-do-table]]
 db-name ="test"
 tbl-name = "~^do_start.*"
+
+[[syncer.ignore-table]]
+db-name = "test"
+tbl-name = "do_ignore_name"
 
 # the downstream mysql protocol database
 [syncer.to]
