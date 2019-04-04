@@ -70,7 +70,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
 	syncer.lastSyncTime = time.Now()
-	syncer.filter = filter.NewFilter(strings.Split(cfg.IgnoreSchemas, ","), nil, cfg.DoDBs, cfg.DoTables)
+	syncer.filter = filter.NewFilter(strings.Split(cfg.IgnoreSchemas, ","), cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
 
 	return syncer, nil
 }

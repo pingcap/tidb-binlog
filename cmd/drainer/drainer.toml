@@ -35,6 +35,11 @@ compressor = ""
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
+# disable sync these table
+#[[syncer.ignore-table]]
+#db-name = "test"
+#tbl-name = "log"
+
 # number of binlog events in a transaction batch
 txn-batch = 20
 

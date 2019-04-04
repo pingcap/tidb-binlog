@@ -19,6 +19,10 @@ pd-urls = "http://127.0.0.1:2379"
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
+[[syncer.ignore-table]]
+db-name = "test"
+tbl-name = "do_ignore_name"
+
 # number of binlog events in a transaction batch
 txn-batch = 1
 
@@ -41,6 +45,10 @@ replicate-do-db = ["~^do_start.*","do_name"]
 [[syncer.replicate-do-table]]
 db-name ="test"
 tbl-name = "do_name"
+
+[[syncer.replicate-do-table]]
+db-name ="test"
+tbl-name = "do_ignore_name"
 
 [[syncer.replicate-do-table]]
 db-name ="test"
