@@ -16,6 +16,8 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
+var createDB = loader.CreateDB
+
 // Server is the server to load data to mysql
 type Server struct {
 	cfg  *Config
@@ -55,7 +57,7 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 	up := cfg.Up
 	down := cfg.Down
 
-	srv.downDB, err = loader.CreateDB(down.User, down.Password, down.Host, down.Port)
+	srv.downDB, err = createDB(down.User, down.Password, down.Host, down.Port)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -70,11 +72,10 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	ts, status, err := srv.checkpoint.Load()
 	if err != nil {
-		if errors.IsNotFound(err) {
-			err = nil
-		} else {
+		if !errors.IsNotFound(err) {
 			return nil, errors.Trace(err)
 		}
+		err = nil
 	} else {
 		srv.finishTS = ts
 	}
