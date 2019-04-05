@@ -315,7 +315,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionCreateTable:
+	case model.ActionCreateTable, model.ActionCreateView:
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
@@ -336,7 +336,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionDropTable:
+	case model.ActionDropTable, model.ActionDropView:
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
