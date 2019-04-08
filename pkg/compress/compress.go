@@ -81,8 +81,7 @@ func CompressGZIPFile(filename string) (gzipFileName string, err error) {
 		}
 
 		if err != nil && len(gzipFileName) != 0 {
-			err1 := os.Remove(gzipFileName)
-			if err1 != nil {
+			if err1 := os.Remove(gzipFileName); err1 != nil {
 				log.Warnf("remove file %s failed %v", gzipFileName, err1)
 			}
 		}
