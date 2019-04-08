@@ -1,10 +1,10 @@
 package compress
 
 import (
-	"os"
-	"io"
-	"path"
 	"compress/gzip"
+	"io"
+	"os"
+	"path"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -19,8 +19,8 @@ var _ = Suite(&testCompressSuite{})
 type testCompressSuite struct{}
 
 func (t *testCompressSuite) TestIsGzipCompressFile(c *C) {
-	testCases := []struct{
-		filename string
+	testCases := []struct {
+		filename         string
 		isComrepressFile bool
 	}{
 		{

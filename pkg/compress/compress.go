@@ -1,14 +1,14 @@
 package compress
 
 import (
-	"os"
-	"io"
-	"strings"
 	"compress/gzip"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/errors"
+	pkgfile "github.com/pingcap/tidb-binlog/pkg/file"
 )
 
 // CompressionCodec defines type of compression.
@@ -48,29 +48,52 @@ func CompressFile(filename string, codec CompressionCodec) (string, error) {
 	}
 }
 
-func CompressGZIPFile(filename string) (string, error) {
-	fileLock, err := file.TryLockFile(filename, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
-	if err != nil {
-		return "", err
-	}
-	defer file.UnLockFile(fileLock)
+func CompressGZIPFile(filename string) (gzipFileName string, err error) {
+	var (
+		fileLock       *pkgfile.LockedFile
+		file, gzipFile *os.File
+		gzipWriter     *gzip.Writer
+	)
 
-	newGzipFileName := filename + gzipFileSuffix
-	newGzipFile, err := os.Create(newGzipFileName)
+	defer func() {
+		if fileLock != nil {
+			pkgfile.UnLockFile(fileLock)
+		}
+
+		if file != nil {
+			file.Close()
+		}
+
+		if gzipFile != nil {
+			gzipFile.Close()
+		}
+
+		if gzipWriter != nil {
+			gzipWriter.Close()
+		}
+
+		if err != nil && len(gzipFileName) != 0 {
+			os.Remove(gzipFileName)
+		}
+	}()
+
+	fileLock, err = pkgfile.TryLockFile(filename, os.O_WRONLY|os.O_CREATE, pkgfile.PrivateFileMode)
 	if err != nil {
 		return "", err
 	}
-	defer newGzipFile.Close()
-	
-	gzipWriter := gzip.NewWriter(newGzipFile)
-	defer gzipWriter.Close()
-	
-	file, err := os.Open(filename)
+
+	gzipFileName = filename + gzipFileSuffix
+	gzipFile, err = os.Create(gzipFileName)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
-		
+
+	file, err = os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+
+	gzipWriter = gzip.NewWriter(gzipFile)
 	if _, err = io.Copy(gzipWriter, file); err != nil {
 		return "", err
 	}
@@ -79,8 +102,8 @@ func CompressGZIPFile(filename string) (string, error) {
 		return "", err
 	}
 
-	return newGzipFileName, err
-} 
+	return gzipFileName, err
+}
 
 // IsCompressFile returns true if file name end with ".tar.gz"
 func IsGzipCompressFile(filename string) bool {
