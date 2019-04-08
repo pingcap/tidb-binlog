@@ -57,19 +57,27 @@ func CompressGZIPFile(filename string) (gzipFileName string, err error) {
 
 	defer func() {
 		if fileLock != nil {
-			pkgfile.UnLockFile(fileLock)
+			if err1 := pkgfile.UnLockFile(fileLock); err1 != nil {
+				log.Warnf("unlock file %s failed %v", fileLock.Name(), err1)
+			}
 		}
 
 		if file != nil {
-			file.Close()
+			if err1 := file.Close(); err1 != nil {
+				log.Warnf("close file %s failed %v", file.Name(), err1)
+			}
 		}
 
 		if gzipFile != nil {
-			gzipFile.Close()
+			if err1 := gzipFile.Close(); err1 != nil {
+				log.Warnf("close file %s failed %v", gzipFileName, err1)
+			}
 		}
 
 		if gzipWriter != nil {
-			gzipWriter.Close()
+			if err1 := gzipWriter.Close(); err1 != nil {
+				log.Warnf("close gzip writer %s failed %v", gzipFileName, err1)
+			}
 		}
 
 		if err != nil && len(gzipFileName) != 0 {
