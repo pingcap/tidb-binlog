@@ -117,14 +117,14 @@ func (c *Config) Parse(args []string) (err error) {
 			return errors.Trace(err)
 		}
 
-		log.Infof("start tso %d", c.StartTSO)
+		log.Infof("Parsed start TSO %d", c.StartTSO)
 	}
 	if c.StopDatetime != "" {
 		c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Infof("stop tso %d", c.StopTSO)
+		log.Infof("Parsed stop TSO %d", c.StopTSO)
 	}
 
 	return errors.Trace(c.validate())
