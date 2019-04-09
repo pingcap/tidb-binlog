@@ -147,8 +147,7 @@ func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commit
 	}
 	pkID := pkColumn.ID
 
-	columns := writableColumns(table)
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	updtDecoder := newUpdateDecoder(table)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
@@ -156,7 +155,7 @@ func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commit
 	var newValues []interface{}
 
 	// TODO: Make updating pk working
-	_, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, gotime.Local)
+	_, newColumnValues, err := updtDecoder.decode(row, gotime.Local)
 	newPkValue := newColumnValues[pkID]
 
 	if err != nil {
