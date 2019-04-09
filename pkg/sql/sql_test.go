@@ -52,16 +52,6 @@ func (s *composeCHDSNSuite) TestShouldIncludeAllInfo(c *C) {
 	c.Assert(dbDSN, Equals, "tcp://test:7979?username=root&database=test&")
 }
 
-func BenchmarkCompose(b *testing.B) {
-	var dbDSN string
-	for i := 0; i < b.N; i++ {
-		dbDSN = composeCHDSN("test_node1", 7979, "root", "secret", "test", 1024)
-	}
-	if len(dbDSN) == 0 {
-		b.Fatal("Invalid DSN")
-	}
-}
-
 type SQLErrSuite struct{}
 
 var _ = Suite(&SQLErrSuite{})
