@@ -31,3 +31,6 @@ bin
 cscope.*
 **/*.swp
 go.sum
+
+# Files generated when testing
+out
