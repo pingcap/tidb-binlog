@@ -47,6 +47,7 @@ type SyncerConfig struct {
 	StrSQLMode       *string            `toml:"sql-mode" json:"sql-mode"`
 	SQLMode          mysql.SQLMode      `toml:"-" json:"-"`
 	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	IgnoreTables     []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
 	To               *executor.DBConfig `toml:"to" json:"to"`
