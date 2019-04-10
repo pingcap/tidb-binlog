@@ -23,38 +23,23 @@ type decoder struct {
 }
 
 // NewDecoder creates a new Decoder.
-func NewDecoder(r io.Reader, initOffset int64) Decoder {
+func NewDecoder(f *os.File , initOffset int64) (Decoder, error) {
+	r, err := NewReader(f)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return NewDecoderFromReader(r, initOffset), nil
+}
+
+// NewDecoderFromReader creates a new Decoder from io.reader.
+func NewDecoderFromReader(r io.Reader, initOffset int64) Decoder {
 	reader := bufio.NewReader(r)
 
 	return &decoder{
 		br:     reader,
 		offset: initOffset,
 	}
-}
-
-func NewDecoderFromFile(f *os.File , initOffset int64) (Decoder, error) {
-	r, err := NewReader(f)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return &decoder{
-		br:     bufio.NewReader(r),
-		offset: initOffset,
-	}, nil
-}
-
-func NewReader(f *os.File) (r io.Reader, err error) {
-	if compress.IsGzipCompressFile(f.Name()) {
-		r, err = gzip.NewReader(f)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	} else {
-		r = io.Reader(f)
-	}
-
-	return r, nil
 }
 
 // Decode implements the Decoder interface.
@@ -138,4 +123,18 @@ func Decode(r io.Reader) (payload []byte, length int64, err error) {
 	// len(magic) + len(size) + len(payload) + len(crc)
 	length = 4 + 8 + size + 4
 	return payload, length, nil
+}
+
+// NewReader returns a reader from file.
+func NewReader(f *os.File) (r io.Reader, err error) {
+	if compress.IsGzipCompressFile(f.Name()) {
+		r, err = gzip.NewReader(f)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		r = io.Reader(f)
+	}
+
+	return r, nil
 }

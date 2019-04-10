@@ -221,7 +221,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			}
 		}
 
-		decoder, err = NewDecoderFromFile(f, from.Offset)
+		decoder, err = NewDecoder(f, from.Offset)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -255,7 +255,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 					offset, err1 := seekBinlog(f, from.Offset+1)
 					if err1 == nil {
 						from.Offset = offset
-						decoder, err = NewDecoderFromFile(f, from.Offset)
+						decoder, err = NewDecoder(f, from.Offset)
 
 						continue
 					}

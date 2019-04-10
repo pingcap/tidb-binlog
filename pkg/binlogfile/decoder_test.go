@@ -21,7 +21,7 @@ func (s *decoderSuite) TestDecode(c *check.C) {
 	_, err := buf.Write(Encode([]byte("payload")))
 	c.Assert(err, check.IsNil)
 
-	decoder := NewDecoder(buf, 0)
+	decoder := NewDecoderFromReader(buf, 0)
 
 	// read the record back and check
 	payload, _, err := decoder.Decode()
