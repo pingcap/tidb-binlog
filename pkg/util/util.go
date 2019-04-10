@@ -101,7 +101,7 @@ func (l *StdLogger) Println(v ...interface{}) {
 
 // ToColumnTypeMap return a map index by column id
 func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
-	colTypeMap := make(map[int64]*types.FieldType)
+	colTypeMap := make(map[int64]*types.FieldType, len(columns))
 	for _, col := range columns {
 		colTypeMap[col.ID] = &col.FieldType
 	}
