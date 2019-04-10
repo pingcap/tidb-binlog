@@ -13,6 +13,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 )
 
@@ -177,7 +178,14 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 		p.grpcConn.Close()
 	}
 
-	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
+	callOpts := []grpc.CallOption{grpc.MaxCallRecvMsgSize(maxMsgSize)}
+
+	if compressor, ok := ctx.Value(drainerKeyType("compressor")).(string); ok {
+		log.Infof("[pump %s] grpc compression enabled", p.nodeID)
+		callOpts = append(callOpts, grpc.UseCompressor(compressor))
+	}
+
+	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(callOpts...))
 	if err != nil {
 		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
 		p.pullCli = nil
