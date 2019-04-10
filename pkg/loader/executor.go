@@ -9,6 +9,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
@@ -248,20 +249,10 @@ func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error
 }
 
 func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
-	var err error
-
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
-		var i int
-		for i = 0; i < retryNum; i++ {
-			if i > 0 {
-				time.Sleep(backoff)
-			}
-
-			err = e.singleExec(dmls, safeMode)
-			if err == nil {
-				break
-			}
-		}
+		err := util.RetryOnError(retryNum, backoff, "singleExec", func() error {
+			return e.singleExec(dmls, safeMode)
+		})
 		if err != nil {
 			return errors.Trace(err)
 		}
