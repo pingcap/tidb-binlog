@@ -70,15 +70,15 @@ func CompressGZIPFile(filename string) (gzipFileName string, err error) {
 			}
 		}
 
-		if gzipFile != nil {
-			if err1 := gzipFile.Close(); err1 != nil {
-				log.Warnf("close file %s failed %v", gzipFileName, err1)
-			}
-		}
-
 		if gzipWriter != nil {
 			if err1 := gzipWriter.Close(); err1 != nil {
 				log.Warnf("close gzip writer %s failed %v", gzipFileName, err1)
+			}
+		}
+
+		if gzipFile != nil {
+			if err1 := gzipFile.Close(); err1 != nil {
+				log.Warnf("close file %s failed %v", gzipFileName, err1)
 			}
 		}
 
