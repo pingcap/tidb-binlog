@@ -296,7 +296,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 		conflict := causality.DetectConflict(keys)
 		if conflict {
 			log.Infof("meet causality.DetectConflict exec now table: %v, keys: %v",
-				quoteSchema(dml.Database, dml.Table), keys)
+				dml.TableName(), keys)
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)
@@ -340,17 +340,21 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		}
 	}
 
-	tables := groupByTable(dmls)
-
-	batchTables := make(map[string][]*DML)
+	var batchTables map[string][]*DML
 	var singleDMLs []*DML
 
-	for tableName, tableDMLs := range tables {
-		info := tableDMLs[0].info
-		if info.primaryKey != nil && len(info.uniqueKeys) == 0 && s.merge {
-			batchTables[tableName] = tableDMLs
-		} else {
-			singleDMLs = append(singleDMLs, tableDMLs...)
+	if !s.merge {
+		singleDMLs = dmls
+	} else {
+		batchTables = make(map[string][]*DML)
+		for _, dml := range dmls {
+			info := dml.info
+			if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+				tblName := dml.TableName()
+				batchTables[tblName] = append(batchTables[tblName], dml)
+			} else {
+				singleDMLs = append(singleDMLs, dml)
+			}
 		}
 	}
 

@@ -41,22 +41,6 @@ func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.Histogram
 	return e
 }
 
-func groupByTable(dmls []*DML) (tables map[string][]*DML) {
-	if len(dmls) == 0 {
-		return nil
-	}
-
-	tables = make(map[string][]*DML)
-	for _, dml := range dmls {
-		table := quoteSchema(dml.Database, dml.Table)
-		tableDMLs := tables[table]
-		tableDMLs = append(tableDMLs, dml)
-		tables[table] = tableDMLs
-	}
-
-	return
-}
-
 func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration) error {
 	var err error
 	for i := 0; i < retryNum; i++ {
