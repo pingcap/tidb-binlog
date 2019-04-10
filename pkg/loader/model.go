@@ -177,7 +177,7 @@ func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 		if wargs[i] == nil {
 			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quoteName(wnames[i]) + " = ? ")
+			builder.WriteString(quoteName(wnames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
