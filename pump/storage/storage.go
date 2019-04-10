@@ -94,13 +94,14 @@ func NewAppend(dir string, options *Options) (append *Append, err error) {
 }
 
 // NewAppendWithResolver returns a instance of Append
-// if tiStore and tiLockResolver is not nil, we will try to query tikv to know weather a txn is committed
+// if tiStore and tiLockResolver is not nil, we will try to query tikv to know whether a txn is committed
 func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiLockResolver *tikv.LockResolver) (append *Append, err error) {
 	if options == nil {
 		options = DefaultOptions()
 	}
 
-	kvDir := path.Join(dir, "kv")
+	log.Infof("options: %+v", options)
+
 	valueDir := path.Join(dir, "value")
 	err = os.MkdirAll(valueDir, 0755)
 	if err != nil {
@@ -113,28 +114,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	var opt opt.Options
-	cf := options.Storage
-	if cf == nil {
-		cf = defaultStorageConfig
-	} else {
-		setDefaultStorageConfig(cf)
-	}
-
-	log.Infof("storage config: %+v", cf)
-
-	opt.BlockCacheCapacity = cf.BlockCacheCapacity
-	opt.BlockRestartInterval = cf.BlockRestartInterval
-	opt.BlockSize = cf.BlockSize
-	opt.CompactionL0Trigger = cf.CompactionL0Trigger
-	opt.CompactionTableSize = cf.CompactionTableSize
-	opt.CompactionTotalSize = cf.CompactionTotalSize
-	opt.CompactionTotalSizeMultiplier = cf.CompactionTotalSizeMultiplier
-	opt.WriteBuffer = cf.WriteBuffer
-	opt.WriteL0PauseTrigger = cf.WriteL0PauseTrigger
-	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
-
-	metadata, err := leveldb.OpenFile(kvDir, &opt)
+	kvDir := path.Join(dir, "kv")
+	metadata, err := openMetadataDB(kvDir, options.KVConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -229,7 +210,6 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 	append.wg.Add(1)
 	go append.updateStatus()
-
 	return
 }
 
@@ -1014,7 +994,17 @@ func getStorageSize(dir string) (size storageSize, err error) {
 
 // Config holds the configuration of storage
 type Config struct {
-	KVConfig `toml:"kv" json:"kv"`
+	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
+	KV      *KVConfig `toml:"kv" json:"kv"`
+}
+
+// GetSyncLog return sync-log config option
+func (c *Config) GetSyncLog() bool {
+	if c.SyncLog == nil {
+		return true
+	}
+
+	return *c.SyncLog
 }
 
 // KVConfig if the configuration of goleveldb
@@ -1031,50 +1021,72 @@ type KVConfig struct {
 	WriteL0SlowdownTrigger        int     `toml:"write-L0-slowdown-trigger" json:"write-L0-slowdown-trigger"`
 }
 
-var defaultStorageConfig = &Config{
-	KVConfig: KVConfig{
-		BlockCacheCapacity:            8388608,
-		BlockRestartInterval:          16,
-		BlockSize:                     4096,
-		CompactionL0Trigger:           8,
-		CompactionTableSize:           67108864,
-		CompactionTotalSize:           536870912,
-		CompactionTotalSizeMultiplier: 8,
-		WriteBuffer:                   67108864,
-		WriteL0PauseTrigger:           24,
-		WriteL0SlowdownTrigger:        17,
-	},
+var defaultStorageKVConfig = &KVConfig{
+	BlockCacheCapacity:            8388608,
+	BlockRestartInterval:          16,
+	BlockSize:                     4096,
+	CompactionL0Trigger:           8,
+	CompactionTableSize:           67108864,
+	CompactionTotalSize:           536870912,
+	CompactionTotalSizeMultiplier: 8,
+	WriteBuffer:                   67108864,
+	WriteL0PauseTrigger:           24,
+	WriteL0SlowdownTrigger:        17,
 }
 
-func setDefaultStorageConfig(cf *Config) {
+func setDefaultStorageConfig(cf *KVConfig) {
 	if cf.BlockCacheCapacity <= 0 {
-		cf.BlockCacheCapacity = defaultStorageConfig.BlockCacheCapacity
+		cf.BlockCacheCapacity = defaultStorageKVConfig.BlockCacheCapacity
 	}
 	if cf.BlockRestartInterval <= 0 {
-		cf.BlockRestartInterval = defaultStorageConfig.BlockRestartInterval
+		cf.BlockRestartInterval = defaultStorageKVConfig.BlockRestartInterval
 	}
 	if cf.BlockSize <= 0 {
-		cf.BlockSize = defaultStorageConfig.BlockSize
+		cf.BlockSize = defaultStorageKVConfig.BlockSize
 	}
 	if cf.CompactionL0Trigger <= 0 {
-		cf.CompactionL0Trigger = defaultStorageConfig.CompactionL0Trigger
+		cf.CompactionL0Trigger = defaultStorageKVConfig.CompactionL0Trigger
 	}
 	if cf.CompactionTableSize <= 0 {
-		cf.CompactionTableSize = defaultStorageConfig.CompactionTableSize
+		cf.CompactionTableSize = defaultStorageKVConfig.CompactionTableSize
 	}
 	if cf.CompactionTotalSize <= 0 {
-		cf.CompactionTotalSize = defaultStorageConfig.CompactionTotalSize
+		cf.CompactionTotalSize = defaultStorageKVConfig.CompactionTotalSize
 	}
 	if cf.CompactionTotalSizeMultiplier <= 0 {
-		cf.CompactionTotalSizeMultiplier = defaultStorageConfig.CompactionTotalSizeMultiplier
+		cf.CompactionTotalSizeMultiplier = defaultStorageKVConfig.CompactionTotalSizeMultiplier
 	}
 	if cf.WriteBuffer <= 0 {
-		cf.WriteBuffer = defaultStorageConfig.WriteBuffer
+		cf.WriteBuffer = defaultStorageKVConfig.WriteBuffer
 	}
 	if cf.WriteL0PauseTrigger <= 0 {
-		cf.WriteL0PauseTrigger = defaultStorageConfig.WriteL0PauseTrigger
+		cf.WriteL0PauseTrigger = defaultStorageKVConfig.WriteL0PauseTrigger
 	}
 	if cf.WriteL0SlowdownTrigger <= 0 {
-		cf.WriteL0SlowdownTrigger = defaultStorageConfig.WriteL0SlowdownTrigger
+		cf.WriteL0SlowdownTrigger = defaultStorageKVConfig.WriteL0SlowdownTrigger
 	}
+}
+
+func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
+	if cf == nil {
+		cf = defaultStorageKVConfig
+	} else {
+		setDefaultStorageConfig(cf)
+	}
+
+	log.Infof("Storage config: %+v", cf)
+
+	var opt opt.Options
+	opt.BlockCacheCapacity = cf.BlockCacheCapacity
+	opt.BlockRestartInterval = cf.BlockRestartInterval
+	opt.BlockSize = cf.BlockSize
+	opt.CompactionL0Trigger = cf.CompactionL0Trigger
+	opt.CompactionTableSize = cf.CompactionTableSize
+	opt.CompactionTotalSize = cf.CompactionTotalSize
+	opt.CompactionTotalSizeMultiplier = cf.CompactionTotalSizeMultiplier
+	opt.WriteBuffer = cf.WriteBuffer
+	opt.WriteL0PauseTrigger = cf.WriteL0PauseTrigger
+	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
+
+	return leveldb.OpenFile(kvDir, &opt)
 }
