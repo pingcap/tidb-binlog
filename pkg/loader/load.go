@@ -10,6 +10,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
@@ -223,45 +224,33 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *Loader) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl: ", ddl)
-	var err error
-	var tx *gosql.Tx
-	for i := 0; i < maxDDLRetryCount; i++ {
-		if i > 0 {
-			time.Sleep(time.Second)
-		}
 
-		tx, err = s.db.Begin()
+	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
+		tx, err := s.db.Begin()
 		if err != nil {
-			log.Error(err)
-			continue
+			return err
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
-				log.Error(err)
 				tx.Rollback()
-				continue
+				return err
 			}
 		}
 
-		log.Infof("retry num: %d, exec ddl: %s", i, ddl.SQL)
-		_, err = tx.Exec(ddl.SQL)
-		if err != nil {
-			log.Error(err)
+		if _, err = tx.Exec(ddl.SQL); err != nil {
 			tx.Rollback()
-			continue
+			return err
 		}
 
-		err = tx.Commit()
-		if err != nil {
-			log.Error(err)
-			continue
+		if err = tx.Commit(); err != nil {
+			return err
 		}
 
 		log.Info("exec ddl success: ", ddl.SQL)
 		return nil
-	}
+	})
 
 	return errors.Trace(err)
 }
