@@ -37,6 +37,7 @@ func ToCompressionCodec(v string) CompressionCodec {
 	}
 }
 
+// CompressFile compresses a file, and return the compressed file name
 func CompressFile(filename string, codec CompressionCodec) (string, error) {
 	switch codec {
 	case CompressionNone:
@@ -48,6 +49,7 @@ func CompressFile(filename string, codec CompressionCodec) (string, error) {
 	}
 }
 
+// CompressGZIPFile compresses file by gzip
 func CompressGZIPFile(filename string) (gzipFileName string, err error) {
 	var (
 		fileLock       *pkgfile.LockedFile
