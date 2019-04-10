@@ -89,6 +89,16 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	return res, err
 }
 
+func (tx *tx) autoRollbakExec(query string, args ...interface{}) (res gosql.Result, err error) {
+	res, err = tx.exec(query, args...)
+	if err != nil {
+		log.Errorf("Failed Exec: %v, query: %s, args: %v", err, query, args)
+		tx.Rollback()
+		err = errors.Trace(err)
+	}
+	return
+}
+
 // wrap of sql.Tx.Commit()
 func (tx *tx) commit() error {
 	start := time.Now()
@@ -128,10 +138,8 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 		return errors.Trace(err)
 	}
 	sql := sqls.String()
-	_, err = tx.exec(sql, argss...)
+	_, err = tx.autoRollbakExec(sql, argss...)
 	if err != nil {
-		log.Error("exec fail sql: %s, args: %v", sql, argss)
-		tx.Rollback()
 		return errors.Trace(err)
 	}
 
@@ -174,10 +182,8 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.exec(builder.String(), args...)
+	_, err = tx.autoRollbakExec(builder.String(), args...)
 	if err != nil {
-		log.Errorf("exec fail sql: %s, args: %v, err: %v", builder.String(), args, err)
-		tx.Rollback()
 		return errors.Trace(err)
 	}
 	err = tx.commit()
@@ -271,37 +277,29 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbakExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 
 			sql, args = dml.replaceSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err = tx.exec(sql, args...)
+			_, err = tx.autoRollbakExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbakExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		} else {
 			sql, args := dml.sql()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbakExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		}
