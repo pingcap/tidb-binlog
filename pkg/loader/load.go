@@ -183,8 +183,10 @@ func (s *Loader) Close() {
 	close(s.input)
 }
 
+var utilGetTableInfo = getTableInfo
+
 func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
-	info, err = getTableInfo(s.db, schema, table)
+	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
 	}
@@ -325,8 +327,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 	}
 
 	for _, dml := range dmls {
-		var err error
-		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+		info, err := s.getTableInfo(dml.Database, dml.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -338,25 +339,10 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 			}
 			dml.Values = vals
 		}
+		dml.info = info
 	}
 
-	var batchTables map[string][]*DML
-	var singleDMLs []*DML
-
-	if !s.merge {
-		singleDMLs = dmls
-	} else {
-		batchTables = make(map[string][]*DML)
-		for _, dml := range dmls {
-			info := dml.info
-			if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
-				tblName := dml.TableName()
-				batchTables[tblName] = append(batchTables[tblName], dml)
-			} else {
-				singleDMLs = append(singleDMLs, dml)
-			}
-		}
-	}
+	batchTables, singleDMLs := s.groupDMLs(dmls)
 
 	log.Debugf("exec by tables: %d tables, by single: %d dmls", len(batchTables), len(singleDMLs))
 
@@ -490,4 +476,28 @@ func (s *Loader) Run() error {
 			}
 		}
 	}
+}
+
+// groupDMLs group DMLs by table in batchByTbls and
+// collects DMLs that can't be executed in bulk in singleDMLs.
+// NOTE: DML.info are assumed to be already set.
+func (s *Loader) groupDMLs(dmls []*DML) (map[string][]*DML, []*DML) {
+	var batchByTbls map[string][]*DML
+	var singleDMLs []*DML
+
+	if !s.merge {
+		singleDMLs = dmls
+	} else {
+		batchByTbls = make(map[string][]*DML)
+		for _, dml := range dmls {
+			info := dml.info
+			if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+				tblName := dml.TableName()
+				batchByTbls[tblName] = append(batchByTbls[tblName], dml)
+			} else {
+				singleDMLs = append(singleDMLs, dml)
+			}
+		}
+	}
+	return batchByTbls, singleDMLs
 }
