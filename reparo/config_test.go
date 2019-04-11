@@ -27,8 +27,8 @@ func (s *testConfigSuite) TestTSORangeParsing(c *check.C) {
 
 	err := config.Parse([]string{
 		"-data-dir=/tmp/data",
-		"-start-datetime=2019-01-01 15:07:00", 
-		"-stop-datetime=2019-02-01 15:07:00", 
+		"-start-datetime=2019-01-01 15:07:00",
+		"-stop-datetime=2019-02-01 15:07:00",
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(config.StartTSO, check.Not(check.Equals), 0)

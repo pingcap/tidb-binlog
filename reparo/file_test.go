@@ -35,7 +35,7 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{
 			Payload: binlogData,
-			Meta: gb.Meta {
+			Meta: gb.Meta{
 				CommitTs: binlog.CommitTs,
 			},
 		})

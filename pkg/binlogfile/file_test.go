@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
@@ -115,4 +114,3 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
 }
-
