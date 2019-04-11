@@ -60,6 +60,11 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 		return errors.Trace(err)
 	}
 
-	_, err = p.binlogger.WriteTail(&tb.Entity{Payload: data})
+	_, err = p.binlogger.WriteTail(&tb.Entity{
+		Payload: data,
+		Meta: tb.Meta{
+			CommitTs: binlog.GetCommitTs(),
+		},
+	})
 	return errors.Trace(err)
 }

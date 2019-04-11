@@ -71,7 +71,7 @@ func Exist(name string) bool {
 func SearchIndex(names []string, index uint64) (int, bool) {
 	for i := len(names) - 1; i >= 0; i-- {
 		name := names[i]
-		curIndex, err := ParseBinlogName(name)
+		curIndex, _, err := ParseBinlogName(name)
 		if err != nil {
 			log.Errorf("parse correct name should never fail: %v", err)
 		}
@@ -88,7 +88,7 @@ func SearchIndex(names []string, index uint64) (int, bool) {
 func IsValidBinlog(names []string) bool {
 	var lastSuffix uint64
 	for _, name := range names {
-		curSuffix, err := ParseBinlogName(name)
+		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
 			log.Fatalf("binlogger: parse corrent name should never fail: %v", err)
 		}
@@ -114,6 +114,8 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 		return nil, errors.Annotatef(ErrFileNotFound, "dir %s", dirpath)
 	}
 
+	log.Infof("all file: %v, after filter %v", names, fnames)
+
 	return fnames, nil
 }
 
@@ -125,7 +127,7 @@ func FilterBinlogNames(names []string) []string {
 			continue
 		}
 
-		if _, err := ParseBinlogName(name); err != nil {
+		if _, _, err := ParseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
 				log.Infof("ignored file %v in binlog dir", name)
 			}
@@ -138,9 +140,10 @@ func FilterBinlogNames(names []string) []string {
 }
 
 // ParseBinlogName parse binlog file name and return binlog index.
-func ParseBinlogName(str string) (index uint64, err error) {
+func ParseBinlogName(str string) (index uint64, ts int64, err error) {
+	log.Infof("parse binlog name %s", str)
 	if !strings.HasPrefix(str, "binlog-") {
-		return 0, ErrBadBinlogName
+		return 0, 0, ErrBadBinlogName
 	}
 
 	items := strings.Split(str, "-")
@@ -149,20 +152,23 @@ func ParseBinlogName(str string) (index uint64, err error) {
 		// backward compatibility
 		// binlog file format like: binlog-0000000000000001-20181010101010 or binlog-0000000000000001
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
+	case 4:
+		// binlog file format like: binlog-0000000000000001-20181010101010-407623959013752832 or binlog-0000000000000001-20181010101010-407623959013752832.tar.gz
+		_, err = fmt.Sscanf(items[1], "%016d", &index)
+		if err != nil {
+			return 0, 0, errors.Trace(err)
+		}
+
+		_, err = fmt.Sscanf(strings.Split(items[3], ".")[0], "%018d", &ts)
 	default:
-		return 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
+		return 0, 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
 	}
 
-	return index, errors.Trace(err)
+	return index, ts, errors.Trace(err)
 }
 
 // BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20181010101010
-func BinlogName(index uint64) string {
-	currentTime := time.Now()
-	return binlogNameWithDateTime(index, currentTime)
-}
-
-// binlogNameWithDateTime creates a binlog file name.
-func binlogNameWithDateTime(index uint64, datetime time.Time) string {
-	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
+func BinlogName(index uint64, ts int64) string {
+	datetimeStr := time.Now().Format(datetimeFormat)
+	return fmt.Sprintf("binlog-%016d-%s-%018d", index, datetimeStr, ts)
 }

@@ -100,9 +100,9 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog-0000000000000000
+	// if no binlog files, we create from index 0, and start with ts 1, the file name like binlog-0000000000000000-20190101010101-000000000000000001 
 	if len(names) == 0 {
-		lastFileName = path.Join(dirpath, BinlogName(0))
+		lastFileName = path.Join(dirpath, BinlogName(0, 1))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file
@@ -112,7 +112,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		}
 
 		lastFileName = path.Join(dirpath, names[len(names)-1])
-		lastFileSuffix, err = ParseBinlogName(names[len(names)-1])
+		lastFileSuffix, _, err = ParseBinlogName(names[len(names)-1])
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -312,7 +312,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			continue
 		}
 
-		curSuffix, err := ParseBinlogName(name)
+		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
 			log.Errorf("parse binlog error %v", err)
 		}
@@ -359,7 +359,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate()
+	err = b.rotate(entity.Meta.CommitTs)
 	return curOffset, errors.Trace(err)
 }
 
@@ -384,8 +384,8 @@ func (b *binlogger) Close() error {
 }
 
 // rotate creates a new file for append binlog
-func (b *binlogger) rotate() error {
-	filename := BinlogName(b.seq() + 1)
+func (b *binlogger) rotate(ts int64) error {
+	filename := BinlogName(b.seq() + 1, ts + 1)
 	b.lastSuffix = b.seq() + 1
 	b.lastOffset = 0
 
@@ -411,7 +411,7 @@ func (b *binlogger) seq() uint64 {
 		return 0
 	}
 
-	seq, err := ParseBinlogName(path.Base(b.file.Name()))
+	seq, _, err := ParseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
 		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
 	}
