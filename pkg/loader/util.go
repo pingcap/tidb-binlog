@@ -31,41 +31,26 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		return nil, errors.Trace(err)
 	}
 
-	// get index info
-	//
-	// mysql> show index from a;
-	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
-	// | Table | Non_unique | Key_name | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment |
-	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
-	// | a     |          0 | PRIMARY  |            1 | id          | A         |           0 |     NULL | NULL   |      | BTREE      |         |               |
-	// | a     |          1 | a1       |            1 | a1          | A         |           0 |     NULL | NULL   | YES  | BTREE      |         |               |
-	// +-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+
-	sql := fmt.Sprintf("SHOW INDEX FROM %s", quoteSchema(schema, table))
-	rows, err := db.Query(sql)
+	sql := `
+SELECT non_unique, index_name, seq_in_index, column_name 
+FROM information_schema.statistics
+WHERE table_schema = ? AND table_name = ?;`
+	rows, err := db.Query(sql, schema, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	defer rows.Close()
 
+	var nonUnique int
+	var keyName string
+	var columnName string
+	var seqInIndex int // start at 1
+
 	// get pk and uk
 	// key for PRIMARY or other index name
 	for rows.Next() {
-		cols := make([]interface{}, 13)
-		for i := 0; i < len(cols); i++ {
-			cols[i] = &gosql.RawBytes{}
-		}
-
-		var nonUnique int
-		var keyName string
-		var columnName string
-		var seqInIndex int // start at 1
-		cols[1] = &nonUnique
-		cols[2] = &keyName
-		cols[3] = &seqInIndex
-		cols[4] = &columnName
-
-		err = rows.Scan(cols...)
+		err = rows.Scan(&nonUnique, &keyName, &seqInIndex, &columnName)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -90,7 +75,6 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		if i == len(info.uniqueKeys) {
 			info.uniqueKeys = append(info.uniqueKeys, indexInfo{keyName, []string{columnName}})
 		}
-
 	}
 
 	// put primary key at first place
