@@ -114,8 +114,6 @@ func ReadBinlogNames(dirpath string) ([]string, error) {
 		return nil, errors.Annotatef(ErrFileNotFound, "dir %s", dirpath)
 	}
 
-	log.Infof("all file: %v, after filter %v", names, fnames)
-
 	return fnames, nil
 }
 
@@ -141,7 +139,6 @@ func FilterBinlogNames(names []string) []string {
 
 // ParseBinlogName parse binlog file name and return binlog index.
 func ParseBinlogName(str string) (index uint64, ts int64, err error) {
-	log.Infof("parse binlog name %s", str)
 	if !strings.HasPrefix(str, "binlog-") {
 		return 0, 0, ErrBadBinlogName
 	}

@@ -24,7 +24,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 	checkTest(c, dir)
 
 	// // check create binloger with empty directory
-	c.Assert(os.RemoveAll(path.Join(dir, BinlogName(0, 0))), IsNil)
+	c.Assert(os.RemoveAll(path.Join(dir, BinlogName(0, 1))), IsNil)
 	checkTest(c, dir)
 }
 

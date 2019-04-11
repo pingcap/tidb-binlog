@@ -16,10 +16,10 @@ var _ = Suite(&testFileSuite{})
 type testFileSuite struct{}
 
 func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
-	// we can get the first binlog's commit ts by decode data in binlog file.
 	binlogDir := c.MkDir()
-
 	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
+
+	// set SegmentSizeBytes to 1 can rotate binlog file after every binlog write
 	binlogfile.SegmentSizeBytes = 1
 
 	// create binlog file
@@ -30,7 +30,6 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 		binlogData, err := binlog.Marshal()
 		c.Assert(err, IsNil)
 
-		// generate binlog file.
 		binloger, err := binlogfile.OpenBinlogger(binlogDir, compress.CompressionNone)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{
@@ -71,20 +70,14 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 			},
 		},
 	}
-
 	expectFileNums := []int{10, 2, 9, 3}
 
 	allFiles, err := searchFiles(binlogDir)
 	c.Assert(err, IsNil)
-	c.Log(allFiles)
 
 	for i, r := range reparos {
-		c.Log("start tso:", r.cfg.StartTSO)
-		c.Log("end tso:", r.cfg.StopTSO)
 		files, err := filterFiles(allFiles, r.cfg.StartTSO, r.cfg.StopTSO)
 		c.Assert(err, IsNil)
-		c.Log("get file num:", len(files))
 		c.Assert(files, HasLen, expectFileNums[i])
-		//c.Assert(len(files), Equals, expectFileNums[i])
 	}
 }
