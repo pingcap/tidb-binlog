@@ -35,3 +35,9 @@ All notable changes to this project are documented in this file.
 	- Skip scanning whole relative file for recovery.
 	- Improve code and test, write to downstream concurrently by using `pkg/loader` 
 
+## [2.1.8]
+- Add sql-mode config for drainer [#513](https://github.com/pingcap/tidb-binlog/pull/513)
+- Drainer: add config ignore-tables [#526](https://github.com/pingcap/tidb-binlog/pull/526)
+- Pump: Add syn-log option [#529](https://github.com/pingcap/tidb-binlog/pull/529)
+- Add support for enabling gzip grpc compression for grpc [#530](https://github.com/pingcap/tidb-binlog/pull/530)
+- Drainer: Ignore generated columns when updating [#531](https://github.com/pingcap/tidb-binlog/pull/531)
