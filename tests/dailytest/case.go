@@ -144,6 +144,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	})
 	tr.execSQLs(case3Clean)
 
+	tr.run(caseTblWithGeneratedCol)
+	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
+
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
 		start := time.Now()
@@ -225,6 +228,44 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+// caseTblWithGeneratedCol creates a table with generated column,
+// and insert values into the table
+func caseTblWithGeneratedCol(db *sql.DB) {
+	_, err := db.Exec(`
+CREATE TABLE gen_contacts (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	first_name VARCHAR(50) NOT NULL,
+	last_name VARCHAR(50) NOT NULL,
+	other VARCHAR(101),
+	fullname VARCHAR(101) GENERATED ALWAYS AS (CONCAT(first_name,' ',last_name)),
+	initial VARCHAR(101) GENERATED ALWAYS AS (CONCAT(LEFT(first_name, 1),' ',LEFT(last_name,1))) STORED
+);`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	insertSQL := "INSERT INTO gen_contacts(first_name, last_name) VALUES(?, ?);"
+	updateSQL := "UPDATE gen_contacts SET other = fullname WHERE first_name = ?"
+	for i := 0; i < 64; i++ {
+		_, err := db.Query(insertSQL, fmt.Sprintf("John%d", i), fmt.Sprintf("Dow%d", i))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		idxToUpdate := rand.Intn(i + 1)
+		_, err = db.Query(updateSQL, fmt.Sprintf("John%d", idxToUpdate))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	delSQL := "DELETE FROM gen_contacts WHERE fullname = ?"
+	for i := 0; i < 10; i++ {
+		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i)); err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // updatePKUK create a table with primary key and unique key

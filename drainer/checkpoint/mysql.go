@@ -19,6 +19,7 @@ import (
 // MysqlCheckPoint is a local savepoint struct for mysql
 type MysqlCheckPoint struct {
 	sync.RWMutex
+	closed          bool
 	clusterID       uint64
 	initialCommitTS int64
 
@@ -79,11 +80,16 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 // Load implements CheckPoint.Load interface
 func (sp *MysqlCheckPoint) Load() error {
 	sp.Lock()
+	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
 	defer func() {
 		if sp.CommitTS == 0 {
 			sp.CommitTS = sp.initialCommitTS
 		}
-		sp.Unlock()
 	}()
 
 	sql := genSelectSQL(sp)
@@ -119,6 +125,10 @@ func (sp *MysqlCheckPoint) Load() error {
 func (sp *MysqlCheckPoint) Save(ts int64) error {
 	sp.Lock()
 	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
 
 	sp.CommitTS = ts
 	sp.saveTime = time.Now()
@@ -156,6 +166,10 @@ func (sp *MysqlCheckPoint) Check(int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
+	if sp.closed {
+		return false
+	}
+
 	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
@@ -165,6 +179,22 @@ func (sp *MysqlCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// Close implements CheckPoint.Close interface
+func (sp *MysqlCheckPoint) Close() error {
+	sp.Lock()
+	defer sp.Unlock()
+
+	if sp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
+	err := sp.db.Close()
+	if err == nil {
+		sp.closed = true
+	}
+	return errors.Trace(err)
 }
 
 // String implements CheckPoint.String interface

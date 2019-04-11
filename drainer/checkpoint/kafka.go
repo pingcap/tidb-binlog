@@ -70,6 +70,10 @@ func (cp *KafkaCheckpoint) Save(ts int64) error {
 	cp.Lock()
 	defer cp.Unlock()
 
+	if cp.closed {
+		return errors.Trace(ErrCheckPointClosed)
+	}
+
 	if ts <= cp.CommitTS {
 		log.Error("ignore save ts: ", ts)
 		return nil
