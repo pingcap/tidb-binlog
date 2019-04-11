@@ -20,7 +20,11 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 	baseTS := int64(oracle.ComposeTS(time.Now().Unix()*1000, 0))
 
 	// set SegmentSizeBytes to 1 can rotate binlog file after every binlog write
+	segmentSizeBytes := binlogfile.SegmentSizeBytes
 	binlogfile.SegmentSizeBytes = 1
+	defer func() {
+		binlogfile.SegmentSizeBytes = segmentSizeBytes
+	}()
 
 	// create binlog file
 	for i := 0; i < 10; i++ {
