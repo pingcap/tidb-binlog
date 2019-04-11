@@ -27,20 +27,10 @@ type indexInfo struct {
 func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, err error) {
 	info = new(tableInfo)
 
-	// get column info
-	//
-	// mysql> SHOW COLUMNS FROM City;
-	// +-------------+----------+------+-----+---------+----------------+
-	// | Field       | Type     | Null | Key | Default | Extra          |
-	// +-------------+----------+------+-----+---------+----------------+
-	// | ID          | int(11)  | NO   | PRI | NULL    | auto_increment |
-	// | Name        | char(35) | NO   |     |         |                |
-	// | CountryCode | char(3)  | NO   | MUL |         |                |
-	// | District    | char(20) | NO   |     |         |                |
-	// | Population  | int(11)  | NO   |     | 0       |                |
-	// +-------------+----------+------+-----+---------+----------------+
-	sql := fmt.Sprintf("show columns from %s", quoteSchema(schema, table))
-	rows, err := db.Query(sql)
+	sql := `
+SELECT column_name, extra FROM information_schema.columns
+WHERE table_schema = ? AND table_name = ?;`
+	rows, err := db.Query(sql, schema, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -48,18 +38,15 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	defer rows.Close()
 
 	for rows.Next() {
-		cols := make([]interface{}, 6)
-		var name string
-		cols[0] = &name
-		for i := 1; i < len(cols); i++ {
-			cols[i] = &gosql.RawBytes{}
-		}
-
-		err = rows.Scan(cols...)
+		var name, extra string
+		err = rows.Scan(&name, &extra)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-
+		isGenerated := strings.Contains(extra, "VIRTUAL GENERATED") || strings.Contains(extra, "STORED GENERATED")
+		if isGenerated {
+			continue
+		}
 		info.columns = append(info.columns, name)
 	}
 

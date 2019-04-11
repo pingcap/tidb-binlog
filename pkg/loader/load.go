@@ -330,6 +330,14 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if len(dml.Values) > len(dml.info.columns) {
+			// Remove values of generated columns
+			vals := make(map[string]interface{}, len(dml.info.columns))
+			for _, col := range dml.info.columns {
+				vals[col] = dml.Values[col]
+			}
+			dml.Values = vals
+		}
 	}
 
 	tables := groupByTable(dmls)

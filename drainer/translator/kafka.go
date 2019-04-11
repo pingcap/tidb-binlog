@@ -176,7 +176,8 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 }
 
 func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
+	columns := writableColumns(tableInfo)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 	oldDatums, newDatums, err := DecodeOldAndNewRow(raw, colsTypeMap, time.Local)
 	if err != nil {
 		return
