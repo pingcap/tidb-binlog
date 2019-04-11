@@ -100,7 +100,8 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from index 0, and start with ts 1, the file name like binlog-0000000000000000-20190101010101-000000000000000001
+	// if no binlog files, we create from index 0, and start with ts 1, 
+	// the file name like binlog-0000000000000000-20190101010101-000000000000000001
 	if len(names) == 0 {
 		lastFileName = path.Join(dirpath, BinlogName(0, 1))
 		lastFileSuffix = 0
