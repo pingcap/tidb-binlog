@@ -147,6 +147,10 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
 
+	tr.run(caseCreateView)
+	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
+	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
 		start := time.Now()
@@ -264,6 +268,36 @@ CREATE TABLE gen_contacts (
 	for i := 0; i < 10; i++ {
 		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i)); err != nil {
 			log.Fatal(err)
+		}
+	}
+}
+
+func caseCreateView(db *sql.DB) {
+	_, err := db.Exec(`
+CREATE TABLE base_for_view (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	user_id INT NOT NULL,
+	amount INT NOT NULL
+);`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = db.Exec(`
+CREATE VIEW view_user_sum (user_id, total)
+AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	insertSQL := "INSERT INTO base_for_view(user_id, amount) VALUES(?, ?);"
+	for i := 0; i < 42; i++ {
+		userID := i * 10
+		for j := 0; j < 3; j++ {
+			_, err := db.Exec(insertSQL, userID, j*10+i)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 }
