@@ -4,6 +4,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"hash/crc32"
+	"net/url"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -133,15 +134,24 @@ WHERE table_schema = ? AND table_name = ?;`
 	return
 }
 
-// CreateDB return sql.DB
-func CreateDB(user string, password string, host string, port int) (db *gosql.DB, err error) {
+// CreateDBWithSQLMode return sql.DB
+func CreateDBWithSQLMode(user string, password string, host string, port int, sqlMode *string) (db *gosql.DB, err error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
+	if sqlMode != nil {
+		// same as "set sql_mode = '<sqlMode>'"
+		dsn += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
+	}
 
 	db, err = gosql.Open("mysql", dsn)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "dsn: %s", dsn)
 	}
 	return
+}
+
+// CreateDB return sql.DB
+func CreateDB(user string, password string, host string, port int) (db *gosql.DB, err error) {
+	return CreateDBWithSQLMode(user, password, host, port, nil)
 }
 
 func quoteSchema(schema string, table string) string {
