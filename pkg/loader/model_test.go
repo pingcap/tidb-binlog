@@ -111,6 +111,8 @@ func (s *getKeysSuite) TestShouldHaveAtLeastOneKey(c *check.C) {
 
 func (s *getKeysSuite) TestShouldCollectNewOldUniqKeyVals(c *check.C) {
 	dml := DML{
+		Database: "db",
+		Table: "tbl",
 		Tp: UpdateDMLType,
 		info: &tableInfo{
 			columns: []string{"id", "first", "last", "other"},
@@ -137,7 +139,13 @@ func (s *getKeysSuite) TestShouldCollectNewOldUniqKeyVals(c *check.C) {
 		},
 	}
 	keys := getKeys(&dml)
-	c.Assert(keys, check.HasLen, 4)
+	expected := []string{
+		"(first: strict)(last: tester)`db`.`tbl`",
+		"(other: 42)`db`.`tbl`",
+		"(first: Strict)(last: Tester)`db`.`tbl`",
+		"(other: 1)`db`.`tbl`",
+	}
+	c.Assert(keys, check.DeepEquals, expected)
 }
 
 type SQLSuite struct {}
@@ -159,6 +167,8 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 	sql, args := dml.sql()
 	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`name`,`age`) VALUES(?,?)")
 	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, "pc")
+	c.Assert(args[1], check.Equals, 42)
 }
 
 func (s *SQLSuite) TestDeleteSQL(c *check.C) {
