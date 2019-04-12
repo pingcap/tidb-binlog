@@ -148,7 +148,8 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 	sql := `
 SELECT non_unique, index_name, seq_in_index, column_name 
 FROM information_schema.statistics
-WHERE table_schema = ? AND table_name = ?;`
+WHERE table_schema = ? AND table_name = ?
+ORDER BY seq_in_index ASC;`
 	rows, err := db.Query(sql, schema, table)
 	if err != nil {
 		err = errors.Trace(err)
@@ -170,23 +171,19 @@ WHERE table_schema = ? AND table_name = ?;`
 			return
 		}
 
-		// log.Debug(nonUnique, keyName, columnName)
 		if nonUnique == 1 {
 			continue
 		}
 
 		var i int
-		// set columns in the order by Seq_In_Index
+		// Search for indexInfo with the current keyName
 		for i = 0; i < len(uniqueKeys); i++ {
 			if uniqueKeys[i].name == keyName {
-				// expand columns size
-				for seqInIndex > len(uniqueKeys[i].columns) {
-					uniqueKeys[i].columns = append(uniqueKeys[i].columns, "")
-				}
-				uniqueKeys[i].columns[seqInIndex-1] = columnName
+				uniqueKeys[i].columns = append(uniqueKeys[i].columns, columnName)
 				break
 			}
 		}
+		// If we don't find the indexInfo with the loop above, create a new one
 		if i == len(uniqueKeys) {
 			uniqueKeys = append(uniqueKeys, indexInfo{keyName, []string{columnName}})
 		}

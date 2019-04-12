@@ -37,16 +37,17 @@ WHERE table_schema = \? AND table_name = \?;`
 	mock.ExpectQuery(sql).WithArgs("test", "test1").WillReturnRows(columnRows)
 
 	indexRows := sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"}).
-		AddRow(0, "PRIMARY", 1, "id").
 		AddRow(0, "dex1", 1, "a1").
+		AddRow(0, "PRIMARY", 1, "id").
 		AddRow(0, "dex2", 1, "a2").
-		AddRow(0, "dex2", 2, "a3").
-		AddRow(1, "dex3", 1, "a4")
+		AddRow(1, "dex3", 1, "a4").
+		AddRow(0, "dex2", 2, "a3")
 
 	mock.ExpectQuery(`
 SELECT non_unique, index_name, seq_in_index, column_name 
 FROM information_schema.statistics
-WHERE table_schema = \? AND table_name = \?;`).WithArgs("test", "test1").WillReturnRows(indexRows)
+WHERE table_schema = \? AND table_name = \?
+ORDER BY seq_in_index ASC;`).WithArgs("test", "test1").WillReturnRows(indexRows)
 
 	info, err := getTableInfo(db, "test", "test1")
 	c.Assert(err, check.IsNil)
