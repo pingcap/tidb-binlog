@@ -21,9 +21,8 @@ type indexInfo struct {
 	columns []string
 }
 
-// getTableInfo return the table info
-// https://dev.mysql.com/doc/refman/8.0/en/show-columns.html
-// https://dev.mysql.com/doc/refman/8.0/en/show-index.html
+// getTableInfo returns information like (non-generated) column names and
+// unique keys about the specified table
 func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, err error) {
 	info = new(tableInfo)
 
@@ -31,50 +30,8 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		return nil, errors.Trace(err)
 	}
 
-	sql := `
-SELECT non_unique, index_name, seq_in_index, column_name 
-FROM information_schema.statistics
-WHERE table_schema = ? AND table_name = ?;`
-	rows, err := db.Query(sql, schema, table)
-	if err != nil {
+	if info.uniqueKeys, err = getUniqKeys(db, schema, table); err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	defer rows.Close()
-
-	var nonUnique int
-	var keyName string
-	var columnName string
-	var seqInIndex int // start at 1
-
-	// get pk and uk
-	// key for PRIMARY or other index name
-	for rows.Next() {
-		err = rows.Scan(&nonUnique, &keyName, &seqInIndex, &columnName)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		// log.Debug(nonUnique, keyName, columnName)
-		if nonUnique == 1 {
-			continue
-		}
-
-		var i int
-		// set columns in the order by Seq_In_Index
-		for i = 0; i < len(info.uniqueKeys); i++ {
-			if info.uniqueKeys[i].name == keyName {
-				// expand columns size
-				for seqInIndex > len(info.uniqueKeys[i].columns) {
-					info.uniqueKeys[i].columns = append(info.uniqueKeys[i].columns, "")
-				}
-				info.uniqueKeys[i].columns[seqInIndex-1] = columnName
-				break
-			}
-		}
-		if i == len(info.uniqueKeys) {
-			info.uniqueKeys = append(info.uniqueKeys, indexInfo{keyName, []string{columnName}})
-		}
 	}
 
 	// put primary key at first place
@@ -85,10 +42,6 @@ WHERE table_schema = ? AND table_name = ?;`
 			info.primaryKey = &info.uniqueKeys[0]
 			break
 		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	return
@@ -157,7 +110,9 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-
+// getColsOfTbl returns a slice of the names of all columns,
+// generated columns are excluded.
+// https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/columns-table.html
 func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 	cols := make([]string, 0, 1)
 	sql := `
@@ -186,4 +141,60 @@ WHERE table_schema = ? AND table_name = ?;`
 		return cols, errors.Trace(err)
 	}
 	return cols, nil
+}
+
+// https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/statistics-table.html
+func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, err error) {
+	sql := `
+SELECT non_unique, index_name, seq_in_index, column_name 
+FROM information_schema.statistics
+WHERE table_schema = ? AND table_name = ?;`
+	rows, err := db.Query(sql, schema, table)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+	defer rows.Close()
+
+	var nonUnique int
+	var keyName string
+	var columnName string
+	var seqInIndex int // start at 1
+
+	// get pk and uk
+	// key for PRIMARY or other index name
+	for rows.Next() {
+		err = rows.Scan(&nonUnique, &keyName, &seqInIndex, &columnName)
+		if err != nil {
+			err = errors.Trace(err)
+			return
+		}
+
+		// log.Debug(nonUnique, keyName, columnName)
+		if nonUnique == 1 {
+			continue
+		}
+
+		var i int
+		// set columns in the order by Seq_In_Index
+		for i = 0; i < len(uniqueKeys); i++ {
+			if uniqueKeys[i].name == keyName {
+				// expand columns size
+				for seqInIndex > len(uniqueKeys[i].columns) {
+					uniqueKeys[i].columns = append(uniqueKeys[i].columns, "")
+				}
+				uniqueKeys[i].columns[seqInIndex-1] = columnName
+				break
+			}
+		}
+		if i == len(uniqueKeys) {
+			uniqueKeys = append(uniqueKeys, indexInfo{keyName, []string{columnName}})
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
 }
