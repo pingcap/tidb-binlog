@@ -470,23 +470,20 @@ func (s *Loader) Run() error {
 // groupDMLs group DMLs by table in batchByTbls and
 // collects DMLs that can't be executed in bulk in singleDMLs.
 // NOTE: DML.info are assumed to be already set.
-func (s *Loader) groupDMLs(dmls []*DML) (map[string][]*DML, []*DML) {
-	var batchByTbls map[string][]*DML
-	var singleDMLs []*DML
-
+func (s *Loader) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, singleDMLs []*DML) {
 	if !s.merge {
 		singleDMLs = dmls
-	} else {
-		batchByTbls = make(map[string][]*DML)
-		for _, dml := range dmls {
-			info := dml.info
-			if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
-				tblName := dml.TableName()
-				batchByTbls[tblName] = append(batchByTbls[tblName], dml)
-			} else {
-				singleDMLs = append(singleDMLs, dml)
-			}
+		return
+	}
+	batchByTbls = make(map[string][]*DML)
+	for _, dml := range dmls {
+		info := dml.info
+		if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+			tblName := dml.TableName()
+			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
+		} else {
+			singleDMLs = append(singleDMLs, dml)
 		}
 	}
-	return batchByTbls, singleDMLs
+	return
 }
