@@ -109,18 +109,18 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 	c.Assert(err, ErrorMatches, ".*mismatch.*")
 }
 
-type fakeStorage struct{}
+type noOpStorage struct{}
 
-func (s *fakeStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *fakeStorage) GCTS(ts int64)                              {}
-func (s *fakeStorage) MaxCommitTS() int64                         { return 0 }
-func (s *fakeStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
-func (s *fakeStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
+func (s *noOpStorage) GCTS(ts int64)                              {}
+func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
+func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
-func (s *fakeStorage) Close() error { return nil }
+func (s *noOpStorage) Close() error { return nil }
 
-type fakePullable struct{ fakeStorage }
+type fakePullable struct{ noOpStorage }
 
 func (s *fakePullable) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	chl := make(chan []byte)
@@ -181,7 +181,7 @@ func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
 }
 
 type fakeWritable struct {
-	fakeStorage
+	noOpStorage
 	binlogs []pb.Binlog
 }
 
