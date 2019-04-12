@@ -73,7 +73,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	return res, err
 }
 
-func (tx *tx) autoRollbakExec(query string, args ...interface{}) (res gosql.Result, err error) {
+func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
 	res, err = tx.exec(query, args...)
 	if err != nil {
 		log.Errorf("Failed Exec: %v, query: %s, args: %v", err, query, args)
@@ -122,7 +122,7 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 		return errors.Trace(err)
 	}
 	sql := sqls.String()
-	_, err = tx.autoRollbakExec(sql, argss...)
+	_, err = tx.autoRollbackExec(sql, argss...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -166,7 +166,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.autoRollbakExec(builder.String(), args...)
+	_, err = tx.autoRollbackExec(builder.String(), args...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -261,28 +261,28 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err := tx.autoRollbakExec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			sql, args = dml.replaceSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err = tx.autoRollbakExec(sql, args...)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.autoRollbakExec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
 			sql, args := dml.sql()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.autoRollbakExec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
