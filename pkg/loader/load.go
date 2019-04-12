@@ -10,6 +10,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
@@ -183,8 +184,10 @@ func (s *Loader) Close() {
 	close(s.input)
 }
 
+var utilGetTableInfo = getTableInfo
+
 func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
-	info, err = getTableInfo(s.db, schema, table)
+	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
 	}
@@ -221,45 +224,33 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *Loader) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl: ", ddl)
-	var err error
-	var tx *gosql.Tx
-	for i := 0; i < maxDDLRetryCount; i++ {
-		if i > 0 {
-			time.Sleep(time.Second)
-		}
 
-		tx, err = s.db.Begin()
+	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
+		tx, err := s.db.Begin()
 		if err != nil {
-			log.Error(err)
-			continue
+			return err
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
-				log.Error(err)
 				tx.Rollback()
-				continue
+				return err
 			}
 		}
 
-		log.Infof("retry num: %d, exec ddl: %s", i, ddl.SQL)
-		_, err = tx.Exec(ddl.SQL)
-		if err != nil {
-			log.Error(err)
+		if _, err = tx.Exec(ddl.SQL); err != nil {
 			tx.Rollback()
-			continue
+			return err
 		}
 
-		err = tx.Commit()
-		if err != nil {
-			log.Error(err)
-			continue
+		if err = tx.Commit(); err != nil {
+			return err
 		}
 
 		log.Info("exec ddl success: ", ddl.SQL)
 		return nil
-	}
+	})
 
 	return errors.Trace(err)
 }
@@ -296,7 +287,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 		conflict := causality.DetectConflict(keys)
 		if conflict {
 			log.Infof("meet causality.DetectConflict exec now table: %v, keys: %v",
-				quoteSchema(dml.Database, dml.Table), keys)
+				dml.TableName(), keys)
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)
@@ -325,11 +316,11 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 	}
 
 	for _, dml := range dmls {
-		var err error
-		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+		info, err := s.getTableInfo(dml.Database, dml.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		dml.info = info
 		if len(dml.Values) > len(dml.info.columns) {
 			// Remove values of generated columns
 			vals := make(map[string]interface{}, len(dml.info.columns))
@@ -340,19 +331,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		}
 	}
 
-	tables := groupByTable(dmls)
-
-	batchTables := make(map[string][]*DML)
-	var singleDMLs []*DML
-
-	for tableName, tableDMLs := range tables {
-		info := tableDMLs[0].info
-		if info.primaryKey != nil && len(info.uniqueKeys) == 0 && s.merge {
-			batchTables[tableName] = tableDMLs
-		} else {
-			singleDMLs = append(singleDMLs, tableDMLs...)
-		}
-	}
+	batchTables, singleDMLs := s.groupDMLs(dmls)
 
 	log.Debugf("exec by tables: %d tables, by single: %d dmls", len(batchTables), len(singleDMLs))
 
@@ -486,4 +465,25 @@ func (s *Loader) Run() error {
 			}
 		}
 	}
+}
+
+// groupDMLs group DMLs by table in batchByTbls and
+// collects DMLs that can't be executed in bulk in singleDMLs.
+// NOTE: DML.info are assumed to be already set.
+func (s *Loader) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, singleDMLs []*DML) {
+	if !s.merge {
+		singleDMLs = dmls
+		return
+	}
+	batchByTbls = make(map[string][]*DML)
+	for _, dml := range dmls {
+		info := dml.info
+		if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+			tblName := dml.TableName()
+			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
+		} else {
+			singleDMLs = append(singleDMLs, dml)
+		}
+	}
+	return
 }
