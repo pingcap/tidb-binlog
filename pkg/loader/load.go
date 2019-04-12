@@ -320,6 +320,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		dml.info = info
 		if len(dml.Values) > len(dml.info.columns) {
 			// Remove values of generated columns
 			vals := make(map[string]interface{}, len(dml.info.columns))
@@ -328,7 +329,6 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 			}
 			dml.Values = vals
 		}
-		dml.info = info
 	}
 
 	batchTables, singleDMLs := s.groupDMLs(dmls)
