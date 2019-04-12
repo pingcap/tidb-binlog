@@ -403,31 +403,25 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
 	binlog, err := s.genFakeBinlog()
 	if err != nil {
-		err = errors.Annotate(err, "gennerate fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "gennerate fake binlog err")
 	}
 
 	payload, err := binlog.Marshal()
 	if err != nil {
-		err = errors.Annotate(err, "gennerate fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "gennerate fake binlog err")
 	}
 
 	req := new(pb.WriteBinlogReq)
 	req.Payload = payload
-
 	req.ClusterID = s.clusterID
 
 	resp, err := s.writeBinlog(s.ctx, req, true)
-
 	if err != nil {
-		err = errors.Annotate(err, "write fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "write fake binlog err")
 	}
 
 	if len(resp.Errmsg) > 0 {
-		err = errors.Errorf("write fake binlog err: %v", resp.Errmsg)
-		return nil, err
+		return nil, errors.Errorf("write fake binlog err: %v", resp.Errmsg)
 	}
 
 	log.Debug("write fake binlog successful")
@@ -659,8 +653,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
 }
 
+var utilGetTSO = util.GetTSO
+
 func (s *Server) getTSO() (int64, error) {
-	ts, err := util.GetTSO(s.pdCli)
+	ts, err := utilGetTSO(s.pdCli)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

@@ -3,9 +3,11 @@ package pump
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -107,18 +109,18 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 	c.Assert(err, ErrorMatches, ".*mismatch.*")
 }
 
-type fakeStorage struct{}
+type noOpStorage struct{}
 
-func (s *fakeStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *fakeStorage) GCTS(ts int64)                              {}
-func (s *fakeStorage) MaxCommitTS() int64                         { return 0 }
-func (s *fakeStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
-func (s *fakeStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
+func (s *noOpStorage) GCTS(ts int64)                              {}
+func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
+func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
-func (s *fakeStorage) Close() error { return nil }
+func (s *noOpStorage) Close() error { return nil }
 
-type fakePullable struct{ fakeStorage }
+type fakePullable struct{ noOpStorage }
 
 func (s *fakePullable) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	chl := make(chan []byte)
@@ -148,4 +150,77 @@ func (s *pullBinlogsSuite) TestPullBinlogFromStorage(c *C) {
 	for i, resp := range stream.sent {
 		c.Assert(string(resp.Entity.Payload), Equals, fmt.Sprintf("payload_%d", i))
 	}
+}
+
+type genForwardBinlogSuite struct{}
+
+var _ = Suite(&genForwardBinlogSuite{})
+
+func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := &Server{
+		clusterID: 42,
+		storage:   &fakePullable{},
+		ctx:       ctx,
+		cfg: &Config{
+			GenFakeBinlogInterval: 1,
+		},
+	}
+	signal := make(chan struct{})
+	go func() {
+		server.wg.Add(1)
+		server.genForwardBinlog()
+		close(signal)
+	}()
+	cancel()
+	select {
+	case <-signal:
+	case <-time.After(100 * time.Millisecond):
+		c.Fatal("Can't be canceled")
+	}
+}
+
+type fakeWritable struct {
+	noOpStorage
+	binlogs []pb.Binlog
+}
+
+func (s *fakeWritable) WriteBinlog(binlog *pb.Binlog) error {
+	s.binlogs = append(s.binlogs, *binlog)
+	return nil
+}
+
+func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
+	origGetTSO := utilGetTSO
+	utilGetTSO = func(cli pd.Client) (int64, error) {
+		return 42, nil
+	}
+	defer func() {
+		utilGetTSO = origGetTSO
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	storage := fakeWritable{binlogs: make([]pb.Binlog, 1)}
+	server := &Server{
+		clusterID: 42,
+		storage:   &storage,
+		ctx:       ctx,
+		cfg: &Config{
+			GenFakeBinlogInterval: 1,
+		},
+	}
+	go func() {
+		server.wg.Add(1)
+		server.genForwardBinlog()
+	}()
+	time.Sleep(time.Duration(server.cfg.GenFakeBinlogInterval*2) * time.Second)
+	cancel()
+	server.wg.Wait()
+	c.Assert(len(storage.binlogs) > 0, IsTrue)
+	var foundFake bool
+	for _, bl := range storage.binlogs {
+		if bl.Tp == pb.BinlogType_Rollback && bl.CommitTs == 42 && bl.StartTs == 42 {
+			foundFake = true
+		}
+	}
+	c.Assert(foundFake, IsTrue)
 }
