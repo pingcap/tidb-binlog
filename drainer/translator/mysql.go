@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 const implicitColID = -1
@@ -597,65 +596,4 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	return data, nil
-}
-
-// DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
-// Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	if b == nil {
-		return nil, nil, nil
-	}
-	if b[0] == codec.NilFlag {
-		return nil, nil, nil
-	}
-
-	cnt := 0
-	var (
-		data   []byte
-		err    error
-		oldRow = make(map[int64]types.Datum, len(cols))
-		newRow = make(map[int64]types.Datum, len(cols))
-	)
-	for len(b) > 0 {
-		// Get col id.
-		data, b, err = codec.CutOne(b)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		_, cid, err := codec.DecodeOne(data)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		// Get col value.
-		data, b, err = codec.CutOne(b)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		id := cid.GetInt64()
-		ft, ok := cols[id]
-		if ok {
-			v, err := tablecodec.DecodeColumnValue(data, ft, loc)
-			if err != nil {
-				return nil, nil, errors.Trace(err)
-			}
-
-			if _, ok := oldRow[id]; ok {
-				newRow[id] = v
-			} else {
-				oldRow[id] = v
-			}
-
-			cnt++
-			if cnt == len(cols)*2 {
-				// Get enough data.
-				break
-			}
-		}
-	}
-
-	if cnt != len(cols)*2 || len(newRow) != len(oldRow) {
-		return nil, nil, errors.Errorf(" row data is corruption %v", b)
-	}
-
-	return oldRow, newRow, nil
 }
