@@ -42,23 +42,9 @@ func (g *BinlogGenrator) reset() {
 // SetDelete set the info to be a delete event
 func (g *BinlogGenrator) SetDelete(c *C) {
 	g.reset()
-	g.TiBinlog = &ti.Binlog{
-		Tp:       ti.BinlogType_Commit,
-		StartTs:  100,
-		CommitTs: 200,
-	}
+	info := g.setEvent(c)
 
-	g.PV = new(ti.PrewriteValue)
-
-	info := testGenTable("hasID")
-	g.id2info[info.ID] = info
-	g.id2name[info.ID] = [2]string{"test", info.Name.L}
-
-	datums := testGenRandomDatums(c, info.Columns)
-	c.Assert(len(datums), Equals, len(info.Columns))
-
-	g.datums = datums
-	row := testGenDeleteBinlog(c, info, datums)
+	row := testGenDeleteBinlog(c, info, g.datums)
 
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
 		TableId:     info.ID,
@@ -111,9 +97,7 @@ func (g *BinlogGenrator) SetDDL() {
 	g.Table = "test"
 }
 
-// SetInsert set up a insert event binlog.
-func (g *BinlogGenrator) SetInsert(c *C) {
-	g.reset()
+func (g *BinlogGenrator) setEvent(c *C) *model.TableInfo {
 	g.TiBinlog = &ti.Binlog{
 		Tp:       ti.BinlogType_Commit,
 		StartTs:  100,
@@ -126,12 +110,19 @@ func (g *BinlogGenrator) SetInsert(c *C) {
 	g.id2info[info.ID] = info
 	g.id2name[info.ID] = [2]string{"test", info.Name.L}
 
-	datums := testGenRandomDatums(c, info.Columns)
-	c.Assert(len(datums), Equals, len(info.Columns))
+	g.datums = testGenRandomDatums(c, info.Columns)
+	g.oldDatums = testGenRandomDatums(c, info.Columns)
+	c.Assert(len(g.datums), Equals, len(info.Columns))
 
-	g.datums = datums
-	row := testGenInsertBinlog(c, info, datums)
+	return info
+}
 
+// SetInsert set up a insert event binlog.
+func (g *BinlogGenrator) SetInsert(c *C) {
+	g.reset()
+	info := g.setEvent(c)
+
+	row := testGenInsertBinlog(c, info, g.datums)
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
 		TableId:      info.ID,
 		InsertedRows: [][]byte{row},
@@ -142,25 +133,9 @@ func (g *BinlogGenrator) SetInsert(c *C) {
 // SetUpdate set up a update event binlog.
 func (g *BinlogGenrator) SetUpdate(c *C) {
 	g.reset()
-	g.TiBinlog = &ti.Binlog{
-		Tp:       ti.BinlogType_Commit,
-		StartTs:  100,
-		CommitTs: 200,
-	}
+	info := g.setEvent(c)
 
-	g.PV = new(ti.PrewriteValue)
-
-	info := testGenTable("hasID")
-	g.id2info[info.ID] = info
-	g.id2name[info.ID] = [2]string{"test", info.Name.L}
-
-	datums := testGenRandomDatums(c, info.Columns)
-	oldDatums := testGenRandomDatums(c, info.Columns)
-	c.Assert(len(datums), Equals, len(info.Columns))
-
-	g.datums = datums
-	g.oldDatums = oldDatums
-	row := testGenUpdateBinlog(c, info, oldDatums, datums)
+	row := testGenUpdateBinlog(c, info, g.oldDatums, g.datums)
 
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
 		TableId:     info.ID,
