@@ -100,10 +100,9 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from index 0, and start with ts 1, 
-	// the file name like binlog-0000000000000000-20190101010101-000000000000000001
+	// if no binlog files, we create from index 0, the file name like binlog-0000000000000000-20190101010101
 	if len(names) == 0 {
-		lastFileName = path.Join(dirpath, BinlogName(0, 1))
+		lastFileName = path.Join(dirpath, BinlogName(0))
 		lastFileSuffix = 0
 	} else {
 		// check binlog files and find last binlog file
@@ -360,7 +359,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 		return curOffset, nil
 	}
 
-	err = b.rotate(entity.Meta.CommitTs)
+	err = b.rotate()
 	return curOffset, errors.Trace(err)
 }
 
@@ -385,8 +384,8 @@ func (b *binlogger) Close() error {
 }
 
 // rotate creates a new file for append binlog
-func (b *binlogger) rotate(ts int64) error {
-	filename := BinlogName(b.seq()+1, ts+1)
+func (b *binlogger) rotate() error {
+	filename := BinlogName(b.seq() + 1)
 	b.lastSuffix = b.seq() + 1
 	b.lastOffset = 0
 

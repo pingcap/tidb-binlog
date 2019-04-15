@@ -109,10 +109,9 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	}
 
 	index := uint64(1)
-	ts := int64(1)
-	name := BinlogName(index, ts)
+	name := BinlogName(index)
 	gotIndex, gotTs, err := ParseBinlogName(name)
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
-	c.Assert(gotTs, Equals, ts)
+	c.Assert(gotTs, Equals, int64(0))
 }

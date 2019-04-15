@@ -150,7 +150,7 @@ func ParseBinlogName(str string) (index uint64, ts int64, err error) {
 		// binlog file format like: binlog-0000000000000001-20181010101010 or binlog-0000000000000001
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
 	case 4:
-		// binlog file format like: binlog-0000000000000001-20181010101010-407623959013752832 or binlog-0000000000000001-20181010101010-407623959013752832.tar.gz
+		// binlog file format like: binlog-0000000000000001-20181010101010-407623959013752832.tar.gz
 		_, err = fmt.Sscanf(items[1], "%016d", &index)
 		if err != nil {
 			return 0, 0, errors.Trace(err)
@@ -165,7 +165,12 @@ func ParseBinlogName(str string) (index uint64, ts int64, err error) {
 }
 
 // BinlogName creates a binlog file name. The file name format is like binlog-0000000000000001-20181010101010
-func BinlogName(index uint64, ts int64) string {
-	datetimeStr := time.Now().Format(datetimeFormat)
-	return fmt.Sprintf("binlog-%016d-%s-%018d", index, datetimeStr, ts)
+func BinlogName(index uint64) string {
+	currentTime := time.Now()
+	return binlogNameWithDateTime(index, currentTime)
+}
+
+// binlogNameWithDateTime creates a binlog file name.
+func binlogNameWithDateTime(index uint64, datetime time.Time) string {
+	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
 }

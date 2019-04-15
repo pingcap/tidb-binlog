@@ -30,7 +30,7 @@ func writeBinlogsInDir(dir string, c *check.C) (binlogs []*pb.Binlog) {
 
 	for index := 0; index < 10; index++ {
 		// create the file to write binlog
-		filename := path.Join(dir, binlogfile.BinlogName(uint64(index), nextTS))
+		filename := path.Join(dir, binlogfile.BinlogName(uint64(index)))
 		file, err := os.Create(filename)
 		c.Assert(err, check.IsNil)
 
