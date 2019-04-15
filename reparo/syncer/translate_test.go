@@ -30,9 +30,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 			DmlData: &pb.DMLData{
 				Events: []pb.Event{},
 			},
-		}: &loader.Txn{
-		// DMLs: []*loader.DML{},
-		},
+		}: &loader.Txn{},
 	}
 
 	for binlog, txn := range tests {
