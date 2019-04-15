@@ -26,8 +26,8 @@ type BinlogGenrator struct {
 	id2info map[int64]*model.TableInfo
 	id2name map[int64][2]string
 
-	name2datums    map[string][]types.Datum
-	name2oldDatums map[string][]types.Datum
+	datums    []types.Datum
+	oldDatums []types.Datum
 }
 
 func (g *BinlogGenrator) reset() {
@@ -37,9 +37,6 @@ func (g *BinlogGenrator) reset() {
 	g.Table = ""
 	g.id2info = make(map[int64]*model.TableInfo)
 	g.id2name = make(map[int64][2]string)
-
-	g.name2datums = make(map[string][]types.Datum)
-	g.name2oldDatums = make(map[string][]types.Datum)
 }
 
 // SetDelete set the info to be a delete event
@@ -60,7 +57,7 @@ func (g *BinlogGenrator) SetDelete(c *C) {
 	datums := testGenRandomDatums(c, info.Columns)
 	c.Assert(len(datums), Equals, len(info.Columns))
 
-	g.name2datums[info.Name.L] = datums
+	g.datums = datums
 	row := testGenDeleteBinlog(c, info, datums)
 
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
@@ -70,13 +67,13 @@ func (g *BinlogGenrator) SetDelete(c *C) {
 	})
 }
 
-func (g *BinlogGenrator) getDatumsByName(name string) (datums []types.Datum) {
-	datums = g.name2datums[name]
+func (g *BinlogGenrator) getDatums() (datums []types.Datum) {
+	datums = g.datums
 	return
 }
 
-func (g *BinlogGenrator) getOldDatumsByName(name string) (datums []types.Datum) {
-	datums = g.name2oldDatums[name]
+func (g *BinlogGenrator) getOldDatums() (datums []types.Datum) {
+	datums = g.oldDatums
 	return
 }
 
@@ -132,7 +129,7 @@ func (g *BinlogGenrator) SetInsert(c *C) {
 	datums := testGenRandomDatums(c, info.Columns)
 	c.Assert(len(datums), Equals, len(info.Columns))
 
-	g.name2datums[info.Name.L] = datums
+	g.datums = datums
 	row := testGenInsertBinlog(c, info, datums)
 
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
@@ -161,8 +158,8 @@ func (g *BinlogGenrator) SetUpdate(c *C) {
 	oldDatums := testGenRandomDatums(c, info.Columns)
 	c.Assert(len(datums), Equals, len(info.Columns))
 
-	g.name2datums[info.Name.L] = datums
-	g.name2oldDatums[info.Name.L] = oldDatums
+	g.datums = datums
+	g.oldDatums = oldDatums
 	row := testGenUpdateBinlog(c, info, oldDatums, datums)
 
 	g.PV.Mutations = append(g.PV.Mutations, ti.TableMutation{
