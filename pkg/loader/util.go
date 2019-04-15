@@ -114,21 +114,21 @@ func buildColumnList(names []string) string {
 // generated columns are excluded.
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/columns-table.html
 func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
-	cols := make([]string, 0, 1)
 	sql := `
 SELECT column_name, extra FROM information_schema.columns
 WHERE table_schema = ? AND table_name = ?;`
 	rows, err := db.Query(sql, schema, table)
 	if err != nil {
-		return cols, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
 
+	cols := make([]string, 0, 1)
 	for rows.Next() {
 		var name, extra string
 		err = rows.Scan(&name, &extra)
 		if err != nil {
-			return cols, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		isGenerated := strings.Contains(extra, "VIRTUAL GENERATED") || strings.Contains(extra, "STORED GENERATED")
 		if isGenerated {
@@ -138,7 +138,7 @@ WHERE table_schema = ? AND table_name = ?;`
 	}
 
 	if err = rows.Err(); err != nil {
-		return cols, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	return cols, nil
 }
