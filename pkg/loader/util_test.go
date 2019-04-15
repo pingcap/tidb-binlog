@@ -2,6 +2,7 @@ package loader
 
 import (
 	"testing"
+	"regexp"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
@@ -31,19 +32,16 @@ func (cs *UtilSuite) TestGetTableInfo(c *check.C) {
 		AddRow("a2", "").
 		AddRow("a3", "VIRTUAL GENERATED").
 		AddRow("a4", "")
-	sql := `
-SELECT column_name, extra FROM information_schema.columns
-WHERE table_schema = \? AND table_name = \?;`
-	mock.ExpectQuery(sql).WithArgs("test", "test1").WillReturnRows(columnRows)
+	mock.ExpectQuery(regexp.QuoteMeta(colsSQL)).WithArgs("test", "test1").WillReturnRows(columnRows)
 
-	indexRows := sqlmock.NewRows([]string{"Table", "Non_unique", "Key_name", "Seq_in_index", "Column_name", "Collation", "Cardinality", "Sub_part", "Packed", "Null", "Index_type", "Comment", "Index_comment"}).
-		AddRow("test1", 0, "PRIMARY", 1, "id", "", "", "", "", "", "", "", "").
-		AddRow("test1", 0, "dex1", 1, "a1", "", "", "", "", "", "", "", "").
-		AddRow("test1", 0, "dex2", 1, "a2", "", "", "", "", "", "", "", "").
-		AddRow("test1", 0, "dex2", 2, "a3", "", "", "", "", "", "", "", "").
-		AddRow("test1", 1, "dex3", 1, "a4", "", "", "", "", "", "", "", "")
+	indexRows := sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"}).
+		AddRow(0, "dex1", 1, "a1").
+		AddRow(0, "PRIMARY", 1, "id").
+		AddRow(0, "dex2", 1, "a2").
+		AddRow(1, "dex3", 1, "a4").
+		AddRow(0, "dex2", 2, "a3")
 
-	mock.ExpectQuery("show index").WillReturnRows(indexRows)
+	mock.ExpectQuery(regexp.QuoteMeta(uniqKeysSQL)).WithArgs("test", "test1").WillReturnRows(indexRows)
 
 	info, err := getTableInfo(db, "test", "test1")
 	c.Assert(err, check.IsNil)
