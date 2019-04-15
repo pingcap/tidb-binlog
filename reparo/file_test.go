@@ -69,7 +69,7 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 			},
 		},
 	}
-	expectFileNums := []int{10, 2, 9, 3}
+	expectFileNums := []int{10, 2, 8, 3}
 
 	allFiles, err := searchFiles(binlogDir)
 	c.Assert(err, IsNil)
