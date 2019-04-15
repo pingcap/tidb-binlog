@@ -9,6 +9,17 @@ import (
 	"github.com/pingcap/errors"
 )
 
+const (
+	colsSQL = `
+SELECT column_name, extra FROM information_schema.columns
+WHERE table_schema = ? AND table_name = ?;`
+	uniqKeysSQL = `
+SELECT non_unique, index_name, seq_in_index, column_name 
+FROM information_schema.statistics
+WHERE table_schema = ? AND table_name = ?
+ORDER BY seq_in_index ASC;`
+)
+
 type tableInfo struct {
 	columns    []string
 	primaryKey *indexInfo
@@ -114,10 +125,7 @@ func buildColumnList(names []string) string {
 // generated columns are excluded.
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/columns-table.html
 func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
-	sql := `
-SELECT column_name, extra FROM information_schema.columns
-WHERE table_schema = ? AND table_name = ?;`
-	rows, err := db.Query(sql, schema, table)
+	rows, err := db.Query(colsSQL, schema, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -145,12 +153,7 @@ WHERE table_schema = ? AND table_name = ?;`
 
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/statistics-table.html
 func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, err error) {
-	sql := `
-SELECT non_unique, index_name, seq_in_index, column_name 
-FROM information_schema.statistics
-WHERE table_schema = ? AND table_name = ?
-ORDER BY seq_in_index ASC;`
-	rows, err := db.Query(sql, schema, table)
+	rows, err := db.Query(uniqKeysSQL, schema, table)
 	if err != nil {
 		err = errors.Trace(err)
 		return
