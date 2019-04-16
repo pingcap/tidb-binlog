@@ -23,6 +23,7 @@ type kafkaTranslator struct {
 
 func init() {
 	Register("kafka", &kafkaTranslator{})
+	Register("pulsar", &kafkaTranslator{})
 }
 
 func (p *kafkaTranslator) SetConfig(bool, parsermysql.SQLMode) {

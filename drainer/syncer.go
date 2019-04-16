@@ -517,7 +517,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				var args []interface{}
 				// for kafka, we want to know the relate schema and table, get it while args now
 				// in executor
-				if s.cfg.DestDBType == "kafka" {
+				if s.cfg.DestDBType == "kafka" || s.cfg.DestDBType == "pulsar"{
 					args = []interface{}{schema, table}
 				}
 				job := newDDLJob(sql, args, "", commitTS, b.nodeID)

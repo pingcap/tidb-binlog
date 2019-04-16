@@ -22,6 +22,8 @@ type DBConfig struct {
 	KafkaVersion     string `toml:"kafka-version" json:"kafka-version"`
 	KafkaMaxMessages int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
 	TopicName        string `toml:"topic-name" json:"topic-name"`
+
+	PulsaAddr string `toml:"pulsar-addr" json:"pulsar-addr"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
 }

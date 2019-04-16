@@ -184,7 +184,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" || c.DestDBType == "kafka" {
+	if c.DestDBType == "pb" || c.DestDBType == "kafka" || c.DestDBType == "pulsar"{
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
