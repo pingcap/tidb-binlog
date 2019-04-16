@@ -144,7 +144,7 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, sq
 
 	db, err = gosql.Open("mysql", dsn)
 	if err != nil {
-		return nil, errors.Annotatef(err, "dsn: %s", dsn)
+		return nil, errors.Trace(err)
 	}
 	return
 }
