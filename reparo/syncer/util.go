@@ -16,7 +16,6 @@ func formatValueToString(data types.Datum, tp byte) string {
 		}
 		fallthrough
 	default:
-		fmt.Println(tp)
 		return fmt.Sprintf("%v", val)
 	}
 }

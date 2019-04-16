@@ -3,7 +3,6 @@ package syncer
 import (
 	"fmt"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
@@ -24,7 +23,6 @@ func New(name string, cfg *DBConfig) (Syncer, error) {
 	case "mysql":
 		db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
 		if err != nil {
-			log.Infof("create db failed %v", err)
 			return nil, errors.Trace(err)
 		}
 		return newMysqlSyncer(db)
