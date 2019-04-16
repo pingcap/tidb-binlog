@@ -325,19 +325,15 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	var recordID int64 = 11
-	for idx, col := range t.Columns {
-		if testIsPKHandleColumn(t, col) {
-			recordID = r[idx].GetInt64()
-			break
-		}
-	}
 
 	colIDs := make([]int64, 0, len(r))
 	row := make([]types.Datum, 0, len(r))
 	for idx, col := range t.Columns {
 		if testIsPKHandleColumn(t, col) {
+			recordID = r[idx].GetInt64()
 			continue
 		}
+
 		colIDs = append(colIDs, col.ID)
 		row = append(row, r[idx])
 	}
