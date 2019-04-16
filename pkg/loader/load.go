@@ -117,7 +117,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
 }
 
 func (s *Loader) metricsInputTxn(txn *Txn) {
-	if s.metrics == nil {
+	if s.metrics == nil || s.metrics.EventCounterVec == nil {
 		return
 	}
 
@@ -337,7 +337,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 
 	errg, _ := errgroup.WithContext(context.Background())
 	executor := newExecutor(s.db).withBatchSize(s.batchSize)
-	if s.metrics != nil {
+	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		executor = executor.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
 
