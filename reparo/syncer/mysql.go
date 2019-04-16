@@ -31,13 +31,7 @@ type mysqlSyncer struct {
 
 var _ Syncer = &mysqlSyncer{}
 
-func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
-	db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
-	if err != nil {
-		log.Infof("create db failed %v", err)
-		return nil, errors.Trace(err)
-	}
-
+func newMysqlSyncer(db *sql.DB) (*mysqlSyncer, error) {
 	loader, err := loader.NewLoader(db, loader.WorkerCount(16), loader.BatchSize(20))
 	if err != nil {
 		return nil, errors.Annotate(err, "new loader failed")
