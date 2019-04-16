@@ -75,6 +75,4 @@ func (s *testUtilSuite) TestFormatValue(c *check.C) {
 		newStr := formatValueToString(newDatum, testCase.changeTp)
 		c.Assert(newStr, check.Equals, testCase.expectStr)
 	}
-
-
 }
