@@ -1,7 +1,6 @@
 package syncer
 
 import (
-
 	"github.com/pingcap/check"
 )
 
@@ -11,7 +10,7 @@ var _ = check.Suite(&testSyncerSuite{})
 
 func (s *testSyncerSuite) TestNewSyncer(c *check.C) {
 	cfg := new(DBConfig)
-	
+
 	syncer, err := New("mysql", cfg)
 	c.Assert(err, check.IsNil)
 	_, ok := syncer.(*mysqlSyncer)

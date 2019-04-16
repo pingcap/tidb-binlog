@@ -4,7 +4,7 @@ import (
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/mysql"
-	"github.com/pingcap/tidb/types"
+	//"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -12,7 +12,7 @@ type testPrintSuite struct{}
 
 var _ = check.Suite(&testPrintSuite{})
 
-func (s *testPrintSuite) TestPrintSyncerStr(c *check.C) {
+func (s *testPrintSuite) TestPrintSyncer(c *check.C) {
 	syncer, err := newPrintSyncer()
 	c.Assert(err, check.IsNil)
 
@@ -32,10 +32,9 @@ func (s *testPrintSuite) TestPrintSyncerStr(c *check.C) {
 
 	err = syncer.Close()
 	c.Assert(err, check.IsNil)
+}
 
-	ddlStr := getDDLStr(ddlBinlog)
-	c.Assert(ddlStr, check.Equals, "DDL query: create database test;\n")
-
+func (s *testPrintSuite) TestPrintEventHeader(c *check.C) {
 	schema := "test"
 	table := "t1"
 	event := &pb.Event{
@@ -46,40 +45,18 @@ func (s *testPrintSuite) TestPrintSyncerStr(c *check.C) {
 
 	eventHeaderStr := getEventHeaderStr(event)
 	c.Assert(eventHeaderStr, check.Equals, "schema: test; table: t1; type: Insert\n")
+}
 
-	/*
-	userIDCol := &model.ColumnInfo{
-		ID:     1,
-		Name:   model.NewCIStr("ID"),
-		Offset: 0,
-		FieldType: types.FieldType{
-			Tp:      mysql.TypeLong,
-			Flag:    mysql.BinaryFlag,
-			Flen:    11,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-		},
-		State: model.StatePublic,
+func (s *testPrintSuite) TestPrintDDL(c *check.C) {
+	ddlBinlog := &pb.Binlog{
+		Tp:       pb.BinlogType_DDL,
+		DdlQuery: []byte("create database test;"),
 	}
-	*/
+	ddlStr := getDDLStr(ddlBinlog)
+	c.Assert(ddlStr, check.Equals, "DDL query: create database test;\n")
+}
 
-	/*
-	str := new(types.Datum)
-	*str = types.NewStringDatum("a")
-	var raw []byte
-	raw = append(raw, bytesFlag)
-	raw = EncodeBytes(raw, str.GetBytes())
-	*/
-
-	str := new(types.Datum)
-	*str = types.NewStringDatum("a")
-	c.Log(str.GetBytes())
-	_, val, err := codec.DecodeOne(encodeIntValue(1))
-	c.Log(val)
-	c.Assert(err, check.IsNil)
-	//c.Assert(err, check.NotNil)
-
+func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	col1 := &pb.Column{
 		Name:      "a",
 		Tp:        []byte{mysql.TypeInt24},
@@ -92,16 +69,50 @@ func (s *testPrintSuite) TestPrintSyncerStr(c *check.C) {
 		MysqlType: "varchar",
 		Value:     encodeBytesValue([]byte("test")),
 	}
+	col3 := &pb.Column{
+		Name:      "c",
+		Tp:        []byte{mysql.TypeVarchar},
+		MysqlType: "varchar",
+		Value:     encodeBytesValue([]byte("test")),
+		ChangedValue: encodeBytesValue([]byte("abc")),
+	}
 
-	colBytes, err := col1.Marshal()
+	col1Bytes, err := col1.Marshal()
 	c.Assert(err, check.IsNil)
-	colStr := getInsertOrDeleteColStr(colBytes)
-	c.Assert(colStr, check.Equals, "a(int): 1 \n")
+	col1Str := getInsertOrDeleteColumnStr(col1Bytes)
+	c.Assert(col1Str, check.Equals, "a(int): 1 \n")
 
-	colBytes, err = col2.Marshal()
+	col2Bytes, err := col2.Marshal()
 	c.Assert(err, check.IsNil)
-	colStr = getInsertOrDeleteColStr(colBytes)
-	c.Assert(colStr, check.Equals, "b(varchar): test \n")
+	col2Str := getInsertOrDeleteColumnStr(col2Bytes)
+	c.Assert(col2Str, check.Equals, "b(varchar): test \n")
+
+	col3Bytes, err := col3.Marshal()
+	c.Assert(err, check.IsNil)
+	col3Str := getUpdateColumnStr(col3Bytes)
+	c.Assert(col3Str, check.Equals, "c(varchar): test => abc\n")
+
+	
+	insertEvent := &pb.Event {
+		Tp:  pb.EventType_Insert,
+		Row: [][]byte{col1Bytes, col2Bytes}, 
+	}
+	eventStr := getEventDataStr(insertEvent)
+	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+
+	deleteEvent := &pb.Event {
+		Tp:  pb.EventType_Delete,
+		Row: [][]byte{col1Bytes, col2Bytes}, 
+	}
+	eventStr = getEventDataStr(deleteEvent)
+	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+
+	updateEvent := &pb.Event {
+		Tp:  pb.EventType_Delete,
+		Row: [][]byte{col3Bytes, col3Bytes}, 
+	}
+	eventStr = getEventDataStr(updateEvent)
+	c.Assert(eventStr, check.Equals, "c(varchar): test \nc(varchar): test \n")
 }
 
 func encodeIntValue(value int64) []byte {

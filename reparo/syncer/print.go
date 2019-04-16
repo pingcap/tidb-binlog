@@ -45,11 +45,11 @@ func (p *printSyncer) Close() error {
 func getEventDataStr(event *pb.Event) string {
 	switch event.GetTp() {
 	case pb.EventType_Insert:
-		return getInsertOrDeleteEventStr(event.Row)
+		return getInsertOrDeleteRowStr(event.Row)
 	case pb.EventType_Update:
-		return getUpdateEventStr(event.Row)
+		return getUpdateRowStr(event.Row)
 	case pb.EventType_Delete:
-		return getInsertOrDeleteEventStr(event.Row)
+		return getInsertOrDeleteRowStr(event.Row)
 	}
 
 	return ""
@@ -63,18 +63,18 @@ func getEventHeaderStr(event *pb.Event) string {
 	return fmt.Sprintf("schema: %s; table: %s; type: %s\n", event.GetSchemaName(), event.GetTableName(), event.GetTp())
 }
 
-func getUpdateEventStr(rows [][]byte) string {
+func getUpdateRowStr(row [][]byte) string {
 	var eventStr string
-	for _, row := range rows {
-		eventStr += getUpdateRowStr(row)
+	for _, col := range row {
+		eventStr += getUpdateColumnStr(col)
 	}
 
 	return eventStr
 }
 
-func getUpdateRowStr(row []byte) string {
+func getUpdateColumnStr(column []byte) string {
 	col := &pb.Column{}
-	err := col.Unmarshal(row)
+	err := col.Unmarshal(column)
 	if err != nil {
 		log.Errorf("unmarshal error %v", err)
 		return ""
@@ -96,29 +96,29 @@ func getUpdateRowStr(row []byte) string {
 	return fmt.Sprintf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
 }
 
-func getInsertOrDeleteEventStr(rows [][]byte) string {
+func getInsertOrDeleteRowStr(row [][]byte) string {
 	var eventStr string
-	for _, row := range rows {
-		eventStr += getInsertOrDeleteRowStr(row)
+	for _, col := range row {
+		eventStr += getInsertOrDeleteColumnStr(col)
 	}
 
 	return eventStr
 }
 
-func getInsertOrDeleteRowStr(row []byte) string {
+func getInsertOrDeleteColumnStr(column []byte) string {
 	col := &pb.Column{}
-		err := col.Unmarshal(row)
-		if err != nil {
-			log.Errorf("unmarshal error %v", err)
-			return ""
-		}
+	err := col.Unmarshal(column)
+	if err != nil {
+		log.Errorf("unmarshal error %v", err)
+		return ""
+	}
 
-		_, val, err := codec.DecodeOne(col.Value)
-		if err != nil {
-			log.Errorf("decode row error %v", err)
-			return ""
-		}
+	_, val, err := codec.DecodeOne(col.Value)
+	if err != nil {
+		log.Errorf("decode row error %v", err)
+		return ""
+	}
 
-		tp := col.Tp[0]
-		return fmt.Sprintf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
+	tp := col.Tp[0]
+	return fmt.Sprintf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
 }
