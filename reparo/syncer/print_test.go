@@ -3,9 +3,6 @@ package syncer
 import (
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	//"github.com/pingcap/tidb/mysql"
-	//"github.com/pingcap/tidb/types"
-	//"github.com/pingcap/tidb/util/codec"
 )
 
 type testPrintSuite struct{}
@@ -74,6 +71,8 @@ func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	}
 	eventStr := getEventDataStr(insertEvent)
 	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+	rowStr := getInsertOrDeleteRowStr(insertEvent.Row)
+	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
 	deleteEvent := &pb.Event {
 		Tp:  pb.EventType_Delete,
@@ -81,6 +80,8 @@ func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	}
 	eventStr = getEventDataStr(deleteEvent)
 	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+	rowStr = getInsertOrDeleteRowStr(deleteEvent.Row)
+	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
 	updateEvent := &pb.Event {
 		Tp:  pb.EventType_Update,
@@ -88,5 +89,7 @@ func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	}
 	eventStr = getEventDataStr(updateEvent)
 	c.Assert(eventStr, check.Equals, "c(varchar): test => abc\n")
+	rowStr = getUpdateRowStr(updateEvent.Row)
+	c.Assert(rowStr, check.Equals, "c(varchar): test => abc\n")
 }
 

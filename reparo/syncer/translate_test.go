@@ -7,7 +7,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/mysql"
-	//"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -68,7 +67,6 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	for binlog, txn := range tests {
 		getTxn, err := pbBinlogToTxn(binlog)
 		c.Assert(err, check.IsNil)
-		//c.Assert(getTxn, check.DeepEquals, txn)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
 		for i, dml := range getTxn.DMLs {
 			c.Assert(dml.Database, check.Equals, txn.DMLs[i].Database)

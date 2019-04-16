@@ -34,6 +34,7 @@ var _ Syncer = &mysqlSyncer{}
 func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
 	db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
 	if err != nil {
+		log.Infof("create db failed %v", err)
 		return nil, errors.Trace(err)
 	}
 
