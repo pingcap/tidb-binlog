@@ -184,7 +184,7 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	}
 
 	if cnt != len(cols)*2 || len(newRow) != len(oldRow) {
-		return nil, nil, errors.Errorf(" row data is corruption %v", b)
+		return nil, nil, errors.Errorf("row data is corrupted %v", b)
 	}
 
 	return oldRow, newRow, nil

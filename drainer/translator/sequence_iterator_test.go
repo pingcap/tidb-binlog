@@ -47,7 +47,7 @@ func (t *testSequenceIteratorSuite) TestIterator(c *C) {
 			break
 		}
 
-		if err != nil {
+		c.Assert(err, IsNil)
 			c.Fail()
 			break
 		}
