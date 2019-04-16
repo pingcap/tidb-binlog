@@ -3,9 +3,9 @@ package syncer
 import (
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
+	//"github.com/pingcap/tidb/mysql"
 	//"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
+	//"github.com/pingcap/tidb/util/codec"
 )
 
 type testPrintSuite struct{}
@@ -57,76 +57,36 @@ func (s *testPrintSuite) TestPrintDDL(c *check.C) {
 }
 
 func (s *testPrintSuite) TestPrintRow(c *check.C) {
-	col1 := &pb.Column{
-		Name:      "a",
-		Tp:        []byte{mysql.TypeInt24},
-		MysqlType: "int",
-		Value:     encodeIntValue(1),
-	}
-	col2 := &pb.Column{
-		Name:      "b",
-		Tp:        []byte{mysql.TypeVarchar},
-		MysqlType: "varchar",
-		Value:     encodeBytesValue([]byte("test")),
-	}
-	col3 := &pb.Column{
-		Name:      "c",
-		Tp:        []byte{mysql.TypeVarchar},
-		MysqlType: "varchar",
-		Value:     encodeBytesValue([]byte("test")),
-		ChangedValue: encodeBytesValue([]byte("abc")),
-	}
+	cols := generateColumns()
 
-	col1Bytes, err := col1.Marshal()
-	c.Assert(err, check.IsNil)
-	col1Str := getInsertOrDeleteColumnStr(col1Bytes)
+	col1Str := getInsertOrDeleteColumnStr(cols[0])
 	c.Assert(col1Str, check.Equals, "a(int): 1 \n")
 
-	col2Bytes, err := col2.Marshal()
-	c.Assert(err, check.IsNil)
-	col2Str := getInsertOrDeleteColumnStr(col2Bytes)
+	col2Str := getInsertOrDeleteColumnStr(cols[1])
 	c.Assert(col2Str, check.Equals, "b(varchar): test \n")
 
-	col3Bytes, err := col3.Marshal()
-	c.Assert(err, check.IsNil)
-	col3Str := getUpdateColumnStr(col3Bytes)
+	col3Str := getUpdateColumnStr(cols[2])
 	c.Assert(col3Str, check.Equals, "c(varchar): test => abc\n")
 
-	
 	insertEvent := &pb.Event {
 		Tp:  pb.EventType_Insert,
-		Row: [][]byte{col1Bytes, col2Bytes}, 
+		Row: [][]byte{cols[0], cols[1]},
 	}
 	eventStr := getEventDataStr(insertEvent)
 	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
 	deleteEvent := &pb.Event {
 		Tp:  pb.EventType_Delete,
-		Row: [][]byte{col1Bytes, col2Bytes}, 
+		Row: [][]byte{cols[0], cols[1]}, 
 	}
 	eventStr = getEventDataStr(deleteEvent)
 	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
 	updateEvent := &pb.Event {
-		Tp:  pb.EventType_Delete,
-		Row: [][]byte{col3Bytes, col3Bytes}, 
+		Tp:  pb.EventType_Update,
+		Row: [][]byte{cols[2]}, 
 	}
 	eventStr = getEventDataStr(updateEvent)
-	c.Assert(eventStr, check.Equals, "c(varchar): test \nc(varchar): test \n")
+	c.Assert(eventStr, check.Equals, "c(varchar): test => abc\n")
 }
 
-func encodeIntValue(value int64) []byte {
-	b := make([]byte, 0, 5)
-	// 3 means intFlag
-	b = append(b, 3)
-	b = codec.EncodeInt(b, value)
-	return b
-}
-
-func encodeBytesValue(value []byte) []byte {
-	b := make([]byte, 0, 5)
-	// 1 means bytesFlag
-	b = append(b, 1)
-	b = codec.EncodeBytes(b, value)
-	return b
-}
