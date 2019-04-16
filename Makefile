@@ -15,7 +15,7 @@ export PATH := $(path_to_add):$(PATH)
 TEST_DIR := /tmp/tidb_binlog_test
 
 GO		:= go
-GOBUILD   := GO111MODULE=on CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOBUILD   := GO111MODULE=on CGO_ENABLED=1 $(GO) build $(BUILD_FLAG)
 GOTEST	:= GO111MODULE=on CGO_ENABLED=1 $(GO) test -p 3
 
 ARCH	  := "`uname -s`"
