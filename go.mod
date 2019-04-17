@@ -13,6 +13,7 @@ require (
 	github.com/eapache/queue v0.0.0-20180227141424-093482f3f8ce // indirect
 	github.com/go-sql-driver/mysql v1.4.0
 	github.com/gogo/protobuf v1.1.1
+	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.1.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/gorilla/context v1.1.1 // indirect
