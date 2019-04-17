@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,7 +157,7 @@ func ParseBinlogName(str string) (index uint64, ts int64, err error) {
 			return 0, 0, errors.Trace(err)
 		}
 
-		_, err = fmt.Sscanf(strings.Split(items[3], ".")[0], "%018d", &ts)
+		ts, err = strconv.ParseInt(strings.Split(items[3], ".")[0], 10, 64)
 	default:
 		return 0, 0, errors.Annotatef(ErrBadBinlogName, "binlog file name %s", str)
 	}
