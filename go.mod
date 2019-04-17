@@ -33,6 +33,7 @@ require (
 	github.com/pingcap/tidb-tools v2.1.5+incompatible
 	github.com/pingcap/tipb v0.0.0-20190107072121-abbec73437b7
 	github.com/prometheus/client_golang v0.8.0
+	github.com/prometheus/client_model v0.0.0-20171117100541-99fa1f4be8e5
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20161005110831-1e9ce2a5ac40

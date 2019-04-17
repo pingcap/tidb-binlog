@@ -1,12 +1,16 @@
 package sql
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
-
 	. "github.com/pingcap/check"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_model/go"
 )
 
 func Test(t *testing.T) { TestingT(t) }
@@ -66,4 +70,150 @@ func (s *SQLErrSuite) TestGetSQLErrCode(c *C) {
 func (s *SQLErrSuite) TestIgnoreDDLError(c *C) {
 	c.Assert(IgnoreDDLError(&mysql.MySQLError{Number: 1146}), IsTrue)
 	c.Assert(IgnoreDDLError(&mysql.MySQLError{Number: 1032}), IsFalse)
+}
+
+type sqlSuite struct {
+	db               *sql.DB
+	mock             sqlmock.Sqlmock
+	oldRetryWaitTime time.Duration
+}
+
+var _ = Suite(&sqlSuite{})
+
+func (s *sqlSuite) SetUpTest(c *C) {
+	var err error
+	s.db, s.mock, err = sqlmock.New()
+	c.Assert(err, IsNil)
+
+	s.oldRetryWaitTime = RetryWaitTime
+	RetryWaitTime = 10 * time.Millisecond
+}
+
+func (s *sqlSuite) TearDownTest(c *C) {
+	RetryWaitTime = s.oldRetryWaitTime
+
+	c.Assert(s.mock.ExpectationsWereMet(), IsNil)
+	s.db.Close()
+}
+
+func (s *sqlSuite) TestGetTidbPosition(c *C) {
+	s.mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
+		sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+			AddRow("tidb-binlog", uint64(407774332609932), "", "", ""),
+	)
+
+	tso, err := GetTidbPosition(s.db)
+	c.Assert(err, IsNil)
+	c.Assert(tso, Equals, int64(407774332609932))
+}
+
+const (
+	testQuery1 = "UPDATE foo SET bar = bar - ?"
+	testQuery2 = "DELETE FROM foo WHERE bar <= ?"
+)
+
+func (s *sqlSuite) TestExecuteTxnSuccess(c *C) {
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillDelayFor(time.Millisecond * 201).
+		WillReturnResult(sqlmock.NewResult(18, 102))
+	s.mock.ExpectExec(testQuery2).
+		WithArgs(0).
+		WillDelayFor(time.Millisecond * 101).
+		WillReturnResult(sqlmock.NewResult(19, 63))
+	s.mock.ExpectCommit()
+
+	histogram := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Buckets: prometheus.LinearBuckets(0, 0.1, 5)},
+		[]string{"exec"},
+	)
+	err := ExecuteTxnWithHistogram(
+		s.db,
+		[]string{testQuery1, testQuery2},
+		[][]interface{}{{1}, {0}},
+		histogram,
+	)
+	c.Assert(err, IsNil)
+
+	// extract the content of the histogram.
+	var metric io_prometheus_client.Metric
+	err = histogram.WithLabelValues("exec").Write(&metric)
+	c.Assert(err, IsNil)
+	c.Assert(metric.Histogram.GetSampleCount(), Equals, uint64(2))
+	sum := metric.Histogram.GetSampleSum()
+	c.Assert(sum, GreaterEqual, 0.302)
+	c.Assert(sum, LessEqual, 0.357)
+	buckets := metric.Histogram.GetBucket()
+	c.Assert(buckets, HasLen, 5)
+	c.Logf("buckets = %q", buckets)
+	c.Assert(buckets[0].GetCumulativeCount(), Equals, uint64(0)) // <= 0ms
+	c.Assert(buckets[1].GetCumulativeCount(), Equals, uint64(0)) // <= 100ms
+	c.Assert(buckets[2].GetCumulativeCount(), Equals, uint64(1)) // <= 200ms
+	c.Assert(buckets[3].GetCumulativeCount(), Equals, uint64(2)) // <= 300ms
+	c.Assert(buckets[4].GetCumulativeCount(), Equals, uint64(2)) // <= infinity
+}
+
+func (s *sqlSuite) TestExecuteTxnRollback(c *C) {
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillReturnError(errors.New("force txn rollback error"))
+	s.mock.ExpectRollback()
+
+	err := ExecuteTxn(s.db, []string{testQuery1, testQuery2}, [][]interface{}{{1}, {0}})
+	c.Assert(err, ErrorMatches, "force txn rollback error")
+}
+
+func (s *sqlSuite) TestExecuteSQLsWithRetry(c *C) {
+	s.mock.ExpectBegin().WillReturnError(errors.New("force retry #0"))
+
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillReturnError(errors.New("force retry #1"))
+	s.mock.ExpectRollback()
+
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillReturnResult(sqlmock.NewResult(18, 102))
+	s.mock.ExpectExec(testQuery2).
+		WithArgs(0).
+		WillReturnError(errors.New("force retry #2"))
+	s.mock.ExpectRollback()
+
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillReturnResult(sqlmock.NewResult(19, 102))
+	s.mock.ExpectExec(testQuery2).
+		WithArgs(0).
+		WillReturnResult(sqlmock.NewResult(20, 63))
+	s.mock.ExpectCommit().WillReturnError(errors.New("force retry #3"))
+
+	s.mock.ExpectBegin()
+	s.mock.ExpectExec(testQuery1).
+		WithArgs(1).
+		WillReturnResult(sqlmock.NewResult(21, 102))
+	s.mock.ExpectExec(testQuery2).
+		WithArgs(0).
+		WillReturnResult(sqlmock.NewResult(22, 63))
+	s.mock.ExpectCommit()
+
+	err := ExecuteSQLs(s.db, []string{testQuery1, testQuery2}, [][]interface{}{{1}, {0}}, false)
+	c.Assert(err, IsNil)
+}
+
+func (s *sqlSuite) TestExecuteSQLsWithRetryAndFailure(c *C) {
+	query := "PERFORM SOME INVALID QUERY"
+
+	for i := 0; i < MaxDDLRetryCount; i++ {
+		s.mock.ExpectBegin()
+		s.mock.ExpectExec(query).WillReturnError(errors.New("syntax error"))
+		s.mock.ExpectRollback()
+	}
+
+	err := ExecuteSQLs(s.db, []string{query}, [][]interface{}{nil}, true)
+	c.Assert(err, ErrorMatches, "syntax error")
 }
