@@ -102,6 +102,12 @@ func (t *testRegistrySuite) TestRefreshNode(c *C) {
 	//mustEqualStatus(c, r, ns.NodeID, ns)
 }
 
+func (t *testRegistrySuite) TestAnalyzeNodeID(c *C) {
+	c.Assert(AnalyzeNodeID("/tidb-binlog/v1/pumps/v1NodeID"), Equals, "v1NodeID")
+	c.Assert(AnalyzeNodeID("/tidb-binlog/pumps/legacyNodeID"), Equals, "legacyNodeID")
+	c.Assert(AnalyzeNodeID("????"), Equals, "")
+}
+
 func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *Status) {
 	ns, err := r.Node(context.Background(), nodePrefix, nodeID)
 	c.Assert(err, IsNil)
