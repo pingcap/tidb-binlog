@@ -68,13 +68,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 		getTxn, err := pbBinlogToTxn(binlog)
 		c.Assert(err, check.IsNil)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
-		for i, dml := range getTxn.DMLs {
-			c.Assert(dml.Database, check.Equals, txn.DMLs[i].Database)
-			c.Assert(dml.Table, check.Equals, txn.DMLs[i].Table)
-			c.Assert(dml.Tp, check.Equals, txn.DMLs[i].Tp)
-			c.Assert(dml.Values, check.DeepEquals, txn.DMLs[i].Values)
-			c.Assert(dml.OldValues, check.DeepEquals, txn.DMLs[i].OldValues)
-		}
+		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs)
 	}
 }
 

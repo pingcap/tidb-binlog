@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
@@ -88,33 +87,29 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	cases := []struct {
 		name          string
 		expectedIndex uint64
+		expectedts    int64
 		expectedError bool
 	}{
-		{"binlog-0000000000000001", 0000000000000001, false},
-		{"binlog-index-20180315121212", 0, true},
-		{"binlog-0000000000000003-20180315121212", 0000000000000003, false},
-		{"binlog-index-20180315121212", 0, true},
-		{"binlog-0000000000000005", 0000000000000005, false},
-		{"binlog-index", 0, true},
+		{"binlog-0000000000000001", 0000000000000001, 0, false},
+		{"binlog-index-20180315121212", 0, 0, true},
+		{"binlog-0000000000000003-20180315121212", 0000000000000003, 0, false},
+		{"binlog-index-20180315121212", 0, 0, true},
+		{"binlog-0000000000000005", 0000000000000005, 0, false},
+		{"binlog-index", 0, 0, true},
+		{"binlog-0000000000000003-20180315121212-000000000000000001.tar.gz", 0000000000000003, 1, false},
+		{"binlog-index-20180315121212-000000000000000001.tar.gz", 0, 0, true},
 	}
 
 	for _, t := range cases {
-		index, err := ParseBinlogName(t.name)
+		index, _, err := ParseBinlogName(t.name)
 		c.Assert(err != nil, Equals, t.expectedError)
 		c.Assert(index, Equals, t.expectedIndex)
 	}
 
 	index := uint64(1)
 	name := BinlogName(index)
-	gotIndex, err := ParseBinlogName(name)
+	gotIndex, gotTs, err := ParseBinlogName(name)
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
-}
-
-func (t *testFileSuite) TestBinlogNameWithDatetime(c *C) {
-	index := uint64(1)
-	datetime, err := time.Parse(datetimeFormat, "20180315121212")
-	c.Assert(err, IsNil)
-	binlogName := binlogNameWithDateTime(index, datetime)
-	c.Assert(binlogName, Equals, "binlog-0000000000000001-20180315121212")
+	c.Assert(gotTs, Equals, int64(0))
 }
