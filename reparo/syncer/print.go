@@ -25,7 +25,7 @@ func (p *printSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) erro
 	case pb.BinlogType_DML:
 		for _, event := range pbBinlog.GetDmlData().GetEvents() {
 			header := getEventHeaderStr(&event)
-			info = header + getEventDataStr(&event)
+			info += header + getEventDataStr(&event)
 		}
 	default:
 		return errors.Errorf("unknown type: %v", pbBinlog.Tp)
