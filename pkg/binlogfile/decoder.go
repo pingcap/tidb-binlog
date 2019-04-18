@@ -2,11 +2,11 @@ package binlogfile
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/binary"
 	"hash/crc32"
 	"io"
 	"os"
-	"compress/gzip"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -24,7 +24,7 @@ type decoder struct {
 }
 
 // NewDecoder creates a new Decoder.
-func NewDecoder(f *os.File , initOffset int64) (Decoder, error) {
+func NewDecoder(f *os.File, initOffset int64) (Decoder, error) {
 	r, err := NewReader(f)
 	if err != nil {
 		return nil, errors.Trace(err)

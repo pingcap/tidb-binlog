@@ -41,7 +41,7 @@ func (t *testCompressSuite) TestIsGzipCompressFile(c *C) {
 		isComrepressFile := IsCompressFile(testCase.filename)
 		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
 
-		isComrepressFile := IsGzipCompressFile(testCase.filename)
+		isComrepressFile = IsGzipCompressFile(testCase.filename)
 		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
 	}
 }
@@ -57,10 +57,12 @@ func (t *testCompressSuite) TestCompressFile(c *C) {
 	c.Assert(err, IsNil)
 	file.Close()
 
-	compressaFileName, err := CompressGZIPFile(filename)
+	compressFileName := "compress-binlog.tar.gz"
+	err = CompressGZIPFile(filename, compressFileName)
 	c.Assert(err, IsNil)
+	defer os.Remove(compressFileName)
 
-	f, err := os.OpenFile(compressaFileName, os.O_RDONLY, 0600)
+	f, err := os.OpenFile(compressFileName, os.O_RDONLY, 0600)
 	c.Assert(err, IsNil)
 	reader, err := gzip.NewReader(f)
 	c.Assert(err, IsNil)

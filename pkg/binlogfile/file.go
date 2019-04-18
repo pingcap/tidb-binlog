@@ -2,8 +2,8 @@ package binlogfile
 
 import (
 	"fmt"
-	"os"
 	"io"
+	"os"
 	"path"
 	"sort"
 	"strconv"

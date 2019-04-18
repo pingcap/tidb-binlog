@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
+	"github.com/pingcap/tidb-binlog/pkg/file"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	gb "github.com/pingcap/tipb/go-binlog"
 )
@@ -132,7 +132,7 @@ func (t *testFileSuite) TestGetFirstBinlogCommitTS(c *C) {
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
 
-	binlog := &pb.Binlog {CommitTs: 2,}
+	binlog := &pb.Binlog{CommitTs: 2}
 	data, err := binlog.Marshal()
 	c.Assert(err, IsNil)
 

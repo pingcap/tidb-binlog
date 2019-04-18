@@ -49,6 +49,9 @@ type Binlogger interface {
 
 	// GC recycles the old binlog file
 	GC(days time.Duration, pos binlog.Pos)
+
+	// CompressFile compress the old binlog file
+	CompressFile()
 }
 
 // binlogger is a logical representation of the log storage
@@ -503,7 +506,7 @@ func (b *binlogger) CompressFile() {
 	// skip the latest binlog file
 	for _, name := range names[:len(names)-1] {
 		fileName := path.Join(b.dir, name)
-		
+
 		if compress.IsCompressFile(fileName) {
 			continue
 		}
@@ -515,8 +518,7 @@ func (b *binlogger) CompressFile() {
 		}
 
 		startT := time.Now()
-		_, err = compress.CompressFileWithTS(fileName, b.codec, ts)
-		if err != nil {
+		if err = compress.CompressFileWithTS(fileName, b.codec, ts); err != nil {
 			log.Errorf("compress file %s failed %v", fileName, err)
 			return
 		}

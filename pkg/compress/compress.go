@@ -2,9 +2,9 @@ package compress
 
 import (
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
-	"fmt"
 	"strings"
 
 	"github.com/ngaut/log"
@@ -39,20 +39,20 @@ func ToCompressionCodec(v string) CompressionCodec {
 }
 
 // CompressFile compresses a file, and return the compressed file name
-func CompressFileWithTS(filename string, codec CompressionCodec, ts int64) (string, error) {
+func CompressFileWithTS(filename string, codec CompressionCodec, ts int64) error {
 	switch codec {
 	case CompressionNone:
-		return filename, nil
+		return nil
 	case CompressionGZIP:
 		compressFilename := GetCompressFileNameWithTS(filename, gzipFileSuffix, ts)
 		return CompressGZIPFile(filename, compressFilename)
 	default:
-		return "", errors.NotSupportedf("compression codec %v", codec)
+		return errors.NotSupportedf("compression codec %v", codec)
 	}
 }
 
 // CompressGZIPFile compresses file by gzip
-func CompressGZIPFile(filename, compressFilename string) (gzipFileName string, err error) {
+func CompressGZIPFile(filename, compressFilename string) (err error) {
 	var (
 		fileLock       *pkgfile.LockedFile
 		file, gzipFile *os.File
@@ -74,49 +74,54 @@ func CompressGZIPFile(filename, compressFilename string) (gzipFileName string, e
 
 		if gzipWriter != nil {
 			if err1 := gzipWriter.Close(); err1 != nil {
-				log.Warnf("close gzip writer %s failed %v", gzipFileName, err1)
+				log.Warnf("close gzip writer %s failed %v", compressFilename, err1)
 			}
 		}
 
 		if gzipFile != nil {
 			if err1 := gzipFile.Close(); err1 != nil {
-				log.Warnf("close file %s failed %v", gzipFileName, err1)
+				log.Warnf("close file %s failed %v", compressFilename, err1)
 			}
 		}
 
-		if err != nil && len(gzipFileName) != 0 {
-			if err1 := os.Remove(gzipFileName); err1 != nil {
-				log.Warnf("remove file %s failed %v", gzipFileName, err1)
+		if err != nil {
+			if err1 := os.Remove(compressFilename); err1 != nil {
+				log.Warnf("remove file %s failed %v", compressFilename, err1)
 			}
 		}
 	}()
 
-	fileLock, err = pkgfile.TryLockFile(filename, os.O_WRONLY|os.O_CREATE, pkgfile.PrivateFileMode)
-	if err != nil {
-		return "", err
+	if err = os.Remove(compressFilename); err != nil {
+		if _, ok := err.(*os.PathError); !ok {
+			return err
+		}
 	}
 
-	gzipFileName = filename + gzipFileSuffix
-	gzipFile, err = os.Create(gzipFileName)
+	fileLock, err = pkgfile.TryLockFile(filename, os.O_WRONLY|os.O_CREATE, pkgfile.PrivateFileMode)
 	if err != nil {
-		return "", err
+		return err
+	}
+
+	gzipFile, err = os.Create(compressFilename)
+	if err != nil {
+		return err
 	}
 
 	file, err = os.Open(filename)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	gzipWriter = gzip.NewWriter(gzipFile)
 	if _, err = io.Copy(gzipWriter, file); err != nil {
-		return "", err
+		return err
 	}
 
 	if err = os.Remove(filename); err != nil {
-		return "", err
+		return err
 	}
 
-	return gzipFileName, err
+	return err
 }
 
 // IsCompressFile returns true if file is compressed.
