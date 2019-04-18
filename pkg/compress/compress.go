@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
+	"fmt"
 	"strings"
 
 	"github.com/ngaut/log"
@@ -38,19 +39,20 @@ func ToCompressionCodec(v string) CompressionCodec {
 }
 
 // CompressFile compresses a file, and return the compressed file name
-func CompressFile(filename string, codec CompressionCodec) (string, error) {
+func CompressFileWithTS(filename string, codec CompressionCodec, ts int64) (string, error) {
 	switch codec {
 	case CompressionNone:
 		return filename, nil
 	case CompressionGZIP:
-		return CompressGZIPFile(filename)
+		compressFilename := GetCompressFileNameWithTS(filename, gzipFileSuffix, ts)
+		return CompressGZIPFile(filename, compressFilename)
 	default:
 		return "", errors.NotSupportedf("compression codec %v", codec)
 	}
 }
 
 // CompressGZIPFile compresses file by gzip
-func CompressGZIPFile(filename string) (gzipFileName string, err error) {
+func CompressGZIPFile(filename, compressFilename string) (gzipFileName string, err error) {
 	var (
 		fileLock       *pkgfile.LockedFile
 		file, gzipFile *os.File
@@ -126,4 +128,9 @@ func IsCompressFile(filename string) bool {
 // IsCompressFile returns true if file name end with ".tar.gz"
 func IsGzipCompressFile(filename string) bool {
 	return strings.HasSuffix(filename, gzipFileSuffix)
+}
+
+// GetCompressFileNameWithTS returns a new filename with ts and suffix
+func GetCompressFileNameWithTS(filename, suffix string, ts int64) string {
+	return fmt.Sprintf("%s-%d%s", filename, ts, suffix)
 }

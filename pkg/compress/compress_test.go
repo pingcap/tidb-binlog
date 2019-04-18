@@ -38,6 +38,9 @@ func (t *testCompressSuite) TestIsGzipCompressFile(c *C) {
 	}
 
 	for _, testCase := range testCases {
+		isComrepressFile := IsCompressFile(testCase.filename)
+		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
+
 		isComrepressFile := IsGzipCompressFile(testCase.filename)
 		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
 	}

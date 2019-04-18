@@ -229,6 +229,24 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	c.Assert(names[1], Equals, BinlogName(1))
 }
 
+func (s *testBinloggerSuite) TestCompressFile(c *C) {
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir, compress.CompressionGZIP)
+	c.Assert(err, IsNil)
+	defer CloseBinlogger(bl)
+
+	b, ok := bl.(*binlogger)
+	c.Assert(ok, IsTrue)
+	b.rotate()
+	b.CompressFile()
+
+	names, err := ReadBinlogNames(b.dir)
+	c.Assert(err, IsNil)
+	c.Assert(names, HasLen, 2)
+	c.Assert(compress.IsCompressFile(names[0]), Equals, true)
+	c.Assert(compress.IsCompressFile(names[1]), Equals, false)
+}
+
 func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 	f, err := ioutil.TempFile(os.TempDir(), "testOffset")
 	c.Assert(err, IsNil)

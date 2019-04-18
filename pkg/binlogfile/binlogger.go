@@ -396,14 +396,6 @@ func (b *binlogger) rotate() error {
 	if err := b.file.Close(); err != nil {
 		log.Errorf("failed to unlock during closing file: %s", err)
 	}
-	if b.codec != compress.CompressionNone {
-		startT := time.Now()
-		_, err := compress.CompressFile(b.file.Name(), b.codec)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Infof("compress file %s cost %v", b.file.Name(), time.Since(startT))
-	}
 
 	filename := BinlogName(b.seq() + 1)
 	b.lastSuffix = b.seq() + 1
@@ -516,8 +508,14 @@ func (b *binlogger) CompressFile() {
 			continue
 		}
 
+		ts, err := GetFirstBinlogCommitTS(fileName)
+		if err != nil {
+			log.Errorf("get first binlog's commit ts in %s failed %v", fileName, err)
+			return
+		}
+
 		startT := time.Now()
-		_, err := compress.CompressFile(fileName, b.codec)
+		_, err = compress.CompressFileWithTS(fileName, b.codec, ts)
 		if err != nil {
 			log.Errorf("compress file %s failed %v", fileName, err)
 			return
