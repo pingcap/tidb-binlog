@@ -10,6 +10,9 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	gb "github.com/pingcap/tipb/go-binlog"
 )
 
 func TestClient(t *testing.T) {
@@ -112,4 +115,32 @@ func (t *testFileSuite) TestParseBinlogName(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(gotIndex, Equals, index)
 	c.Assert(gotTs, Equals, int64(0))
+}
+
+func (t *testFileSuite) TestGetFirstBinlogCommitTS(c *C) {
+	// test read gzip binlog file, will get ts from file name
+	gzipBinlogFileName := "binlog-0000000000000001-20180315121212-000000000000000001.tar.gz"
+	ts, err := GetFirstBinlogCommitTS(gzipBinlogFileName)
+	c.Assert(err, IsNil)
+	c.Assert(ts, Equals, int64(1))
+
+	// test read normal binlog file, will read file to get commit ts
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	c.Assert(err, IsNil)
+
+	b, ok := bl.(*binlogger)
+	c.Assert(ok, IsTrue)
+
+	binlog := &pb.Binlog {CommitTs: 2,}
+	data, err := binlog.Marshal()
+	c.Assert(err, IsNil)
+
+	_, err = bl.WriteTail(&gb.Entity{Payload: data})
+	c.Assert(err, IsNil)
+	bl.Close()
+
+	ts, err = GetFirstBinlogCommitTS(b.file.Name())
+	c.Assert(err, IsNil)
+	c.Assert(ts, Equals, int64(2))
 }

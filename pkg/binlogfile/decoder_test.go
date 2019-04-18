@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
