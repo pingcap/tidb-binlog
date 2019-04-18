@@ -243,8 +243,8 @@ func (s *testBinloggerSuite) TestCompressFile(c *C) {
 	names, err := ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 2)
-	c.Assert(compress.IsCompressFile(names[0]), Equals, true)
-	c.Assert(compress.IsCompressFile(names[1]), Equals, false)
+	c.Assert(compress.IsCompressFile(names[0]), IsTrue)
+	c.Assert(compress.IsCompressFile(names[1]), IsFalse)
 }
 
 func (s *testBinloggerSuite) TestSeekBinlog(c *C) {

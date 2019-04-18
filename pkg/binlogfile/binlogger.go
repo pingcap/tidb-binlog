@@ -51,7 +51,7 @@ type Binlogger interface {
 	GC(days time.Duration, pos binlog.Pos)
 
 	// CompressFile compress the old binlog file
-	CompressFile()
+	CompressFile() error
 }
 
 // binlogger is a logical representation of the log storage
@@ -480,14 +480,14 @@ func seekBinlog(f *os.File, offset int64) (int64, error) {
 }
 
 // CompressFile compresses the old binlog files
-func (b *binlogger) CompressFile() {
+func (b *binlogger) CompressFile() error {
 	if b.codec == compress.CompressionNone {
-		return
+		return nil
 	}
 
 	if atomic.LoadInt32(&b.compressing) == 1 {
 		log.Debug("binlog file is in compressing")
-		return
+		return nil
 	}
 
 	atomic.StoreInt32(&b.compressing, 1)
@@ -496,11 +496,11 @@ func (b *binlogger) CompressFile() {
 	names, err := ReadBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files error:", names)
-		return
+		return errors.Trace(err)
 	}
 
 	if len(names) == 0 {
-		return
+		return nil
 	}
 
 	// skip the latest binlog file
@@ -514,14 +514,16 @@ func (b *binlogger) CompressFile() {
 		ts, err := GetFirstBinlogCommitTS(fileName)
 		if err != nil {
 			log.Errorf("get first binlog's commit ts in %s failed %v", fileName, err)
-			return
+			return errors.Trace(err)
 		}
 
 		startT := time.Now()
 		if err = compress.CompressFileWithTS(fileName, b.codec, ts); err != nil {
 			log.Errorf("compress file %s failed %v", fileName, err)
-			return
+			return errors.Trace(err)
 		}
 		log.Infof("compress file %s cost %v", fileName, time.Since(startT))
 	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"time"
 	"context"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
@@ -74,7 +75,10 @@ func (p *pbExecutor) compressFile(ctx context.Context) {
 		for {
 			select {
 			case <-time.After(time.Hour):
-				p.binlogger.CompressFile()
+				if err := p.binlogger.CompressFile(); err != nil {
+					log.Errorf("compress pb file meet error %v, will stop compress", errors.Trace(err))
+					return
+				}
 			case <- ctx.Done():
 				return
 			}

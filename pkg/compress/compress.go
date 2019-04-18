@@ -130,7 +130,7 @@ func IsCompressFile(filename string) bool {
 	return IsGzipCompressFile(filename)
 }
 
-// IsCompressFile returns true if file name end with ".tar.gz"
+// IsCompressFile returns true if file name ends with ".tar.gz"
 func IsGzipCompressFile(filename string) bool {
 	return strings.HasSuffix(filename, gzipFileSuffix)
 }

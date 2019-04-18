@@ -152,5 +152,5 @@ func NewReaderFromFile(f *os.File) (r io.Reader, err error) {
 		r = bufio.NewReader(f)
 	}
 
-	return r, nil
+	return
 }

@@ -57,17 +57,16 @@ func (t *testCompressSuite) TestCompressFile(c *C) {
 	c.Assert(err, IsNil)
 	file.Close()
 
-	compressFileName := "compress-binlog.tar.gz"
+	compressFileName := path.Join(dir, "compress-binlog.tar.gz")
 	err = CompressGZIPFile(filename, compressFileName)
 	c.Assert(err, IsNil)
-	defer os.Remove(compressFileName)
 
 	f, err := os.OpenFile(compressFileName, os.O_RDONLY, 0600)
 	c.Assert(err, IsNil)
 	reader, err := gzip.NewReader(f)
 	c.Assert(err, IsNil)
 
-	data := make([]byte, 10)
+	data := make([]byte, len(message))
 	_, err = io.ReadFull(reader, data)
 	c.Assert(err, IsNil)
 	c.Assert(data, DeepEquals, message)
