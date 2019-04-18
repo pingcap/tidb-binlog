@@ -17,7 +17,7 @@ type Item struct {
 type Syncer interface {
 	// Sync the binlog item to downstream
 	Sync(item *Item) error
-	// will be close if Close normally or meet error, call Err() to check it
+	// will be close if Close normally or meet error, call Error() to check it
 	Successes() <-chan *Item
 	// Return not nil if fail to sync data to downstream or nil if closed normally
 	Error() <-chan error

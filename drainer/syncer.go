@@ -35,7 +35,7 @@ type Syncer struct {
 	dsyncer dsync.Syncer
 	itemsWg sync.WaitGroup
 
-	shundown chan struct{}
+	shutdown chan struct{}
 	closed   chan struct{}
 }
 
@@ -46,7 +46,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
 	syncer.lastSyncTime = time.Now()
-	syncer.shundown = make(chan struct{})
+	syncer.shutdown = make(chan struct{})
 	syncer.closed = make(chan struct{})
 
 	var ignoreDBs []string
@@ -119,8 +119,8 @@ func (s *Syncer) Start() error {
 }
 
 func (s *Syncer) addDMLEventMetrics(muts []pb.TableMutation) {
-	for i := 0; i < len(muts); i++ {
-		for _, tp := range muts[i].GetSequence() {
+	for _, mut := range muts {
+		for _, tp := range mut.GetSequence() {
 			s.addDMLCount(tp, 1)
 		}
 	}
@@ -159,7 +159,7 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 		}()
 
 		select {
-		case <-s.shundown:
+		case <-s.shutdown:
 		case <-time.After(5 * time.Minute):
 		}
 	}()
@@ -257,7 +257,7 @@ ForLoop:
 		select {
 		case err := <-dsyncError:
 			return errors.Trace(err)
-		case <-s.shundown:
+		case <-s.shutdown:
 			break ForLoop
 		case b = <-s.input:
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
@@ -390,7 +390,7 @@ func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (i
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
 	select {
-	case <-s.shundown:
+	case <-s.shutdown:
 	case s.input <- b:
 		log.Debugf("receive publish binlog item: %s", b)
 	}
@@ -399,7 +399,7 @@ func (s *Syncer) Add(b *binlogItem) {
 // Close closes syncer.
 func (s *Syncer) Close() error {
 	log.Debug("closing syncer")
-	close(s.shundown)
+	close(s.shutdown)
 	<-s.closed
 	log.Debug("syncer is closed")
 	return nil

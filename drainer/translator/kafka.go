@@ -23,16 +23,21 @@ func TiBinlogToSlaveBinlog(infoGetter TableInfoGetter, schema string, table stri
 	tiBinlog *pb.Binlog, pv *pb.PrewriteValue) (slaveBinlog *obinlog.Binlog, err error) {
 	slaveBinlog = new(obinlog.Binlog)
 	if tiBinlog.DdlJobId > 0 { // DDL
-		slaveBinlog.Type = obinlog.BinlogType_DDL
-		slaveBinlog.CommitTs = tiBinlog.GetCommitTs()
-		slaveBinlog.DdlData = new(obinlog.DDLData)
-		slaveBinlog.DdlData.SchemaName = proto.String(schema)
-		slaveBinlog.DdlData.TableName = proto.String(table)
-		slaveBinlog.DdlData.DdlQuery = tiBinlog.GetDdlQuery()
+		slaveBinlog = &obinlog.Binlog{
+			Type:     obinlog.BinlogType_DDL,
+			CommitTs: tiBinlog.GetCommitTs(),
+			DdlData: &obinlog.DDLData{
+				SchemaName: proto.String(schema),
+				TableName:  proto.String(table),
+				DdlQuery:   tiBinlog.GetDdlQuery(),
+			},
+		}
 	} else {
-		slaveBinlog.Type = obinlog.BinlogType_DML
-		slaveBinlog.CommitTs = tiBinlog.GetCommitTs()
-		slaveBinlog.DmlData = new(obinlog.DMLData)
+		slaveBinlog = &obinlog.Binlog{
+			Type:     obinlog.BinlogType_DML,
+			CommitTs: tiBinlog.GetCommitTs(),
+			DmlData:  new(obinlog.DMLData),
+		}
 
 		for _, mut := range pv.GetMutations() {
 			var info *model.TableInfo

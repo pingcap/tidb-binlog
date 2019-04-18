@@ -151,7 +151,7 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 
 	// should get 3 binlog item
 	interceptSyncer := syncer.dsyncer.(*interceptSyncer)
-	c.Assert(len(interceptSyncer.items), check.Equals, 3)
+	c.Assert(interceptSyncer.items, check.HasLen, 3)
 
 	// check checkpoint ts
 	c.Assert(cp.TS(), check.Equals, commitTS)

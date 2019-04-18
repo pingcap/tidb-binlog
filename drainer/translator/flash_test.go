@@ -34,11 +34,9 @@ func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 		binlog := testFlashGenInsertBinlog(c, table, rowDatas)
 		sql, vals, err := GenFlashInsertSQL(schema, table, binlog, genCommitTS(i))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals), Equals, expectedValCounts[i])
+		c.Assert(vals, HasLen, expectedValCounts[i])
 		c.Assert(sql, Equals, expectedSQLs[i])
-		for index := range vals {
-			c.Assert(vals[index], DeepEquals, expected[index])
-		}
+		c.Assert(vals, DeepEquals, expected)
 	}
 
 	table := testGenTable("normal")
@@ -70,9 +68,7 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(len(vals), Equals, expectedValCounts[i])
 		c.Assert(sql, Equals, expectedSQLs[i])
-		for index := range vals {
-			c.Assert(vals[index], DeepEquals, newExpected[index])
-		}
+		c.Assert(vals, DeepEquals, newExpected)
 	}
 
 	table := testGenTable("normal")
@@ -98,9 +94,7 @@ func (t *testTranslatorSuite) TestFlashGenDeleteSQLs(c *C) {
 		c.Assert(err, IsNil)
 		c.Assert(len(vals), Equals, expectedValCounts[i])
 		c.Assert(sql, Equals, expectedSQLs[i])
-		for index := range vals {
-			c.Assert(vals[index], DeepEquals, expected[index])
-		}
+		c.Assert(vals, DeepEquals, expected)
 	}
 
 	table := testGenTable("normal")

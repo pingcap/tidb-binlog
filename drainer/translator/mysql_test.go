@@ -40,7 +40,7 @@ func (t *testMysqlSuite) testDML(c *check.C, tp loader.DMLType) {
 	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(len(txn.DMLs), check.Equals, 1)
+	c.Assert(txn.DMLs, check.HasLen, 1)
 	c.Assert(txn.DDL, check.IsNil)
 
 	dml := txn.DMLs[0]
@@ -76,13 +76,13 @@ func (t *testMysqlSuite) TestDelete(c *check.C) {
 }
 
 func checkMysqlColumns(c *check.C, info *model.TableInfo, dml *loader.DML, datums []types.Datum, oldDatums []types.Datum) {
-	for i := 0; i < len(info.Columns); i++ {
-		myValue := dml.Values[info.Columns[i].Name.O]
-		checkMysqlColumn(c, info.Columns[i], myValue, datums[i])
+	for i, column := range info.Columns {
+		myValue := dml.Values[column.Name.O]
+		checkMysqlColumn(c, column, myValue, datums[i])
 
 		if oldDatums != nil {
-			myValue := dml.OldValues[info.Columns[i].Name.O]
-			checkMysqlColumn(c, info.Columns[i], myValue, oldDatums[i])
+			myValue := dml.OldValues[column.Name.O]
+			checkMysqlColumn(c, column, myValue, oldDatums[i])
 		}
 	}
 }

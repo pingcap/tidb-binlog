@@ -136,10 +136,9 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						Values:   make(map[string]interface{}),
 					}
 					txn.DMLs = append(txn.DMLs, dml)
-					for i := 0; i < len(names); i++ {
-						dml.Values[names[i]] = args[i]
+					for i, name := range names {
+						dml.Values[name] = args[i]
 					}
-
 				case tipb.MutationType_Update:
 					names, args, oldArgs, err := genMysqlUpdate(schema, info, row)
 					if err != nil {
@@ -154,9 +153,9 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						OldValues: make(map[string]interface{}),
 					}
 					txn.DMLs = append(txn.DMLs, dml)
-					for i := 0; i < len(names); i++ {
-						dml.Values[names[i]] = args[i]
-						dml.OldValues[names[i]] = oldArgs[i]
+					for i, name := range names {
+						dml.Values[name] = args[i]
+						dml.OldValues[name] = oldArgs[i]
 					}
 
 				case tipb.MutationType_DeleteRow:
@@ -172,8 +171,8 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						Values:   make(map[string]interface{}),
 					}
 					txn.DMLs = append(txn.DMLs, dml)
-					for i := 0; i < len(names); i++ {
-						dml.Values[names[i]] = args[i]
+					for i, name := range names {
+						dml.Values[name] = args[i]
 					}
 
 				default:

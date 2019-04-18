@@ -96,8 +96,7 @@ func (s *flashSuite) TestFlushByTimeLimit(c *check.C) {
 	case <-syncer.Successes():
 		break
 	case <-time.After(time.Second * 5):
-		c.Log("time out to get from Successes")
-		c.FailNow()
+		c.Fatal("time out to get from Successes")
 	}
 }
 
