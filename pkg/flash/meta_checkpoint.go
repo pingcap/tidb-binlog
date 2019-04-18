@@ -107,6 +107,6 @@ func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64) {
 
 func (f *MetaCheckpoint) removePendingCPs(to int) {
 	newPendingCP := make([]*checkpoint, 0, len(f.pendingCPs)-to)
-	copy(newPendingCP, f.pendingCPs[to:])
+	newPendingCP = append(newPendingCP, f.pendingCPs[to:]...)
 	f.pendingCPs = newPendingCP
 }

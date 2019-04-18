@@ -38,8 +38,17 @@ func NewDefaultConfig() *Config {
 
 // Client is a simple wrapper for zk.
 type Client struct {
-	conn *zk.Conn
+	conn Conn
 	conf *Config
+}
+
+// Conn is an interface abstracting away the zookeeper connection.
+//
+// The standard `*zk.Conn` type implements this interface.
+type Conn interface {
+	Close()
+	Children(path string) ([]string, *zk.Stat, error)
+	Get(path string) ([]byte, *zk.Stat, error)
 }
 
 // New creates a instance of Client.
@@ -74,6 +83,14 @@ func NewFromConnectionString(connectionString string, dialTimeout, sessionTimeou
 		conf.SessionTimeout = sessionTimeout
 	}
 	return New(nodes, conf)
+}
+
+// NewWithConnection creates a Client with an existing zookeeper connection.
+func NewWithConnection(conn Conn, conf *Config) *Client {
+	if conf == nil {
+		conf = NewDefaultConfig()
+	}
+	return &Client{conn, conf}
 }
 
 // Close closes zookeeper client.
