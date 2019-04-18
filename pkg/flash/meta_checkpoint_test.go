@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 )
 
+// TestClient hook up gocheck into the "go test" runner.
 func TestClient(t *testing.T) {
 	TestingT(t)
 }

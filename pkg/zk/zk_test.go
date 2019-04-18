@@ -7,7 +7,6 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/zk"
-	// gzk "github.com/samuel/go-zookeeper/zk"
 )
 
 func TestClient(t *testing.T) {
