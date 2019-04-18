@@ -10,6 +10,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/compress"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 // Decoder is an interface wraps basic Decode method which decode binlog.Entity into binlogBuffer.
@@ -123,6 +124,21 @@ func Decode(r io.Reader) (payload []byte, length int64, err error) {
 	// len(magic) + len(size) + len(payload) + len(crc)
 	length = 4 + 8 + size + 4
 	return payload, length, nil
+}
+
+// DecodeBinlog returns binlog and bytes read from io.Reader
+func DecodeBinlog(r io.Reader) (*pb.Binlog, int64, error) {
+	payload, length, err := Decode(r)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+
+	binlog := &pb.Binlog{}
+	err = binlog.Unmarshal(payload)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return binlog, length, nil
 }
 
 // NewReader returns a reader from file.

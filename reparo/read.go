@@ -99,7 +99,7 @@ func (r *dirPbReader) read() (binlog *pb.Binlog, err error) {
 	}
 
 	for {
-		binlog, _, err = Decode(r.reader)
+		binlog, _, err = bf.DecodeBinlog(r.reader)
 		if err == nil {
 			if !isAcceptableBinlog(binlog, r.startTS, r.endTS) {
 				continue

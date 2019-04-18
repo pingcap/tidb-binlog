@@ -34,3 +34,21 @@ func (s *decoderSuite) TestDecode(c *check.C) {
 	_, _, err = decoder.Decode()
 	c.Assert(err, check.Equals, io.ErrUnexpectedEOF)
 }
+
+func (s *decoderSuite) TestDecodeBinlog(c *check.C) {
+	binlog := &pb.Binlog{
+		Tp:       pb.BinlogType_DDL,
+		CommitTs: 1000000000,
+	}
+
+	data, err := binlog.Marshal()
+	c.Assert(err, check.IsNil)
+
+	data = Encode(data)
+	reader := bytes.NewReader(data)
+
+	decodeBinlog, n, err := DecodeBinlog(reader)
+	c.Assert(err, check.IsNil)
+	c.Assert(int(n), check.Equals, len(data))
+	c.Assert(decodeBinlog, check.DeepEquals, binlog)
+}

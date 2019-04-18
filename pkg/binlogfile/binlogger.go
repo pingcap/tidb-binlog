@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ngaut/log"
@@ -67,6 +68,9 @@ type binlogger struct {
 	file    *file.LockedFile
 	dirLock *file.LockedFile
 	mutex   sync.Mutex
+
+	// if compressing is 1 meaning the binlog file is in compressing
+	compressing int32
 }
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
@@ -477,5 +481,47 @@ func seekBinlog(f *os.File, offset int64) (int64, error) {
 		// hard code
 		offset += int64(tailLength)
 		header[0], header[1], header[2] = tail[tailLength-3], tail[tailLength-2], tail[tailLength-1]
+	}
+}
+
+// CompressFile compresses the old binlog files
+func (b *binlogger) CompressFile() {
+	if b.codec == compress.CompressionNone {
+		return
+	}
+
+	if atomic.LoadInt32(&b.compressing) == 1 {
+		log.Debug("binlog file is in compressing")
+		return
+	}
+
+	atomic.StoreInt32(&b.compressing, 1)
+	defer atomic.StoreInt32(&b.compressing, 0)
+
+	names, err := ReadBinlogNames(b.dir)
+	if err != nil {
+		log.Error("read binlog files error:", names)
+		return
+	}
+
+	if len(names) == 0 {
+		return
+	}
+
+	// skip the latest binlog file
+	for _, name := range names[:len(names)-1] {
+		fileName := path.Join(b.dir, name)
+		
+		if compress.IsCompressFile(fileName) {
+			continue
+		}
+
+		startT := time.Now()
+		_, err := compress.CompressFile(fileName, b.codec)
+		if err != nil {
+			log.Errorf("compress file %s failed %v", fileName, err)
+			return
+		}
+		log.Infof("compress file %s cost %v", fileName, time.Since(startT))
 	}
 }

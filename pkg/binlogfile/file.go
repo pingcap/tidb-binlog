@@ -3,6 +3,8 @@ package binlogfile
 import (
 	"fmt"
 	"os"
+	"io"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -173,4 +175,39 @@ func BinlogName(index uint64) string {
 // binlogNameWithDateTime creates a binlog file name.
 func binlogNameWithDateTime(index uint64, datetime time.Time) string {
 	return fmt.Sprintf("binlog-%016d-%s", index, datetime.Format(datetimeFormat))
+}
+
+// GetFirstBinlogCommitTS return the first binlog's commit ts in a pb file.
+func GetFirstBinlogCommitTS(filename string) (int64, error) {
+	_, binlogFileName := path.Split(filename)
+	_, ts, err := ParseBinlogName(binlogFileName)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if ts > 0 {
+		return ts, nil
+	}
+
+	fd, err := os.OpenFile(filename, os.O_RDONLY, 0600)
+	if err != nil {
+		return 0, errors.Annotatef(err, "open file %s error", filename)
+	}
+	defer fd.Close()
+
+	// get the first binlog in file
+	r, err := NewReader(fd)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	binlog, _, err := DecodeBinlog(r)
+	if errors.Cause(err) == io.EOF {
+		log.Warnf("no binlog find in %s", filename)
+		return 0, nil
+	}
+	if err != nil {
+		return 0, errors.Annotatef(err, "decode binlog error")
+	}
+
+	return binlog.CommitTs, nil
 }

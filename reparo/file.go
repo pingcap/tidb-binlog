@@ -1,8 +1,6 @@
 package reparo
 
 import (
-	"io"
-	"os"
 	"path"
 
 	"github.com/ngaut/log"
@@ -41,7 +39,7 @@ func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, erro
 	}
 
 	for _, file := range fileNames {
-		ts, err := getFirstBinlogCommitTS(file)
+		ts, err := bf.GetFirstBinlogCommitTS(file)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -61,38 +59,4 @@ func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, erro
 
 	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, startTS, endTS)
 	return binlogFiles, nil
-}
-
-func getFirstBinlogCommitTS(filename string) (int64, error) {
-	_, binlogFileName := path.Split(filename)
-	_, ts, err := bf.ParseBinlogName(binlogFileName)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	if ts > 0 {
-		return ts, nil
-	}
-
-	fd, err := os.OpenFile(filename, os.O_RDONLY, 0600)
-	if err != nil {
-		return 0, errors.Annotatef(err, "open file %s error", filename)
-	}
-	defer fd.Close()
-
-	// get the first binlog in file
-	r, err := bf.NewReader(fd)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	binlog, _, err := Decode(r)
-	if errors.Cause(err) == io.EOF {
-		log.Warnf("no binlog find in %s", filename)
-		return 0, nil
-	}
-	if err != nil {
-		return 0, errors.Annotatef(err, "decode binlog error")
-	}
-
-	return binlog.CommitTs, nil
 }

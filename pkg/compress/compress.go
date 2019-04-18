@@ -117,6 +117,12 @@ func CompressGZIPFile(filename string) (gzipFileName string, err error) {
 	return gzipFileName, err
 }
 
+// IsCompressFile returns true if file is compressed.
+func IsCompressFile(filename string) bool {
+	// now only support gzip
+	return IsGzipCompressFile(filename)
+}
+
 // IsCompressFile returns true if file name end with ".tar.gz"
 func IsGzipCompressFile(filename string) bool {
 	return strings.HasSuffix(filename, gzipFileSuffix)
