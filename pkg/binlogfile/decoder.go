@@ -133,7 +133,7 @@ func NewReader(f *os.File) (r io.Reader, err error) {
 			return nil, errors.Trace(err)
 		}
 	} else {
-		r = io.Reader(f)
+		r = bufio.NewReader(f)
 	}
 
 	return r, nil
