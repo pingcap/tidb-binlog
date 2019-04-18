@@ -37,7 +37,7 @@ import (
 )
 
 var (
-	notifyDrainerTimeout = time.Second * 10
+	notifyDrainerTimeout     = time.Second * 10
 	serverInfoOutputInterval = time.Second * 10
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
