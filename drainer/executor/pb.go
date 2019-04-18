@@ -2,6 +2,7 @@ package executor
 
 import (
 	"time"
+	"context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
@@ -16,7 +17,7 @@ type pbExecutor struct {
 	*baseError
 }
 
-func newPB(cfg *DBConfig) (Executor, error) {
+func newPB(ctx context.Context, cfg *DBConfig) (Executor, error) {
 	codec := compress.ToCompressionCodec(cfg.Compression)
 	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, codec)
 	if err != nil {
@@ -28,7 +29,7 @@ func newPB(cfg *DBConfig) (Executor, error) {
 		binlogger: binlogger,
 		baseError: newBaseError(),
 	}
-	newPbExecutor.compressFile()
+	newPbExecutor.compressFile(ctx)
 	return newPbExecutor, nil
 }
 
@@ -68,12 +69,14 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 	return errors.Trace(err)
 }
 
-func (p *pbExecutor) compressFile() {
+func (p *pbExecutor) compressFile(ctx context.Context) {
 	go func() {
 		for {
 			select {
 			case <-time.After(time.Hour):
 				p.binlogger.CompressFile()
+			case <- ctx.Done():
+				return
 			}
 		}
 	}()

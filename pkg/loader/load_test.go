@@ -2,6 +2,7 @@ package loader
 
 import (
 	"database/sql"
+
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
 )

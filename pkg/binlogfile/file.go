@@ -195,7 +195,7 @@ func GetFirstBinlogCommitTS(filename string) (int64, error) {
 	defer fd.Close()
 
 	// get the first binlog in file
-	r, err := NewReader(fd)
+	r, err := NewReaderFromFile(fd)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

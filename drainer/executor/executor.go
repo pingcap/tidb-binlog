@@ -1,6 +1,8 @@
 package executor
 
 import (
+	"context"
+
 	"github.com/pingcap/errors"
 )
 
@@ -15,12 +17,12 @@ type Executor interface {
 }
 
 // New returns the an Executor instance by given name
-func New(name string, cfg *DBConfig, sqlMode *string) (Executor, error) {
+func New(ctx context.Context, name string, cfg *DBConfig, sqlMode *string) (Executor, error) {
 	switch name {
 	case "mysql", "tidb":
 		return newMysql(cfg, sqlMode)
 	case "pb":
-		return newPB(cfg)
+		return newPB(ctx, cfg)
 	case "flash":
 		return newFlash(cfg)
 	case "kafka":

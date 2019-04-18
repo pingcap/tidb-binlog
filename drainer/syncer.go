@@ -419,7 +419,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		return errors.Trace(err)
 	}
 
-	s.executors, err = createExecutors(s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount, s.cfg.StrSQLMode)
+	s.executors, err = createExecutors(s.ctx, s.cfg.DestDBType, s.cfg.To, s.cfg.WorkerCount, s.cfg.StrSQLMode)
 	if err != nil {
 		return errors.Trace(err)
 	}

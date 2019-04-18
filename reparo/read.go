@@ -83,7 +83,7 @@ func (r *dirPbReader) nextFile() (err error) {
 		return errors.Annotatef(err, "open file %s error", bfile)
 	}
 
-	r.reader, err = bf.NewReader(r.file)
+	r.reader, err = bf.NewReaderFromFile(r.file)
 	if err != nil {
 		return errors.Trace(err)
 	}

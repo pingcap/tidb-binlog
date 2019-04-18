@@ -25,7 +25,7 @@ type decoder struct {
 
 // NewDecoder creates a new Decoder.
 func NewDecoder(f *os.File, initOffset int64) (Decoder, error) {
-	r, err := NewReader(f)
+	r, err := NewReaderFromFile(f)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -141,8 +141,8 @@ func DecodeBinlog(r io.Reader) (*pb.Binlog, int64, error) {
 	return binlog, length, nil
 }
 
-// NewReader returns a reader from file.
-func NewReader(f *os.File) (r io.Reader, err error) {
+// NewReaderFromFile returns a reader from file.
+func NewReaderFromFile(f *os.File) (r io.Reader, err error) {
 	if compress.IsGzipCompressFile(f.Name()) {
 		r, err = gzip.NewReader(f)
 		if err != nil {
