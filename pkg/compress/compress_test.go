@@ -1,4 +1,4 @@
-package compress
+package compress_test
 
 import (
 	"compress/gzip"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/compress"
 )
 
 func TestClient(t *testing.T) {
@@ -38,10 +39,10 @@ func (t *testCompressSuite) TestIsGzipCompressFile(c *C) {
 	}
 
 	for _, testCase := range testCases {
-		isComrepressFile := IsCompressFile(testCase.filename)
+		isComrepressFile := compress.IsCompressFile(testCase.filename)
 		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
 
-		isComrepressFile = IsGzipCompressFile(testCase.filename)
+		isComrepressFile = compress.IsGzipCompressFile(testCase.filename)
 		c.Assert(isComrepressFile, Equals, testCase.isComrepressFile)
 	}
 }
@@ -58,7 +59,7 @@ func (t *testCompressSuite) TestCompressFile(c *C) {
 	file.Close()
 
 	compressFileName := path.Join(dir, "compress-binlog.tar.gz")
-	err = CompressGZIPFile(filename, compressFileName)
+	err = compress.CompressGZIPFile(filename, compressFileName)
 	c.Assert(err, IsNil)
 
 	f, err := os.OpenFile(compressFileName, os.O_RDONLY, 0600)
@@ -73,6 +74,13 @@ func (t *testCompressSuite) TestCompressFile(c *C) {
 }
 
 func (t *testCompressSuite) TestGetCompressFileNameWithTS(c *C) {
-	filename := GetCompressFileNameWithTS("binlog-1", ".gzip", 123)
+	filename := compress.GetCompressFileNameWithTS("binlog-1", ".gzip", 123)
 	c.Assert(filename, Equals, "binlog-1-123.gzip")
 }
+
+func (s *testCompressSuite) TestParseCompressCodec(c *C) {
+	c.Assert(compress.ToCompressionCodec(""), Equals, compress.CompressionNone)
+	c.Assert(compress.ToCompressionCodec("gzip"), Equals, compress.CompressionGZIP)
+	c.Assert(compress.ToCompressionCodec("zstd"), Not(Equals), compress.CompressionGZIP)
+}
+

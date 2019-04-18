@@ -146,7 +146,7 @@ func NodesStatusFromEtcdNode(root *etcd.Node) ([]*Status, error) {
 // AnalyzeNodeID returns nodeID by analyze key path.
 func AnalyzeNodeID(key string) string {
 	// the key looks like: /tidb-binlog/v1/pumps/nodeID, or /tidb-binlog/pumps/nodeID for old binlog version.
-	paths := strings.Split(key, "/")
+	paths := strings.Split(strings.TrimLeft(key, "/"), "/")
 	nodeIDOffset := 3
 
 	if len(paths) >= 2 {
