@@ -64,6 +64,15 @@ func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, erro
 }
 
 func getFirstBinlogCommitTS(filename string) (int64, error) {
+	_, binlogFileName := path.Split(filename)
+	_, ts, err := bf.ParseBinlogName(binlogFileName)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if ts > 0 {
+		return ts, nil
+	}
+
 	fd, err := os.OpenFile(filename, os.O_RDONLY, 0600)
 	if err != nil {
 		return 0, errors.Annotatef(err, "open file %s error", filename)

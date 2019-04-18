@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -19,14 +20,15 @@ import (
 
 // pbTranslator translates TiDB binlog to self-description protobuf
 type pbTranslator struct {
+	sqlMode mysql.SQLMode
 }
 
 func init() {
 	Register("pb", &pbTranslator{})
 }
 
-func (p *pbTranslator) SetConfig(bool) {
-	// do nothing
+func (p *pbTranslator) SetConfig(_ bool, sqlMode mysql.SQLMode) {
+	p.sqlMode = sqlMode
 }
 
 func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -77,7 +79,7 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 }
 
 func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
-	columns := table.Columns
+	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -182,7 +184,9 @@ func (p *pbTranslator) GenDeleteSQLs(schema string, table *model.TableInfo, rows
 }
 
 func (p *pbTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	ddlParser := parser.New()
+	ddlParser.SetSQLMode(p.sqlMode)
+	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}

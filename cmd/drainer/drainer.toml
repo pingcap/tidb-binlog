@@ -27,8 +27,10 @@ compressor = ""
 # syncer Configuration.
 [syncer]
 
-# disable sync these schema
-ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+# Assume the upstream sql-mode.
+# If this is setted , will use the same sql-mode to parse DDL statment, and set the same sql-mode at downstream when db-type is mysql.
+# If this is not setted, it will not set any sql-mode.
+# sql-mode = "STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
 
 # number of binlog events in a transaction batch
 txn-batch = 20
@@ -47,10 +49,14 @@ safe-mode = false
 # valid values are "mysql", "pb", "tidb", "flash", "kafka"
 db-type = "mysql"
 
+# disable sync these schema
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regex expression , start with '~' declare use regex expression.
 #
 #replicate-do-db = ["~^b.*","s1"]
+
 #[[syncer.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "log"
@@ -58,6 +64,11 @@ db-type = "mysql"
 #[[syncer.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "~^a.*"
+
+# disable sync these table
+#[[syncer.ignore-table]]
+#db-name = "test"
+#tbl-name = "log"
 
 # the downstream mysql protocol database
 [syncer.to]

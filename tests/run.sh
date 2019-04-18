@@ -4,7 +4,7 @@ set -eu
 
 OUT_DIR=/tmp/tidb_binlog_test
 
-mkdir $OUT_DIR || true
+mkdir -p $OUT_DIR || true
 # to the dir of this script
 cd "$(dirname "$0")"
 

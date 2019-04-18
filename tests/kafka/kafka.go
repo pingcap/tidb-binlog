@@ -75,12 +75,8 @@ func main() {
 			select {
 			case msg := <-breader.Messages():
 				str := msg.Binlog.String()
-				if len(str) > 2000 {
-					str = str[:2000] + "..."
-				}
-				log.Debug("recv: ", str)
-				binlog := msg.Binlog
-				ld.Input() <- loader.SlaveBinlogToTxn(binlog)
+				log.Debugf("recv: %.2000s", str)
+				ld.Input() <- loader.SlaveBinlogToTxn(msg.Binlog)
 			case txn := <-ld.Successes():
 				log.Debug("succ: ", txn)
 			}

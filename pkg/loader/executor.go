@@ -9,6 +9,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,22 +39,6 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
 	e.queryHistogramVec = queryHistogramVec
 	return e
-}
-
-func groupByTable(dmls []*DML) (tables map[string][]*DML) {
-	if len(dmls) == 0 {
-		return nil
-	}
-
-	tables = make(map[string][]*DML)
-	for _, dml := range dmls {
-		table := quoteSchema(dml.Database, dml.Table)
-		tableDMLs := tables[table]
-		tableDMLs = append(tableDMLs, dml)
-		tables[table] = tableDMLs
-	}
-
-	return
 }
 
 func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration) error {
@@ -86,6 +71,16 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	}
 
 	return res, err
+}
+
+func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
+	res, err = tx.exec(query, args...)
+	if err != nil {
+		log.Errorf("Failed Exec: %v, query: %s, args: %v", err, query, args)
+		tx.Rollback()
+		err = errors.Trace(err)
+	}
+	return
 }
 
 // wrap of sql.Tx.Commit()
@@ -127,10 +122,8 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 		return errors.Trace(err)
 	}
 	sql := sqls.String()
-	_, err = tx.exec(sql, argss...)
+	_, err = tx.autoRollbackExec(sql, argss...)
 	if err != nil {
-		log.Error("exec fail sql: %s, args: %v", sql, argss)
-		tx.Rollback()
 		return errors.Trace(err)
 	}
 
@@ -162,22 +155,19 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		builder.WriteString(holder)
 	}
 
-	var args []interface{}
+	args := make([]interface{}, 0, len(inserts)*len(info.columns))
 	for _, insert := range inserts {
 		for _, name := range info.columns {
 			v := insert.Values[name]
 			args = append(args, v)
 		}
 	}
-
 	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.exec(builder.String(), args...)
+	_, err = tx.autoRollbackExec(builder.String(), args...)
 	if err != nil {
-		log.Errorf("exec fail sql: %s, args: %v, err: %v", builder.String(), args, err)
-		tx.Rollback()
 		return errors.Trace(err)
 	}
 	err = tx.commit()
@@ -249,20 +239,10 @@ func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error
 }
 
 func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
-	var err error
-
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
-		var i int
-		for i = 0; i < retryNum; i++ {
-			if i > 0 {
-				time.Sleep(backoff)
-			}
-
-			err = e.singleExec(dmls, safeMode)
-			if err == nil {
-				break
-			}
-		}
+		err := util.RetryOnError(retryNum, backoff, "singleExec", func() error {
+			return e.singleExec(dmls, safeMode)
+		})
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -281,37 +261,29 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 
 			sql, args = dml.replaceSQL()
 			log.Debugf("exec: %s, args: %v", sql, args)
-			_, err = tx.exec(sql, args...)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		} else {
 			sql, args := dml.sql()
 			log.Debugf("exec dml sql: %s, args: %v", sql, args)
-			_, err := tx.exec(sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
-				log.Errorf("err: %v, exec dml sql: %s, args: %v", err, sql, args)
-				tx.Rollback()
 				return errors.Trace(err)
 			}
 		}

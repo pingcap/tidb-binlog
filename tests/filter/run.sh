@@ -29,11 +29,13 @@ run_sql "CREATE TABLE test.do_start1(id int);"
 run_sql "CREATE TABLE test.do_name(id int);"
 run_sql "CREATE TABLE test.do_not_start1(id int);"
 run_sql "CREATE TABLE test.do_not_name(id int);"
+run_sql "CREATE TABLE test.do_ignore_name(id int);"
 
 run_sql "INSERT INTO test.do_start1(id) VALUES (1);"
 run_sql "INSERT INTO test.do_name(id) VALUES (1);"
 run_sql "INSERT INTO test.do_not_start1(id) VALUES (1);"
 run_sql "INSERT INTO test.do_not_name(id) VALUES (1);"
+run_sql "INSERT INTO test.do_ignore_name(id) VALUES (1);"
 
 
 sleep 5
@@ -50,6 +52,7 @@ check_contains "Tables_in_test: do_start1"
 check_contains "Tables_in_test: do_name"
 check_not_contains "Tables_in_test: do_not_start1"
 check_not_contains "Tables_in_test: do_not_name"
+check_not_contains "Tables_in_test: do_ignore_name"
 
 # check DML
 down_run_sql "SELECT count(*) FROM test.do_start1;"

@@ -13,12 +13,12 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 const implicitColID = -1
@@ -27,6 +27,7 @@ const implicitColID = -1
 type mysqlTranslator struct {
 	// safeMode is a mode for translate sql, will translate update to delete and replace, and translate insert to replace.
 	safeMode int32
+	sqlMode  parsermysql.SQLMode
 }
 
 func init() {
@@ -34,12 +35,13 @@ func init() {
 	Register("tidb", &mysqlTranslator{})
 }
 
-func (m *mysqlTranslator) SetConfig(safeMode bool) {
+func (m *mysqlTranslator) SetConfig(safeMode bool, sqlMode parsermysql.SQLMode) {
 	if safeMode {
 		atomic.StoreInt32(&m.safeMode, 1)
 	} else {
 		atomic.StoreInt32(&m.safeMode, 0)
 	}
+	m.sqlMode = sqlMode
 }
 
 func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
@@ -100,7 +102,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		return sqls, keys, values, safeMode, err
 	}
 
-	columns := table.Columns
+	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -164,7 +166,7 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 }
 
 func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
-	columns := table.Columns
+	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -272,7 +274,9 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	ddlParser := parser.New()
+	ddlParser.SetSQLMode(m.sqlMode)
+	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -592,65 +596,4 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	return data, nil
-}
-
-// DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
-// Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	if b == nil {
-		return nil, nil, nil
-	}
-	if b[0] == codec.NilFlag {
-		return nil, nil, nil
-	}
-
-	cnt := 0
-	var (
-		data   []byte
-		err    error
-		oldRow = make(map[int64]types.Datum, len(cols))
-		newRow = make(map[int64]types.Datum, len(cols))
-	)
-	for len(b) > 0 {
-		// Get col id.
-		data, b, err = codec.CutOne(b)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		_, cid, err := codec.DecodeOne(data)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		// Get col value.
-		data, b, err = codec.CutOne(b)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		id := cid.GetInt64()
-		ft, ok := cols[id]
-		if ok {
-			v, err := tablecodec.DecodeColumnValue(data, ft, loc)
-			if err != nil {
-				return nil, nil, errors.Trace(err)
-			}
-
-			if _, ok := oldRow[id]; ok {
-				newRow[id] = v
-			} else {
-				oldRow[id] = v
-			}
-
-			cnt++
-			if cnt == len(cols)*2 {
-				// Get enough data.
-				break
-			}
-		}
-	}
-
-	if cnt != len(cols)*2 || len(newRow) != len(oldRow) {
-		return nil, nil, errors.Errorf(" row data is corruption %v", b)
-	}
-
-	return oldRow, newRow, nil
 }

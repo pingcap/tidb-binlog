@@ -35,6 +35,16 @@ check_contains 'sum(a): 12'
 check_contains 'sum(b): 62'
 check_contains 'sum(c): 52'
 
+run_sql 'UPDATE gencol.gct SET c = b WHERE a = 7;'
+
+sleep 3
+
+down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
+check_contains 'count(*): 3'
+check_contains 'sum(a): 12'
+check_contains 'sum(b): 62'
+check_contains 'sum(c): 93'
+
 # Verify DELETE statements works with generated columns...
 
 run_sql 'DELETE FROM gencol.gct WHERE b = 9;'
@@ -45,6 +55,6 @@ down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
 check_contains 'count(*): 2'
 check_contains 'sum(a): 9'
 check_contains 'sum(b): 53'
-check_contains 'sum(c): 20'
+check_contains 'sum(c): 61'
 
 killall drainer

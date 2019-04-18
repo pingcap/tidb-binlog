@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	tmysql "github.com/pingcap/tidb/mysql"
@@ -47,18 +49,9 @@ func ExecuteSQLsWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, i
 		retryCount = MaxDDLRetryCount
 	}
 
-	var err error
-	for i := 0; i < retryCount; i++ {
-		if i > 0 {
-			//log.Warnf("exec sql retry %d - %v", i, sqls)
-			time.Sleep(RetryWaitTime)
-		}
-
-		err = ExecuteTxnWithHistogram(db, sqls, args, hist)
-		if err == nil {
-			return nil
-		}
-	}
+	err := util.RetryOnError(retryCount, RetryWaitTime, "[SQL]", func() error {
+		return ExecuteTxnWithHistogram(db, sqls, args, hist)
+	})
 
 	return errors.Trace(err)
 }
@@ -116,15 +109,24 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 	return nil
 }
 
-// OpenDB creates an instance of sql.DB.
-func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+// OpenDBWithSQLMode creates an instance of sql.DB.
+func OpenDBWithSQLMode(proto string, host string, port int, username string, password string, sqlMode *string) (*sql.DB, error) {
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&multiStatements=true", username, password, host, port)
+	if sqlMode != nil {
+		// same as "set sql_mode = '<sqlMode>'"
+		dbDSN += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
+	}
 	db, err := sql.Open(proto, dbDSN)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "dsn: %s", dbDSN)
 	}
 
 	return db, nil
+}
+
+// OpenDB creates an instance of sql.DB.
+func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
+	return OpenDBWithSQLMode(proto, host, port, username, password, nil)
 }
 
 // IgnoreDDLError checks the error can be ignored or not.
@@ -179,14 +181,14 @@ func GetTidbPosition(db *sql.DB) (int64, error) {
 		return 0, errors.New("get slave cluster's ts failed")
 	}
 
-	fields, err1 := ScanRow(rows)
-	if err1 != nil {
-		return 0, errors.Trace(err1)
+	fields, err := ScanRow(rows)
+	if err != nil {
+		return 0, errors.Trace(err)
 	}
 
-	ts, err1 := strconv.ParseInt(string(fields["Position"]), 10, 64)
-	if err1 != nil {
-		return 0, errors.Trace(err1)
+	ts, err := strconv.ParseInt(string(fields["Position"]), 10, 64)
+	if err != nil {
+		return 0, errors.Trace(err)
 	}
 	return ts, nil
 }
@@ -209,7 +211,7 @@ func ScanRow(rows *sql.Rows) (map[string][]byte, error) {
 		return nil, errors.Trace(err)
 	}
 
-	result := make(map[string][]byte)
+	result := make(map[string][]byte, len(colVals))
 	for i := range colVals {
 		result[cols[i]] = colVals[i]
 	}
@@ -248,16 +250,16 @@ func ParseCHAddr(addr string) ([]CHHostAndPort, error) {
 func composeCHDSN(host string, port int, username string, password string, dbName string, blockSize int) string {
 	dbDSN := fmt.Sprintf("tcp://%s:%d?", host, port)
 	if len(username) > 0 {
-		dbDSN = fmt.Sprintf("%susername=%s&", dbDSN, username)
+		dbDSN += fmt.Sprintf("username=%s&", username)
 	}
 	if len(password) > 0 {
-		dbDSN = fmt.Sprintf("%spassword=%s&", dbDSN, password)
+		dbDSN += fmt.Sprintf("password=%s&", password)
 	}
 	if len(dbName) > 0 {
-		dbDSN = fmt.Sprintf("%sdatabase=%s&", dbDSN, dbName)
+		dbDSN += fmt.Sprintf("database=%s&", dbName)
 	}
 	if blockSize > 0 {
-		dbDSN = fmt.Sprintf("%sblock_size=%d&", dbDSN, blockSize)
+		dbDSN += fmt.Sprintf("block_size=%d&", blockSize)
 	}
 	return dbDSN
 }
@@ -276,7 +278,7 @@ func OpenCH(host string, port int, username string, password string, dbName stri
 
 // QuoteSchema quote like `dbname`.`table` name
 func QuoteSchema(schema string, table string) string {
-	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
+	return fmt.Sprintf("%s.%s", QuoteName(schema), QuoteName(table))
 }
 
 // QuoteName quote name like `name`

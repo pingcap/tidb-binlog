@@ -109,6 +109,7 @@ func mustEqualStatus(c *C, r RegisrerTestClient, nodeID string, status *Status) 
 }
 
 type checkNodeExistsSuite struct{}
+
 var _ = Suite(&checkNodeExistsSuite{})
 
 func (s *checkNodeExistsSuite) TestNotExist(c *C) {

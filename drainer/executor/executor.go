@@ -15,10 +15,10 @@ type Executor interface {
 }
 
 // New returns the an Executor instance by given name
-func New(name string, cfg *DBConfig) (Executor, error) {
+func New(name string, cfg *DBConfig, sqlMode *string) (Executor, error) {
 	switch name {
 	case "mysql", "tidb":
-		return newMysql(cfg)
+		return newMysql(cfg, sqlMode)
 	case "pb":
 		return newPB(cfg)
 	case "flash":

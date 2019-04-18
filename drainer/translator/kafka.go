@@ -9,6 +9,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/mysql"
@@ -24,7 +25,7 @@ func init() {
 	Register("kafka", &kafkaTranslator{})
 }
 
-func (p *kafkaTranslator) SetConfig(bool) {
+func (p *kafkaTranslator) SetConfig(bool, parsermysql.SQLMode) {
 	// do nothing
 }
 
@@ -175,7 +176,8 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 }
 
 func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
+	columns := writableColumns(tableInfo)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 	oldDatums, newDatums, err := DecodeOldAndNewRow(raw, colsTypeMap, time.Local)
 	if err != nil {
 		return
