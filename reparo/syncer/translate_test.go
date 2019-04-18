@@ -107,7 +107,7 @@ func generateDMLEvents() []pb.Event {
 
 // generateColumns generates three columns for test, the last one used for update.
 func generateColumns() [][]byte {
-	colsBytes := make([][]byte, 0, 3)
+	allColBytes := make([][]byte, 0, 3)
 	
 	cols := []*pb.Column {
 		{
@@ -135,10 +135,10 @@ func generateColumns() [][]byte {
 			panic(err)
 		}
 
-		colsBytes = append(colsBytes, colBytes)
+		allColBytes = append(allColBytes, colBytes)
 	}
 
-	return colsBytes
+	return allColBytes
 }
 
 func encodeIntValue(value int64) []byte {
