@@ -13,7 +13,7 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	db, _, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 
-	syncer, err := newMysqlSyncer(db)
+	syncer, err := newMysqlSyncerFromSQLDB(db)
 	c.Assert(err, check.IsNil)
 
 	err = syncer.Close()

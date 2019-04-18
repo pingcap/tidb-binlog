@@ -3,8 +3,6 @@ package syncer
 import (
 	"fmt"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
@@ -21,11 +19,7 @@ type Syncer interface {
 func New(name string, cfg *DBConfig) (Syncer, error) {
 	switch name {
 	case "mysql":
-		db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return newMysqlSyncer(db)
+		return newMysqlSyncer(cfg)
 	case "print":
 		return newPrintSyncer()
 	case "memory":
