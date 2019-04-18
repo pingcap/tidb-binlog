@@ -72,3 +72,8 @@ func (t *testCompressSuite) TestCompressFile(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(data, DeepEquals, message)
 }
+
+func (t *testCompressSuite) TestGetCompressFileNameWithTS(c *C) {
+	filename := GetCompressFileNameWithTS("binlog-1", ".gzip", 123)
+	c.Assert(filename, Equals, "binlog-1-123.gzip")
+}
