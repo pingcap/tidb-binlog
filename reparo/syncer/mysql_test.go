@@ -1,8 +1,8 @@
 package syncer
 
 import (
-	"github.com/pingcap/check"
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/check"
 )
 
 type testMysqlSuite struct{}

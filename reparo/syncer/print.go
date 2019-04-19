@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
@@ -18,21 +19,21 @@ func newPrintSyncer() (*printSyncer, error) {
 }
 
 func (p *printSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
-	var info string
+	var info strings.Builder
 	switch pbBinlog.Tp {
 	case pb.BinlogType_DDL:
-		info = getDDLStr(pbBinlog)
+		info.WriteString(getDDLStr(pbBinlog))
 	case pb.BinlogType_DML:
 		for _, event := range pbBinlog.GetDmlData().GetEvents() {
-			header := getEventHeaderStr(&event)
-			info += header + getEventDataStr(&event)
+			info.WriteString(getEventHeaderStr(&event))
+			info.WriteString(getEventDataStr(&event))
 		}
 	default:
 		return errors.Errorf("unknown type: %v", pbBinlog.Tp)
 
 	}
 
-	fmt.Print(info)
+	fmt.Print(info.String())
 	cb(pbBinlog)
 
 	return nil
@@ -64,12 +65,12 @@ func getEventHeaderStr(event *pb.Event) string {
 }
 
 func getUpdateRowStr(row [][]byte) string {
-	var eventStr string
+	var rowStr strings.Builder
 	for _, col := range row {
-		eventStr += getUpdateColumnStr(col)
+		rowStr.WriteString(getUpdateColumnStr(col))
 	}
 
-	return eventStr
+	return rowStr.String()
 }
 
 func getUpdateColumnStr(column []byte) string {
@@ -97,12 +98,12 @@ func getUpdateColumnStr(column []byte) string {
 }
 
 func getInsertOrDeleteRowStr(row [][]byte) string {
-	var eventStr string
+	var rowStr strings.Builder
 	for _, col := range row {
-		eventStr += getInsertOrDeleteColumnStr(col)
+		rowStr.WriteString(getInsertOrDeleteColumnStr(col))
 	}
 
-	return eventStr
+	return rowStr.String()
 }
 
 func getInsertOrDeleteColumnStr(column []byte) string {

@@ -65,7 +65,7 @@ func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	col3Str := getUpdateColumnStr(cols[2])
 	c.Assert(col3Str, check.Equals, "c(varchar): test => abc\n")
 
-	insertEvent := &pb.Event {
+	insertEvent := &pb.Event{
 		Tp:  pb.EventType_Insert,
 		Row: [][]byte{cols[0], cols[1]},
 	}
@@ -74,22 +74,21 @@ func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	rowStr := getInsertOrDeleteRowStr(insertEvent.Row)
 	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
-	deleteEvent := &pb.Event {
+	deleteEvent := &pb.Event{
 		Tp:  pb.EventType_Delete,
-		Row: [][]byte{cols[0], cols[1]}, 
+		Row: [][]byte{cols[0], cols[1]},
 	}
 	eventStr = getEventDataStr(deleteEvent)
 	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 	rowStr = getInsertOrDeleteRowStr(deleteEvent.Row)
 	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
 
-	updateEvent := &pb.Event {
+	updateEvent := &pb.Event{
 		Tp:  pb.EventType_Update,
-		Row: [][]byte{cols[2]}, 
+		Row: [][]byte{cols[2]},
 	}
 	eventStr = getEventDataStr(updateEvent)
 	c.Assert(eventStr, check.Equals, "c(varchar): test => abc\n")
 	rowStr = getUpdateRowStr(updateEvent.Row)
 	c.Assert(rowStr, check.Equals, "c(varchar): test => abc\n")
 }
-

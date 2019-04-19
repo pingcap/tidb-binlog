@@ -18,26 +18,26 @@ var _ = check.Suite(&testTranslateSuite{})
 
 func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	tests := map[*pb.Binlog]*loader.Txn{
-		&pb.Binlog{
+		{
 			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("use db1; create table table1(id int)"),
-		}: &loader.Txn{
+		}: {
 			DDL: &loader.DDL{
 				SQL: "use db1; create table table1(id int)",
 			},
 		},
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
 				Events: generateDMLEvents(),
 			},
-		}: &loader.Txn{
+		}: {
 			DMLs: []*loader.DML{
 				{
 					Database: "test",
 					Table:    "t1",
 					Tp:       loader.InsertDMLType,
-					Values:   map[string]interface{}{
+					Values: map[string]interface{}{
 						"a": int64(1),
 						"b": "test",
 					},
@@ -45,7 +45,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 					Database: "test",
 					Table:    "t1",
 					Tp:       loader.DeleteDMLType,
-					Values:   map[string]interface{}{
+					Values: map[string]interface{}{
 						"a": int64(1),
 						"b": "test",
 					},
@@ -53,10 +53,10 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 					Database: "test",
 					Table:    "t1",
 					Tp:       loader.UpdateDMLType,
-					Values:   map[string]interface{}{
+					Values: map[string]interface{}{
 						"c": "abc",
 					},
-					OldValues:   map[string]interface{}{
+					OldValues: map[string]interface{}{
 						"c": "test",
 					},
 				},
@@ -76,7 +76,7 @@ func (s *testTranslateSuite) TestGenColsAndArgs(c *check.C) {
 	cols, args, err := genColsAndArgs(generateColumns())
 	c.Assert(err, check.IsNil)
 	c.Assert(cols, check.DeepEquals, []string{"a", "b", "c"})
-	c.Assert(args, check.DeepEquals, []interface {}{int64(1), "test", "test"})
+	c.Assert(args, check.DeepEquals, []interface{}{int64(1), "test", "test"})
 }
 
 // generateDMLEvents generates three DML Events for test.
@@ -85,22 +85,22 @@ func generateDMLEvents() []pb.Event {
 	table := "t1"
 	cols := generateColumns()
 
-	return []pb.Event {
+	return []pb.Event{
 		{
-			Tp: pb.EventType_Insert,
+			Tp:         pb.EventType_Insert,
 			SchemaName: &schema,
-			TableName:  &table, 
-			Row: [][]byte{cols[0], cols[1]},
-		},{
-			Tp: pb.EventType_Delete,
+			TableName:  &table,
+			Row:        [][]byte{cols[0], cols[1]},
+		}, {
+			Tp:         pb.EventType_Delete,
 			SchemaName: &schema,
-			TableName:  &table, 
-			Row: [][]byte{cols[0], cols[1]},
-		},{
-			Tp: pb.EventType_Update,
+			TableName:  &table,
+			Row:        [][]byte{cols[0], cols[1]},
+		}, {
+			Tp:         pb.EventType_Update,
 			SchemaName: &schema,
-			TableName:  &table, 
-			Row: [][]byte{cols[2]},
+			TableName:  &table,
+			Row:        [][]byte{cols[2]},
 		},
 	}
 }
@@ -108,8 +108,8 @@ func generateDMLEvents() []pb.Event {
 // generateColumns generates three columns for test, the last one used for update.
 func generateColumns() [][]byte {
 	allColBytes := make([][]byte, 0, 3)
-	
-	cols := []*pb.Column {
+
+	cols := []*pb.Column{
 		{
 			Name:      "a",
 			Tp:        []byte{mysql.TypeInt24},
@@ -121,10 +121,10 @@ func generateColumns() [][]byte {
 			MysqlType: "varchar",
 			Value:     encodeBytesValue([]byte("test")),
 		}, {
-			Name:      "c",
-			Tp:        []byte{mysql.TypeVarchar},
-			MysqlType: "varchar",
-			Value:     encodeBytesValue([]byte("test")),
+			Name:         "c",
+			Tp:           []byte{mysql.TypeVarchar},
+			MysqlType:    "varchar",
+			Value:        encodeBytesValue([]byte("test")),
 			ChangedValue: encodeBytesValue([]byte("abc")),
 		},
 	}
