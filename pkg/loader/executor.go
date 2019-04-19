@@ -42,17 +42,9 @@ func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.Histogram
 }
 
 func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration) error {
-	var err error
-	for i := 0; i < retryNum; i++ {
-		if i > 0 {
-			time.Sleep(backoff)
-		}
-
-		err = e.execTableBatch(dmls)
-		if err == nil {
-			return nil
-		}
-	}
+	err := util.RetryOnError(retryNum, backoff, "execTableBatchRetry", func() error {
+		return e.execTableBatch(dmls)
+	})
 	return errors.Trace(err)
 }
 
