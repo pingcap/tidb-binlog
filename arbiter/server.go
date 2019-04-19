@@ -45,7 +45,6 @@ type Server struct {
 	// all txn commitTS <= finishTS has loaded to downstream
 	finishTS int64
 
-	metricsCancel context.CancelFunc
 	metrics       *metricClient
 
 	closed bool
@@ -160,13 +159,12 @@ func (s *Server) Close() error {
 func (s *Server) Run() error {
 	defer s.downDB.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// push metrics if need
 	if s.metrics != nil {
-		var ctx context.Context
-		ctx, s.metricsCancel = context.WithCancel(context.Background())
 		go s.metrics.Start(ctx, s.port)
-
-		defer s.metricsCancel()
 	}
 
 	var wg sync.WaitGroup
