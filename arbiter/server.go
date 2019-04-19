@@ -38,7 +38,7 @@ type Server struct {
 
 	load loader.Loader
 
-	checkpoint  *Checkpoint
+	checkpoint  Checkpoint
 	kafkaReader *reader.Reader
 	downDB      *sql.DB
 
