@@ -45,33 +45,29 @@ func GenFlashSQLs(infoGetter TableInfoGetter, pv *tipb.PrewriteValue, commitTS i
 				return nil, nil, errors.Trace(err)
 			}
 
+			var sql string
+			var args []interface{}
 			switch mutType {
 			case tipb.MutationType_Insert:
-				sql, args, err := GenFlashInsertSQL(schema, info, row, commitTS)
+				sql, args, err = GenFlashInsertSQL(schema, info, row, commitTS)
 				if err != nil {
 					return nil, nil, errors.Annotate(err, "gen insert sql fail")
 				}
-				sqls = append(sqls, sql)
-				argss = append(argss, args)
 			case tipb.MutationType_Update:
-				sql, args, err := GenFlashUpdateSQL(schema, info, row, commitTS)
+				sql, args, err = GenFlashUpdateSQL(schema, info, row, commitTS)
 				if err != nil {
 					return nil, nil, errors.Annotate(err, "gen update sql fail")
 				}
-				sqls = append(sqls, sql)
-				argss = append(argss, args)
-
 			case tipb.MutationType_DeleteRow:
-				sql, args, err := GenFlashDeleteSQL(schema, info, row, commitTS)
+				sql, args, err = GenFlashDeleteSQL(schema, info, row, commitTS)
 				if err != nil {
 					return nil, nil, errors.Annotate(err, "gen delete sql fail")
 				}
-				sqls = append(sqls, sql)
-				argss = append(argss, args)
-
 			default:
 				return nil, nil, errors.Errorf("unknown mutation type: %v", mutType)
 			}
+			sqls = append(sqls, sql)
+			argss = append(argss, args)
 		}
 
 	}

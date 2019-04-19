@@ -164,7 +164,6 @@ func closeSyncers(c *check.C, syncers []Syncer) {
 		err := syncer.Close()
 		c.Assert(err, check.IsNil)
 
-		tp := reflect.TypeOf(syncer)
-		c.Logf("close %v success", tp)
+		c.Logf("close %T success", syncer)
 	}
 }

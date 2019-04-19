@@ -221,10 +221,9 @@ func (e *FlashSyncer) Sync(item *Item) error {
 			return errors.Annotate(err, "gen ddl sql fail")
 		}
 
+		var args [][]interface{}
+		args = append(args, nil)
 		for _, db := range e.dbs {
-			var args [][]interface{}
-			args = append(args, nil)
-
 			e.err = pkgsql.ExecuteSQLs(db, []string{sql}, args, true)
 			if e.err != nil {
 				return errors.Trace(e.err)

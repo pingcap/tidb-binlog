@@ -111,17 +111,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(cp.TS()))))
 
-	tiStore, err := createTiStore(cfg.EtcdURLs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	jobs, err := loadHistoryDDLJobs(tiStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	syncer, err := NewSyncer(cp, cfg.SyncerCfg, jobs)
+	syncer, err := createSyncer(cfg.EtcdURLs, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -163,6 +153,26 @@ func NewServer(cfg *Config) (*Server, error) {
 		latestTS:   latestTS,
 		latestTime: latestTime,
 	}, nil
+}
+
+func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) (syncer *Syncer, err error) {
+	tiStore, err := createTiStore(etcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer tiStore.Close()
+
+	jobs, err := loadHistoryDDLJobs(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	syncer, err = NewSyncer(cp, cfg, jobs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
 }
 
 // DumpBinlog implements the gRPC interface of drainer server

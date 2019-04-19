@@ -71,7 +71,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createSyncer(cfg, syncer.schema)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -79,7 +79,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)

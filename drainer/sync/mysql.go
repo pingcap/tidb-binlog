@@ -33,8 +33,7 @@ func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, w
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker))
-	opts = append(opts, loader.BatchSize(batchSize))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,

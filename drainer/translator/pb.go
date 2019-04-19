@@ -32,7 +32,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 
 		_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
 		if isCreateDatabase {
-			sql = fmt.Sprintf("%s;", sql)
+			sql += ";"
 		} else {
 			sql = fmt.Sprintf("use %s; %s;", schema, sql)
 		}

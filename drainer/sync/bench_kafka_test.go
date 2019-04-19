@@ -44,7 +44,7 @@ func BenchmarkBinlogMarshal(b *testing.B) {
 		},
 	}
 	for i := 0; i < b.N; i++ {
-		var _ = binlog.String()
+		binlog.String()
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-// TiBinlogToSlaveBinlog translator the format to slave binlog
+// TiBinlogToSlaveBinlog translates the format to slave binlog
 func TiBinlogToSlaveBinlog(infoGetter TableInfoGetter, schema string, table string,
 	tiBinlog *pb.Binlog, pv *pb.PrewriteValue) (slaveBinlog *obinlog.Binlog, err error) {
 	slaveBinlog = new(obinlog.Binlog)
