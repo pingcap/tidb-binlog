@@ -81,7 +81,7 @@ func GenFlashInsertSQL(schema string, table *model.TableInfo, row []byte, commit
 	if pkHandleColumn(table) == nil {
 		fakeImplicitColumn(table)
 	}
-	columns := table.Columns
+	columns := writableColumns(table)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
@@ -133,7 +133,9 @@ func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commit
 		pkColumn = fakeImplicitColumn(table)
 	}
 	pkID := pkColumn.ID
-	colsTypeMap := util.ToColumnTypeMap(table.Columns)
+
+	columns := writableColumns(table)
+	colsTypeMap := util.ToColumnTypeMap(columns)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 

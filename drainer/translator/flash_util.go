@@ -38,6 +38,7 @@ func fakeImplicitColumn(table *model.TableInfo) *model.ColumnInfo {
 	// Transform TiDB's default extra handle column name and type into our own.
 	handleColumn.Name = model.NewCIStr(implicitColName)
 	handleColumn.Tp = mysql.TypeLonglong
+	handleColumn.State = model.StatePublic
 	table.Columns = append(table.Columns, handleColumn)
 
 	table.PKIsHandle = true

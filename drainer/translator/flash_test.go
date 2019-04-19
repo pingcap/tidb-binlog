@@ -30,6 +30,7 @@ func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?);",
 	}
 	for i, table := range tables {
+		c.Logf("id: %d, table: %+v", i, table)
 		rowDatas, expected := testFlashGenRowData(c, table, i, false)
 		binlog := testFlashGenInsertBinlog(c, table, rowDatas)
 		sql, vals, err := GenFlashInsertSQL(schema, table, binlog, genCommitTS(i))
