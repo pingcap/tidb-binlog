@@ -18,7 +18,8 @@ type MysqlSyncer struct {
 	db     *sql.DB
 	loader *loader.Loader
 
-	shutdown chan struct{}
+	shutdown     chan struct{}
+	shutdownOnce sync.Once
 	*baseSyncer
 }
 
@@ -79,7 +80,9 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 
 // Close implements Syncer interface
 func (m *MysqlSyncer) Close() error {
-	close(m.shutdown)
+	m.shutdownOnce.Do(func() {
+		close(m.shutdown)
+	})
 
 	err := <-m.Error()
 
@@ -116,6 +119,10 @@ func (m *MysqlSyncer) run() {
 	}()
 
 	err := <-loaderQuit
+	m.shutdownOnce.Do(func() {
+		close(m.shutdown)
+	})
+
 	wg.Wait()
 	m.db.Close()
 	m.SetErr(err)
