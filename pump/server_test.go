@@ -399,17 +399,17 @@ func (n *nodeWithState) RefreshStatus(ctx context.Context, status *node.Status) 
 func (s commitStatusSuite) TestShouldChangeToCorrectState(c *C) {
 	tests := map[string]string{
 		node.Pausing: node.Paused,
-		node.Online: node.Paused,
-		"unknown": "unknown",
+		node.Online:  node.Paused,
+		"unknown":    "unknown",
 	}
 	for from, to := range tests {
 		server := &Server{
-			node: &nodeWithState{state: from},
+			node:    &nodeWithState{state: from},
 			storage: &dummyStorage{},
 		}
 		server.commitStatus()
 		c.Assert(server.node.(*nodeWithState).newState, Equals, to)
-		}
+	}
 }
 
 type closeSuite struct{}
