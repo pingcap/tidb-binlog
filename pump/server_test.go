@@ -260,7 +260,9 @@ func (s *startHeartbeatSuite) TestOnlyLogNonCancelErr(c *C) {
 	close(errChl)
 
 	msg := buf.String()
-	c.Assert(msg, Matches, ".*send heartbeat error test[^\n]*\n")
+	lines := strings.Split(strings.TrimSpace(msg), "\n")
+	c.Assert(lines, HasLen, 1)
+	c.Assert(lines[0], Matches, ".*send heartbeat error test.*")
 }
 
 type printServerInfoSuite struct{}
