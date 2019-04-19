@@ -369,13 +369,9 @@ func (s *pumpStatusSuite) TestCorrectlyGetStatusAndCommitTS(c *C) {
 	c.Assert(status.ErrMsg, Equals, "")
 	c.Assert(status.CommitTS, Equals, int64(1024))
 	c.Assert(status.StatusMap, HasLen, 3)
-	for k := range status.StatusMap {
-		switch k {
-		case "pump1", "pump2", "pump4":
-		default:
-			c.Fail()
-		}
-	}
+	c.Assert(status.StatusMap, HasKey, "pump1")
+	c.Assert(status.StatusMap, HasKey, "pump2")
+	c.Assert(status.StatusMap, HasKey, "pump4")
 }
 
 type commitStatusSuite struct{}
