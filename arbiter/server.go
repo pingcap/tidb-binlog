@@ -171,36 +171,8 @@ func (s *Server) Run() error {
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
-		saveTick := time.NewTicker(time.Second)
-		defer saveTick.Stop()
-
-		for {
-			select {
-			case txn, ok := <-s.load.Successes():
-				if !ok {
-					log.Info("load successes channel closed")
-					return
-				}
-				msg := txn.Metadata.(*reader.Message)
-				log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-				s.finishTS = msg.Binlog.CommitTs
-
-				ms := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(s.finishTS))
-				txnLatencySecondsHistogram.Observe(float64(ms) / 1000.0)
-
-			case <-saveTick.C:
-				// log.Debug("save checkpoint ", s.finishTS)
-				err := s.checkpoint.Save(s.finishTS, StatusRunning)
-				if err != nil {
-					log.Error(err)
-					continue
-				}
-
-				checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
-			}
-		}
+		s.trackTS(ctx, time.Second)
+		wg.Done()
 	}()
 
 	wg.Add(1)
@@ -231,12 +203,56 @@ func (s *Server) Run() error {
 		return errors.Trace(err)
 	}
 
-	err = s.checkpoint.Save(s.finishTS, StatusNormal)
-	if err != nil {
+	if err = s.saveFinishTS(); err != nil {
 		return errors.Trace(err)
 	}
 
-	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
-
 	return nil
+}
+
+func (s *Server) updateFinishTS(msg *reader.Message) {
+	s.finishTS = msg.Binlog.CommitTs
+
+	ms := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(s.finishTS))
+	txnLatencySecondsHistogram.Observe(float64(ms) / 1000.0)
+}
+
+func (s *Server) saveFinishTS() error {
+	err := s.checkpoint.Save(s.finishTS, StatusRunning)
+	if err != nil {
+		return err
+	}
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
+	return nil
+}
+
+
+func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
+	saveTick := time.NewTicker(saveInterval)
+	defer saveTick.Stop()
+
+	L:
+	for {
+		select {
+		case txn, ok := <-s.load.Successes():
+			if !ok {
+				log.Info("load successes channel closed")
+				break L
+			}
+			msg := txn.Metadata.(*reader.Message)
+			log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
+			s.updateFinishTS(msg)
+		case <-saveTick.C:
+			if err := s.saveFinishTS(); err != nil {
+				log.Error(err)
+				continue
+			}
+		case <-ctx.Done():
+			break L
+		}
+	}
+
+	if err := s.saveFinishTS(); err != nil {
+		log.Error(err)
+	}
 }

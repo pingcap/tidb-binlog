@@ -14,10 +14,15 @@
 package arbiter
 
 import (
+	"time"
 	"database/sql"
+	"context"
 	"fmt"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
+	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	. "github.com/pingcap/check"
 )
 
@@ -79,4 +84,76 @@ func (s *testNewServerSuite) TestStopIfCannotCreateCheckpoint(c *C) {
 	_, err := NewServer(&cfg)
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, "cannot create")
+}
+
+type updateFinishTSSuite struct {}
+
+var _ = Suite(&updateFinishTSSuite{})
+
+func (s *updateFinishTSSuite) TestShouldSetFinishTS(c *C) {
+	server := Server{}	
+	msg := reader.Message{
+		Binlog: &pb.Binlog{
+			CommitTs: 1024,		
+		},
+	}
+	c.Assert(server.finishTS, Equals, int64(0))
+	server.updateFinishTS(&msg)
+	c.Assert(server.finishTS, Equals, int64(1024))
+}
+
+type trackTSSuite struct{}
+
+var _ = Suite(&trackTSSuite{})
+
+type dummyCp struct {
+	Checkpoint
+	timestamps []int64
+	status []int
+}
+
+func (cp *dummyCp) Save(ts int64, status int) error {
+	cp.timestamps = append(cp.timestamps, ts)
+	cp.status = append(cp.status, status)
+	return nil
+}
+
+func (s *trackTSSuite) TestShouldSaveFinishTS(c *C) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		c.Fatalf("Failed to create mock db: %s", err)
+	}
+	ld, err := loader.NewLoader(db)
+	c.Assert(err, IsNil)
+	cp := dummyCp{}
+	server := Server{
+		load: ld,
+		checkpoint: &cp,
+	}	
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stop := make(chan struct{})
+	go func() {
+		server.trackTS(ctx, 50 * time.Millisecond)
+		close(stop)
+	}()
+
+	for i := 0; i < 42; i++ {
+		server.finishTS = int64(i)
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	cancel()
+
+	select {
+	case <-stop:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time")
+	}
+
+	c.Assert(len(cp.status), Greater, 1)
+	c.Assert(len(cp.timestamps), Greater, 1)
+	c.Assert(cp.status[len(cp.status)-1], Equals, StatusRunning)
+	c.Assert(cp.timestamps[len(cp.timestamps)-1], Equals, int64(41))
 }
