@@ -17,6 +17,7 @@ import (
 	"time"
 	"database/sql"
 	"context"
+	"errors"
 	"fmt"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -156,4 +157,50 @@ func (s *trackTSSuite) TestShouldSaveFinishTS(c *C) {
 	c.Assert(len(cp.timestamps), Greater, 1)
 	c.Assert(cp.status[len(cp.status)-1], Equals, StatusRunning)
 	c.Assert(cp.timestamps[len(cp.timestamps)-1], Equals, int64(41))
+}
+
+type loadStatusSuite struct{}
+
+var _ = Suite(&loadStatusSuite{})
+
+type configurableCp struct {
+	Checkpoint
+	ts int64
+	status int
+	err error
+}
+
+func (c *configurableCp) Load() (ts int64, status int, err error) {
+	return c.ts, c.status, c.err
+}
+
+func (s *loadStatusSuite) TestShouldIgnoreNotFound(c *C) {
+	cp := configurableCp{status: StatusNormal, err: errors.New("not found")}
+	server := Server{
+		checkpoint: &cp,
+	}
+	status, err := server.loadStatus()
+	c.Assert(err, IsNil)
+	c.Assert(status, Equals, cp.status)
+}
+
+func (s *loadStatusSuite) TestShouldSetFinishTS(c *C) {
+	cp := configurableCp{status: StatusRunning, ts: 1984}
+	server := Server{
+		checkpoint: &cp,
+	}
+	status, err := server.loadStatus()
+	c.Assert(err, IsNil)
+	c.Assert(status, Equals, cp.status)
+	c.Assert(server.finishTS, Equals, cp.ts)
+}
+
+func (s *loadStatusSuite) TestShouldRetErr(c *C) {
+	cp := configurableCp{status: StatusNormal, err: errors.New("other")}
+	server := Server{
+		checkpoint: &cp,
+	}
+	_, err := server.loadStatus()
+	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, "other")
 }

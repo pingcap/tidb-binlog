@@ -82,14 +82,9 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	srv.finishTS = up.InitialCommitTS
 
-	ts, status, err := srv.checkpoint.Load()
+	status, err := srv.loadStatus()
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, errors.Trace(err)
-		}
-		err = nil
-	} else {
-		srv.finishTS = ts
+		return nil, errors.Trace(err)
 	}
 
 	// set reader to read binlog from kafka
@@ -255,4 +250,17 @@ func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
 	if err := s.saveFinishTS(); err != nil {
 		log.Error(err)
 	}
+}
+
+func (s *Server) loadStatus() (int, error) {
+	ts, status, err := s.checkpoint.Load()
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return 0, errors.Trace(err)
+		}
+		err = nil
+	} else {
+		s.finishTS = ts
+	}
+	return status, errors.Trace(err)
 }
