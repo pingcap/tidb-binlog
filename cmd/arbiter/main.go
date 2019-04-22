@@ -22,33 +22,33 @@ import (
 
 	"github.com/Shopify/sarama"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/arbiter"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := arbiter.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, See '%s --help'. %s", os.Args[0], errors.ErrorStack(err))
+		log.Fatal("verifying flags failed. See 'arbiter --help'.", zap.Error(err))
 	}
 
-	util.InitLogger(cfg.LogLevel, cfg.LogFile, cfg.LogRotate)
+	util.InitLogger(cfg.LogLevel, cfg.LogFile)
 	// may too many noise, discard sarama log now
 	sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
 
-	log.Infof("use config: %+v", cfg)
+	log.Info("start arbiter...", zap.Reflect("config", cfg))
 	version.PrintVersionInfo()
 
 	go startHTTPServer(cfg.ListenAddr)
 
 	srv, err := arbiter.NewServer(cfg)
 	if err != nil {
-		log.Errorf("%v", errors.ErrorStack(err))
+		log.Error("new server failed", zap.Error(err))
 		return
 	}
 
@@ -59,7 +59,7 @@ func main() {
 	log.Info("start run server...")
 	err = srv.Run()
 	if err != nil {
-		log.Errorf("%v", errors.ErrorStack(err))
+		log.Error("run server failed", zap.Error(err))
 	}
 
 	log.Info("server exit")
@@ -71,6 +71,6 @@ func startHTTPServer(addr string) {
 
 	err := http.ListenAndServe(addr, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("listen and server http failed", zap.String("addr", addr), zap.Error(err))
 	}
 }

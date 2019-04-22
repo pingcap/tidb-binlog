@@ -14,13 +14,14 @@
 package util
 
 import (
-	. "github.com/pingcap/check"
 	"bytes"
+	"log"
 	"os"
 	"strings"
 	"syscall"
 	"time"
-	"github.com/ngaut/log"
+
+	. "github.com/pingcap/check"
 )
 
 type signalSuite struct{}
@@ -47,7 +48,6 @@ func (s *signalSuite) TestShouldCallFunc(c *C) {
 
 func (s *signalSuite) TestShouldDumpStack(c *C) {
 	var buf bytes.Buffer
-	log.SetLevel(log.LOG_LEVEL_DEBUG)
 	log.SetOutput(&buf)
 	defer func() {
 		log.SetOutput(os.Stderr)

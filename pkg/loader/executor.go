@@ -20,10 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -81,7 +82,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
 	res, err = tx.exec(query, args...)
 	if err != nil {
-		log.Errorf("Failed Exec: %v, query: %s, args: %v", err, query, args)
+		log.Error("exec fail", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
 		tx.Rollback()
 		err = errors.Trace(err)
 	}
@@ -199,7 +200,7 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 		return errors.Trace(err)
 	}
 
-	log.Debugf("dmls: %v after merge: %v", dmls, types)
+	log.Debug("merge dmls", zap.Reflect("dmls", dmls), zap.Reflect("merged", types))
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
 		err := e.splitExecDML(allDeletes, e.bulkDelete)
@@ -265,28 +266,24 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 	for _, dml := range dmls {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
-			log.Debugf("exec: %s, args: %v", sql, args)
 			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			sql, args = dml.replaceSQL()
-			log.Debugf("exec: %s, args: %v", sql, args)
 			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
-			log.Debugf("exec dml sql: %s, args: %v", sql, args)
 			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
 			sql, args := dml.sql()
-			log.Debugf("exec dml sql: %s, args: %v", sql, args)
 			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)

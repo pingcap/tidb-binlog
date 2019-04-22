@@ -20,8 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
@@ -50,15 +51,13 @@ type MysqlCheckPoint struct {
 }
 
 func newMysql(tp string, cfg *Config) (CheckPoint, error) {
-	if res := checkConfig(cfg); res != nil {
-		log.Errorf("Argument cfg is Invaild %v", res)
-		return &MysqlCheckPoint{}, errors.Trace(res)
+	if err := checkConfig(cfg); err != nil {
+		return nil, errors.Annotate(err, "check config failed")
 	}
 
 	db, err := pkgsql.OpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
-		log.Errorf("open database error %v", err)
-		return &MysqlCheckPoint{}, errors.Trace(err)
+		return nil, errors.Annotate(err, "open db failed")
 	}
 
 	sp := &MysqlCheckPoint{
@@ -75,15 +74,13 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	sql := genCreateSchema(sp)
 	_, err = execSQL(db, sql)
 	if err != nil {
-		log.Errorf("Create schema error %v", err)
-		return sp, errors.Trace(err)
+		return nil, errors.Annotatef(err, "exec sql failed %s", sql)
 	}
 
 	sql = genCreateTable(sp)
 	_, err = execSQL(db, sql)
 	if err != nil {
-		log.Errorf("Create table error %v", err)
-		return sp, errors.Trace(err)
+		return nil, errors.Annotatef(err, "exec sql failed %s", sql)
 	}
 
 	err = sp.Load()
@@ -108,16 +105,14 @@ func (sp *MysqlCheckPoint) Load() error {
 	sql := genSelectSQL(sp)
 	rows, err := querySQL(sp.db, sql)
 	if err != nil {
-		log.Errorf("select checkPoint error %v", err)
-		return errors.Trace(err)
+		return errors.Annotatef(err, "query sql failed: %s", sql)
 	}
 
 	var str string
 	for rows.Next() {
 		err = rows.Scan(&str)
 		if err != nil {
-			log.Errorf("rows Scan error %v", err)
-			return errors.Trace(err)
+			return errors.Annotate(err, "scan row failed")
 		}
 	}
 
@@ -154,7 +149,7 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
 			errCode, ok := pkgsql.GetSQLErrCode(err)
 			if !ok || int(errCode) != tmysql.ErrUnknown {
-				log.Warnf("get ts from slave cluster error %v", err)
+				log.Warn("get ts from slave cluster failed", zap.Error(err))
 			}
 		} else {
 			sp.TsMap["master-ts"] = ts
@@ -164,14 +159,16 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 
 	b, err := json.Marshal(sp)
 	if err != nil {
-		log.Errorf("Json Marshal error %v", err)
-		return errors.Trace(err)
+		return errors.Annotate(err, "json marshal failed")
 	}
 
 	sql := genReplaceSQL(sp, string(b))
 	_, err = execSQL(sp.db, sql)
+	if err != nil {
+		return errors.Annotatef(err, "query sql failed: %s", sql)
+	}
 
-	return errors.Trace(err)
+	return nil
 }
 
 // Check implements CheckPoint.Check interface

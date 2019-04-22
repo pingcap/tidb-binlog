@@ -22,13 +22,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 )
 
 func mustCreateTable(db *sql.DB) {
 	conn, err := db.Conn(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		log.S().Fatal(err)
 	}
 	mustCreateTableWithConn(conn)
 }
@@ -37,11 +37,11 @@ func mustCreateTableWithConn(conn *sql.Conn) {
 	var err error
 	_, err = conn.ExecContext(context.Background(), "create database if not exists test")
 	if err != nil {
-		log.Fatal(err)
+		log.S().Fatal(err)
 	}
 	_, err = conn.ExecContext(context.Background(), "create table if not exists test.test1(id int primary key, v1 int default null)")
 	if err != nil {
-		log.Fatal(err)
+		log.S().Fatal(err)
 	}
 }
 
@@ -66,12 +66,12 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 	// so we setback the used db before close the conn
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.S().Fatal(err)
 	}
 	defer func() {
 		_, err := conn.ExecContext(context.Background(), "use test")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 		conn.Close()
 	}()
@@ -88,7 +88,7 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 
 		_, err = conn.ExecContext(context.Background(), "drop database test")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 	}
@@ -107,7 +107,7 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 
 		_, err = db.Exec("truncate table test.test1")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		time.Sleep(time.Millisecond)
@@ -124,7 +124,7 @@ func dml(ctx context.Context, db *sql.DB, id int) {
 		if err == nil {
 			success++
 			if success%100 == 0 {
-				log.Info(id, " success: ", success)
+				log.S().Info(id, " success: ", success)
 			}
 		}
 
@@ -149,7 +149,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 
 		_, err = db.Exec("alter table test.test1 drop column v1")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 		time.Sleep(time.Millisecond)
 
@@ -170,7 +170,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 
 		_, err = db.Exec(fmt.Sprintf("alter table test.test1 add column v1 int default ? %s", notNULL), defaultValue)
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 		time.Sleep(time.Millisecond)
 
@@ -199,7 +199,7 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 
 		_, err = db.Exec("alter table test.test1 modify column v1 int default ?", defaultValue)
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -214,12 +214,12 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 	runTime := time.Second * 3
 	start := time.Now()
 	defer func() {
-		log.Infof("runDDLTest take %v", time.Since(start))
+		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
 	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL} {
 		RunTest(srcs[0], targetDB, schema, func(_ *sql.DB) {
-			log.Info("running ddl test: ", getFunctionName(ddlFunc))
+			log.S().Info("running ddl test: ", getFunctionName(ddlFunc))
 
 			var wg sync.WaitGroup
 			ctx, cancel := context.WithTimeout(context.Background(), runTime)
@@ -248,7 +248,7 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 		RunTest(srcs[0], targetDB, schema, func(db *sql.DB) {
 			_, err := db.Exec("drop table if exists test1")
 			if err != nil {
-				log.Fatal(err)
+				log.S().Fatal(err)
 			}
 		})
 	}

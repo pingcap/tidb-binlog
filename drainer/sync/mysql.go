@@ -16,8 +16,8 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/prometheus/client_golang/prometheus"

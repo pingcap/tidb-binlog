@@ -17,14 +17,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
-
-func init() {
-	log.SetLevel(log.LOG_LEVEL_ERROR)
-}
 
 type SorterSuite struct{}
 

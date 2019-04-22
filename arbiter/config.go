@@ -20,10 +20,11 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"go.uber.org/zap"
 )
 
 const (
@@ -41,7 +42,6 @@ type Config struct {
 	LogLevel      string `toml:"log-level" json:"log-level"`
 	ListenAddr    string `toml:"addr" json:"addr"`
 	LogFile       string `toml:"log-file" json:"log-file"`
-	LogRotate     string `toml:"log-rotate" json:"log-rotate"`
 
 	Up   UpConfig   `toml:"up" json:"up"`
 	Down DownConfig `toml:"down" json:"down"`
@@ -94,7 +94,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Metrics.Addr, "metrics.addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.Metrics.Interval, "metrics.interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 
 	fs.Int64Var(&cfg.Up.InitialCommitTS, "up.initial-commit-ts", 0, "if arbiter doesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.StringVar(&cfg.Up.Topic, "up.topic", "", "topic name of kafka")
@@ -108,7 +107,7 @@ func NewConfig() *Config {
 func (cfg *Config) String() string {
 	data, err := json.MarshalIndent(cfg, "\t", "\t")
 	if err != nil {
-		log.Error(err)
+		log.Error("marshal Config failed", zap.Error(err))
 	}
 
 	return string(data)

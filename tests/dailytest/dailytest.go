@@ -16,7 +16,7 @@ package dailytest
 import (
 	"database/sql"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 )
 
 // RunMultiSource runs the test that need multi instance TiDB, one instance for one *sql.DB* in srcs
@@ -71,6 +71,6 @@ create table ntest(
 		DropTestTable(sourceDB, TableSQLs)
 	})
 
-	log.Info("test pass!!!")
+	log.S().Info("test pass!!!")
 
 }

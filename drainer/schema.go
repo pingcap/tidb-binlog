@@ -16,11 +16,12 @@ package drainer
 import (
 	"encoding/json"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/mysql"
+	"go.uber.org/zap"
 )
 
 const implicitColName = "_tidb_rowid"
@@ -148,7 +149,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
 
-	log.Debugf("create schema %s, schema id %d", db.Name.O, db.ID)
+	log.Debug("create schema failed, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
 	return nil
 }
 
@@ -166,7 +167,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	delete(s.tables, id)
 	delete(s.tableIDToName, id)
 
-	log.Debugf("drop table %s, table id %d", table.Name.O, id)
+	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return table.Name.O, nil
 }
 
@@ -185,7 +186,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 
-	log.Debugf("create table %s.%s, table id %d", schema.Name.O, table.Name.O, table.ID)
+	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
 	return nil
 }
 
@@ -231,13 +232,15 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
 		if skipJob(s.jobs[i]) {
-			log.Debugf("skip ddl job %v", s.jobs[i])
+			log.Debug("skip ddl job", zap.Stringer("job", s.jobs[i]))
 			continue
 		}
 
 		if s.jobs[i].BinlogInfo.SchemaVersion <= version {
 			if s.jobs[i].BinlogInfo.SchemaVersion <= s.currentVersion {
-				log.Warnf("ddl job %v schema version is less than current version %d, skip this ddl job", s.jobs[i], s.currentVersion)
+				log.Warn("ddl job schema version is less than current version, skip this ddl job",
+					zap.Stringer("job", s.jobs[i]),
+					zap.Int64("currentVersion", s.currentVersion))
 				continue
 			}
 
@@ -261,7 +264,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
 func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
-	log.Debug("handle job: ", job)
+	log.Debug("handle job: ", zap.Stringer("job", job))
 
 	if skipJob(job) {
 		return "", "", "", nil

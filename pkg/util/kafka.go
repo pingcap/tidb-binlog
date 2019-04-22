@@ -17,10 +17,11 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
+	"go.uber.org/zap"
 )
 
 // don't use directly, call GetParentMetricsRegistry to get it
@@ -50,7 +51,7 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 
 	config.ClientID = "tidb_binlog"
 	config.Version = version
-	log.Debugf("kafka consumer version %v", version)
+	log.Debug("kafka consumer", zap.Stringer("version", version))
 	config.MetricRegistry = metrics.NewPrefixedChildRegistry(GetParentMetricsRegistry(), metricsPrefix)
 
 	return config, nil

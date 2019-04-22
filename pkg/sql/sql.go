@@ -23,9 +23,11 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+
 	"github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
@@ -77,7 +79,7 @@ func ExecuteTxn(db *sql.DB, sqls []string, args [][]interface{}) error {
 func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hist *prometheus.HistogramVec) error {
 	txn, err := db.Begin()
 	if err != nil {
-		log.Errorf("exec sqls[%v] begin failed %v", sqls, errors.ErrorStack(err))
+		log.Error("exec begin failed", zap.Strings("sqls", sqls), zap.Error(err))
 		return errors.Trace(err)
 	}
 
@@ -88,10 +90,10 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 
 		_, err = txn.Exec(sqls[i], args[i]...)
 		if err != nil {
-			log.Errorf("[exec][sql]%s[args]%v[error]%v", sqls[i], args[i], err)
+			log.Error("exec failed", zap.String("sql", sqls[i]), zap.Reflect("args", args[i]), zap.Error(err))
 			rerr := txn.Rollback()
 			if rerr != nil {
-				log.Errorf("[rollback][error]%v", rerr)
+				log.Error("Rollback failed", zap.Error(rerr))
 			}
 			return errors.Trace(err)
 		}
@@ -101,7 +103,7 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 			hist.WithLabelValues("exec").Observe(takeDuration.Seconds())
 		}
 		if takeDuration > SlowWarnLog {
-			log.Warnf("[exec slow log take %v][sql]%s[args]%v", takeDuration, sqls[i], args[i])
+			log.Warn("exec slow log", zap.Duration("take", takeDuration), zap.String("sql", sqls[i]), zap.Reflect("args", args[i]))
 		}
 	}
 
@@ -109,7 +111,7 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 
 	err = txn.Commit()
 	if err != nil {
-		log.Errorf("exec sqls[%v] commit failed %v", sqls, errors.ErrorStack(err))
+		log.Error("commit failed", zap.Strings("sqls", sqls), zap.Error(err))
 		return errors.Trace(err)
 	}
 
@@ -279,7 +281,7 @@ func composeCHDSN(host string, port int, username string, password string, dbNam
 // OpenCH opens a connection to CH and returns the standard SQL driver's DB interface.
 func OpenCH(host string, port int, username string, password string, dbName string, blockSize int) (*sql.DB, error) {
 	dbDSN := composeCHDSN(host, port, username, password, dbName, blockSize)
-	log.Infof("Connecting to %s", dbDSN)
+	log.Info("open CH", zap.String("dsn", dbDSN))
 	db, err := sql.Open("clickhouse", dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)

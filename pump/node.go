@@ -24,14 +24,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -88,7 +89,7 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 			return nil, errors.Trace(err)
 		}
 	} else if cfg.NodeID != "" {
-		log.Warning("you had a node ID in local file.[if you want to change the node ID, you should delete the file data-dir/.node file]")
+		log.Warn("you had a node ID in local file.[if you want to change the node ID, you should delete the file data-dir/.node file]")
 	}
 
 	advURL, err := url.Parse(cfg.AdvertiseAddr)
@@ -157,7 +158,7 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 
 	for _, c := range drainers {
 		if c.State == node.Online {
-			log.Info("start try to notify drainer: ", c.Addr)
+			log.Info("start try to notify drainer", zap.String("addr", c.Addr))
 			clientConn, err := grpc.Dial(c.Addr, dialerOpt, grpc.WithInsecure())
 			if err != nil {
 				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)

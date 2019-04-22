@@ -14,11 +14,12 @@
 package syncer
 
 import (
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
@@ -76,7 +77,12 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 					oldDatum = formatValue(oldDatum, tp)
 					oldValue := oldDatum.GetValue()
 
-					log.Debugf("%s(%s %v): %v => %v", col.Name, col.MysqlType, tp, oldValue, newValue)
+					log.Debug("translate update event",
+						zap.String("col name", col.Name),
+						zap.String("col mysql type", col.MysqlType),
+						zap.Uint8("tp", tp),
+						zap.Reflect("old value", oldValue),
+						zap.Reflect("new value", newValue))
 
 					dml.Values[col.Name] = newValue
 					dml.OldValues[col.Name] = oldValue
@@ -122,7 +128,10 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 
 		tp := col.Tp[0]
 		val = formatValue(val, tp)
-		log.Debugf("%s(%s): %v", col.Name, col.MysqlType, val.GetValue())
+		log.Debug("format value",
+			zap.String("col name", col.Name),
+			zap.String("mysql type", col.MysqlType),
+			zap.Reflect("value", val.GetValue()))
 		args = append(args, val.GetValue())
 	}
 

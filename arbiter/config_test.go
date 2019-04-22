@@ -46,7 +46,6 @@ func (t *TestConfigSuite) TestParseConfig(c *check.C) {
 	// check config item
 	c.Assert(config.LogLevel, check.Equals, "info")
 	c.Assert(config.LogFile, check.Equals, "")
-	c.Assert(config.LogRotate, check.Equals, "")
 	c.Assert(config.ListenAddr, check.Equals, "127.0.0.1:8251")
 	c.Assert(config.configFile, check.Equals, configFile)
 	c.Assert(config.Up.KafkaAddrs, check.Equals, defaultKafkaAddrs)
@@ -69,8 +68,6 @@ func (t *TestConfigSuite) TestParseConfig(c *check.C) {
 	args = append(args, fmt.Sprintf("-L=%s", logLevel))
 	logFile := "arbiter.log"
 	args = append(args, fmt.Sprintf("-log-file=%s", logFile))
-	logRotate := "hour"
-	args = append(args, fmt.Sprintf("-log-rotate=%s", logRotate))
 	upInitCTS := int64(123)
 	args = append(args, fmt.Sprintf("-up.initial-commit-ts=%d", upInitCTS))
 	downWC := 456
@@ -86,7 +83,6 @@ func (t *TestConfigSuite) TestParseConfig(c *check.C) {
 	c.Assert(config.ListenAddr, check.Equals, listenAddr)
 	c.Assert(config.LogLevel, check.Equals, logLevel)
 	c.Assert(config.LogFile, check.Equals, logFile)
-	c.Assert(config.LogRotate, check.Equals, logRotate)
 	c.Assert(config.Up.InitialCommitTS, check.Equals, upInitCTS)
 	c.Assert(config.Down.WorkerCount, check.Equals, downWC)
 	c.Assert(config.Down.BatchSize, check.Equals, downBS)

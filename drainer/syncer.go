@@ -19,9 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
@@ -67,8 +68,6 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
-
-	log.Debug(jobs)
 
 	var err error
 	// create schema
@@ -236,13 +235,13 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 
 func (s *Syncer) savePoint(ts int64) {
 	if ts < s.cp.TS() {
-		log.Errorf("ts %d is less than checkpoint ts %d", ts, s.cp.TS())
+		log.Error("save ts is less than checkpoint ts %d", zap.Int64("save ts", ts), zap.Int64("checkpoint ts", s.cp.TS()))
 	}
 
-	log.Infof("[write save point]%d", ts)
+	log.Info("write save point", zap.Int64("ts", ts))
 	err := s.cp.Save(ts)
 	if err != nil {
-		log.Fatalf("[write save point]%d[error]%v", ts, err)
+		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
@@ -297,7 +296,7 @@ ForLoop:
 			continue
 		case b = <-s.input:
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
-			log.Debugf("consume binlogItem: %s", b)
+			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
 
 		binlog := b.binlog
@@ -323,7 +322,7 @@ ForLoop:
 				break ForLoop
 			}
 
-			log.Debug("DML SchemaVersion: ", preWrite.SchemaVersion)
+			log.Debug("get DML", zap.Int64("SchemaVersion", preWrite.SchemaVersion))
 			if preWrite.SchemaVersion < lastDDLSchemaVersion {
 				log.Debug("encounter older schema dml")
 			}
@@ -354,13 +353,13 @@ ForLoop:
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			}
 		} else if jobID > 0 {
-			log.Debug("get ddl binlog job: ", b.job)
+			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
 
-			log.Debug("DDL SchemaVersion: ", b.job.BinlogInfo.SchemaVersion)
+			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
 
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
@@ -368,7 +367,6 @@ ForLoop:
 				return errors.Trace(err)
 			}
 
-			log.Debug("ddl query: ", b.job.Query)
 			sql := b.job.Query
 			var schema, table string
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
@@ -377,7 +375,8 @@ ForLoop:
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
-				log.Infof("[skip ddl]db:%s table:%s, sql:%s, commit ts %d", schema, table, sql, commitTS)
+				log.Info("skip ddl", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 			} else if sql != "" {
 				s.addDDLCount()
 				beginTime := time.Now()
@@ -417,7 +416,7 @@ func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (i
 		}
 
 		if filter.SkipSchemaAndTable(schemaName, tableName) {
-			log.Debugf("[skip dml]db:%s table:%s", schemaName, tableName)
+			log.Debug("skip dml", zap.String("schema", schemaName), zap.String("table", tableName))
 			continue
 		}
 
@@ -438,7 +437,7 @@ func (s *Syncer) Add(b *binlogItem) {
 	select {
 	case <-s.shutdown:
 	case s.input <- b:
-		log.Debugf("receive publish binlog item: %s", b)
+		log.Debug("receive publish binlog item", zap.Stringer("item", b))
 	}
 }
 
@@ -470,7 +469,7 @@ func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
 	var mutations = make([]pb.TableMutation, 0, len(pv.GetMutations()))
 	for _, mutation := range pv.GetMutations() {
 		if s.schema.IsTruncateTableID(mutation.TableId) {
-			log.Infof("skip old version truncate dml, table id: %d", mutation.TableId)
+			log.Info("skip old version truncate dml", zap.Int64("table id", mutation.TableId))
 			continue
 		}
 

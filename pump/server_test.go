@@ -14,19 +14,16 @@
 package pump
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/integration"
-	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -258,11 +255,9 @@ func (n *heartbeartNode) Heartbeat(ctx context.Context) <-chan error {
 }
 
 func (s *startHeartbeatSuite) TestOnlyLogNonCancelErr(c *C) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer func() {
-		log.SetOutput(os.Stderr)
-	}()
+	var hook util.LogHook
+	hook.SetUp()
+	defer hook.TearDown()
 
 	errChl := make(chan error)
 	node := heartbeartNode{errChl: errChl}
@@ -272,10 +267,8 @@ func (s *startHeartbeatSuite) TestOnlyLogNonCancelErr(c *C) {
 	errChl <- context.Canceled
 	close(errChl)
 
-	msg := buf.String()
-	lines := strings.Split(strings.TrimSpace(msg), "\n")
-	c.Assert(lines, HasLen, 1)
-	c.Assert(lines[0], Matches, ".*send heartbeat error test.*")
+	c.Assert(hook.Entrys, HasLen, 1)
+	c.Assert(hook.Entrys[0].Message, Matches, ".*send heartbeat failed.*")
 }
 
 type printServerInfoSuite struct{}
@@ -291,14 +284,16 @@ func (ds dummyStorage) MaxCommitTS() int64 {
 }
 
 func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
-	var buf bytes.Buffer
 	originalInterval := serverInfoOutputInterval
 	serverInfoOutputInterval = 50 * time.Millisecond
-	log.SetOutput(&buf)
+
 	defer func() {
-		log.SetOutput(os.Stderr)
 		serverInfoOutputInterval = originalInterval
 	}()
+
+	var hook util.LogHook
+	hook.SetUp()
+	defer hook.TearDown()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	server := &Server{storage: dummyStorage{}, ctx: ctx}
@@ -319,14 +314,11 @@ func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
 		c.Fatal("Fail to return when server's done")
 	}
 
-	logged := buf.String()
-	logged = strings.TrimSpace(logged)
-	lines := strings.Split(logged, "\n")
-	for i, l := range lines {
-		if i == len(lines)-1 {
-			c.Assert(l, Matches, ".*printServerInfo exit.*")
+	for i, entry := range hook.Entrys {
+		if i == len(hook.Entrys)-1 {
+			c.Assert(entry.Message, Matches, ".*printServerInfo exit.*")
 		} else {
-			c.Assert(l, Matches, ".*writeBinlogCount: 0, alivePullerCount: 0, maxCommitTS: 1024.*")
+			c.Assert(entry.Message, Matches, ".*server info tick.*")
 		}
 	}
 }
@@ -430,14 +422,12 @@ type closeSuite struct{}
 var _ = Suite(&closeSuite{})
 
 func (s *closeSuite) TestSkipIfAlreadyClosed(c *C) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer func() {
-		log.SetOutput(os.Stderr)
-	}()
+	var hook util.LogHook
+	hook.SetUp()
+	defer hook.TearDown()
+
 	server := Server{isClosed: 1}
 	server.Close()
 
-	logged := strings.TrimSpace(buf.String())
-	c.Assert(strings.Split(logged, "\n")[1], Matches, ".*server had closed.*")
+	c.Assert(len(hook.Entrys), Less, 2)
 }

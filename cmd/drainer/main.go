@@ -22,11 +22,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ngaut/log"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -35,16 +35,16 @@ func main() {
 
 	cfg := drainer.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, See 'drainer --help'. %s", errors.ErrorStack(err))
+		log.Fatal("verifying flags failed, See 'drainer --help'.", zap.Error(err))
 	}
 
-	util.InitLogger(cfg.LogLevel, cfg.LogFile, cfg.LogRotate)
+	util.InitLogger(cfg.LogLevel, cfg.LogFile)
 	version.PrintVersionInfo()
-	log.Infof("use config: %+v", cfg)
+	log.Info("start drainer...", zap.Reflect("config", cfg))
 
 	bs, err := drainer.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("create drainer server error, %s", errors.ErrorStack(err))
+		log.Fatal("create drainer server failed", zap.Error(err))
 	}
 
 	sc := make(chan os.Signal, 1)
@@ -57,13 +57,13 @@ func main() {
 
 	go func() {
 		sig := <-sc
-		log.Infof("got signal [%d] to exit.", sig)
+		log.Info("got signal to exit.", zap.Stringer("signal", sig))
 		bs.Close()
 		os.Exit(0)
 	}()
 
 	if err := bs.Start(); err != nil {
-		log.Errorf("start drainer server error, %s", errors.ErrorStack(err))
+		log.Error("start drainer server failed", zap.Error(err))
 		os.Exit(2)
 	}
 

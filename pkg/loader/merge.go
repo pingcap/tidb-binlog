@@ -14,8 +14,9 @@
 package loader
 
 import (
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // all DML must be the same table
@@ -92,7 +93,7 @@ func mergeByPrimaryKey(dmls []*DML) (types map[DMLType][]*DML, err error) {
 			// ignore the previous delete
 			if oldDML.Tp == DeleteDMLType {
 			} else if oldDML.Tp == UpdateDMLType || oldDML.Tp == InsertDMLType {
-				log.Warnf("update-insert/insert-insert happen. before: %+v, after: %+v", oldDML, dml)
+				log.Warn("update-insert/insert-insert happen", zap.Reflect("before", oldDML), zap.Reflect("after", dml))
 			}
 			res[key] = dml
 		case DeleteDMLType:

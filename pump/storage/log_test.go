@@ -25,15 +25,10 @@ import (
 	"strconv"
 
 	fuzz "github.com/google/gofuzz"
-	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
-
-func init() {
-	log.SetLevel(log.LOG_LEVEL_ERROR)
-}
 
 type LogFileSuit struct {
 	fuzz *fuzz.Fuzzer

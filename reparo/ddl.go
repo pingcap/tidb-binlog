@@ -14,11 +14,12 @@
 package reparo
 
 import (
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"go.uber.org/zap"
 )
 
 func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
@@ -41,7 +42,7 @@ func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
 		//FIXME: does it needed?
 		_, isDDL := n.(ast.DDLNode)
 		if !isDDL {
-			log.Warnf("node %+v is not ddl, unexpected!", n)
+			log.Warn("node is not ddl, unexpected!", zap.Reflect("node", n))
 			continue
 		}
 		switch v := n.(type) {

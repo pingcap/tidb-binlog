@@ -18,7 +18,6 @@ import (
 	"path"
 	"runtime"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 )
@@ -71,13 +70,6 @@ func (s *testConfigSuite) TestAdjustDoDBAndTable(c *check.C) {
 	c.Assert(config.DoTables[0].Table, check.Equals, "table1")
 	c.Assert(config.DoDBs[0], check.Equals, "test1")
 	c.Assert(config.DoDBs[1], check.Equals, "test2")
-}
-
-func (s *testConfigSuite) TestInitLogger(c *check.C) {
-	logPath := path.Join(c.MkDir(), "test.log")
-	cfg := Config{LogLevel: "error", LogFile: logPath, LogRotate: "hour"}
-	InitLogger(&cfg)
-	c.Assert(log.GetLogLevel(), check.Equals, log.LOG_LEVEL_ERROR)
 }
 
 func getTemplateConfigFilePath() string {

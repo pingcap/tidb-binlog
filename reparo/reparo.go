@@ -16,12 +16,13 @@ package reparo
 import (
 	"io"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 // Reparo i the main part of the recovery tool.
@@ -34,7 +35,7 @@ type Reparo struct {
 
 // New creates a Reparo object.
 func New(cfg *Config) (*Reparo, error) {
-	log.Infof("cfg %+v", cfg)
+	log.Info("New Reparo", zap.Reflect("config", cfg))
 
 	syncer, err := syncer.New(cfg.DestType, cfg.DestDB)
 	if err != nil {
@@ -79,7 +80,7 @@ func (r *Reparo) Process() error {
 
 		err = r.syncer.Sync(binlog, func(binlog *pb.Binlog) {
 			dt := oracle.GetTimeFromTS(uint64(binlog.CommitTs))
-			log.Infof("ts %d, datetime %s", binlog.CommitTs, dt)
+			log.Info("sync binlog success", zap.Int64("ts", binlog.CommitTs), zap.Time("datetime", dt))
 		})
 
 		if err != nil {

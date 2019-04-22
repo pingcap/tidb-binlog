@@ -25,15 +25,10 @@ import (
 	"time"
 
 	fuzz "github.com/google/gofuzz"
-	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
 )
-
-func init() {
-	log.SetLevel(log.LOG_LEVEL_DEBUG)
-}
 
 type Log interface {
 	Fatal(args ...interface{})

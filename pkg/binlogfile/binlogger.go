@@ -22,10 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
@@ -81,7 +82,7 @@ type binlogger struct {
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
 func OpenBinlogger(dirpath string) (Binlogger, error) {
-	log.Infof("open binlog directory %s", dirpath)
+	log.Info("open binlogger", zap.String("directory", dirpath))
 	var (
 		err            error
 		lastFileName   string
@@ -103,7 +104,7 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	defer func() {
 		if err != nil && dirLock != nil {
 			if err1 := dirLock.Close(); err1 != nil {
-				log.Errorf("failed to unlock directory %s: %v with return error %v", dirpath, err1, err)
+				log.Error("failed to unlock", zap.String("directory", dirpath), zap.Error(err1))
 			}
 		}
 	}()
@@ -128,7 +129,7 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 		}
 	}
 
-	log.Infof("open and lock binlog file %s", lastFileName)
+	log.Info("open and lock binlog file", zap.String("name", lastFileName))
 	fileLock, err = file.TryLockFile(lastFileName, os.O_WRONLY|os.O_CREATE, file.PrivateFileMode)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -185,7 +186,7 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
 func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error {
-	log.Infof("[binlogger] walk from position %+v", from)
+	log.Info("receive walk request", zap.Reflect("position", from))
 	var (
 		decoder Decoder
 		first   = true
@@ -210,7 +211,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 
 		select {
 		case <-ctx.Done():
-			log.Warningf("Walk Done!")
+			log.Warn("Walk Done!")
 			return nil
 		default:
 		}
@@ -235,7 +236,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		for {
 			select {
 			case <-ctx.Done():
-				log.Warningf("Walk Done!")
+				log.Warn("Walk Done!")
 				return nil
 			default:
 			}
@@ -256,7 +257,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 				// seek next binlog and report metrics
 				if err == ErrCRCMismatch || err == ErrMagicMismatch {
 					corruptionBinlogCounter.Add(1)
-					log.Errorf("decode %+v binlog error %v", from, err)
+					log.Error("decode binlog failed %v", zap.Reflect("position", from), zap.Error(err))
 					// offset + 1 to skip magic code of current binlog
 					offset, err1 := seekBinlog(f, from.Offset+1)
 					if err1 == nil {
@@ -289,7 +290,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 		}
 
 		if err != nil && err != io.EOF {
-			log.Errorf("read from local binlog file %d error %v", from.Suffix, err)
+			log.Error("read from local binlog file failed", zap.Uint64("suffix", from.Suffix), zap.Error(err))
 			return errors.Trace(err)
 		}
 
@@ -304,7 +305,7 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 	names, err := ReadBinlogNames(b.dir)
 	if err != nil {
-		log.Error("read binlog files error:", names)
+		log.Error("read binlog files failed", zap.Error(err))
 		return
 	}
 
@@ -317,13 +318,13 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 		fileName := path.Join(b.dir, name)
 		fi, err := os.Stat(fileName)
 		if err != nil {
-			log.Error("GC binlog file stat error:", err)
+			log.Error("GC binlog file stat failed", zap.Error(err))
 			continue
 		}
 
 		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
-			log.Errorf("parse binlog error %v", err)
+			log.Error("parse binlog failed", zap.Error(err))
 		}
 
 		if curSuffix < pos.Suffix {
@@ -332,9 +333,9 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 				log.Error("remove old binlog file err")
 				continue
 			}
-			log.Info("GC binlog file:", fileName)
+			log.Info("GC binlog file", zap.String("file name", fileName))
 		} else if time.Since(fi.ModTime()) > days {
-			log.Warningf("binlog file %s is already reach the gc time, but data is not send to kafka, position is %v", fileName, pos)
+			log.Warn("binlog file is already reach the gc time, but data is not send to kafka, position is %v", zap.String("name", fileName), zap.Reflect("position", pos))
 		}
 	}
 }
@@ -358,7 +359,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 
 	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
-		log.Errorf("write local binlog file %d error %v", b.lastSuffix, err)
+		log.Error("write local binlog failed", zap.Uint64("suffix", b.lastSuffix), zap.Error(err))
 		return 0, errors.Trace(err)
 	}
 
@@ -379,13 +380,13 @@ func (b *binlogger) Close() error {
 
 	if b.file != nil {
 		if err := b.file.Close(); err != nil {
-			log.Errorf("failed to unlock file %s during closing file: %v", b.file.Name(), err)
+			log.Error("failed to unlock file during closing file", zap.String("name", b.file.Name()), zap.Error(err))
 		}
 	}
 
 	if b.dirLock != nil {
 		if err := b.dirLock.Close(); err != nil {
-			log.Errorf("failed to unlock dir %s during closing file: %v", b.dir, err)
+			log.Error("failed to unlock dir during closing file", zap.String("directory", b.dir), zap.Error(err))
 		}
 	}
 
@@ -406,12 +407,12 @@ func (b *binlogger) rotate() error {
 	}
 
 	if err = b.file.Close(); err != nil {
-		log.Errorf("failed to unlock during closing file: %s", err)
+		log.Error("failed to unlock during closing file", zap.Error(err))
 	}
 	b.file = newTail
 
 	b.encoder = NewEncoder(b.file, 0)
-	log.Infof("segmented binlog file %v is created", fpath)
+	log.Info("segmented binlog file is created", zap.String("path", fpath))
 	return nil
 }
 
@@ -422,7 +423,7 @@ func (b *binlogger) seq() uint64 {
 
 	seq, _, err := ParseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
-		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
+		log.Fatal("bad binlog name", zap.String("name", b.file.Name()), zap.Error(err))
 	}
 
 	return seq

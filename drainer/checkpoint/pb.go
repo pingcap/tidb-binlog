@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/siddontang/go/ioutil2"
 )
@@ -100,14 +99,12 @@ func (sp *PbCheckPoint) Save(ts int64) error {
 	e := toml.NewEncoder(&buf)
 	err := e.Encode(sp)
 	if err != nil {
-		log.Errorf("syncer save CheckPointor info to file %s err %v", sp.name, errors.ErrorStack(err))
-		return errors.Trace(err)
+		return errors.Annotate(err, "encode checkpoint failed")
 	}
 
 	err = ioutil2.WriteFileAtomic(sp.name, buf.Bytes(), 0644)
 	if err != nil {
-		log.Errorf("syncer save CheckPointor info to file %s err %v", sp.name, errors.ErrorStack(err))
-		return errors.Trace(err)
+		return errors.Annotatef(err, "write file %s failed", sp.name)
 	}
 
 	sp.saveTime = time.Now()

@@ -21,9 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/file"
+	"go.uber.org/zap"
 )
 
 const (
@@ -86,8 +87,9 @@ func SearchIndex(names []string, index uint64) (int, bool) {
 	for i := len(names) - 1; i >= 0; i-- {
 		name := names[i]
 		curIndex, _, err := ParseBinlogName(name)
+		// TODO handle the err
 		if err != nil {
-			log.Errorf("parse correct name should never fail: %v", err)
+			log.Error("parse correct name should never fail", zap.Error(err))
 		}
 
 		if index == curIndex {
@@ -104,7 +106,7 @@ func IsValidBinlog(names []string) bool {
 	for _, name := range names {
 		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
-			log.Fatalf("binlogger: parse corrent name should never fail: %v", err)
+			log.Fatal("binlogger: parse corrent name should never fail", zap.Error(err))
 		}
 
 		if lastSuffix != 0 && lastSuffix != curSuffix-1 {
@@ -141,7 +143,7 @@ func FilterBinlogNames(names []string) []string {
 
 		if _, _, err := ParseBinlogName(name); err != nil {
 			if !strings.HasSuffix(name, ".tmp") {
-				log.Infof("ignored file %v in binlog dir", name)
+				log.Info("ignored file in binlog dir", zap.String("name", name))
 			}
 			continue
 		}

@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 )
 
 // TiBinlogToSlaveBinlog translates the format to slave binlog
@@ -151,9 +152,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
 	columnValues, err := tablecodec.DecodeRow(raw, colsTypeMap, time.Local)
 	if err != nil {
-		log.Error(err)
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotate(err, "DecodeRow failed")
 	}
 
 	// log.Debugf("delete decodeRow: %+v\n", columnValues)
@@ -223,13 +222,13 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		if mysql.HasUnsignedFlag(colInfo.Flag) {
 			val, err := strconv.ParseUint(str, 10, 64)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("ParseUint failed", zap.String("str", str), zap.Error(err))
 			}
 			col.Uint64Value = proto.Uint64(val)
 		} else {
 			val, err := strconv.ParseInt(str, 10, 64)
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("ParseInt failed", zap.String("str", str), zap.Error(err))
 			}
 			col.Int64Value = proto.Int64(val)
 		}
@@ -254,7 +253,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 
 	// TiDB don't suppose now
 	case "geometry":
-		log.Warn("unknown mysql type: ", colInfo.Tp)
+		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.Tp))
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 
@@ -262,7 +261,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.BytesValue = []byte(datum.GetMysqlJSON().String())
 
 	default:
-		log.Warn("unknown mysql type: ", colInfo.Tp)
+		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.Tp))
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 

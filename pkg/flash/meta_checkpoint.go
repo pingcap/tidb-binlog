@@ -16,7 +16,8 @@ package flash
 import (
 	"sync"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 type checkpoint struct {
@@ -54,12 +55,12 @@ func (f *MetaCheckpoint) Flush(commitTS int64, forceSave bool) {
 	defer f.Unlock()
 
 	if forceSave {
-		log.Debugf("[flush] FMC received a force save at %d.", commitTS)
+		log.Debug("[flush] FMC received a force save", zap.Int64("commit ts", commitTS))
 		f.forceSave = forceSave
 		return
 	} else if f.forceSave {
 		// Now being called from flushing thread, ignore as we are about to force save right away.
-		log.Debugf("[flush] FMC received a flush during force save period at %d. Ignoring.", commitTS)
+		log.Debug("[flush] FMC received a flush during force save period. Ignoring.", zap.Int64("commit ts", commitTS))
 		return
 	}
 
@@ -75,13 +76,13 @@ func (f *MetaCheckpoint) Flush(commitTS int64, forceSave bool) {
 	}
 	// Re-make pending checkpoints and discards ones until the safe checkpoint.
 	if removeUntil >= 0 {
-		log.Debugf("[flush] FMC picks safe checkpoint %v.", f.safeCP)
+		log.Debug("[flush] FMC picks safe checkpoint.", zap.Int64("ts", f.safeCP.commitTS))
 		f.removePendingCPs(removeUntil + 1)
 	} else {
 		log.Debug("[flush] FMC picks no safe checkpoint.")
 	}
 
-	log.Debugf("[flush] FMC remaining %d pending checkpoints.", len(f.pendingCPs))
+	log.Debug("[flush] FMC remaining pending checkpoints.", zap.Int("len", len(f.pendingCPs)))
 }
 
 // PushPendingCP pushes a pending checkpoint.
@@ -91,7 +92,7 @@ func (f *MetaCheckpoint) PushPendingCP(commitTS int64) {
 
 	f.pendingCPs = append(f.pendingCPs, &checkpoint{commitTS})
 
-	log.Debugf("[push] FMC pushed a pending checkpoint %v.", f.pendingCPs[len(f.pendingCPs)-1])
+	log.Debug("[push] FMC pushed a pending checkpoint", zap.Int64("ts", f.pendingCPs[len(f.pendingCPs)-1].commitTS))
 }
 
 // PopSafeCP pops the safe checkpoint, after popping the safe checkpoint will be nil.
@@ -111,7 +112,7 @@ func (f *MetaCheckpoint) PopSafeCP() (bool, bool, int64) {
 		return false, false, -1
 	}
 
-	log.Debugf("[pop] FMC popping safe checkpoint %v.", f.safeCP)
+	log.Debug("[pop] FMC popping safe checkpoint", zap.Int64("ts", f.safeCP.commitTS))
 
 	commitTS := f.safeCP.commitTS
 	f.safeCP = nil

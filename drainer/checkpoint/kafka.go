@@ -16,8 +16,9 @@ package checkpoint
 import (
 	"sync"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // KafkaCheckpoint is local CheckPoint struct.
@@ -49,7 +50,7 @@ func (cp *KafkaCheckpoint) Save(ts int64) error {
 	}
 
 	if ts <= cp.CommitTS {
-		log.Error("ignore save ts: ", ts)
+		log.Error("ignore save checkpoint", zap.Int64("ts", ts))
 		return nil
 	}
 

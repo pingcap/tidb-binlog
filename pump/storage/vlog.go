@@ -25,8 +25,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -430,7 +431,7 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 		logFile.lock.Lock()
 		err := os.Remove(logFile.path)
 		if err != nil {
-			log.Errorf("remove file %s err: %v", logFile.path, err)
+			log.Error("remove file failed", zap.String("path", logFile.path), zap.Error(err))
 		}
 		logFile.lock.Unlock()
 	}

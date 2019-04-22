@@ -16,7 +16,8 @@ package version
 import (
 	"runtime"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 var (
@@ -30,9 +31,11 @@ var (
 
 // PrintVersionInfo show version info to Stdout
 func PrintVersionInfo() {
-	log.Infof("Release Version: %s", ReleaseVersion)
-	log.Infof("Git Commit Hash: %s", GitHash)
-	log.Infof("Build TS: %s", BuildTS)
-	log.Infof("Go Version: %s", runtime.Version())
-	log.Infof("Go OS/Arch: %s%s", runtime.GOOS, runtime.GOARCH)
+	log.Info("Welcome to TiDB-Binlog",
+		zap.String("Release Version", ReleaseVersion),
+		zap.String("Git Commit Hash", GitHash),
+		zap.String("Build TS", BuildTS),
+		zap.String("Go Version", runtime.Version()),
+		zap.String("Go OS/Arch", runtime.GOOS+"/"+runtime.GOARCH),
+	)
 }

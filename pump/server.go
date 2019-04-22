@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
@@ -43,6 +43,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -113,7 +114,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	clusterID := pdCli.GetClusterID(ctx)
-	log.Infof("clusterID of pump server is %v", clusterID)
+	log.Info("get clusterID success", zap.Uint64("clusterID", clusterID))
 
 	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
 	if cfg.tls != nil {
@@ -227,7 +228,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 
 errHandle:
 	lossBinlogCacheCounter.Add(1)
-	log.Errorf("write binlog error %v", err)
+	log.Error("write binlog failed", zap.Error(err))
 	ret.Errmsg = err.Error()
 	return ret, err
 }
@@ -238,9 +239,9 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	beginTime := time.Now()
 	atomic.AddInt64(&s.alivePullerCount, 1)
 
-	log.Debug("get PullBinlogs req: ", in)
+	log.Debug("get PullBinlogs request", zap.Reflect("request", in))
 	defer func() {
-		log.Debug("PullBinlogs req: ", in, " quit")
+		log.Debug("PullBinlogs request quit", zap.Reflect("request", in))
 		var label string
 		if err != nil {
 			label = "fail"
@@ -274,12 +275,12 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			resp.Entity.Payload = data
 			err = stream.Send(resp)
 			if err != nil {
-				log.Warn(err)
+				log.Warn("send failed", zap.Error(err))
 				return err
 			}
-			log.Debug("PullBinlogs send binlog payload len: ", len(data), "success")
+			log.Debug("PullBinlogs send binlog payload success", zap.Int("len", len(data)))
 		case <-stream.Context().Done():
-			log.Debug("stream done: ", stream.Context().Err())
+			log.Debug("stream done", zap.Error(stream.Context().Err()))
 			return nil
 		}
 	}
@@ -296,7 +297,7 @@ func (s *Server) startHeartbeat() {
 	go func() {
 		for err := range errc {
 			if err != context.Canceled {
-				log.Errorf("send heartbeat error %v", err)
+				log.Error("send heartbeat failed", zap.Error(err))
 			}
 		}
 	}()
@@ -313,14 +314,14 @@ func (s *Server) Start() error {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
-	log.Infof("register success, this pump's node id is %s", s.node.NodeStatus().NodeID)
+	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
 
 	// notify all cisterns
 	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 	if err := s.node.Notify(ctx); err != nil {
 		// if fail, refresh this node's state to paused
 		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
-			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
+			log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
 	}
@@ -396,7 +397,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
-	log.Infof("start to server request on %s", s.tcpAddr)
+	log.Info("start to server request", zap.String("addr", s.tcpAddr))
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
@@ -465,7 +466,7 @@ func (s *Server) genForwardBinlog() {
 			if lastWriteBinlogUnixNano == atomic.LoadInt64(&s.lastWriteBinlogUnixNano) {
 				_, err := s.writeFakeBinlog()
 				if err != nil {
-					log.Error("write fake binlog err: ", err)
+					log.Error("write fake binlog failed", zap.Error(err))
 				}
 			}
 			lastWriteBinlogUnixNano = atomic.LoadInt64(&s.lastWriteBinlogUnixNano)
@@ -485,9 +486,10 @@ func (s *Server) printServerInfo() {
 			log.Info("printServerInfo exit")
 			return
 		case <-ticker.C:
-			log.Infof("writeBinlogCount: %d, alivePullerCount: %d, maxCommitTS: %d",
-				atomic.LoadInt64(&s.writeBinlogCount), atomic.LoadInt64(&s.alivePullerCount),
-				s.storage.MaxCommitTS())
+			log.Info("server info tick",
+				zap.Int64("writeBinlogCount", atomic.LoadInt64(&s.writeBinlogCount)),
+				zap.Int64("alivePullerCount", atomic.LoadInt64(&s.alivePullerCount)),
+				zap.Int64("MaxCommitTS", s.storage.MaxCommitTS()))
 		}
 	}
 }
@@ -507,17 +509,17 @@ func (s *Server) gcBinlogFile() {
 
 			safeTSO, err := s.getSaveGCTSOForDrainers()
 			if err != nil {
-				log.Warn(err)
+				log.Warn("get save gc tso for drainers failed", zap.Error(err))
 				continue
 			}
-			log.Info("safe ts for drainers: ", safeTSO)
+			log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
 
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 			if safeTSO < gcTS {
 				gcTS = safeTSO
 			}
-			log.Info("gc ts: ", gcTS)
+			log.Info("send gc request to storage", zap.Int64("ts", gcTS))
 			s.storage.GCTS(gcTS)
 		}
 	}
@@ -566,7 +568,7 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 
 	pumps, err := node.EtcdRegistry.Nodes(s.ctx, "drainers")
 	if err != nil {
-		log.Errorf("get pumps error %v", err)
+		log.Error("get pumps failed", zap.Error(err))
 	}
 
 	json.NewEncoder(w).Encode(pumps)
@@ -606,7 +608,7 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 func (s *Server) PumpStatus() *HTTPStatus {
 	status, err := s.node.NodesStatus(s.ctx)
 	if err != nil {
-		log.Errorf("get pumps' status error %v", err)
+		log.Error("get pumps' status failed", zap.Error(err))
 		return &HTTPStatus{
 			ErrMsg: err.Error(),
 		}
@@ -620,7 +622,7 @@ func (s *Server) PumpStatus() *HTTPStatus {
 	// get ts from pd
 	commitTS, err := s.getTSO()
 	if err != nil {
-		log.Errorf("get ts from pd, error %v", err)
+		log.Error("get ts from pd failed", zap.Error(err))
 		return &HTTPStatus{
 			ErrMsg: err.Error(),
 		}
@@ -646,7 +648,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := mux.Vars(r)["nodeID"]
 	action := mux.Vars(r)["action"]
-	log.Infof("node %s receive action %s", nodeID, action)
+	log.Info("receive action", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.node.NodeStatus().NodeID {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
@@ -660,10 +662,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "pause":
-		log.Infof("pump %s's state change to pausing", nodeID)
+		log.Info("pump 's state change to pausing", zap.String("nodeID", nodeID))
 		s.node.NodeStatus().State = node.Pausing
 	case "close":
-		log.Infof("pump %s's state change to closing", nodeID)
+		log.Info("pump 's state change to closing", zap.String("nodeID", nodeID))
 		s.node.NodeStatus().State = node.Closing
 	default:
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
@@ -694,7 +696,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		fakeBinlog, err = s.writeFakeBinlog()
 		if err != nil {
-			log.Error(err)
+			log.Error("write fake binlog failed", zap.Error(err))
 
 			select {
 			case <-time.After(time.Second):
@@ -711,7 +713,9 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		maxCommitTS := s.storage.MaxCommitTS()
 		if maxCommitTS < fakeBinlog.CommitTs {
-			log.Info("max commit TS in storage: %d, fake binlog commit ts: %d", maxCommitTS, fakeBinlog.CommitTs)
+			log.Info("max commit TS in storage less than fake binlog commit ts",
+				zap.Int64("max commit ts", maxCommitTS),
+				zap.Int64("fake binlog commit ts", fakeBinlog.CommitTs))
 			select {
 			case <-time.After(time.Second):
 				continue
@@ -732,8 +736,8 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 			pumpNode := s.node.(*pumpNode)
 			drainers, err := pumpNode.Nodes(ctx, "drainers")
 			if err != nil {
-				log.Error(err)
-				return errors.Trace(err)
+				log.Error("get nodes failed", zap.Error(err))
+				break
 			}
 			needByDrainer := false
 			for _, drainer := range drainers {
@@ -742,7 +746,10 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				}
 
 				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
-					log.Infof("wait for drainer: %v maxCommitTS: %d, pump maxCommitTS: %d", drainer.NodeID, drainer.MaxCommitTS, fakeBinlog.CommitTs)
+					log.Info("wait for drainer to consume binlog",
+						zap.String("drainer NodeID", drainer.NodeID),
+						zap.Int64("drainer MaxCommitTS", drainer.MaxCommitTS),
+						zap.Int64("Binlog CommiTS", fakeBinlog.CommitTs))
 					needByDrainer = true
 					break
 				}
@@ -753,7 +760,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 			_, err = s.writeFakeBinlog()
 			if err != nil {
-				log.Errorf("write fake binlog error %v", err)
+				log.Error("write fake binlog failed", zap.Error(err))
 			}
 
 		case <-ctx.Done():
@@ -774,13 +781,15 @@ func (s *Server) commitStatus() {
 		log.Info("safe to offline now")
 		state = node.Offline
 	default:
-		log.Warnf("there must be something wrong, now the node status is %v", s.node.NodeStatus())
+		log.Warn("there must be something wrong", zap.Reflect("status", s.node.NodeStatus()))
 		state = s.node.NodeStatus().State
 	}
 	if err := s.registerNode(context.Background(), state, 0); err != nil {
-		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
+		log.Error("unregister pump failed", zap.Error(err))
 	}
-	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)
+	log.Info("update state success",
+		zap.String("NodeID", s.node.NodeStatus().NodeID),
+		zap.String("state", state))
 }
 
 // Close gracefully releases resource of pump server
@@ -804,12 +813,12 @@ func (s *Server) Close() {
 	log.Info("grpc is stopped")
 
 	if err := s.storage.Close(); err != nil {
-		log.Errorf("close storage error %v", errors.ErrorStack(err))
+		log.Error("close storage failed", zap.Error(err))
 	}
 	log.Info("storage is closed")
 
 	if err := s.node.Quit(); err != nil {
-		log.Errorf("close pump node error %s", errors.Trace(err))
+		log.Error("close pump node failed", zap.Error(err))
 	}
 	log.Info("pump node is closed")
 
