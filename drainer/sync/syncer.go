@@ -43,3 +43,8 @@ func newBaseSyncer(tableInfoGetter translator.TableInfoGetter) *baseSyncer {
 func (s *baseSyncer) Successes() <-chan *Item {
 	return s.success
 }
+
+// Error implements Syncer interface
+func (s *baseSyncer) Error() <-chan error {
+	return s.error()
+}

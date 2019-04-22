@@ -60,7 +60,7 @@ func (p *pbSyncer) saveBinlog(binlog *pb.Binlog) error {
 
 func (p *pbSyncer) Close() error {
 	err := p.binlogger.Close()
-	p.SetErr(err)
+	p.setErr(err)
 	close(p.success)
 
 	return p.err

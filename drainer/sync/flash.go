@@ -316,7 +316,7 @@ func (e *FlashSyncer) flushRoutine() {
 			if err != nil {
 				e.Unlock()
 				log.Errorf("[flush_thread] Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
-				e.SetErr(err)
+				e.setErr(err)
 				return
 			}
 			e.Unlock()

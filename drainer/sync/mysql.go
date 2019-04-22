@@ -18,7 +18,6 @@ type MysqlSyncer struct {
 	db     *sql.DB
 	loader *loader.Loader
 
-	shutdownOnce sync.Once
 	*baseSyncer
 }
 
@@ -112,5 +111,5 @@ func (m *MysqlSyncer) run() {
 
 	wg.Wait()
 	m.db.Close()
-	m.SetErr(err)
+	m.setErr(err)
 }

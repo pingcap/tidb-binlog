@@ -21,7 +21,6 @@ import (
 // TiBinlogToSlaveBinlog translates the format to slave binlog
 func TiBinlogToSlaveBinlog(infoGetter TableInfoGetter, schema string, table string,
 	tiBinlog *pb.Binlog, pv *pb.PrewriteValue) (slaveBinlog *obinlog.Binlog, err error) {
-	slaveBinlog = new(obinlog.Binlog)
 	if tiBinlog.DdlJobId > 0 { // DDL
 		slaveBinlog = &obinlog.Binlog{
 			Type:     obinlog.BinlogType_DDL,
