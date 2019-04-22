@@ -36,7 +36,7 @@ type KafkaSyncer struct {
 // newAsyncProducer will only be changed in unit test for mock
 var newAsyncProducer = sarama.NewAsyncProducer
 
-// NewKafka return a instance of KafkaSyncer
+// NewKafka returns a instance of KafkaSyncer
 func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*KafkaSyncer, error) {
 	var topic string
 	if len(cfg.TopicName) == 0 {

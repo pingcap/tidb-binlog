@@ -31,15 +31,15 @@ type CheckpointConfig struct {
 	Schema string `toml:"schema" json:"schema"`
 }
 
+type baseError struct {
+	err   error
+	errCh chan struct{}
+}
+
 func newBaseError() *baseError {
 	return &baseError{
 		errCh: make(chan struct{}),
 	}
-}
-
-type baseError struct {
-	err   error
-	errCh chan struct{}
 }
 
 func (b *baseError) Error() <-chan error {

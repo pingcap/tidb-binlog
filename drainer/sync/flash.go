@@ -153,7 +153,7 @@ var openCH = pkgsql.OpenCH
 
 var _ Syncer = &FlashSyncer{}
 
-// NewFlashSyncer return a instance of FlashSyncer
+// NewFlashSyncer returns a instance of FlashSyncer
 func NewFlashSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*FlashSyncer, error) {
 	timeLimit, err := time.ParseDuration(cfg.TimeLimit)
 	if err != nil {

@@ -25,7 +25,7 @@ type MysqlSyncer struct {
 // should only be used for unit test to create mock db
 var createDB = loader.CreateDBWithSQLMode
 
-// NewMysqlSyncer return a instance of MysqlSyncer
+// NewMysqlSyncer returns a instance of MysqlSyncer
 func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string) (*MysqlSyncer, error) {
 	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
