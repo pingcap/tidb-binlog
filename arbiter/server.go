@@ -198,7 +198,7 @@ func (s *Server) Run() error {
 		return errors.Trace(err)
 	}
 
-	if err = s.saveFinishTS(); err != nil {
+	if err = s.saveFinishTS(StatusNormal); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -212,8 +212,8 @@ func (s *Server) updateFinishTS(msg *reader.Message) {
 	txnLatencySecondsHistogram.Observe(float64(ms) / 1000.0)
 }
 
-func (s *Server) saveFinishTS() error {
-	err := s.checkpoint.Save(s.finishTS, StatusRunning)
+func (s *Server) saveFinishTS(status int) error {
+	err := s.checkpoint.Save(s.finishTS, status)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
 			log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
 			s.updateFinishTS(msg)
 		case <-saveTick.C:
-			if err := s.saveFinishTS(); err != nil {
+			if err := s.saveFinishTS(StatusRunning); err != nil {
 				log.Error(err)
 				continue
 			}
@@ -247,7 +247,7 @@ func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
 		}
 	}
 
-	if err := s.saveFinishTS(); err != nil {
+	if err := s.saveFinishTS(StatusRunning); err != nil {
 		log.Error(err)
 	}
 }
