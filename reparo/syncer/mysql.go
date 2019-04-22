@@ -23,7 +23,7 @@ type DBConfig struct {
 type mysqlSyncer struct {
 	db *sql.DB
 
-	loader *loader.Loader
+	loader loader.Loader
 
 	loaderQuit chan struct{}
 	loaderErr  error

@@ -23,7 +23,7 @@ type Server struct {
 	cfg  *Config
 	port int
 
-	load *loader.Loader
+	load loader.Loader
 
 	checkpoint  *Checkpoint
 	kafkaReader *reader.Reader
