@@ -44,28 +44,34 @@ func DefaultIP() (ip string, err error) {
 		}
 
 		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
+			if ipStr := getAddrDefaultIP(addr); len(ipStr) > 0 {
+				return ipStr, nil
 			}
-			if ip.IsUnspecified() || ip.IsLoopback() {
-				continue
-			}
-
-			ip = ip.To4()
-			if ip == nil {
-				continue
-			}
-
-			return ip.String(), nil
 		}
 	}
 
 	err = errors.New("no ip found")
 	return
+}
+
+func getAddrDefaultIP(addr net.Addr) string {
+	var ip net.IP
+	switch v := addr.(type) {
+	case *net.IPNet:
+		ip = v.IP
+	case *net.IPAddr:
+		ip = v.IP
+	}
+	if ip.IsUnspecified() || ip.IsLoopback() {
+		return ""
+	}
+
+	ip = ip.To4()
+	if ip == nil {
+		return ""
+	}
+
+	return ip.String()
 }
 
 // DefaultListenAddr returns default listen address with appointed port.
@@ -91,28 +97,30 @@ type StdLogger struct {
 }
 
 // NewStdLogger return an instance of StdLogger
-func NewStdLogger(prefix string) *StdLogger {
-	return &StdLogger{
+func NewStdLogger(prefix string) StdLogger {
+	return StdLogger{
 		prefix: prefix,
 	}
 }
 
-// Print implements samara.StdLogger
-func (l *StdLogger) Print(v ...interface{}) {
+func (l StdLogger) emit(msg string) {
 	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprint(v...))
+	logger.Output(2, l.prefix + msg)
+}
+
+// Print implements samara.StdLogger
+func (l StdLogger) Print(v ...interface{}) {
+	l.emit(fmt.Sprint(v...))
 }
 
 // Printf implements samara.StdLogger
-func (l *StdLogger) Printf(format string, v ...interface{}) {
-	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprintf(format, v...))
+func (l StdLogger) Printf(format string, v ...interface{}) {
+	l.emit(fmt.Sprintf(format, v...))
 }
 
 // Println implements samara.StdLogger
-func (l *StdLogger) Println(v ...interface{}) {
-	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprintln(v...))
+func (l StdLogger) Println(v ...interface{}) {
+	l.emit(fmt.Sprintln(v...))
 }
 
 // ToColumnTypeMap return a map index by column id
@@ -152,6 +160,9 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	return int64(version.Ver), nil
 }
 
+// Store the function in a variable so that we can mock it when testing
+var newPdCli = pd.NewClient
+
 func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
 	urlv, err := flags.NewURLsValue(etcdURLs)
 	if err != nil {
@@ -162,16 +173,15 @@ func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, er
 
 	var pdCli pd.Client
 	for i := 1; i < pdReconnTimes; i++ {
-		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+		pdCli, err = newPdCli(urlv.StringSlice(), pd.SecurityOption{
 			CAPath:   securityConfig.SSLCA,
 			CertPath: securityConfig.SSLCert,
 			KeyPath:  securityConfig.SSLKey,
 		})
-		if err != nil {
-			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
-		} else {
+		if err == nil {
 			break
 		}
+		time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
 	}
 
 	return pdCli, errors.Trace(err)
