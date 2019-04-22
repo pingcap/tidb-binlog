@@ -102,5 +102,5 @@ func checkColumn(c *check.C, info *obinlog.ColumnInfo, col *obinlog.Column, datu
 		datumV = fmt.Sprintf("%v", datum.GetInt64())
 	}
 
-	c.Assert(colV, check.Equals, fmt.Sprintf("%v", datumV))
+	c.Assert(colV, check.Equals, datumV)
 }
