@@ -154,14 +154,8 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 	mysqlSyncer.SetSafeMode(true)
 
 	go func() {
-		defer func() {
-			mysqlSyncer.SetSafeMode(s.cfg.SafeMode)
-		}()
-
-		select {
-		case <-s.shutdown:
-		case <-time.After(5 * time.Minute):
-		}
+		<-time.After(5 * time.Minute)
+		mysqlSyncer.SetSafeMode(s.cfg.SafeMode)
 	}()
 }
 
@@ -246,7 +240,7 @@ func (s *Syncer) run() error {
 
 	var err error
 
-	go s.enableSafeModeInitializationPhase()
+	s.enableSafeModeInitializationPhase()
 
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
