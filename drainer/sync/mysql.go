@@ -101,13 +101,7 @@ func (m *MysqlSyncer) run() {
 	}()
 
 	// run loader
-	loaderQuit := make(chan error, 1)
-	go func() {
-		err := m.loader.Run()
-		loaderQuit <- err
-	}()
-
-	err := <-loaderQuit
+	err := m.loader.Run()
 
 	wg.Wait()
 	m.db.Close()
