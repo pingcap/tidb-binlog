@@ -121,7 +121,7 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 			break
 		}
 
-		log.Errorf("%s: %v", errStr, errors.ErrorStack(err))
+		log.Errorf("%s: %v", errStr, err)
 		time.Sleep(sleepTime)
 	}
 
