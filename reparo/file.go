@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package reparo
 
 import (
@@ -65,6 +78,15 @@ func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, erro
 }
 
 func getFirstBinlogCommitTS(filename string) (int64, error) {
+	_, binlogFileName := path.Split(filename)
+	_, ts, err := bf.ParseBinlogName(binlogFileName)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if ts > 0 {
+		return ts, nil
+	}
+
 	fd, err := os.OpenFile(filename, os.O_RDONLY, 0600)
 	if err != nil {
 		return 0, errors.Annotatef(err, "open file %s error", filename)

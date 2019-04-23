@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package zk
 
 import (
@@ -38,8 +51,17 @@ func NewDefaultConfig() *Config {
 
 // Client is a simple wrapper for zk.
 type Client struct {
-	conn *zk.Conn
+	conn Conn
 	conf *Config
+}
+
+// Conn is an interface abstracting away the zookeeper connection.
+//
+// The standard `*zk.Conn` type implements this interface.
+type Conn interface {
+	Close()
+	Children(path string) ([]string, *zk.Stat, error)
+	Get(path string) ([]byte, *zk.Stat, error)
 }
 
 // New creates a instance of Client.
@@ -74,6 +96,14 @@ func NewFromConnectionString(connectionString string, dialTimeout, sessionTimeou
 		conf.SessionTimeout = sessionTimeout
 	}
 	return New(nodes, conf)
+}
+
+// NewWithConnection creates a Client with an existing zookeeper connection.
+func NewWithConnection(conn Conn, conf *Config) *Client {
+	if conf == nil {
+		conf = NewDefaultConfig()
+	}
+	return &Client{conn, conf}
 }
 
 // Close closes zookeeper client.

@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package binlogfile
 
 import (
@@ -100,7 +113,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog-0000000000000000
+	// if no binlog files, we create from index 0, the file name like binlog-0000000000000000-20190101010101
 	if len(names) == 0 {
 		lastFileName = path.Join(dirpath, BinlogName(0))
 		lastFileSuffix = 0
@@ -112,7 +125,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		}
 
 		lastFileName = path.Join(dirpath, names[len(names)-1])
-		lastFileSuffix, err = ParseBinlogName(names[len(names)-1])
+		lastFileSuffix, _, err = ParseBinlogName(names[len(names)-1])
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -312,7 +325,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			continue
 		}
 
-		curSuffix, err := ParseBinlogName(name)
+		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
 			log.Errorf("parse binlog error %v", err)
 		}
@@ -411,7 +424,7 @@ func (b *binlogger) seq() uint64 {
 		return 0
 	}
 
-	seq, err := ParseBinlogName(path.Base(b.file.Name()))
+	seq, _, err := ParseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
 		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
 	}

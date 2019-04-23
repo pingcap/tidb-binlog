@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package reparo
 
 import (
@@ -27,8 +40,8 @@ func (s *testConfigSuite) TestTSORangeParsing(c *check.C) {
 
 	err := config.Parse([]string{
 		"-data-dir=/tmp/data",
-		"-start-datetime=2019-01-01 15:07:00", 
-		"-stop-datetime=2019-02-01 15:07:00", 
+		"-start-datetime=2019-01-01 15:07:00",
+		"-stop-datetime=2019-02-01 15:07:00",
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(config.StartTSO, check.Not(check.Equals), 0)
