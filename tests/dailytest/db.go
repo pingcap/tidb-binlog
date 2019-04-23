@@ -364,6 +364,7 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 	writeSrc(src)
 
 	tick := time.NewTicker(time.Second * 5)
+	defer tick.Stop()
 	timeout := time.After(time.Second * 240)
 
 	for {
