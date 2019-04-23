@@ -147,18 +147,18 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	})
 
 	// Add fake binlog
-	commitTS++
-	binlog = &pb.Binlog{
-		StartTs:  commitTS,
-		CommitTs: commitTS,
+	for i := 0; i < 3; i++ {
+		time.Sleep(time.Second)
+		commitTS++
+		binlog = &pb.Binlog{
+			StartTs:  commitTS,
+			CommitTs: commitTS,
+		}
+
+		syncer.Add(&binlogItem{
+			binlog: binlog,
+		})
 	}
-
-	syncer.Add(&binlogItem{
-		binlog: binlog,
-	})
-
-	// wait syncer consume binlog items
-	time.Sleep(time.Second)
 
 	syncer.Close()
 
@@ -167,8 +167,10 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	c.Assert(interceptSyncer.items, check.HasLen, 3)
 
 	// check checkpoint ts
-	c.Assert(cp.TS(), check.Equals, commitTS)
-	c.Assert(syncer.GetLatestCommitTS(), check.Equals, commitTS)
+	// the latest fake binlog may or may not be saved
+	var lastNoneFakeTS int64 = 3
+	c.Assert(cp.TS(), check.Greater, lastNoneFakeTS)
+	c.Assert(syncer.GetLatestCommitTS(), check.Greater, lastNoneFakeTS)
 }
 
 func getEmptyPrewriteValue(schemaVersion int64, tableID int64) (data []byte) {
