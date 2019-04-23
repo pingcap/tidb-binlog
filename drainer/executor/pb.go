@@ -85,9 +85,12 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 
 func (p *pbExecutor) compressFile(ctx context.Context) {
 	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+
 		for {
 			select {
-			case <-time.After(time.Hour):
+			case <- ticker.C:
 				if err := p.binlogger.CompressFile(); err != nil {
 					log.Errorf("compress pb file meet error %v, will stop compress", errors.Trace(err))
 					return
