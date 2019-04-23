@@ -266,8 +266,8 @@ func (s *Syncer) run() error {
 ForLoop:
 	for {
 		select {
-		case err := <-dsyncError:
-			return errors.Trace(err)
+		case err = <-dsyncError:
+			break ForLoop
 		case <-s.shutdown:
 			break ForLoop
 		case b = <-s.input:
@@ -292,12 +292,14 @@ ForLoop:
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
 			if err != nil {
-				return errors.Errorf("prewrite %s unmarshal error %v", preWriteValue, err)
+				err = errors.Annotatef(err, "prewrite %s Unmarshal failed", preWriteValue)
+				break ForLoop
 			}
 
 			err = s.rewriteForOldVersion(preWrite)
 			if err != nil {
-				return errors.Annotate(err, "rewrite for old version fail")
+				err = errors.Annotate(err, "rewrite for old version fail")
+				break ForLoop
 			}
 
 			log.Debug("DML SchemaVersion: ", preWrite.SchemaVersion)
@@ -307,12 +309,15 @@ ForLoop:
 
 			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
 			if err != nil {
-				return errors.Trace(err)
+				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
+				break ForLoop
 			}
 
-			ignore, err := filterTable(preWrite, s.filter, s.schema)
+			var ignore bool
+			ignore, err = filterTable(preWrite, s.filter, s.schema)
 			if err != nil {
-				return errors.Trace(err)
+				err = errors.Annotate(err, "filterTable failed")
+				break ForLoop
 			}
 
 			if !ignore {
@@ -321,7 +326,8 @@ ForLoop:
 				s.itemsWg.Add(1)
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
-					return errors.Trace(err)
+					err = errors.Annotate(err, "add to dsyncer failed")
+					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			}
@@ -342,7 +348,9 @@ ForLoop:
 
 			log.Debug("ddl query: ", b.job.Query)
 			sql := b.job.Query
-			schema, table, err := s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
+			var schema string
+			var table string
+			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -355,7 +363,8 @@ ForLoop:
 				s.itemsWg.Add(1)
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
-					return errors.Trace(err)
+					err = errors.Annotate(err, "add to dsyncer failed")
+					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			}
@@ -363,15 +372,16 @@ ForLoop:
 	}
 
 	close(fakeBinlog)
-	s.itemsWg.Wait()
-	err = s.dsyncer.Close()
-	if err != nil {
-		return errors.Annotate(err, "close dsyncer error")
-	}
+	cerr := s.dsyncer.Close()
 	wg.Wait()
+
 	close(s.closed)
 
-	return nil
+	// return the origin error if has, or the close error
+	if err != nil {
+		return err
+	}
+	return cerr
 }
 
 // filterTable may drop some table mutation in `PrewriteValue`
