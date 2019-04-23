@@ -16,6 +16,7 @@ package drainer
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ngaut/log"
@@ -173,10 +174,9 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 // Note we do not send the fake binlog to downstream, we get fake binlog from
 // another chan and it's guaranteed that all the received binlogs before have been synced to downstream
 // when we get the fake binlog from this chan.
-func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog) {
-	var lastTS int64
-
+func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 	successes := s.dsyncer.Successes()
+	var lastSaveTS int64
 
 	for {
 		if successes == nil && fakeBinlog == nil {
@@ -195,8 +195,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog) {
 			s.lastSyncTime = time.Now()
 			s.itemsWg.Done()
 			ts := item.Binlog.CommitTs
-			if ts > lastTS {
-				lastTS = ts
+			if ts > atomic.LoadInt64(lastTS) {
+				atomic.StoreInt64(lastTS, ts)
 			}
 
 			// save ASAP for DDL
@@ -210,19 +210,26 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog) {
 				break
 			}
 			ts := binlog.CommitTs
-			if ts > lastTS {
-				lastTS = ts
+			if ts > atomic.LoadInt64(lastTS) {
+				atomic.StoreInt64(lastTS, ts)
 			}
 		}
 
-		if saveNow || s.cp.Check(lastTS) {
-			s.savePoint(lastTS)
-			eventCounter.WithLabelValues("savepoint").Add(1)
+		ts := atomic.LoadInt64(lastTS)
+		if saveNow || s.cp.Check(ts) {
+			if ts != lastSaveTS {
+				s.savePoint(ts)
+				lastSaveTS = ts
+				eventCounter.WithLabelValues("savepoint").Add(1)
+			}
 		}
 	}
 
-	s.savePoint(lastTS)
-	eventCounter.WithLabelValues("savepoint").Add(1)
+	ts := atomic.LoadInt64(lastTS)
+	if ts != lastSaveTS {
+		s.savePoint(ts)
+		eventCounter.WithLabelValues("savepoint").Add(1)
+	}
 
 	log.Info("handleSuccess quit")
 }
@@ -244,12 +251,15 @@ func (s *Syncer) savePoint(ts int64) {
 func (s *Syncer) run() error {
 	var wg sync.WaitGroup
 
-	fakeBinlog := make(chan *pb.Binlog, 1024)
+	fakeBinlogCh := make(chan *pb.Binlog, 1024)
+	var lastSuccessTS int64
+	var fakeBinlogs []*pb.Binlog
+	var fakeBinlogPreAddTS []int64
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.handleSuccess(fakeBinlog)
+		s.handleSuccess(fakeBinlogCh, &lastSuccessTS)
 	}()
 
 	var err error
@@ -259,17 +269,32 @@ func (s *Syncer) run() error {
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
 
-	lastWaitTime := time.Now()
-	waitLagDuration := time.Second
+	var fakeBinlog *pb.Binlog
+	var pushFakeBinlog chan<- *pb.Binlog = nil
 
+	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
 ForLoop:
 	for {
+		// check if we can safely push a fake binlog
+		// We must wait previous items consumed to make sure we are safe to save this fake binlog commitTS
+		if pushFakeBinlog == nil && len(fakeBinlogs) > 0 {
+			if fakeBinlogPreAddTS[0] <= atomic.LoadInt64(&lastSuccessTS) {
+				pushFakeBinlog = fakeBinlogCh
+				fakeBinlog = fakeBinlogs[0]
+				fakeBinlogs = fakeBinlogs[1:]
+				fakeBinlogPreAddTS = fakeBinlogPreAddTS[1:]
+			}
+		}
+
 		select {
 		case err = <-dsyncError:
 			break ForLoop
 		case <-s.shutdown:
 			break ForLoop
+		case pushFakeBinlog <- fakeBinlog:
+			pushFakeBinlog = nil
+			continue
 		case b = <-s.input:
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
 			log.Debugf("consume binlogItem: %s", b)
@@ -281,12 +306,8 @@ ForLoop:
 		jobID := binlog.GetDdlJobId()
 
 		if startTS == commitTS {
-			if time.Since(lastWaitTime) > waitLagDuration {
-				// wait previous items consumed to make sure we are safe to save this fake binlog commitTS
-				s.itemsWg.Wait()
-				lastWaitTime = time.Now()
-				fakeBinlog <- binlog
-			}
+			fakeBinlogs = append(fakeBinlogs, binlog)
+			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddComitTS)
 		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
@@ -324,6 +345,7 @@ ForLoop:
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
 				s.itemsWg.Add(1)
+				lastAddComitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
 					err = errors.Annotate(err, "add to dsyncer failed")
@@ -361,6 +383,7 @@ ForLoop:
 				s.addDDLCount()
 				beginTime := time.Now()
 				s.itemsWg.Add(1)
+				lastAddComitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
 					err = errors.Annotate(err, "add to dsyncer failed")
@@ -371,7 +394,7 @@ ForLoop:
 		}
 	}
 
-	close(fakeBinlog)
+	close(fakeBinlogCh)
 	cerr := s.dsyncer.Close()
 	wg.Wait()
 
