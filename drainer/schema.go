@@ -228,14 +228,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 				continue
 			}
 
-			data, err := json.Marshal(s.jobs[i])
-			if err != nil {
-				log.Error(err)
-			} else {
-				log.Debugf("handle ddl job id(%d): %s", s.jobs[i].ID, string(data))
-			}
-
-			_, _, _, err = s.handleDDL(s.jobs[i])
+			_, _, _, err := s.handleDDL(s.jobs[i])
 			if err != nil {
 				return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 			}
@@ -255,6 +248,8 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
 func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
+	log.Debug("handle job: ", job)
+
 	if skipJob(job) {
 		return "", "", "", nil
 	}

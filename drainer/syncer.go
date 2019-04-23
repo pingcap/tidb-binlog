@@ -1,7 +1,6 @@
 package drainer
 
 import (
-	"encoding/json"
 	"strings"
 	"sync"
 	"time"
@@ -55,17 +54,10 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
 
-	// create schema
-	for i := 0; i < len(jobs); i++ {
-		data, err := json.Marshal(jobs[i])
-		if err != nil {
-			log.Error(err)
-		} else {
-			log.Debug("get ddl binlog job: ", string(data))
-		}
-	}
+	log.Debug(jobs)
 
 	var err error
+	// create schema
 	syncer.schema, err = NewSchema(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -84,22 +76,22 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
 		if err != nil {
-			return nil, errors.Annotate(err, "create dsyncer fail")
+			return nil, errors.Annotate(err, "fail to create kafka dsyncer")
 		}
 	case "pb":
 		dsyncer, err = dsync.NewPBSyncer(cfg.To.BinlogFileDir, cfg.To.Compression, schema)
 		if err != nil {
-			return nil, errors.Annotate(err, "create dsyncer fail")
+			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
 	case "flash":
 		dsyncer, err = dsync.NewFlashSyncer(cfg.To, schema)
 		if err != nil {
-			return nil, errors.Annotate(err, "create dsyncer fail")
+			return nil, errors.Annotate(err, "fail to create flash dsyncer")
 		}
 	case "mysql", "tidb":
 		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode)
 		if err != nil {
-			return nil, errors.Annotate(err, "create dsyncer fail")
+			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
 		// only use for test
 	case "_intercept":
