@@ -186,8 +186,8 @@ func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
 		},
 	}
 	signal := make(chan struct{})
+	server.wg.Add(1)
 	go func() {
-		server.wg.Add(1)
 		server.genForwardBinlog()
 		close(signal)
 	}()
@@ -227,8 +227,8 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 			GenFakeBinlogInterval: 1,
 		},
 	}
+	server.wg.Add(1)
 	go func() {
-		server.wg.Add(1)
 		server.genForwardBinlog()
 	}()
 	time.Sleep(time.Duration(server.cfg.GenFakeBinlogInterval*2) * time.Second)
