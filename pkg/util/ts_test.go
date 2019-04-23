@@ -49,6 +49,6 @@ func (s *tsSuite) TestGetTSO(c *C) {
 	c.Assert(err, NotNil)
 
 	t, err = GetTSO(dummyCli{physical: 1, logical: 10})
-	c.Assert(t, Equals, int64(1<<physicalShiftBits + 10))
 	c.Assert(err, IsNil)
+	c.Assert(t, Equals, int64(1<<physicalShiftBits + 10))
 }
