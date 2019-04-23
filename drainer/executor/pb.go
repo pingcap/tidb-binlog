@@ -14,8 +14,8 @@
 package executor
 
 import (
-	"time"
 	"context"
+	"time"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
@@ -43,7 +43,11 @@ func newPB(ctx context.Context, cfg *DBConfig) (Executor, error) {
 		binlogger: binlogger,
 		baseError: newBaseError(),
 	}
-	newPbExecutor.compressFile(ctx)
+
+	if codec != compress.CompressionNone {
+		newPbExecutor.startCompressFile(ctx)
+	}
+
 	return newPbExecutor, nil
 }
 
@@ -83,19 +87,19 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 	return errors.Trace(err)
 }
 
-func (p *pbExecutor) compressFile(ctx context.Context) {
+func (p *pbExecutor) startCompressFile(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <- ticker.C:
+			case <-ticker.C:
 				if err := p.binlogger.CompressFile(); err != nil {
 					log.Errorf("compress pb file meet error %v, will stop compress", errors.Trace(err))
 					return
 				}
-			case <- ctx.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
