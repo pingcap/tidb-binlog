@@ -164,6 +164,11 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 	}()
 }
 
+// handleSuccess handle the success binlog item we synced to downstream,
+// currently we only need to save checkpoint ts.
+// Note we do not send the fake binlog to downstream, we get fake binlog from
+// another chan and it's guaranteed that all the received binlogs before have been synced to downstream
+// when we get the fake binlog from this chan.
 func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog) {
 	var lastTS int64
 
@@ -250,6 +255,9 @@ func (s *Syncer) run() error {
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
 
+	lastWaitTime := time.Now()
+	waitLagDuration := time.Second
+
 	dsyncError := s.dsyncer.Error()
 ForLoop:
 	for {
@@ -269,9 +277,12 @@ ForLoop:
 		jobID := binlog.GetDdlJobId()
 
 		if startTS == commitTS {
-			// wait previous items consumed to make sure we are safe to save this fake binlog commitTS
-			s.itemsWg.Wait()
-			fakeBinlog <- binlog
+			if time.Since(lastWaitTime) > waitLagDuration {
+				// wait previous items consumed to make sure we are safe to save this fake binlog commitTS
+				s.itemsWg.Wait()
+				lastWaitTime = time.Now()
+				fakeBinlog <- binlog
+			}
 		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
