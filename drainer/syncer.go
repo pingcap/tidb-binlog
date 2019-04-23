@@ -159,8 +159,12 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 	mysqlSyncer.SetSafeMode(true)
 
 	go func() {
-		<-time.After(5 * time.Minute)
-		mysqlSyncer.SetSafeMode(s.cfg.SafeMode)
+		select {
+		case <-time.After(5 * time.Minute):
+			mysqlSyncer.SetSafeMode(s.cfg.SafeMode)
+		case <-s.shutdown:
+			return
+		}
 	}()
 }
 
