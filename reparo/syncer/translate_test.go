@@ -29,7 +29,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
-				Events: generateDMLEvents(),
+				Events: generateDMLEvents(c),
 			},
 		}: {
 			DMLs: []*loader.DML{
@@ -73,17 +73,17 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 }
 
 func (s *testTranslateSuite) TestGenColsAndArgs(c *check.C) {
-	cols, args, err := genColsAndArgs(generateColumns())
+	cols, args, err := genColsAndArgs(generateColumns(c))
 	c.Assert(err, check.IsNil)
 	c.Assert(cols, check.DeepEquals, []string{"a", "b", "c"})
 	c.Assert(args, check.DeepEquals, []interface{}{int64(1), "test", "test"})
 }
 
 // generateDMLEvents generates three DML Events for test.
-func generateDMLEvents() []pb.Event {
+func generateDMLEvents(c *check.C) []pb.Event {
 	schema := "test"
 	table := "t1"
-	cols := generateColumns()
+	cols := generateColumns(c)
 
 	return []pb.Event{
 		{
@@ -106,7 +106,7 @@ func generateDMLEvents() []pb.Event {
 }
 
 // generateColumns generates three columns for test, the last one used for update.
-func generateColumns() [][]byte {
+func generateColumns(c *check.C) [][]byte {
 	allColBytes := make([][]byte, 0, 3)
 
 	cols := []*pb.Column{
@@ -132,7 +132,7 @@ func generateColumns() [][]byte {
 	for _, col := range cols {
 		colBytes, err := col.Marshal()
 		if err != nil {
-			panic(err)
+			c.Fatal(err)
 		}
 
 		allColBytes = append(allColBytes, colBytes)

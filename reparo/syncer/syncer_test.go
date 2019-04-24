@@ -14,15 +14,15 @@ func (s *testSyncerSuite) TestNewSyncer(c *check.C) {
 	syncer, err := New("print", cfg)
 	c.Assert(err, check.IsNil)
 	_, ok := syncer.(*printSyncer)
-	c.Assert(ok, check.Equals, true)
+	c.Assert(ok, check.IsTrue)
 
 	syncer, err = New("memory", cfg)
 	c.Assert(err, check.IsNil)
 	_, ok = syncer.(*MemSyncer)
-	c.Assert(ok, check.Equals, true)
+	c.Assert(ok, check.IsTrue)
 
 	syncer, err = New("print", cfg)
 	c.Assert(err, check.IsNil)
 	_, ok = syncer.(*MemSyncer)
-	c.Assert(ok, check.Equals, false)
+	c.Assert(ok, check.IsFalse)
 }

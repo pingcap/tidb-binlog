@@ -54,7 +54,7 @@ func (s *testPrintSuite) TestPrintDDL(c *check.C) {
 }
 
 func (s *testPrintSuite) TestPrintRow(c *check.C) {
-	cols := generateColumns()
+	cols := generateColumns(c)
 
 	col1Str := getInsertOrDeleteColumnStr(cols[0])
 	c.Assert(col1Str, check.Equals, "a(int): 1 \n")
