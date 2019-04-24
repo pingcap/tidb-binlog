@@ -197,7 +197,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" || c.DestDBType == "file" || c.DestDBType == "kafka" {
+	if c.DestDBType == "file" || c.DestDBType == "kafka" {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
@@ -277,8 +277,6 @@ func (cfg *Config) adjustConfig() error {
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.SyncerCfg.adjustWorkCount()
-	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
@@ -323,6 +321,8 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream file directory: %s", cfg.DataDir)
 		}
+		// pb is an alias of file, use file instead 
+		cfg.SyncerCfg.DestDBType = "file"
 	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 		if len(cfg.SyncerCfg.To.Host) == 0 {
 			host := os.Getenv("MYSQL_HOST")
@@ -349,6 +349,9 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
 	}
+
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	return nil
 }

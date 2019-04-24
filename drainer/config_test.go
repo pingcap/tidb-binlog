@@ -69,3 +69,16 @@ func (t *testDrainerSuite) TestValidate(c *C) {
 	err = cfg.validate()
 	c.Assert(err, IsNil)
 }
+
+func (t *testDrainerSuite) TestAdjustConfig(c *C) {
+	cfg := NewConfig()
+	cfg.SyncerCfg.DestDBType = "pb"
+	cfg.SyncerCfg.WorkerCount = 10
+	cfg.SyncerCfg.DisableDispatch = true
+
+	err := cfg.adjustConfig()
+	c.Assert(err, IsNil)
+	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
+	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
+	c.Assert(cfg.SyncerCfg.DisableDispatch, IsTrue)
+}
