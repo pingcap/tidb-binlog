@@ -3,6 +3,7 @@ package syncer
 import (
 	"strings"
 
+	capturer "github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
