@@ -67,6 +67,7 @@ func (s *utilSuite) TestIsValidateListenHost(c *C) {
 	c.Assert(IsValidateListenHost("192.168.3.72"), IsTrue)
 	c.Assert(IsValidateListenHost("localhost"), IsFalse)
 	c.Assert(IsValidateListenHost("127.0.0.1"), IsFalse)
+	c.Assert(IsValidateListenHost("::1"), IsFalse)
 }
 
 func (s *utilSuite) TestToColumnTypeMap(c *C) {

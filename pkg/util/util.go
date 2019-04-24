@@ -85,10 +85,10 @@ func DefaultListenAddr(port int32) string {
 
 // IsValidateListenHost judge the host is validate listen host or not.
 func IsValidateListenHost(host string) bool {
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
-		return false
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback()
 	}
-	return true
+	return host != "localhost"
 }
 
 // StdLogger implements samara.StdLogger
