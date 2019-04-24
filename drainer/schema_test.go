@@ -68,12 +68,12 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(
 		jobs,
 		&model.Job{
-			ID: 6,
-			State: model.JobStateSynced,
-			SchemaID: 1,
-			Type: model.ActionDropSchema,
+			ID:         6,
+			State:      model.JobStateSynced,
+			SchemaID:   1,
+			Type:       model.ActionDropSchema,
 			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 123},
-			Query: "drop database test",
+			Query:      "drop database test",
 		},
 	)
 	schema, err = NewSchema(jobs, false)
@@ -96,12 +96,12 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(
 		jobs,
 		&model.Job{
-			ID: 9,
-			State: model.JobStateSynced,
-			SchemaID: 1,
-			Type: model.ActionDropSchema,
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   1,
+			Type:       model.ActionDropSchema,
 			BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
-			Query: "drop database test",
+			Query:      "drop database test",
 		},
 	)
 	schema, err = NewSchema(jobs, false)
@@ -170,7 +170,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2,  TableInfo: tblInfo, FinishedTS: 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
@@ -224,13 +224,13 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(
 		jobs,
 		&model.Job{
-			ID: 9,
-			State: model.JobStateSynced,
-			SchemaID: 3,
-			TableID: 2,
-			Type: model.ActionTruncateTable,
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   3,
+			TableID:    2,
+			Type:       model.ActionTruncateTable,
 			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 123},
-			Query: "truncate table " + tbName.O,
+			Query:      "truncate table " + tbName.O,
 		},
 	)
 	schema1, err := NewSchema(jobs, false)
@@ -246,13 +246,13 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(
 		jobs,
 		&model.Job{
-			ID: 9,
-			State: model.JobStateSynced,
-			SchemaID: 3,
-			TableID: 9,
-			Type: model.ActionDropTable,
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   3,
+			TableID:    9,
+			Type:       model.ActionDropTable,
 			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 123},
-			Query: "drop table " + tbName.O,
+			Query:      "drop table " + tbName.O,
 		},
 	)
 	schema2, err := NewSchema(jobs, false)

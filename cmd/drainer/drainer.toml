@@ -82,12 +82,9 @@ port = 3306
 #schema = "tidb_binlog"
 
 # Uncomment this if you want to use pb or sql as db-type.
-# Compress compresses output file, like pb and sql file. Now it supports "gzip" algorithm only. 
-# Values can be "gzip". Leave it empty to disable compression. 
 #[syncer.to]
 # directory to save pb file, default same as data-dir(save checkpoint file) if this is not configured.
 # dir = "data.drainer"
-# compression = "gzip"
 
 
 # when db-type is kafka, you can uncomment this to config the down stream kafka, it will be the globle config kafka default
