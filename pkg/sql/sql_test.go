@@ -23,6 +23,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_model/go"
 )
 
 func Test(t *testing.T) { TestingT(t) }

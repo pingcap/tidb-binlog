@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
