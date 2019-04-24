@@ -360,7 +360,7 @@ func (e *FlashSyncer) flushAll() error {
 	for _, item := range e.items {
 		e.success <- item
 	}
-	e.items = e.items[:0]
+	e.items = nil
 
 	return nil
 }
