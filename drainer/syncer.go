@@ -216,8 +216,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 		}
 
 		ts := atomic.LoadInt64(lastTS)
-		if saveNow || s.cp.Check(ts) {
-			if ts != lastSaveTS {
+		if ts > lastSaveTS {
+			if saveNow || s.cp.Check(ts) {
 				s.savePoint(ts)
 				lastSaveTS = ts
 				eventCounter.WithLabelValues("savepoint").Add(1)
@@ -226,7 +226,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 	}
 
 	ts := atomic.LoadInt64(lastTS)
-	if ts != lastSaveTS {
+	if ts > lastSaveTS {
 		s.savePoint(ts)
 		eventCounter.WithLabelValues("savepoint").Add(1)
 	}
