@@ -42,7 +42,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobDup := &model.Job{
@@ -50,7 +50,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
@@ -65,7 +65,17 @@ func (t *schemaSuite) TestSchema(c *C) {
 	c.Assert(err, IsNil)
 
 	// test drop schema
-	jobs = append(jobs, &model.Job{ID: 6, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{3, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID: 6,
+			State: model.JobStateSynced,
+			SchemaID: 1,
+			Type: model.ActionDropSchema,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 123},
+			Query: "drop database test",
+		},
+	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(3)
@@ -83,7 +93,17 @@ func (t *schemaSuite) TestSchema(c *C) {
 
 	// test schema drop schema error
 	jobs = jobs[:0]
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{1, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID: 9,
+			State: model.JobStateSynced,
+			SchemaID: 1,
+			Type: model.ActionDropSchema,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
+			Query: "drop database test",
+		},
+	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(1)
@@ -138,7 +158,7 @@ func (*schemaSuite) TestTable(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
@@ -150,7 +170,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{2, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2,  TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
@@ -163,7 +183,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{3, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
@@ -176,7 +196,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{4, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
@@ -201,7 +221,18 @@ func (*schemaSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{5, nil, tblInfo1, 123}, Query: "truncate table " + tbName.O})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID: 9,
+			State: model.JobStateSynced,
+			SchemaID: 3,
+			TableID: 2,
+			Type: model.ActionTruncateTable,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 123},
+			Query: "truncate table " + tbName.O,
+		},
+	)
 	schema1, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema1.handlePreviousDDLJobIfNeed(5)
@@ -212,7 +243,18 @@ func (*schemaSuite) TestTable(c *C) {
 	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 9, Type: model.ActionDropTable, BinlogInfo: &model.HistoryInfo{6, nil, nil, 123}, Query: "drop table " + tbName.O})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID: 9,
+			State: model.JobStateSynced,
+			SchemaID: 3,
+			TableID: 9,
+			Type: model.ActionDropTable,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 123},
+			Query: "drop table " + tbName.O,
+		},
+	)
 	schema2, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema2.handlePreviousDDLJobIfNeed(6)

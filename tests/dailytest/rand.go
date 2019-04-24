@@ -16,7 +16,6 @@ package dailytest
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -40,29 +39,12 @@ func randInt64(min int64, max int64) int64 {
 	return min + rand.Int63n(max-min+1)
 }
 
-func randFloat64(min int64, max int64, prec int) float64 {
-	value := float64(randInt64(min, max))
-	fvalue := strconv.FormatFloat(value, 'f', prec, 64)
-	value, _ = strconv.ParseFloat(fvalue, 64)
-	return value
-}
-
-func randBool() bool {
-	value := randInt(0, 1)
-	return value == 1
-}
-
 func randString(n int) string {
 	bytes := make([]byte, n)
 	for i := range bytes {
 		bytes[i] = alphabet[randInt(0, len(alphabet)-1)]
 	}
 	return string(bytes)
-}
-
-func randDuration(n time.Duration) time.Duration {
-	duration := randInt(0, int(n))
-	return time.Duration(duration)
 }
 
 func randDate(min string, max string) string {

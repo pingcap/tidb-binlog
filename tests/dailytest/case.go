@@ -275,7 +275,7 @@ CREATE TABLE gen_contacts (
 	}
 	delSQL := "DELETE FROM gen_contacts WHERE fullname = ?"
 	for i := 0; i < 10; i++ {
-		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i)); err != nil {
+		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i, i)); err != nil {
 			log.Fatal(err)
 		}
 	}

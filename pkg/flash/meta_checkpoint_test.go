@@ -57,7 +57,7 @@ func (s *testFlashSuite) TestFlushNoSave(c *C) {
 	c.Assert(safeTS, Equals, int64(20))
 
 	// save CP has been cleared above.
-	forceSave, ok, safeTS = s.cp.PopSafeCP()
+	forceSave, ok, _ = s.cp.PopSafeCP()
 	c.Assert(forceSave, IsFalse)
 	c.Assert(ok, IsFalse)
 
@@ -71,7 +71,7 @@ func (s *testFlashSuite) TestFlushNoSave(c *C) {
 
 	// no more checkpoints beyond ts=50
 	s.cp.Flush(65, false)
-	forceSave, ok, safeTS = s.cp.PopSafeCP()
+	forceSave, ok, _ = s.cp.PopSafeCP()
 	c.Assert(forceSave, IsFalse)
 	c.Assert(ok, IsFalse)
 
@@ -86,7 +86,7 @@ func (s *testFlashSuite) TestFlushNoSave(c *C) {
 	c.Assert(safeTS, Equals, int64(70))
 
 	s.cp.Flush(76, false)
-	forceSave, ok, safeTS = s.cp.PopSafeCP()
+	forceSave, ok, _ = s.cp.PopSafeCP()
 	c.Assert(forceSave, IsFalse)
 	c.Assert(ok, IsFalse)
 

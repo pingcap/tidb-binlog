@@ -71,11 +71,6 @@ func (g *BinlogGenrator) getDatums() (datums []types.Datum) {
 	return
 }
 
-func (g *BinlogGenrator) getOldDatums() (datums []types.Datum) {
-	datums = g.oldDatums
-	return
-}
-
 // TableByID implements TableInfoGetter interface
 func (g *BinlogGenrator) TableByID(id int64) (info *model.TableInfo, ok bool) {
 	info, ok = g.id2info[id]
