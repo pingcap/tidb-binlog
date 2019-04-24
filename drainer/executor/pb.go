@@ -29,23 +29,29 @@ type pbExecutor struct {
 	dir       string
 	binlogger binlogfile.Binlogger
 	*baseError
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func newPB(ctx context.Context, cfg *DBConfig) (Executor, error) {
+func newPB(cfg *DBConfig) (Executor, error) {
 	codec := compress.ToCompressionCodec(cfg.Compression)
 	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, codec)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	newPbExecutor := &pbExecutor{
 		dir:       cfg.BinlogFileDir,
 		binlogger: binlogger,
 		baseError: newBaseError(),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 
 	if codec != compress.CompressionNone {
-		newPbExecutor.startCompressFile(ctx)
+		newPbExecutor.startCompressFile()
 	}
 
 	return newPbExecutor, nil
@@ -74,6 +80,7 @@ func (p *pbExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []in
 }
 
 func (p *pbExecutor) Close() error {
+	p.cancel()
 	return p.binlogger.Close()
 }
 
@@ -87,7 +94,7 @@ func (p *pbExecutor) saveBinlog(binlog *pb.Binlog) error {
 	return errors.Trace(err)
 }
 
-func (p *pbExecutor) startCompressFile(ctx context.Context) {
+func (p *pbExecutor) startCompressFile() {
 	go func() {
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
@@ -99,7 +106,7 @@ func (p *pbExecutor) startCompressFile(ctx context.Context) {
 					log.Errorf("compress pb file meet error %v, will stop compress", errors.Trace(err))
 					return
 				}
-			case <-ctx.Done():
+			case <-p.ctx.Done():
 				return
 			}
 		}

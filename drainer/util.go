@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"fmt"
-	"context"
 	"hash/crc32"
 	"net"
 	"net/url"
@@ -148,10 +147,10 @@ func closeExecutors(executors ...executor.Executor) {
 	}
 }
 
-func createExecutors(ctx context.Context, destDBType string, cfg *executor.DBConfig, count int, sqlMODE *string) ([]executor.Executor, error) {
+func createExecutors(destDBType string, cfg *executor.DBConfig, count int, sqlMODE *string) ([]executor.Executor, error) {
 	executors := make([]executor.Executor, 0, count)
 	for i := 0; i < count; i++ {
-		executor, err := executor.New(ctx, destDBType, cfg, sqlMODE)
+		executor, err := executor.New(destDBType, cfg, sqlMODE)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

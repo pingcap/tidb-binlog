@@ -96,4 +96,3 @@ func (s *testCompressSuite) TestParseCompressCodec(c *C) {
 	c.Assert(compress.ToCompressionCodec("gzip"), Equals, compress.CompressionGZIP)
 	c.Assert(compress.ToCompressionCodec("zstd"), Not(Equals), compress.CompressionGZIP)
 }
-
