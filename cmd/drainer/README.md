@@ -20,7 +20,7 @@ Usage of drainer:
   -data-dir string
       drainer data directory path (default data.drainer) (default "data.drainer")
   -dest-db-type string
-      target db type: mysql or pb; see syncer section in conf/drainer.toml (default "mysql")
+      target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml (default "mysql")
   -detect-interval int
       the interval time (in seconds) of detect pumps' status (default 10)
   -disable-detect
