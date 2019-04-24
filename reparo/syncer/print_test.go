@@ -5,7 +5,6 @@ import (
 
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/kami-zh/go-capturer"
 )
 
 type testPrintSuite struct{}
@@ -48,7 +47,7 @@ func (s *testPrintSuite) TestPrintEventHeader(c *check.C) {
 	})
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	c.Assert(lines, check.HasLen, 1)
- 	c.Assert(lines[0], check.Matches, ".*schema: test; table: t1; type: Insert.*")
+	c.Assert(lines[0], check.Matches, ".*schema: test; table: t1; type: Insert.*")
 }
 
 func (s *testPrintSuite) TestPrintDDL(c *check.C) {
