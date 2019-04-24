@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package executor
+package sync
 
 import (
 	"database/sql"
@@ -23,7 +23,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/flash"
+	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/zanmato1984/clickhouse"
 )
@@ -144,7 +144,8 @@ func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
 	return batch.latestCommitTS, nil
 }
 
-type flashExecutor struct {
+// FlashSyncer sync binlog to TiFlash
+type FlashSyncer struct {
 	sync.Mutex
 	close chan bool
 	wg    sync.WaitGroup
@@ -152,14 +153,21 @@ type flashExecutor struct {
 	timeLimit time.Duration
 	sizeLimit int
 
-	dbs        []*sql.DB
+	dbs []*sql.DB
+	// [sql][len(dbs)], group by same sql and shard by hashKey
 	rowBatches map[string][]*flashRowBatch
-	metaCP     *flash.MetaCheckpoint
 
-	*baseError
+	items []*Item
+	*baseSyncer
 }
 
-func newFlash(cfg *DBConfig) (Executor, error) {
+// openCH should only be change for unit test mock
+var openCH = pkgsql.OpenCH
+
+var _ Syncer = &FlashSyncer{}
+
+// NewFlashSyncer returns a instance of FlashSyncer
+func NewFlashSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*FlashSyncer, error) {
 	timeLimit, err := time.ParseDuration(cfg.TimeLimit)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -179,21 +187,20 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 
 	dbs := make([]*sql.DB, 0, len(hostAndPorts))
 	for _, hostAndPort := range hostAndPorts {
-		db, err := pkgsql.OpenCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "", sizeLimit)
+		db, err := openCH(hostAndPort.Host, hostAndPort.Port, cfg.User, cfg.Password, "", sizeLimit)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		dbs = append(dbs, db)
 	}
 
-	e := flashExecutor{
+	e := FlashSyncer{
 		close:      make(chan bool),
 		timeLimit:  timeLimit,
 		sizeLimit:  sizeLimit,
 		dbs:        dbs,
 		rowBatches: make(map[string][]*flashRowBatch),
-		metaCP:     flash.GetInstance(),
-		baseError:  newBaseError(),
+		baseSyncer: newBaseSyncer(tableInfoGetter),
 	}
 
 	e.wg.Add(1)
@@ -202,7 +209,8 @@ func newFlash(cfg *DBConfig) (Executor, error) {
 	return &e, nil
 }
 
-func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
+// Sync implements Syncer interface
+func (e *FlashSyncer) Sync(item *Item) error {
 	e.Lock()
 	defer e.Unlock()
 
@@ -211,20 +219,37 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		return errors.Trace(e.err)
 	}
 
-	if isDDL {
+	tiBinlog := item.Binlog
+
+	if tiBinlog.DdlJobId > 0 {
 		// Flush all row batches.
-		e.err = e.flushAll(true)
+		e.err = e.flushAll()
 		if e.err != nil {
 			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
 			return errors.Trace(e.err)
 		}
+
+		sql, err := translator.GenFlashDDLSQL(string(tiBinlog.GetDdlQuery()), item.Schema)
+		if err != nil {
+			return errors.Annotate(err, "gen ddl sql fail")
+		}
+
+		var args [][]interface{}
+		args = append(args, nil)
 		for _, db := range e.dbs {
-			e.err = pkgsql.ExecuteSQLs(db, sqls, args, isDDL)
+			e.err = pkgsql.ExecuteSQLs(db, []string{sql}, args, true)
 			if e.err != nil {
 				return errors.Trace(e.err)
 			}
+
+			e.success <- item
 		}
 	} else {
+		sqls, args, err := translator.GenFlashSQLs(e.tableInfoGetter, item.PrewriteValue, tiBinlog.GetCommitTs())
+		if err != nil {
+			return errors.Annotate(err, "gen sqls fail")
+		}
+
 		for i, row := range args {
 			hashKey := e.partition(row[0].(int64))
 			sql := sqls[i]
@@ -236,7 +261,7 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 				e.rowBatches[sql][hashKey] = newFlashRowBatch(sql, e.sizeLimit)
 			}
 			rb := e.rowBatches[sql][hashKey]
-			e.err = rb.AddRow(args, commitTSs[i])
+			e.err = rb.AddRow(args, tiBinlog.GetCommitTs())
 			if e.err != nil {
 				return errors.Trace(e.err)
 			}
@@ -249,12 +274,15 @@ func (e *flashExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 				}
 			}
 		}
+
+		e.items = append(e.items, item)
 	}
 
 	return nil
 }
 
-func (e *flashExecutor) Close() error {
+// Close implements Syncer interface
+func (e *FlashSyncer) Close() error {
 	// Could have had error in async flush goroutine, log it.
 	e.Lock()
 	if e.err != nil {
@@ -277,10 +305,11 @@ func (e *flashExecutor) Close() error {
 	if hasError {
 		return errors.New("error in closing some flash connector, check log for details")
 	}
+
 	return nil
 }
 
-func (e *flashExecutor) flushRoutine() {
+func (e *FlashSyncer) flushRoutine() {
 	defer e.wg.Done()
 	log.Info("[flush_thread] Flush thread started.")
 	for {
@@ -296,45 +325,42 @@ func (e *flashExecutor) flushRoutine() {
 				log.Errorf("[flush_thread] Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
 				return
 			}
-			err := e.flushAll(false)
+			err := e.flushAll()
 			if err != nil {
 				e.Unlock()
 				log.Errorf("[flush_thread] Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
-				e.SetErr(err)
+				e.setErr(err)
 				return
 			}
-			// TODO: save checkpoint.
 			e.Unlock()
 		}
 	}
 }
 
 // partition must be a index of dbs
-func (e *flashExecutor) partition(key int64) int {
+func (e *FlashSyncer) partition(key int64) int {
 	return int(key) % len(e.dbs)
 }
 
-func (e *flashExecutor) flushAll(forceSaveCP bool) error {
+func (e *FlashSyncer) flushAll() error {
 	log.Debug("[flush_all] Flushing all row batches.")
 
-	// Pick the latest commitTS among all row batches.
-	// TODO: consider if it's safe enough.
-	maxCommitTS := int64(0)
 	for _, rbs := range e.rowBatches {
 		for i, rb := range rbs {
 			if rb == nil {
 				continue
 			}
-			lastestCommitTS, err := rb.Flush(e.dbs[i])
+			_, err := rb.Flush(e.dbs[i])
 			if err != nil {
 				return errors.Trace(err)
-			}
-			if maxCommitTS < lastestCommitTS {
-				maxCommitTS = lastestCommitTS
 			}
 		}
 	}
 
-	e.metaCP.Flush(maxCommitTS, forceSaveCP)
+	for _, item := range e.items {
+		e.success <- item
+	}
+	e.items = nil
+
 	return nil
 }

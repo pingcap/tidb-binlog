@@ -28,10 +28,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -121,7 +124,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(cp.TS()))))
 
-	syncer, err := NewSyncer(ctx, cp, cfg.SyncerCfg)
+	syncer, err := createSyncer(cfg.EtcdURLs, cp, cfg.SyncerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -163,6 +166,26 @@ func NewServer(cfg *Config) (*Server, error) {
 		latestTS:   latestTS,
 		latestTime: latestTime,
 	}, nil
+}
+
+func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) (syncer *Syncer, err error) {
+	tiStore, err := createTiStore(etcdURLs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer tiStore.Close()
+
+	jobs, err := loadHistoryDDLJobs(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	syncer, err = NewSyncer(cp, cfg, jobs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
 }
 
 // DumpBinlog implements the gRPC interface of drainer server
@@ -223,7 +246,7 @@ func (s *Server) StartMetrics() {
 }
 
 // StartSyncer runs a syncer in a goroutine
-func (s *Server) StartSyncer(jobs []*model.Job) {
+func (s *Server) StartSyncer() {
 	s.wg.Add(1)
 	go func() {
 		defer func() {
@@ -235,7 +258,7 @@ func (s *Server) StartSyncer(jobs []*model.Job) {
 			s.wg.Done()
 			s.Close()
 		}()
-		err := s.syncer.Start(jobs)
+		err := s.syncer.Start()
 		if err != nil {
 			log.Errorf("syncer exited, error %v", errors.ErrorStack(err))
 		}
@@ -290,11 +313,6 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	jobs, err := loadHistoryDDLJobs(s.collector.tiStore)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	// start to collect
 	s.StartCollect()
 
@@ -302,7 +320,7 @@ func (s *Server) Start() error {
 	s.StartMetrics()
 
 	// start a syncer
-	s.StartSyncer(jobs)
+	s.StartSyncer()
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -439,6 +457,7 @@ func (s *Server) Close() {
 
 	// notify all goroutines to exit
 	s.cancel()
+	s.syncer.Close()
 	// waiting for goroutines exit
 	s.wg.Wait()
 	// close the CheckPoint
@@ -450,4 +469,20 @@ func (s *Server) Close() {
 	// stop gRPC server
 	s.gs.Stop()
 	log.Info("drainer exit")
+}
+
+func createTiStore(urls string) (kv.Storage, error) {
+	urlv, err := flags.NewURLsValue(urls)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	session.RegisterStore("tikv", tikv.Driver{})
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := session.NewStore(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return tiStore, nil
 }

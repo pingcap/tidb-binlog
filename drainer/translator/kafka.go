@@ -15,6 +15,7 @@ package translator
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -22,74 +23,87 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	pb "github.com/pingcap/tipb/go-binlog"
 )
 
-// kafkaTranslator translates TiDB binlog to self-description protobuf
-type kafkaTranslator struct {
-}
-
-func init() {
-	Register("kafka", &kafkaTranslator{})
-}
-
-func (p *kafkaTranslator) SetConfig(bool, parsermysql.SQLMode) {
-	// do nothing
-}
-
-func (p *kafkaTranslator) GenInsertSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
-
-	for _, row := range rows {
-		table := genTable(schema, tableInfo)
-		tableMutation := new(obinlog.TableMutation)
-		table.Mutations = append(table.Mutations, tableMutation)
-		tableMutation.Type = obinlog.MutationType_Insert.Enum()
-
-		var err error
-		tableMutation.Row, err = insertRowToRow(tableInfo, row)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
+// TiBinlogToSlaveBinlog translates the format to slave binlog
+func TiBinlogToSlaveBinlog(infoGetter TableInfoGetter, schema string, table string,
+	tiBinlog *pb.Binlog, pv *pb.PrewriteValue) (slaveBinlog *obinlog.Binlog, err error) {
+	if tiBinlog.DdlJobId > 0 { // DDL
+		slaveBinlog = &obinlog.Binlog{
+			Type:     obinlog.BinlogType_DDL,
+			CommitTs: tiBinlog.GetCommitTs(),
+			DdlData: &obinlog.DDLData{
+				SchemaName: proto.String(schema),
+				TableName:  proto.String(table),
+				DdlQuery:   tiBinlog.GetDdlQuery(),
+			},
+		}
+	} else {
+		slaveBinlog = &obinlog.Binlog{
+			Type:     obinlog.BinlogType_DML,
+			CommitTs: tiBinlog.GetCommitTs(),
+			DmlData:  new(obinlog.DMLData),
 		}
 
-		sqls = append(sqls, "")
-		values = append(values, []interface{}{table})
-		keys = append(keys, nil)
-	}
+		for _, mut := range pv.GetMutations() {
+			info, ok := infoGetter.TableByID(mut.GetTableId())
+			if !ok {
+				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
+			}
 
-	return sqls, keys, values, nil
-}
+			schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
+			if !ok {
+				return nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
+			}
 
-func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
+			iter := newSequenceIterator(&mut)
+			for {
+				mutType, row, err := iter.next()
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					return nil, errors.Trace(err)
+				}
 
-	for _, row := range rows {
-		table := genTable(schema, tableInfo)
-		tableMutation := new(obinlog.TableMutation)
-		table.Mutations = append(table.Mutations, tableMutation)
-		tableMutation.Type = obinlog.MutationType_Update.Enum()
+				table := genTable(schema, info)
+				slaveBinlog.DmlData.Tables = append(slaveBinlog.DmlData.Tables, table)
+				tableMutation := new(obinlog.TableMutation)
+				table.Mutations = append(table.Mutations, tableMutation)
 
-		var err error
-		tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(tableInfo, row)
-		if err != nil {
-			return nil, nil, nil, false, errors.Trace(err)
+				switch mutType {
+				case pb.MutationType_Insert:
+					tableMutation.Type = obinlog.MutationType_Insert.Enum()
+					tableMutation.Row, err = insertRowToRow(info, row)
+					if err != nil {
+						return nil, err
+					}
+				case pb.MutationType_Update:
+					tableMutation.Type = obinlog.MutationType_Update.Enum()
+					tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(info, row)
+					if err != nil {
+						return nil, err
+					}
+				case pb.MutationType_DeleteRow:
+					tableMutation.Type = obinlog.MutationType_Delete.Enum()
+					tableMutation.Row, err = deleteRowToRow(info, row)
+					if err != nil {
+						return nil, err
+					}
+				default:
+					return nil, errors.Errorf("unknown mutation type: %v", mutType)
+				}
+			}
 		}
-
-		sqls = append(sqls, "")
-		values = append(values, []interface{}{table})
-		keys = append(keys, nil)
 	}
 
-	return sqls, keys, values, false, nil
+	return
 }
 
 func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) {
@@ -110,35 +124,6 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 	table.ColumnInfo = columnInfos
 
 	return
-}
-
-func (p *kafkaTranslator) GenDeleteSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
-	sqls := make([]string, 0, len(rows))
-	keys := make([][]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
-
-	for _, row := range rows {
-		table := genTable(schema, tableInfo)
-		tableMutation := new(obinlog.TableMutation)
-		table.Mutations = append(table.Mutations, tableMutation)
-		tableMutation.Type = obinlog.MutationType_Delete.Enum()
-
-		var err error
-		tableMutation.Row, err = deleteRowToRow(tableInfo, row)
-		if err != nil {
-			return nil, nil, nil, errors.Trace(err)
-		}
-
-		sqls = append(sqls, "")
-		values = append(values, []interface{}{table})
-		keys = append(keys, nil)
-	}
-
-	return sqls, keys, values, nil
-}
-
-func (p *kafkaTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	return sql, nil
 }
 
 func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {

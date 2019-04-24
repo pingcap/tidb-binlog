@@ -16,80 +16,29 @@ package translator
 import (
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
-	parsermysql "github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
 
-// OpType represents type of the operation
-type OpType byte
+var sqlMode mysql.SQLMode
 
-const (
-	// DML is the constant OpType for delete operation
-	DML = iota + 1
-	// DDL is the constant OpType for ddl operation
-	DDL
-	// FLUSH is for wait all operation executed
-	FLUSH
-	// FAKE is for fake binlog
-	FAKE
-	// COMPLETE means the end of a binlog.
-	COMPLETE
-)
-
-var providers = make(map[string]SQLTranslator)
-
-// SQLTranslator is the interface for translating TiDB binlog to target sqls
-type SQLTranslator interface {
-	// Config set the configuration
-	SetConfig(safeMode bool, sqlMode parsermysql.SQLMode)
-
-	// GenInsertSQLs generates the insert sqls
-	GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error)
-
-	// GenUpdateSQLs generates the update sqls
-	GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error)
-
-	// GenDeleteSQLs generates the delete sqls by cols values
-	GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error)
-
-	// GenDDLSQL generates the ddl sql by query string
-	GenDDLSQL(sql string, schema string, commitTS int64) (string, error)
+// SetSQLMode set the sql mode of parser
+func SetSQLMode(mode mysql.SQLMode) {
+	sqlMode = mode
 }
 
-// Register registers the SQLTranslator into the providers
-func Register(name string, provider SQLTranslator) {
-	if provider == nil {
-		log.Fatal("SQLTranslator: Register provide is nil")
-	}
+func getParser() (p *parser.Parser) {
+	p = parser.New()
+	p.SetSQLMode(sqlMode)
 
-	if _, dup := providers[name]; dup {
-		log.Fatal("SQLTranslator: Register called twice for provider " + name)
-	}
-
-	providers[name] = provider
-}
-
-// Unregister unregisters the SQLTranslator by name
-func Unregister(name string) {
-	delete(providers, name)
-}
-
-// New returns the SQLTranslator by given providerName
-func New(providerName string) (SQLTranslator, error) {
-	translator, ok := providers[providerName]
-	if !ok {
-		return nil, errors.Errorf("SQLTranslator: unknown provider %q", providerName)
-	}
-
-	return translator, nil
+	return
 }
 
 func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datums map[int64]types.Datum, err error) {

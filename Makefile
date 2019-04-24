@@ -99,12 +99,8 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-
 check-static:
-	gometalinter --disable-all --deadline 120s \
-		--enable megacheck \
-		--enable ineffassign \
-		$$($(PACKAGE_DIRECTORIES))
+	golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
 
 update: update_vendor clean_vendor
 update_vendor:

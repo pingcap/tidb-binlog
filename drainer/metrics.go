@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/ngaut/log"
-	"github.com/pingcap/tidb-binlog/drainer/executor"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
@@ -133,7 +132,6 @@ func init() {
 	registry.MustRegister(binlogReachDurationHistogram)
 	registry.MustRegister(readBinlogSizeHistogram)
 	registry.MustRegister(queryHistogramVec)
-	executor.QueryHistogramVec = queryHistogramVec
 	registry.MustRegister(queueSizeGauge)
 
 	// for pb using it

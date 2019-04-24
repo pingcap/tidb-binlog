@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package executor
+package sync
 
 import (
 	// mysql driver
@@ -42,4 +42,30 @@ type DBConfig struct {
 // CheckpointConfig is the Checkpoint configuration.
 type CheckpointConfig struct {
 	Schema string `toml:"schema" json:"schema"`
+}
+
+type baseError struct {
+	err   error
+	errCh chan struct{}
+}
+
+func newBaseError() *baseError {
+	return &baseError{
+		errCh: make(chan struct{}),
+	}
+}
+
+func (b *baseError) error() <-chan error {
+	ret := make(chan error, 1)
+	go func() {
+		<-b.errCh
+		ret <- b.err
+	}()
+
+	return ret
+}
+
+func (b *baseError) setErr(err error) {
+	b.err = err
+	close(b.errCh)
 }
