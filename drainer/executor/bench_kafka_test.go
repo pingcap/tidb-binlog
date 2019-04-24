@@ -42,8 +42,12 @@ func BenchmarkBinlogMarshal(b *testing.B) {
 			Tables: []*obinlog.Table{table},
 		},
 	}
+	var s string
 	for i := 0; i < b.N; i++ {
-		binlog.String()
+		s = binlog.String()
+	}
+	if len(s) == 0 {
+		b.Fail()
 	}
 }
 

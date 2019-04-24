@@ -25,7 +25,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobDup := &model.Job{
@@ -33,7 +33,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
@@ -141,7 +141,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
@@ -166,7 +166,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{3, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
@@ -179,7 +179,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{4, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
