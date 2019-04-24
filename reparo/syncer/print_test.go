@@ -1,8 +1,11 @@
 package syncer
 
 import (
+	"strings"
+
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/kami-zh/go-capturer"
 )
 
 type testPrintSuite struct{}
@@ -40,8 +43,12 @@ func (s *testPrintSuite) TestPrintEventHeader(c *check.C) {
 		TableName:  &table,
 	}
 
-	eventHeaderStr := getEventHeaderStr(event)
-	c.Assert(eventHeaderStr, check.Equals, "schema: test; table: t1; type: Insert\n")
+	out := capturer.CaptureStdout(func() {
+		printEventHeader(event)
+	})
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(lines, check.HasLen, 1)
+ 	c.Assert(lines[0], check.Matches, ".*schema: test; table: t1; type: Insert.*")
 }
 
 func (s *testPrintSuite) TestPrintDDL(c *check.C) {
@@ -49,46 +56,54 @@ func (s *testPrintSuite) TestPrintDDL(c *check.C) {
 		Tp:       pb.BinlogType_DDL,
 		DdlQuery: []byte("create database test;"),
 	}
-	ddlStr := getDDLStr(ddlBinlog)
-	c.Assert(ddlStr, check.Equals, "DDL query: create database test;\n")
+
+	out := capturer.CaptureStdout(func() {
+		printDDL(ddlBinlog)
+	})
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(lines, check.HasLen, 1)
+	c.Assert(lines[0], check.Matches, ".*DDL query: create database test;.*")
 }
 
 func (s *testPrintSuite) TestPrintRow(c *check.C) {
 	cols := generateColumns(c)
 
-	col1Str := getInsertOrDeleteColumnStr(cols[0])
-	c.Assert(col1Str, check.Equals, "a(int): 1 \n")
-
-	col2Str := getInsertOrDeleteColumnStr(cols[1])
-	c.Assert(col2Str, check.Equals, "b(varchar): test \n")
-
-	col3Str := getUpdateColumnStr(cols[2])
-	c.Assert(col3Str, check.Equals, "c(varchar): test => abc\n")
-
 	insertEvent := &pb.Event{
 		Tp:  pb.EventType_Insert,
 		Row: [][]byte{cols[0], cols[1]},
 	}
-	eventStr := getEventDataStr(insertEvent)
-	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
-	rowStr := getInsertOrDeleteRowStr(insertEvent.Row)
-	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+
+	out := capturer.CaptureStdout(func() {
+		printEvent(insertEvent)
+	})
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(lines, check.HasLen, 3)
+	c.Assert(lines[0], check.Equals, "schema: ; table: ; type: Insert")
+	c.Assert(lines[1], check.Equals, "a(int): 1")
+	c.Assert(lines[2], check.Equals, "b(varchar): test")
 
 	deleteEvent := &pb.Event{
 		Tp:  pb.EventType_Delete,
 		Row: [][]byte{cols[0], cols[1]},
 	}
-	eventStr = getEventDataStr(deleteEvent)
-	c.Assert(eventStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
-	rowStr = getInsertOrDeleteRowStr(deleteEvent.Row)
-	c.Assert(rowStr, check.Equals, "a(int): 1 \nb(varchar): test \n")
+	out = capturer.CaptureStdout(func() {
+		printEvent(deleteEvent)
+	})
+	lines = strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(lines, check.HasLen, 3)
+	c.Assert(lines[0], check.Equals, "schema: ; table: ; type: Delete")
+	c.Assert(lines[1], check.Equals, "a(int): 1")
+	c.Assert(lines[2], check.Equals, "b(varchar): test")
 
 	updateEvent := &pb.Event{
 		Tp:  pb.EventType_Update,
 		Row: [][]byte{cols[2]},
 	}
-	eventStr = getEventDataStr(updateEvent)
-	c.Assert(eventStr, check.Equals, "c(varchar): test => abc\n")
-	rowStr = getUpdateRowStr(updateEvent.Row)
-	c.Assert(rowStr, check.Equals, "c(varchar): test => abc\n")
+	out = capturer.CaptureStdout(func() {
+		printEvent(updateEvent)
+	})
+	lines = strings.Split(strings.TrimSpace(out), "\n")
+	c.Assert(lines, check.HasLen, 2)
+	c.Assert(lines[0], check.Equals, "schema: ; table: ; type: Update")
+	c.Assert(lines[1], check.Equals, "c(varchar): test => abc")
 }

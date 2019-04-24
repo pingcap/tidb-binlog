@@ -2,7 +2,6 @@ package syncer
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
@@ -19,22 +18,19 @@ func newPrintSyncer() (*printSyncer, error) {
 }
 
 func (p *printSyncer) Sync(pbBinlog *pb.Binlog, cb func(binlog *pb.Binlog)) error {
-	var info strings.Builder
 	switch pbBinlog.Tp {
 	case pb.BinlogType_DDL:
-		info.WriteString(getDDLStr(pbBinlog))
+		printDDL(pbBinlog)
+		cb(pbBinlog)
 	case pb.BinlogType_DML:
 		for _, event := range pbBinlog.GetDmlData().GetEvents() {
-			info.WriteString(getEventHeaderStr(&event))
-			info.WriteString(getEventDataStr(&event))
+			printEvent(&event)
 		}
+		cb(pbBinlog)
 	default:
 		return errors.Errorf("unknown type: %v", pbBinlog.Tp)
 
 	}
-
-	fmt.Print(info.String())
-	cb(pbBinlog)
 
 	return nil
 }
@@ -43,83 +39,73 @@ func (p *printSyncer) Close() error {
 	return nil
 }
 
-func getEventDataStr(event *pb.Event) string {
+func printEvent(event *pb.Event) {
+	printHeader(event)
+
 	switch event.GetTp() {
 	case pb.EventType_Insert:
-		return getInsertOrDeleteRowStr(event.Row)
+		printInsertOrDeleteEvent(event.Row)
 	case pb.EventType_Update:
-		return getUpdateRowStr(event.Row)
+		printUpdateEvent(event.Row)
 	case pb.EventType_Delete:
-		return getInsertOrDeleteRowStr(event.Row)
+		printInsertOrDeleteEvent(event.Row)
 	}
-
-	return ""
 }
 
-func getDDLStr(binlog *pb.Binlog) string {
-	return fmt.Sprintf("DDL query: %s\n", binlog.DdlQuery)
+func printHeader(event *pb.Event) {
+	printEventHeader(event)
 }
 
-func getEventHeaderStr(event *pb.Event) string {
-	return fmt.Sprintf("schema: %s; table: %s; type: %s\n", event.GetSchemaName(), event.GetTableName(), event.GetTp())
+func printDDL(binlog *pb.Binlog) {
+	fmt.Printf("DDL query: %s\n", binlog.DdlQuery)
 }
 
-func getUpdateRowStr(row [][]byte) string {
-	var rowStr strings.Builder
-	for _, col := range row {
-		rowStr.WriteString(getUpdateColumnStr(col))
-	}
-
-	return rowStr.String()
+func printEventHeader(event *pb.Event) {
+	fmt.Printf("schema: %s; table: %s; type: %s\n", event.GetSchemaName(), event.GetTableName(), event.GetTp())
 }
 
-func getUpdateColumnStr(column []byte) string {
-	col := &pb.Column{}
-	err := col.Unmarshal(column)
-	if err != nil {
-		log.Errorf("unmarshal error %v", err)
-		return ""
-	}
+func printUpdateEvent(row [][]byte) {
+	for _, c := range row {
+		col := &pb.Column{}
+		err := col.Unmarshal(c)
+		if err != nil {
+			log.Errorf("unmarshal error %v", err)
+			return
+		}
 
-	_, val, err := codec.DecodeOne(col.Value)
-	if err != nil {
-		log.Errorf("decode row error %v", err)
-		return ""
-	}
+		_, val, err := codec.DecodeOne(col.Value)
+		if err != nil {
+			log.Errorf("decode row error %v", err)
+			return
+		}
 
-	_, changedVal, err := codec.DecodeOne(col.ChangedValue)
-	if err != nil {
-		log.Errorf("decode row error %v", err)
-		return ""
-	}
+		_, changedVal, err := codec.DecodeOne(col.ChangedValue)
+		if err != nil {
+			log.Errorf("decode row error %v", err)
+			return
+		}
 
-	tp := col.Tp[0]
-	return fmt.Sprintf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
+		tp := col.Tp[0]
+		fmt.Printf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
+	}
 }
 
-func getInsertOrDeleteRowStr(row [][]byte) string {
-	var rowStr strings.Builder
-	for _, col := range row {
-		rowStr.WriteString(getInsertOrDeleteColumnStr(col))
+func printInsertOrDeleteEvent(row [][]byte) {
+	for _, c := range row {
+		col := &pb.Column{}
+		err := col.Unmarshal(c)
+		if err != nil {
+			log.Errorf("unmarshal error %v", err)
+			return
+		}
+
+		_, val, err := codec.DecodeOne(col.Value)
+		if err != nil {
+			log.Errorf("decode row error %v", err)
+			return
+		}
+
+		tp := col.Tp[0]
+		fmt.Printf("%s(%s): %s\n", col.Name, col.MysqlType, formatValueToString(val, tp))
 	}
-
-	return rowStr.String()
-}
-
-func getInsertOrDeleteColumnStr(column []byte) string {
-	col := &pb.Column{}
-	err := col.Unmarshal(column)
-	if err != nil {
-		log.Errorf("unmarshal error %v", err)
-		return ""
-	}
-
-	_, val, err := codec.DecodeOne(col.Value)
-	if err != nil {
-		log.Errorf("decode row error %v", err)
-		return ""
-	}
-
-	tp := col.Tp[0]
-	return fmt.Sprintf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
 }
