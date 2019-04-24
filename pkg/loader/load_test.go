@@ -94,6 +94,7 @@ func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
 	c.Assert(info.columns[1], check.Equals, "name")
 
 	info, err = ld.getTableInfo("test", "contacts")
+	c.Assert(err, check.IsNil)
 	c.Assert(info.columns[1], check.Equals, "name")
 
 	c.Assert(nCalled, check.Equals, 1)
