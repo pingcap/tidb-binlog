@@ -39,9 +39,7 @@ func (s *signalSuite) TestShouldCallFunc(c *C) {
 
 	select {
 	case s := <-received:
-		if s != syscall.SIGINT {
-			c.Fatal("Received wrong signal")
-		}
+		c.Assert(s, Equals, syscall.SIGINT, Commentf("Received wrong signal"))
 	case <-time.After(2 * time.Second):
 		c.Fatal("Timeout waiting for the signal")
 	}
