@@ -74,7 +74,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	cfg := NewConfig()
 	cfg.SyncerCfg.DestDBType = "pb"
 	cfg.SyncerCfg.WorkerCount = 10
-	cfg.SyncerCfg.DisableDispatch = true
+	cfg.SyncerCfg.DisableDispatch = false
 
 	err := cfg.adjustConfig()
 	c.Assert(err, IsNil)
