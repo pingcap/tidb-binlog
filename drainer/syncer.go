@@ -370,8 +370,7 @@ ForLoop:
 
 			log.Debug("ddl query: ", b.job.Query)
 			sql := b.job.Query
-			var schema string
-			var table string
+			var schema, table string
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				return errors.Trace(err)

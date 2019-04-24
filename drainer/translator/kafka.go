@@ -52,9 +52,7 @@ func TiBinlogToSlaveBinlog(infoGetter TableInfoGetter, schema string, table stri
 		}
 
 		for _, mut := range pv.GetMutations() {
-			var info *model.TableInfo
-			var ok bool
-			info, ok = infoGetter.TableByID(mut.GetTableId())
+			info, ok := infoGetter.TableByID(mut.GetTableId())
 			if !ok {
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}

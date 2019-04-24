@@ -92,9 +92,9 @@ func BenchmarkKafka(b *testing.B) {
 
 	b.ResetTimer()
 
+	// Just drain is, or may be block if the buffer is full
 	go func() {
 		for range syncer.Successes() {
-
 		}
 	}()
 
