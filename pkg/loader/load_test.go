@@ -45,7 +45,7 @@ type groupDMLsSuite struct{}
 var _ = check.Suite(&groupDMLsSuite{})
 
 func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
-	ld := Loader{merge: false}
+	ld := loaderImpl{merge: false}
 	dmls := []*DML{
 		&DML{Tp: UpdateDMLType},
 		&DML{Tp: UpdateDMLType},
@@ -57,7 +57,7 @@ func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
 }
 
 func (s *groupDMLsSuite) TestGroupByTableName(c *check.C) {
-	ld := Loader{merge: true}
+	ld := loaderImpl{merge: true}
 	canBatch := tableInfo{primaryKey: &indexInfo{}}
 	onlySingle := tableInfo{}
 	dmls := []*DML{
@@ -87,7 +87,7 @@ func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
 	defer func() {
 		utilGetTableInfo = origGet
 	}()
-	ld := Loader{}
+	ld := loaderImpl{}
 
 	info, err := ld.getTableInfo("test", "contacts")
 	c.Assert(err, check.IsNil)

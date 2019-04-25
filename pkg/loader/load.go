@@ -40,7 +40,16 @@ const (
 )
 
 // Loader is used to load data to mysql
-type Loader struct {
+type Loader interface {
+	SetSafeMode(bool)
+	GetSafeMode() bool
+	Input() chan<- *Txn
+	Successes() <-chan *Txn
+	Close()
+	Run() error
+}
+
+type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
 	db *gosql.DB
@@ -108,13 +117,13 @@ func Metrics(m *MetricsGroup) Option {
 
 // NewLoader return a Loader
 // db must support multi statement and interpolateParams
-func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
+func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	opts := defaultLoaderOptions
 	for _, o := range opt {
 		o(&opts)
 	}
 
-	s := &Loader{
+	s := &loaderImpl{
 		db:          db,
 		workerCount: opts.workerCount,
 		batchSize:   opts.batchSize,
@@ -129,7 +138,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
 	return s, nil
 }
 
-func (s *Loader) metricsInputTxn(txn *Txn) {
+func (s *loaderImpl) metricsInputTxn(txn *Txn) {
 	if s.metrics == nil || s.metrics.EventCounterVec == nil {
 		return
 	}
@@ -159,7 +168,7 @@ func (s *Loader) metricsInputTxn(txn *Txn) {
 }
 
 // SetSafeMode set safe mode
-func (s *Loader) SetSafeMode(safe bool) {
+func (s *loaderImpl) SetSafeMode(safe bool) {
 	if safe {
 		atomic.StoreInt32(&s.safeMode, 1)
 	} else {
@@ -168,13 +177,13 @@ func (s *Loader) SetSafeMode(safe bool) {
 }
 
 // GetSafeMode get safe mode
-func (s *Loader) GetSafeMode() bool {
+func (s *loaderImpl) GetSafeMode() bool {
 	v := atomic.LoadInt32(&s.safeMode)
 
 	return v != 0
 }
 
-func (s *Loader) markSuccess(txns ...*Txn) {
+func (s *loaderImpl) markSuccess(txns ...*Txn) {
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
@@ -182,24 +191,24 @@ func (s *Loader) markSuccess(txns ...*Txn) {
 }
 
 // Input returns input channel which used to put Txn into Loader
-func (s *Loader) Input() chan<- *Txn {
+func (s *loaderImpl) Input() chan<- *Txn {
 	return s.input
 }
 
 // Successes return a channel to get the successfully Txn loaded to mysql
-func (s *Loader) Successes() <-chan *Txn {
+func (s *loaderImpl) Successes() <-chan *Txn {
 	return s.successTxn
 }
 
 // Close close the Loader, no more Txn can be push into Input()
 // Run will quit when all data is drained
-func (s *Loader) Close() {
+func (s *loaderImpl) Close() {
 	close(s.input)
 }
 
 var utilGetTableInfo = getTableInfo
 
-func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
 	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
@@ -214,7 +223,7 @@ func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo,
 	return
 }
 
-func (s *Loader) getTableInfo(schema string, table string) (info *tableInfo, err error) {
+func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo, err error) {
 	v, ok := s.tableInfos.Load(quoteSchema(schema, table))
 	if ok {
 		info = v.(*tableInfo)
@@ -235,7 +244,7 @@ func isCreateDatabaseDDL(sql string) bool {
 	return isCreateDatabase
 }
 
-func (s *Loader) execDDL(ddl *DDL) error {
+func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl: ", ddl)
 
 	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
@@ -268,7 +277,7 @@ func (s *Loader) execDDL(ddl *DDL) error {
 	return errors.Trace(err)
 }
 
-func (s *Loader) execByHash(executor *executor, byHash [][]*DML) error {
+func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
 	errg, _ := errgroup.WithContext(context.Background())
 
 	for _, dmls := range byHash {
@@ -289,7 +298,7 @@ func (s *Loader) execByHash(executor *executor, byHash [][]*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
+func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	causality := NewCausality()
 
 	var byHash = make([][]*DML, s.workerCount)
@@ -323,7 +332,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *Loader) execDMLs(dmls []*DML) error {
+func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -374,7 +383,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 }
 
 // Run will quit when meet any error, or all the txn are drained
-func (s *Loader) Run() error {
+func (s *loaderImpl) Run() error {
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
@@ -483,7 +492,7 @@ func (s *Loader) Run() error {
 // groupDMLs group DMLs by table in batchByTbls and
 // collects DMLs that can't be executed in bulk in singleDMLs.
 // NOTE: DML.info are assumed to be already set.
-func (s *Loader) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, singleDMLs []*DML) {
+func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, singleDMLs []*DML) {
 	if !s.merge {
 		singleDMLs = dmls
 		return
