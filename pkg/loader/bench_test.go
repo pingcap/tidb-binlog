@@ -111,7 +111,7 @@ func benchmarkWrite(b *testing.B, merge bool) {
 
 type runner struct {
 	db     *sql.DB
-	loader *Loader
+	loader Loader
 	wg     sync.WaitGroup
 }
 
@@ -126,7 +126,8 @@ func newRunner(merge bool) (r *runner, err error) {
 		return nil, errors.Trace(err)
 	}
 
-	loader.merge = merge
+	impl := loader.(*loaderImpl)
+	impl.merge = merge
 
 	r = new(runner)
 	r.db = db
@@ -155,7 +156,7 @@ func (r *runner) close() {
 	r.wg.Wait()
 }
 
-func createTable(db *sql.DB, loader *Loader) error {
+func createTable(db *sql.DB, loader Loader) error {
 	sql := "create table test1(id int primary key, a1 int)"
 	// sql = "create table test1(id int, a1 int, UNIQUE KEY `id` (`id`))"
 	loader.Input() <- NewDDLTxn("test", "test1", sql)
@@ -163,13 +164,13 @@ func createTable(db *sql.DB, loader *Loader) error {
 	return nil
 }
 
-func dropTable(db *sql.DB, loader *Loader) error {
+func dropTable(db *sql.DB, loader Loader) error {
 	sql := fmt.Sprintf("drop table if exists test1")
 	loader.Input() <- NewDDLTxn("test", "test1", sql)
 	return nil
 }
 
-func loadTable(db *sql.DB, loader *Loader, n int) error {
+func loadTable(db *sql.DB, loader Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
@@ -194,7 +195,7 @@ func loadTable(db *sql.DB, loader *Loader, n int) error {
 	return nil
 }
 
-func updateTable(db *sql.DB, loader *Loader, n int) error {
+func updateTable(db *sql.DB, loader Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
@@ -223,7 +224,7 @@ func updateTable(db *sql.DB, loader *Loader, n int) error {
 	return nil
 }
 
-func deleteTable(db *sql.DB, loader *Loader, n int) error {
+func deleteTable(db *sql.DB, loader Loader, n int) error {
 	var txns []*Txn
 	for i := 0; i < n; i++ {
 		txn := new(Txn)
