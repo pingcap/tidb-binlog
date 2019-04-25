@@ -16,9 +16,11 @@ package checkpoint
 import (
 	"database/sql"
 	"errors"
-	"regexp"
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/flash"
+	"regexp"
+	"time"
 )
 
 type flashSuite struct{}
@@ -39,6 +41,49 @@ func (s *flashSuite) TestFlashCheckPointString(c *C) {
 	c.Assert(cp.String(), Equals, "binlog commitTS = 1234")
 }
 
+func (t *flashSuite) TestCheck(c *C) {
+	cp := FlashCheckPoint{saveTime: time.Now(), metaCP: &flash.MetaCheckpoint{}}
+	c.Assert(cp.Check(1), IsFalse)
+	cp.saveTime = time.Now().Add(-maxSaveTime)
+	c.Assert(cp.Check(1), IsTrue)
+}
+
+func (s *flashSuite) TestClose(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	mock.ExpectClose()
+	cp := FlashCheckPoint{db: db}
+	cp.Close()
+	cp.Close()
+	c.Assert(cp.closed, IsTrue)
+}
+
+func (s *flashSuite) TestSave(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	cp := FlashCheckPoint{
+		metaCP: &flash.MetaCheckpoint{},
+		db: db,
+	}
+	cp.metaCP.Flush(-1, true) // Flush metaCP to turn on forceSave
+	mock.ExpectBegin()
+	mock.ExpectExec("IMPORT INTO.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	err = cp.Save(1024)
+	c.Assert(err, IsNil)
+}
+
+func (s *flashSuite) TestLoad(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	cp := FlashCheckPoint{db: db}
+	rows := sqlmock.NewRows([]string{"checkPoint"}).AddRow(`{"commitTS": 1003}`)
+	mock.ExpectQuery("SELECT `checkpoint` from.*").WillReturnRows(rows)
+	err = cp.Load()
+	c.Assert(err, IsNil)
+	c.Assert(cp.CommitTS, Equals, int64(1003))
+}
+
 type newFlashSuite struct{}
 
 var _ = Suite(&newFlashSuite{})
@@ -54,8 +99,8 @@ func (s *newFlashSuite) TestCannotOpenDB(c *C) {
 	openCH = func(host string, port int, username string, password string, dbName string, blockSize int) (*sql.DB, error) {
 		return nil, errors.New("OpenErr")
 	}
-	defer func ()  {
-		openCH = origOpen	
+	defer func() {
+		openCH = origOpen
 	}()
 	cfg := Config{Db: &DBConfig{Host: "127.0.0.1:9000"}}
 	_, err := newFlash(&cfg)
@@ -71,8 +116,8 @@ func (s *newFlashSuite) TestDBStatementErrs(c *C) {
 	openCH = func(host string, port int, username string, password string, dbName string, blockSize int) (*sql.DB, error) {
 		return db, nil
 	}
-	defer func ()  {
-		openCH = origOpen	
+	defer func() {
+		openCH = origOpen
 	}()
 
 	sqlDB := "CREATE DATABASE IF NOT EXISTS `test`"
