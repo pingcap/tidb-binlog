@@ -41,7 +41,7 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	mock.ExpectExec("INSERT INTO").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	binlogs := make([]*pb.Binlog, 0, 1)
+	binlogs := make([]*pb.Binlog, 0, 2)
 	err = syncer.Sync(ddlBinlog, func(binlog *pb.Binlog) {
 		c.Log(binlog)
 		binlogs = append(binlogs, binlog)

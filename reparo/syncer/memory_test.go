@@ -26,7 +26,7 @@ func (s *testMemorySuite) TestMemorySyncer(c *check.C) {
 		},
 	}
 
-	binlogs := make([]*pb.Binlog, 0, 1)
+	binlogs := make([]*pb.Binlog, 0, 2)
 	err = syncer.Sync(ddlBinlog, func(binlog *pb.Binlog) {
 		c.Log(binlog)
 		binlogs = append(binlogs, binlog)
