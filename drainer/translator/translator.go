@@ -151,3 +151,21 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 
 	return oldRow, newRow, nil
 }
+
+
+type updateDecoder struct {
+	colsTypes map[int64]*types.FieldType
+}
+
+func newUpdateDecoder(table *model.TableInfo) updateDecoder {
+	columns := writableColumns(table)
+	return updateDecoder{
+		colsTypes: util.ToColumnTypeMap(columns),
+	}
+}
+
+// decode decodes a byte slice into datums with a existing row map.
+// Row layout: colID1, value1, colID2, value2, .....
+func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
+	return DecodeOldAndNewRow(b, ud.colsTypes, loc)
+}
