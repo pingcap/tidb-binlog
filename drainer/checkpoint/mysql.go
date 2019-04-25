@@ -49,13 +49,15 @@ type MysqlCheckPoint struct {
 	snapshot time.Time
 }
 
+var sqlOpenDB = pkgsql.OpenDB
+
 func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	if res := checkConfig(cfg); res != nil {
 		log.Errorf("Argument cfg is Invaild %v", res)
 		return &MysqlCheckPoint{}, errors.Trace(res)
 	}
 
-	db, err := pkgsql.OpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
+	db, err := sqlOpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
 		log.Errorf("open database error %v", err)
 		return &MysqlCheckPoint{}, errors.Trace(err)
@@ -73,15 +75,13 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := genCreateSchema(sp)
-	_, err = db.Exec(sql)
-	if err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Errorf("Create schema error %v", err)
 		return sp, errors.Trace(err)
 	}
 
 	sql = genCreateTable(sp)
-	_, err = db.Exec(sql)
-	if err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Errorf("Create table error %v", err)
 		return sp, errors.Trace(err)
 	}
@@ -105,20 +105,12 @@ func (sp *MysqlCheckPoint) Load() error {
 		}
 	}()
 
-	sql := genSelectSQL(sp)
-	rows, err := sp.db.Query(sql)
-	if err != nil {
-		log.Errorf("select checkPoint error %v", err)
-		return errors.Trace(err)
-	}
-
 	var str string
-	for rows.Next() {
-		err = rows.Scan(&str)
-		if err != nil {
-			log.Errorf("rows Scan error %v", err)
-			return errors.Trace(err)
-		}
+	sql := genSelectSQL(sp)
+	row := sp.db.QueryRow(sql)
+	if err := row.Scan(&str); err != nil {
+		log.Errorf("rows Scan error %v", err)
+		return errors.Trace(err)
 	}
 
 	if len(str) == 0 {
@@ -126,13 +118,14 @@ func (sp *MysqlCheckPoint) Load() error {
 		return nil
 	}
 
-	err = json.Unmarshal([]byte(str), sp)
-	if err != nil {
+	if err := json.Unmarshal([]byte(str), sp); err != nil {
 		return errors.Trace(err)
 	}
 
 	return nil
 }
+
+var getTidbPos = pkgsql.GetTidbPosition
 
 // Save implements checkpoint.Save interface
 func (sp *MysqlCheckPoint) Save(ts int64) error {
@@ -149,7 +142,7 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	// we don't need update tsMap every time.
 	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
 		sp.snapshot = time.Now()
-		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
+		slaveTS, err := getTidbPos(sp.db)
 		if err != nil {
 			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
 			errCode, ok := pkgsql.GetSQLErrCode(err)
