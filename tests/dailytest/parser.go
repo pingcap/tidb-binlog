@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package dailytest
 
 import (
@@ -223,39 +236,3 @@ func parseTableSQL(table *table, sql string) error {
 	return errors.Trace(err)
 }
 
-func parseIndex(table *table, stmt *ast.CreateIndexStmt) error {
-	if table.name != stmt.Table.Name.L {
-		return errors.Errorf("mismatch table name for create index - %s : %s", table.name, stmt.Table.Name.L)
-	}
-
-	for _, indexCol := range stmt.IndexColNames {
-		name := indexCol.Column.Name.L
-		if stmt.Unique {
-			table.uniqIndices[name] = table.findCol(table.columns, name)
-		} else {
-			table.indices[name] = table.findCol(table.columns, name)
-		}
-	}
-
-	return nil
-}
-
-func parseIndexSQL(table *table, sql string) error {
-	if len(sql) == 0 {
-		return nil
-	}
-
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	switch node := stmt.(type) {
-	case *ast.CreateIndexStmt:
-		err = parseIndex(table, node)
-	default:
-		err = errors.Errorf("invalid statement - %v", stmt.Text())
-	}
-
-	return errors.Trace(err)
-}

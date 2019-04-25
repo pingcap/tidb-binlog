@@ -1,14 +1,33 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pump
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/integration"
+	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -167,8 +186,8 @@ func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
 		},
 	}
 	signal := make(chan struct{})
+	server.wg.Add(1)
 	go func() {
-		server.wg.Add(1)
 		server.genForwardBinlog()
 		close(signal)
 	}()
@@ -208,8 +227,8 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 			GenFakeBinlogInterval: 1,
 		},
 	}
+	server.wg.Add(1)
 	go func() {
-		server.wg.Add(1)
 		server.genForwardBinlog()
 	}()
 	time.Sleep(time.Duration(server.cfg.GenFakeBinlogInterval*2) * time.Second)
@@ -223,4 +242,202 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 		}
 	}
 	c.Assert(foundFake, IsTrue)
+}
+
+type startHeartbeatSuite struct{}
+
+var _ = Suite(&startHeartbeatSuite{})
+
+type heartbeartNode struct {
+	fakeNode
+	errChl chan error
+}
+
+func (n *heartbeartNode) Heartbeat(ctx context.Context) <-chan error {
+	return n.errChl
+}
+
+func (s *startHeartbeatSuite) TestOnlyLogNonCancelErr(c *C) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+
+	errChl := make(chan error)
+	node := heartbeartNode{errChl: errChl}
+	server := &Server{node: &node, ctx: context.Background()}
+	server.startHeartbeat()
+	errChl <- errors.New("test")
+	errChl <- context.Canceled
+	close(errChl)
+
+	msg := buf.String()
+	lines := strings.Split(strings.TrimSpace(msg), "\n")
+	c.Assert(lines, HasLen, 1)
+	c.Assert(lines[0], Matches, ".*send heartbeat error test.*")
+}
+
+type printServerInfoSuite struct{}
+
+var _ = Suite(&printServerInfoSuite{})
+
+type dummyStorage struct {
+	storage.Storage
+}
+
+func (ds dummyStorage) MaxCommitTS() int64 {
+	return 1024
+}
+
+func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
+	var buf bytes.Buffer
+	originalInterval := serverInfoOutputInterval
+	serverInfoOutputInterval = 50 * time.Millisecond
+	log.SetOutput(&buf)
+	defer func() {
+		log.SetOutput(os.Stderr)
+		serverInfoOutputInterval = originalInterval
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	server := &Server{storage: dummyStorage{}, ctx: ctx}
+	signal := make(chan struct{})
+
+	server.wg.Add(1)
+	go func() {
+		server.printServerInfo()
+		close(signal)
+	}()
+
+	time.Sleep(3 * serverInfoOutputInterval)
+	cancel()
+
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Fail to return when server's done")
+	}
+
+	logged := buf.String()
+	logged = strings.TrimSpace(logged)
+	lines := strings.Split(logged, "\n")
+	for i, l := range lines {
+		if i == len(lines)-1 {
+			c.Assert(l, Matches, ".*printServerInfo exit.*")
+		} else {
+			c.Assert(l, Matches, ".*writeBinlogCount: 0, alivePullerCount: 0, maxCommitTS: 1024.*")
+		}
+	}
+}
+
+type pumpStatusSuite struct{}
+
+var _ = Suite(&pumpStatusSuite{})
+
+type failStatusNode struct {
+	node.Node
+}
+
+func (n failStatusNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
+	return nil, errors.New("Query Status Failed")
+}
+
+func (s *pumpStatusSuite) TestShouldRetErrIfFailToGetStatus(c *C) {
+	server := &Server{node: failStatusNode{}}
+	status := server.PumpStatus()
+	c.Assert(status.ErrMsg, Equals, "Query Status Failed")
+}
+
+type nodeWithStatus struct {
+	node.Node
+}
+
+func (n nodeWithStatus) NodesStatus(ctx context.Context) (sts []*node.Status, err error) {
+	sts = []*node.Status{
+		&node.Status{NodeID: "pump1"},
+		&node.Status{NodeID: "pump4"},
+		&node.Status{NodeID: "pump2"},
+	}
+	return
+}
+
+func (s *pumpStatusSuite) TestShouldRetErrIfFailToGetCommitTS(c *C) {
+	origGetTSO := utilGetTSO
+	utilGetTSO = func(cli pd.Client) (int64, error) { return -1, errors.New("PD Failure") }
+	defer func() { utilGetTSO = origGetTSO }()
+
+	server := &Server{node: nodeWithStatus{}}
+	status := server.PumpStatus()
+	c.Assert(status.ErrMsg, Equals, "PD Failure")
+}
+
+func (s *pumpStatusSuite) TestCorrectlyGetStatusAndCommitTS(c *C) {
+	origGetTSO := utilGetTSO
+	utilGetTSO = func(cli pd.Client) (int64, error) { return 1024, nil }
+	defer func() { utilGetTSO = origGetTSO }()
+
+	server := &Server{node: nodeWithStatus{}}
+	status := server.PumpStatus()
+	c.Assert(status.ErrMsg, Equals, "")
+	c.Assert(status.CommitTS, Equals, int64(1024))
+	c.Assert(status.StatusMap, HasLen, 3)
+	c.Assert(status.StatusMap, HasKey, "pump1")
+	c.Assert(status.StatusMap, HasKey, "pump2")
+	c.Assert(status.StatusMap, HasKey, "pump4")
+}
+
+type commitStatusSuite struct{}
+
+var _ = Suite(commitStatusSuite{})
+
+type nodeWithState struct {
+	node.Node
+	state    string
+	newState string
+}
+
+func (n *nodeWithState) NodeStatus() *node.Status {
+	return &node.Status{
+		State:  n.state,
+		NodeID: "test",
+		Addr:   "192.168.1.1",
+	}
+}
+func (n *nodeWithState) RefreshStatus(ctx context.Context, status *node.Status) error {
+	n.newState = status.State
+	return nil
+}
+
+func (s commitStatusSuite) TestShouldChangeToCorrectState(c *C) {
+	tests := map[string]string{
+		node.Pausing: node.Paused,
+		node.Online:  node.Paused,
+		"unknown":    "unknown",
+	}
+	for from, to := range tests {
+		server := &Server{
+			node:    &nodeWithState{state: from},
+			storage: &dummyStorage{},
+		}
+		server.commitStatus()
+		c.Assert(server.node.(*nodeWithState).newState, Equals, to)
+	}
+}
+
+type closeSuite struct{}
+
+var _ = Suite(&closeSuite{})
+
+func (s *closeSuite) TestSkipIfAlreadyClosed(c *C) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer func() {
+		log.SetOutput(os.Stderr)
+	}()
+	server := Server{isClosed: 1}
+	server.Close()
+
+	logged := strings.TrimSpace(buf.String())
+	c.Assert(strings.Split(logged, "\n")[1], Matches, ".*server had closed.*")
 }

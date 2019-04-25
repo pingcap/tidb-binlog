@@ -5,7 +5,7 @@ PROJECT=tidb-binlog
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
-	$(error Please set the environment variable GOPATH before running `make`)
+  $(error Please set the environment variable GOPATH before running `make`)
 endif
 
 CURDIR := $(shell pwd)
@@ -99,12 +99,8 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-
 check-static:
-	gometalinter --disable-all --deadline 120s \
-		--enable megacheck \
-		--enable ineffassign \
-		$$($(PACKAGE_DIRECTORIES))
+	golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
 
 update: update_vendor clean_vendor
 update_vendor:

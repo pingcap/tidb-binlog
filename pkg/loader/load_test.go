@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package loader
 
 import (
@@ -32,7 +45,7 @@ type groupDMLsSuite struct{}
 var _ = check.Suite(&groupDMLsSuite{})
 
 func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
-	ld := Loader{merge: false}
+	ld := loaderImpl{merge: false}
 	dmls := []*DML{
 		&DML{Tp: UpdateDMLType},
 		&DML{Tp: UpdateDMLType},
@@ -44,7 +57,7 @@ func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
 }
 
 func (s *groupDMLsSuite) TestGroupByTableName(c *check.C) {
-	ld := Loader{merge: true}
+	ld := loaderImpl{merge: true}
 	canBatch := tableInfo{primaryKey: &indexInfo{}}
 	onlySingle := tableInfo{}
 	dmls := []*DML{
@@ -74,13 +87,14 @@ func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
 	defer func() {
 		utilGetTableInfo = origGet
 	}()
-	ld := Loader{}
+	ld := loaderImpl{}
 
 	info, err := ld.getTableInfo("test", "contacts")
 	c.Assert(err, check.IsNil)
 	c.Assert(info.columns[1], check.Equals, "name")
 
 	info, err = ld.getTableInfo("test", "contacts")
+	c.Assert(err, check.IsNil)
 	c.Assert(info.columns[1], check.Equals, "name")
 
 	c.Assert(nCalled, check.Equals, 1)

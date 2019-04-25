@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package util
 
 import (
@@ -15,18 +28,13 @@ var (
 	physicalShiftBits uint = 18
 )
 
-// TsToTimestamp translate ts to timestamp
-func TsToTimestamp(ts int64) int64 {
-	return ts >> physicalShiftBits / 1000
-}
-
 // GetApproachTS get a approach ts by ts and time
 func GetApproachTS(ts int64, tm time.Time) int64 {
 	if ts == 0 {
 		return 0
 	}
 	second := int64(time.Since(tm).Seconds())
-	return ts + (second*1000)<<18
+	return ts + (second*1000)<<physicalShiftBits
 }
 
 // GetTSO get tso from pd
