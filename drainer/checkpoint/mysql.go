@@ -106,16 +106,15 @@ func (sp *MysqlCheckPoint) Load() error {
 	}()
 
 	var str string
-	sql := genSelectSQL(sp)
-	row := sp.db.QueryRow(sql)
-	if err := row.Scan(&str); err != nil {
-		log.Errorf("rows Scan error %v", err)
-		return errors.Trace(err)
-	}
-
-	if len(str) == 0 {
+	selectSQL := genSelectSQL(sp)
+	err := sp.db.QueryRow(selectSQL).Scan(&str)
+	switch {
+	case err == sql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
 		return nil
+	case err != nil:
+		log.Errorf("rows Scan error %v", err)
+		return errors.Trace(err)
 	}
 
 	if err := json.Unmarshal([]byte(str), sp); err != nil {
