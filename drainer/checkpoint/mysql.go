@@ -73,14 +73,14 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := genCreateSchema(sp)
-	_, err = execSQL(db, sql)
+	_, err = db.Exec(sql)
 	if err != nil {
 		log.Errorf("Create schema error %v", err)
 		return sp, errors.Trace(err)
 	}
 
 	sql = genCreateTable(sp)
-	_, err = execSQL(db, sql)
+	_, err = db.Exec(sql)
 	if err != nil {
 		log.Errorf("Create table error %v", err)
 		return sp, errors.Trace(err)
@@ -106,7 +106,7 @@ func (sp *MysqlCheckPoint) Load() error {
 	}()
 
 	sql := genSelectSQL(sp)
-	rows, err := querySQL(sp.db, sql)
+	rows, err := sp.db.Query(sql)
 	if err != nil {
 		log.Errorf("select checkPoint error %v", err)
 		return errors.Trace(err)
@@ -169,7 +169,7 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	}
 
 	sql := genReplaceSQL(sp, string(b))
-	_, err = execSQL(sp.db, sql)
+	_, err = sp.db.Exec(sql)
 
 	return errors.Trace(err)
 }

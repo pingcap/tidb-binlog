@@ -90,13 +90,13 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)
-	if _, err = execSQL(db, sql); err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Errorf("Create database error %v", err)
 		return sp, errors.Trace(err)
 	}
 
 	sql = fmt.Sprintf("ATTACH TABLE IF NOT EXISTS `%s`.`%s`(`clusterid` UInt64, `checkpoint` String) ENGINE MutableMergeTree((`clusterid`), 8192)", sp.schema, sp.table)
-	if _, err = execSQL(db, sql); err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Errorf("Create table error %v", err)
 		return nil, errors.Trace(err)
 	}
@@ -115,7 +115,7 @@ func (sp *FlashCheckPoint) Load() error {
 	}
 
 	sql := fmt.Sprintf("SELECT `checkpoint` from `%s`.`%s` WHERE `clusterid` = %d", sp.schema, sp.table, sp.clusterID)
-	rows, err := querySQL(sp.db, sql)
+	rows, err := sp.db.Query(sql)
 	if err != nil {
 		log.Errorf("select checkPoint error %v", err)
 		return errors.Trace(err)
