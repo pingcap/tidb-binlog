@@ -16,11 +16,14 @@ package checkpoint
 import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"time"
 )
 
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
+
+	maxSaveTime = 3 * time.Second
 )
 
 // CheckPoint is the binlog sync pos meta.
