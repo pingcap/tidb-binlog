@@ -12,7 +12,7 @@ your contribution accepted.
 
 ## Building TiDB-Binlog
 
-Developing DM requires:
+Developing TiDB-Binlog requires:
 
 * [Go 1.11+](http://golang.org/doc/code.html)
 * An internet connection to download the dependencies
@@ -31,7 +31,7 @@ See [tests/README.md](./tests/README.md) for how to execute and add tests.
 
 ### Updating dependencies
 
-DM uses [Go 1.11 module](https://github.com/golang/go/wiki/Modules) to manage dependencies.
+TiDB-Binlog uses [Go 1.11 module](https://github.com/golang/go/wiki/Modules) to manage dependencies.
 To add or update a dependency: use the `go mod edit` command to change the dependency.
 
 ## Contribution flow
@@ -50,10 +50,10 @@ Thanks for your contributions!
 
 ### Code style
 
-The coding style suggested by the Golang community is used in DM.
+The coding style suggested by the Golang community is used in TiDB-Binlog.
 See the [style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
 
-Please follow this style to make DM easy to review, maintain and develop.
+Please follow this style to make TiDB-Binlog easy to review, maintain and develop.
 
 ### Format of the Commit Message
 
@@ -62,7 +62,7 @@ questions: what changed and why. The subject line should feature the what and
 the body of the commit should describe the why.
 
 ```
-dm-master: add comment for variable declaration
+Pump: add comment for variable declaration
 
 Improve documentation.
 ```
@@ -82,7 +82,7 @@ second line is always blank, and other lines should be wrapped at 80 characters.
 This allows the message to be easier to read on GitHub as well as in various
 git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like `dm-master,dm-worker:`.
+If the change affects more than one subsystem, you can use comma to separate them like `pump,drainer:`.
 
 If the change affects many subsystems, you can use ```*``` instead, like ```*:```.
 
