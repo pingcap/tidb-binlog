@@ -76,7 +76,7 @@ The best way to install TiDB-Binlog is via [TiDB-Binlog-Ansible](https://www.pin
 
 ## Config File
 * Pump config file: [pump.toml](./cmd/pump/pump.toml) 
-* Drainer config file: [drainer.toml](./cmd/pump/drainer.toml) 
+* Drainer config file: [drainer.toml](./cmd/drainer/drainer.toml) 
 
 ## Contributing
 Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
