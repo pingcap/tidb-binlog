@@ -71,7 +71,7 @@ See [tests](./tests/README.md) for how to execute and add integration tests.
 
 The recommended startup sequence: PD -> TiKV -> [Pump](./cmd/pump) -> TiDB -> [Drainer](./cmd/drainer)
 
-The best way to install DM is via [TiDB-Binlog-Ansible](https://www.pingcap.com/docs-cn/tools/tidb-binlog-cluster/)
+The best way to install TiDB-Binlog is via [TiDB-Binlog-Ansible](https://www.pingcap.com/docs-cn/tools/tidb-binlog-cluster/)
 
 
 ## Config File
