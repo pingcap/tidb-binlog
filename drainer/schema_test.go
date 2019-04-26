@@ -325,12 +325,12 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		schemaName  string
 		tableName   string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{1, dbInfo, nil, 123}, "create database Test", "create database Test", dbInfo.Name.O, ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{3, nil, tblInfo, 123}, "create table T(id int);", "create table T(id int);", dbInfo.Name.O, tblInfo.Name.O},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{4, nil, tblInfo, 123}, "alter table T add a varchar(45);", "alter table T add a varchar(45);", dbInfo.Name.O, tblInfo.Name.O},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{5, nil, tblInfo, 123}, "truncate table T;", "truncate table T;", dbInfo.Name.O, tblInfo.Name.O},
-		{"dropTable", 12, 2, 10, model.ActionDropTable, &model.HistoryInfo{6, nil, nil, 123}, "drop table T;", "drop table T;", dbInfo.Name.O, tblInfo.Name.O},
-		{"dropSchema", 13, 2, 0, model.ActionDropSchema, &model.HistoryInfo{7, nil, nil, 123}, "drop database test;", "drop database test;", dbInfo.Name.O, ""},
+		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: model.ActionCreateSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: model.ActionCreateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: model.ActionAddColumn, binlogInfo: &model.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "truncateTable", jobID: 11, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 10, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table T;", resultQuery: "drop table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
 	}
 
 	for _, testCase := range testCases {
