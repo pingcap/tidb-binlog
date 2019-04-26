@@ -24,29 +24,29 @@ var _ = check.Suite(&testDDLSuite{})
 
 func (s *testDDLSuite) TestParseDDL(c *check.C) {
 	tests := map[string]filter.TableName{
-		"create database db1": filter.TableName{"db1", ""},
-		"drop database db1":   filter.TableName{"db1", ""},
+		"create database db1": {"db1", ""},
+		"drop database db1":   {"db1", ""},
 
-		"use db1; create table table1(id int)": filter.TableName{"db1", "table1"},
-		"create table table1(id int)":          filter.TableName{"", "table1"},
+		"use db1; create table table1(id int)": {"db1", "table1"},
+		"create table table1(id int)":          {"", "table1"},
 
-		"use db1; drop table table1": filter.TableName{"db1", "table1"},
-		"drop table table1":          filter.TableName{"", "table1"},
+		"use db1; drop table table1": {"db1", "table1"},
+		"drop table table1":          {"", "table1"},
 
-		"use db1; alter table table1 drop column v1": filter.TableName{"db1", "table1"},
-		"alter table table1 drop column v1":          filter.TableName{"", "table1"},
+		"use db1; alter table table1 drop column v1": {"db1", "table1"},
+		"alter table table1 drop column v1":          {"", "table1"},
 
-		"use db1; truncate table table1": filter.TableName{"db1", "table1"},
-		"truncate table table1":          filter.TableName{"", "table1"},
+		"use db1; truncate table table1": {"db1", "table1"},
+		"truncate table table1":          {"", "table1"},
 
-		"use db1; create index idx on table1(id)": filter.TableName{"db1", "table1"},
-		"create index idx on table1(id)":          filter.TableName{"", "table1"},
+		"use db1; create index idx on table1(id)": {"db1", "table1"},
+		"create index idx on table1(id)":          {"", "table1"},
 
-		"use db1; alter table table1 drop index index_name": filter.TableName{"db1", "table1"},
-		"alter table table1 drop index index_name":          filter.TableName{"", "table1"},
+		"use db1; alter table table1 drop index index_name": {"db1", "table1"},
+		"alter table table1 drop index index_name":          {"", "table1"},
 
-		"use db1;rename table table1 to table2": filter.TableName{"db1", "table1"},
-		"rename table table1 to table2":         filter.TableName{"", "table1"},
+		"use db1;rename table table1 to table2": {"db1", "table1"},
+		"rename table table1 to table2":         {"", "table1"},
 	}
 
 	for sql, table := range tests {
