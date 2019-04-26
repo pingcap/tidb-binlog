@@ -29,11 +29,12 @@ import (
 
 var (
 	etcdDialTimeout = 5 * time.Second
+	createRegistryFuc = createRegistry
 )
 
 // queryNodesByKind returns specified nodes, like pumps/drainers
 func QueryNodesByKind(urls string, kind string) error {
-	registry, err := createRegistry(urls)
+	registry, err := createRegistryFuc(urls)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -56,7 +57,7 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 		node's state can be online, pausing, paused, closing and offline.
 		if the state is one of them, will update the node's state saved in etcd directly.
 	*/
-	registry, err := createRegistry(urls)
+	registry, err := createRegistryFuc(urls)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -97,7 +98,7 @@ func createRegistry(urls string) (*node.EtcdRegistry, error) {
 }
 
 func ApplyAction(urls, kind, nodeID string, action string) error {
-	registry, err := createRegistry(urls)
+	registry, err := createRegistryFuc(urls)
 	if err != nil {
 		return errors.Trace(err)
 	}
