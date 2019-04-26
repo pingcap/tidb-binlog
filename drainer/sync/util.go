@@ -26,7 +26,6 @@ type DBConfig struct {
 	Port          int              `toml:"port" json:"port"`
 	Checkpoint    CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir string           `toml:"dir" json:"dir"`
-	Compression   string           `toml:"compression" json:"compression"`
 	TimeLimit     string           `toml:"time-limit" json:"time-limit"`
 	SizeLimit     string           `toml:"size-limit" json:"size-limit"`
 

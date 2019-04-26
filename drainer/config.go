@@ -124,7 +124,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or pb or flash or kafka; see syncer section in conf/drainer.toml")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
@@ -197,7 +197,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" || c.DestDBType == "kafka" {
+	if c.DestDBType == "file" || c.DestDBType == "kafka" {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
@@ -277,13 +277,17 @@ func (cfg *Config) adjustConfig() error {
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.SyncerCfg.adjustWorkCount()
-	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
 		cfg.SyncerCfg.To = new(dsync.DBConfig)
 	}
+
+	if cfg.SyncerCfg.DestDBType == "pb" {
+		// pb is an alias of file, use file instead
+		cfg.SyncerCfg.DestDBType = "file"
+	}
+
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
@@ -318,10 +322,10 @@ func (cfg *Config) adjustConfig() error {
 		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
 			cfg.SyncerCfg.To.KafkaMaxMessages = 1024
 		}
-	} else if cfg.SyncerCfg.DestDBType == "pb" {
+	} else if cfg.SyncerCfg.DestDBType == "file" {
 		if len(cfg.SyncerCfg.To.BinlogFileDir) == 0 {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+			log.Infof("use default downstream file directory: %s", cfg.DataDir)
 		}
 	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 		if len(cfg.SyncerCfg.To.Host) == 0 {
@@ -349,6 +353,9 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
 	}
+
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	return nil
 }

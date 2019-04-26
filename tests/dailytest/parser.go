@@ -235,4 +235,3 @@ func parseTableSQL(table *table, sql string) error {
 
 	return errors.Trace(err)
 }
-
