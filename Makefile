@@ -25,7 +25,7 @@ MAC	   := "Darwin"
 PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.pb.go')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -77,17 +77,19 @@ fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
-check:
-	bash gitcookie.sh
-	go get github.com/golang/lint/golint
+lint:tools/bin/revive
+	@echo "linting"
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+
+vet:
 	@echo "vet"
-	@ go tool vet $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
-	@echo "vet --shadow"
-	@ go tool vet --shadow $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
-	@echo "golint"
-	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | grep -vE 'vendor' | awk '{print} END{if(NR>0) {exit 1}}'
-	@echo "gofmt (simplify)"
-	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
+	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
+
+tidy:
+	@echo "go mod tidy"
+	./tools/check/check-tidy.sh
+
+check: fmt lint tidy vet
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -117,3 +119,6 @@ clean_vendor:
 	hack/clean_vendor.sh
 
 
+tools/bin/revive: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/revive github.com/mgechev/revive
