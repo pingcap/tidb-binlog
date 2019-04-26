@@ -282,6 +282,12 @@ func (cfg *Config) adjustConfig() error {
 	if cfg.SyncerCfg.To == nil {
 		cfg.SyncerCfg.To = new(dsync.DBConfig)
 	}
+
+	if cfg.SyncerCfg.DestDBType == "pb" {
+		// pb is an alias of file, use file instead
+		cfg.SyncerCfg.DestDBType = "file"
+	}
+
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
@@ -316,13 +322,11 @@ func (cfg *Config) adjustConfig() error {
 		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
 			cfg.SyncerCfg.To.KafkaMaxMessages = 1024
 		}
-	} else if cfg.SyncerCfg.DestDBType == "pb" || cfg.SyncerCfg.DestDBType == "file" {
+	} else if cfg.SyncerCfg.DestDBType == "file" {
 		if len(cfg.SyncerCfg.To.BinlogFileDir) == 0 {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
 			log.Infof("use default downstream file directory: %s", cfg.DataDir)
 		}
-		// pb is an alias of file, use file instead 
-		cfg.SyncerCfg.DestDBType = "file"
 	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 		if len(cfg.SyncerCfg.To.Host) == 0 {
 			host := os.Getenv("MYSQL_HOST")
