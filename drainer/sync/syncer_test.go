@@ -54,7 +54,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 	}
 
 	// create pb syncer
-	pb, err := NewPBSyncer(c.MkDir(), "", infoGetter)
+	pb, err := NewPBSyncer(c.MkDir(), infoGetter)
 	c.Assert(err, check.IsNil)
 
 	s.syncers = append(s.syncers, pb)

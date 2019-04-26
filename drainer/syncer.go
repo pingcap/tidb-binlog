@@ -92,8 +92,8 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create kafka dsyncer")
 		}
-	case "pb":
-		dsyncer, err = dsync.NewPBSyncer(cfg.To.BinlogFileDir, cfg.To.Compression, schema)
+	case "file":
+		dsyncer, err = dsync.NewPBSyncer(cfg.To.BinlogFileDir, schema)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}

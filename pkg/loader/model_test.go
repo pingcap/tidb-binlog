@@ -95,15 +95,15 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 }
 
+type getKeysSuite struct{}
 
-type getKeysSuite struct {}
 var _ = check.Suite(&getKeysSuite{})
 
 func (s *getKeysSuite) TestGetKeyShouldUseNamesWithVals(c *check.C) {
 	names := []string{"name", "age", "city"}
 	values := map[string]interface{}{
 		"name": "pingcap",
-		"age": 42,
+		"age":  42,
 	}
 	c.Assert(getKey(names, values), check.Equals, "(name: pingcap)(age: 42)")
 }
@@ -125,29 +125,29 @@ func (s *getKeysSuite) TestShouldHaveAtLeastOneKey(c *check.C) {
 func (s *getKeysSuite) TestShouldCollectNewOldUniqKeyVals(c *check.C) {
 	dml := DML{
 		Database: "db",
-		Table: "tbl",
-		Tp: UpdateDMLType,
+		Table:    "tbl",
+		Tp:       UpdateDMLType,
 		info: &tableInfo{
 			columns: []string{"id", "first", "last", "other"},
 			uniqueKeys: []indexInfo{
 				indexInfo{
-					name: "uniq name",
+					name:    "uniq name",
 					columns: []string{"first", "last"},
 				},
 				indexInfo{
-					name: "other",
+					name:    "other",
 					columns: []string{"other"},
 				},
 			},
 		},
 		Values: map[string]interface{}{
 			"first": "strict",
-			"last": "tester",
+			"last":  "tester",
 			"other": 42,
 		},
 		OldValues: map[string]interface{}{
 			"first": "Strict",
-			"last": "Tester",
+			"last":  "Tester",
 			"other": 1,
 		},
 	}
@@ -161,17 +161,18 @@ func (s *getKeysSuite) TestShouldCollectNewOldUniqKeyVals(c *check.C) {
 	c.Assert(keys, check.DeepEquals, expected)
 }
 
-type SQLSuite struct {}
+type SQLSuite struct{}
+
 var _ = check.Suite(&SQLSuite{})
 
 func (s *SQLSuite) TestInsertSQL(c *check.C) {
 	dml := DML{
-		Tp: InsertDMLType,
+		Tp:       InsertDMLType,
 		Database: "test",
-		Table: "hello",
+		Table:    "hello",
 		Values: map[string]interface{}{
 			"name": "pc",
-			"age": 42,
+			"age":  42,
 		},
 		info: &tableInfo{
 			columns: []string{"name", "age"},
@@ -186,9 +187,9 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 
 func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 	dml := DML{
-		Tp: DeleteDMLType,
+		Tp:       DeleteDMLType,
 		Database: "test",
-		Table: "hello",
+		Table:    "hello",
 		Values: map[string]interface{}{
 			"name": "pc",
 		},
@@ -206,9 +207,9 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 
 func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 	dml := DML{
-		Tp: UpdateDMLType,
+		Tp:       UpdateDMLType,
 		Database: "db",
-		Table: "tbl",
+		Table:    "tbl",
 		Values: map[string]interface{}{
 			"name": "pc",
 		},
