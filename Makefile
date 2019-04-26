@@ -15,17 +15,17 @@ export PATH := $(path_to_add):$(PATH)
 
 TEST_DIR := /tmp/tidb_binlog_test
 
-GO		:= go
-GOBUILD   := GO111MODULE=on CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST	:= GO111MODULE=on CGO_ENABLED=1 $(GO) test -p 3
+GO       := GO111MODULE=on go
+GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
 
-ARCH	  := "`uname -s`"
-LINUX	 := "Linux"
-MAC	   := "Darwin"
+ARCH  := "`uname -s`"
+LINUX := "Linux"
+MAC   := "Darwin"
 PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.pb.go')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.pb.go')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -52,7 +52,7 @@ arbiter:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/arbiter cmd/arbiter/main.go
 
 reparo:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go	
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go
 
 install:
 	go install ./...
@@ -89,7 +89,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: fmt lint tidy vet
+check: fmt lint vet check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -102,8 +102,8 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-check-static:
-	golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
+check-static: tools/bin/golangci-lint
+	tools/bin/golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
 
 update: update_vendor clean_vendor
 update_vendor:
@@ -122,3 +122,7 @@ clean_vendor:
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; \
 	$(GO) build -o ../bin/revive github.com/mgechev/revive
+
+tools/bin/golangci-lint: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
