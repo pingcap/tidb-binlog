@@ -111,8 +111,6 @@ func (cfg *Config) Parse(args []string) error {
 	return cfg.validate()
 }
 
-
-
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check EtcdEndpoints
