@@ -14,9 +14,10 @@
 package checkpoint
 
 import (
+	"time"
+
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"time"
 )
 
 var (

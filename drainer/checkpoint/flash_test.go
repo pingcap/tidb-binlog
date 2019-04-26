@@ -16,11 +16,12 @@ package checkpoint
 import (
 	"database/sql"
 	"errors"
+	"regexp"
+	"time"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
-	"regexp"
-	"time"
 )
 
 type flashSuite struct{}
@@ -63,7 +64,7 @@ func (s *flashSuite) TestSave(c *C) {
 	c.Assert(err, IsNil)
 	cp := FlashCheckPoint{
 		metaCP: &flash.MetaCheckpoint{},
-		db: db,
+		db:     db,
 	}
 	cp.metaCP.Flush(-1, true) // Flush metaCP to turn on forceSave
 	mock.ExpectBegin()
