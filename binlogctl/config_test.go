@@ -14,12 +14,9 @@
 package binlogctl
 
 import (
-	"testing"
 
 	. "github.com/pingcap/check"
 )
-
-func Test(t *testing.T) { TestingT(t) }
 
 type configSuite struct{}
 

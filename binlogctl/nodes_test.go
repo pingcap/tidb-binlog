@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"time"
 	"testing"
+	"path"
+	"context"
 
 	"github.com/coreos/etcd/integration"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -28,11 +30,13 @@ type nodesSuite struct{}
 
 var _ = Suite(&nodesSuite{})
 var testEtcdCluster *integration.ClusterV3
+var fakeRegistry *node.EtcdRegistry
 
 func TestNode(t *testing.T) {
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
+	createFakeRegistry("127.0.0.1:2379")
 	TestingT(t)
 }
 
@@ -47,17 +51,55 @@ func (s *nodesSuite) TestQueryNodesByKind(c *C) {
 		createRegistryFuc = createRegistry
 	}()
 
-	err := QueryNodesByKind("127.0.0.1:2379", "pumps")
+	ns := &node.Status{
+		NodeID:  "test",
+		Addr:    "test",
+		State:   node.Online,
+		IsAlive: true,
+	}
+
+	c.Log("insert node")
+	nodePrefix := path.Join(node.DefaultRootPath, node.NodePrefix["pumps"])
+	err := fakeRegistry.UpdateNode(context.Background(), nodePrefix, ns)
+	c.Assert(err, IsNil)
+
+	c.Log("query node")
+	err = QueryNodesByKind("127.0.0.1:2379", "pumps")
+	c.Assert(err, IsNil)
+}
+
+func (s *nodesSuite) TestUpdateNodeState(c *C) {
+	createRegistryFuc = createFakeRegistry
+	defer func() {
+		createRegistryFuc = createRegistry
+	}()
+
+	ns := &node.Status{
+		NodeID:  "test",
+		Addr:    "test",
+		State:   node.Online,
+		IsAlive: true,
+	}
+
+	nodePrefix := path.Join(node.DefaultRootPath, node.NodePrefix["pumps"])
+	err := fakeRegistry.UpdateNode(context.Background(), nodePrefix, ns)
+	c.Assert(err, IsNil)
+
+	err = UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused)
 	c.Assert(err, IsNil)
 }
 
 func createFakeRegistry(urls string) (*node.EtcdRegistry, error) {
+	if fakeRegistry != nil {
+		return fakeRegistry, nil
+	}
+
 	fmt.Println("create etcd client")
 	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath)
 	fmt.Println("create registry")
-	r := node.NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
+	fakeRegistry = node.NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
 	
-	return r, nil
+	return fakeRegistry, nil
 	/*
 	ns := &Status{
 		NodeID:  "test",
