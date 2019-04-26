@@ -58,11 +58,11 @@ func genMysqlInsert(schema string, table *model.TableInfo, row []byte) (names []
 
 func genMysqlUpdate(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	updtDecoder := newUpdateDecoder(table)
 
 	var updateColumns []*model.ColumnInfo
 
-	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
+	oldColumnValues, newColumnValues, err := updtDecoder.decode(row, time.Local)
 	if err != nil {
 		return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}

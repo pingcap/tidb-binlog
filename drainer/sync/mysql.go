@@ -28,7 +28,7 @@ var _ Syncer = &MysqlSyncer{}
 // MysqlSyncer sync binlog to Mysql
 type MysqlSyncer struct {
 	db     *sql.DB
-	loader *loader.Loader
+	loader loader.Loader
 
 	*baseSyncer
 }
