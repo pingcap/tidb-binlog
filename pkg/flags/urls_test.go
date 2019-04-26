@@ -14,11 +14,6 @@
 package flags
 
 import (
-	"flag"
-	"os"
-	"strings"
-	"testing"
-
 	. "github.com/pingcap/check"
 )
 

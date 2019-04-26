@@ -14,10 +14,11 @@
 package util
 
 import (
-	. "github.com/pingcap/check"
-	"time"
 	"path"
+	"time"
+
 	"github.com/ngaut/log"
+	. "github.com/pingcap/check"
 )
 
 type logSuite struct{}
