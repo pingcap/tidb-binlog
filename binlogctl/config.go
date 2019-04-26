@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/version"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const (
@@ -94,14 +95,9 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	// adjust configuration
-	adjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
 
 	// transfore tls config
-	/*
-		SSLCA   string `toml:"ssl-ca" json:"ssl-ca"`
-		SSLCert string `toml:"ssl-cert" json:"ssl-cert"`
-		SSLKey  string `toml:"ssl-key" json:"ssl-key"
-	*/
 	sCfg := &security.Config{
 		SSLCA:   cfg.SSLCA,
 		SSLCert: cfg.SSLCert,
@@ -115,11 +111,7 @@ func (cfg *Config) Parse(args []string) error {
 	return cfg.validate()
 }
 
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
+
 
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {

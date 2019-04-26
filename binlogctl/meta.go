@@ -15,7 +15,6 @@ package binlogctl
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -55,8 +54,6 @@ func GenerateMetaInfo(cfg *Config) error {
 
 // GetTSO gets ts from pd
 func GetTSO(cfg *Config) (int64, error) {
-	now := time.Now()
-
 	ectdEndpoints, err := flags.ParseHostPortAddr(cfg.EtcdURLs)
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -67,16 +64,8 @@ func GetTSO(cfg *Config) (int64, error) {
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,
 	})
-	physical, logical, err := pdCli.GetTS(context.Background())
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	dist := time.Since(now)
-	if dist > slowDist {
-		log.Warn("get timestamp too slow", zap.Duration("dist", dist))
-	}
-
-	return int64(composeTS(physical, logical)), nil
+	
+	return util.GetTSO(pdCli)
 }
 
 func composeTS(physical, logical int64) uint64 {

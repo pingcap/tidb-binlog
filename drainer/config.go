@@ -220,18 +220,6 @@ func (cfg *Config) configFromFile(path string) error {
 	return errors.Trace(err)
 }
 
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
-
-func adjustInt(v *int, defValue int) {
-	if *v == 0 {
-		*v = defValue
-	}
-}
-
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -273,10 +261,10 @@ func (cfg *Config) validate() error {
 
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
+	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
