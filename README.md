@@ -65,6 +65,7 @@ Run all tests, including unit test and integration test
 ```
 make test
 ```
+See [tests](./tests/README.md) for how to execute and add integration tests.
 
 ## Deployment
 
