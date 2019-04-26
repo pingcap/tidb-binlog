@@ -52,3 +52,9 @@ func (s *tsSuite) TestGetTSO(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(t, Equals, int64(1<<physicalShiftBits + 10))
 }
+
+func (s *tsSuite) TestTSOToRoughTime(c *C) {
+	t := TSOToRoughTime(407964913197645824)
+	expectT := time.Date(2019, 4, 26, 15, 10, 38, 0, time.Local)
+	c.Assert(t, Equals, expectT)
+}
