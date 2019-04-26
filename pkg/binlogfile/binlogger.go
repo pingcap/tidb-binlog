@@ -11,7 +11,6 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -58,8 +57,6 @@ type binlogger struct {
 	// encoder encodes binlog payload into bytes, and write to file
 	encoder Encoder
 
-	codec compress.CompressionCodec
-
 	lastSuffix uint64
 	lastOffset int64
 
@@ -70,7 +67,7 @@ type binlogger struct {
 }
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+func OpenBinlogger(dirpath string) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -132,8 +129,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	binlog := &binlogger{
 		dir:        dirpath,
 		file:       fileLock,
-		encoder:    NewEncoder(fileLock, offset, codec),
-		codec:      codec,
+		encoder:    NewEncoder(fileLock, offset),
 		dirLock:    dirLock,
 		lastSuffix: lastFileSuffix,
 		lastOffset: offset,
@@ -401,7 +397,7 @@ func (b *binlogger) rotate() error {
 	}
 	b.file = newTail
 
-	b.encoder = NewEncoder(b.file, 0, b.codec)
+	b.encoder = NewEncoder(b.file, 0)
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }
