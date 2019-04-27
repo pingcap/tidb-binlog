@@ -22,7 +22,7 @@ GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.pb.go')
@@ -103,21 +103,12 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
+	$(GO) mod vendor
 	tools/bin/golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
-
-update: update_vendor clean_vendor
-update_vendor:
-	rm -rf vendor/
-	GO111MODULE=on go mod verify
-	GO111MODULE=on go mod vendor
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
-
-clean_vendor:
-	hack/clean_vendor.sh
-
 
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; \
