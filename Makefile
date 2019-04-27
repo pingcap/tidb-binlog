@@ -89,7 +89,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: fmt lint vet check-static tidy
+check: fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
