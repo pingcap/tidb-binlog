@@ -661,10 +661,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "pause":
-		log.Info("pump 's state change to pausing", zap.String("nodeID", nodeID))
+		log.Info("pump's state change to pausing", zap.String("nodeID", nodeID))
 		s.node.NodeStatus().State = node.Pausing
 	case "close":
-		log.Info("pump 's state change to closing", zap.String("nodeID", nodeID))
+		log.Info("pump's state change to closing", zap.String("nodeID", nodeID))
 		s.node.NodeStatus().State = node.Closing
 	default:
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
