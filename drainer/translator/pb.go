@@ -31,6 +31,7 @@ import (
 	tipb "github.com/pingcap/tipb/go-binlog"
 )
 
+// TiBinlogToPbBinlog translate the binlog format
 func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue) (pbBinlog *pb.Binlog, err error) {
 	pbBinlog = new(pb.Binlog)
 
