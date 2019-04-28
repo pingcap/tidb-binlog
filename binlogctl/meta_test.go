@@ -33,11 +33,6 @@ func (s *metaSuite) TestMeta(c *C) {
 	c.Assert(metaStr, Equals, "commitTS: 123")
 }
 
-func (s *metaSuite) TestComposeTS(c *C) {
-	ts := composeTS(1, 2)
-	c.Assert(ts, Equals, uint64((1<<physicalShiftBits)+2))
-}
-
 func (s *metaSuite) TestSaveMeta(c *C) {
 	dir := c.MkDir()
 	filename := path.Join(dir, "savepoint")

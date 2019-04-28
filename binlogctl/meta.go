@@ -30,8 +30,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const physicalShiftBits = 18
-
 // GenerateMetaInfo generates Meta from pd
 func GenerateMetaInfo(cfg *Config) error {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
@@ -68,10 +66,6 @@ func GetTSO(cfg *Config) (int64, error) {
 	}
 
 	return util.GetTSO(pdCli)
-}
-
-func composeTS(physical, logical int64) uint64 {
-	return uint64((physical << physicalShiftBits) + logical)
 }
 
 // Meta contains commit TS that can be used to specifies the location of the synchronized data
