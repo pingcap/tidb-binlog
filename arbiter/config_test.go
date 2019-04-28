@@ -27,6 +27,19 @@ type TestConfigSuite struct {
 
 var _ = check.Suite(&TestConfigSuite{})
 
+func (t *TestConfigSuite) TestAdjustConfig(c *check.C) {
+	config := Config{
+		Up:   UpConfig{},
+		Down: DownConfig{},
+	}
+	config.adjustConfig()
+	c.Assert(config.Up.KafkaAddrs, check.Equals, defaultKafkaAddrs)
+	c.Assert(config.Up.KafkaVersion, check.Equals, defaultKafkaVersion)
+	c.Assert(config.Down.Host, check.Equals, "localhost")
+	c.Assert(config.Down.Port, check.Equals, 3306)
+	c.Assert(config.Down.User, check.Equals, "root")
+}
+
 func (t *TestConfigSuite) TestParseConfig(c *check.C) {
 	args := make([]string, 0, 10)
 
