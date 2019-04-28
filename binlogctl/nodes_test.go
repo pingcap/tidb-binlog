@@ -55,7 +55,7 @@ func (s *nodesSuite) TestApplyAction(c *C) {
 	c.Assert(err, ErrorMatches, "nodeID test2 not found")
 
 	registerPumpForTest(c, "test", url)
-	// TODO: read log infomarion and add check
+	// TODO: handle log information and add check
 	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
 	c.Assert(err, IsNil)
 }
@@ -68,7 +68,7 @@ func (s *nodesSuite) TestQueryNodesByKind(c *C) {
 
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
-	// TODO: read log infomarion and add check
+	// TODO: handle log information and add check
 	err := QueryNodesByKind("127.0.0.1:2379", "pumps")
 	c.Assert(err, IsNil)
 }
