@@ -45,7 +45,7 @@ type Server struct {
 	// all txn commitTS <= finishTS has loaded to downstream
 	finishTS int64
 
-	metrics       *metricClient
+	metrics *metricClient
 
 	closed bool
 	mu     sync.Mutex
@@ -221,12 +221,11 @@ func (s *Server) saveFinishTS(status int) error {
 	return nil
 }
 
-
 func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
 	saveTick := time.NewTicker(saveInterval)
 	defer saveTick.Stop()
 
-	L:
+L:
 	for {
 		select {
 		case txn, ok := <-s.load.Successes():

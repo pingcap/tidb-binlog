@@ -29,7 +29,7 @@ var _ = check.Suite(&TestConfigSuite{})
 
 func (t *TestConfigSuite) TestAdjustConfig(c *check.C) {
 	config := Config{
-		Up: UpConfig{},
+		Up:   UpConfig{},
 		Down: DownConfig{},
 	}
 	config.adjustConfig()

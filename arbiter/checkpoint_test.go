@@ -81,7 +81,6 @@ func (cs *CheckpointSuite) TestSaveAndLoad(c *check.C) {
 	c.Assert(status, check.Equals, saveStatus)
 }
 
-
 func createDbCheckpoint(db *gosql.DB) (*dbCheckpoint, error) {
 	cp, err := NewCheckpoint(db, "topic_name")
 	return cp.(*dbCheckpoint), err

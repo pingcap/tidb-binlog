@@ -14,17 +14,17 @@
 package arbiter
 
 import (
-	"time"
-	"database/sql"
 	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
-	"github.com/pingcap/errors"
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
-	. "github.com/pingcap/check"
 )
 
 type testNewServerSuite struct {
@@ -87,15 +87,15 @@ func (s *testNewServerSuite) TestStopIfCannotCreateCheckpoint(c *C) {
 	c.Assert(err, ErrorMatches, "cannot create")
 }
 
-type updateFinishTSSuite struct {}
+type updateFinishTSSuite struct{}
 
 var _ = Suite(&updateFinishTSSuite{})
 
 func (s *updateFinishTSSuite) TestShouldSetFinishTS(c *C) {
-	server := Server{}	
+	server := Server{}
 	msg := reader.Message{
 		Binlog: &pb.Binlog{
-			CommitTs: 1024,		
+			CommitTs: 1024,
 		},
 	}
 	c.Assert(server.finishTS, Equals, int64(0))
@@ -110,7 +110,7 @@ var _ = Suite(&trackTSSuite{})
 type dummyCp struct {
 	Checkpoint
 	timestamps []int64
-	status []int
+	status     []int
 }
 
 func (cp *dummyCp) Save(ts int64, status int) error {
@@ -128,15 +128,15 @@ func (s *trackTSSuite) TestShouldSaveFinishTS(c *C) {
 	c.Assert(err, IsNil)
 	cp := dummyCp{}
 	server := Server{
-		load: ld,
+		load:       ld,
 		checkpoint: &cp,
-	}	
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	stop := make(chan struct{})
 	go func() {
-		server.trackTS(ctx, 50 * time.Millisecond)
+		server.trackTS(ctx, 50*time.Millisecond)
 		close(stop)
 	}()
 
@@ -165,9 +165,9 @@ var _ = Suite(&loadStatusSuite{})
 
 type configurableCp struct {
 	Checkpoint
-	ts int64
+	ts     int64
 	status int
-	err error
+	err    error
 }
 
 func (c *configurableCp) Load() (ts int64, status int, err error) {
