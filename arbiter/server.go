@@ -240,7 +240,6 @@ func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
 		case <-saveTick.C:
 			if err := s.saveFinishTS(StatusRunning); err != nil {
 				log.Error(err)
-				continue
 			}
 		case <-ctx.Done():
 			break L
