@@ -39,16 +39,19 @@ func TestNode(t *testing.T) {
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
-	createMockRegistry("127.0.0.1:2379")
 	TestingT(t)
 }
 
-func (s *nodesSuite) TestApplyAction(c *C) {
+func (s *nodesSuite) SetUpTest(c *C) {
 	createRegistryFuc = createMockRegistry
-	defer func() {
-		createRegistryFuc = createRegistry
-	}()
+	createMockRegistry("127.0.0.1:2379")
+}
 
+func (s *nodesSuite) TearDownTest(c *C) {
+	createRegistryFuc = createRegistry
+}
+
+func (s *nodesSuite) TestApplyAction(c *C) {
 	url := createMockPumpServer(c)
 
 	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump)
@@ -61,11 +64,6 @@ func (s *nodesSuite) TestApplyAction(c *C) {
 }
 
 func (s *nodesSuite) TestQueryNodesByKind(c *C) {
-	createRegistryFuc = createMockRegistry
-	defer func() {
-		createRegistryFuc = createRegistry
-	}()
-
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
 	// TODO: handle log information and add check
@@ -74,11 +72,6 @@ func (s *nodesSuite) TestQueryNodesByKind(c *C) {
 }
 
 func (s *nodesSuite) TestUpdateNodeState(c *C) {
-	createRegistryFuc = createMockRegistry
-	defer func() {
-		createRegistryFuc = createRegistry
-	}()
-
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
 	err := UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused)
