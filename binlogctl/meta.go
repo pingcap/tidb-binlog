@@ -69,7 +69,6 @@ func GetTSO(cfg *Config) (int64, error) {
 }
 
 // Meta contains commit TS that can be used to specifies the location of the synchronized data
-// TODO: improve meta later, like adding offset of kafka topic that corresponds to each pump node
 type Meta struct {
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
