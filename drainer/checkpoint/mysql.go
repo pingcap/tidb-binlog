@@ -50,12 +50,14 @@ type MysqlCheckPoint struct {
 	snapshot time.Time
 }
 
+var sqlOpenDB = pkgsql.OpenDB
+
 func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	if err := checkConfig(cfg); err != nil {
 		return nil, errors.Annotate(err, "check config failed")
 	}
 
-	db, err := pkgsql.OpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
+	db, err := sqlOpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}
@@ -72,15 +74,13 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := genCreateSchema(sp)
-	_, err = execSQL(db, sql)
-	if err != nil {
-		return nil, errors.Annotatef(err, "exec sql failed %s", sql)
+	if _, err = db.Exec(sql); err != nil {
+		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
 	}
 
 	sql = genCreateTable(sp)
-	_, err = execSQL(db, sql)
-	if err != nil {
-		return nil, errors.Annotatef(err, "exec sql failed %s", sql)
+	if _, err = db.Exec(sql); err != nil {
+		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
 	}
 
 	err = sp.Load()
@@ -102,32 +102,25 @@ func (sp *MysqlCheckPoint) Load() error {
 		}
 	}()
 
-	sql := genSelectSQL(sp)
-	rows, err := querySQL(sp.db, sql)
-	if err != nil {
-		return errors.Annotatef(err, "query sql failed: %s", sql)
-	}
-
 	var str string
-	for rows.Next() {
-		err = rows.Scan(&str)
-		if err != nil {
-			return errors.Annotate(err, "scan row failed")
-		}
-	}
-
-	if len(str) == 0 {
+	selectSQL := genSelectSQL(sp)
+	err := sp.db.QueryRow(selectSQL).Scan(&str)
+	switch {
+	case err == sql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
 		return nil
+	case err != nil:
+		return errors.Annotatef(err, "QueryRow failed, sql: %s", selectSQL)
 	}
 
-	err = json.Unmarshal([]byte(str), sp)
-	if err != nil {
+	if err := json.Unmarshal([]byte(str), sp); err != nil {
 		return errors.Trace(err)
 	}
 
 	return nil
 }
+
+var getTidbPos = pkgsql.GetTidbPosition
 
 // Save implements checkpoint.Save interface
 func (sp *MysqlCheckPoint) Save(ts int64) error {
@@ -144,7 +137,7 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	// we don't need update tsMap every time.
 	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
 		sp.snapshot = time.Now()
-		slaveTS, err := pkgsql.GetTidbPosition(sp.db)
+		slaveTS, err := getTidbPos(sp.db)
 		if err != nil {
 			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
 			errCode, ok := pkgsql.GetSQLErrCode(err)
@@ -163,7 +156,7 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	}
 
 	sql := genReplaceSQL(sp, string(b))
-	_, err = execSQL(sp.db, sql)
+	_, err = sp.db.Exec(sql)
 	if err != nil {
 		return errors.Annotatef(err, "query sql failed: %s", sql)
 	}

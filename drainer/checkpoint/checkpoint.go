@@ -14,6 +14,8 @@
 package checkpoint
 
 import (
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -22,6 +24,8 @@ import (
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
+
+	maxSaveTime = 3 * time.Second
 )
 
 // CheckPoint is the binlog sync pos meta.

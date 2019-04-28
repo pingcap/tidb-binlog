@@ -43,9 +43,9 @@ type FlashCheckPoint struct {
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
 
-func checkFlashConfig(cfg *Config) error {
+func checkFlashConfig(cfg *Config) {
 	if cfg == nil {
-		cfg = new(Config)
+		return
 	}
 	if cfg.Db == nil {
 		cfg.Db = new(DBConfig)
@@ -62,22 +62,19 @@ func checkFlashConfig(cfg *Config) error {
 	if cfg.Table == "" {
 		cfg.Table = "checkpoint"
 	}
-
-	return nil
 }
 
+var openCH = pkgsql.OpenCH
+
 func newFlash(cfg *Config) (CheckPoint, error) {
-	if err := checkFlashConfig(cfg); err != nil {
-		log.Error("Checkpoint config is invaild", zap.Error(err))
-		return nil, errors.Trace(err)
-	}
+	checkFlashConfig(cfg)
 
 	hostAndPorts, err := pkgsql.ParseCHAddr(cfg.Db.Host)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	db, err := pkgsql.OpenCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "", 0)
+	db, err := openCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "", 0)
 	if err != nil {
 		log.Error("open database failed", zap.Error(err))
 		return nil, errors.Trace(err)
@@ -94,18 +91,15 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)
-	_, err = execSQL(db, sql)
-	if err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Error("Create database failed", zap.String("sql", sql), zap.Error(err))
 		return sp, errors.Trace(err)
 	}
 
 	sql = fmt.Sprintf("ATTACH TABLE IF NOT EXISTS `%s`.`%s`(`clusterid` UInt64, `checkpoint` String) ENGINE MutableMergeTree((`clusterid`), 8192)", sp.schema, sp.table)
-	_, err = execSQL(db, sql)
-	if err != nil {
+	if _, err = db.Exec(sql); err != nil {
 		log.Error("Create table failed", zap.String("sql", sql), zap.Error(err))
 		return nil, errors.Trace(err)
-
 	}
 
 	err = sp.Load()
@@ -122,7 +116,7 @@ func (sp *FlashCheckPoint) Load() error {
 	}
 
 	sql := fmt.Sprintf("SELECT `checkpoint` from `%s`.`%s` WHERE `clusterid` = %d", sp.schema, sp.table, sp.clusterID)
-	rows, err := querySQL(sp.db, sql)
+	rows, err := sp.db.Query(sql)
 	if err != nil {
 		log.Error("select checkPoint failed", zap.String("sql", sql), zap.Error(err))
 		return errors.Trace(err)
