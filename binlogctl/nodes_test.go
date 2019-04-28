@@ -15,7 +15,6 @@ package binlogctl
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path"
@@ -63,7 +62,7 @@ func (s *nodesSuite) TestApplyAction(c *C) {
 	registerPumpForTest(c, "test", url)
 	// TODO: handle log information and add check
 	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 }
 
 func (s *nodesSuite) TestQueryNodesByKind(c *C) {
