@@ -17,9 +17,9 @@ import (
 	"time"
 	"database/sql"
 	"context"
-	"errors"
 	"fmt"
 
+	"github.com/pingcap/errors"
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
@@ -175,7 +175,7 @@ func (c *configurableCp) Load() (ts int64, status int, err error) {
 }
 
 func (s *loadStatusSuite) TestShouldIgnoreNotFound(c *C) {
-	cp := configurableCp{status: StatusNormal, err: errors.New("not found")}
+	cp := configurableCp{status: StatusNormal, err: errors.NotFoundf("")}
 	server := Server{
 		checkpoint: &cp,
 	}
