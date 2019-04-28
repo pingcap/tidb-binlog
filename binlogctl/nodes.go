@@ -32,7 +32,7 @@ var (
 	createRegistryFuc = createRegistry
 )
 
-// queryNodesByKind returns specified nodes, like pumps/drainers
+// QueryNodesByKind returns specified nodes, like pumps/drainers
 func QueryNodesByKind(urls string, kind string) error {
 	registry, err := createRegistryFuc(urls)
 	if err != nil {
@@ -51,7 +51,7 @@ func QueryNodesByKind(urls string, kind string) error {
 	return nil
 }
 
-// updateNodeState update pump or drainer's state.
+// UpdateNodeState update pump or drainer's state.
 func UpdateNodeState(urls, kind, nodeID, state string) error {
 	/*
 		node's state can be online, pausing, paused, closing and offline.
@@ -97,6 +97,7 @@ func createRegistry(urls string) (*node.EtcdRegistry, error) {
 	return node.NewEtcdRegistry(cli, etcdDialTimeout), nil
 }
 
+// ApplyAction applies action on pump or drainer
 func ApplyAction(urls, kind, nodeID string, action string) error {
 	registry, err := createRegistryFuc(urls)
 	if err != nil {

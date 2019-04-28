@@ -128,7 +128,6 @@ type httpHandler struct {
 }
 
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	return
 }
 
 func createMockPumpServer(c *C) string {

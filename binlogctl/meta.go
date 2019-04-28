@@ -31,9 +31,8 @@ import (
 )
 
 const physicalShiftBits = 18
-const slowDist = 30 * time.Millisecond
 
-// generateMeta generates Meta from pd
+// GenerateMetaInfo generates Meta from pd
 func GenerateMetaInfo(cfg *Config) error {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return errors.Trace(err)
@@ -64,6 +63,9 @@ func GetTSO(cfg *Config) (int64, error) {
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,
 	})
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
 
 	return util.GetTSO(pdCli)
 }

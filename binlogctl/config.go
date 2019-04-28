@@ -30,14 +30,31 @@ const (
 )
 
 const (
-	GenerateMeta   = "generate_meta"
-	QueryPumps     = "pumps"
-	QueryDrainers  = "drainers"
-	UpdatePump     = "update-pump"
-	UpdateDrainer  = "update-drainer"
-	PausePump      = "pause-pump"
-	OfflinePump    = "offline-pump"
-	PauseDrainer   = "pause-drainer"
+	// GenerateMeta is command used for generate meta info for drainer's first run.
+	GenerateMeta = "generate_meta"
+
+	// QueryPumps is command used for query all pump's status.
+	QueryPumps = "pumps"
+
+	// QueryDrainers is command used for query all drainer's status.
+	QueryDrainers = "drainers"
+
+	// UpdatePump is command used for update pump's status.
+	UpdatePump = "update-pump"
+
+	// UpdateDrainer is command used for update drainer's status.
+	UpdateDrainer = "update-drainer"
+
+	// PausePump is command used for pause pump.
+	PausePump = "pause-pump"
+
+	// OfflinePump is command used for offline pump.
+	OfflinePump = "offline-pump"
+
+	// PauseDrainer is comamnd used for pause drainer.
+	PauseDrainer = "pause-drainer"
+
+	// OfflineDrainer is comamnd used for offlien drainer.
 	OfflineDrainer = "offline-drainer"
 )
 
