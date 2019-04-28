@@ -40,7 +40,7 @@ all: dev install
 
 dev: check test
 
-build: check pump drainer reparo arbiter
+build: pump drainer reparo arbiter
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
