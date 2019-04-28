@@ -42,7 +42,7 @@ func (s *flashSuite) TestFlashCheckPointString(c *C) {
 	c.Assert(cp.String(), Equals, "binlog commitTS = 1234")
 }
 
-func (t *flashSuite) TestCheck(c *C) {
+func (s *flashSuite) TestCheck(c *C) {
 	cp := FlashCheckPoint{saveTime: time.Now(), metaCP: &flash.MetaCheckpoint{}}
 	c.Assert(cp.Check(1), IsFalse)
 	cp.saveTime = time.Now().Add(-maxSaveTime)
