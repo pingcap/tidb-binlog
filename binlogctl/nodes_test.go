@@ -129,5 +129,5 @@ func createMockPumpServer(c *C) (*httptest.Server, string) {
 	handler := &httpHandler{}
 	server := httptest.NewServer(handler)
 
-	return server, strings.Trim(server.URL, "http://")
+	return server, strings.TrimPrefix(server.URL, "http://")
 }
