@@ -16,6 +16,7 @@ package binlogctl
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -107,7 +108,7 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	if cfg.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		return flag.ErrHelp
 	}
 
