@@ -39,7 +39,7 @@ bin/binlogctl -pd-urls=http://127.0.0.1:2379 -cmd drainers
 Then the result will be like this (the output will be formatted later):
 
 ```
-2018/06/21 11:24:10 nodes.go:53: [info] pump: &{NodeID:ip-192-168-199-118:8250 Host:127.0.0.1:8250 IsAlive:true IsOffline:false LatestFilePos:{Suffix:0 Offset:15320} LatestKafkaPos:{Suffix:0 Offset:382} OfflineTS:0}
+[2019/04/28 09:29:59.016 +00:00] [INFO] [nodes.go:48] ["query node"] [type=pump] [node="{NodeID: 1.1.1.1:8250, Addr: pump:8250, State: online, MaxCommitTS: 408012403141509121, UpdateTime: 2019-04-28 09:29:57 +0000 UTC}"]
 ```
 
 ### Unregister Pump/Drainer
@@ -73,7 +73,7 @@ Then the result will be like this:
 INFO[0000] [pd] create pd client with endpoints [http://192.168.199.118:32379]
 INFO[0000] [pd] leader switches to: http://192.168.199.118:32379, previous:
 INFO[0000] [pd] init cluster id 6569368151110378289
-2018/06/21 11:24:47 meta.go:117: [info] meta: &{CommitTS:400962745252184065}
+[2019/04/28 09:33:15.950 +00:00] [INFO] [meta.go:114] ["save meta"] [meta="commitTS: 408012454863044609"]
 ```
 
 It will also generate a `{data-dir}/savepoint` meta file
