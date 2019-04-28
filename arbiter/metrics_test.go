@@ -18,6 +18,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 type testStartSuite struct{}
@@ -40,4 +41,34 @@ func (s *testStartSuite) TestCanBeStoppedFromOutside(c *C) {
 	}()
 	mc.Start(ctx, 1234)
 	close(signal)
+}
+
+type instanceNameSuite struct{}
+
+var _ = Suite(&instanceNameSuite{})
+
+func (s *instanceNameSuite) TestShouldRetUnknown(c *C) {
+	orig := getHostname
+	defer func() {
+		getHostname = orig
+	}()
+	getHostname = func() (string, error) {
+		return "", errors.New("host")
+	}
+
+	n := instanceName(9090)
+	c.Assert(n, Equals, "unknown")
+}
+
+func (s *instanceNameSuite) TestShouldUseHostname(c *C) {
+	orig := getHostname
+	defer func() {
+		getHostname = orig
+	}()
+	getHostname = func() (string, error) {
+		return "kendoka", nil
+	}
+
+	n := instanceName(9090)
+	c.Assert(n, Equals, "kendoka_9090")
 }

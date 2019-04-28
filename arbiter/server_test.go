@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -27,9 +28,36 @@ import (
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 )
 
+type dummyLoader struct {
+	loader.Loader
+	successes chan *loader.Txn
+	safe      bool
+	input     chan *loader.Txn
+	closed    bool
+}
+
+func (l *dummyLoader) SetSafeMode(safe bool) {
+	l.safe = safe
+}
+
+func (l *dummyLoader) Successes() <-chan *loader.Txn {
+	return l.successes
+}
+
+func (l *dummyLoader) Input() chan<- *loader.Txn {
+	return l.input
+}
+
+func (l *dummyLoader) Close() {
+	l.closed = true
+}
+
 type testNewServerSuite struct {
-	db     *sql.DB
-	dbMock sqlmock.Sqlmock
+	db            *sql.DB
+	dbMock        sqlmock.Sqlmock
+	origCreateDB  func(string, string, string, int) (*sql.DB, error)
+	origNewReader func(*reader.Config) (*reader.Reader, error)
+	origNewLoader func(*sql.DB, ...loader.Option) (loader.Loader, error)
 }
 
 var _ = Suite(&testNewServerSuite{})
@@ -41,50 +69,170 @@ func (s *testNewServerSuite) SetUpTest(c *C) {
 	}
 	s.db = db
 	s.dbMock = mock
+
+	s.origCreateDB = createDB
+	createDB = func(user string, password string, host string, port int) (*sql.DB, error) {
+		return s.db, nil
+	}
+
+	s.origNewReader = newReader
+	newReader = func(cfg *reader.Config) (r *reader.Reader, err error) {
+		return &reader.Reader{}, nil
+	}
+
+	s.origNewLoader = newLoader
+	newLoader = func(db *sql.DB, opt ...loader.Option) (loader.Loader, error) {
+		return &dummyLoader{}, nil
+	}
 }
 
 func (s *testNewServerSuite) TearDownTest(c *C) {
 	s.db.Close()
+
+	createDB = s.origCreateDB
+	newReader = s.origNewReader
+	newLoader = s.origNewLoader
 }
 
 func (s *testNewServerSuite) TestRejectInvalidAddr(c *C) {
 	cfg := Config{ListenAddr: "whatever"}
 	_, err := NewServer(&cfg)
-	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*wrong ListenAddr.*")
 
 	cfg.ListenAddr = "whatever:invalid"
 	_, err = NewServer(&cfg)
-	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, "ListenAddr.*")
 }
 
 func (s *testNewServerSuite) TestStopIfFailedtoConnectDownStream(c *C) {
-	origCreateDB := createDB
 	createDB = func(user string, password string, host string, port int) (*sql.DB, error) {
 		return nil, fmt.Errorf("Can't create db")
 	}
-	defer func() { createDB = origCreateDB }()
 
 	cfg := Config{ListenAddr: "localhost:8080"}
 	_, err := NewServer(&cfg)
-	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, "Can't create db")
 }
 
 func (s *testNewServerSuite) TestStopIfCannotCreateCheckpoint(c *C) {
-	origCreateDB := createDB
 	s.dbMock.ExpectExec("CREATE DATABASE IF NOT EXISTS `tidb_binlog`").WillReturnError(
 		fmt.Errorf("cannot create"))
-	createDB = func(user string, password string, host string, port int) (*sql.DB, error) {
-		return s.db, nil
-	}
-	defer func() { createDB = origCreateDB }()
 
 	cfg := Config{ListenAddr: "localhost:8080"}
 	_, err := NewServer(&cfg)
-	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, "cannot create")
+}
+
+func (s *testNewServerSuite) TestStopIfCannotLoadStatus(c *C) {
+	s.dbMock.ExpectExec("CREATE DATABASE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectExec("CREATE TABLE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectQuery("SELECT ts, status.*").
+		WithArgs("test_topic").
+		WillReturnError(errors.New("Failed load"))
+
+	cfg := Config{
+		ListenAddr: "localhost:8080",
+		Up: UpConfig{
+			Topic: "test_topic",
+		},
+	}
+	_, err := NewServer(&cfg)
+	c.Assert(err, ErrorMatches, "Failed load")
+}
+
+func (s *testNewServerSuite) TestStopIfCannotCreateReader(c *C) {
+	s.dbMock.ExpectExec("CREATE DATABASE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectExec("CREATE TABLE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectQuery("SELECT ts, status.*").
+		WithArgs("test_topic").
+		WillReturnError(errors.NotFoundf(""))
+	newReader = func(cfg *reader.Config) (r *reader.Reader, err error) {
+		return nil, errors.New("no reader")
+	}
+
+	cfg := Config{
+		ListenAddr: "localhost:8080",
+		Up: UpConfig{
+			Topic: "test_topic",
+		},
+	}
+	_, err := NewServer(&cfg)
+	c.Assert(err, ErrorMatches, "no reader")
+}
+
+func (s *testNewServerSuite) TestStopIfCannotCreateLoader(c *C) {
+	s.dbMock.ExpectExec("CREATE DATABASE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectExec("CREATE TABLE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectQuery("SELECT ts, status.*").
+		WithArgs("test_topic").
+		WillReturnError(errors.New("not found"))
+	newLoader = func(db *sql.DB, opt ...loader.Option) (loader.Loader, error) {
+		return nil, errors.New("no loader")
+	}
+
+	cfg := Config{
+		ListenAddr: "localhost:8080",
+		Up: UpConfig{
+			Topic: "test_topic",
+		},
+	}
+	_, err := NewServer(&cfg)
+	c.Assert(err, ErrorMatches, "no loader")
+}
+
+func (s *testNewServerSuite) TestSetSafeMode(c *C) {
+	s.dbMock.ExpectExec("CREATE DATABASE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectExec("CREATE TABLE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	rows := sqlmock.NewRows([]string{"ts", "status"}).AddRow(42, StatusRunning)
+	s.dbMock.ExpectQuery("SELECT ts, status.*").
+		WithArgs("test_topic").
+		WillReturnRows(rows)
+	var ld dummyLoader
+	newLoader = func(db *sql.DB, opt ...loader.Option) (loader.Loader, error) {
+		return &ld, nil
+	}
+
+	origDuration := initSafeModeDuration
+	defer func() {
+		initSafeModeDuration = origDuration
+	}()
+	initSafeModeDuration = 10 * time.Millisecond
+
+	cfg := Config{
+		ListenAddr: "localhost:8080",
+		Up: UpConfig{
+			Topic: "test_topic",
+		},
+	}
+	_, err := NewServer(&cfg)
+	c.Assert(err, IsNil)
+	c.Assert(ld.safe, IsTrue)
+	time.Sleep(2 * initSafeModeDuration)
+	c.Assert(ld.safe, IsFalse)
+}
+
+func (s *testNewServerSuite) TestCreateMetricCli(c *C) {
+	s.dbMock.ExpectExec("CREATE DATABASE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectExec("CREATE TABLE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.dbMock.ExpectQuery("SELECT ts, status.*").
+		WithArgs("test_topic").
+		WillReturnError(errors.New("not found"))
+
+	cfg := Config{
+		ListenAddr: "localhost:8080",
+		Up: UpConfig{
+			Topic: "test_topic",
+		},
+		Metrics: Metrics{
+			Addr:     "testing",
+			Interval: 10,
+		},
+	}
+	srv, err := NewServer(&cfg)
+	c.Assert(err, IsNil)
+	c.Assert(srv.metrics, NotNil)
+	c.Assert(srv.metrics.addr, Equals, "testing")
+	c.Assert(srv.metrics.interval, Equals, 10)
 }
 
 type updateFinishTSSuite struct{}
@@ -117,6 +265,31 @@ func (cp *dummyCp) Save(ts int64, status int) error {
 	cp.timestamps = append(cp.timestamps, ts)
 	cp.status = append(cp.status, status)
 	return nil
+}
+
+func (s *trackTSSuite) TestShouldUpdateFinishTS(c *C) {
+	cp := dummyCp{}
+	successes := make(chan *loader.Txn, 1)
+	ld := dummyLoader{successes: successes}
+	server := Server{
+		load:       &ld,
+		checkpoint: &cp,
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		server.trackTS(context.Background(), 50*time.Millisecond)
+		wg.Done()
+	}()
+
+	for i := 0; i < 42; i++ {
+		successes <- &loader.Txn{Metadata: &reader.Message{Binlog: &pb.Binlog{CommitTs: int64(i)}}}
+	}
+	close(successes)
+
+	wg.Wait()
+	c.Assert(server.finishTS, Equals, int64(41))
 }
 
 func (s *trackTSSuite) TestShouldSaveFinishTS(c *C) {
@@ -203,4 +376,46 @@ func (s *loadStatusSuite) TestShouldRetErr(c *C) {
 	_, err := server.loadStatus()
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, "other")
+}
+
+type syncBinlogsSuite struct{}
+
+var _ = Suite(&syncBinlogsSuite{})
+
+func (s *syncBinlogsSuite) createMsg(schema, table, sql string) *reader.Message {
+	return &reader.Message{
+		Binlog: &pb.Binlog{
+			DdlData: &pb.DDLData{
+				SchemaName: &schema,
+				TableName:  &table,
+				DdlQuery:   []byte(sql),
+			},
+		},
+	}
+}
+
+func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
+	source := make(chan *reader.Message, 1)
+	msgs := []*reader.Message{
+		s.createMsg("test42", "users", "alter table users add column gender smallint"),
+		s.createMsg("test42", "operations", "alter table operations drop column seq"),
+	}
+	dest := make(chan *loader.Txn, len(msgs))
+	go func() {
+		for _, m := range msgs {
+			source <- m
+		}
+		close(source)
+	}()
+	ld := dummyLoader{input: dest}
+
+	syncBinlogs(source, &ld)
+
+	c.Assert(len(dest), Equals, 2)
+	for _, m := range msgs {
+		txn := <-dest
+		c.Assert(txn.Metadata.(*reader.Message), DeepEquals, m)
+	}
+
+	c.Assert(ld.closed, IsTrue)
 }

@@ -30,7 +30,14 @@ import (
 	"go.uber.org/zap"
 )
 
-var createDB = loader.CreateDB
+var (
+	initSafeModeDuration = time.Minute * 5
+
+	// Make it possible to mock the following functions
+	createDB  = loader.CreateDB
+	newReader = reader.NewReader
+	newLoader = loader.NewLoader
+)
 
 // Server is the server to load data to mysql
 type Server struct {
@@ -97,13 +104,13 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	log.Info("use kafka binlog reader", zap.Reflect("cfg", readerCfg))
 
-	srv.kafkaReader, err = reader.NewReader(readerCfg)
+	srv.kafkaReader, err = newReader(readerCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	// set loader
-	srv.load, err = loader.NewLoader(srv.downDB,
+	srv.load, err = newLoader(srv.downDB,
 		loader.WorkerCount(cfg.Down.WorkerCount),
 		loader.BatchSize(cfg.Down.BatchSize),
 		loader.Metrics(&loader.MetricsGroup{
@@ -119,7 +126,7 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 		log.Info("set safe mode to be true")
 		srv.load.SetSafeMode(true)
 		go func() {
-			time.Sleep(time.Minute * 5)
+			time.Sleep(initSafeModeDuration)
 			srv.load.SetSafeMode(false)
 			log.Info("set safe mode to be false")
 		}()
@@ -173,19 +180,8 @@ func (s *Server) Run() error {
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
-		for msg := range s.kafkaReader.Messages() {
-			log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
-			txn := loader.SlaveBinlogToTxn(msg.Binlog)
-			txn.Metadata = msg
-			s.load.Input() <- txn
-
-			queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(s.kafkaReader.Messages())))
-			queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(s.load.Input())))
-		}
-
-		s.load.Close()
+		syncBinlogs(s.kafkaReader.Messages(), s.load)
+		wg.Done()
 	}()
 
 	err := s.load.Run()
@@ -262,4 +258,18 @@ func (s *Server) loadStatus() (int, error) {
 		s.finishTS = ts
 	}
 	return status, errors.Trace(err)
+}
+
+func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) {
+	dest := ld.Input()
+	for msg := range source {
+		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+		txn := loader.SlaveBinlogToTxn(msg.Binlog)
+		txn.Metadata = msg
+		dest <- txn
+
+		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
+		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))
+	}
+	ld.Close()
 }
