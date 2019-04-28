@@ -14,25 +14,25 @@
 package binlogctl
 
 import (
-	"time"
-	"testing"
-	"path"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path"
+	"testing"
+	"time"
 
 	"github.com/coreos/etcd/integration"
+	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	. "github.com/pingcap/check"
 )
 
 type nodesSuite struct{}
 
 var (
-	_ = Suite(&nodesSuite{})
+	_               = Suite(&nodesSuite{})
 	testEtcdCluster *integration.ClusterV3
-	fakeRegistry *node.EtcdRegistry
+	fakeRegistry    *node.EtcdRegistry
 )
 
 func TestNode(t *testing.T) {
@@ -105,7 +105,7 @@ func createMockRegistry(urls string) (*node.EtcdRegistry, error) {
 
 	etcdclient := etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath)
 	fakeRegistry = node.NewEtcdRegistry(etcdclient, time.Duration(5)*time.Second)
-	
+
 	return fakeRegistry, nil
 }
 

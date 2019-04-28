@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
-	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
 const (

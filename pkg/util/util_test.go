@@ -224,4 +224,3 @@ func (s *adjustValueSuite) TestAdjustDuration(c *C) {
 	AdjustDuration(&d, time.Duration(time.Hour))
 	c.Assert(d, Equals, time.Duration(time.Second))
 }
-

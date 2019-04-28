@@ -26,7 +26,7 @@ type metaSuite struct{}
 var _ = Suite(&metaSuite{})
 
 func (s *metaSuite) TestMeta(c *C) {
-	meta := &Meta {
+	meta := &Meta{
 		CommitTS: 123,
 	}
 	metaStr := meta.String()
@@ -35,7 +35,7 @@ func (s *metaSuite) TestMeta(c *C) {
 
 func (s *metaSuite) TestComposeTS(c *C) {
 	ts := composeTS(1, 2)
-	c.Assert(ts, Equals, uint64((1 << physicalShiftBits) + 2))
+	c.Assert(ts, Equals, uint64((1<<physicalShiftBits)+2))
 }
 
 func (s *metaSuite) TestSaveMeta(c *C) {
@@ -43,7 +43,7 @@ func (s *metaSuite) TestSaveMeta(c *C) {
 	filename := path.Join(dir, "savepoint")
 	err := saveMeta(filename, 123, "Local")
 	c.Assert(err, IsNil)
-	
+
 	b, err := ioutil.ReadFile(filename)
 	c.Assert(err, IsNil)
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")

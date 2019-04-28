@@ -64,7 +64,7 @@ func GetTSO(cfg *Config) (int64, error) {
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,
 	})
-	
+
 	return util.GetTSO(pdCli)
 }
 

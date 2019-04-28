@@ -14,7 +14,6 @@
 package binlogctl
 
 import (
-
 	. "github.com/pingcap/check"
 )
 
@@ -27,7 +26,7 @@ func (s *configSuite) TestConfig(c *C) {
 	args := []string{"-pd-urls=127.0.0.1"}
 	err := config.Parse(args)
 	c.Assert(err, ErrorMatches, ".*parse EtcdURLs error.*")
-	
+
 	args = []string{"-cmd=pumps", "-node-id=nodeID", "-pd-urls=127.0.0.1:2379"}
 	err = config.Parse(args)
 	c.Assert(err, IsNil)

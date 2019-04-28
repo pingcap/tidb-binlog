@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	etcdDialTimeout = 5 * time.Second
+	etcdDialTimeout   = 5 * time.Second
 	createRegistryFuc = createRegistry
 )
 
