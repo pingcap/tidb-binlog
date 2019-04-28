@@ -98,30 +98,30 @@ type StdLogger struct {
 }
 
 // NewStdLogger return an instance of StdLogger
-func NewStdLogger(prefix string) *StdLogger {
-	return &StdLogger{
+func NewStdLogger(prefix string) StdLogger {
+	return StdLogger{
 		prefix: prefix,
 	}
 }
 
-func (l *StdLogger) emit(msg string) {
+func (l StdLogger) emit(msg string) {
 	logger := log.L().WithOptions(zap.AddCallerSkip(2))
 	// log as info level
 	logger.Sugar().Info(l.prefix + msg)
 }
 
 // Print implements samara.StdLogger
-func (l *StdLogger) Print(v ...interface{}) {
+func (l StdLogger) Print(v ...interface{}) {
 	l.emit(fmt.Sprint(v...))
 }
 
 // Printf implements samara.StdLogger
-func (l *StdLogger) Printf(format string, v ...interface{}) {
+func (l StdLogger) Printf(format string, v ...interface{}) {
 	l.emit(fmt.Sprintf(format, v...))
 }
 
 // Println implements samara.StdLogger
-func (l *StdLogger) Println(v ...interface{}) {
+func (l StdLogger) Println(v ...interface{}) {
 	l.emit(fmt.Sprint(v...))
 }
 
