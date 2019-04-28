@@ -72,11 +72,11 @@ func (s *utilSuite) TestIsValidateListenHost(c *C) {
 
 func (s *utilSuite) TestToColumnTypeMap(c *C) {
 	cols := []*model.ColumnInfo{
-		&model.ColumnInfo{
+		{
 			ID:        10,
 			FieldType: types.FieldType{Tp: mysql.TypeVarchar},
 		},
-		&model.ColumnInfo{
+		{
 			ID:        1984,
 			FieldType: types.FieldType{Tp: mysql.TypeLong},
 		},
@@ -224,3 +224,4 @@ func (s *adjustValueSuite) TestAdjustDuration(c *C) {
 	AdjustDuration(&d, time.Duration(time.Hour))
 	c.Assert(d, Equals, time.Duration(time.Second))
 }
+

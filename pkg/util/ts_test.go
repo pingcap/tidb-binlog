@@ -19,7 +19,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/client"
 )
 
 type tsSuite struct{}

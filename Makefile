@@ -7,6 +7,7 @@ PROJECT=tidb-binlog
 ifeq "$(GOPATH)" ""
   $(error Please set the environment variable GOPATH before running `make`)
 endif
+FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -14,17 +15,17 @@ export PATH := $(path_to_add):$(PATH)
 
 TEST_DIR := /tmp/tidb_binlog_test
 
-GO		:= go
-GOBUILD   := GO111MODULE=on CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST	:= GO111MODULE=on CGO_ENABLED=1 $(GO) test -p 3
+GO       := GO111MODULE=on go
+GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
 
-ARCH	  := "`uname -s`"
-LINUX	 := "Linux"
-MAC	   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|cmd|test|proto|diff'
+ARCH  := "`uname -s`"
+LINUX := "Linux"
+MAC   := "Darwin"
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
-FILES	 := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.pb.go')
 
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
@@ -51,7 +52,7 @@ arbiter:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/arbiter cmd/arbiter/main.go
 
 reparo:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go	
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go
 
 binlogctl:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlogctl cmd/binlogctl/main.go
@@ -76,20 +77,22 @@ integration_test: build
 	tests/run.sh
 
 fmt:
-	go fmt ./...
-	@goimports -w $(FILES)
-
-check:
-	bash gitcookie.sh
-	go get github.com/golang/lint/golint
-	@echo "vet"
-	@ go tool vet $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
-	@echo "vet --shadow"
-	@ go tool vet --shadow $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
-	@echo "golint"
-	@ golint ./... 2>&1 | grep -vE '\.pb\.go' | grep -vE 'vendor' | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "gofmt (simplify)"
-	@ gofmt -s -l -w $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
+	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+
+lint:tools/bin/revive
+	@echo "linting"
+	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+
+vet:
+	@echo "vet"
+	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
+
+tidy:
+	@echo "go mod tidy"
+	./tools/check/check-tidy.sh
+
+check: fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -102,20 +105,18 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-check-static:
-	golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
-
-update: update_vendor clean_vendor
-update_vendor:
-	rm -rf vendor/
-	GO111MODULE=on go mod verify
-	GO111MODULE=on go mod vendor
+check-static: tools/bin/golangci-lint
+	$(GO) mod vendor
+	tools/bin/golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
 
-clean_vendor:
-	hack/clean_vendor.sh
+tools/bin/revive: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/revive github.com/mgechev/revive
 
-
+tools/bin/golangci-lint: tools/check/go.mod
+	cd tools/check; \
+	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint

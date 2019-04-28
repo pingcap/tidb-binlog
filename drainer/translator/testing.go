@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -53,7 +53,7 @@ func (g *BinlogGenrator) reset() {
 }
 
 // SetDelete set the info to be a delete event
-func (g *BinlogGenrator) SetDelete(c *C) {
+func (g *BinlogGenrator) SetDelete(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 
@@ -110,7 +110,7 @@ func (g *BinlogGenrator) SetDDL() {
 	g.Table = "test"
 }
 
-func (g *BinlogGenrator) setEvent(c *C) *model.TableInfo {
+func (g *BinlogGenrator) setEvent(c *check.C) *model.TableInfo {
 	g.TiBinlog = &ti.Binlog{
 		Tp:       ti.BinlogType_Commit,
 		StartTs:  100,
@@ -125,13 +125,13 @@ func (g *BinlogGenrator) setEvent(c *C) *model.TableInfo {
 
 	g.datums = testGenRandomDatums(c, info.Columns)
 	g.oldDatums = testGenRandomDatums(c, info.Columns)
-	c.Assert(len(g.datums), Equals, len(info.Columns))
+	c.Assert(len(g.datums), check.Equals, len(info.Columns))
 
 	return info
 }
 
 // SetInsert set up a insert event binlog.
-func (g *BinlogGenrator) SetInsert(c *C) {
+func (g *BinlogGenrator) SetInsert(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 
@@ -144,7 +144,7 @@ func (g *BinlogGenrator) SetInsert(c *C) {
 }
 
 // SetUpdate set up a update event binlog.
-func (g *BinlogGenrator) SetUpdate(c *C) {
+func (g *BinlogGenrator) SetUpdate(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 
@@ -237,7 +237,7 @@ func testGenTable(tt string) *model.TableInfo {
 	return t
 }
 
-func testGenRandomDatums(c *C, cols []*model.ColumnInfo) (datums []types.Datum) {
+func testGenRandomDatums(c *check.C, cols []*model.ColumnInfo) (datums []types.Datum) {
 	for i := 0; i < len(cols); i++ {
 		datum, _ := testGenDatum(c, cols[i], i)
 		datums = append(datums, datum)
@@ -246,7 +246,7 @@ func testGenRandomDatums(c *C, cols []*model.ColumnInfo) (datums []types.Datum) 
 	return
 }
 
-func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+func testGenDeleteBinlog(c *check.C, t *model.TableInfo, r []types.Datum) []byte {
 	var data []byte
 	var err error
 
@@ -256,12 +256,12 @@ func testGenDeleteBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 		colIDs[i] = col.ID
 	}
 	data, err = tablecodec.EncodeRow(sc, r, colIDs, nil, nil)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	return data
 }
 
 // generate raw row data by column.Type
-func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface{}) {
+func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, interface{}) {
 	var d types.Datum
 	var e interface{}
 	switch col.Tp {
@@ -300,7 +300,7 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 		e = []byte(val)
 	case mysql.TypeDuration:
 		duration, err := types.ParseDuration(new(stmtctx.StatementContext), "10:10:10", 0)
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		d.SetMysqlDuration(duration)
 		e = "10:10:10"
 	case mysql.TypeDate, mysql.TypeNewDate:
@@ -317,25 +317,25 @@ func testGenDatum(c *C, col *model.ColumnInfo, base int) (types.Datum, interface
 		e = t.String()
 	case mysql.TypeBit:
 		bit, err := types.ParseBitStr("0b01")
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		d.SetMysqlBit(bit)
 	case mysql.TypeSet:
 		elems := []string{"a", "b", "c", "d"}
 		set, err := types.ParseSetName(elems, elems[base-1])
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		d.SetMysqlSet(set)
 		e = set.Value
 	case mysql.TypeEnum:
 		elems := []string{"male", "female"}
 		enum, err := types.ParseEnumName(elems, elems[base-1])
-		c.Assert(err, IsNil)
+		c.Assert(err, check.IsNil)
 		d.SetMysqlEnum(enum)
 		e = enum.Value
 	}
 	return d, e
 }
 
-func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
+func testGenInsertBinlog(c *check.C, t *model.TableInfo, r []types.Datum) []byte {
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	var recordID int64 = 11
 
@@ -352,14 +352,14 @@ func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {
 	}
 
 	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 
 	handleVal, _ := codec.EncodeValue(sc, nil, types.NewIntDatum(recordID))
 	bin := append(handleVal, value...)
 	return bin
 }
 
-func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
+func testGenUpdateBinlog(c *check.C, t *model.TableInfo, oldData []types.Datum, newData []types.Datum) []byte {
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	colIDs := make([]int64, 0, len(t.Columns))
 	for _, col := range t.Columns {
@@ -368,9 +368,9 @@ func testGenUpdateBinlog(c *C, t *model.TableInfo, oldData []types.Datum, newDat
 
 	var bin []byte
 	value, err := tablecodec.EncodeRow(sc, newData, colIDs, nil, nil)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	oldValue, err := tablecodec.EncodeRow(sc, oldData, colIDs, nil, nil)
-	c.Assert(err, IsNil)
+	c.Assert(err, check.IsNil)
 	bin = append(oldValue, value...)
 	return bin
 }
