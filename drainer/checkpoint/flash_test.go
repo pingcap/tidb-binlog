@@ -55,7 +55,7 @@ func (s *flashSuite) TestClose(c *C) {
 	mock.ExpectClose()
 	cp := FlashCheckPoint{db: db}
 	cp.Close()
-	cp.Close()
+	cp.Close() // Show that closing more than once is OK
 	c.Assert(cp.closed, IsTrue)
 }
 
