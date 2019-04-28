@@ -105,7 +105,7 @@ func NewStdLogger(prefix string) StdLogger {
 
 func (l StdLogger) emit(msg string) {
 	logger := log.Logger()
-	logger.Output(2, l.prefix + msg)
+	logger.Output(2, l.prefix+msg)
 }
 
 // Print implements samara.StdLogger

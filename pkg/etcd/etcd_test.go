@@ -190,9 +190,9 @@ var _ = Suite(&parseToDirTreeSuite{})
 func (s *parseToDirTreeSuite) TestReturnFound(c *C) {
 	root := &Node{
 		Childs: map[string]*Node{
-			"drainer": &Node{
+			"drainer": {
 				Childs: map[string]*Node{
-					"1": &Node{Value: []byte("alive")},
+					"1": {Value: []byte("alive")},
 				},
 			},
 		},
