@@ -19,7 +19,6 @@ import (
 	"io"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 )
 
 var magic uint32 = 471532804
@@ -35,15 +34,13 @@ type Encoder interface {
 
 type encoder struct {
 	bw     io.Writer
-	codec  compress.CompressionCodec
 	offset int64
 }
 
 // NewEncoder creates a Encoder instance
-func NewEncoder(w io.Writer, initOffset int64, codec compress.CompressionCodec) Encoder {
+func NewEncoder(w io.Writer, initOffset int64) Encoder {
 	return &encoder{
 		bw:     w,
-		codec:  codec,
 		offset: initOffset,
 	}
 }
@@ -51,12 +48,7 @@ func NewEncoder(w io.Writer, initOffset int64, codec compress.CompressionCodec) 
 // Encode implements interface of Encoder
 func (e *encoder) Encode(payload []byte) (int64, error) {
 	data := Encode(payload)
-
-	data, err := compress.Compress(data, e.codec)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	_, err = e.bw.Write(data)
+	_, err := e.bw.Write(data)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

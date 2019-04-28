@@ -15,6 +15,7 @@ package loader
 
 import (
 	"database/sql"
+
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
 )
@@ -47,9 +48,9 @@ var _ = check.Suite(&groupDMLsSuite{})
 func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
 	ld := loaderImpl{merge: false}
 	dmls := []*DML{
-		&DML{Tp: UpdateDMLType},
-		&DML{Tp: UpdateDMLType},
-		&DML{Tp: InsertDMLType},
+		{Tp: UpdateDMLType},
+		{Tp: UpdateDMLType},
+		{Tp: InsertDMLType},
 	}
 	batch, single := ld.groupDMLs(dmls)
 	c.Assert(batch, check.HasLen, 0)
@@ -61,11 +62,11 @@ func (s *groupDMLsSuite) TestGroupByTableName(c *check.C) {
 	canBatch := tableInfo{primaryKey: &indexInfo{}}
 	onlySingle := tableInfo{}
 	dmls := []*DML{
-		&DML{Table: "test1", info: &canBatch},
-		&DML{Table: "test1", info: &canBatch},
-		&DML{Table: "test2", info: &onlySingle},
-		&DML{Table: "test1", info: &canBatch},
-		&DML{Table: "test2", info: &onlySingle},
+		{Table: "test1", info: &canBatch},
+		{Table: "test1", info: &canBatch},
+		{Table: "test2", info: &onlySingle},
+		{Table: "test1", info: &canBatch},
+		{Table: "test2", info: &onlySingle},
 	}
 	batch, single := ld.groupDMLs(dmls)
 	c.Assert(batch, check.HasLen, 1)

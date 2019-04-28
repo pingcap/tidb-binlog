@@ -25,11 +25,11 @@ import (
 	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/kv"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // Hook up gocheck into the "go test" runner.
@@ -72,11 +72,11 @@ func (s *utilSuite) TestIsValidateListenHost(c *C) {
 
 func (s *utilSuite) TestToColumnTypeMap(c *C) {
 	cols := []*model.ColumnInfo{
-		&model.ColumnInfo{
+		{
 			ID:        10,
 			FieldType: types.FieldType{Tp: mysql.TypeVarchar},
 		},
-		&model.ColumnInfo{
+		{
 			ID:        1984,
 			FieldType: types.FieldType{Tp: mysql.TypeLong},
 		},
@@ -183,7 +183,7 @@ func (s *getPdClientSuite) TestShouldRejectInvalidAddr(c *C) {
 func (s *getPdClientSuite) TestShouldRetPdCli(c *C) {
 	expected := dummyCli{}
 	origF := newPdCli
-	newPdCli = func (pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
+	newPdCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
 		return expected, nil
 	}
 	defer func() {

@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	gb "github.com/pingcap/tipb/go-binlog"
@@ -47,7 +46,7 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 		binlogData, err := binlog.Marshal()
 		c.Assert(err, IsNil)
 
-		binloger, err := binlogfile.OpenBinlogger(binlogDir, compress.CompressionNone)
+		binloger, err := binlogfile.OpenBinlogger(binlogDir)
 		c.Assert(err, IsNil)
 		binloger.WriteTail(&gb.Entity{Payload: binlogData})
 		err = binloger.Close()

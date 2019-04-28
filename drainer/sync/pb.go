@@ -16,7 +16,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	tb "github.com/pingcap/tipb/go-binlog"
 )
@@ -29,9 +28,8 @@ type pbSyncer struct {
 	*baseSyncer
 }
 
-func NewPBSyncer(dir string, compression string, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
-	codec := compress.ToCompressionCodec(compression)
-	binlogger, err := binlogfile.OpenBinlogger(dir, codec)
+func NewPBSyncer(dir string, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
+	binlogger, err := binlogfile.OpenBinlogger(dir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

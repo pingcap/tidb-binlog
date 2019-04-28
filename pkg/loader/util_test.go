@@ -14,8 +14,8 @@
 package loader
 
 import (
-	"testing"
 	"regexp"
+	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
