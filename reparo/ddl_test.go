@@ -24,29 +24,29 @@ var _ = check.Suite(&testDDLSuite{})
 
 func (s *testDDLSuite) TestParseDDL(c *check.C) {
 	tests := map[string]filter.TableName{
-		"create database db1": {"db1", ""},
-		"drop database db1":   {"db1", ""},
+		"create database db1": {Schema: "db1", Table: ""},
+		"drop database db1":   {Schema: "db1", Table: ""},
 
-		"use db1; create table table1(id int)": {"db1", "table1"},
-		"create table table1(id int)":          {"", "table1"},
+		"use db1; create table table1(id int)": {Schema: "db1", Table: "table1"},
+		"create table table1(id int)":          {Schema: "", Table: "table1"},
 
-		"use db1; drop table table1": {"db1", "table1"},
-		"drop table table1":          {"", "table1"},
+		"use db1; drop table table1": {Schema: "db1", Table: "table1"},
+		"drop table table1":          {Schema: "", Table: "table1"},
 
-		"use db1; alter table table1 drop column v1": {"db1", "table1"},
-		"alter table table1 drop column v1":          {"", "table1"},
+		"use db1; alter table table1 drop column v1": {Schema: "db1", Table: "table1"},
+		"alter table table1 drop column v1":          {Schema: "", Table: "table1"},
 
-		"use db1; truncate table table1": {"db1", "table1"},
-		"truncate table table1":          {"", "table1"},
+		"use db1; truncate table table1": {Schema: "db1", Table: "table1"},
+		"truncate table table1":          {Schema: "", Table: "table1"},
 
-		"use db1; create index idx on table1(id)": {"db1", "table1"},
-		"create index idx on table1(id)":          {"", "table1"},
+		"use db1; create index idx on table1(id)": {Schema: "db1", Table: "table1"},
+		"create index idx on table1(id)":          {Schema: "", Table: "table1"},
 
-		"use db1; alter table table1 drop index index_name": {"db1", "table1"},
-		"alter table table1 drop index index_name":          {"", "table1"},
+		"use db1; alter table table1 drop index index_name": {Schema: "db1", Table: "table1"},
+		"alter table table1 drop index index_name":          {Schema: "", Table: "table1"},
 
-		"use db1;rename table table1 to table2": {"db1", "table1"},
-		"rename table table1 to table2":         {"", "table1"},
+		"use db1;rename table table1 to table2": {Schema: "db1", Table: "table1"},
+		"rename table table1 to table2":         {Schema: "", Table: "table1"},
 	}
 
 	for sql, table := range tests {
