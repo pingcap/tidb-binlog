@@ -95,11 +95,11 @@ func (s *testReparoSuite) TestFilterBinlog(c *C) {
 	afilter := filter.NewFilter([]string{"ignore_db"}, nil, nil, nil)
 
 	ddlBinlogs := map[*pb.Binlog]bool{
-		&pb.Binlog{
+		{
 			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("use ignore_db; create table a(id int)"),
 		}: true,
-		&pb.Binlog{
+		{
 			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("use do_db; create table a(id int)"),
 		}: false,
@@ -112,24 +112,24 @@ func (s *testReparoSuite) TestFilterBinlog(c *C) {
 	}
 
 	dmlBinlogs := map[*pb.Binlog]bool{
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
-				Events: []pb.Event{pb.Event{SchemaName: proto.String("ignore_db")}},
+				Events: []pb.Event{{SchemaName: proto.String("ignore_db")}},
 			},
 		}: true,
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
-				Events: []pb.Event{pb.Event{SchemaName: proto.String("do_db")}},
+				Events: []pb.Event{{SchemaName: proto.String("do_db")}},
 			},
 		}: false,
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
 				Events: []pb.Event{
-					pb.Event{SchemaName: proto.String("do_db")},
-					pb.Event{SchemaName: proto.String("ignore_db")},
+					{SchemaName: proto.String("do_db")},
+					{SchemaName: proto.String("ignore_db")},
 				}},
 		}: false,
 	}

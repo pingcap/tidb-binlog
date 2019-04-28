@@ -70,11 +70,11 @@ func (s *utilSuite) TestIsValidateListenHost(c *C) {
 
 func (s *utilSuite) TestToColumnTypeMap(c *C) {
 	cols := []*model.ColumnInfo{
-		&model.ColumnInfo{
+		{
 			ID:        10,
 			FieldType: types.FieldType{Tp: mysql.TypeVarchar},
 		},
-		&model.ColumnInfo{
+		{
 			ID:        1984,
 			FieldType: types.FieldType{Tp: mysql.TypeLong},
 		},

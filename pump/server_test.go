@@ -347,9 +347,9 @@ type nodeWithStatus struct {
 
 func (n nodeWithStatus) NodesStatus(ctx context.Context) (sts []*node.Status, err error) {
 	sts = []*node.Status{
-		&node.Status{NodeID: "pump1"},
-		&node.Status{NodeID: "pump4"},
-		&node.Status{NodeID: "pump2"},
+		{NodeID: "pump1"},
+		{NodeID: "pump4"},
+		{NodeID: "pump2"},
 	}
 	return
 }

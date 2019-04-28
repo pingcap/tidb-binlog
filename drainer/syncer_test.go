@@ -39,7 +39,7 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 
 	var pv = &pb.PrewriteValue{
 		Mutations: []pb.TableMutation{
-			pb.TableMutation{TableId: dropID},
+			{TableId: dropID},
 		},
 	}
 

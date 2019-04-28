@@ -57,7 +57,7 @@ func (s *testConfigSuite) TestDateTimeToTSO(c *check.C) {
 func (s *testConfigSuite) TestAdjustDoDBAndTable(c *check.C) {
 	config := &Config{}
 	config.DoTables = []filter.TableName{
-		filter.TableName{
+		{
 			Schema: "TEST1",
 			Table:  "tablE1",
 		},

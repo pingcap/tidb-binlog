@@ -16,9 +16,10 @@ package util
 import (
 	"context"
 	"errors"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/pd/client"
 	"time"
+
+	. "github.com/pingcap/check"
+	pd "github.com/pingcap/pd/client"
 )
 
 type tsSuite struct{}
