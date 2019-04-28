@@ -15,9 +15,11 @@ package binlogctl
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +54,8 @@ func (s *nodesSuite) TearDownTest(c *C) {
 }
 
 func (s *nodesSuite) TestApplyAction(c *C) {
-	url := createMockPumpServer(c)
+	server, url := createMockPumpServer(c)
+	defer server.Close()
 
 	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump)
 	c.Assert(err, ErrorMatches, "nodeID test2 not found")
@@ -60,7 +63,7 @@ func (s *nodesSuite) TestApplyAction(c *C) {
 	registerPumpForTest(c, "test", url)
 	// TODO: handle log information and add check
 	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
-	c.Assert(err, IsNil)
+	c.Assert(err, NotNil)
 }
 
 func (s *nodesSuite) TestQueryNodesByKind(c *C) {
@@ -123,10 +126,9 @@ type httpHandler struct {
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
-func createMockPumpServer(c *C) string {
+func createMockPumpServer(c *C) (*httptest.Server, string) {
 	handler := &httpHandler{}
 	server := httptest.NewServer(handler)
-	defer server.Close()
 
-	return server.URL
+	return server, strings.Trim(server.URL, "http://")
 }
