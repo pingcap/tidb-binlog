@@ -42,5 +42,8 @@ func (s *metaSuite) TestSaveMeta(c *C) {
 	b, err := ioutil.ReadFile(filename)
 	c.Assert(err, IsNil)
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	c.Assert(lines, HasLen, 3)
 	c.Assert(lines[0], Equals, "commitTS = 123")
+	c.Assert(lines[1], Equals, "1970-01-01 00:00:00 +0000 UTC")
+	c.Assert(lines[2], Matches, "1970-01-01.*")
 }
