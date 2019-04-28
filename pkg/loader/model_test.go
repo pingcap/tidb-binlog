@@ -130,11 +130,11 @@ func (s *getKeysSuite) TestShouldCollectNewOldUniqKeyVals(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"id", "first", "last", "other"},
 			uniqueKeys: []indexInfo{
-				indexInfo{
+				{
 					name:    "uniq name",
 					columns: []string{"first", "last"},
 				},
-				indexInfo{
+				{
 					name:    "other",
 					columns: []string{"other"},
 				},

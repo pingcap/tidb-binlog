@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/types"
+
 	// import parser_drive to avoid panic
 	_ "github.com/pingcap/tidb/types/parser_driver"
 )

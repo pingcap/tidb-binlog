@@ -16,9 +16,10 @@ package util
 import (
 	"context"
 	"errors"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/pd/client"
 	"time"
+
+	. "github.com/pingcap/check"
+	pd "github.com/pingcap/pd/client"
 )
 
 type tsSuite struct{}
@@ -50,5 +51,5 @@ func (s *tsSuite) TestGetTSO(c *C) {
 
 	t, err = GetTSO(dummyCli{physical: 1, logical: 10})
 	c.Assert(err, IsNil)
-	c.Assert(t, Equals, int64(1<<physicalShiftBits + 10))
+	c.Assert(t, Equals, int64(1<<physicalShiftBits+10))
 }
