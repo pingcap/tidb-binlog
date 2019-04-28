@@ -40,7 +40,7 @@ func DefaultOptions() *Options {
 	}
 }
 
-// WithStorage set the Config
+// WithKVConfig set the Config
 func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
 	o.KVConfig = kvConfig
 	return o

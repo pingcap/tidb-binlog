@@ -16,6 +16,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 func main() {
