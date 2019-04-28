@@ -14,6 +14,7 @@
 package version
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/pingcap/log"
@@ -29,9 +30,24 @@ var (
 	ReleaseVersion = "Not provided (use make build instead of go build)"
 )
 
-// PrintVersionInfo show version info to Stdout
-func PrintVersionInfo() {
-	log.Info("Welcome to TiDB-Binlog",
+// GetRawVersionInfo do what its name tells
+func GetRawVersionInfo() string {
+	var info string
+	info += fmt.Sprintf("Release Version: %s\n", ReleaseVersion)
+	info += fmt.Sprintf("Git Commit Hash: %s\n", GitHash)
+	info += fmt.Sprintf("Build TS: %s\n", BuildTS)
+	info += fmt.Sprintf("Go Version: %s\n", runtime.Version())
+	info += fmt.Sprintf("Go OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	return info
+}
+
+// PrintVersionInfo print version info.
+func PrintVersionInfo(app string) {
+	oldLevel := log.GetLevel()
+	log.SetLevel(zap.InfoLevel)
+	defer log.SetLevel(oldLevel)
+
+	log.Info("Welcome to "+app,
 		zap.String("Release Version", ReleaseVersion),
 		zap.String("Git Commit Hash", GitHash),
 		zap.String("Build TS", BuildTS),

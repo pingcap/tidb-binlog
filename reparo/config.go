@@ -95,7 +95,7 @@ func (c *Config) Parse(args []string) (err error) {
 	}
 
 	if c.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		os.Exit(0)
 	}
 

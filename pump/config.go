@@ -132,7 +132,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	if cfg.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		os.Exit(0)
 	}
 

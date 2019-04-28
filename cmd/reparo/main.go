@@ -40,7 +40,7 @@ func main() {
 	}
 
 	util.InitLogger(cfg.LogLevel, cfg.LogFile)
-	version.PrintVersionInfo()
+	version.PrintVersionInfo("Reparo")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,

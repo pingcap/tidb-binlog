@@ -42,7 +42,7 @@ func main() {
 	sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
 
 	log.Info("start arbiter...", zap.Reflect("config", cfg))
-	version.PrintVersionInfo()
+	version.PrintVersionInfo("Arbiter")
 
 	go startHTTPServer(cfg.ListenAddr)
 

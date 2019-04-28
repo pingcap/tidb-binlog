@@ -40,7 +40,7 @@ func main() {
 	}
 
 	util.InitLogger(cfg.LogLevel, cfg.LogFile)
-	version.PrintVersionInfo()
+	version.PrintVersionInfo("Drainer")
 	log.Info("start drainer...", zap.Reflect("config", cfg))
 
 	bs, err := drainer.NewServer(cfg)

@@ -42,7 +42,7 @@ func main() {
 	}
 
 	util.InitLogger(cfg.LogLevel, cfg.LogFile)
-	version.PrintVersionInfo()
+	version.PrintVersionInfo("Pump")
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {
