@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package arbiter
 
 import (
@@ -23,17 +36,16 @@ type Server struct {
 	cfg  *Config
 	port int
 
-	load *loader.Loader
+	load loader.Loader
 
-	checkpoint  *Checkpoint
+	checkpoint  Checkpoint
 	kafkaReader *reader.Reader
 	downDB      *sql.DB
 
 	// all txn commitTS <= finishTS has loaded to downstream
 	finishTS int64
 
-	metricsCancel context.CancelFunc
-	metrics       *metricClient
+	metrics *metricClient
 
 	closed bool
 	mu     sync.Mutex
@@ -70,14 +82,9 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	srv.finishTS = up.InitialCommitTS
 
-	ts, status, err := srv.checkpoint.Load()
+	status, err := srv.loadStatus()
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, errors.Trace(err)
-		}
-		err = nil
-	} else {
-		srv.finishTS = ts
+		return nil, errors.Trace(err)
 	}
 
 	// set reader to read binlog from kafka
@@ -147,49 +154,20 @@ func (s *Server) Close() error {
 func (s *Server) Run() error {
 	defer s.downDB.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// push metrics if need
 	if s.metrics != nil {
-		var ctx context.Context
-		ctx, s.metricsCancel = context.WithCancel(context.Background())
 		go s.metrics.Start(ctx, s.port)
-
-		defer s.metricsCancel()
 	}
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
-		saveTick := time.NewTicker(time.Second)
-		defer saveTick.Stop()
-
-		for {
-			select {
-			case txn, ok := <-s.load.Successes():
-				if !ok {
-					log.Info("load successes channel closed")
-					return
-				}
-				msg := txn.Metadata.(*reader.Message)
-				log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-				s.finishTS = msg.Binlog.CommitTs
-
-				ms := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(s.finishTS))
-				txnLatencySecondsHistogram.Observe(float64(ms) / 1000.0)
-
-			case <-saveTick.C:
-				// log.Debug("save checkpoint ", s.finishTS)
-				err := s.checkpoint.Save(s.finishTS, StatusRunning)
-				if err != nil {
-					log.Error(err)
-					continue
-				}
-
-				checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
-			}
-		}
+		s.trackTS(ctx, time.Second)
+		wg.Done()
 	}()
 
 	wg.Add(1)
@@ -220,12 +198,67 @@ func (s *Server) Run() error {
 		return errors.Trace(err)
 	}
 
-	err = s.checkpoint.Save(s.finishTS, StatusNormal)
-	if err != nil {
+	if err = s.saveFinishTS(StatusNormal); err != nil {
 		return errors.Trace(err)
 	}
 
-	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
-
 	return nil
+}
+
+func (s *Server) updateFinishTS(msg *reader.Message) {
+	s.finishTS = msg.Binlog.CommitTs
+
+	ms := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(s.finishTS))
+	txnLatencySecondsHistogram.Observe(float64(ms) / 1000.0)
+}
+
+func (s *Server) saveFinishTS(status int) error {
+	err := s.checkpoint.Save(s.finishTS, status)
+	if err != nil {
+		return err
+	}
+	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
+	return nil
+}
+
+func (s *Server) trackTS(ctx context.Context, saveInterval time.Duration) {
+	saveTick := time.NewTicker(saveInterval)
+	defer saveTick.Stop()
+
+L:
+	for {
+		select {
+		case txn, ok := <-s.load.Successes():
+			if !ok {
+				log.Info("load successes channel closed")
+				break L
+			}
+			msg := txn.Metadata.(*reader.Message)
+			log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
+			s.updateFinishTS(msg)
+		case <-saveTick.C:
+			if err := s.saveFinishTS(StatusRunning); err != nil {
+				log.Error(err)
+			}
+		case <-ctx.Done():
+			break L
+		}
+	}
+
+	if err := s.saveFinishTS(StatusRunning); err != nil {
+		log.Error(err)
+	}
+}
+
+func (s *Server) loadStatus() (int, error) {
+	ts, status, err := s.checkpoint.Load()
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return 0, errors.Trace(err)
+		}
+		err = nil
+	} else {
+		s.finishTS = ts
+	}
+	return status, errors.Trace(err)
 }

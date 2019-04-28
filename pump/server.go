@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pump
 
 import (
@@ -33,13 +46,14 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	_ "google.golang.org/grpc/encoding/gzip"
 )
 
-var notifyDrainerTimeout = time.Second * 10
-
-// GlobalConfig is global config of pump
-var GlobalConfig *globalConfig
+var (
+	notifyDrainerTimeout     = time.Second * 10
+	serverInfoOutputInterval = time.Second * 10
+	// GlobalConfig is global config of pump
+	GlobalConfig *globalConfig
+)
 
 // Server implements the gRPC interface,
 // and maintains pump's status at run time.
@@ -270,6 +284,23 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	}
 }
 
+func (s *Server) registerNode(ctx context.Context, state string, updateTS int64) error {
+	n := s.node
+	status := node.NewStatus(n.NodeStatus().NodeID, n.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), updateTS)
+	return n.RefreshStatus(ctx, status)
+}
+
+func (s *Server) startHeartbeat() {
+	errc := s.node.Heartbeat(s.ctx)
+	go func() {
+		for err := range errc {
+			if err != context.Canceled {
+				log.Errorf("send heartbeat error %v", err)
+			}
+		}
+	}()
+}
+
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
 	// register this node
@@ -277,9 +308,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Annotate(err, "fail to get tso from pd")
 	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Online, 0, s.storage.MaxCommitTS(), ts)
-	err = s.node.RefreshStatus(context.Background(), status)
-	if err != nil {
+	if err := s.registerNode(context.Background(), node.Online, ts); err != nil {
 		return errors.Annotate(err, "fail to register node to etcd")
 	}
 
@@ -289,9 +318,7 @@ func (s *Server) Start() error {
 	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 	if err := s.node.Notify(ctx); err != nil {
 		// if fail, refresh this node's state to paused
-		status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, node.Paused, 0, s.storage.MaxCommitTS(), 0)
-		rerr := s.node.RefreshStatus(context.Background(), status)
-		if rerr != nil {
+		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
 			log.Errorf("unregister pump while pump fails to notify drainer error %v", errors.ErrorStack(err))
 		}
 		return errors.Annotate(err, "fail to notify all living drainer")
@@ -299,14 +326,7 @@ func (s *Server) Start() error {
 
 	log.Debug("notify success")
 
-	errc := s.node.Heartbeat(s.ctx)
-	go func() {
-		for err := range errc {
-			if err != context.Canceled {
-				log.Errorf("send heartbeat error %v", err)
-			}
-		}
-	}()
+	s.startHeartbeat()
 
 	// start a UNIX listener
 	var unixLis net.Listener
@@ -403,31 +423,25 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
 	binlog, err := s.genFakeBinlog()
 	if err != nil {
-		err = errors.Annotate(err, "gennerate fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "gennerate fake binlog err")
 	}
 
 	payload, err := binlog.Marshal()
 	if err != nil {
-		err = errors.Annotate(err, "gennerate fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "gennerate fake binlog err")
 	}
 
 	req := new(pb.WriteBinlogReq)
 	req.Payload = payload
-
 	req.ClusterID = s.clusterID
 
 	resp, err := s.writeBinlog(s.ctx, req, true)
-
 	if err != nil {
-		err = errors.Annotate(err, "write fake binlog err")
-		return nil, err
+		return nil, errors.Annotate(err, "write fake binlog err")
 	}
 
 	if len(resp.Errmsg) > 0 {
-		err = errors.Errorf("write fake binlog err: %v", resp.Errmsg)
-		return nil, err
+		return nil, errors.Errorf("write fake binlog err: %v", resp.Errmsg)
 	}
 
 	log.Debug("write fake binlog successful")
@@ -461,7 +475,7 @@ func (s *Server) genForwardBinlog() {
 func (s *Server) printServerInfo() {
 	defer s.wg.Done()
 
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(serverInfoOutputInterval)
 	defer ticker.Stop()
 
 	for {
@@ -470,7 +484,7 @@ func (s *Server) printServerInfo() {
 			log.Info("printServerInfo exit")
 			return
 		case <-ticker.C:
-			log.Infof("writeBinlogCount: %d, alivePullerCount: %d,  maxCommitTS: %d",
+			log.Infof("writeBinlogCount: %d, alivePullerCount: %d, maxCommitTS: %d",
 				atomic.LoadInt64(&s.writeBinlogCount), atomic.LoadInt64(&s.alivePullerCount),
 				s.storage.MaxCommitTS())
 		}
@@ -659,8 +673,10 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
 }
 
+var utilGetTSO = util.GetTSO
+
 func (s *Server) getTSO() (int64, error) {
-	ts, err := util.GetTSO(s.pdCli)
+	ts, err := utilGetTSO(s.pdCli)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -760,9 +776,7 @@ func (s *Server) commitStatus() {
 		log.Warnf("there must be something wrong, now the node status is %v", s.node.NodeStatus())
 		state = s.node.NodeStatus().State
 	}
-	status := node.NewStatus(s.node.NodeStatus().NodeID, s.node.NodeStatus().Addr, state, 0, s.storage.MaxCommitTS(), 0)
-	err := s.node.RefreshStatus(context.Background(), status)
-	if err != nil {
+	if err := s.registerNode(context.Background(), state, 0); err != nil {
 		log.Errorf("unregister pump error %v", errors.ErrorStack(err))
 	}
 	log.Infof("%s has update status to %s", s.node.NodeStatus().NodeID, state)

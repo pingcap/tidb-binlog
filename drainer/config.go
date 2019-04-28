@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package drainer
 
 import (
@@ -17,7 +30,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 
-	"github.com/pingcap/tidb-binlog/drainer/executor"
+	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -51,7 +64,7 @@ type SyncerConfig struct {
 	IgnoreTables     []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *executor.DBConfig `toml:"to" json:"to"`
+	To               *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables         []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType       string             `toml:"db-type" json:"db-type"`
@@ -111,7 +124,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
-	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or pb or flash or kafka; see syncer section in conf/drainer.toml")
+	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
@@ -184,7 +197,7 @@ func (cfg *Config) Parse(args []string) error {
 }
 
 func (c *SyncerConfig) adjustWorkCount() {
-	if c.DestDBType == "pb" || c.DestDBType == "kafka" {
+	if c.DestDBType == "file" || c.DestDBType == "kafka" {
 		c.DisableDispatch = true
 		c.WorkerCount = 1
 	} else if c.DisableDispatch {
@@ -205,18 +218,6 @@ func (c *SyncerConfig) adjustDoDBAndTable() {
 func (cfg *Config) configFromFile(path string) error {
 	_, err := toml.DecodeFile(path, cfg)
 	return errors.Trace(err)
-}
-
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
-
-func adjustInt(v *int, defValue int) {
-	if *v == 0 {
-		*v = defValue
-	}
 }
 
 // validate checks whether the configuration is valid
@@ -260,17 +261,21 @@ func (cfg *Config) validate() error {
 
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
+	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
-	cfg.SyncerCfg.adjustWorkCount()
-	cfg.SyncerCfg.adjustDoDBAndTable()
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
-		cfg.SyncerCfg.To = new(executor.DBConfig)
+		cfg.SyncerCfg.To = new(dsync.DBConfig)
 	}
+
+	if cfg.SyncerCfg.DestDBType == "pb" {
+		// pb is an alias of file, use file instead
+		cfg.SyncerCfg.DestDBType = "file"
+	}
+
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
@@ -305,10 +310,10 @@ func (cfg *Config) adjustConfig() error {
 		if cfg.SyncerCfg.To.KafkaMaxMessages <= 0 {
 			cfg.SyncerCfg.To.KafkaMaxMessages = 1024
 		}
-	} else if cfg.SyncerCfg.DestDBType == "pb" {
+	} else if cfg.SyncerCfg.DestDBType == "file" {
 		if len(cfg.SyncerCfg.To.BinlogFileDir) == 0 {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream pb directory: %s", cfg.DataDir)
+			log.Infof("use default downstream file directory: %s", cfg.DataDir)
 		}
 	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 		if len(cfg.SyncerCfg.To.Host) == 0 {
@@ -336,6 +341,9 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
 	}
+
+	cfg.SyncerCfg.adjustWorkCount()
+	cfg.SyncerCfg.adjustDoDBAndTable()
 
 	return nil
 }

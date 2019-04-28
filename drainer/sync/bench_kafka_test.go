@@ -1,4 +1,17 @@
-package executor
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package sync
 
 import (
 	"testing"
@@ -6,6 +19,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/ngaut/log"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	ti "github.com/pingcap/tipb/go-binlog"
 )
 
 var bytes = make([]byte, 5*(1<<10))
@@ -42,8 +56,12 @@ func BenchmarkBinlogMarshal(b *testing.B) {
 			Tables: []*obinlog.Table{table},
 		},
 	}
+	var s string
 	for i := 0; i < b.N; i++ {
-		binlog.String()
+		s = binlog.String()
+	}
+	if len(s) == 0 {
+		b.Fail()
 	}
 }
 
@@ -59,20 +77,31 @@ func BenchmarkKafka(b *testing.B) {
 		ClusterID:    99900,
 	}
 
-	executor, err := newKafka(cfg)
+	binlog := &obinlog.Binlog{
+		DmlData: &obinlog.DMLData{
+			Tables: []*obinlog.Table{table},
+		},
+	}
+
+	item := &Item{Binlog: &ti.Binlog{}}
+
+	syncer, err := NewKafka(cfg, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ResetTimer()
-	var arg = []interface{}{table}
-	var args = [][]interface{}{arg}
+
+	// Just drain is, or may be block if the buffer is full
+	go func() {
+		for range syncer.Successes() {
+		}
+	}()
 
 	for i := 0; i < b.N; i++ {
-		err = executor.Execute([]string{""}, args, []int64{int64(i)}, false)
+		err = syncer.saveBinlog(binlog, item)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
-
 }

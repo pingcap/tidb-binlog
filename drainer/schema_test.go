@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package drainer
 
 import (
@@ -29,7 +42,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobDup := &model.Job{
@@ -37,7 +50,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
@@ -52,7 +65,17 @@ func (t *schemaSuite) TestSchema(c *C) {
 	c.Assert(err, IsNil)
 
 	// test drop schema
-	jobs = append(jobs, &model.Job{ID: 6, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{3, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID:         6,
+			State:      model.JobStateSynced,
+			SchemaID:   1,
+			Type:       model.ActionDropSchema,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 123},
+			Query:      "drop database test",
+		},
+	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(3)
@@ -70,7 +93,17 @@ func (t *schemaSuite) TestSchema(c *C) {
 
 	// test schema drop schema error
 	jobs = jobs[:0]
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 1, Type: model.ActionDropSchema, BinlogInfo: &model.HistoryInfo{1, nil, nil, 123}, Query: "drop database test"})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   1,
+			Type:       model.ActionDropSchema,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
+			Query:      "drop database test",
+		},
+	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(1)
@@ -125,7 +158,7 @@ func (*schemaSuite) TestTable(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
@@ -137,7 +170,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{2, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
@@ -150,7 +183,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{3, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
@@ -163,7 +196,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{4, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
@@ -188,7 +221,18 @@ func (*schemaSuite) TestTable(c *C) {
 		Name:  tbName,
 		State: model.StatePublic,
 	}
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 2, Type: model.ActionTruncateTable, BinlogInfo: &model.HistoryInfo{5, nil, tblInfo1, 123}, Query: "truncate table " + tbName.O})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   3,
+			TableID:    2,
+			Type:       model.ActionTruncateTable,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 123},
+			Query:      "truncate table " + tbName.O,
+		},
+	)
 	schema1, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema1.handlePreviousDDLJobIfNeed(5)
@@ -199,7 +243,18 @@ func (*schemaSuite) TestTable(c *C) {
 	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
 	// check drop table
-	jobs = append(jobs, &model.Job{ID: 9, State: model.JobStateSynced, SchemaID: 3, TableID: 9, Type: model.ActionDropTable, BinlogInfo: &model.HistoryInfo{6, nil, nil, 123}, Query: "drop table " + tbName.O})
+	jobs = append(
+		jobs,
+		&model.Job{
+			ID:         9,
+			State:      model.JobStateSynced,
+			SchemaID:   3,
+			TableID:    9,
+			Type:       model.ActionDropTable,
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 123},
+			Query:      "drop table " + tbName.O,
+		},
+	)
 	schema2, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema2.handlePreviousDDLJobIfNeed(6)
@@ -270,12 +325,12 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		schemaName  string
 		tableName   string
 	}{
-		{"createSchema", 3, 2, 0, model.ActionCreateSchema, &model.HistoryInfo{1, dbInfo, nil, 123}, "create database Test", "create database Test", dbInfo.Name.O, ""},
-		{"createTable", 7, 2, 6, model.ActionCreateTable, &model.HistoryInfo{3, nil, tblInfo, 123}, "create table T(id int);", "create table T(id int);", dbInfo.Name.O, tblInfo.Name.O},
-		{"addColumn", 9, 2, 6, model.ActionAddColumn, &model.HistoryInfo{4, nil, tblInfo, 123}, "alter table T add a varchar(45);", "alter table T add a varchar(45);", dbInfo.Name.O, tblInfo.Name.O},
-		{"truncateTable", 11, 2, 6, model.ActionTruncateTable, &model.HistoryInfo{5, nil, tblInfo, 123}, "truncate table T;", "truncate table T;", dbInfo.Name.O, tblInfo.Name.O},
-		{"dropTable", 12, 2, 10, model.ActionDropTable, &model.HistoryInfo{6, nil, nil, 123}, "drop table T;", "drop table T;", dbInfo.Name.O, tblInfo.Name.O},
-		{"dropSchema", 13, 2, 0, model.ActionDropSchema, &model.HistoryInfo{7, nil, nil, 123}, "drop database test;", "drop database test;", dbInfo.Name.O, ""},
+		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: model.ActionCreateSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: model.ActionCreateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: model.ActionAddColumn, binlogInfo: &model.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "truncateTable", jobID: 11, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 10, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table T;", resultQuery: "drop table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
 	}
 
 	for _, testCase := range testCases {

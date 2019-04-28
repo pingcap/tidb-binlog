@@ -13,6 +13,7 @@ require (
 	github.com/eapache/queue v0.0.0-20180227141424-093482f3f8ce // indirect
 	github.com/go-sql-driver/mysql v1.4.0
 	github.com/gogo/protobuf v1.1.1
+	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.1.0
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/gorilla/context v1.1.1 // indirect
@@ -24,14 +25,16 @@ require (
 	github.com/montanaflynn/stats v0.0.0-20180911141734-db72e6cae808 // indirect
 	github.com/ngaut/log v0.0.0-20160810023011-cec23d3e10b0
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pingcap/check v0.0.0-20171206051426-1c287c953996
+	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.0
+	github.com/pingcap/log v0.0.0-20190307075452-bd41d9273596
 	github.com/pingcap/parser v0.0.0-20190411060258-7e41749fa69c
 	github.com/pingcap/pd v2.1.3+incompatible
 	github.com/pingcap/tidb v2.1.3+incompatible
 	github.com/pingcap/tidb-tools v2.1.5+incompatible
 	github.com/pingcap/tipb v0.0.0-20190107072121-abbec73437b7
 	github.com/prometheus/client_golang v0.8.0
+	github.com/prometheus/client_model v0.0.0-20171117100541-99fa1f4be8e5
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20161005110831-1e9ce2a5ac40
@@ -43,9 +46,7 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/unrolled/render v0.0.0-20180807193321-4206df6ff701
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
-	go.uber.org/atomic v1.3.2 // indirect
-	go.uber.org/multierr v1.1.0 // indirect
-	go.uber.org/zap v1.9.1 // indirect
+	go.uber.org/zap v1.9.1
 	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 	golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e
@@ -55,5 +56,4 @@ require (
 	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3 // indirect
 )

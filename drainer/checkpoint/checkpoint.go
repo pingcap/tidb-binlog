@@ -1,6 +1,21 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package checkpoint
 
 import (
+	"time"
+
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 )
@@ -8,6 +23,8 @@ import (
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
+
+	maxSaveTime = 3 * time.Second
 )
 
 // CheckPoint is the binlog sync pos meta.
@@ -41,8 +58,8 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 	switch name {
 	case "mysql", "tidb":
 		cp, err = newMysql(name, cfg)
-	case "pb":
-		cp, err = newPb(cfg)
+	case "file":
+		cp, err = NewPb(cfg)
 	case "kafka":
 		cp, err = newKafka(cfg)
 	case "flash":

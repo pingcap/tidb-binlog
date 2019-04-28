@@ -1,9 +1,23 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package arbiter
 
 import (
 	"fmt"
 	"testing"
 
+	gosql "database/sql"
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -28,7 +42,7 @@ func (cs *CheckpointSuite) TestNewCheckpoint(c *check.C) {
 
 	setNewExpect(mock)
 
-	_, err = NewCheckpoint(db, "topic_name")
+	_, err = createDbCheckpoint(db)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
@@ -39,7 +53,7 @@ func (cs *CheckpointSuite) TestSaveAndLoad(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	setNewExpect(mock)
-	cp, err := NewCheckpoint(db, "topic_name")
+	cp, err := createDbCheckpoint(db)
 	c.Assert(err, check.IsNil)
 	sql := fmt.Sprintf("SELECT (.+) FROM %s WHERE topic_name = ?",
 		pkgsql.QuoteSchema(cp.database, cp.table))
@@ -65,4 +79,9 @@ func (cs *CheckpointSuite) TestSaveAndLoad(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(ts, check.Equals, saveTS)
 	c.Assert(status, check.Equals, saveStatus)
+}
+
+func createDbCheckpoint(db *gosql.DB) (*dbCheckpoint, error) {
+	cp, err := NewCheckpoint(db, "topic_name")
+	return cp.(*dbCheckpoint), err
 }

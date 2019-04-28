@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package arbiter
 
 import (
@@ -13,6 +26,19 @@ type TestConfigSuite struct {
 }
 
 var _ = check.Suite(&TestConfigSuite{})
+
+func (t *TestConfigSuite) TestAdjustConfig(c *check.C) {
+	config := Config{
+		Up:   UpConfig{},
+		Down: DownConfig{},
+	}
+	config.adjustConfig()
+	c.Assert(config.Up.KafkaAddrs, check.Equals, defaultKafkaAddrs)
+	c.Assert(config.Up.KafkaVersion, check.Equals, defaultKafkaVersion)
+	c.Assert(config.Down.Host, check.Equals, "localhost")
+	c.Assert(config.Down.Port, check.Equals, 3306)
+	c.Assert(config.Down.User, check.Equals, "root")
+}
 
 func (t *TestConfigSuite) TestParseConfig(c *check.C) {
 	args := make([]string, 0, 10)

@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pump
 
 import (
@@ -148,13 +161,13 @@ func (cfg *Config) Parse(arguments []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
-	adjustString(&cfg.ListenAddr, defaultListenAddr)
-	adjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
+	util.AdjustString(&cfg.ListenAddr, defaultListenAddr)
+	util.AdjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
 	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
-	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	util.AdjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
 	return cfg.validate()
 }
@@ -162,24 +175,6 @@ func (cfg *Config) Parse(arguments []string) error {
 func (cfg *Config) configFromFile(path string) error {
 	_, err := toml.DecodeFile(path, cfg)
 	return errors.Trace(err)
-}
-
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
-
-func adjustInt(v *int, defValue int) {
-	if *v == 0 {
-		*v = defValue
-	}
-}
-
-func adjustDuration(v *time.Duration, defValue time.Duration) {
-	if *v == 0 {
-		*v = defValue
-	}
 }
 
 // validate checks whether the configuration is valid

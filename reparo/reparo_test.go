@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package reparo
 
 import (
@@ -82,11 +95,11 @@ func (s *testReparoSuite) TestFilterBinlog(c *C) {
 	afilter := filter.NewFilter([]string{"ignore_db"}, nil, nil, nil)
 
 	ddlBinlogs := map[*pb.Binlog]bool{
-		&pb.Binlog{
+		{
 			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("use ignore_db; create table a(id int)"),
 		}: true,
-		&pb.Binlog{
+		{
 			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("use do_db; create table a(id int)"),
 		}: false,
@@ -99,24 +112,24 @@ func (s *testReparoSuite) TestFilterBinlog(c *C) {
 	}
 
 	dmlBinlogs := map[*pb.Binlog]bool{
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
-				Events: []pb.Event{pb.Event{SchemaName: proto.String("ignore_db")}},
+				Events: []pb.Event{{SchemaName: proto.String("ignore_db")}},
 			},
 		}: true,
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
-				Events: []pb.Event{pb.Event{SchemaName: proto.String("do_db")}},
+				Events: []pb.Event{{SchemaName: proto.String("do_db")}},
 			},
 		}: false,
-		&pb.Binlog{
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
 				Events: []pb.Event{
-					pb.Event{SchemaName: proto.String("do_db")},
-					pb.Event{SchemaName: proto.String("ignore_db")},
+					{SchemaName: proto.String("do_db")},
+					{SchemaName: proto.String("ignore_db")},
 				}},
 		}: false,
 	}

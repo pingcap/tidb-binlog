@@ -1,9 +1,21 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package dailytest
 
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -27,29 +39,12 @@ func randInt64(min int64, max int64) int64 {
 	return min + rand.Int63n(max-min+1)
 }
 
-func randFloat64(min int64, max int64, prec int) float64 {
-	value := float64(randInt64(min, max))
-	fvalue := strconv.FormatFloat(value, 'f', prec, 64)
-	value, _ = strconv.ParseFloat(fvalue, 64)
-	return value
-}
-
-func randBool() bool {
-	value := randInt(0, 1)
-	return value == 1
-}
-
 func randString(n int) string {
 	bytes := make([]byte, n)
 	for i := range bytes {
 		bytes[i] = alphabet[randInt(0, len(alphabet)-1)]
 	}
 	return string(bytes)
-}
-
-func randDuration(n time.Duration) time.Duration {
-	duration := randInt(0, int(n))
-	return time.Duration(duration)
 }
 
 func randDate(min string, max string) string {

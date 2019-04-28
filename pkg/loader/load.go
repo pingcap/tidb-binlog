@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package loader
 
 import (
@@ -10,6 +23,7 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
@@ -26,7 +40,16 @@ const (
 )
 
 // Loader is used to load data to mysql
-type Loader struct {
+type Loader interface {
+	SetSafeMode(bool)
+	GetSafeMode() bool
+	Input() chan<- *Txn
+	Successes() <-chan *Txn
+	Close()
+	Run() error
+}
+
+type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
 	db *gosql.DB
@@ -94,13 +117,13 @@ func Metrics(m *MetricsGroup) Option {
 
 // NewLoader return a Loader
 // db must support multi statement and interpolateParams
-func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
+func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	opts := defaultLoaderOptions
 	for _, o := range opt {
 		o(&opts)
 	}
 
-	s := &Loader{
+	s := &loaderImpl{
 		db:          db,
 		workerCount: opts.workerCount,
 		batchSize:   opts.batchSize,
@@ -115,8 +138,8 @@ func NewLoader(db *gosql.DB, opt ...Option) (*Loader, error) {
 	return s, nil
 }
 
-func (s *Loader) metricsInputTxn(txn *Txn) {
-	if s.metrics == nil {
+func (s *loaderImpl) metricsInputTxn(txn *Txn) {
+	if s.metrics == nil || s.metrics.EventCounterVec == nil {
 		return
 	}
 
@@ -145,7 +168,7 @@ func (s *Loader) metricsInputTxn(txn *Txn) {
 }
 
 // SetSafeMode set safe mode
-func (s *Loader) SetSafeMode(safe bool) {
+func (s *loaderImpl) SetSafeMode(safe bool) {
 	if safe {
 		atomic.StoreInt32(&s.safeMode, 1)
 	} else {
@@ -154,13 +177,13 @@ func (s *Loader) SetSafeMode(safe bool) {
 }
 
 // GetSafeMode get safe mode
-func (s *Loader) GetSafeMode() bool {
+func (s *loaderImpl) GetSafeMode() bool {
 	v := atomic.LoadInt32(&s.safeMode)
 
 	return v != 0
 }
 
-func (s *Loader) markSuccess(txns ...*Txn) {
+func (s *loaderImpl) markSuccess(txns ...*Txn) {
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
@@ -168,23 +191,25 @@ func (s *Loader) markSuccess(txns ...*Txn) {
 }
 
 // Input returns input channel which used to put Txn into Loader
-func (s *Loader) Input() chan<- *Txn {
+func (s *loaderImpl) Input() chan<- *Txn {
 	return s.input
 }
 
 // Successes return a channel to get the successfully Txn loaded to mysql
-func (s *Loader) Successes() <-chan *Txn {
+func (s *loaderImpl) Successes() <-chan *Txn {
 	return s.successTxn
 }
 
 // Close close the Loader, no more Txn can be push into Input()
 // Run will quit when all data is drained
-func (s *Loader) Close() {
+func (s *loaderImpl) Close() {
 	close(s.input)
 }
 
-func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
-	info, err = getTableInfo(s.db, schema, table)
+var utilGetTableInfo = getTableInfo
+
+func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
 	}
@@ -198,7 +223,7 @@ func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo,
 	return
 }
 
-func (s *Loader) getTableInfo(schema string, table string) (info *tableInfo, err error) {
+func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo, err error) {
 	v, ok := s.tableInfos.Load(quoteSchema(schema, table))
 	if ok {
 		info = v.(*tableInfo)
@@ -219,52 +244,40 @@ func isCreateDatabaseDDL(sql string) bool {
 	return isCreateDatabase
 }
 
-func (s *Loader) execDDL(ddl *DDL) error {
+func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl: ", ddl)
-	var err error
-	var tx *gosql.Tx
-	for i := 0; i < maxDDLRetryCount; i++ {
-		if i > 0 {
-			time.Sleep(time.Second)
-		}
 
-		tx, err = s.db.Begin()
+	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
+		tx, err := s.db.Begin()
 		if err != nil {
-			log.Error(err)
-			continue
+			return err
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
-				log.Error(err)
 				tx.Rollback()
-				continue
+				return err
 			}
 		}
 
-		log.Infof("retry num: %d, exec ddl: %s", i, ddl.SQL)
-		_, err = tx.Exec(ddl.SQL)
-		if err != nil {
-			log.Error(err)
+		if _, err = tx.Exec(ddl.SQL); err != nil {
 			tx.Rollback()
-			continue
+			return err
 		}
 
-		err = tx.Commit()
-		if err != nil {
-			log.Error(err)
-			continue
+		if err = tx.Commit(); err != nil {
+			return err
 		}
 
 		log.Info("exec ddl success: ", ddl.SQL)
 		return nil
-	}
+	})
 
 	return errors.Trace(err)
 }
 
-func (s *Loader) execByHash(executor *executor, byHash [][]*DML) error {
+func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
 	errg, _ := errgroup.WithContext(context.Background())
 
 	for _, dmls := range byHash {
@@ -285,7 +298,7 @@ func (s *Loader) execByHash(executor *executor, byHash [][]*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
+func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	causality := NewCausality()
 
 	var byHash = make([][]*DML, s.workerCount)
@@ -296,7 +309,7 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 		conflict := causality.DetectConflict(keys)
 		if conflict {
 			log.Infof("meet causality.DetectConflict exec now table: %v, keys: %v",
-				quoteSchema(dml.Database, dml.Table), keys)
+				dml.TableName(), keys)
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)
@@ -319,17 +332,17 @@ func (s *Loader) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *Loader) execDMLs(dmls []*DML) error {
+func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
 	}
 
 	for _, dml := range dmls {
-		var err error
-		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+		info, err := s.getTableInfo(dml.Database, dml.Table)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		dml.info = info
 		if len(dml.Values) > len(dml.info.columns) {
 			// Remove values of generated columns
 			vals := make(map[string]interface{}, len(dml.info.columns))
@@ -340,25 +353,13 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 		}
 	}
 
-	tables := groupByTable(dmls)
-
-	batchTables := make(map[string][]*DML)
-	var singleDMLs []*DML
-
-	for tableName, tableDMLs := range tables {
-		info := tableDMLs[0].info
-		if info.primaryKey != nil && len(info.uniqueKeys) == 0 && s.merge {
-			batchTables[tableName] = tableDMLs
-		} else {
-			singleDMLs = append(singleDMLs, tableDMLs...)
-		}
-	}
+	batchTables, singleDMLs := s.groupDMLs(dmls)
 
 	log.Debugf("exec by tables: %d tables, by single: %d dmls", len(batchTables), len(singleDMLs))
 
 	errg, _ := errgroup.WithContext(context.Background())
 	executor := newExecutor(s.db).withBatchSize(s.batchSize)
-	if s.metrics != nil {
+	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		executor = executor.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
 
@@ -382,7 +383,7 @@ func (s *Loader) execDMLs(dmls []*DML) error {
 }
 
 // Run will quit when meet any error, or all the txn are drained
-func (s *Loader) Run() error {
+func (s *loaderImpl) Run() error {
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
@@ -486,4 +487,25 @@ func (s *Loader) Run() error {
 			}
 		}
 	}
+}
+
+// groupDMLs group DMLs by table in batchByTbls and
+// collects DMLs that can't be executed in bulk in singleDMLs.
+// NOTE: DML.info are assumed to be already set.
+func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, singleDMLs []*DML) {
+	if !s.merge {
+		singleDMLs = dmls
+		return
+	}
+	batchByTbls = make(map[string][]*DML)
+	for _, dml := range dmls {
+		info := dml.info
+		if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+			tblName := dml.TableName()
+			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
+		} else {
+			singleDMLs = append(singleDMLs, dml)
+		}
+	}
+	return
 }

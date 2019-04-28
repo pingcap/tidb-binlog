@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package binlogfile
 
 import (
@@ -10,7 +23,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tipb/go-binlog"
 )
 
@@ -19,10 +31,7 @@ var _ = Suite(&testBinloggerSuite{})
 type testBinloggerSuite struct{}
 
 func (s *testBinloggerSuite) TestCreate(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
+	dir := c.MkDir()
 	// check create binloger with non-exist directory
 	checkTest(c, dir)
 
@@ -32,7 +41,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 }
 
 func checkTest(c *C, dir string) {
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer CloseBinlogger(bl)
 
@@ -43,11 +52,8 @@ func checkTest(c *C, dir string) {
 }
 
 func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	b, ok := bl.(*binlogger)
@@ -58,7 +64,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	c.Assert(err, IsNil)
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir, compress.CompressionNone)
+	bl, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	b, ok = bl.(*binlogger)
@@ -82,11 +88,8 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 }
 
 func (s *testBinloggerSuite) TestRotateFile(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	payload := []byte("binlogtest")
@@ -106,7 +109,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir, compress.CompressionNone)
+	bl, err = OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 
 	binlogs, err := bl.ReadFrom(binlog.Pos{}, 1)
@@ -124,11 +127,8 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 }
 
 func (s *testBinloggerSuite) TestRead(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -166,11 +166,8 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 }
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -178,7 +175,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	c.Assert(ok, IsTrue)
 
 	for i := 0; i < 3; i++ {
-		for i := 0; i < 4; i++ {
+		for j := 0; j < 4; j++ {
 			_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 			c.Assert(err, IsNil)
 		}
@@ -202,11 +199,8 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 }
 
 func (s *testBinloggerSuite) TestGC(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer CloseBinlogger(bl)
 
@@ -232,7 +226,7 @@ func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 		os.Remove(f.Name())
 	}()
 
-	encoder := NewEncoder(f, 0, compress.CompressionNone)
+	encoder := NewEncoder(f, 0)
 	_, err = encoder.Encode([]byte("binlogtest"))
 	c.Assert(err, IsNil)
 
@@ -274,11 +268,8 @@ func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 }
 
 func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
-	dir, err := ioutil.TempDir(os.TempDir(), "binloggertest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
-
-	bl, err := OpenBinlogger(dir, compress.CompressionNone)
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 

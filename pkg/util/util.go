@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package util
 
 import (
@@ -31,28 +44,34 @@ func DefaultIP() (ip string, err error) {
 		}
 
 		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
+			if ipStr := getAddrDefaultIP(addr); len(ipStr) > 0 {
+				return ipStr, nil
 			}
-			if ip.IsUnspecified() || ip.IsLoopback() {
-				continue
-			}
-
-			ip = ip.To4()
-			if ip == nil {
-				continue
-			}
-
-			return ip.String(), nil
 		}
 	}
 
 	err = errors.New("no ip found")
 	return
+}
+
+func getAddrDefaultIP(addr net.Addr) string {
+	var ip net.IP
+	switch v := addr.(type) {
+	case *net.IPNet:
+		ip = v.IP
+	case *net.IPAddr:
+		ip = v.IP
+	}
+	if ip.IsUnspecified() || ip.IsLoopback() {
+		return ""
+	}
+
+	ip = ip.To4()
+	if ip == nil {
+		return ""
+	}
+
+	return ip.String()
 }
 
 // DefaultListenAddr returns default listen address with appointed port.
@@ -66,10 +85,10 @@ func DefaultListenAddr(port int32) string {
 
 // IsValidateListenHost judge the host is validate listen host or not.
 func IsValidateListenHost(host string) bool {
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
-		return false
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback()
 	}
-	return true
+	return host != "localhost"
 }
 
 // StdLogger implements samara.StdLogger
@@ -78,28 +97,30 @@ type StdLogger struct {
 }
 
 // NewStdLogger return an instance of StdLogger
-func NewStdLogger(prefix string) *StdLogger {
-	return &StdLogger{
+func NewStdLogger(prefix string) StdLogger {
+	return StdLogger{
 		prefix: prefix,
 	}
 }
 
-// Print implements samara.StdLogger
-func (l *StdLogger) Print(v ...interface{}) {
+func (l StdLogger) emit(msg string) {
 	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprint(v...))
+	logger.Output(2, l.prefix+msg)
+}
+
+// Print implements samara.StdLogger
+func (l StdLogger) Print(v ...interface{}) {
+	l.emit(fmt.Sprint(v...))
 }
 
 // Printf implements samara.StdLogger
-func (l *StdLogger) Printf(format string, v ...interface{}) {
-	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprintf(format, v...))
+func (l StdLogger) Printf(format string, v ...interface{}) {
+	l.emit(fmt.Sprintf(format, v...))
 }
 
 // Println implements samara.StdLogger
-func (l *StdLogger) Println(v ...interface{}) {
-	logger := log.Logger()
-	logger.Output(2, l.prefix+fmt.Sprintln(v...))
+func (l StdLogger) Println(v ...interface{}) {
+	l.emit(fmt.Sprintln(v...))
 }
 
 // ToColumnTypeMap return a map index by column id
@@ -139,6 +160,10 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	return int64(version.Ver), nil
 }
 
+// Store the function in a variable so that we can mock it when testing
+var newPdCli = pd.NewClient
+
+// GetPdClient create a PD client
 func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
 	urlv, err := flags.NewURLsValue(etcdURLs)
 	if err != nil {
@@ -149,17 +174,37 @@ func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, er
 
 	var pdCli pd.Client
 	for i := 1; i < pdReconnTimes; i++ {
-		pdCli, err = pd.NewClient(urlv.StringSlice(), pd.SecurityOption{
+		pdCli, err = newPdCli(urlv.StringSlice(), pd.SecurityOption{
 			CAPath:   securityConfig.SSLCA,
 			CertPath: securityConfig.SSLCert,
 			KeyPath:  securityConfig.SSLKey,
 		})
-		if err != nil {
-			time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
-		} else {
+		if err == nil {
 			break
 		}
+		time.Sleep(time.Duration(pdReconnTimes*i) * time.Millisecond)
 	}
 
 	return pdCli, errors.Trace(err)
+}
+
+// AdjustString adjusts v to default value if v is nil
+func AdjustString(v *string, defValue string) {
+	if len(*v) == 0 {
+		*v = defValue
+	}
+}
+
+// AdjustInt adjusts v to default value if v is nil
+func AdjustInt(v *int, defValue int) {
+	if *v == 0 {
+		*v = defValue
+	}
+}
+
+// AdjustDuration adjusts v to default value if v is nil
+func AdjustDuration(v *time.Duration, defValue time.Duration) {
+	if *v == 0 {
+		*v = defValue
+	}
 }

@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -75,12 +88,8 @@ func main() {
 			select {
 			case msg := <-breader.Messages():
 				str := msg.Binlog.String()
-				if len(str) > 2000 {
-					str = str[:2000] + "..."
-				}
-				log.Debug("recv: ", str)
-				binlog := msg.Binlog
-				ld.Input() <- loader.SlaveBinlogToTxn(binlog)
+				log.Debugf("recv: %.2000s", str)
+				ld.Input() <- loader.SlaveBinlogToTxn(msg.Binlog)
 			case txn := <-ld.Successes():
 				log.Debug("succ: ", txn)
 			}

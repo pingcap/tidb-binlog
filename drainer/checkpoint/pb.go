@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package checkpoint
 
 import (
@@ -13,10 +26,6 @@ import (
 	"github.com/siddontang/go/ioutil2"
 )
 
-var (
-	maxSaveTime = 3 * time.Second
-)
-
 // PbCheckPoint is local CheckPoint struct.
 type PbCheckPoint struct {
 	sync.RWMutex
@@ -30,7 +39,7 @@ type PbCheckPoint struct {
 }
 
 // NewPb creates a new Pb.
-func newPb(cfg *Config) (CheckPoint, error) {
+func NewPb(cfg *Config) (CheckPoint, error) {
 	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, saveTime: time.Now()}
 	err := pb.Load()
 	if err != nil {
@@ -121,6 +130,7 @@ func (sp *PbCheckPoint) TS() int64 {
 	return sp.CommitTS
 }
 
+// Close implements CheckPoint.Close interface
 func (sp *PbCheckPoint) Close() error {
 	sp.Lock()
 	defer sp.Unlock()

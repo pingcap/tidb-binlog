@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package arbiter
 
 import (
@@ -16,8 +29,13 @@ const (
 	StatusRunning int = 1
 )
 
-// Checkpoint to save the checkpoint
-type Checkpoint struct {
+// Checkpoint is able to save and load checkpoints
+type Checkpoint interface {
+	Save(ts int64, status int) error
+	Load() (ts int64, status int, err error)
+}
+
+type dbCheckpoint struct {
 	database  string
 	table     string
 	db        *gosql.DB
@@ -25,23 +43,22 @@ type Checkpoint struct {
 }
 
 // NewCheckpoint creates a Checkpoint
-func NewCheckpoint(db *gosql.DB, topicName string) (cp *Checkpoint, err error) {
-	cp = &Checkpoint{
+func NewCheckpoint(db *gosql.DB, topicName string) (Checkpoint, error) {
+	cp := &dbCheckpoint{
 		db:        db,
 		database:  "tidb_binlog",
 		table:     "arbiter_checkpoint",
 		topicName: topicName,
 	}
 
-	err = cp.createSchemaIfNeed()
-	if err != nil {
+	if err := cp.createSchemaIfNeed(); err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return cp, nil
 }
 
-func (c *Checkpoint) createSchemaIfNeed() error {
+func (c *dbCheckpoint) createSchemaIfNeed() error {
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", pkgsql.QuoteName(c.database))
 	_, err := c.db.Exec(sql)
 	if err != nil {
@@ -60,7 +77,7 @@ func (c *Checkpoint) createSchemaIfNeed() error {
 }
 
 // Save saves the ts and status
-func (c *Checkpoint) Save(ts int64, status int) error {
+func (c *dbCheckpoint) Save(ts int64, status int) error {
 	sql := fmt.Sprintf("REPLACE INTO %s(topic_name, ts, status) VALUES(?,?,?)",
 		pkgsql.QuoteSchema(c.database, c.table))
 	_, err := c.db.Exec(sql, c.topicName, ts, status)
@@ -72,7 +89,7 @@ func (c *Checkpoint) Save(ts int64, status int) error {
 }
 
 // Load return ts and status, if no record in checkpoint, return err = errors.NotFoundf
-func (c *Checkpoint) Load() (ts int64, status int, err error) {
+func (c *dbCheckpoint) Load() (ts int64, status int, err error) {
 	sql := fmt.Sprintf("SELECT ts, status FROM %s WHERE topic_name = ?",
 		pkgsql.QuoteSchema(c.database, c.table))
 

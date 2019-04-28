@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package binlogfile
 
 import (
@@ -11,7 +24,6 @@ import (
 
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	"github.com/pingcap/tidb-binlog/pkg/file"
 	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -29,6 +41,7 @@ var (
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
+	// SegmentSizeBytes is the max file size of file
 	SegmentSizeBytes int64 = 512 * 1024 * 1024
 )
 
@@ -58,8 +71,6 @@ type binlogger struct {
 	// encoder encodes binlog payload into bytes, and write to file
 	encoder Encoder
 
-	codec compress.CompressionCodec
-
 	lastSuffix uint64
 	lastOffset int64
 
@@ -70,7 +81,7 @@ type binlogger struct {
 }
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, error) {
+func OpenBinlogger(dirpath string) (Binlogger, error) {
 	log.Infof("open binlog directory %s", dirpath)
 	var (
 		err            error
@@ -100,7 +111,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 
 	// ignore file not found error
 	names, _ := ReadBinlogNames(dirpath)
-	// if no binlog files, we create from binlog-0000000000000000
+	// if no binlog files, we create from index 0, the file name like binlog-0000000000000000-20190101010101
 	if len(names) == 0 {
 		lastFileName = path.Join(dirpath, BinlogName(0))
 		lastFileSuffix = 0
@@ -112,7 +123,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 		}
 
 		lastFileName = path.Join(dirpath, names[len(names)-1])
-		lastFileSuffix, err = ParseBinlogName(names[len(names)-1])
+		lastFileSuffix, _, err = ParseBinlogName(names[len(names)-1])
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -132,8 +143,7 @@ func OpenBinlogger(dirpath string, codec compress.CompressionCodec) (Binlogger, 
 	binlog := &binlogger{
 		dir:        dirpath,
 		file:       fileLock,
-		encoder:    NewEncoder(fileLock, offset, codec),
-		codec:      codec,
+		encoder:    NewEncoder(fileLock, offset),
 		dirLock:    dirLock,
 		lastSuffix: lastFileSuffix,
 		lastOffset: offset,
@@ -312,7 +322,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			continue
 		}
 
-		curSuffix, err := ParseBinlogName(name)
+		curSuffix, _, err := ParseBinlogName(name)
 		if err != nil {
 			log.Errorf("parse binlog error %v", err)
 		}
@@ -401,7 +411,7 @@ func (b *binlogger) rotate() error {
 	}
 	b.file = newTail
 
-	b.encoder = NewEncoder(b.file, 0, b.codec)
+	b.encoder = NewEncoder(b.file, 0)
 	log.Infof("segmented binlog file %v is created", fpath)
 	return nil
 }
@@ -411,7 +421,7 @@ func (b *binlogger) seq() uint64 {
 		return 0
 	}
 
-	seq, err := ParseBinlogName(path.Base(b.file.Name()))
+	seq, _, err := ParseBinlogName(path.Base(b.file.Name()))
 	if err != nil {
 		log.Fatalf("bad binlog name %s (%v)", b.file.Name(), err)
 	}

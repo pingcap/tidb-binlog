@@ -1,7 +1,19 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package translator
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/pingcap/check"
@@ -22,7 +34,6 @@ func genCommitTS(i int) int64 {
 }
 
 func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
-	f := testGenFlashTranslator(c)
 	schema := "T"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	expectedValCounts := []int{7, 7, 6}
@@ -32,29 +43,24 @@ func (t *testTranslatorSuite) TestFlashGenInsertSQLs(c *C) {
 		"IMPORT INTO `t`.`account` (`id`,`name`,`sex`,`" + internalVersionColName + "`,`" + internalDelmarkColName + "`) values (?,?,?,?,?);",
 	}
 	for i, table := range tables {
+		c.Logf("id: %d, table: %+v", i, table)
 		rowDatas, expected := testFlashGenRowData(c, table, i, false)
 		binlog := testFlashGenInsertBinlog(c, table, rowDatas)
-		sqls, keys, vals, err := f.GenInsertSQLs(schema, table, [][]byte{binlog}, genCommitTS(i))
-		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
-		}
+		sql, vals, err := GenFlashInsertSQL(schema, table, binlog, genCommitTS(i))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
-		c.Assert(sqls[0], Equals, expectedSQLs[i])
-		for index := range vals[0] {
-			c.Assert(vals[0][index], DeepEquals, expected[index])
-		}
+		c.Assert(vals, HasLen, expectedValCounts[i])
+		c.Assert(sql, Equals, expectedSQLs[i])
+		c.Assert(vals, DeepEquals, expected)
 	}
 
 	table := testGenTable("normal")
 	rowDatas, _ := testFlashGenRowData(c, table, 1, false)
 	binlog := testFlashGenInsertBinlog(c, table, rowDatas)
-	_, _, _, err := f.GenInsertSQLs(schema, tables[0], [][]byte{binlog[6:]}, 0)
+	_, _, err := GenFlashInsertSQL(schema, tables[0], binlog[6:], 0)
 	c.Assert(err, NotNil)
 }
 
 func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
-	f := testGenFlashTranslator(c)
 	schema := "T"
 	tables := []*model.TableInfo{
 		testGenTable("normal"),
@@ -72,27 +78,21 @@ func (t *testTranslatorSuite) TestGenUpdateFlashSQLs(c *C) {
 		oldRowDatas, _ := testFlashGenRowData(c, table, 1, false)
 		newRowDatas, newExpected := testFlashGenRowData(c, table, i, false)
 		binlog := testFlashGenUpdateBinlog(c, table, oldRowDatas, newRowDatas)
-		sqls, keys, vals, _, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog}, genCommitTS(i))
-		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", table.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
-		}
+		sql, vals, err := GenFlashUpdateSQL(schema, table, binlog, genCommitTS(i))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
-		c.Assert(sqls[0], Equals, expectedSQLs[i])
-		for index := range vals[0] {
-			c.Assert(vals[0][index], DeepEquals, newExpected[index])
-		}
+		c.Assert(len(vals), Equals, expectedValCounts[i])
+		c.Assert(sql, Equals, expectedSQLs[i])
+		c.Assert(vals, DeepEquals, newExpected)
 	}
 
 	table := testGenTable("normal")
 	rowDatas, _ := testFlashGenRowData(c, table, 1, false)
 	binlog := testFlashGenUpdateBinlog(c, table, rowDatas, rowDatas)
-	_, _, _, _, err := f.GenUpdateSQLs(schema, table, [][]byte{binlog[6:]}, 0)
+	_, _, err := GenFlashUpdateSQL(schema, table, binlog[6:], 0)
 	c.Assert(err, NotNil)
 }
 
 func (t *testTranslatorSuite) TestFlashGenDeleteSQLs(c *C) {
-	f := testGenFlashTranslator(c)
 	schema := "T"
 	tables := []*model.TableInfo{testGenTable("normal"), testGenTable("hasPK"), testGenTable("hasID")}
 	expectedValCounts := []int{7, 7, 6}
@@ -104,31 +104,25 @@ func (t *testTranslatorSuite) TestFlashGenDeleteSQLs(c *C) {
 	for i, t := range tables {
 		rowDatas, expected := testFlashGenRowData(c, t, i, true)
 		binlog := testFlashGenDeleteBinlog(c, t, rowDatas)
-		sqls, keys, vals, err := f.GenDeleteSQLs(schema, t, [][]byte{binlog}, genCommitTS(i))
-		if fmt.Sprintf("%v", keys[0]) != fmt.Sprintf("[%s]", t.Name.O) {
-			c.Assert(fmt.Sprintf("%v", keys[0]), Equals, "[]")
-		}
+		sql, vals, err := GenFlashDeleteSQL(schema, t, binlog, genCommitTS(i))
 		c.Assert(err, IsNil)
-		c.Assert(len(vals[0]), Equals, expectedValCounts[i])
-		c.Assert(sqls[0], Equals, expectedSQLs[i])
-		for index := range vals[0] {
-			c.Assert(vals[0][index], DeepEquals, expected[index])
-		}
+		c.Assert(len(vals), Equals, expectedValCounts[i])
+		c.Assert(sql, Equals, expectedSQLs[i])
+		c.Assert(vals, DeepEquals, expected)
 	}
 
 	table := testGenTable("normal")
 	rowDatas, _ := testFlashGenRowData(c, table, 1, true)
 	binlog := testFlashGenDeleteBinlog(c, table, rowDatas)
-	_, _, _, err := f.GenDeleteSQLs(schema, table, [][]byte{binlog[6:]}, 0)
+	_, _, err := GenFlashDeleteSQL(schema, table, binlog[6:], 0)
 	c.Assert(err, NotNil)
 }
 
 func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
-	f := testGenFlashTranslator(c)
 	schema := "Test_Schema"
 	dtRegex := "[0-9]{4}-[0-1][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]"
 	check := func(ddl string, checker Checker, expected string) {
-		gen, err := f.GenDDLSQL(ddl, schema, 0)
+		gen, err := GenFlashDDLSQL(ddl, schema)
 		c.Assert(err, IsNil)
 		c.Assert(gen, checker, expected)
 	}
@@ -646,12 +640,4 @@ func testFlashGenDeleteBinlog(c *C, table *model.TableInfo, r []types.Datum) []b
 	bin, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
 	c.Assert(err, IsNil)
 	return bin
-}
-
-func testGenFlashTranslator(c *C) *flashTranslator {
-	translator, err := New("flash")
-	c.Assert(err, IsNil)
-	f, ok := translator.(*flashTranslator)
-	c.Assert(ok, IsTrue)
-	return f
 }

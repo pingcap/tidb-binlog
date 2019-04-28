@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package checkpoint
 
 import (
@@ -13,7 +26,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	notExistFileName := "test_not_exist"
 	cfg := new(Config)
 	cfg.CheckPointFile = fileName
-	meta, err := newPb(cfg)
+	meta, err := NewPb(cfg)
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(fileName)
 
@@ -36,7 +49,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 
 	// check not exist meta file
 	cfg.CheckPointFile = notExistFileName
-	meta, err = newPb(cfg)
+	meta, err = NewPb(cfg)
 	c.Assert(err, IsNil)
 	err = meta.Load()
 	c.Assert(err, IsNil)
@@ -44,7 +57,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 
 	// check not exist meta file, but with initialCommitTs
 	cfg.InitialCommitTS = 123
-	meta, err = newPb(cfg)
+	meta, err = NewPb(cfg)
 	c.Assert(err, IsNil)
 	c.Assert(meta.TS(), Equals, cfg.InitialCommitTS)
 

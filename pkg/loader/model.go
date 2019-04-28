@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package loader
 
 import (
@@ -140,10 +153,15 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 	return values
 }
 
+// TableName returns the fully qualified name of the DML's table
+func (dml *DML) TableName() string {
+	return quoteSchema(dml.Database, dml.Table)
+}
+
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
-	fmt.Fprintf(builder, "UPDATE %s SET ", quoteSchema(dml.Database, dml.Table))
+	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
 
 	for name, arg := range dml.Values {
 		if len(args) > 0 {
@@ -172,7 +190,7 @@ func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 		if wargs[i] == nil {
 			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quoteName(wnames[i]) + " = ? ")
+			builder.WriteString(quoteName(wnames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
@@ -213,7 +231,7 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
-	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", quoteSchema(dml.Database, dml.Table))
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
 	args = dml.buildWhere(builder)
 	builder.WriteString(" LIMIT 1")
 
@@ -223,7 +241,7 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
 	info := dml.info
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", quoteSchema(dml.Database, dml.Table), buildColumnList(info.columns), holderString(len(info.columns)))
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(info.columns), holderString(len(info.columns)))
 	for _, name := range info.columns {
 		v := dml.Values[name]
 		args = append(args, v)
@@ -281,7 +299,7 @@ func getKey(names []string, values map[string]interface{}) string {
 func getKeys(dml *DML) (keys []string) {
 	info := dml.info
 
-	tableName := quoteSchema(dml.Database, dml.Table)
+	tableName := dml.TableName()
 
 	var addOldKey int
 	var addNewKey int
