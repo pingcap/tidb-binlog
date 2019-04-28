@@ -165,6 +165,7 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 // Store the function in a variable so that we can mock it when testing
 var newPdCli = pd.NewClient
 
+// GetPdClient create a PD client
 func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
 	urlv, err := flags.NewURLsValue(etcdURLs)
 	if err != nil {

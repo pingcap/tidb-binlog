@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
 	"go.uber.org/zap"
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 func main() {

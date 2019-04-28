@@ -131,6 +131,7 @@ func (sp *PbCheckPoint) TS() int64 {
 	return sp.CommitTS
 }
 
+// Close implements CheckPoint.Close interface
 func (sp *PbCheckPoint) Close() error {
 	sp.Lock()
 	defer sp.Unlock()
