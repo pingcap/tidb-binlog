@@ -152,7 +152,6 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	return oldRow, newRow, nil
 }
 
-
 type updateDecoder struct {
 	colsTypes map[int64]*types.FieldType
 }

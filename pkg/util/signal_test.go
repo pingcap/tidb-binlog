@@ -14,13 +14,14 @@
 package util
 
 import (
-	. "github.com/pingcap/check"
 	"bytes"
 	"os"
 	"strings"
 	"syscall"
 	"time"
+
 	"github.com/ngaut/log"
+	. "github.com/pingcap/check"
 )
 
 type signalSuite struct{}
