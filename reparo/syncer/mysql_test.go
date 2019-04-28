@@ -35,7 +35,11 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	mock.ExpectCommit()
 
 	mock.ExpectQuery("SELECT column_name, extra FROM information_schema.columns").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("a", "").AddRow("b", ""))
-	mock.ExpectQuery("SELECT non_unique, index_name, seq_in_index, column_name FROM information_schema.statistics").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"}))
+
+	rows := sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"})
+	mock.ExpectQuery("SELECT non_unique, index_name, seq_in_index, column_name FROM information_schema.statistics").
+		WithArgs("test", "t1").
+		WillReturnRows(rows)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
