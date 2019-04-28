@@ -26,10 +26,6 @@ import (
 	"github.com/siddontang/go/ioutil2"
 )
 
-var (
-	maxSaveTime = 3 * time.Second
-)
-
 // PbCheckPoint is local CheckPoint struct.
 type PbCheckPoint struct {
 	sync.RWMutex
