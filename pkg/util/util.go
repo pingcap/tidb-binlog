@@ -187,3 +187,24 @@ func GetPdClient(etcdURLs string, securityConfig security.Config) (pd.Client, er
 
 	return pdCli, errors.Trace(err)
 }
+
+// AdjustString adjusts v to default value if v is nil
+func AdjustString(v *string, defValue string) {
+	if len(*v) == 0 {
+		*v = defValue
+	}
+}
+
+// AdjustInt adjusts v to default value if v is nil
+func AdjustInt(v *int, defValue int) {
+	if *v == 0 {
+		*v = defValue
+	}
+}
+
+// AdjustDuration adjusts v to default value if v is nil
+func AdjustDuration(v *time.Duration, defValue time.Duration) {
+	if *v == 0 {
+		*v = defValue
+	}
+}

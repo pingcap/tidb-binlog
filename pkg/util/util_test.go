@@ -193,3 +193,34 @@ func (s *getPdClientSuite) TestShouldRetPdCli(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cli.(dummyCli), Equals, expected)
 }
+
+type adjustValueSuite struct{}
+
+var _ = Suite(&adjustValueSuite{})
+
+func (s *adjustValueSuite) TestAdjustString(c *C) {
+	var str string
+	AdjustString(&str, "hi")
+	c.Assert(str, Equals, "hi")
+
+	AdjustString(&str, "hello")
+	c.Assert(str, Equals, "hi")
+}
+
+func (s *adjustValueSuite) TestAdjustInt(c *C) {
+	var i int
+	AdjustInt(&i, 1)
+	c.Assert(i, Equals, 1)
+
+	AdjustInt(&i, 2)
+	c.Assert(i, Equals, 1)
+}
+
+func (s *adjustValueSuite) TestAdjustDuration(c *C) {
+	var d time.Duration
+	AdjustDuration(&d, time.Duration(time.Second))
+	c.Assert(d, Equals, time.Duration(time.Second))
+
+	AdjustDuration(&d, time.Duration(time.Hour))
+	c.Assert(d, Equals, time.Duration(time.Second))
+}
