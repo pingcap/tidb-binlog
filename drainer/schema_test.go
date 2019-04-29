@@ -375,6 +375,17 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 	}
 }
 
+func (t *schemaSuite) TestAddImplicitColumn(c *C) {
+	tbl := model.TableInfo{}
+
+	addImplicitColumn(&tbl)
+
+	c.Assert(tbl.Columns, HasLen, 1)
+	c.Assert(tbl.Columns[0].ID, Equals, int64(implicitColID))
+	c.Assert(tbl.Indices, HasLen, 1)
+	c.Assert(tbl.Indices[0].Primary, IsTrue)
+}
+
 func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
 	schemaName, tableName, resSQL, err := schema.handleDDL(job)
 	c.Logf("handle: %s", job.Query)
