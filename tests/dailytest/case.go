@@ -16,6 +16,7 @@ package dailytest
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -141,6 +142,8 @@ func (tr *testRunner) execSQLs(sqls []string) {
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
+
+	runPKcases(tr)
 
 	tr.execSQLs(case1)
 	tr.execSQLs(case1Clean)
@@ -374,4 +377,89 @@ func updatePKUK(db *sql.DB, opNum int) error {
 
 	_, err = db.Exec("DROP TABLE pkuk")
 	return errors.Trace(err)
+}
+
+// create a table with one column id with different type
+// test the case weather it is primary key too, this can
+// also help test when the column is handle or not.
+func runPKcases(tr *testRunner) {
+	cases := []struct {
+		Tp     string
+		Value  interface{}
+		Update interface{}
+	}{
+		{
+			Tp:     "BIGINT UNSIGNED",
+			Value:  uint64(math.MaxUint64),
+			Update: uint64(math.MaxUint64) - 1,
+		},
+		{
+			Tp:     "BIGINT SIGNED",
+			Value:  int64(math.MaxInt64),
+			Update: int64(math.MaxInt64) - 1,
+		},
+		{
+			Tp:     "INT UNSIGNED",
+			Value:  uint32(math.MaxUint32),
+			Update: uint32(math.MaxUint32) - 1,
+		},
+		{
+			Tp:     "INT SIGNED",
+			Value:  int32(math.MaxInt32),
+			Update: int32(math.MaxInt32) - 1,
+		},
+		{
+			Tp:     "SMALLINT UNSIGNED",
+			Value:  uint16(math.MaxUint16),
+			Update: uint16(math.MaxUint16) - 1,
+		},
+		{
+			Tp:     "SMALLINT SIGNED",
+			Value:  int16(math.MaxInt16),
+			Update: int16(math.MaxInt16) - 1,
+		},
+		{
+			Tp:     "TINYINT UNSIGNED",
+			Value:  uint8(math.MaxUint8),
+			Update: uint8(math.MaxUint8) - 1,
+		},
+		{
+			Tp:     "TINYINT SIGNED",
+			Value:  int8(math.MaxInt8),
+			Update: int8(math.MaxInt8) - 1,
+		},
+	}
+
+	for _, c := range cases {
+		for _, ispk := range []string{"", "PRIMARY KEY"} {
+
+			tr.run(func(src *sql.DB) {
+				sql := fmt.Sprintf("CREATE TABLE pk(id %s %s)", c.Tp, ispk)
+				mustExec(src, sql)
+
+				sql = "INSERT INTO pk(id) values( ? )"
+				mustExec(src, sql, c.Value)
+
+				if len(ispk) == 0 {
+					// insert a null value
+					mustExec(src, sql, nil)
+				}
+
+				sql = "UPDATE pk set id = ? where id = ?"
+				mustExec(src, sql, c.Update, c.Value)
+
+				sql = "DELETE from pk where id = ?"
+				mustExec(src, sql, c.Update)
+			})
+
+			tr.execSQLs([]string{"DROP TABLE pk"})
+		}
+	}
+}
+
+func mustExec(db *sql.DB, sql string, args ...interface{}) {
+	_, err := db.Exec(sql, args...)
+	if err != nil {
+		log.S().Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)
+	}
 }

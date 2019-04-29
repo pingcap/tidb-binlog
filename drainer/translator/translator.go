@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 var sqlMode mysql.SQLMode
@@ -63,7 +65,15 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 
 	for _, col := range table.Columns {
 		if IsPKHandleColumn(table, col) {
-			datums[col.ID] = pk
+			// If pk is handle, the datums TiDB write will always be Int64 type.
+			// https://github.com/pingcap/tidb/blob/cd10bca6660937beb5d6de11d49ec50e149fe083/table/tables/tables.go#L721
+			//
+			// create table pk(id BIGINT UNSIGNED);
+			// insert into pk(id) values(18446744073709551615)
+			//
+			// Will get -1 here, note: uint64(int64(-1)) = 18446744073709551615
+			// so we change it to uint64 if the column type is unsigned
+			datums[col.ID] = fixType(pk, col)
 		}
 	}
 
@@ -167,4 +177,15 @@ func newUpdateDecoder(table *model.TableInfo) updateDecoder {
 // Row layout: colID1, value1, colID2, value2, .....
 func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	return DecodeOldAndNewRow(b, ud.colsTypes, loc)
+}
+
+func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {
+	if mysql.HasUnsignedFlag(col.Flag) {
+		switch oldV := data.GetValue().(type) {
+		case int64:
+			log.Debug("convert int64 type to uint64", zap.Int64("value", oldV))
+			return types.NewDatum(uint64(oldV))
+		}
+	}
+	return data
 }
