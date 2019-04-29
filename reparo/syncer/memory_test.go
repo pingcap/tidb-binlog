@@ -22,7 +22,7 @@ func (s *testMemorySuite) TestMemorySyncer(c *check.C) {
 	dmlBinlog := &pb.Binlog{
 		Tp: pb.BinlogType_DML,
 		DmlData: &pb.DMLData{
-			Events: generateDMLEvents(c)[0:1],
+			Events: generateDMLEvents(c),
 		},
 	}
 

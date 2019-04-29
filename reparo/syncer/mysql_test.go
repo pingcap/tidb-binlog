@@ -13,6 +13,12 @@ type testMysqlSuite struct{}
 var _ = check.Suite(&testMysqlSuite{})
 
 func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
+	originWorkerCount := defaultWorkerCount
+	defaultWorkerCount = 1
+	defer func() {
+		defaultWorkerCount = originWorkerCount
+	}()
+
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 
@@ -26,7 +32,7 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	dmlBinlog := &pb.Binlog{
 		Tp: pb.BinlogType_DML,
 		DmlData: &pb.DMLData{
-			Events: generateDMLEvents(c)[0:1],
+			Events: generateDMLEvents(c),
 		},
 	}
 
@@ -43,6 +49,8 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("DELETE FROM").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE").WithArgs("abc").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	binlogs := make([]*pb.Binlog, 0, 2)
