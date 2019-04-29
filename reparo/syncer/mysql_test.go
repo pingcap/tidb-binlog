@@ -25,17 +25,6 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	syncer, err := newMysqlSyncerFromSQLDB(db)
 	c.Assert(err, check.IsNil)
 
-	ddlBinlog := &pb.Binlog{
-		Tp:       pb.BinlogType_DDL,
-		DdlQuery: []byte("create database test;"),
-	}
-	dmlBinlog := &pb.Binlog{
-		Tp: pb.BinlogType_DML,
-		DmlData: &pb.DMLData{
-			Events: generateDMLEvents(c),
-		},
-	}
-
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -53,8 +42,26 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 	mock.ExpectExec("UPDATE").WithArgs("abc").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
+	syncTest(c, Syncer(syncer))
+
+	err = syncer.Close()
+	c.Assert(err, check.IsNil)
+}
+
+func syncTest(c *check.C, syncer Syncer) {
+	ddlBinlog := &pb.Binlog{
+		Tp:       pb.BinlogType_DDL,
+		DdlQuery: []byte("create database test;"),
+	}
+	dmlBinlog := &pb.Binlog{
+		Tp: pb.BinlogType_DML,
+		DmlData: &pb.DMLData{
+			Events: generateDMLEvents(c),
+		},
+	}
+
 	binlogs := make([]*pb.Binlog, 0, 2)
-	err = syncer.Sync(ddlBinlog, func(binlog *pb.Binlog) {
+	err := syncer.Sync(ddlBinlog, func(binlog *pb.Binlog) {
 		c.Log(binlog)
 		binlogs = append(binlogs, binlog)
 	})
@@ -68,7 +75,4 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 
 	time.Sleep(100 * time.Millisecond)
 	c.Assert(binlogs, check.HasLen, 2)
-
-	err = syncer.Close()
-	c.Assert(err, check.IsNil)
 }
