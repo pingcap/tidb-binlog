@@ -43,9 +43,9 @@ type mysqlSyncer struct {
 }
 
 var (
-	_ Syncer = &mysqlSyncer{}
-	defaultWorkerCount = 16
-	defaultBatchSize = 20
+	_                  Syncer = &mysqlSyncer{}
+	defaultWorkerCount        = 16
+	defaultBatchSize          = 20
 )
 
 func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
