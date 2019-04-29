@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 

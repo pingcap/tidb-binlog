@@ -14,9 +14,11 @@
 package version
 
 import (
+	"fmt"
 	"runtime"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 var (
@@ -28,11 +30,28 @@ var (
 	ReleaseVersion = "Not provided (use make build instead of go build)"
 )
 
-// PrintVersionInfo show version info to Stdout
-func PrintVersionInfo() {
-	log.Infof("Release Version: %s", ReleaseVersion)
-	log.Infof("Git Commit Hash: %s", GitHash)
-	log.Infof("Build TS: %s", BuildTS)
-	log.Infof("Go Version: %s", runtime.Version())
-	log.Infof("Go OS/Arch: %s%s", runtime.GOOS, runtime.GOARCH)
+// GetRawVersionInfo do what its name tells
+func GetRawVersionInfo() string {
+	var info string
+	info += fmt.Sprintf("Release Version: %s\n", ReleaseVersion)
+	info += fmt.Sprintf("Git Commit Hash: %s\n", GitHash)
+	info += fmt.Sprintf("Build TS: %s\n", BuildTS)
+	info += fmt.Sprintf("Go Version: %s\n", runtime.Version())
+	info += fmt.Sprintf("Go OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	return info
+}
+
+// PrintVersionInfo print version info.
+func PrintVersionInfo(app string) {
+	oldLevel := log.GetLevel()
+	log.SetLevel(zap.InfoLevel)
+	defer log.SetLevel(oldLevel)
+
+	log.Info("Welcome to "+app,
+		zap.String("Release Version", ReleaseVersion),
+		zap.String("Git Commit Hash", GitHash),
+		zap.String("Build TS", BuildTS),
+		zap.String("Go Version", runtime.Version()),
+		zap.String("Go OS/Arch", runtime.GOOS+"/"+runtime.GOARCH),
+	)
 }

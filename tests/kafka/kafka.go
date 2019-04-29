@@ -20,8 +20,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
@@ -39,7 +39,7 @@ var (
 
 func main() {
 	flag.Parse()
-	log.Debug("start run kafka test...")
+	log.S().Debug("start run kafka test...")
 
 	cfg := &reader.Config{
 		KafkaAddr: strings.Split(*kafkaAddr, ","),
@@ -77,8 +77,8 @@ func main() {
 	go func() {
 		err := ld.Run()
 		if err != nil {
-			log.Error(errors.ErrorStack(err))
-			log.Fatal(err)
+			log.S().Error(errors.ErrorStack(err))
+			log.S().Fatal(err)
 		}
 	}()
 
@@ -88,10 +88,10 @@ func main() {
 			select {
 			case msg := <-breader.Messages():
 				str := msg.Binlog.String()
-				log.Debugf("recv: %.2000s", str)
+				log.S().Debugf("recv: %.2000s", str)
 				ld.Input() <- loader.SlaveBinlogToTxn(msg.Binlog)
 			case txn := <-ld.Successes():
-				log.Debug("succ: ", txn)
+				log.S().Debug("succ: ", txn)
 			}
 		}
 	}()

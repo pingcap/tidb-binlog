@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 )
@@ -39,7 +39,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 
 	sql, arg, err := genDeleteSqls(table, db, count/10)
 	if err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.S().Error(errors.ErrorStack(err))
 	} else {
 		sqls = append(sqls, sql...)
 		args = append(args, arg...)
@@ -47,7 +47,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 
 	sql, arg, err = genInsertSqls(table, count)
 	if err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.S().Error(errors.ErrorStack(err))
 	} else {
 		sqls = append(sqls, sql...)
 		args = append(args, arg...)
@@ -55,7 +55,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 
 	sql, arg, err = genUpdateSqls(table, db, count/10)
 	if err != nil {
-		log.Error(errors.ErrorStack(err))
+		log.S().Error(errors.ErrorStack(err))
 	} else {
 		sqls = append(sqls, sql...)
 		args = append(args, arg...)
@@ -67,19 +67,19 @@ func doSqls(table *table, db *sql.DB, count int) {
 func execSqls(db *sql.DB, sqls []string, args [][]interface{}) {
 	txn, err := db.Begin()
 	if err != nil {
-		log.Fatalf(errors.ErrorStack(err))
+		log.S().Fatalf(errors.ErrorStack(err))
 	}
 
 	for i := range sqls {
 		_, err = txn.Exec(sqls[i], args[i]...)
 		if err != nil {
-			log.Error(errors.ErrorStack(err))
+			log.S().Error(errors.ErrorStack(err))
 		}
 	}
 
 	err = txn.Commit()
 	if err != nil {
-		log.Warning(errors.ErrorStack(err))
+		log.S().Warn(errors.ErrorStack(err))
 	}
 }
 
@@ -163,7 +163,7 @@ func doDDLProcess(table *table, db *sql.DB) {
 
 func doProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch int) {
 	if len(table.columns) <= 2 {
-		log.Fatal("column count must > 2, and the first and second column are for primary key")
+		log.S().Fatal("column count must > 2, and the first and second column are for primary key")
 	}
 
 	doDMLProcess(table, db, jobCount/2, workerCount, batch)

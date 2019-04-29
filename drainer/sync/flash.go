@@ -21,11 +21,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/zanmato1984/clickhouse"
+	"go.uber.org/zap"
 )
 
 var extraRowSize = 1024
@@ -79,28 +80,21 @@ func (batch *flashRowBatch) Size() int {
 func (batch *flashRowBatch) Flush(db *sql.DB) (commitTS int64, err error) {
 	for i := 0; i < pkgsql.MaxDMLRetryCount; i++ {
 		if i > 0 {
-			log.Warnf("[flush] Retrying %d flushing row batch %v in %d seconds", i, batch.sql, pkgsql.RetryWaitTime)
+			log.Warn("retrying flushing row batch", zap.String("sql", batch.sql), zap.Duration("RetryWaitTime", pkgsql.RetryWaitTime))
 			time.Sleep(pkgsql.RetryWaitTime)
 		}
 		commitTS, err = batch.flushInternal(db)
 		if err == nil {
 			return commitTS, nil
 		}
-		log.Warnf("[flush] Error %v when flushing row batch %v", err, batch.sql)
+		log.Warn("flushing row batch failed", zap.Error(err), zap.String("sql", batch.sql))
 	}
 
 	return commitTS, errors.Trace(err)
 }
 
 func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
-	log.Debugf("[flush] Flushing %d rows for \"%s\".", batch.Size(), batch.sql)
-	defer func() {
-		if err != nil {
-			log.Warnf("[flush] Flushing rows for \"%s\" failed due to error %v.", batch.sql, err)
-		} else {
-			log.Debugf("[flush] Flushed %d rows for \"%s\".", batch.Size(), batch.sql)
-		}
-	}()
+	log.Debug("flushing row batch", zap.Int("size", batch.Size()), zap.String("sql", batch.sql))
 
 	if batch.Size() == 0 {
 		return batch.latestCommitTS, nil
@@ -132,7 +126,7 @@ func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
 	if err != nil {
 		if ce, ok := err.(*clickhouse.Exception); ok {
 			// Stack trace from server side could be very helpful for triaging problems.
-			log.Error("[flush] ", ce.StackTrace)
+			log.Error("commit failed", zap.String("stack trace", ce.StackTrace))
 		}
 		return batch.latestCommitTS, errors.Trace(err)
 	}
@@ -215,8 +209,7 @@ func (e *FlashSyncer) Sync(item *Item) error {
 	defer e.Unlock()
 
 	if e.err != nil {
-		log.Errorf("[execute] Executor seeing error %v from the flush thread, exiting.", e.err)
-		return errors.Trace(e.err)
+		return errors.Annotate(e.err, "executor seeing error from the flush thread")
 	}
 
 	tiBinlog := item.Binlog
@@ -225,8 +218,7 @@ func (e *FlashSyncer) Sync(item *Item) error {
 		// Flush all row batches.
 		e.err = e.flushAll()
 		if e.err != nil {
-			log.Errorf("[execute] Executor seeing error %v when flushing, exiting.", e.err)
-			return errors.Trace(e.err)
+			return errors.Annotate(e.err, "executor seeing error when flushing")
 		}
 
 		sql, err := translator.GenFlashDDLSQL(string(tiBinlog.GetDdlQuery()), item.Schema)
@@ -286,12 +278,12 @@ func (e *FlashSyncer) Close() error {
 	// Could have had error in async flush goroutine, log it.
 	e.Lock()
 	if e.err != nil {
-		log.Error("[close] ", e.err)
+		log.Error("close see error", zap.Error(e.err))
 	}
 	e.Unlock()
 
 	// Wait for async flush goroutine to exit.
-	log.Info("[close] Waiting for flush thread to close.")
+	log.Info("Waiting for flush thread to close")
 	close(e.close)
 
 	hasError := false
@@ -299,7 +291,7 @@ func (e *FlashSyncer) Close() error {
 		err := db.Close()
 		if err != nil {
 			hasError = true
-			log.Error("[close] ", err)
+			log.Error("close db failed", zap.Error(err))
 		}
 	}
 	if hasError {
@@ -311,24 +303,24 @@ func (e *FlashSyncer) Close() error {
 
 func (e *FlashSyncer) flushRoutine() {
 	defer e.wg.Done()
-	log.Info("[flush_thread] Flush thread started.")
+	log.Info("Flush thread started.")
 	for {
 		select {
 		case <-e.close:
-			log.Info("[flush_thread] Flush thread closing.")
+			log.Info("Flush thread closing.")
 			return
 		case <-time.After(e.timeLimit):
 			e.Lock()
-			log.Debug("[flush_thread] Flush thread reached time limit, flushing.")
+			log.Debug("Flush thread reached time limit, flushing.")
 			if e.err != nil {
 				e.Unlock()
-				log.Errorf("[flush_thread] Flush thread seeing error %v from the executor, exiting.", errors.Trace(e.err))
+				log.Error("Flush thread seeing error from the executor, exiting", zap.Error(e.err))
 				return
 			}
 			err := e.flushAll()
 			if err != nil {
 				e.Unlock()
-				log.Errorf("[flush_thread] Flush thread seeing error %v when flushing, exiting.", errors.Trace(e.err))
+				log.Error("Flush thread seeing error when flushing, exiting.", zap.Error(e.err))
 				e.setErr(err)
 				return
 			}

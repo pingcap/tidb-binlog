@@ -24,8 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -34,6 +34,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
 )
 
@@ -113,7 +114,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		options = DefaultOptions()
 	}
 
-	log.Infof("options: %+v", options)
+	log.Info("NewAppendWithResolver", zap.Reflect("options", options))
 
 	valueDir := path.Join(dir, "value")
 	err = os.MkdirAll(valueDir, 0755)
@@ -170,7 +171,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 	append.handleSortItemQuit = append.handleSortItem(append.sortItems)
 	sorter := newSorter(func(item sortItem) {
-		log.Debugf("sorter get item: %+v", item)
+		log.Debug("sorter get item", zap.Reflect("item:", item))
 		append.sortItems <- item
 	})
 
@@ -185,7 +186,10 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		minPointer = append.handlePointer
 	}
 
-	log.Infof("gcTS: %v, maxCommitTS: %v, headPointer: %+v, handlePointer: %+v", append.gcTS, append.maxCommitTS, append.headPointer, append.handlePointer)
+	log.Info("Append info", zap.Int64("gcTS", append.gcTS),
+		zap.Int64("maxCommitTS", append.maxCommitTS),
+		zap.Reflect("headPointer", append.headPointer),
+		zap.Reflect("handlePointer", append.handlePointer))
 
 	toKV := append.writeToValueLog(writeCh)
 
@@ -227,7 +231,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 }
 
 func (a *Append) persistHandlePointer(item sortItem) error {
-	log.Debug("persist item: ", item)
+	log.Debug("persist item", zap.Reflect("item", item))
 	tsKey := encodeTSKey(item.commit)
 	pointerData, err := a.metadata.Get(tsKey, nil)
 	if err != nil {
@@ -279,7 +283,9 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 				// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
 				// or this should never happen
 				if item.commit < atomic.LoadInt64(&a.maxCommitTS) {
-					log.Warnf("sortItem's commit ts(%d) less than append.maxCommitTS(%d)", item.commit, a.maxCommitTS)
+					log.Warn("sortItem's commit ts less than append.maxCommitTS",
+						zap.Int64("ts", item.commit),
+						zap.Int64("maxCommitTS", a.maxCommitTS))
 					continue
 				}
 				atomic.StoreInt64(&a.maxCommitTS, item.commit)
@@ -288,7 +294,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 				if toSave == nil {
 					toSave = time.After(persistAtLeastTime)
 				}
-				log.Debug("get sort item: ", item)
+				log.Debug("get sort item", zap.Reflect("item", item))
 			case <-toSave:
 				err := a.persistHandlePointer(toSaveItem)
 				if err != nil {
@@ -327,14 +333,14 @@ func (a *Append) updateStatus() {
 		case <-updateLatest:
 			ts, err := pkgutil.QueryLatestTsFromPD(a.tiStore)
 			if err != nil {
-				log.Errorf("QueryLatestTSFromPD err: %v", err)
+				log.Error("QueryLatestTSFromPD failed", zap.Error(err))
 			} else {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		case <-updateSize:
 			size, err := getStorageSize(a.dir)
 			if err != nil {
-				log.Error("update sotrage size err: ", err)
+				log.Error("update sotrage size failed", zap.Error(err))
 			} else {
 				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
 				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
@@ -343,9 +349,9 @@ func (a *Append) updateStatus() {
 			var stats leveldb.DBStats
 			err := a.metadata.Stats(&stats)
 			if err != nil {
-				log.Error(err)
+				log.Error("get Stats failed", zap.Error(err))
 			} else {
-				log.Infof("DBStats: %+v", stats)
+				log.Info("DBStats", zap.Reflect("DBStats", stats))
 				if stats.WritePaused {
 					log.Warn("in WritePaused stat")
 				}
@@ -373,14 +379,14 @@ func (a *Append) resolve(startTS int64) bool {
 		return false
 	}
 
-	log.Warnf("unknown commit stats start ts: %d", startTS)
+	log.Warn("unknown commit stats", zap.Int64("start ts", startTS))
 
 	if pbinlog.GetDdlJobId() == 0 {
 		tikvQueryCount.Add(1.0)
 		primaryKey := pbinlog.GetPrewriteKey()
 		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
 		if err != nil {
-			log.Error(err)
+			log.Error("GetTxnStatus failed", zap.Error(err))
 			return false
 		}
 
@@ -395,7 +401,7 @@ func (a *Append) resolve(startTS int64) bool {
 
 			req := a.writeBinlog(cbinlog)
 			if req.err != nil {
-				log.Error(req.err)
+				log.Error("writeBinlog failed", zap.Error(req.err))
 				return false
 			}
 
@@ -410,16 +416,18 @@ func (a *Append) resolve(startTS int64) bool {
 
 			err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
 			if err != nil {
-				log.Error(err)
+				log.Error("put into metadata failed", zap.Error(req.err))
 				return false
 			}
 		}
 
-		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.CommitTS())
+		log.Info("known txn is committed from tikv",
+			zap.Int64("start ts", startTS),
+			zap.Uint64("commit ts", status.CommitTS()))
 		return true
 	}
 
-	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTS)
+	log.Error("some prewrite DDL items remain single after waiting for a long time", zap.Int64("startTS", startTS))
 	return false
 }
 
@@ -510,12 +518,12 @@ func (a *Append) Close() error {
 
 	err := a.metadata.Close()
 	if err != nil {
-		log.Error(err)
+		log.Error("close metadata failed", zap.Error(err))
 	}
 
 	err = a.vlog.close()
 	if err != nil {
-		log.Error(err)
+		log.Error("close vlog failed", zap.Error(err))
 	}
 
 	return err
@@ -525,7 +533,7 @@ func (a *Append) Close() error {
 func (a *Append) GCTS(ts int64) {
 	lastTS := atomic.LoadInt64(&a.gcTS)
 	if ts <= lastTS {
-		log.Infof("ignore gc ts: %d, last gc ts: %d", ts, lastTS)
+		log.Info("ignore gc request", zap.Int64("ts", ts), zap.Int64("lastTS", lastTS))
 		return
 	}
 
@@ -549,7 +557,7 @@ func (a *Append) doGCTS(ts int64) {
 		if batch.Len() == 1024 {
 			err := a.metadata.Write(batch, nil)
 			if err != nil {
-				log.Error(err)
+				log.Error("write batch failed", zap.Error(err))
 			}
 			batch.Reset()
 		}
@@ -558,7 +566,7 @@ func (a *Append) doGCTS(ts int64) {
 	if batch.Len() > 0 {
 		err := a.metadata.Write(batch, nil)
 		if err != nil {
-			log.Error(err)
+			log.Error("write batch failed", zap.Error(err))
 		}
 	}
 
@@ -611,7 +619,7 @@ func (a *Append) writeToSorter(reqs chan *request) {
 	defer a.wg.Done()
 
 	for req := range reqs {
-		log.Debugf("write request to sorter: %s", req)
+		log.Debug("write request to sorter", zap.Reflect("request", req))
 		var item sortItem
 		item.start = req.startTS
 		item.commit = req.commitTS
@@ -634,7 +642,7 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 			batch.Reset()
 			var lastPointer []byte
 			for _, req := range bufReqs {
-				log.Debugf("write request to kv: %s", req)
+				log.Debug("write request to kv", zap.Reflect("request", req))
 				var err error
 
 				pointer, err := req.valuePointer.MarshalBinary()
@@ -653,7 +661,7 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 				// we just retry of quit when Append is closed
 				if err != nil {
-					log.Error(err)
+					log.Error("write batch failed", zap.Error(err))
 					if a.isClosed() {
 						return
 					}
@@ -726,7 +734,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			if len(reqs) == 0 {
 				return
 			}
-			log.Debugf("write requests to value log: %v", reqs)
+			log.Debug("write requests to value log", zap.Reflect("requests", reqs))
 			beginTime := time.Now()
 			writeBinlogSizeHistogram.WithLabelValues("batch").Observe(float64(size))
 
@@ -742,7 +750,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			}
 
 			for _, req := range reqs {
-				log.Debug(req.startTS, req.commitTS, " done")
+				log.Debug("request done", zap.Int64("startTS", req.startTS), zap.Int64("commitTS", req.commitTS))
 				req.wg.Done()
 				// payload is useless anymore, let it GC ASAP
 				req.payload = nil
@@ -860,7 +868,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 // PullCommitBinlog return commit binlog  > last
 func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
-	log.Debug("new PullCommitBinlog last: ", last)
+	log.Debug("new PullCommitBinlog", zap.Int64("last ts", last))
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() {
@@ -873,7 +881,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if last < gcTS {
-		log.Warnf("last ts %d less than gcTS %d", last, gcTS)
+		log.Warn("last ts less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
 		last = gcTS
 	}
 
@@ -904,11 +912,11 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					panic(err)
 				}
 
-				log.Debugf("get ts: %d, pointer: %v", decodeTSKey(iter.Key()), vp)
+				log.Debug("get binlog", zap.Int64("ts", decodeTSKey(iter.Key())), zap.Reflect("pointer", vp))
 
 				value, err := a.vlog.readValue(vp)
 				if err != nil {
-					log.Error(err)
+					log.Error("read value failed", zap.Error(err))
 					iter.Release()
 					errorCount.WithLabelValues("read_value").Add(1.0)
 					return
@@ -917,7 +925,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				binlog := new(pb.Binlog)
 				err = binlog.Unmarshal(value)
 				if err != nil {
-					log.Error(err)
+					log.Error("Unmarshal Binlog failed", zap.Error(err))
 					iter.Release()
 					return
 				}
@@ -928,12 +936,12 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 				if binlog.CommitTs == binlog.StartTs {
 					// this should be a fake binlog, drainer should ignore this when push binlog to the downstream
-					log.Debug("get fake c binlog: ", binlog.CommitTs)
+					log.Debug("get fake c binlog", zap.Int64("CommitTS", binlog.CommitTs))
 				} else {
 					err = a.feedPreWriteValue(binlog)
 					if err != nil {
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
-						log.Error(err)
+						log.Error("feed pre write value failed", zap.Error(err))
 						iter.Release()
 						return
 					}
@@ -941,7 +949,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 				value, err = binlog.Marshal()
 				if err != nil {
-					log.Error(err)
+					log.Error("marshal failed", zap.Error(err))
 					iter.Release()
 					return
 				}
@@ -1087,7 +1095,7 @@ func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 		setDefaultStorageConfig(cf)
 	}
 
-	log.Infof("Storage config: %+v", cf)
+	log.Info("open metadata db", zap.Reflect("config", cf))
 
 	var opt opt.Options
 	opt.BlockCacheCapacity = cf.BlockCacheCapacity

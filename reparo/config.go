@@ -21,13 +21,14 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 const (
@@ -52,9 +53,8 @@ type Config struct {
 	IgnoreTables []filter.TableName `toml:"replicate-ignore-table" json:"replicate-ignore-table"`
 	IgnoreDBs    []string           `toml:"replicate-ignore-db" json:"replicate-ignore-db"`
 
-	LogFile   string `toml:"log-file" json:"log-file"`
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
-	LogLevel  string `toml:"log-level" json:"log-level"`
+	LogFile  string `toml:"log-file" json:"log-file"`
+	LogLevel string `toml:"log-level" json:"log-level"`
 
 	configFile   string
 	printVersion bool
@@ -75,7 +75,6 @@ func NewConfig() *Config {
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
@@ -96,7 +95,7 @@ func (c *Config) Parse(args []string) (err error) {
 	}
 
 	if c.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		os.Exit(0)
 	}
 
@@ -130,14 +129,14 @@ func (c *Config) Parse(args []string) (err error) {
 			return errors.Trace(err)
 		}
 
-		log.Infof("Parsed start TSO %d", c.StartTSO)
+		log.Info("Parsed start TSO", zap.Int64("ts", c.StartTSO))
 	}
 	if c.StopDatetime != "" {
 		c.StopTSO, err = dateTimeToTSO(c.StopDatetime)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Infof("Parsed stop TSO %d", c.StopTSO)
+		log.Info("Parsed stop TSO", zap.Int64("ts", c.StopTSO))
 	}
 
 	return errors.Trace(c.validate())
@@ -185,18 +184,4 @@ func dateTimeToTSO(dateTimeStr string) (int64, error) {
 	}
 
 	return int64(oracle.ComposeTS(t.Unix()*1000, 0)), nil
-}
-
-// InitLogger initalizes Pump's logger.
-func InitLogger(c *Config) {
-	log.SetLevelByString(c.LogLevel)
-
-	if len(c.LogFile) > 0 {
-		log.SetOutputByName(c.LogFile)
-		if c.LogRotate == "hour" {
-			log.SetRotateByHour()
-		} else {
-			log.SetRotateByDay()
-		}
-	}
 }

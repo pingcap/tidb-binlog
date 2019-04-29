@@ -18,7 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // DMLType represents the dml type
@@ -265,7 +266,7 @@ func (dml *DML) sql() (sql string, args []interface{}) {
 		return dml.deleteSQL()
 	}
 
-	log.Debugf("dml: %+v sql: %s, args: %v", dml, sql, args)
+	log.Debug("get sql for dml", zap.Reflect("dml", dml), zap.String("sql", sql), zap.Reflect("args", args))
 
 	return
 }

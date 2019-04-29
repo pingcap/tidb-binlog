@@ -20,8 +20,8 @@ import (
 	"strings"
 	gotime "time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	tipb "github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 )
 
 // GenFlashSQLs generate the SQL need to execute syncing this binlog to Flash
@@ -541,7 +542,7 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 	for _, option := range colDef.Options {
 		if option.Tp == ast.ColumnOptionDefaultValue {
 			if defaultValue, shouldQuote, err := formatFlashLiteral(option.Expr, colDef.Tp); err != nil {
-				log.Warnf("Cannot compile column %s default value: %s", cName, err)
+				log.Warn("Cannot compile column", zap.String("name", cName), zap.Error(err))
 			} else {
 				if shouldQuote {
 					// Do final quote for string types. As we want to quote values like -255, which is hard to quote in lower level.

@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
@@ -41,6 +41,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/unrolled/render"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -48,7 +49,6 @@ import (
 var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
-	clusterID         uint64
 )
 
 type drainerKeyType string
@@ -104,7 +104,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, drainerKeyType("compressor"), cfg.Compressor)
 
-	clusterID = pdCli.GetClusterID(ctx)
+	clusterID := pdCli.GetClusterID(ctx)
+	log.Info("get cluster id from pd", zap.Uint64("id", clusterID))
 	// update latestTS and latestTime
 	latestTS, err := util.GetTSO(pdCli)
 	if err != nil {
@@ -113,7 +114,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	latestTime := time.Now()
 
 	cfg.SyncerCfg.To.ClusterID = clusterID
-	log.Infof("clusterID of drainer server is %v", clusterID)
 	pdCli.Close()
 
 	cpCfg := GenCheckPointCfg(cfg, clusterID)
@@ -199,7 +199,7 @@ func (s *Server) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.Noti
 
 	err := s.collector.Notify()
 	if err != nil {
-		log.Errorf("grpc call notify error: %v", err)
+		log.Error("grpc call notify failed", zap.Error(err))
 	}
 	return nil, errors.Trace(err)
 }
@@ -215,7 +215,7 @@ func (s *Server) StartCollect() {
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Errorf("start collect panic. err: %s, stack: %s", err, debug.Stack())
+				log.Error("start collect panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
 			}
 
 			log.Info("collect goroutine exited")
@@ -235,7 +235,7 @@ func (s *Server) StartMetrics() {
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Errorf("start metrics panic. err: %s, stack: %s", err, debug.Stack())
+				log.Error("start metircs panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
 			}
 
 			log.Info("metrics goroutine exited")
@@ -251,7 +251,7 @@ func (s *Server) StartSyncer() {
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Errorf("start syncer panic. err: %s, stack: %s", err, debug.Stack())
+				log.Error("start syner panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
 			}
 
 			log.Info("syncer goroutine exited")
@@ -260,7 +260,7 @@ func (s *Server) StartSyncer() {
 		}()
 		err := s.syncer.Start()
 		if err != nil {
-			log.Errorf("syncer exited, error %v", errors.ErrorStack(err))
+			log.Error("syncer exited abnormal", zap.Error(err))
 		}
 	}()
 }
@@ -303,13 +303,13 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Infof("register success, this drainer's node id is %s", s.ID)
+	log.Info("register success", zap.String("drainer node id", s.ID))
 
 	// start heartbeat
 	errc := s.heartbeat(s.ctx)
 	go func() {
 		for err := range errc {
-			log.Errorf("send heart error %v", err)
+			log.Error("send heart failed", zap.Error(err))
 		}
 	}()
 
@@ -349,7 +349,7 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
-	log.Infof("start to server request on %s", s.tcpAddr)
+	log.Info("start to server request", zap.String("addr", s.tcpAddr))
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
 		return errors.Trace(err)
 	}
@@ -365,7 +365,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 
 	nodeID := mux.Vars(r)["nodeID"]
 	action := mux.Vars(r)["action"]
-	log.Infof("node %s receive action %s", nodeID, action)
+	log.Info("receive apply action request", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.ID {
 		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
@@ -420,11 +420,11 @@ func (s *Server) commitStatus() {
 
 	err := s.updateStatus()
 	if err != nil {
-		log.Errorf("%s failed to update status", s.ID)
+		log.Error("update status failed", zap.String("id", s.ID))
 		return
 	}
 
-	log.Infof("%s has already update status ", s.ID)
+	log.Info("has already update status", zap.String("id", s.ID))
 }
 
 func (s *Server) updateStatus() error {
@@ -463,7 +463,7 @@ func (s *Server) Close() {
 	// close the CheckPoint
 	err := s.cp.Close()
 	if err != nil {
-		log.Errorf("close checkpoint error %s", errors.ErrorStack(err))
+		log.Error("close checkpoint failed", zap.Error(err))
 	}
 
 	// stop gRPC server

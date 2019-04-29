@@ -19,7 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 const (
@@ -81,7 +82,7 @@ func NewHeapStrategy() *HeapStrategy {
 // Push implements MergeStrategy's Push function
 func (h *HeapStrategy) Push(item MergeItem) {
 	if _, ok := h.sourceIDs[item.GetSourceID()]; ok {
-		log.Errorf("should not push sourceID %s's item", item.GetSourceID())
+		log.Error("should not push item", zap.String("sourceID", item.GetSourceID()))
 	}
 
 	heap.Push(h.items, item)
@@ -121,7 +122,7 @@ func NewNormalStrategy() *NormalStrategy {
 // Push implements MergeStrategy's Push function
 func (n *NormalStrategy) Push(item MergeItem) {
 	if _, ok := n.items[item.GetSourceID()]; ok {
-		log.Errorf("should not push sourceID %s's item", item.GetSourceID())
+		log.Error("should not push item", zap.String("source id", item.GetSourceID()))
 	}
 	n.items[item.GetSourceID()] = item
 }
@@ -184,7 +185,7 @@ func NewMerger(ts int64, strategy string, sources ...MergeSource) *Merger {
 	case normalStrategy:
 		mergeStrategy = NewNormalStrategy()
 	default:
-		log.Errorf("unsupport strategy %s, use heap instead", strategy)
+		log.Error("unsupport strategy, use heap instead", zap.String("strategy", strategy))
 		mergeStrategy = NewHeapStrategy()
 	}
 
@@ -218,7 +219,7 @@ func (m *Merger) isClosed() bool {
 func (m *Merger) AddSource(source MergeSource) {
 	m.Lock()
 	m.sources[source.ID] = source
-	log.Infof("merger add source %s", source.ID)
+	log.Info("merger add source", zap.String("source id", source.ID))
 	m.setSourceChanged()
 	m.Unlock()
 }
@@ -227,7 +228,7 @@ func (m *Merger) AddSource(source MergeSource) {
 func (m *Merger) RemoveSource(sourceID string) {
 	m.Lock()
 	delete(m.sources, sourceID)
-	log.Infof("merger remove source %s", sourceID)
+	log.Info("merger remove source", zap.String("source id", sourceID))
 	m.setSourceChanged()
 	m.Unlock()
 }
@@ -269,7 +270,7 @@ func (m *Merger) run() {
 			}
 
 			if source.Source == nil {
-				log.Warnf("can't read binlog from pump %s", sourceID)
+				log.Warn("can't read binlog from pump", zap.String("source id", sourceID))
 				skip = true
 			} else {
 				binlog, ok := <-source.Source
@@ -279,7 +280,7 @@ func (m *Merger) run() {
 					m.Unlock()
 				} else {
 					// the source is closing.
-					log.Warnf("can't read binlog from pump %s", sourceID)
+					log.Warn("can't read binlog from pump", zap.String("source id", sourceID))
 					skip = true
 				}
 			}
@@ -315,7 +316,9 @@ func (m *Merger) run() {
 
 		if minBinlog.GetCommitTs() <= latestTS {
 			disorderBinlogCount.Add(1)
-			log.Errorf("binlog's commit ts is %d, and is less than the last ts %d", minBinlog.GetCommitTs(), latestTS)
+			log.Error("binlog's commit ts less than the last ts",
+				zap.Int64("commit ts", minBinlog.GetCommitTs()),
+				zap.Int64("last ts", latestTS))
 		} else {
 			m.output <- minBinlog
 			latestTS = minBinlog.GetCommitTs()

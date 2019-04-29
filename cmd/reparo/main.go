@@ -23,10 +23,11 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/ngaut/log"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	reparo "github.com/pingcap/tidb-binlog/reparo"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -35,11 +36,11 @@ func main() {
 
 	cfg := reparo.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'reparo --help'.", err)
+		log.Fatal("verifying flags failed. See 'reparo --help'.", zap.Error(err))
 	}
 
-	reparo.InitLogger(cfg)
-	version.PrintVersionInfo()
+	util.InitLogger(cfg.LogLevel, cfg.LogFile)
+	version.PrintVersionInfo("Reparo")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -50,20 +51,20 @@ func main() {
 
 	r, err := reparo.New(cfg)
 	if err != nil {
-		log.Fatalf("create reparo err %v", errors.ErrorStack(err))
+		log.Fatal("create reparo failed", zap.Error(err))
 	}
 
 	go func() {
 		sig := <-sc
-		log.Infof("got signal [%v] to exit.", sig)
+		log.Info("got signal to exit.", zap.Stringer("signale", sig))
 		r.Close()
 		os.Exit(0)
 	}()
 
 	if err := r.Process(); err != nil {
-		log.Errorf("reparo processing error, %v", errors.ErrorStack(err))
+		log.Error("reparo processing failed", zap.Error(err))
 	}
 	if err := r.Close(); err != nil {
-		log.Fatalf("close err %v", err)
+		log.Fatal("close reparo failed", zap.Error(err))
 	}
 }

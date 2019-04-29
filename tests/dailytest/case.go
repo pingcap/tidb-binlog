@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 )
 
 // test different data type of mysql
@@ -133,7 +133,7 @@ func (tr *testRunner) execSQLs(sqls []string) {
 	RunTest(tr.src, tr.dst, tr.schema, func(src *sql.DB) {
 		err := execSQLs(tr.src, sqls)
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	})
 }
@@ -152,7 +152,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(func(src *sql.DB) {
 		err := execSQLs(src, case3)
 		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	})
 	tr.execSQLs(case3Clean)
@@ -166,52 +166,52 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 		err := updatePKUK(src, 1000)
 		if err != nil {
-			log.Fatal(errors.ErrorStack(err))
+			log.S().Fatal(errors.ErrorStack(err))
 		}
 
-		log.Info(" updatePKUK take: ", time.Since(start))
+		log.S().Info(" updatePKUK take: ", time.Since(start))
 	})
 
 	// swap unique index value
 	tr.run(func(src *sql.DB) {
 		_, err := src.Exec("create table uindex(id int primary key, a1 int unique)")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		_, err = src.Exec("insert into uindex(id, a1) values(1, 10),(2,20)")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		tx, err := src.Begin()
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		err = tx.Commit()
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		_, err = src.Exec("drop table uindex")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	})
 
@@ -219,12 +219,12 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(func(src *sql.DB) {
 		_, err := src.Query("create table binlog_big(id int primary key, data longtext);")
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		tx, err := src.Begin()
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 		// insert 50 * 1M
 		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
@@ -232,12 +232,12 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		for i := 0; i < 50; i++ {
 			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
 			if err != nil {
-				log.Fatal(err)
+				log.S().Fatal(err)
 			}
 		}
 		err = tx.Commit()
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
@@ -256,7 +256,7 @@ CREATE TABLE gen_contacts (
 	initial VARCHAR(101) GENERATED ALWAYS AS (CONCAT(LEFT(first_name, 1),' ',LEFT(last_name,1))) STORED
 );`)
 	if err != nil {
-		log.Fatal(err)
+		log.S().Fatal(err)
 	}
 
 	insertSQL := "INSERT INTO gen_contacts(first_name, last_name) VALUES(?, ?);"
@@ -264,19 +264,19 @@ CREATE TABLE gen_contacts (
 	for i := 0; i < 64; i++ {
 		_, err := db.Query(insertSQL, fmt.Sprintf("John%d", i), fmt.Sprintf("Dow%d", i))
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		idxToUpdate := rand.Intn(i + 1)
 		_, err = db.Query(updateSQL, fmt.Sprintf("John%d", idxToUpdate))
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	}
 	delSQL := "DELETE FROM gen_contacts WHERE fullname = ?"
 	for i := 0; i < 10; i++ {
 		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i, i)); err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	}
 }
@@ -327,7 +327,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 				continue
 			}
 			for hasPK(pk) {
-				log.Info(pks)
+				log.S().Info(pks)
 				pk = rand.Intn(maxKey)
 			}
 			sql = fmt.Sprintf("insert into pkuk(pk, uk, v) values(%d,%d,%d)", pk, uk, v)
@@ -336,7 +336,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 				continue
 			}
 			for !hasPK(oldPK) {
-				log.Info(pks)
+				log.S().Info(pks)
 				oldPK = rand.Intn(maxKey)
 			}
 			sql = fmt.Sprintf("update pkuk set pk = %d, uk = %d, v = %d where pk = %d", pk, uk, v, oldPK)
@@ -345,7 +345,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 				continue
 			}
 			for !hasPK(pk) {
-				log.Info(pks)
+				log.S().Info(pks)
 				pk = rand.Intn(maxKey)
 			}
 			sql = fmt.Sprintf("delete from pkuk where pk = %d", pk)

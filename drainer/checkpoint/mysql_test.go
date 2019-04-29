@@ -126,7 +126,7 @@ func (s *loadSuite) TestShouldUseInitialCommitTs(c *C) {
 	mock.ExpectQuery(".*").WillReturnError(errors.New("test"))
 	err = cp.Load()
 	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "test")
+	c.Assert(err, ErrorMatches, ".*test.*")
 	c.Assert(cp.CommitTS, Equals, cp.initialCommitTS)
 }
 
@@ -143,7 +143,7 @@ func (s *newMysqlSuite) TestCannotOpenDB(c *C) {
 
 	_, err := newMysql("tidb", &Config{})
 	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "no db")
+	c.Assert(err, ErrorMatches, ".*no db.*")
 }
 
 func (s *newMysqlSuite) TestCreationErrors(c *C) {
@@ -159,12 +159,12 @@ func (s *newMysqlSuite) TestCreationErrors(c *C) {
 	mock.ExpectExec("create schema.*").WillReturnError(errors.New("fail schema"))
 	_, err = newMysql("tidb", &Config{})
 	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "fail schema")
+	c.Assert(err, ErrorMatches, ".*fail schema.*")
 
 	mock.ExpectExec("create schema.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("create table.*").WillReturnError(errors.New("fail table"))
 
 	_, err = newMysql("tidb", &Config{})
 	c.Assert(err, NotNil)
-	c.Assert(err, ErrorMatches, "fail table")
+	c.Assert(err, ErrorMatches, ".*fail table.*")
 }

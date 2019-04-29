@@ -22,9 +22,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 )
 
 /*
@@ -132,7 +133,7 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 	}
 
 	logReporter := func(bytes int, reason error) {
-		log.Warnf("skip %d bytes because of %v", bytes, reason)
+		log.Warn("skip bytes", zap.Int("count", bytes), zap.String("reason", reason.Error()))
 	}
 
 	lf = &logFile{
@@ -259,7 +260,7 @@ func (lf *logFile) readRecord(offset int64) (record *Record, err error) {
 		return
 	}
 
-	log.Debugf("offset: %d after read header record: %+v", offset-headerLength, record)
+	log.Debug("after read header", zap.Int64("offset", offset-headerLength), zap.Reflect("record", record))
 
 	if record.magic != recordMagic {
 		return nil, ErrWrongMagic

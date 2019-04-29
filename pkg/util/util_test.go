@@ -14,22 +14,20 @@
 package util
 
 import (
-	"bytes"
 	"errors"
 	"net"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap/zapcore"
 )
 
 // Hook up gocheck into the "go test" runner.
@@ -90,23 +88,23 @@ func (s *utilSuite) TestToColumnTypeMap(c *C) {
 }
 
 func (s *utilSuite) TestStdLogger(c *C) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer func() {
-		log.SetOutput(os.Stderr)
-	}()
+	var logHook LogHook
+	logHook.SetUp()
+	oldLevel := log.GetLevel()
+	log.SetLevel(zapcore.InfoLevel)
+	defer log.SetLevel(oldLevel)
+	defer logHook.TearDown()
 
 	logger := NewStdLogger("hola:")
 	logger.Print("Hello,")
 	logger.Printf(" %d!", 42)
 	logger.Println("Goodbye!")
 
-	msg := buf.String()
-	lines := strings.Split(strings.TrimSpace(msg), "\n")
-	c.Assert(lines, HasLen, 3)
-	c.Assert(lines[0], Matches, ".*hola:Hello,.*")
-	c.Assert(lines[1], Matches, ".*hola: 42!.*")
-	c.Assert(lines[2], Matches, ".*hola:Goodbye!.*")
+	entrys := logHook.Entrys
+	c.Assert(entrys, HasLen, 3)
+	c.Assert(entrys[0].Message, Matches, ".*hola:Hello,.*")
+	c.Assert(entrys[1].Message, Matches, ".*hola: 42!.*")
+	c.Assert(entrys[2].Message, Matches, ".*hola:Goodbye!.*")
 }
 
 type getAddrIPSuite struct{}

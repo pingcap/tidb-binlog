@@ -18,14 +18,15 @@ import (
 	"net"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap"
 )
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
@@ -78,7 +79,7 @@ func getAddrDefaultIP(addr net.Addr) string {
 func DefaultListenAddr(port int32) string {
 	defaultIP, err := DefaultIP()
 	if err != nil {
-		log.Infof("get default ip err: %v, use: %s", err, defaultIP)
+		log.Info("get default ip failed", zap.Error(err), zap.String("use", defaultIP))
 	}
 	return fmt.Sprintf("%s:%d", defaultIP, port)
 }
@@ -104,8 +105,9 @@ func NewStdLogger(prefix string) StdLogger {
 }
 
 func (l StdLogger) emit(msg string) {
-	logger := log.Logger()
-	logger.Output(2, l.prefix+msg)
+	logger := log.L().WithOptions(zap.AddCallerSkip(2))
+	// log as info level
+	logger.Sugar().Info(l.prefix + msg)
 }
 
 // Print implements samara.StdLogger
@@ -120,7 +122,7 @@ func (l StdLogger) Printf(format string, v ...interface{}) {
 
 // Println implements samara.StdLogger
 func (l StdLogger) Println(v ...interface{}) {
-	l.emit(fmt.Sprintln(v...))
+	l.emit(fmt.Sprint(v...))
 }
 
 // ToColumnTypeMap return a map index by column id
@@ -142,7 +144,7 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 			break
 		}
 
-		log.Errorf("%s: %v", errStr, err)
+		log.Error(errStr, zap.Error(err))
 		time.Sleep(sleepTime)
 	}
 
@@ -153,7 +155,7 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	version, err := tiStore.CurrentVersion()
 	if err != nil {
-		log.Errorf("get current version error: %v", err)
+		log.Error("get current version failed", zap.Error(err))
 		return 0, errors.Trace(err)
 	}
 

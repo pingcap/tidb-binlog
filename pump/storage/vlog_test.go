@@ -21,14 +21,12 @@ import (
 	"time"
 
 	fuzz "github.com/google/gofuzz"
-	"github.com/ngaut/log"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 func init() {
 	rand.Seed(time.Now().Unix())
-	log.SetLevel(log.LOG_LEVEL_ERROR)
 }
 
 type VlogSuit struct{}

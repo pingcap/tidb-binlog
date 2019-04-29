@@ -19,8 +19,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 func flagToEnv(prefix, name string) string {
@@ -42,7 +43,7 @@ func SetFlagsFromEnv(prefix string, fs *flag.FlagSet) error {
 	fs.VisitAll(func(f *flag.Flag) {
 		err = setFlagFromEnv(fs, prefix, f.Name, usedEnvKey, alreadySet)
 		if err != nil {
-			log.Error(err)
+			log.Error("setFlagFromEnv failed", zap.Error(err))
 		}
 	})
 
@@ -62,7 +63,10 @@ func setFlagFromEnv(fs flagSetter, prefix, fname string, usedEnvKey, alreadySet 
 			if serr := fs.Set(fname, val); serr != nil {
 				return errors.Errorf("invalid environment value %q for %s: %v", val, key, serr)
 			}
-			log.Infof("recognized and used environment variable %s=%s flag name: %s", key, val, fname)
+			log.Info("recognized and used environment variable",
+				zap.String("key", key),
+				zap.String("val", val),
+				zap.String("flag", fname))
 		}
 	}
 	return nil

@@ -19,9 +19,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
+	"go.uber.org/zap"
 )
 
 var (
@@ -78,7 +79,7 @@ type metricClient struct {
 
 // Start run a loop of pushing metrics to Prometheus Pushgateway.
 func (mc *metricClient) Start(ctx context.Context, port int) {
-	log.Debugf("start prometheus metrics client, addr=%s, internal=%ds", mc.addr, mc.interval)
+	log.Debug("start prometheus metrics client", zap.String("addr", mc.addr), zap.Int("interval second", mc.interval))
 	for {
 		select {
 		case <-ctx.Done():
@@ -92,7 +93,7 @@ func (mc *metricClient) Start(ctx context.Context, port int) {
 				Registry,
 			)
 			if err != nil {
-				log.Errorf("could not push metrics to Prometheus Pushgateway: %v", err)
+				log.Error("could not push metrics to Prometheus Pushgateway", zap.Error(err))
 			}
 		}
 	}

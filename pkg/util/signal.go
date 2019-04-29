@@ -19,7 +19,10 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/ngaut/log"
+	stdlog "log"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // SetupSignalHandler setup signal handler
@@ -33,7 +36,7 @@ func SetupSignalHandler(shudownFunc func(sig os.Signal)) {
 			sig := <-usrDefSignalChan
 			if sig == syscall.SIGUSR1 {
 				stackLen := runtime.Stack(buf, true)
-				log.Infof("\n=== Got signal [%s] to dump goroutine stack. ===\n%s\n=== Finished dumping goroutine stack. ===\n", sig, buf[:stackLen])
+				stdlog.Printf("\n=== Got signal [%s] to dump goroutine stack. ===\n%s\n=== Finished dumping goroutine stack. ===\n", sig, buf[:stackLen])
 			}
 		}
 	}()
@@ -47,7 +50,7 @@ func SetupSignalHandler(shudownFunc func(sig os.Signal)) {
 
 	go func() {
 		sig := <-closeSignalChan
-		log.Infof("Got signal [%s] to exit.", sig)
+		log.Info("Got signal to exit.", zap.Stringer("signal", sig))
 		shudownFunc(sig)
 	}()
 }

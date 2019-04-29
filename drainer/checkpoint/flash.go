@@ -20,10 +20,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"go.uber.org/zap"
 )
 
 // FlashCheckPoint is a local savepoint struct for flash
@@ -75,7 +76,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 
 	db, err := openCH(hostAndPorts[0].Host, hostAndPorts[0].Port, cfg.Db.User, cfg.Db.Password, "", 0)
 	if err != nil {
-		log.Errorf("open database error %v", err)
+		log.Error("open database failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
@@ -91,13 +92,13 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)
 	if _, err = db.Exec(sql); err != nil {
-		log.Errorf("Create database error %v", err)
+		log.Error("Create database failed", zap.String("sql", sql), zap.Error(err))
 		return sp, errors.Trace(err)
 	}
 
 	sql = fmt.Sprintf("ATTACH TABLE IF NOT EXISTS `%s`.`%s`(`clusterid` UInt64, `checkpoint` String) ENGINE MutableMergeTree((`clusterid`), 8192)", sp.schema, sp.table)
 	if _, err = db.Exec(sql); err != nil {
-		log.Errorf("Create table error %v", err)
+		log.Error("Create table failed", zap.String("sql", sql), zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
@@ -117,7 +118,7 @@ func (sp *FlashCheckPoint) Load() error {
 	sql := fmt.Sprintf("SELECT `checkpoint` from `%s`.`%s` WHERE `clusterid` = %d", sp.schema, sp.table, sp.clusterID)
 	rows, err := sp.db.Query(sql)
 	if err != nil {
-		log.Errorf("select checkPoint error %v", err)
+		log.Error("select checkPoint failed", zap.String("sql", sql), zap.Error(err))
 		return errors.Trace(err)
 	}
 
@@ -125,7 +126,7 @@ func (sp *FlashCheckPoint) Load() error {
 	for rows.Next() {
 		err = rows.Scan(&str)
 		if err != nil {
-			log.Errorf("rows Scan error %v", err)
+			log.Error("rows Scan failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 	}
@@ -170,7 +171,6 @@ func (sp *FlashCheckPoint) Save(ts int64) error {
 
 	b, err := json.Marshal(sp)
 	if err != nil {
-		log.Errorf("Json Marshal error %v", err)
 		return errors.Trace(err)
 	}
 
