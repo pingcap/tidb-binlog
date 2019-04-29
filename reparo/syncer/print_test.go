@@ -16,7 +16,20 @@ func (s *testPrintSuite) TestPrintSyncer(c *check.C) {
 	syncer, err := newPrintSyncer()
 	c.Assert(err, check.IsNil)
 
-	syncTest(c, Syncer(syncer))
+	out := capturer.CaptureStdout(func() {
+		syncTest(c, Syncer(syncer))
+	})
+
+	c.Assert(out, check.Equals,
+		"DDL query: create database test;\n"+
+			"schema: test; table: t1; type: Insert\n"+
+			"a(int): 1\n"+
+			"b(varchar): test\n"+
+			"schema: test; table: t1; type: Delete\n"+
+			"a(int): 1\n"+
+			"b(varchar): test\n"+
+			"schema: test; table: t1; type: Update\n"+
+			"c(varchar): test => abc\n")
 
 	err = syncer.Close()
 	c.Assert(err, check.IsNil)
