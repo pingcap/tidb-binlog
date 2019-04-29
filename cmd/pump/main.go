@@ -24,11 +24,11 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/ngaut/log"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/pump"
+	"go.uber.org/zap"
 	_ "google.golang.org/grpc/encoding/gzip"
 )
 
@@ -38,15 +38,15 @@ func main() {
 
 	cfg := pump.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("verifying flags error, %v. See 'pump --help'.", errors.ErrorStack(err))
+		log.Fatal("verifying flags failed. See 'pump --help'.", zap.Error(err))
 	}
 
-	util.InitLogger(cfg.LogLevel, cfg.LogFile, cfg.LogRotate)
-	version.PrintVersionInfo()
+	util.InitLogger(cfg.LogLevel, cfg.LogFile)
+	version.PrintVersionInfo("Pump")
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {
-		log.Fatalf("creating pump server error, %v", errors.ErrorStack(err))
+		log.Fatal("creating pump server failed", zap.Error(err))
 	}
 
 	sc := make(chan os.Signal, 1)
@@ -60,7 +60,7 @@ func main() {
 
 	go func() {
 		sig := <-sc
-		log.Infof("got signal [%d] to exit.", sig)
+		log.Info("got signal to exit.", zap.Stringer("signal", sig))
 		wg.Add(1)
 		p.Close()
 		log.Info("pump is closed")
@@ -69,7 +69,7 @@ func main() {
 
 	// Start will block until the server is closed
 	if err := p.Start(); err != nil {
-		log.Errorf("pump server error, %v", err)
+		log.Error("start pump server failed", zap.Error(err))
 		// exit when start fail
 		os.Exit(2)
 	}

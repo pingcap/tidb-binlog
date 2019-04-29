@@ -67,7 +67,6 @@ type Config struct {
 	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	GC                int             `toml:"gc" json:"gc"`
 	LogFile           string          `toml:"log-file" json:"log-file"`
-	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
 	Security          security.Config `toml:"security" json:"security"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
@@ -107,7 +106,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.configFile, "config", "", "path to the pump configuration file")
 	fs.BoolVar(&cfg.printVersion, "V", false, "print version information and exit")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.IntVar(&cfg.GenFakeBinlogInterval, "fake-binlog-interval", defaultGenFakeBinlogInterval, "interval time to generate fake binlog, the unit is second")
 
 	// global config
@@ -116,6 +114,7 @@ func NewConfig() *Config {
 	fs.Int64Var(new(int64), "binlog-file-size", 0, "DEPRECATED")
 	fs.BoolVar(new(bool), "enable-binlog-slice", false, "DEPRECATED")
 	fs.IntVar(new(int), "binlog-slice-size", 0, "DEPRECATED")
+	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 
 	return cfg
 }
@@ -133,7 +132,7 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	if cfg.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		os.Exit(0)
 	}
 
@@ -161,13 +160,13 @@ func (cfg *Config) Parse(arguments []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
-	adjustString(&cfg.ListenAddr, defaultListenAddr)
-	adjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
+	util.AdjustString(&cfg.ListenAddr, defaultListenAddr)
+	util.AdjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
 	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
-	adjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	util.AdjustDuration(&cfg.EtcdDialTimeout, defaultEtcdDialTimeout)
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
 	return cfg.validate()
 }
@@ -175,24 +174,6 @@ func (cfg *Config) Parse(arguments []string) error {
 func (cfg *Config) configFromFile(path string) error {
 	_, err := toml.DecodeFile(path, cfg)
 	return errors.Trace(err)
-}
-
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
-
-func adjustInt(v *int, defValue int) {
-	if *v == 0 {
-		*v = defValue
-	}
-}
-
-func adjustDuration(v *time.Duration, defValue time.Duration) {
-	if *v == 0 {
-		*v = defValue
-	}
 }
 
 // validate checks whether the configuration is valid

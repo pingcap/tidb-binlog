@@ -20,8 +20,9 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 func getTestDB() (db *sql.DB, err error) {
@@ -55,8 +56,6 @@ func BenchmarkDeleteNoMerge(b *testing.B) {
 }
 
 func benchmarkUpdate(b *testing.B, merge bool) {
-	log.SetLevelByString("error")
-
 	r, err := newRunner(merge)
 	if err != nil {
 		b.Fatal(err)
@@ -74,8 +73,6 @@ func benchmarkUpdate(b *testing.B, merge bool) {
 }
 
 func benchmarkDelete(b *testing.B, merge bool) {
-	log.SetLevelByString("error")
-
 	r, err := newRunner(merge)
 	if err != nil {
 		b.Fatal(err)
@@ -93,8 +90,6 @@ func benchmarkDelete(b *testing.B, merge bool) {
 }
 
 func benchmarkWrite(b *testing.B, merge bool) {
-	log.SetLevelByString("error")
-
 	r, err := newRunner(merge)
 	if err != nil {
 		b.Fatal(err)
@@ -137,7 +132,7 @@ func newRunner(merge bool) (r *runner, err error) {
 	go func() {
 		err := loader.Run()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("loader run failed", zap.Error(err))
 		}
 		r.wg.Done()
 	}()

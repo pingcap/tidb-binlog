@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb/types"
@@ -70,7 +70,7 @@ func (col *column) parseRule(kvs []string) {
 		var err error
 		col.step, err = strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	} else if key == "set" {
 		fields := strings.Split(value, ",")

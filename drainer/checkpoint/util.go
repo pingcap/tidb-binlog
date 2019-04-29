@@ -14,7 +14,6 @@
 package checkpoint
 
 import (
-	"database/sql"
 	"fmt"
 
 	// mysql driver
@@ -64,14 +63,6 @@ func checkConfig(cfg *Config) error {
 	}
 
 	return nil
-}
-
-func execSQL(db *sql.DB, sql string) (sql.Result, error) {
-	return db.Exec(sql)
-}
-
-func querySQL(db *sql.DB, sql string) (*sql.Rows, error) {
-	return db.Query(sql)
 }
 
 func genCreateSchema(sp *MysqlCheckPoint) string {

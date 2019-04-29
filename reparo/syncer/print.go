@@ -16,10 +16,11 @@ package syncer
 import (
 	"fmt"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 type printSyncer struct{}
@@ -57,11 +58,20 @@ func printEvent(event *pb.Event) {
 
 	switch event.GetTp() {
 	case pb.EventType_Insert:
-		printInsertOrDeleteEvent(event.Row)
+		err := printInsertOrDeleteEvent(event.Row)
+		if err != nil {
+			log.Error("print insert event failed", zap.Error(err))
+		}
 	case pb.EventType_Update:
-		printUpdateEvent(event.Row)
+		err := printUpdateEvent(event.Row)
+		if err != nil {
+			log.Error("print update event failed", zap.Error(err))
+		}
 	case pb.EventType_Delete:
-		printInsertOrDeleteEvent(event.Row)
+		err := printInsertOrDeleteEvent(event.Row)
+		if err != nil {
+			log.Error("print delete event failed", zap.Error(err))
+		}
 	}
 }
 
@@ -77,48 +87,45 @@ func printEventHeader(event *pb.Event) {
 	fmt.Printf("schema: %s; table: %s; type: %s\n", event.GetSchemaName(), event.GetTableName(), event.GetTp())
 }
 
-func printUpdateEvent(row [][]byte) {
+func printUpdateEvent(row [][]byte) error {
 	for _, c := range row {
 		col := &pb.Column{}
 		err := col.Unmarshal(c)
 		if err != nil {
-			log.Errorf("unmarshal error %v", err)
-			return
+			return errors.Annotate(err, "unmarshal failed")
 		}
 
 		_, val, err := codec.DecodeOne(col.Value)
 		if err != nil {
-			log.Errorf("decode row error %v", err)
-			return
+			return errors.Annotate(err, "decode row failed")
 		}
 
 		_, changedVal, err := codec.DecodeOne(col.ChangedValue)
 		if err != nil {
-			log.Errorf("decode row error %v", err)
-			return
+			return errors.Annotate(err, "decode row failed")
 		}
 
 		tp := col.Tp[0]
 		fmt.Printf("%s(%s): %s => %s\n", col.Name, col.MysqlType, formatValueToString(val, tp), formatValueToString(changedVal, tp))
 	}
+	return nil
 }
 
-func printInsertOrDeleteEvent(row [][]byte) {
+func printInsertOrDeleteEvent(row [][]byte) error {
 	for _, c := range row {
 		col := &pb.Column{}
 		err := col.Unmarshal(c)
 		if err != nil {
-			log.Errorf("unmarshal error %v", err)
-			return
+			return errors.Annotate(err, "unmarshal failed")
 		}
 
 		_, val, err := codec.DecodeOne(col.Value)
 		if err != nil {
-			log.Errorf("decode row error %v", err)
-			return
+			return errors.Annotate(err, "decode row failed")
 		}
 
 		tp := col.Tp[0]
 		fmt.Printf("%s(%s): %s\n", col.Name, col.MysqlType, formatValueToString(val, tp))
 	}
+	return nil
 }

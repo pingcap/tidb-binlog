@@ -16,10 +16,11 @@ package util
 import (
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
@@ -46,10 +47,16 @@ func GetTSO(pdCli pd.Client) (int64, error) {
 	}
 	dist := time.Since(now)
 	if dist > slowDist {
-		log.Warnf("get timestamp too slow: %s", dist)
+		log.Warn("get timestamp too slow", zap.Duration("take", dist))
 	}
 
 	ts := int64(oracle.ComposeTS(physical, logical))
 
 	return ts, nil
+}
+
+// TSOToRoughTime translates tso to rough time that used to display
+func TSOToRoughTime(ts int64) time.Time {
+	t := time.Unix(ts>>18/1000, 0)
+	return t
 }

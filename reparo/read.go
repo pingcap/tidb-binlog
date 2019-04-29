@@ -18,9 +18,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"go.uber.org/zap"
 )
 
 // PbReader is a reader to read pb Binlog
@@ -119,7 +120,7 @@ func (r *dirPbReader) read() (binlog *pb.Binlog, err error) {
 		}
 
 		if errors.Cause(err) == io.EOF {
-			log.Infof("read file %s end", r.files[r.idx-1])
+			log.Info("read file end", zap.String("file", r.files[r.idx-1]))
 			err = r.nextFile()
 			if err != nil {
 				return nil, err

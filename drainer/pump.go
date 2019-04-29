@@ -17,12 +17,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -49,22 +50,25 @@ type Pump struct {
 
 	pullCli  pb.Pump_PullBinlogsClient
 	grpcConn *grpc.ClientConn
+	logger   *zap.Logger
 }
 
 // NewPump returns an instance of Pump
 func NewPump(nodeID, addr string, clusterID uint64, startTs int64, errCh chan error) *Pump {
+	nodeID = pump.FormatNodeID(nodeID)
 	return &Pump{
-		nodeID:    pump.FormatNodeID(nodeID),
+		nodeID:    nodeID,
 		addr:      addr,
 		clusterID: clusterID,
 		latestTS:  startTs,
 		errCh:     errCh,
+		logger:    log.L().With(zap.String("id", nodeID)),
 	}
 }
 
 // Close sets isClose to 1, and pull binlog will be exit.
 func (p *Pump) Close() {
-	log.Infof("[pump %s] is closing", p.nodeID)
+	p.logger.Info("pump is closing")
 	atomic.StoreInt32(&p.isClosed, 1)
 }
 
@@ -72,7 +76,7 @@ func (p *Pump) Close() {
 func (p *Pump) Pause() {
 	// use CompareAndSwapInt32 to avoid redundant log
 	if atomic.CompareAndSwapInt32(&p.isPaused, 0, 1) {
-		log.Infof("[pump %s] pause pull binlog", p.nodeID)
+		p.logger.Info("pump pause pull binlog")
 	}
 }
 
@@ -80,7 +84,7 @@ func (p *Pump) Pause() {
 func (p *Pump) Continue(pctx context.Context) {
 	// use CompareAndSwapInt32 to avoid redundant log
 	if atomic.CompareAndSwapInt32(&p.isPaused, 1, 0) {
-		log.Infof("[pump %s] continue pull binlog", p.nodeID)
+		p.logger.Info("pump continue pull binlog")
 	}
 }
 
@@ -98,14 +102,14 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 	ret := make(chan MergeItem, binlogChanSize)
 
 	go func() {
-		log.Debugf("[pump %s] start PullBinlog", p.nodeID)
+		p.logger.Debug("pump start PullBinlog")
 
 		defer func() {
 			close(ret)
 			if p.grpcConn != nil {
 				p.grpcConn.Close()
 			}
-			log.Debugf("[pump %s] stop PullBinlog", p.nodeID)
+			p.logger.Debug("pump stop PullBinlog")
 		}()
 
 		needReCreateConn := false
@@ -117,7 +121,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			if atomic.LoadInt32(&p.isPaused) == 1 {
 				// this pump is paused, wait until it can pull binlog again
 				pLog.Print(labelPaused, func() {
-					log.Debugf("[pump %s] is paused", p.nodeID)
+					p.logger.Debug("pump is paused")
 				})
 
 				time.Sleep(time.Second)
@@ -125,10 +129,10 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			}
 
 			if p.grpcConn == nil || needReCreateConn {
-				log.Infof("[pump %s] create pull binlogs client", p.nodeID)
+				p.logger.Info("pump create pull binlogs client")
 				err := p.createPullBinlogsClient(pctx, last)
 				if err != nil {
-					log.Errorf("[pump %s] create pull binlogs client error %v", p.nodeID, err)
+					p.logger.Error("pump create pull binlogs client failed", zap.Error(err))
 					time.Sleep(time.Second)
 					continue
 				}
@@ -140,7 +144,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			if err != nil {
 				if status.Code(err) != codes.Canceled {
 					pLog.Print(labelReceive, func() {
-						log.Errorf("[pump %s] receive binlog error %v", p.nodeID, err)
+						p.logger.Error("pump receive binlog failed", zap.Error(err))
 					})
 				}
 
@@ -156,7 +160,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			err = binlog.Unmarshal(resp.Entity.Payload)
 			if err != nil {
 				errorCount.WithLabelValues("unmarshal_binlog").Add(1)
-				log.Errorf("[pump %s] unmarshal binlog error: %v", p.nodeID, err)
+				p.logger.Error("pump unmarshal binlog failed", zap.Error(err))
 				p.reportErr(pctx, err)
 				return
 			}
@@ -174,7 +178,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 					last = binlog.CommitTs
 					p.latestTS = binlog.CommitTs
 				} else {
-					log.Errorf("[pump %s] receive unsort binlog", p.nodeID)
+					p.logger.Error("pump receive unsort binlog")
 				}
 			case <-pctx.Done():
 				return
@@ -193,13 +197,13 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 	callOpts := []grpc.CallOption{grpc.MaxCallRecvMsgSize(maxMsgSize)}
 
 	if compressor, ok := ctx.Value(drainerKeyType("compressor")).(string); ok {
-		log.Infof("[pump %s] grpc compression enabled", p.nodeID)
+		p.logger.Info("pump grpc compression enabled")
 		callOpts = append(callOpts, grpc.UseCompressor(compressor))
 	}
 
 	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(callOpts...))
 	if err != nil {
-		log.Errorf("[pump %s] create grpc dial error %v", p.nodeID, err)
+		p.logger.Error("pump create grpc dial failed", zap.Error(err))
 		p.pullCli = nil
 		p.grpcConn = nil
 		return errors.Trace(err)
@@ -213,7 +217,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 	}
 	pullCli, err := cli.PullBinlogs(ctx, in)
 	if err != nil {
-		log.Errorf("[pump %s] create PullBinlogs client error %v", p.nodeID, err)
+		p.logger.Error("pump create PullBinlogs client failed", zap.Error(err))
 		conn.Close()
 		p.pullCli = nil
 		p.grpcConn = nil

@@ -27,3 +27,9 @@ func (s *testNodeSuite) TestClone(c *C) {
 	c.Assert(status, Not(Equals), status2)
 	c.Assert(*status, Equals, *status2)
 }
+
+func (s *testNodeSuite) TestString(c *C) {
+	status := NewStatus("nodeID", "localhost", Online, 100, 407775642342881, 407775645599649)
+	str := status.String()
+	c.Assert(str, Matches, "{NodeID: nodeID, Addr: localhost, State: online, MaxCommitTS: 407775642342881, UpdateTime: 1970-01-19 .*}")
+}

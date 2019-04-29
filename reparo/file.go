@@ -19,9 +19,10 @@ import (
 	"os"
 	"path"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"go.uber.org/zap"
 )
 
 // searchFiles return matched file with full path
@@ -73,7 +74,10 @@ func filterFiles(fileNames []string, startTS int64, endTS int64) ([]string, erro
 	}
 	appendFile()
 
-	log.Infof("binlog files %+v, start tso: %d, stop tso: %d", binlogFiles, startTS, endTS)
+	log.Info("after filter files",
+		zap.Strings("files", binlogFiles),
+		zap.Int64("start tso", startTS),
+		zap.Int64("stop tso", endTS))
 	return binlogFiles, nil
 }
 
@@ -97,7 +101,7 @@ func getFirstBinlogCommitTS(filename string) (int64, error) {
 	br := bufio.NewReader(fd)
 	binlog, _, err := Decode(br)
 	if errors.Cause(err) == io.EOF {
-		log.Warnf("no binlog find in %s", filename)
+		log.Warn("no binlog find in file", zap.String("filename", filename))
 		return 0, nil
 	}
 	if err != nil {

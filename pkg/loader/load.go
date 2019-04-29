@@ -21,10 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/parser"
@@ -187,7 +188,7 @@ func (s *loaderImpl) markSuccess(txns ...*Txn) {
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
-	log.Debugf("markSuccess %d txns", len(txns))
+	log.Debug("markSuccess txns", zap.Int("txns len", len(txns)))
 }
 
 // Input returns input channel which used to put Txn into Loader
@@ -215,7 +216,7 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 	}
 
 	if len(info.uniqueKeys) == 0 {
-		log.Warnf("table %s has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key or unique key for table", quoteSchema(schema, table))
+		log.Warn("table has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key or unique key for table", zap.String("table", quoteSchema(schema, table)))
 	}
 
 	s.tableInfos.Store(quoteSchema(schema, table), info)
@@ -236,7 +237,7 @@ func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo,
 func isCreateDatabaseDDL(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
-		log.Errorf("parse [%s] err: %v", sql, err)
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
 		return false
 	}
 
@@ -245,7 +246,7 @@ func isCreateDatabaseDDL(sql string) bool {
 }
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
-	log.Debug("exec ddl: ", ddl)
+	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
 	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
 		tx, err := s.db.Begin()
@@ -270,7 +271,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 			return err
 		}
 
-		log.Info("exec ddl success: ", ddl.SQL)
+		log.Info("exec ddl success", zap.String("sql", ddl.SQL))
 		return nil
 	})
 
@@ -305,11 +306,12 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 
 	for _, dml := range dmls {
 		keys := getKeys(dml)
-		log.Debugf("dml: %v keys: %v", dml, keys)
+		log.Debug("get keys", zap.Reflect("dml", dml), zap.Strings("keys", keys))
 		conflict := causality.DetectConflict(keys)
 		if conflict {
-			log.Infof("meet causality.DetectConflict exec now table: %v, keys: %v",
-				dml.TableName(), keys)
+			log.Info("meet causality.DetectConflict exec now",
+				zap.String("table name", dml.TableName()),
+				zap.Strings("keys", keys))
 			err := s.execByHash(executor, byHash)
 			if err != nil {
 				return errors.Trace(err)
@@ -354,8 +356,6 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	}
 
 	batchTables, singleDMLs := s.groupDMLs(dmls)
-
-	log.Debugf("exec by tables: %d tables, by single: %d dmls", len(batchTables), len(singleDMLs))
 
 	errg, _ := errgroup.WithContext(context.Background())
 	executor := newExecutor(s.db).withBatchSize(s.batchSize)
@@ -411,10 +411,10 @@ func (s *loaderImpl) Run() error {
 		err := s.execDDL(txn.DDL)
 		if err != nil {
 			if !pkgsql.IgnoreDDLError(err) {
-				log.Errorf("exe ddl: %s fail: %v", txn.DDL.SQL, err)
+				log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
 				return errors.Trace(err)
 			}
-			log.Warnf("ignore ddl error: %v, ddl: %v", err, txn.DDL)
+			log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
 		}
 
 		s.markSuccess(txn)

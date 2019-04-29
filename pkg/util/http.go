@@ -16,7 +16,7 @@ package util
 import (
 	"fmt"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 )
 
 const (
@@ -55,7 +55,7 @@ func NotFoundResponsef(format string, args ...interface{}) *Response {
 // ErrResponsef returns a error response.
 func ErrResponsef(format string, args ...interface{}) *Response {
 	errMsg := fmt.Sprintf(format, args...)
-	log.Warnf(errMsg)
+	log.Warn(errMsg)
 	return &Response{
 		Code:    statusOtherError,
 		Message: errMsg,

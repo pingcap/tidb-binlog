@@ -16,7 +16,6 @@ package loader
 import (
 	"math/rand"
 
-	"github.com/ngaut/log"
 	check "github.com/pingcap/check"
 )
 
@@ -26,7 +25,6 @@ type modelSuite struct {
 var _ = check.Suite(&modelSuite{})
 
 func (m *modelSuite) TestMerge(c *check.C) {
-	log.SetLevelByString("error")
 	info := &tableInfo{
 		columns:    []string{"k", "v"},
 		uniqueKeys: []indexInfo{{"PRIMARY", []string{"k"}}},

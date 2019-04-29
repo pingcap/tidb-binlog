@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/ngaut/log"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	ti "github.com/pingcap/tipb/go-binlog"
 )
@@ -69,8 +68,6 @@ func BenchmarkBinlogMarshal(b *testing.B) {
 // BenchmarkKafka-4         1000000             42384 ns/op
 // means 23593 op/second
 func BenchmarkKafka(b *testing.B) {
-	log.SetLevelByString("error")
-
 	cfg := &DBConfig{
 		KafkaAddrs:   "127.0.0.1:9092",
 		KafkaVersion: "0.8.2.0",

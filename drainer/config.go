@@ -26,9 +26,10 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
+	"go.uber.org/zap"
 
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
@@ -82,7 +83,6 @@ type Config struct {
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
 	LogFile         string          `toml:"log-file" json:"log-file"`
-	LogRotate       string          `toml:"log-rotate" json:"log-rotate"`
 	InitialCommitTS int64           `toml:"initial-commit-ts" json:"initial-commit-ts"`
 	SyncerCfg       *SyncerConfig   `toml:"syncer" json:"sycner"`
 	Security        security.Config `toml:"security" json:"security"`
@@ -118,7 +118,6 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&cfg.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.Int64Var(&cfg.InitialCommitTS, "initial-commit-ts", 0, "if drainer donesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.StringVar(&cfg.Compressor, "compressor", "", "use the specified compressor to compress payload between pump and drainer, only 'gzip' is supported now (default \"\", ie. compression disabled.)")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
@@ -130,6 +129,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 
 	return cfg
 }
@@ -137,7 +137,7 @@ func NewConfig() *Config {
 func (cfg *Config) String() string {
 	data, err := json.MarshalIndent(cfg, "\t", "\t")
 	if err != nil {
-		log.Error(err)
+		log.Error("marshal json failed", zap.Error(err))
 	}
 
 	return string(data)
@@ -155,7 +155,7 @@ func (cfg *Config) Parse(args []string) error {
 		os.Exit(2)
 	}
 	if cfg.printVersion {
-		version.PrintVersionInfo()
+		fmt.Println(version.GetRawVersionInfo())
 		os.Exit(0)
 	}
 
@@ -220,18 +220,6 @@ func (cfg *Config) configFromFile(path string) error {
 	return errors.Trace(err)
 }
 
-func adjustString(v *string, defValue string) {
-	if len(*v) == 0 {
-		*v = defValue
-	}
-}
-
-func adjustInt(v *int, defValue int) {
-	if *v == 0 {
-		*v = defValue
-	}
-}
-
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
@@ -246,7 +234,7 @@ func (cfg *Config) validate() error {
 	}
 
 	if !util.IsValidateListenHost(host) {
-		log.Fatal("drainer listen on: %v and will register this ip into etcd, pumb must access drainer, change the listen addr config", host)
+		log.Fatal("invalid listen addr, drainer will register this ip into etcd, pump must access drainer, change the listen addr config", zap.String("listen addr", host))
 	}
 
 	// check EtcdEndpoints
@@ -273,10 +261,10 @@ func (cfg *Config) validate() error {
 
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
-	adjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
+	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
-	adjustString(&cfg.DataDir, defaultDataDir)
-	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
+	util.AdjustString(&cfg.DataDir, defaultDataDir)
+	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 
 	// add default syncer.to configuration if need
 	if cfg.SyncerCfg.To == nil {
@@ -303,7 +291,7 @@ func (cfg *Config) adjustConfig() error {
 			}
 
 			// use kafka address get from zookeeper to reset the config
-			log.Infof("get kafka addrs from zookeeper: %v", kafkaUrls)
+			log.Info("get kafka addrs from zookeeper", zap.String("kafka urls", kafkaUrls))
 			cfg.SyncerCfg.To.KafkaAddrs = kafkaUrls
 		}
 
@@ -325,7 +313,7 @@ func (cfg *Config) adjustConfig() error {
 	} else if cfg.SyncerCfg.DestDBType == "file" {
 		if len(cfg.SyncerCfg.To.BinlogFileDir) == 0 {
 			cfg.SyncerCfg.To.BinlogFileDir = cfg.DataDir
-			log.Infof("use default downstream file directory: %s", cfg.DataDir)
+			log.Info("use default downstream file directory", zap.String("directory", cfg.DataDir))
 		}
 	} else if cfg.SyncerCfg.DestDBType == "mysql" || cfg.SyncerCfg.DestDBType == "tidb" {
 		if len(cfg.SyncerCfg.To.Host) == 0 {

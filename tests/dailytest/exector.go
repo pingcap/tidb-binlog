@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 )
 
 // RunDailyTest generates insert/update/delete sqls and execute
@@ -33,12 +33,12 @@ func RunDailyTest(db *sql.DB, tableSQLs []string, workerCount int, jobCount int,
 			table := newTable()
 			err := parseTableSQL(table, tableSQLs[i])
 			if err != nil {
-				log.Fatal(err)
+				log.S().Fatal(err)
 			}
 
 			err = execSQL(db, tableSQLs[i])
 			if err != nil {
-				log.Fatal(err)
+				log.S().Fatal(err)
 			}
 
 			doProcess(table, db, jobCount, workerCount, batch)
@@ -54,12 +54,12 @@ func TruncateTestTable(db *sql.DB, tableSQLs []string) {
 		table := newTable()
 		err := parseTableSQL(table, tableSQLs[i])
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		err = execSQL(db, fmt.Sprintf("truncate table %s", table.name))
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	}
 }
@@ -70,12 +70,12 @@ func DropTestTable(db *sql.DB, tableSQLs []string) {
 		table := newTable()
 		err := parseTableSQL(table, tableSQLs[i])
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		err = execSQL(db, fmt.Sprintf("drop table %s", table.name))
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 	}
 }

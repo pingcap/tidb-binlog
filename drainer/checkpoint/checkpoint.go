@@ -14,13 +14,18 @@
 package checkpoint
 
 import (
-	"github.com/ngaut/log"
+	"time"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
+
+	maxSaveTime = 3 * time.Second
 )
 
 // CheckPoint is the binlog sync pos meta.
@@ -67,6 +72,7 @@ func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
 		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", name, cfg)
 	}
 
-	log.Infof("initialize %s type checkpoint %s with config %+v", name, cp, cfg)
+	log.Info("initialize checkpoint", zap.String("name", name), zap.Stringer("checkpoint", cp), zap.Reflect("cfg", cfg))
+
 	return cp, nil
 }

@@ -20,11 +20,12 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	"go.uber.org/zap"
 )
 
 var maxWaitTimeToSendMSG = time.Second * 30
@@ -166,7 +167,7 @@ func (p *KafkaSyncer) run() {
 		for msg := range p.producer.Successes() {
 			item := msg.Metadata.(*Item)
 			commitTs := item.Binlog.GetCommitTs()
-			log.Debug("commitTs: ", commitTs, " return success from kafka")
+			log.Debug("get success msg from producer", zap.Int64("ts", commitTs))
 
 			p.toBeAckCommitTSMu.Lock()
 			p.lastSuccessTime = time.Now()

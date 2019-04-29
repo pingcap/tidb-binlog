@@ -19,14 +19,15 @@ import (
 	"math/big"
 	gotime "time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/opcode"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap"
 )
 
 const implicitColName = "_tidb_rowid"
@@ -157,7 +158,7 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 		dec := data.GetMysqlDecimal()
 		bin, err := mysqlDecimalToCHDecimalBin(ft, dec)
 		if err != nil {
-			log.Warnf("Corrupted decimal data: %v, will leave it zero.", data.GetMysqlDecimal())
+			log.Warn("Corrupted decimal data, will leave it zero.", zap.Reflect("data", data.GetMysqlDecimal()))
 			bin = make([]byte, 64)
 		}
 		return bin, nil
@@ -173,7 +174,7 @@ func formatFlashData(data *types.Datum, ft *types.FieldType) (interface{}, error
 	case mysql.TypeDuration: // Int64
 		num, err := data.GetMysqlDuration().ToNumber().ToInt()
 		if err != nil {
-			log.Warnf("Corrupted Duration data: %v, will leave it zero.", data.GetMysqlDuration())
+			log.Warn("Corrupted Duration data, will leave it zero.", zap.Reflect("data", data.GetMysqlDuration()))
 			num = 0
 		}
 		return num, nil

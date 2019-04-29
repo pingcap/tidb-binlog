@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/tests/util"
 	"github.com/pingcap/tidb/mysql"
 )
@@ -32,13 +32,13 @@ func intRangeValue(column *column, min int64, max int64) (int64, int64) {
 	if len(column.min) > 0 {
 		min, err = strconv.ParseInt(column.min, 10, 64)
 		if err != nil {
-			log.Fatal(err)
+			log.S().Fatal(err)
 		}
 
 		if len(column.max) > 0 {
 			max, err = strconv.ParseInt(column.max, 10, 64)
 			if err != nil {
-				log.Fatal(err)
+				log.S().Fatal(err)
 			}
 		}
 	}
@@ -376,7 +376,7 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 		case <-timeout:
 			// check last time
 			if !util.CheckSyncState(src, dst, schema) {
-				log.Fatal("sourceDB don't equal targetDB")
+				log.S().Fatal("sourceDB don't equal targetDB")
 			}
 
 			return

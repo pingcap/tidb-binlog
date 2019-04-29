@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
@@ -131,7 +132,7 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 					})
 
 					if err != nil {
-						log.Errorf("get DDL job by id %d error %v", binlog.DdlJobId, errors.Trace(err))
+						log.Error("get DDL job failed", zap.Int64("id", binlog.DdlJobId), zap.Error(err))
 						c.reportErr(ctx, err)
 						return
 					}
@@ -141,12 +142,7 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 						continue
 					}
 
-					// according to DDL
-					// only when reach this two state will write binlog:
-					if job.State != model.JobStateSynced &&
-						job.State != model.JobStateRollbackDone {
-						log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
-					}
+					log.Info("get ddl job", zap.Stringer("job", job))
 
 					if !skipJob(job) {
 						item.SetJob(job)
@@ -194,7 +190,7 @@ func (c *Collector) Start(ctx context.Context) {
 		case <-time.After(c.interval):
 			c.updateStatus(ctx)
 		case err := <-c.errCh:
-			log.Errorf("collector meets error %v", err)
+			log.Error("collector meets error", zap.Error(err))
 			return
 		}
 	}
@@ -222,7 +218,7 @@ func (c *Collector) updateCollectStatus(synced bool) {
 // continue pull binlog for online pump, and deletes offline pump.
 func (c *Collector) updateStatus(ctx context.Context) error {
 	if err := c.updatePumpStatus(ctx); err != nil {
-		log.Errorf("DetectPumps error: %v", errors.ErrorStack(err))
+		log.Error("updatePumpStatus failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 
@@ -278,8 +274,8 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 				c.merger.RemoveSource(n.NodeID)
 				c.pumps[n.NodeID].Close()
 				delete(c.pumps, n.NodeID)
-				log.Infof("node(%s) of cluster(%d) has been removed and release the connection to it",
-					p.nodeID, p.clusterID)
+				log.Info("node of cluster has been removed and release the connection to it",
+					zap.String("nodeID", p.nodeID), zap.Uint64("clusterID", p.clusterID))
 			}
 		}
 	}
@@ -325,7 +321,7 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 }
 
 func (c *Collector) reportErr(ctx context.Context, err error) {
-	log.Errorf("reportErr receive error %s", err)
+	log.Error("reportErr receive error", zap.Error(err))
 	select {
 	case <-ctx.Done():
 		return

@@ -17,8 +17,9 @@ import (
 	"path"
 	"time"
 
-	"github.com/ngaut/log"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/log"
+	"go.uber.org/zap/zapcore"
 )
 
 type logSuite struct{}
@@ -46,6 +47,6 @@ func (s *logSuite) TestLog(c *C) {
 
 func (s *logSuite) TestInitLogger(c *C) {
 	f := path.Join(c.MkDir(), "test")
-	InitLogger("error", f, "hour")
-	c.Assert(log.GetLogLevel(), Equals, log.LOG_LEVEL_ERROR)
+	InitLogger("error", f)
+	c.Assert(log.GetLevel(), Equals, zapcore.ErrorLevel)
 }

@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Log prints log only after a certain amount of time
@@ -55,19 +57,59 @@ func (l *Log) Print(label string, fn func()) {
 	}
 }
 
+// _globalP is the global ZapProperties in log
+var _globalP *log.ZapProperties
+
 // InitLogger initalizes logger
-func InitLogger(level string, file string, rotate string) {
-	log.SetLevelByString(level)
-
-	if len(file) > 0 {
-		log.SetOutputByName(file)
-
-		if rotate == "hour" {
-			log.SetRotateByHour()
-		} else {
-			log.SetRotateByDay()
-		}
+func InitLogger(level string, file string) error {
+	cfg := &log.Config{
+		Level: level,
+		File: log.FileLogConfig{
+			Filename:  file,
+			LogRotate: true,
+			// default rotate by size 300M in pingcap/log never delete old files
+			// MaxSize:
+			// MaxDays:
+			// MaxBackups:
+		},
 	}
 
+	var lg *zap.Logger
+	var err error
+	lg, _globalP, err = log.InitLogger(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Do not log stack traces at all, as we'll get the stack trace from the
+	// error itself.
+	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+
+	log.ReplaceGlobals(lg, _globalP)
+
 	sarama.Logger = NewStdLogger("[sarama] ")
+	return nil
+}
+
+// LogHook to get the save entrys for test
+type LogHook struct {
+	// save the log entrys
+	Entrys       []zapcore.Entry
+	originLogger *zap.Logger
+}
+
+// SetUp LogHook
+func (h *LogHook) SetUp() {
+	h.originLogger = log.L()
+	lg := log.L().WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+		h.Entrys = append(h.Entrys, entry)
+		return nil
+	}))
+
+	log.ReplaceGlobals(lg, _globalP)
+}
+
+// TearDown set back the origin logger
+func (h *LogHook) TearDown() {
+	log.ReplaceGlobals(h.originLogger, _globalP)
 }

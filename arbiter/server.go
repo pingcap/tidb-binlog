@@ -22,11 +22,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 var createDB = loader.CreateDB
@@ -94,7 +95,7 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 		Topic:     up.Topic,
 	}
 
-	log.Infof("use kafka binlog reader cfg: %+v", readerCfg)
+	log.Info("use kafka binlog reader", zap.Reflect("cfg", readerCfg))
 
 	srv.kafkaReader, err = reader.NewReader(readerCfg)
 	if err != nil {
@@ -175,7 +176,7 @@ func (s *Server) Run() error {
 		defer wg.Done()
 
 		for msg := range s.kafkaReader.Messages() {
-			log.Debugf("recv binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
+			log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
 			txn := loader.SlaveBinlogToTxn(msg.Binlog)
 			txn.Metadata = msg
 			s.load.Input() <- txn
@@ -234,11 +235,11 @@ L:
 				break L
 			}
 			msg := txn.Metadata.(*reader.Message)
-			log.Debugf("success binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
+			log.Debug("get success binlog", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
 			s.updateFinishTS(msg)
 		case <-saveTick.C:
 			if err := s.saveFinishTS(StatusRunning); err != nil {
-				log.Error(err)
+				log.Error("save finish ts failed", zap.Error(err))
 			}
 		case <-ctx.Done():
 			break L
@@ -246,7 +247,7 @@ L:
 	}
 
 	if err := s.saveFinishTS(StatusRunning); err != nil {
-		log.Error(err)
+		log.Error("save finish ts failed", zap.Error(err))
 	}
 }
 
