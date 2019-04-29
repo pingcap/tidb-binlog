@@ -19,6 +19,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
@@ -41,4 +42,26 @@ func (t *testDrainerSuite) TestIgnoreDDLError(c *C) {
 	ok = sql.IgnoreDDLError(err2)
 	c.Assert(ok, IsFalse)
 
+}
+
+type taskGroupSuite struct{}
+
+var _ = Suite(&taskGroupSuite{})
+
+func (s *taskGroupSuite) TestShouldRecoverFromPanic(c *C) {
+	var logHook util.LogHook
+	logHook.SetUp()
+	defer logHook.TearDown()
+
+	var called bool
+	var g taskGroup
+	g.GoNoPanic("test", func() {
+		called = true
+		panic("Evil Smile")
+	})
+	g.Wait()
+	c.Assert(called, IsTrue)
+	c.Assert(logHook.Entrys, HasLen, 2)
+	c.Assert(logHook.Entrys[0].Message, Matches, ".*Recovered.*")
+	c.Assert(logHook.Entrys[1].Message, Matches, ".*Exit.*")
 }

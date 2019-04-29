@@ -19,19 +19,61 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"sort"
+	"sync"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"go.uber.org/zap"
 )
 
 const (
 	maxMsgSize = 1024 * 1024 * 1024
 )
+
+// taskGroup is a wrapper of `sync.WaitGroup`.
+type taskGroup struct {
+	wg sync.WaitGroup
+}
+
+func (g *taskGroup) Go(name string, f func()) {
+	g.start(name, f, false)
+}
+
+func (g *taskGroup) GoNoPanic(name string, f func()) {
+	g.start(name, f, true)
+}
+
+func (g *taskGroup) start(name string, f func(), noPanic bool) {
+	fName := zap.String("name", name)
+	g.wg.Add(1)
+	go func() {
+		defer func() {
+			if noPanic {
+				if err := recover(); err != nil {
+					log.Error("Recovered from panic",
+						zap.Reflect("err", err),
+						zap.String("stack", string(debug.Stack())),
+						fName,
+					)
+				}
+			}
+			log.Info("Exit", fName)
+			g.wg.Done()
+		}()
+		f()
+	}()
+}
+
+func (g *taskGroup) Wait() {
+	g.wg.Wait()
+}
 
 // GenCheckPointCfg returns an CheckPoint config instance
 func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {

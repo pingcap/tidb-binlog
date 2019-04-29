@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,7 +65,7 @@ type Server struct {
 	metrics   *metricClient
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	tg        taskGroup
 	syncer    *Syncer
 	cp        checkpoint.CheckPoint
 	isClosed  int32
@@ -209,90 +208,27 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 	return
 }
 
-// StartCollect runs Collector up in a goroutine.
-func (s *Server) StartCollect() {
-	s.wg.Add(1)
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Error("start collect panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
-			}
-
-			log.Info("collect goroutine exited")
-			s.wg.Done()
-			s.Close()
-		}()
-		s.collector.Start(s.ctx)
-	}()
-}
-
-// StartMetrics runs a metrics colletcor in a goroutine
-func (s *Server) StartMetrics() {
-	if s.metrics == nil {
-		return
-	}
-	s.wg.Add(1)
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Error("start metircs panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
-			}
-
-			log.Info("metrics goroutine exited")
-			s.wg.Done()
-		}()
-		s.metrics.Start(s.ctx, s.ID)
-	}()
-}
-
-// StartSyncer runs a syncer in a goroutine
-func (s *Server) StartSyncer() {
-	s.wg.Add(1)
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Error("start syner panic", zap.Reflect("err", err), zap.String("stack", string(debug.Stack())))
-			}
-
-			log.Info("syncer goroutine exited")
-			s.wg.Done()
-			s.Close()
-		}()
-		err := s.syncer.Start()
-		if err != nil {
-			log.Error("syncer exited abnormal", zap.Error(err))
-		}
-	}()
-}
-
 func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	errc := make(chan error, 1)
-	err := s.updateStatus()
-	if err != nil {
-		errc <- errors.Trace(err)
-	}
 
-	s.wg.Add(1)
-	go func() {
+	s.tg.Go("heartbeat", func() {
 		defer func() {
 			close(errc)
-			log.Info("heartbeat goroutine exited")
-			s.wg.Done()
 			s.Close()
 		}()
 
 		for {
+			err := s.updateStatus()
+			if err != nil {
+				errc <- errors.Trace(err)
+			}
 			select {
+			case <-time.After(heartbeatInterval):
 			case <-ctx.Done():
 				return
-			case <-time.After(heartbeatInterval):
-				err := s.updateStatus()
-				if err != nil {
-					errc <- errors.Trace(err)
-				}
 			}
 		}
-	}()
+	})
 	return errc
 }
 
@@ -313,14 +249,24 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	// start to collect
-	s.StartCollect()
+	s.tg.GoNoPanic("collect", func() {
+		defer s.Close()
+		s.collector.Start(s.ctx)
+	})
 
-	// collect metrics to prometheus
-	s.StartMetrics()
+	if s.metrics != nil {
+		s.tg.GoNoPanic("metrics", func() {
+			s.metrics.Start(s.ctx, s.ID)
+		})
+	}
 
-	// start a syncer
-	s.StartSyncer()
+	s.tg.GoNoPanic("syncer", func() {
+		defer s.Close()
+		err := s.syncer.Start()
+		if err != nil {
+			log.Error("syncer exited abnormal", zap.Error(err))
+		}
+	})
 
 	// start a TCP listener
 	tcpURL, err := url.Parse(s.tcpAddr)
@@ -444,12 +390,12 @@ func (s *Server) updateStatus() error {
 
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
-	log.Info("begin to close drainer server")
-
 	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
 		log.Debug("server had closed")
 		return
 	}
+
+	log.Info("begin to close drainer server")
 
 	// update drainer's status
 	s.commitStatus()
@@ -459,7 +405,7 @@ func (s *Server) Close() {
 	s.cancel()
 	s.syncer.Close()
 	// waiting for goroutines exit
-	s.wg.Wait()
+	s.tg.Wait()
 	// close the CheckPoint
 	err := s.cp.Close()
 	if err != nil {
