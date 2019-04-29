@@ -20,6 +20,7 @@ require (
 	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20180820150422-93bf4626fba7 // indirect
+	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/montanaflynn/stats v0.0.0-20180911141734-db72e6cae808 // indirect
 	github.com/ngaut/log v0.0.0-20160810023011-cec23d3e10b0

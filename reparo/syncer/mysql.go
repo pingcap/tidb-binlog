@@ -29,7 +29,11 @@ type mysqlSyncer struct {
 	loaderErr  error
 }
 
-var _ Syncer = &mysqlSyncer{}
+var (
+	_                  Syncer = &mysqlSyncer{}
+	defaultWorkerCount        = 16
+	defaultBatchSize          = 20
+)
 
 func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
 	db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
@@ -37,7 +41,11 @@ func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
 		return nil, errors.Trace(err)
 	}
 
-	loader, err := loader.NewLoader(db, loader.WorkerCount(16), loader.BatchSize(20))
+	return newMysqlSyncerFromSQLDB(db)
+}
+
+func newMysqlSyncerFromSQLDB(db *sql.DB) (*mysqlSyncer, error) {
+	loader, err := loader.NewLoader(db, loader.WorkerCount(defaultWorkerCount), loader.BatchSize(defaultBatchSize))
 	if err != nil {
 		return nil, errors.Annotate(err, "new loader failed")
 	}
