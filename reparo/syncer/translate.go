@@ -62,11 +62,11 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 						return nil, errors.Trace(err)
 					}
 
-					_, newDatum, err := codec.DecodeOne(col.Value)
+					_, oldDatum, err := codec.DecodeOne(col.Value)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
-					_, oldDatum, err := codec.DecodeOne(col.ChangedValue)
+					_, newDatum, err := codec.DecodeOne(col.ChangedValue)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}

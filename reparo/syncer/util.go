@@ -33,7 +33,6 @@ func formatValueToString(data types.Datum, tp byte) string {
 	}
 }
 
-// TODO: test it.
 func formatValue(value types.Datum, tp byte) types.Datum {
 	if value.GetValue() == nil {
 		return value

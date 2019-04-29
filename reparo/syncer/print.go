@@ -125,7 +125,7 @@ func printInsertOrDeleteEvent(row [][]byte) error {
 		}
 
 		tp := col.Tp[0]
-		fmt.Printf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
+		fmt.Printf("%s(%s): %s\n", col.Name, col.MysqlType, formatValueToString(val, tp))
 	}
 	return nil
 }
