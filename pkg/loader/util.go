@@ -132,7 +132,7 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 }
 
 func buildColumnList(names []string) string {
-	b := new(strings.Builder)
+	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {
 			b.WriteString(",")
