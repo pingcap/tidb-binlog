@@ -110,9 +110,12 @@ func init() {
 	Registry.MustRegister(txnLatencySecondsHistogram)
 }
 
+var getHostname = os.Hostname
+
 func instanceName(port int) string {
-	hostname, err := os.Hostname()
+	hostname, err := getHostname()
 	if err != nil {
+		log.Error("Failed to get hostname", zap.Error(err))
 		return "unknown"
 	}
 	return fmt.Sprintf("%s_%d", hostname, port)
