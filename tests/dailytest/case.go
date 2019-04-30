@@ -3,6 +3,7 @@ package dailytest
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -106,46 +107,44 @@ var case3Clean = []string{`
 	drop table a`,
 }
 
+type testRunner struct {
+	src    *sql.DB
+	dst    *sql.DB
+	schema string
+}
+
+func (tr *testRunner) run(test func(*sql.DB)) {
+	RunTest(tr.src, tr.dst, tr.schema, test)
+}
+
+func (tr *testRunner) execSQLs(sqls []string) {
+	RunTest(tr.src, tr.dst, tr.schema, func(src *sql.DB) {
+		err := execSQLs(tr.src, sqls)
+		if err != nil {
+			log.Fatal(err)
+		}
+	})
+}
+
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
-	RunTest(src, dst, schema, func(src *sql.DB) {
-		err := execSQLs(src, case1)
-		if err != nil {
-			log.Fatal(err)
-		}
-	})
+	tr := &testRunner{src: src, dst: dst, schema: schema}
+	runPKcases(tr)
 
-	// clean table
-	RunTest(src, dst, schema, func(src *sql.DB) {
-		err := execSQLs(src, case1Clean)
-		if err != nil {
-			log.Fatal(err)
-		}
-	})
+	tr.execSQLs(case1)
+	tr.execSQLs(case1Clean)
 
-	// run case2
-	RunTest(src, dst, schema, func(src *sql.DB) {
-		err := execSQLs(src, case2)
-		if err != nil {
-			log.Fatal(err)
-		}
-	})
-
-	// clean table
-	RunTest(src, dst, schema, func(src *sql.DB) {
-		err := execSQLs(src, case2Clean)
-		if err != nil {
-			log.Fatal(err)
-		}
-	})
+	tr.execSQLs(case2)
+	tr.execSQLs(case2Clean)
 
 	// run case3
-	RunTest(src, dst, schema, func(src *sql.DB) {
+	tr.run(func(src *sql.DB) {
 		err := execSQLs(src, case3)
 		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
 			log.Fatal(err)
 		}
 	})
+	tr.execSQLs(case3Clean)
 
 	// random op on have both pk and uk table
 	RunTest(src, dst, schema, func(src *sql.DB) {
@@ -157,14 +156,6 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 
 		log.Info(" updatePKUK take: ", time.Since(start))
-	})
-
-	// clean table
-	RunTest(src, dst, schema, func(src *sql.DB) {
-		err := execSQLs(src, case3Clean)
-		if err != nil {
-			log.Fatal(err)
-		}
 	})
 
 	// swap unique index value
@@ -342,4 +333,89 @@ func updatePKUK(db *sql.DB, opNum int) error {
 	}
 
 	return nil
+}
+
+// create a table with one column id with different type
+// test the case whether it is primary key too, this can
+// also help test when the column is handle or not.
+func runPKcases(tr *testRunner) {
+	cases := []struct {
+		Tp     string
+		Value  interface{}
+		Update interface{}
+	}{
+		{
+			Tp:     "BIGINT UNSIGNED",
+			Value:  uint64(math.MaxUint64),
+			Update: uint64(math.MaxUint64) - 1,
+		},
+		{
+			Tp:     "BIGINT SIGNED",
+			Value:  int64(math.MaxInt64),
+			Update: int64(math.MaxInt64) - 1,
+		},
+		{
+			Tp:     "INT UNSIGNED",
+			Value:  uint32(math.MaxUint32),
+			Update: uint32(math.MaxUint32) - 1,
+		},
+		{
+			Tp:     "INT SIGNED",
+			Value:  int32(math.MaxInt32),
+			Update: int32(math.MaxInt32) - 1,
+		},
+		{
+			Tp:     "SMALLINT UNSIGNED",
+			Value:  uint16(math.MaxUint16),
+			Update: uint16(math.MaxUint16) - 1,
+		},
+		{
+			Tp:     "SMALLINT SIGNED",
+			Value:  int16(math.MaxInt16),
+			Update: int16(math.MaxInt16) - 1,
+		},
+		{
+			Tp:     "TINYINT UNSIGNED",
+			Value:  uint8(math.MaxUint8),
+			Update: uint8(math.MaxUint8) - 1,
+		},
+		{
+			Tp:     "TINYINT SIGNED",
+			Value:  int8(math.MaxInt8),
+			Update: int8(math.MaxInt8) - 1,
+		},
+	}
+
+	for _, c := range cases {
+		for _, ispk := range []string{"", "PRIMARY KEY"} {
+
+			tr.run(func(src *sql.DB) {
+				sql := fmt.Sprintf("CREATE TABLE pk(id %s %s)", c.Tp, ispk)
+				mustExec(src, sql)
+
+				sql = "INSERT INTO pk(id) values( ? )"
+				mustExec(src, sql, c.Value)
+
+				if len(ispk) == 0 {
+					// insert a null value
+					mustExec(src, sql, nil)
+				}
+
+				sql = "UPDATE pk set id = ? where id = ?"
+				mustExec(src, sql, c.Update, c.Value)
+
+				sql = "DELETE from pk where id = ?"
+				mustExec(src, sql, c.Update)
+			})
+
+			tr.execSQLs([]string{"DROP TABLE pk"})
+		}
+	}
+}
+
+func mustExec(db *sql.DB, sql string, args ...interface{}) {
+	_, err := db.Exec(sql, args...)
+	if err != nil {
+		log.Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)
+	}
 }
