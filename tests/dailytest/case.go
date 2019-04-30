@@ -380,7 +380,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 }
 
 // create a table with one column id with different type
-// test the case weather it is primary key too, this can
+// test the case whether it is primary key too, this can
 // also help test when the column is handle or not.
 func runPKcases(tr *testRunner) {
 	cases := []struct {
