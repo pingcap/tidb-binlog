@@ -14,7 +14,6 @@
 package sync
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,15 +32,16 @@ var maxWaitTimeToSendMSG = time.Second * 30
 
 var _ Syncer = &KafkaSyncer{}
 
+// PartitionMode Kafka partition mode
 type PartitionMode byte
 
 const (
-	// choose fixed partition 0
-	PARTITION_FIXED = iota + 1
-	// choose partition by schema
-	PARTITION_BY_SCHEMA
-	// choose partition by table
-	PARTITION_BY_TABLE
+	// PartitionFixed choose fixed partition 0
+	PartitionFixed = iota + 1
+	// PartitionBySchema choose partition by schema
+	PartitionBySchema
+	// PartitionByTable choose partition by table
+	PartitionByTable
 )
 
 // KafkaSyncer sync data to kafka
@@ -64,11 +64,11 @@ type KafkaSyncer struct {
 func partitionMode(mode string) PartitionMode {
 	switch strings.ToLower(mode) {
 	case "schema":
-		return PARTITION_BY_SCHEMA
+		return PartitionBySchema
 	case "table":
-		return PARTITION_BY_TABLE
+		return PartitionByTable
 	default:
-		return PARTITION_FIXED
+		return PartitionFixed
 	}
 }
 
@@ -111,7 +111,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	config.Metadata.Retry.Max = 10000
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
-	if executor.partitionMode == PARTITION_FIXED {
+	if executor.partitionMode == PartitionFixed {
 		config.Producer.Partitioner = sarama.NewManualPartitioner
 	} else {
 		config.Producer.Partitioner = sarama.NewReferenceHashPartitioner
@@ -142,60 +142,61 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	switch slaveBinlog.Type {
-	case obinlog.BinlogType_DDL:
+	switch p.partitionMode {
+	case PartitionFixed:
 		return errors.Trace(p.saveBinlog(slaveBinlog, item, nil))
-	case obinlog.BinlogType_DML:
-		tables := slaveBinlog.DmlData.Tables
-		if len(tables) == 1 || p.partitionMode == PARTITION_FIXED {
-			return errors.Trace(p.saveBinlog(slaveBinlog, item, nil))
-		} else if p.partitionMode == PARTITION_BY_SCHEMA {
-			return errors.Trace(p.executeDMLPartitionBySchema(slaveBinlog, item))
-		} else if p.partitionMode == PARTITION_BY_TABLE {
-			return errors.Trace(p.executeDMLPartitionByTable(slaveBinlog, item))
-		} else {
-			return errors.Errorf("Invalid partition mode: %v", p.partitionMode)
+	case PartitionBySchema:
+		if slaveBinlog.Type == obinlog.BinlogType_DML {
+			return errors.Trace(p.syncDMLPartitionBySchema(slaveBinlog, item))
 		}
+		partitionKey := sarama.StringEncoder(*slaveBinlog.DdlData.SchemaName)
+		return errors.Trace(p.saveBinlog(slaveBinlog, item, partitionKey))
+	case PartitionByTable:
+		if slaveBinlog.Type == obinlog.BinlogType_DML {
+			return errors.Trace(p.syncDMLPartitionByTable(slaveBinlog, item))
+		}
+		partitionKey := sarama.StringEncoder(*slaveBinlog.DdlData.SchemaName + "." + *slaveBinlog.DdlData.TableName)
+		return errors.Trace(p.saveBinlog(slaveBinlog, item, partitionKey))
 	}
-	return errors.Errorf("Invalid binlog type: %v", slaveBinlog.Type)
+	return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
 }
 
-func (p *KafkaSyncer) executeDMLPartitionBySchema(binlog *obinlog.Binlog, item *Item) error {
+func (p *KafkaSyncer) syncDMLPartitionBySchema(binlog *obinlog.Binlog, item *Item) error {
+	tables := binlog.DmlData.Tables
+	if len(tables) == 1 {
+		return errors.Trace(p.saveBinlog(binlog, item, sarama.StringEncoder(*tables[0].SchemaName)))
+	}
+
 	tablesBySchema := make(map[string][]*obinlog.Table)
-	for _, table := range binlog.DmlData.Tables {
+	for _, table := range tables {
 		schemaName := *table.SchemaName
-		if _, ok := tablesBySchema[schemaName]; !ok {
-			tablesBySchema[schemaName] = make([]*obinlog.Table, 0, 1)
-		}
 		tablesBySchema[schemaName] = append(tablesBySchema[schemaName], table)
 	}
 
-	var err error
 	for schema, tables := range tablesBySchema {
 		binlog.DmlData.Tables = tables
-		if err = p.saveBinlog(binlog, item, sarama.StringEncoder(schema)); err != nil {
-			break
+		if err := p.saveBinlog(binlog, item, sarama.StringEncoder(schema)); err != nil {
+			return errors.Trace(err)
 		}
 	}
-	return errors.Trace(err)
+	return nil
 }
 
-func (p *KafkaSyncer) executeDMLPartitionByTable(binlog *obinlog.Binlog, item *Item) error {
+func (p *KafkaSyncer) syncDMLPartitionByTable(binlog *obinlog.Binlog, item *Item) error {
 	tables := binlog.DmlData.Tables
+	if len(tables) == 1 {
+		table := tables[0]
+		return errors.Trace(p.saveBinlog(binlog, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName)))
+	}
+
 	binlog.DmlData.Tables = make([]*obinlog.Table, 1)
-	var err error
-	var buffer bytes.Buffer
 	for _, table := range tables {
 		binlog.DmlData.Tables[0] = table
-		buffer.Reset()
-		buffer.WriteString(*table.SchemaName)
-		buffer.WriteRune('.')
-		buffer.WriteString(*table.TableName)
-		if err = p.saveBinlog(binlog, item, sarama.StringEncoder(buffer.String())); err != nil {
-			break
+		if err := p.saveBinlog(binlog, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName)); err != nil {
+			return errors.Trace(err)
 		}
 	}
-	return errors.Trace(err)
+	return nil
 }
 
 // Close implements Syncer interface
