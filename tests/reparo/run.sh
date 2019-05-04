@@ -20,7 +20,7 @@ run_sql "CREATE TABLE \`reparo_test\`.\`test\`(\`id\` int, \`name\` varchar(10),
 run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(1, 'a', 'a'), (2, 'b', 'b')"
 run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(3, 'c', 'c'), (4, 'd', 'c')"
 run_sql "UPDATE \`reparo_test\`.\`test\` SET \`name\` = 'bb' where \`id\` = 2"
-run_sql "DELETE FROM \`reparo_test\`.\`test\` WHERE \`name\` = 'bb'"
+run_sql "DELETE FROM \`reparo_test\`.\`test\` WHERE \`id\` = '1'"
 run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(5, 'e', 'e')"
 
 sleep 5
