@@ -31,7 +31,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 				Events: []pb.Event{},
 			},
 		}: {
-			// DMLs: []*loader.DML{},
+		// DMLs: []*loader.DML{},
 		},
 	}
 
