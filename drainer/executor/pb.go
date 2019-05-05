@@ -3,7 +3,6 @@ package executor
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/compress"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	tb "github.com/pingcap/tipb/go-binlog"
 )
@@ -15,8 +14,7 @@ type pbExecutor struct {
 }
 
 func newPB(cfg *DBConfig) (Executor, error) {
-	codec := compress.ToCompressionCodec(cfg.Compression)
-	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, codec)
+	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
