@@ -41,3 +41,9 @@ All notable changes to this project are documented in this file.
 - Pump: Add syn-log option [#529](https://github.com/pingcap/tidb-binlog/pull/529)
 - Add support for enabling gzip grpc compression for grpc [#530](https://github.com/pingcap/tidb-binlog/pull/530)
 - Drainer: Ignore generated columns when updating [#531](https://github.com/pingcap/tidb-binlog/pull/531)
+
+## [2.1.9]
+- Drainer: Fix when pk is handle and value overflow int64 (https://github.com/pingcap/tidb-binlog/pull/574)
+- Drainer: Remove pb compress config and change downstream name 'pb' to 'file' (https://github.com/pingcap/tidb-binlog/pull/575)
+- Reparo: Fix wrongly set update value (https://github.com/pingcap/tidb-binlog/pull/576)
+	- This bug is introduced since 2.1.7.
