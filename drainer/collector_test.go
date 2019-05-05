@@ -59,10 +59,11 @@ func (s *collectorSuite) TestUpdateCollectStatus(c *C) {
 	status := col.mu.status
 	c.Assert(status.Synced, IsTrue)
 	c.Assert(status.LastTS, Equals, merger.latestTS)
-	c.Assert(status.PumpPos, HasLen, 3)
-	c.Assert(status.PumpPos["node1"], Equals, int64(1001))
-	c.Assert(status.PumpPos["node2"], Equals, int64(1003))
-	c.Assert(status.PumpPos["node3"], Equals, int64(1001))
+	c.Assert(status.PumpPos, DeepEquals, map[string]int64{
+		"node1": 1001,
+		"node2": 1003,
+		"node3": 1001,
+	})
 }
 
 func (s *collectorSuite) TestNotify(c *C) {
