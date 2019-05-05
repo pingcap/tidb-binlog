@@ -19,7 +19,7 @@ func New(name string, cfg *DBConfig, sqlMode *string) (Executor, error) {
 	switch name {
 	case "mysql", "tidb":
 		return newMysql(cfg, sqlMode)
-	case "pb":
+	case "file":
 		return newPB(cfg)
 	case "flash":
 		return newFlash(cfg)

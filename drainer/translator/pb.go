@@ -24,7 +24,7 @@ type pbTranslator struct {
 }
 
 func init() {
-	Register("pb", &pbTranslator{})
+	Register("file", &pbTranslator{})
 }
 
 func (p *pbTranslator) SetConfig(_ bool, sqlMode mysql.SQLMode) {
