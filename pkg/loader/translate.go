@@ -31,39 +31,32 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn) {
 		for _, table := range binlog.DmlData.GetTables() {
 			for _, mut := range table.GetMutations() {
 				dml := new(DML)
-				txn.DMLs = append(txn.DMLs, dml)
 				dml.Database = table.GetSchemaName()
 				dml.Table = table.GetTableName()
-				switch mut.GetType() {
-				case pb.MutationType_Insert:
-					dml.Tp = InsertDMLType
-				case pb.MutationType_Update:
-					dml.Tp = UpdateDMLType
-				case pb.MutationType_Delete:
-					dml.Tp = DeleteDMLType
-				}
+				dml.Tp = getDMLType(mut)
 
 				// setup values
-				dml.Values = make(map[string]interface{})
-				for i, col := range mut.Row.GetColumns() {
-					name := table.ColumnInfo[i].Name
-					arg := columnToArg(table.ColumnInfo[i].GetMysqlType(), col)
-					dml.Values[name] = arg
-				}
+				dml.Values = getColVals(table, mut.Row.GetColumns())
 
 				// setup old values
 				if dml.Tp == UpdateDMLType {
-					dml.OldValues = make(map[string]interface{})
-					for i, col := range mut.ChangeRow.GetColumns() {
-						name := table.ColumnInfo[i].Name
-						arg := columnToArg(table.ColumnInfo[i].GetMysqlType(), col)
-						dml.OldValues[name] = arg
-					}
+					dml.OldValues = getColVals(table, mut.ChangeRow.GetColumns())
 				}
+				txn.DMLs = append(txn.DMLs, dml)
 			}
 		}
 	}
 	return
+}
+
+func getColVals(table *pb.Table, cols []*pb.Column) map[string]interface{} {
+	vals := make(map[string]interface{}, len(cols))
+	for i, col := range cols {
+		name := table.ColumnInfo[i].Name
+		arg := columnToArg(table.ColumnInfo[i].GetMysqlType(), col)
+		vals[name] = arg
+	}
+	return vals
 }
 
 func columnToArg(mysqlType string, c *pb.Column) (arg interface{}) {
@@ -95,4 +88,17 @@ func columnToArg(mysqlType string, c *pb.Column) (arg interface{}) {
 	}
 
 	return c.GetStringValue()
+}
+
+func getDMLType(mut *pb.TableMutation) DMLType {
+	switch mut.GetType() {
+	case pb.MutationType_Insert:
+		return InsertDMLType
+	case pb.MutationType_Update:
+		return UpdateDMLType
+	case pb.MutationType_Delete:
+		return DeleteDMLType
+	default:
+		return UnknownDMLType
+	}
 }
