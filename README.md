@@ -4,7 +4,7 @@
 
 ## TiDB-Binlog introduction
 
-TiDB-Binlog is a commercial tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
+TiDB-Binlog is a tool used to collect [TiDB's](https://github.com/pingcap/tidb) binary logs with the following features:
 
 - Data replication
     
@@ -73,6 +73,9 @@ The recommended startup sequence: PD -> TiKV -> [Pump](./cmd/pump) -> TiDB -> [D
 
 The best way to install TiDB-Binlog is via [TiDB-Binlog-Ansible](https://www.pingcap.com/docs-cn/tools/tidb-binlog-cluster/)
 
+## Tutorial
+
+Here's a [tutorial](https://www.pingcap.com/docs/dev/how-to/get-started/tidb-binlog/) to experiment with TiDB-Binlog (not for production use).
 
 ## Config File
 * Pump config file: [pump.toml](./cmd/pump/pump.toml) 
