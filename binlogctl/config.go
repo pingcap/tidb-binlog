@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -80,6 +81,11 @@ type Config struct {
 func NewConfig() *Config {
 	cfg := &Config{}
 	cfg.FlagSet = flag.NewFlagSet("binlogctl", flag.ContinueOnError)
+	fs := cfg.FlagSet
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage of binlogctl:")
+		fs.PrintDefaults()
+	}
 
 	cfg.FlagSet.StringVar(&cfg.Command, "cmd", "pumps", "operator: \"generate_meta\", \"pumps\", \"drainers\", \"update-pump\", \"update-drainer\", \"pause-pump\", \"pause-drainer\", \"offline-pump\", \"offline-drainer\"")
 	cfg.FlagSet.StringVar(&cfg.NodeID, "node-id", "", "id of node, use to update some node with operation update-pump, update-drainer, pause-pump, pause-drainer, offline-pump and offline-drainer")
@@ -99,9 +105,14 @@ func NewConfig() *Config {
 func (cfg *Config) Parse(args []string) error {
 	// parse first to get config file
 	err := cfg.FlagSet.Parse(args)
-	if err != nil {
-		return errors.Trace(err)
+	switch err {
+	case nil:
+	case flag.ErrHelp:
+		os.Exit(0)
+	default:
+		os.Exit(2)
 	}
+
 	// parse command line options
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
