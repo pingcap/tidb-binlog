@@ -206,8 +206,8 @@ func (s *syncBinlogSuite) TestShouldSetJob(c *C) {
 	err := col.syncBinlog(&item)
 	c.Assert(err, IsNil)
 
-	c.Assert(item.job.ID, DeepEquals, job.ID)
-	c.Assert(item.job.State, DeepEquals, job.State)
+	c.Assert(item.job.ID, Equals, job.ID)
+	c.Assert(item.job.State, Equals, job.State)
 }
 
 type publishSuite struct{}
