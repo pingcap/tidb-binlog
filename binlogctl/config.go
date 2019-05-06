@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
@@ -99,9 +100,14 @@ func NewConfig() *Config {
 func (cfg *Config) Parse(args []string) error {
 	// parse first to get config file
 	err := cfg.FlagSet.Parse(args)
-	if err != nil {
-		return errors.Trace(err)
+	switch err {
+	case nil:
+	case flag.ErrHelp:
+		os.Exit(0)
+	default:
+		os.Exit(2)
 	}
+
 	// parse command line options
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
