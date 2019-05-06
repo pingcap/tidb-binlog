@@ -40,6 +40,11 @@ const (
 	execLimitMultiple = 3
 )
 
+var (
+	execDDLRetryWait = time.Second
+	fNewBatchManager = newBatchManager
+)
+
 // Loader is used to load data to mysql
 type Loader interface {
 	SetSafeMode(bool)
@@ -49,6 +54,8 @@ type Loader interface {
 	Close()
 	Run() error
 }
+
+var _ Loader = &loaderImpl{}
 
 type loaderImpl struct {
 	// we can get table info from downstream db
@@ -149,22 +156,10 @@ func (s *loaderImpl) metricsInputTxn(txn *Txn) {
 	if txn.isDDL() {
 		s.metrics.EventCounterVec.WithLabelValues("DDL").Add(1)
 	} else {
-		var insertEvent float64
-		var deleteEvent float64
-		var updateEvent float64
-		for _, dml := range txn.DMLs {
-			switch dml.Tp {
-			case InsertDMLType:
-				insertEvent++
-			case UpdateDMLType:
-				updateEvent++
-			case DeleteDMLType:
-				deleteEvent++
-			}
-		}
-		s.metrics.EventCounterVec.WithLabelValues("Insert").Add(insertEvent)
-		s.metrics.EventCounterVec.WithLabelValues("Update").Add(updateEvent)
-		s.metrics.EventCounterVec.WithLabelValues("Delete").Add(deleteEvent)
+		nInsert, nDelete, nUpdate := countEvents(txn.DMLs)
+		s.metrics.EventCounterVec.WithLabelValues("Insert").Add(nInsert)
+		s.metrics.EventCounterVec.WithLabelValues("Delete").Add(nDelete)
+		s.metrics.EventCounterVec.WithLabelValues("Update").Add(nUpdate)
 	}
 }
 
@@ -248,7 +243,7 @@ func isCreateDatabaseDDL(sql string) bool {
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
-	err := util.RetryOnError(maxDDLRetryCount, time.Second, "execDDL", func() error {
+	err := util.RetryOnError(maxDDLRetryCount, execDDLRetryWait, "execDDL", func() error {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
@@ -312,8 +307,7 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 			log.Info("meet causality.DetectConflict exec now",
 				zap.String("table name", dml.TableName()),
 				zap.Strings("keys", keys))
-			err := s.execByHash(executor, byHash)
-			if err != nil {
+			if err := s.execByHash(executor, byHash); err != nil {
 				return errors.Trace(err)
 			}
 
@@ -340,28 +334,16 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	}
 
 	for _, dml := range dmls {
-		info, err := s.getTableInfo(dml.Database, dml.Table)
-		if err != nil {
+		if err := s.setDMLInfo(dml); err != nil {
 			return errors.Trace(err)
 		}
-		dml.info = info
-		if len(dml.Values) > len(dml.info.columns) {
-			// Remove values of generated columns
-			vals := make(map[string]interface{}, len(dml.info.columns))
-			for _, col := range dml.info.columns {
-				vals[col] = dml.Values[col]
-			}
-			dml.Values = vals
-		}
+		filterGeneratedCols(dml)
 	}
 
 	batchTables, singleDMLs := s.groupDMLs(dmls)
 
+	executor := s.getExecutor()
 	errg, _ := errgroup.WithContext(context.Background())
-	executor := newExecutor(s.db).withBatchSize(s.batchSize)
-	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
-		executor = executor.withQueryHistogramVec(s.metrics.QueryHistogramVec)
-	}
 
 	for _, dmls := range batchTables {
 		// https://golang.org/doc/faq#closures_and_goroutines
@@ -389,87 +371,27 @@ func (s *loaderImpl) Run() error {
 		close(s.successTxn)
 	}()
 
-	var err error
-
-	// the txns and according dmls we accumulate to execute later
-	var txns []*Txn
-	var dmls []*DML
-
-	execDML := func() error {
-		err := s.execDMLs(dmls)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		s.markSuccess(txns...)
-		txns = txns[:0]
-		dmls = dmls[:0]
-		return nil
-	}
-
-	execDDL := func(txn *Txn) error {
-		err := s.execDDL(txn.DDL)
-		if err != nil {
-			if !pkgsql.IgnoreDDLError(err) {
-				log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
-				return errors.Trace(err)
-			}
-			log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
-		}
-
-		s.markSuccess(txn)
-		s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
-		return nil
-	}
-
-	handleTxn := func(txn *Txn) error {
-		s.metricsInputTxn(txn)
-
-		// we always executor the previous dmls when we meet ddl,
-		// and executor ddl one by one.
-		if txn.isDDL() {
-			if err = execDML(); err != nil {
-				return errors.Trace(err)
-			}
-
-			err = execDDL(txn)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			dmls = append(dmls, txn.DMLs...)
-			txns = append(txns, txn)
-
-			// reach a limit size to exec
-			if len(dmls) >= s.batchSize*s.workerCount*execLimitMultiple {
-				if err = execDML(); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-
-		return nil
-	}
+	batch := fNewBatchManager(s)
 
 	for {
 		select {
 		case txn, ok := <-s.input:
 			if !ok {
-				log.Info("loader closed quit running")
-				if err = execDML(); err != nil {
+				log.Info("Loader closed, quit running")
+				if err := batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
 				return nil
 			}
 
-			if err = handleTxn(txn); err != nil {
+			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
 
 		default:
-			// excute dmls ASAP if no more txn we can get
-			if len(dmls) > 0 {
-				if err = execDML(); err != nil {
+			// execute DMLs ASAP if the `input` channel is empty
+			if len(batch.dmls) > 0 {
+				if err := batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
 
@@ -482,7 +404,7 @@ func (s *loaderImpl) Run() error {
 				return nil
 			}
 
-			if err = handleTxn(txn); err != nil {
+			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -508,4 +430,122 @@ func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, sing
 		}
 	}
 	return
+}
+
+func countEvents(dmls []*DML) (insertEvent float64, deleteEvent float64, updateEvent float64) {
+	for _, dml := range dmls {
+		switch dml.Tp {
+		case InsertDMLType:
+			insertEvent++
+		case UpdateDMLType:
+			updateEvent++
+		case DeleteDMLType:
+			deleteEvent++
+		}
+	}
+	return
+}
+
+func (s *loaderImpl) setDMLInfo(dml *DML) (err error) {
+	dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+	if err != nil {
+		err = errors.Trace(err)
+	}
+	return
+}
+
+func filterGeneratedCols(dml *DML) {
+	if len(dml.Values) > len(dml.info.columns) {
+		// Remove values of generated columns
+		vals := make(map[string]interface{}, len(dml.info.columns))
+		for _, col := range dml.info.columns {
+			vals[col] = dml.Values[col]
+		}
+		dml.Values = vals
+	}
+}
+
+func (s *loaderImpl) getExecutor() *executor {
+	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
+		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
+	}
+	return e
+}
+
+func newBatchManager(s *loaderImpl) *batchManager {
+	return &batchManager{
+		limit:                s.batchSize * s.workerCount * execLimitMultiple,
+		fExecDMLs:            s.execDMLs,
+		fDMLsSuccessCallback: s.markSuccess,
+		fExecDDL:             s.execDDL,
+		fDDLSuccessCallback: func(txn *Txn) {
+			s.markSuccess(txn)
+			s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
+		},
+	}
+}
+
+type batchManager struct {
+	txns                 []*Txn
+	dmls                 []*DML
+	limit                int
+	fExecDMLs            func([]*DML) error
+	fDMLsSuccessCallback func(...*Txn)
+	fExecDDL             func(*DDL) error
+	fDDLSuccessCallback  func(*Txn)
+}
+
+func (b *batchManager) execAccumulatedDMLs() error {
+	if len(b.dmls) == 0 {
+		return nil
+	}
+
+	if err := b.fExecDMLs(b.dmls); err != nil {
+		return errors.Trace(err)
+	}
+
+	if b.fDMLsSuccessCallback != nil {
+		b.fDMLsSuccessCallback(b.txns...)
+	}
+	b.txns = b.txns[:0]
+	b.dmls = b.dmls[:0]
+	return nil
+}
+
+func (b *batchManager) execDDL(txn *Txn) error {
+	if err := b.fExecDDL(txn.DDL); err != nil {
+		if !pkgsql.IgnoreDDLError(err) {
+			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
+			return errors.Trace(err)
+		}
+		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
+	}
+
+	b.fDDLSuccessCallback(txn)
+	return nil
+}
+
+func (b *batchManager) put(txn *Txn) error {
+	// we always executor the previous dmls when we meet ddl,
+	// and executor ddl one by one.
+	if txn.isDDL() {
+		if err := b.execAccumulatedDMLs(); err != nil {
+			return errors.Trace(err)
+		}
+		if err := b.execDDL(txn); err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}
+	b.dmls = append(b.dmls, txn.DMLs...)
+	b.txns = append(b.txns, txn)
+
+	// reach a limit size to exec
+	if len(b.dmls) >= b.limit {
+		if err := b.execAccumulatedDMLs(); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
