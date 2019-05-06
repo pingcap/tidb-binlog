@@ -97,6 +97,7 @@ func (s *singleExecSuite) TestFailedToBeginTx(c *C) {
 	e := newExecutor(s.db)
 	err := e.singleExec([]*DML{}, true)
 	c.Assert(err, ErrorMatches, "begin")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
 
 func (s *singleExecSuite) TestInsert(c *C) {
@@ -123,6 +124,7 @@ func (s *singleExecSuite) TestInsert(c *C) {
 	e := newExecutor(s.db)
 	err := e.singleExec([]*DML{&dml}, false)
 	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
 	s.resetMock(c)
 
@@ -134,6 +136,7 @@ func (s *singleExecSuite) TestInsert(c *C) {
 	e = newExecutor(s.db)
 	err = e.singleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
 
 func (s *singleExecSuite) TestSafeUpdate(c *C) {
@@ -167,6 +170,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	e := newExecutor(s.db)
 	err := e.singleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
 	s.resetMock(c)
 
@@ -180,6 +184,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	e = newExecutor(s.db)
 	err = e.singleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "replace")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
 	s.resetMock(c)
 
@@ -193,6 +198,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	e = newExecutor(s.db)
 	err = e.singleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
 
 type bulkDelSuite struct{}
@@ -240,6 +246,7 @@ func (s *bulkDelSuite) TestDeleteInBulk(c *C) {
 	e := newExecutor(db)
 	err = e.bulkDelete(dmls)
 	c.Assert(err, IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
 type bulkReplaceSuite struct{}
@@ -286,4 +293,5 @@ func (s *bulkReplaceSuite) TestReplaceInBulk(c *C) {
 	e := newExecutor(db)
 	err = e.bulkReplace(dmls)
 	c.Assert(err, IsNil)
+	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
