@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"time"
@@ -26,7 +27,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb/kv"
 	pb "github.com/pingcap/tipb/go-binlog"
-	"golang.org/x/net/context"
 )
 
 type dummyCheckpoint struct {
