@@ -81,11 +81,6 @@ type Config struct {
 func NewConfig() *Config {
 	cfg := &Config{}
 	cfg.FlagSet = flag.NewFlagSet("binlogctl", flag.ContinueOnError)
-	fs := cfg.FlagSet
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage of binlogctl:")
-		fs.PrintDefaults()
-	}
 
 	cfg.FlagSet.StringVar(&cfg.Command, "cmd", "pumps", "operator: \"generate_meta\", \"pumps\", \"drainers\", \"update-pump\", \"update-drainer\", \"pause-pump\", \"pause-drainer\", \"offline-pump\", \"offline-drainer\"")
 	cfg.FlagSet.StringVar(&cfg.NodeID, "node-id", "", "id of node, use to update some node with operation update-pump, update-drainer, pause-pump, pause-drainer, offline-pump and offline-drainer")
