@@ -61,9 +61,6 @@ insert into binlog_case1(t_bigint) values(-9223372036854775808);
 	`
 insert into binlog_case1(t_bigint) values(9223372036854775807);
 `,
-	`
-insert into binlog_case1(t_json) values('{"key1": "value1", "key2": "value2"}');
-`,
 }
 
 var case1Clean = []string{`

@@ -26,6 +26,8 @@ stop_services() {
     killall -9 tikv-server || true
     killall -9 pd-server || true
     killall -9 tidb-server || true
+    killall -9 tidb-server.2.1.9 || true
+    killall -9 tidb-server.2.0.8 || true
 
     killall -9 pump || true
     killall -9 drainer || true
@@ -34,7 +36,7 @@ stop_services() {
 start_upstream_tidb() {
     port=${1-4000}
     echo "Starting TiDB at port: $port..."
-    tidb-server \
+    tidb-server.2.1.9 \
         -P $port \
         --store tikv \
         --path 127.0.0.1:2379 \
@@ -95,7 +97,7 @@ EOF
     start_upstream_tidb 4001
 
     echo "Starting Downstream TiDB..."
-    tidb-server \
+    tidb-server.2.0.8 \
         -P 3306 \
         --path=$OUT_DIR/tidb \
         --status=20080 \
