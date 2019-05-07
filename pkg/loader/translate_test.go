@@ -97,6 +97,18 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDML(c *C) {
 	c.Assert(insert.Values["uid"], Equals, newVal)
 }
 
+func (s *slaveBinlogToTxnSuite) TestGetDMLType(c *C) {
+	mut := pb.TableMutation{}
+	mut.Type = pb.MutationType(404).Enum()
+	c.Assert(getDMLType(&mut), Equals, UnknownDMLType)
+	mut.Type = pb.MutationType_Insert.Enum()
+	c.Assert(getDMLType(&mut), Equals, InsertDMLType)
+	mut.Type = pb.MutationType_Update.Enum()
+	c.Assert(getDMLType(&mut), Equals, UpdateDMLType)
+	mut.Type = pb.MutationType_Delete.Enum()
+	c.Assert(getDMLType(&mut), Equals, DeleteDMLType)
+}
+
 type columnToArgSuite struct{}
 
 var _ = Suite(&columnToArgSuite{})
