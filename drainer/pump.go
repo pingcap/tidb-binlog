@@ -130,8 +130,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 
 			if p.grpcConn == nil || needReCreateConn {
 				p.logger.Info("pump create pull binlogs client")
-				err := p.createPullBinlogsClient(pctx, last)
-				if err != nil {
+				if err := p.createPullBinlogsClient(pctx, last); err != nil {
 					p.logger.Error("pump create pull binlogs client failed", zap.Error(err))
 					time.Sleep(time.Second)
 					continue
@@ -168,10 +167,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			millisecond := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(binlog.CommitTs))
 			binlogReachDurationHistogram.WithLabelValues(p.nodeID).Observe(float64(millisecond) / 1000.0)
 
-			item := &binlogItem{
-				binlog: binlog,
-				nodeID: p.nodeID,
-			}
+			item := newBinlogItem(binlog, p.nodeID)
 			select {
 			case ret <- item:
 				if binlog.CommitTs > last {
@@ -233,8 +229,6 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 func (p *Pump) reportErr(ctx context.Context, err error) {
 	select {
 	case <-ctx.Done():
-		return
 	case p.errCh <- err:
-		return
 	}
 }

@@ -72,6 +72,15 @@ type Collector struct {
 	wg    sync.WaitGroup
 }
 
+var (
+	getDDLJobRetryWait = time.Second
+
+	// Make it possible to mock the following functions in tests
+	newStore      = session.NewStore
+	newClient     = etcd.NewClientFromCfg
+	fDDLJobGetter = getDDLJob
+)
+
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
@@ -81,12 +90,12 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 
 	session.RegisterStore("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := session.NewStore(tiPath)
+	tiStore, err := newStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	cli, err := etcd.NewClientFromCfg(urlv.StringSlice(), cfg.EtcdTimeout, node.DefaultRootPath, cfg.tls)
+	cli, err := newClient(urlv.StringSlice(), cfg.EtcdTimeout, node.DefaultRootPath, cfg.tls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -120,39 +129,9 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 			return
 		case mergeItem := <-c.merger.Output():
 			item := mergeItem.(*binlogItem)
-			binlog := item.binlog
-
-			if binlog.DdlJobId > 0 {
-				for {
-					var job *model.Job
-					err := util.RetryOnError(getDDLJobRetryTime, time.Second, fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId), func() error {
-						var err1 error
-						job, err1 = getDDLJob(c.tiStore, binlog.DdlJobId)
-						return err1
-					})
-
-					if err != nil {
-						log.Error("get DDL job failed", zap.Int64("id", binlog.DdlJobId), zap.Error(err))
-						c.reportErr(ctx, err)
-						return
-					}
-
-					if job == nil {
-						time.Sleep(time.Second)
-						continue
-					}
-
-					log.Info("get ddl job", zap.Stringer("job", job))
-
-					if !skipJob(job) {
-						item.SetJob(job)
-						c.syncer.Add(item)
-						ddlJobsCounter.Add(float64(1))
-					}
-					break
-				}
-			} else {
-				c.syncer.Add(item)
+			if err := c.syncBinlog(item); err != nil {
+				c.reportErr(ctx, err)
+				return
 			}
 		}
 	}
@@ -240,44 +219,7 @@ func (c *Collector) updatePumpStatus(ctx context.Context) error {
 	}
 
 	for _, n := range nodes {
-		// format and check the nodeID
-		n.NodeID = pump.FormatNodeID(n.NodeID)
-
-		p, ok := c.pumps[n.NodeID]
-		if !ok {
-			// if pump is offline, ignore it
-			if n.State == node.Offline {
-				continue
-			}
-
-			commitTS := c.merger.GetLatestTS()
-			p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
-			c.pumps[n.NodeID] = p
-			c.merger.AddSource(MergeSource{
-				ID:     n.NodeID,
-				Source: p.PullBinlog(ctx, commitTS),
-			})
-
-		} else {
-			switch n.State {
-			case node.Pausing:
-				// do nothing
-			case node.Paused:
-				p.Pause()
-			case node.Online:
-				p.Continue(ctx)
-			case node.Closing:
-				// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
-			case node.Offline:
-				// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
-				// so when the pump is offline, we can remove this pump directly.
-				c.merger.RemoveSource(n.NodeID)
-				c.pumps[n.NodeID].Close()
-				delete(c.pumps, n.NodeID)
-				log.Info("node of cluster has been removed and release the connection to it",
-					zap.String("nodeID", p.nodeID), zap.Uint64("clusterID", p.clusterID))
-			}
-		}
+		c.handlePumpStatusUpdate(ctx, n)
 	}
 	return nil
 }
@@ -307,11 +249,10 @@ func (c *Collector) HTTPStatus() *HTTPStatus {
 		return &HTTPStatus{
 			Synced: false,
 		}
-
 	}
 
-	// if syncer don't have binlog input in a minitue,
-	// we can think all the binlog is synced
+	// If the syncer has no binlog input for more than `c.syncedCheckTime` minitue,
+	// we may consider all binlogs synced
 	if time.Since(c.syncer.GetLastSyncTime()) > time.Duration(c.syncedCheckTime)*time.Minute {
 		status.Synced = true
 	}
@@ -324,8 +265,81 @@ func (c *Collector) reportErr(ctx context.Context, err error) {
 	log.Error("reportErr receive error", zap.Error(err))
 	select {
 	case <-ctx.Done():
-		return
 	case c.errCh <- err:
-		return
+	}
+}
+
+func (c *Collector) syncBinlog(item *binlogItem) error {
+	binlog := item.binlog
+	if binlog.DdlJobId > 0 {
+		msgPrefix := fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId)
+		var job *model.Job
+		for {
+			err := util.RetryOnError(getDDLJobRetryTime, getDDLJobRetryWait, msgPrefix, func() error {
+				var err1 error
+				job, err1 = fDDLJobGetter(c.tiStore, binlog.DdlJobId)
+				return err1
+			})
+
+			if err != nil {
+				log.Error("get DDL job failed", zap.Int64("id", binlog.DdlJobId), zap.Error(err))
+				return errors.Trace(err)
+			}
+
+			if job != nil {
+				break
+			}
+
+			time.Sleep(time.Second)
+		}
+
+		log.Info("get ddl job", zap.Stringer("job", job))
+
+		if skipJob(job) {
+			return nil
+		}
+		item.SetJob(job)
+		ddlJobsCounter.Add(float64(1))
+	}
+	c.syncer.Add(item)
+	return nil
+}
+
+func (c *Collector) handlePumpStatusUpdate(ctx context.Context, n *node.Status) {
+	n.NodeID = pump.FormatNodeID(n.NodeID)
+
+	p, ok := c.pumps[n.NodeID]
+	if !ok {
+		// if pump is offline, ignore it
+		if n.State == node.Offline {
+			return
+		}
+
+		commitTS := c.merger.GetLatestTS()
+		p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
+		c.pumps[n.NodeID] = p
+		c.merger.AddSource(MergeSource{
+			ID:     n.NodeID,
+			Source: p.PullBinlog(ctx, commitTS),
+		})
+	} else {
+		switch n.State {
+		case node.Pausing:
+			// do nothing
+		case node.Paused:
+			p.Pause()
+		case node.Online:
+			p.Continue(ctx)
+		case node.Closing:
+			// pump is closing, and need wait all the binlog is send to drainer, so do nothing here.
+		case node.Offline:
+			// before pump change status to offline, it needs to check all the binlog save in this pump had already been consumed in drainer.
+			// so when the pump is offline, we can remove this pump directly.
+			c.merger.RemoveSource(n.NodeID)
+			c.pumps[n.NodeID].Close()
+			delete(c.pumps, n.NodeID)
+			log.Info("node of cluster has been removed and release the connection to it",
+				zap.String("nodeID", p.nodeID), zap.Uint64("clusterID", p.clusterID))
+		}
 	}
 }
