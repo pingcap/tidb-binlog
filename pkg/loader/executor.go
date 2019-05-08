@@ -134,10 +134,7 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 	}
 
 	err = tx.commit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 func (e *executor) bulkReplace(inserts []*DML) error {
@@ -177,11 +174,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		return errors.Trace(err)
 	}
 	err = tx.commit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-
+	return errors.Trace(err)
 }
 
 // we merge dmls by primary key, after merge by key, we
