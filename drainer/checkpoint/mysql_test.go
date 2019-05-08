@@ -31,18 +31,6 @@ var _ = Suite(&testCheckPointSuite{})
 
 type testCheckPointSuite struct{}
 
-func (t *testCheckPointSuite) TestCheckPointString(c *C) {
-	cp := MysqlCheckPoint{CommitTS: 2019}
-	c.Assert(cp.String(), Equals, "binlog commitTS = 2019")
-}
-
-func (t *testCheckPointSuite) TestCheck(c *C) {
-	cp := MysqlCheckPoint{saveTime: time.Now()}
-	c.Assert(cp.Check(1), IsFalse)
-	cp.saveTime = time.Now().Add(-maxSaveTime)
-	c.Assert(cp.Check(1), IsTrue)
-}
-
 func (t *testCheckPointSuite) TestClose(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
