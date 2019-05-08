@@ -212,21 +212,23 @@ func (dml *DML) whereValues(names []string) (values []interface{}) {
 }
 
 func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
+	// Try to use unique key values when available
 	for _, index := range dml.info.uniqueKeys {
 		values := dml.whereValues(index.columns)
-		var i int
-		for i = 0; i < len(values); i++ {
+		notAnyNil := true
+		for i := 0; i < len(values); i++ {
 			if values[i] == nil {
+				notAnyNil = false
 				break
 			}
 		}
-		if i == len(values) {
+		if notAnyNil {
 			return index.columns, values
 		}
 	}
 
+	// Fallback to use all columns
 	return dml.info.columns, dml.whereValues(dml.info.columns)
-
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {

@@ -114,6 +114,10 @@ func (e *executor) begin() (*tx, error) {
 }
 
 func (e *executor) bulkDelete(deletes []*DML) error {
+	if len(deletes) == 0 {
+		return nil
+	}
+
 	var sqls strings.Builder
 	var argss []interface{}
 
@@ -143,12 +147,11 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	}
 
 	info := inserts[0].info
-	dbName := inserts[0].Database
-	tableName := inserts[0].Table
 
-	builder := new(strings.Builder)
+	var builder strings.Builder
 
-	fmt.Fprintf(builder, "REPLACE INTO %s(%s) VALUES ", quoteSchema(dbName, tableName), buildColumnList(info.columns))
+	cols := "(" + buildColumnList(info.columns) + ")"
+	builder.WriteString("REPLACE INTO " + inserts[0].TableName() + cols + " VALUES ")
 
 	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
 	for i := 0; i < len(inserts); i++ {
@@ -196,22 +199,19 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 	log.Debug("merge dmls", zap.Reflect("dmls", dmls), zap.Reflect("merged", types))
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
-		err := e.splitExecDML(allDeletes, e.bulkDelete)
-		if err != nil {
+		if err := e.splitExecDML(allDeletes, e.bulkDelete); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allInserts, ok := types[InsertDMLType]; ok {
-		err := e.splitExecDML(allInserts, e.bulkReplace)
-		if err != nil {
+		if err := e.splitExecDML(allInserts, e.bulkReplace); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
-		err := e.splitExecDML(allUpdates, e.bulkReplace)
-		if err != nil {
+		if err := e.splitExecDML(allUpdates, e.bulkReplace); err != nil {
 			return errors.Trace(err)
 		}
 	}
