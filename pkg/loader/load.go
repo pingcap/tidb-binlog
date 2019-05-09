@@ -384,6 +384,7 @@ func (s *loaderImpl) Run() error {
 				return nil
 			}
 
+			s.metricsInputTxn(txn)
 			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
@@ -404,6 +405,7 @@ func (s *loaderImpl) Run() error {
 				return nil
 			}
 
+			s.metricsInputTxn(txn)
 			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
