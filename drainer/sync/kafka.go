@@ -37,7 +37,7 @@ type PartitionMode byte
 
 const (
 	// PartitionFixed choose fixed partition 0
-	PartitionFixed = iota + 1
+	PartitionFixed PartitionMode = iota + 1
 	// PartitionBySchema choose partition by schema
 	PartitionBySchema
 	// PartitionByTable choose partition by table
