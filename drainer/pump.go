@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -192,7 +193,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 
 	callOpts := []grpc.CallOption{grpc.MaxCallRecvMsgSize(maxMsgSize)}
 
-	if compressor, ok := ctx.Value(drainerKeyType("compressor")).(string); ok {
+	if compressor, ok := getCompressorName(ctx); ok {
 		p.logger.Info("pump grpc compression enabled")
 		callOpts = append(callOpts, grpc.UseCompressor(compressor))
 	}
@@ -231,4 +232,14 @@ func (p *Pump) reportErr(ctx context.Context, err error) {
 	case <-ctx.Done():
 	case p.errCh <- err:
 	}
+}
+
+func getCompressorName(ctx context.Context) (string, bool) {
+	if compressor, ok := ctx.Value(drainerKeyType("compressor")).(string); ok {
+		compressor = strings.TrimSpace(compressor)
+		if len(compressor) != 0 {
+			return compressor, true
+		}
+	}
+	return "", false
 }
