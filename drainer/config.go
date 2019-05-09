@@ -234,7 +234,7 @@ func (cfg *Config) validate() error {
 	}
 
 	if !util.IsValidateListenHost(host) {
-		log.Fatal("invalid listen addr, drainer will register this ip into etcd, pump must access drainer, change the listen addr config", zap.String("listen addr", host))
+		log.Warn("pump may not be able to access drainer using this listen addr config", zap.String("listen addr", host))
 	}
 
 	// check EtcdEndpoints
