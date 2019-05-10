@@ -14,14 +14,11 @@
 package arbiter
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/zap"
 )
 
@@ -71,33 +68,6 @@ var (
 
 // Registry is the metrics registry of server
 var Registry = prometheus.NewRegistry()
-
-type metricClient struct {
-	addr     string
-	interval int
-}
-
-// Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(ctx context.Context, port int) {
-	log.Debug("start prometheus metrics client", zap.String("addr", mc.addr), zap.Int("interval second", mc.interval))
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("stop push metrics")
-			return
-		case <-time.After(time.Duration(mc.interval) * time.Second):
-			err := push.AddFromGatherer(
-				"binlog",
-				map[string]string{"instance": instanceName(port)},
-				mc.addr,
-				Registry,
-			)
-			if err != nil {
-				log.Error("could not push metrics to Prometheus Pushgateway", zap.Error(err))
-			}
-		}
-	}
-}
 
 func init() {
 	Registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))

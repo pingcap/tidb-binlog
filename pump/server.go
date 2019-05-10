@@ -74,7 +74,7 @@ type Server struct {
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	gcDuration time.Duration
-	metrics    *metricClient
+	metrics    *util.MetricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
@@ -98,12 +98,13 @@ func init() {
 
 // NewServer returns a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
-	var metrics *metricClient
+	var metrics *util.MetricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
-		metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
-		}
+		metrics = util.NewMetricClient(
+			cfg.MetricsAddr,
+			time.Duration(cfg.MetricsInterval)*time.Second,
+			registry,
+		)
 	}
 
 	// get pd client and cluster ID
@@ -553,7 +554,7 @@ func (s *Server) startMetrics() {
 		return
 	}
 	log.Info("start metricClient")
-	s.metrics.Start(s.ctx, s.node.ID())
+	s.metrics.Start(s.ctx, map[string]string{"instance": s.node.ID()})
 	log.Info("startMetrics exit")
 }
 
