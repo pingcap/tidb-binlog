@@ -33,3 +33,4 @@ cscope.*
 
 # Files generated when testing
 out
+vendor/
