@@ -198,8 +198,7 @@ func (p *pumpNode) Heartbeat(ctx context.Context) <-chan error {
 			case <-time.After(p.heartbeatInterval):
 				p.Lock()
 				p.updateStatus()
-				err := p.UpdateNode(ctx, nodePrefix, p.status)
-				if err != nil {
+				if err := p.UpdateNode(ctx, nodePrefix, p.status); err != nil {
 					errc <- errors.Trace(err)
 				}
 				p.Unlock()

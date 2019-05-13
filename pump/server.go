@@ -52,6 +52,7 @@ import (
 var (
 	notifyDrainerTimeout     = time.Second * 10
 	serverInfoOutputInterval = time.Second * 10
+	gcInterval               = time.Hour
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -333,26 +334,18 @@ func (s *Server) Start() error {
 	// start a UNIX listener
 	var unixLis net.Listener
 	if s.unixAddr != "" {
-		unixURL, err := url.Parse(s.unixAddr)
+		unixLis, err = listen("unix", s.unixAddr)
 		if err != nil {
-			return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
-		}
-		unixLis, err = net.Listen("unix", unixURL.Path)
-		if err != nil {
-			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
+			return errors.Trace(err)
 		}
 	}
 
 	log.Debug("init success")
 
 	// start a TCP listener
-	tcpURL, err := url.Parse(s.tcpAddr)
+	tcpLis, err := listen("tcp", s.tcpAddr)
 	if err != nil {
-		return errors.Annotatef(err, "invalid listening tcp addr (%s)", s.tcpAddr)
-	}
-	tcpLis, err := net.Listen("tcp", tcpURL.Host)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
+		return errors.Trace(err)
 	}
 
 	// start generate binlog if pump doesn't receive new binlogs
@@ -502,7 +495,7 @@ func (s *Server) gcBinlogFile() {
 		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
-		case <-time.After(time.Hour):
+		case <-time.After(gcInterval):
 			if s.gcDuration == 0 {
 				continue
 			}
@@ -514,7 +507,7 @@ func (s *Server) gcBinlogFile() {
 			}
 			log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
 
-			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
+			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1e6
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 			if safeTSO < gcTS {
 				gcTS = safeTSO
@@ -692,77 +685,38 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	var fakeBinlog *pb.Binlog
 	var err error
 
-	// write a fake binlog
-	for {
+	err = util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() error {
 		fakeBinlog, err = s.writeFakeBinlog()
-		if err != nil {
-			log.Error("write fake binlog failed", zap.Error(err))
-
-			select {
-			case <-time.After(time.Second):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
-		}
-
-		break
+		return err
+	})
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	// check storage has handle this fake binlog
-	for {
-		maxCommitTS := s.storage.MaxCommitTS()
-		if maxCommitTS < fakeBinlog.CommitTs {
-			log.Info("max commit TS in storage less than fake binlog commit ts",
-				zap.Int64("max commit ts", maxCommitTS),
-				zap.Int64("fake binlog commit ts", fakeBinlog.CommitTs))
-			select {
-			case <-time.After(time.Second):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
-		}
-
-		break
+	if err := s.waitUntilCommitTSSaved(ctx, fakeBinlog.CommitTs, time.Second); err != nil {
+		return errors.Trace(ctx.Err())
 	}
 
-	log.Debug("start to check offline safe for drainers")
+	log.Debug("Start waiting until all drainers have consumed the last fake binlog")
 
-	// check drainer has consume fake binlog we just write
 	for {
 		select {
 		case <-time.After(time.Second):
-			pumpNode := s.node.(*pumpNode)
-			drainers, err := pumpNode.Nodes(ctx, "drainers")
+			minSavedTSO, err := s.getSaveGCTSOForDrainers()
 			if err != nil {
 				log.Error("get nodes failed", zap.Error(err))
 				break
 			}
-			needByDrainer := false
-			for _, drainer := range drainers {
-				if drainer.State == node.Offline {
-					continue
-				}
-
-				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
-					log.Info("wait for drainer to consume binlog",
-						zap.String("drainer NodeID", drainer.NodeID),
-						zap.Int64("drainer MaxCommitTS", drainer.MaxCommitTS),
-						zap.Int64("Binlog CommiTS", fakeBinlog.CommitTs))
-					needByDrainer = true
-					break
-				}
-			}
-			if !needByDrainer {
+			if minSavedTSO >= fakeBinlog.CommitTs {
 				return nil
 			}
-
-			_, err = s.writeFakeBinlog()
-			if err != nil {
+			log.Info("Waiting for drainer to consume binlog",
+				zap.Int64("Minimum Drainer MaxCommitTS", minSavedTSO),
+				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
+			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
 			}
-
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		}
@@ -827,4 +781,34 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
+}
+
+func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInterval time.Duration) error {
+	for {
+		maxCommitTS := s.storage.MaxCommitTS()
+		if maxCommitTS < ts {
+			log.Info("The max commit ts saved is less than expected commit ts",
+				zap.Int64("max commit ts", maxCommitTS),
+				zap.Int64("expected commit ts", ts))
+			select {
+			case <-time.After(checkInterval):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+		return nil
+	}
+}
+
+func listen(network, addr string) (net.Listener, error) {
+	URL, err := url.Parse(addr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", URL)
+	}
+	listener, err := net.Listen(network, URL.Path)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Path)
+	}
+	return listener, nil
 }
