@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
@@ -53,7 +54,7 @@ type Server struct {
 	// all txn commitTS <= finishTS has loaded to downstream
 	finishTS int64
 
-	metrics *metricClient
+	metrics *util.MetricClient
 
 	closed bool
 	mu     sync.Mutex
@@ -134,10 +135,11 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	// set metrics
 	if cfg.Metrics.Addr != "" && cfg.Metrics.Interval != 0 {
-		srv.metrics = &metricClient{
-			addr:     cfg.Metrics.Addr,
-			interval: cfg.Metrics.Interval,
-		}
+		srv.metrics = util.NewMetricClient(
+			cfg.Metrics.Addr,
+			time.Duration(cfg.Metrics.Interval)*time.Second,
+			Registry,
+		)
 	}
 
 	return
@@ -167,7 +169,7 @@ func (s *Server) Run() error {
 
 	// push metrics if need
 	if s.metrics != nil {
-		go s.metrics.Start(ctx, s.port)
+		go s.metrics.Start(ctx, map[string]string{"instance": instanceName(s.port)})
 	}
 
 	var wg sync.WaitGroup

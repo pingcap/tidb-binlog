@@ -15,14 +15,9 @@ package drainer
 
 import (
 	"os"
-	"time"
 
-	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
-	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -137,30 +132,4 @@ func init() {
 
 	// for pb using it
 	bf.InitMetircs(registry)
-}
-
-type metricClient struct {
-	addr     string
-	interval int
-}
-
-// Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(ctx context.Context, drainerID string) {
-	log.Debug("start prometheus metrics client", zap.String("addr", mc.addr), zap.Int("interval second", mc.interval))
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Duration(mc.interval) * time.Second):
-			err := push.AddFromGatherer(
-				"binlog",
-				map[string]string{"instance": drainerID},
-				mc.addr,
-				registry,
-			)
-			if err != nil {
-				log.Error("push metrics to Prometheus Pushgateway failed", zap.Error(err))
-			}
-		}
-	}
 }
