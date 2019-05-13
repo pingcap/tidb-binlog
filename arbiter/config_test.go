@@ -32,7 +32,8 @@ func (t *TestConfigSuite) TestAdjustConfig(c *check.C) {
 		Up:   UpConfig{},
 		Down: DownConfig{},
 	}
-	config.adjustConfig()
+	err := config.adjustConfig()
+	c.Assert(err, check.IsNil)
 	c.Assert(config.Up.KafkaAddrs, check.Equals, defaultKafkaAddrs)
 	c.Assert(config.Up.KafkaVersion, check.Equals, defaultKafkaVersion)
 	c.Assert(config.Down.Host, check.Equals, "localhost")

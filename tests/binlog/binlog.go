@@ -40,19 +40,31 @@ func main() {
 	if err != nil {
 		log.S().Fatal(err)
 	}
-	defer util.CloseDB(sourceDB)
+	defer func() {
+		if err := util.CloseDB(sourceDB); err != nil {
+			log.S().Errorf("Failed to close source database: %s\n", err)
+		}
+	}()
 
 	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
 	if err != nil {
 		log.S().Fatal(err)
 	}
-	defer util.CloseDB(targetDB)
+	defer func() {
+		if err := util.CloseDB(targetDB); err != nil {
+			log.S().Errorf("Failed to close target database: %s\n", err)
+		}
+	}()
 
 	sourceDBs, err := util.CreateSourceDBs()
 	if err != nil {
 		log.S().Fatal(err)
 	}
-	defer util.CloseDBs(sourceDBs)
+	defer func() {
+		if err := util.CloseDBs(sourceDBs); err != nil {
+			log.S().Errorf("Failed to close source databases: %s\n", err)
+		}
+	}()
 
 	dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
 	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)

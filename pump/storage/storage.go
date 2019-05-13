@@ -841,23 +841,23 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	pbinlog := new(pb.Binlog)
 	err = pbinlog.Unmarshal(pvalue)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	cbinlog.StartTs = pbinlog.StartTs

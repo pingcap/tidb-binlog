@@ -112,7 +112,9 @@ func (c *Config) Parse(args []string) (err error) {
 	}
 
 	// Parse again to replace with command line options
-	c.FlagSet.Parse(args)
+	if err := c.FlagSet.Parse(args); err != nil {
+		return errors.Trace(err)
+	}
 	if len(c.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", c.FlagSet.Arg(0))
 	}

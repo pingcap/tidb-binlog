@@ -43,7 +43,10 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 func checkTest(c *C, dir string) {
 	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
-	defer CloseBinlogger(bl)
+	defer func() {
+		err := CloseBinlogger(bl)
+		c.Assert(err, IsNil)
+	}()
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
@@ -58,7 +61,8 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate()
+	err = b.rotate()
+	c.Assert(err, IsNil)
 
 	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
@@ -202,11 +206,15 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	dir := c.MkDir()
 	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
-	defer CloseBinlogger(bl)
+	defer func() {
+		err := CloseBinlogger(bl)
+		c.Assert(err, IsNil)
+	}()
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate()
+	err = b.rotate()
+	c.Assert(err, IsNil)
 
 	time.Sleep(10 * time.Millisecond)
 	b.GC(time.Millisecond, binlog.Pos{})

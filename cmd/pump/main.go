@@ -41,7 +41,9 @@ func main() {
 		log.Fatal("verifying flags failed. See 'pump --help'.", zap.Error(err))
 	}
 
-	util.InitLogger(cfg.LogLevel, cfg.LogFile)
+	if err := util.InitLogger(cfg.LogLevel, cfg.LogFile); err != nil {
+		log.Fatal("Failed to initialize log", zap.Error(err))
+	}
 	version.PrintVersionInfo("Pump")
 
 	p, err := pump.NewServer(cfg)

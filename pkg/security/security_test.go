@@ -75,7 +75,7 @@ func (s *testSecuritySuite) TestToTLSConfig(c *C) {
 	// openssl x509 -req -in ssl.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out ssl.crt -days 999999
 	// ```
 
-	ioutil.WriteFile(dummyConfig.SSLCA, []byte(`
+	err := ioutil.WriteFile(dummyConfig.SSLCA, []byte(`
 -----BEGIN CERTIFICATE-----
 MIIBBjCBtQIJAMLMVjQw2v1pMAoGCCqGSM49BAMCMBQxEjAQBgNVBAMMCWxvY2Fs
 aG9zdDAgFw0xOTA0MTcxODEyNDNaGA80NzU3MDMxMzE4MTI0M1owFDESMBAGA1UE
@@ -85,8 +85,9 @@ KoZIzj0EAwIDQAAwPQIcbNvV16rOOzwotH65cJY6cCdf0h3IODjlWMf1qAIdAIBB
 Fma6g8iW5zdQPqDR9BGqugNPjtI/SMK6tfQ=
 -----END CERTIFICATE-----
 	`), 0644)
+	c.Assert(err, IsNil)
 
-	ioutil.WriteFile(dummyConfig.SSLCert, []byte(`
+	err = ioutil.WriteFile(dummyConfig.SSLCert, []byte(`
 -----BEGIN CERTIFICATE-----
 MIIBBTCBtAIJAP8wfS+6tJ3LMAkGByqGSM49BAEwFDESMBAGA1UEAwwJbG9jYWxo
 b3N0MCAXDTE5MDQxNzE4MTI0NFoYDzQ3NTcwMzEzMTgxMjQ0WjAUMRIwEAYDVQQD
@@ -96,14 +97,16 @@ hkjOPQQBA0EAMD4CHQC05dXi9zFLjYjQGhpJNx+Nc/5vC6E7j/MU+xsTAh0A6SUn
 g916djuFWv8djdDq+0NEFD9OzgPdSb8rZw==
 -----END CERTIFICATE-----
 	`), 0644)
+	c.Assert(err, IsNil)
 
-	ioutil.WriteFile(dummyConfig.SSLKey, []byte(`
+	err = ioutil.WriteFile(dummyConfig.SSLKey, []byte(`
 -----BEGIN EC PRIVATE KEY-----
 MGgCAQEEHCsPBVueZ3YX3yp1tn15YXj0cTKGCo1SO1EWO92gBwYFK4EEACGhPAM6
 AAQJaXEnDhG2tPxD4wl1ycaZwqWm9JeQZFuUPgxekGwCMM22sKpYLvhdKroSBoKW
 wXIC6vZMWeIj/w==
 -----END EC PRIVATE KEY-----
 	`), 0600)
+	c.Assert(err, IsNil)
 
 	config, err := dummyConfig.ToTLSConfig()
 	c.Assert(err, IsNil)
@@ -131,7 +134,8 @@ func (s *testSecuritySuite) TestInvalidTLSConfig(c *C) {
 	_, err := dummyConfig.ToTLSConfig()
 	c.Assert(err, ErrorMatches, "could not read ca certificate.*")
 
-	ioutil.WriteFile(dummyConfig.SSLCA, []byte("invalid certificate"), 0644)
+	err = ioutil.WriteFile(dummyConfig.SSLCA, []byte("invalid certificate"), 0644)
+	c.Assert(err, IsNil)
 
 	_, err = dummyConfig.ToTLSConfig()
 	c.Assert(err, ErrorMatches, "failed to append ca certs.*")
@@ -139,8 +143,10 @@ func (s *testSecuritySuite) TestInvalidTLSConfig(c *C) {
 	dummyConfig.SSLCert = filepath.Join(temp, "invalid-ssl.crt")
 	dummyConfig.SSLKey = filepath.Join(temp, "invalid-ssl.key")
 
-	ioutil.WriteFile(dummyConfig.SSLCert, []byte("invalid certificate"), 0644)
-	ioutil.WriteFile(dummyConfig.SSLKey, []byte("invalid key"), 0600)
+	err = ioutil.WriteFile(dummyConfig.SSLCert, []byte("invalid certificate"), 0644)
+	c.Assert(err, IsNil)
+	err = ioutil.WriteFile(dummyConfig.SSLKey, []byte("invalid key"), 0600)
+	c.Assert(err, IsNil)
 
 	_, err = dummyConfig.ToTLSConfig()
 	c.Assert(err, ErrorMatches, "could not load client key pair.*")
