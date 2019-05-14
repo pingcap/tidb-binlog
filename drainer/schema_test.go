@@ -10,7 +10,11 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-func (t *testDrainerSuite) TestSchema(c *C) {
+type schemaSuite struct{}
+
+var _ = Suite(&schemaSuite{})
+
+func (t *schemaSuite) TestSchema(c *C) {
 	var jobs []*model.Job
 	dbName := model.NewCIStr("Test")
 	// db and ignoreDB info
@@ -25,7 +29,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobDup := &model.Job{
@@ -33,7 +37,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{2, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
@@ -93,7 +97,7 @@ func (t *testDrainerSuite) TestSchema(c *C) {
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
-func (*testDrainerSuite) TestTable(c *C) {
+func (*schemaSuite) TestTable(c *C) {
 	var jobs []*model.Job
 	dbName := model.NewCIStr("Test")
 	tbName := model.NewCIStr("T")
@@ -141,7 +145,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   3,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{1, dbInfo, nil, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
@@ -166,7 +170,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{3, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
@@ -179,7 +183,7 @@ func (*testDrainerSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{4, nil, tblInfo, 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 123},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
@@ -253,4 +257,128 @@ func (*testDrainerSuite) TestTable(c *C) {
 	c.Assert(err, IsNil)
 	// test schema version
 	c.Assert(schema.SchemaMetaVersion(), Equals, int64(0))
+}
+
+func (t *schemaSuite) TestHandleDDL(c *C) {
+	schema, err := NewSchema(nil, false)
+	c.Assert(err, IsNil)
+	dbName := model.NewCIStr("Test")
+	colName := model.NewCIStr("A")
+	tbName := model.NewCIStr("T")
+
+	// check rollback done job
+	job := &model.Job{ID: 1, State: model.JobStateRollbackDone}
+	_, _, sql, err := schema.handleDDL(job)
+	c.Assert(err, IsNil)
+	c.Assert(sql, Equals, "")
+
+	// check job.Query is empty
+	job = &model.Job{ID: 1, State: model.JobStateDone}
+	_, _, sql, err = schema.handleDDL(job)
+	c.Assert(sql, Equals, "")
+	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
+
+	// db info
+	dbInfo := &model.DBInfo{
+		ID:    2,
+		Name:  dbName,
+		State: model.StatePublic,
+	}
+	// table Info
+	tblInfo := &model.TableInfo{
+		ID:    6,
+		Name:  tbName,
+		State: model.StatePublic,
+	}
+	// column info
+	colInfo := &model.ColumnInfo{
+		ID:        8,
+		Name:      colName,
+		Offset:    0,
+		FieldType: *types.NewFieldType(mysql.TypeLonglong),
+		State:     model.StatePublic,
+	}
+	tblInfo.Columns = []*model.ColumnInfo{colInfo}
+
+	testCases := []struct {
+		name        string
+		jobID       int64
+		schemaID    int64
+		tableID     int64
+		jobType     model.ActionType
+		binlogInfo  *model.HistoryInfo
+		query       string
+		resultQuery string
+		schemaName  string
+		tableName   string
+	}{
+		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: model.ActionCreateSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: model.ActionCreateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: model.ActionAddColumn, binlogInfo: &model.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "truncateTable", jobID: 11, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 10, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table T;", resultQuery: "drop table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
+	}
+
+	for _, testCase := range testCases {
+		// prepare for ddl
+		switch testCase.name {
+		case "addColumn":
+			tblInfo.Columns = []*model.ColumnInfo{colInfo}
+		case "truncateTable":
+			tblInfo.ID = 10
+		}
+
+		job = &model.Job{
+			ID:         testCase.jobID,
+			State:      model.JobStateDone,
+			SchemaID:   testCase.schemaID,
+			TableID:    testCase.tableID,
+			Type:       testCase.jobType,
+			BinlogInfo: testCase.binlogInfo,
+			Query:      testCase.query,
+		}
+		testDoDDLAndCheck(c, schema, job, false, testCase.resultQuery, testCase.schemaName, testCase.tableName)
+
+		// custom check after ddl
+		switch testCase.name {
+		case "createSchema":
+			_, ok := schema.SchemaByID(dbInfo.ID)
+			c.Assert(ok, IsTrue)
+		case "createTable":
+			_, ok := schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsTrue)
+		case "addColumn", "truncateTable":
+			tb, ok := schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsTrue)
+			c.Assert(tb.Columns, HasLen, 1)
+		case "dropTable":
+			_, ok := schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsFalse)
+		case "dropSchema":
+			_, ok := schema.SchemaByID(job.SchemaID)
+			c.Assert(ok, IsFalse)
+		}
+	}
+}
+
+func (t *schemaSuite) TestAddImplicitColumn(c *C) {
+	tbl := model.TableInfo{}
+
+	addImplicitColumn(&tbl)
+
+	c.Assert(tbl.Columns, HasLen, 1)
+	c.Assert(tbl.Columns[0].ID, Equals, int64(implicitColID))
+	c.Assert(tbl.Indices, HasLen, 1)
+	c.Assert(tbl.Indices[0].Primary, IsTrue)
+}
+
+func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
+	schemaName, tableName, resSQL, err := schema.handleDDL(job)
+	c.Logf("handle: %s", job.Query)
+	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)
+	c.Assert(err != nil, Equals, isErr)
+	c.Assert(sql, Equals, resSQL)
+	c.Assert(schemaName, Equals, expectedSchema)
+	c.Assert(tableName, Equals, expectedTable)
 }

@@ -233,7 +233,6 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 			log.Fatal(err)
 		}
 	})
-
 }
 
 // updatePKUK create a table with primary key and unique key

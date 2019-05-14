@@ -274,7 +274,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, ""}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 
@@ -284,7 +284,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schemaName, ""}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schemaName, Table: ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 
 	case model.ActionRenameTable:
@@ -310,7 +310,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = table.Name.O
@@ -331,7 +331,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = table.Name.O
@@ -347,7 +347,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tableName}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: tableName}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 
@@ -373,7 +373,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, table.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = table.Name.O
@@ -399,7 +399,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.Trace(err)
 		}
 
-		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{schema.Name.O, tbInfo.Name.O}
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: tbInfo.Name.O}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = tbInfo.Name.O
