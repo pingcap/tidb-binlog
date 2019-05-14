@@ -214,10 +214,10 @@ func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
 
 			for idx, src := range srcs {
 				wg.Add(1)
-				go func() {
-					dml(ctx, src, idx)
+				go func(i int, s *sql.DB) {
+					dml(ctx, s, i)
 					wg.Done()
-				}()
+				}(idx, src)
 			}
 
 			time.Sleep(time.Millisecond)

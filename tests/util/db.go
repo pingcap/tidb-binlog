@@ -37,8 +37,8 @@ func (c *DBConfig) String() string {
 func CreateDB(cfg DBConfig) (*sql.DB, error) {
 	// just set to the same timezone so the timestamp field of mysql will return the same value
 	// timestamp field will be display as the time zone of the Local time of drainer when write to kafka, so we set it to local time to pass CI now
-	zone, offset := time.Now().Zone()
-	zone = fmt.Sprintf("'+%02d:00'", offset/3600)
+	_, offset := time.Now().Zone()
+	zone := fmt.Sprintf("'+%02d:00'", offset/3600)
 
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&interpolateParams=true&multiStatements=true&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape(zone))
 	db, err := sql.Open("mysql", dbDSN)

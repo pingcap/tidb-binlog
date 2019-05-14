@@ -28,6 +28,7 @@ var (
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
+	// SegmentSizeBytes is the max file size of file
 	SegmentSizeBytes int64 = 512 * 1024 * 1024
 )
 
