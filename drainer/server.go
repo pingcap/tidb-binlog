@@ -62,7 +62,7 @@ type Server struct {
 	collector *Collector
 	tcpAddr   string
 	gs        *grpc.Server
-	metrics   *metricClient
+	metrics   *util.MetricClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	tg        taskGroup
@@ -133,12 +133,13 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	var metrics *metricClient
+	var metrics *util.MetricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
-		metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
-		}
+		metrics = util.NewMetricClient(
+			cfg.MetricsAddr,
+			time.Duration(cfg.MetricsInterval)*time.Second,
+			registry,
+		)
 	}
 
 	advURL, err := url.Parse(cfg.ListenAddr)
@@ -256,7 +257,7 @@ func (s *Server) Start() error {
 
 	if s.metrics != nil {
 		s.tg.GoNoPanic("metrics", func() {
-			s.metrics.Start(s.ctx, s.ID)
+			s.metrics.Start(s.ctx, map[string]string{"instance": s.ID})
 		})
 	}
 

@@ -231,8 +231,6 @@ func (s *testNewServerSuite) TestCreateMetricCli(c *C) {
 	srv, err := NewServer(&cfg)
 	c.Assert(err, IsNil)
 	c.Assert(srv.metrics, NotNil)
-	c.Assert(srv.metrics.addr, Equals, "testing")
-	c.Assert(srv.metrics.interval, Equals, 10)
 }
 
 type updateFinishTSSuite struct{}
