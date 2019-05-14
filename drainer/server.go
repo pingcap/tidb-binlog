@@ -48,6 +48,7 @@ import (
 var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
+	getPdClient       = util.GetPdClient
 )
 
 type drainerKeyType string
@@ -95,7 +96,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := util.GetPdClient(cfg.EtcdURLs, cfg.Security)
+	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -236,8 +237,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// register drainer
-	err := s.updateStatus()
-	if err != nil {
+	if err := s.updateStatus(); err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("register success", zap.String("drainer node id", s.ID))
@@ -263,8 +263,7 @@ func (s *Server) Start() error {
 
 	s.tg.GoNoPanic("syncer", func() {
 		defer s.Close()
-		err := s.syncer.Start()
-		if err != nil {
+		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
 		}
 	})
@@ -286,13 +285,8 @@ func (s *Server) Start() error {
 	binlog.RegisterCisternServer(s.gs, s)
 	go s.gs.Serve(grpcL)
 
-	router := mux.NewRouter()
-	router.HandleFunc("/status", s.collector.Status).Methods("GET")
-	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
-	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router := s.initAPIRouter()
 	http.Handle("/", router)
-	prometheus.DefaultGatherer = registry
-	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
 
@@ -310,12 +304,12 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		IndentJSON: true,
 	})
 
-	nodeID := mux.Vars(r)["nodeID"]
-	action := mux.Vars(r)["action"]
+	vars := mux.Vars(r)
+	nodeID, action := vars["nodeID"], vars["action"]
 	log.Info("receive apply action request", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.ID {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
 		return
 	}
 
@@ -335,7 +329,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		s.status.State = node.Closing
 	default:
 		s.statusMu.Unlock()
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid action %s", action))
 		return
 	}
 	s.statusMu.Unlock()
@@ -387,6 +381,16 @@ func (s *Server) updateStatus() error {
 	}
 
 	return nil
+}
+
+func (s *Server) initAPIRouter() *mux.Router {
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	prometheus.DefaultGatherer = registry
+	router.Handle("/metrics", promhttp.Handler())
+	return router
 }
 
 // Close stops all goroutines started by drainer server gracefully

@@ -103,15 +103,10 @@ func initializeSaramaGlobalConfig() {
 }
 
 func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
-	version, err := tiStore.CurrentVersion()
+	snapMeta, err := getSnapshotMeta(tiStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	snapshot, err := tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
 	job, err := snapMeta.GetHistoryDDLJob(id)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -121,15 +116,10 @@ func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 
 // loadHistoryDDLJobs loads all history DDL jobs from TiDB
 func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
-	version, err := tiStore.CurrentVersion()
+	snapMeta, err := getSnapshotMeta(tiStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	snapshot, err := tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapMeta := meta.NewSnapshotMeta(snapshot)
 	jobs, err := snapMeta.GetAllHistoryDDLJobs()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -141,6 +131,18 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	})
 
 	return jobs, nil
+}
+
+func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return meta.NewSnapshotMeta(snapshot), nil
 }
 
 func genDrainerID(listenAddr string) (string, error) {
