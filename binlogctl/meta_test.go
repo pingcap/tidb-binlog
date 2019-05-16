@@ -84,6 +84,7 @@ func (s *metaSuite) TestGenerateMetaInfo(c *C) {
 	c.Assert(err, IsNil)
 
 	b, err := ioutil.ReadFile(path.Join(dir, "savepoint"))
+	c.Assert(err, IsNil)
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	c.Assert(lines, HasLen, 1)
 	c.Assert(lines[0], Equals, "commitTS = 32244168")
