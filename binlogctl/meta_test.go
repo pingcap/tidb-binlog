@@ -14,11 +14,13 @@
 package binlogctl
 
 import (
+	"context"
 	"io/ioutil"
 	"path"
 	"strings"
 
 	. "github.com/pingcap/check"
+	pd "github.com/pingcap/pd/client"
 )
 
 type metaSuite struct{}
@@ -47,4 +49,42 @@ func (s *metaSuite) TestSaveMeta(c *C) {
 	c.Assert(lines[1], Equals, "1970-01-01 00:00:00 +0000 UTC")
 	// the output depends on the local's timezone
 	c.Assert(lines[2], Matches, "1970-01-0.*")
+}
+
+type dummyCli struct {
+	pd.Client
+	physical, logical int64
+	err               error
+}
+
+func (c dummyCli) GetTS(ctx context.Context) (int64, int64, error) {
+	return c.physical, c.logical, c.err
+}
+
+func NewFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
+	return &dummyCli{
+		physical: 123,
+		logical:  456,
+	}, nil
+}
+
+func (s *metaSuite) TestGenerateMetaInfo(c *C) {
+	NewPDClientFunc = NewFakePDClient
+	defer func() {
+		NewPDClientFunc = pd.NewClient
+	}()
+
+	dir := c.MkDir()
+	cfg := &Config{
+		DataDir:  dir,
+		EtcdURLs: "127.0.0.1:2379",
+	}
+
+	err := GenerateMetaInfo(cfg)
+	c.Assert(err, IsNil)
+
+	b, err := ioutil.ReadFile(path.Join(dir, "savepoint"))
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	c.Assert(lines, HasLen, 1)
+	c.Assert(lines[0], Equals, "commitTS = 32244168")
 }

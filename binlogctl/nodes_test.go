@@ -15,6 +15,7 @@ package binlogctl
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"path"
@@ -28,44 +29,47 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 )
 
-type nodesSuite struct{}
-
-var (
-	_               = Suite(&nodesSuite{})
-	testEtcdCluster *integration.ClusterV3
-	fakeRegistry    *node.EtcdRegistry
-)
-
-func TestNode(t *testing.T) {
+func Test(t *testing.T) {
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
 	TestingT(t)
 }
 
-func (s *nodesSuite) SetUpTest(c *C) {
+var (
+	_               = Suite(&testNodesSuite{})
+	testEtcdCluster *integration.ClusterV3
+	fakeRegistry    *node.EtcdRegistry
+)
+
+type testNodesSuite struct{}
+
+func (s *testNodesSuite) SetUpTest(c *C) {
+	newEtcdClientFromCfgFunc = NewFakeEtcdClientFromCfg
 	createRegistryFuc = createMockRegistry
 	createMockRegistry("127.0.0.1:2379")
 }
 
-func (s *nodesSuite) TearDownTest(c *C) {
+func (s *testNodesSuite) TearDownTest(c *C) {
+	newEtcdClientFromCfgFunc = etcd.NewClientFromCfg
 	createRegistryFuc = createRegistry
 }
 
-func (s *nodesSuite) TestApplyAction(c *C) {
+func (s *testNodesSuite) TestApplyAction(c *C) {
 	server, url := createMockPumpServer(c)
 	defer server.Close()
+
+	registerPumpForTest(c, "test", url)
 
 	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump)
 	c.Assert(err, ErrorMatches, "nodeID test2 not found")
 
-	registerPumpForTest(c, "test", url)
 	// TODO: handle log information and add check
 	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
 	c.Assert(err, IsNil)
 }
 
-func (s *nodesSuite) TestQueryNodesByKind(c *C) {
+func (s *testNodesSuite) TestQueryNodesByKind(c *C) {
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
 	// TODO: handle log information and add check
@@ -73,10 +77,13 @@ func (s *nodesSuite) TestQueryNodesByKind(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *nodesSuite) TestUpdateNodeState(c *C) {
+func (s *testNodesSuite) TestUpdateNodeState(c *C) {
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
-	err := UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused)
+	err := UpdateNodeState("127.0.0.1:2379", "pumps", "test2", node.Paused)
+	c.Assert(err, ErrorMatches, ".*not found.*")
+
+	err = UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused)
 	c.Assert(err, IsNil)
 
 	// check node's state is changed to paused
@@ -91,6 +98,13 @@ func (s *nodesSuite) TestUpdateNodeState(c *C) {
 		}
 	}
 	c.Assert(findNode, IsTrue)
+}
+
+func (s *testNodesSuite) TestCreateRegistry(c *C) {
+	urls := "127.0.0.1:2379"
+	registry, err := createRegistry(urls)
+	c.Assert(err, IsNil)
+	c.Assert(registry, NotNil)
 }
 
 func createMockRegistry(urls string) (*node.EtcdRegistry, error) {
@@ -130,4 +144,8 @@ func createMockPumpServer(c *C) (*httptest.Server, string) {
 	server := httptest.NewServer(handler)
 
 	return server, strings.TrimPrefix(server.URL, "http://")
+}
+
+func NewFakeEtcdClientFromCfg([]string, time.Duration, string, *tls.Config) (*etcd.Client, error) {
+	return etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath), nil
 }

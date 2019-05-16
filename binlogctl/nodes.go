@@ -15,6 +15,7 @@ package binlogctl
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
@@ -28,8 +29,9 @@ import (
 )
 
 var (
-	etcdDialTimeout   = 5 * time.Second
-	createRegistryFuc = createRegistry
+	etcdDialTimeout          = 5 * time.Second
+	createRegistryFuc        = createRegistry
+	newEtcdClientFromCfgFunc = etcd.NewClientFromCfg
 )
 
 // QueryNodesByKind returns specified nodes, like pumps/drainers
@@ -83,13 +85,15 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 	return errors.NotFoundf("node %s, id %s from etcd %s", kind, nodeID, urls)
 }
 
+var NewEtcdClientFromCfgFunc func([]string, time.Duration, string, *tls.Config) (*etcd.Client, error) = etcd.NewClientFromCfg
+
 // createRegistry returns an ectd registry
 func createRegistry(urls string) (*node.EtcdRegistry, error) {
 	ectdEndpoints, err := flags.ParseHostPortAddr(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := etcd.NewClientFromCfg(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
+	cli, err := newEtcdClientFromCfgFunc(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -49,6 +49,8 @@ func GenerateMetaInfo(cfg *Config) error {
 	return errors.Trace(err)
 }
 
+var NewPDClientFunc func([]string, pd.SecurityOption) (pd.Client, error) = pd.NewClient
+
 // GetTSO gets ts from pd
 func GetTSO(cfg *Config) (int64, error) {
 	ectdEndpoints, err := flags.ParseHostPortAddr(cfg.EtcdURLs)
@@ -56,7 +58,7 @@ func GetTSO(cfg *Config) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	pdCli, err := pd.NewClient(ectdEndpoints, pd.SecurityOption{
+	pdCli, err := NewPDClientFunc(ectdEndpoints, pd.SecurityOption{
 		CAPath:   cfg.SSLCA,
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,
