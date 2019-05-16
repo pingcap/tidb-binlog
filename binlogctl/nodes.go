@@ -15,7 +15,6 @@ package binlogctl
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
@@ -84,8 +83,6 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 
 	return errors.NotFoundf("node %s, id %s from etcd %s", kind, nodeID, urls)
 }
-
-var NewEtcdClientFromCfgFunc func([]string, time.Duration, string, *tls.Config) (*etcd.Client, error) = etcd.NewClientFromCfg
 
 // createRegistry returns an ectd registry
 func createRegistry(urls string) (*node.EtcdRegistry, error) {

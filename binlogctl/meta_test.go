@@ -69,9 +69,9 @@ func NewFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
 }
 
 func (s *metaSuite) TestGenerateMetaInfo(c *C) {
-	NewPDClientFunc = NewFakePDClient
+	newPDClientFunc = NewFakePDClient
 	defer func() {
-		NewPDClientFunc = pd.NewClient
+		newPDClientFunc = pd.NewClient
 	}()
 
 	dir := c.MkDir()
