@@ -33,6 +33,10 @@ type DBConfig struct {
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion     string `toml:"kafka-version" json:"kafka-version"`
 	KafkaMaxMessages int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
+	KafkaSASLEnable bool `toml:"kafka-sasl-enable" json:"kafka-sasl-enable"`
+	KafkaSASLHandshake bool `toml:"kafka-sasl-handshake" json:"kafka-sasl-handshake"`
+	KafkaSASLUser string `toml:"kafka-sasl-user" json:"kafka-sasl-user"`
+	KafkaSASLPassword string `toml:"kafka-sasl-password" json:"kafka-sasl-password"`
 	TopicName        string `toml:"topic-name" json:"topic-name"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`

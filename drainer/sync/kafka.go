@@ -96,6 +96,12 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
+	// sasl configuration
+	config.Net.SASL.Enable = cfg.KafkaSASLEnable
+	config.Net.SASL.Handshake = cfg.KafkaSASLHandshake
+	config.Net.SASL.User = cfg.KafkaSASLUser
+	config.Net.SASL.Password = cfg.KafkaSASLPassword
+
 	executor.producer, err = newAsyncProducer(executor.addr, config)
 	if err != nil {
 		return nil, errors.Trace(err)
