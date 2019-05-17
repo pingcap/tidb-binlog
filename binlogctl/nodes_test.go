@@ -45,7 +45,7 @@ var (
 type testNodesSuite struct{}
 
 func (s *testNodesSuite) SetUpTest(c *C) {
-	newEtcdClientFromCfgFunc = NewFakeEtcdClientFromCfg
+	newEtcdClientFromCfgFunc = newFakeEtcdClientFromCfg
 	createRegistryFuc = createMockRegistry
 	createMockRegistry("127.0.0.1:2379")
 }
@@ -168,6 +168,6 @@ func createMockPumpServer(c *C) (*httptest.Server, string) {
 	return server, strings.TrimPrefix(server.URL, "http://")
 }
 
-func NewFakeEtcdClientFromCfg([]string, time.Duration, string, *tls.Config) (*etcd.Client, error) {
+func newFakeEtcdClientFromCfg([]string, time.Duration, string, *tls.Config) (*etcd.Client, error) {
 	return etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath), nil
 }
