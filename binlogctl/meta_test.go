@@ -61,7 +61,7 @@ func (c dummyCli) GetTS(ctx context.Context) (int64, int64, error) {
 	return c.physical, c.logical, c.err
 }
 
-func NewFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
+func newFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
 	return &dummyCli{
 		physical: 123,
 		logical:  456,
@@ -69,7 +69,7 @@ func NewFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
 }
 
 func (s *metaSuite) TestGenerateMetaInfo(c *C) {
-	newPDClientFunc = NewFakePDClient
+	newPDClientFunc = newFakePDClient
 	defer func() {
 		newPDClientFunc = pd.NewClient
 	}()

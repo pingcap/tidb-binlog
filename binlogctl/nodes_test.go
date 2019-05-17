@@ -105,6 +105,28 @@ func (s *testNodesSuite) TestCreateRegistry(c *C) {
 	registry, err := createRegistry(urls)
 	c.Assert(err, IsNil)
 	c.Assert(registry, NotNil)
+
+	ns := &node.Status{
+		NodeID: "registry_test",
+	}
+
+	nodePrefix := path.Join(node.DefaultRootPath, node.NodePrefix["pumps"])
+	err = registry.UpdateNode(context.Background(), nodePrefix, ns)
+	if err != nil {
+		c.Fatal(err)
+	}
+
+	nodes, err := registry.Nodes(context.Background(), nodePrefix)
+	c.Assert(err, IsNil)
+
+	var findNode bool
+	for _, n := range nodes {
+		if n.NodeID == "registry_test" {
+			findNode = true
+		}
+	}
+	c.Assert(findNode, IsTrue)
+
 }
 
 func createMockRegistry(urls string) (*node.EtcdRegistry, error) {
