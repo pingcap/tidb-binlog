@@ -685,9 +685,9 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	var fakeBinlog *pb.Binlog
 	var err error
 
-	err = util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() error {
-		fakeBinlog, err = s.writeFakeBinlog()
-		return err
+	err = util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() (e error) {
+		fakeBinlog, e = s.writeFakeBinlog()
+		return
 	})
 	if err != nil {
 		return errors.Trace(err)
