@@ -500,7 +500,7 @@ func (s *Server) gcBinlogFile() {
 				continue
 			}
 
-			safeTSO, err := s.getSaveGCTSOForDrainers()
+			safeTSO, err := s.getSafeGCTSOForDrainers()
 			if err != nil {
 				log.Warn("get save gc tso for drainers failed", zap.Error(err))
 				continue
@@ -518,7 +518,7 @@ func (s *Server) gcBinlogFile() {
 	}
 }
 
-func (s *Server) getSaveGCTSOForDrainers() (int64, error) {
+func (s *Server) getSafeGCTSOForDrainers() (int64, error) {
 	pumpNode := s.node.(*pumpNode)
 
 	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
@@ -703,16 +703,16 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		select {
 		case <-time.After(time.Second):
-			minSavedTSO, err := s.getSaveGCTSOForDrainers()
+			safeTSO, err := s.getSafeGCTSOForDrainers()
 			if err != nil {
-				log.Error("get nodes failed", zap.Error(err))
+				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
 			}
-			if minSavedTSO >= fakeBinlog.CommitTs {
+			if safeTSO >= fakeBinlog.CommitTs {
 				return nil
 			}
 			log.Info("Waiting for drainer to consume binlog",
-				zap.Int64("Minimum Drainer MaxCommitTS", minSavedTSO),
+				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
 				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
 			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
