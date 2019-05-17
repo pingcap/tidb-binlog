@@ -683,9 +683,8 @@ func (s *Server) getTSO() (int64, error) {
 // return if and only if it's safe to offline or context is canceled
 func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	var fakeBinlog *pb.Binlog
-	var err error
 
-	err = util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() (e error) {
+	err := util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() (e error) {
 		fakeBinlog, e = s.writeFakeBinlog()
 		return
 	})
