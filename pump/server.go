@@ -804,7 +804,7 @@ func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInte
 func listen(network, addr string) (net.Listener, error) {
 	URL, err := url.Parse(addr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", URL)
+		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", addr)
 	}
 	listener, err := net.Listen(network, URL.Path)
 	if err != nil {
