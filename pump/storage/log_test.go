@@ -128,7 +128,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 
 	// should get the later one record write
 	var recordGet *Record
-	lf.scan(0, func(vp valuePointer, record *Record) error {
+	err = lf.scan(0, func(vp valuePointer, record *Record) error {
 		if recordGet != nil {
 			c.Fatal("get more than on record")
 		}
@@ -138,6 +138,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 
 		return nil
 	})
+	c.Assert(err, check.IsNil)
 
 	c.Assert(recordGet, check.NotNil)
 }

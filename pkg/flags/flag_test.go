@@ -35,7 +35,8 @@ func (s *testFlagSuite) TestSetFlagsFromEnv(c *C) {
 	fs.String("f1", "", "")
 	fs.String("f2", "", "")
 	fs.String("f3", "", "")
-	fs.Parse([]string{})
+	err := fs.Parse([]string{})
+	c.Assert(err, IsNil)
 
 	os.Clearenv()
 	// 1. flag is set with env vars
@@ -74,7 +75,8 @@ func (s *testFlagSuite) TestSetFlagsFromEnvMore(c *C) {
 	fs.Bool("bool", false, "")
 	fs.String("a-hyphen", "", "")
 	fs.String("lowercase", "", "")
-	fs.Parse([]string{})
+	err := fs.Parse([]string{})
+	c.Assert(err, IsNil)
 
 	os.Clearenv()
 	os.Setenv("TEST_STR", "ijk")
@@ -99,7 +101,8 @@ func (s *testFlagSuite) TestSetFlagsFromEnvMore(c *C) {
 func (s *testFlagSuite) TestSetFlagsFromEnvBad(c *C) {
 	fs := flag.NewFlagSet("test3", flag.ExitOnError)
 	fs.Int("num", 0, "")
-	fs.Parse([]string{})
+	err := fs.Parse([]string{})
+	c.Assert(err, IsNil)
 
 	os.Clearenv()
 	os.Setenv("TEST_NUM", "abc123")
@@ -113,7 +116,8 @@ func (s *testFlagSuite) TestURLStrsFromFlag(c *C) {
 
 	fs := flag.NewFlagSet("testUrlFlag", flag.ExitOnError)
 	fs.Var(urlv, "urls", "")
-	fs.Parse([]string{})
+	err = fs.Parse([]string{})
+	c.Assert(err, IsNil)
 
 	urls := "http://192.168.1.1:1234,http://192.168.1.2:1234,http://192.168.1.3:1234"
 	mustSuccess(c, fs.Set("urls", urls))

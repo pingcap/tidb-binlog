@@ -43,7 +43,11 @@ func main() {
 	if err != nil {
 		log.S().Fatal(err)
 	}
-	defer util.CloseDB(sourceDB)
+	defer func() {
+		if err := util.CloseDB(sourceDB); err != nil {
+			log.S().Errorf("Failed to close source database: %s\n", err)
+		}
+	}()
 
 	targetAddr, err := pkgsql.ParseCHAddr(cfg.TargetDBCfg.Host)
 	if err != nil {
@@ -56,7 +60,11 @@ func main() {
 	if err != nil {
 		log.S().Fatal(err)
 	}
-	defer util.CloseDB(targetDB)
+	defer func() {
+		if err := util.CloseDB(targetDB); err != nil {
+			log.S().Errorf("Failed to close target database: %s\n", err)
+		}
+	}()
 	_, err = targetDB.Exec(fmt.Sprintf("drop database if exists %s", cfg.TargetDBCfg.Name))
 	if err != nil {
 		log.S().Fatal(err)

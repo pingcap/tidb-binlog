@@ -45,7 +45,8 @@ func TestNode(t *testing.T) {
 
 func (s *nodesSuite) SetUpTest(c *C) {
 	createRegistryFuc = createMockRegistry
-	createMockRegistry("127.0.0.1:2379")
+	_, err := createMockRegistry("127.0.0.1:2379")
+	c.Assert(err, IsNil)
 }
 
 func (s *nodesSuite) TearDownTest(c *C) {

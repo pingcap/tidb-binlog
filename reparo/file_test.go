@@ -48,7 +48,8 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 
 		binloger, err := binlogfile.OpenBinlogger(binlogDir)
 		c.Assert(err, IsNil)
-		binloger.WriteTail(&gb.Entity{Payload: binlogData})
+		_, err = binloger.WriteTail(&gb.Entity{Payload: binlogData})
+		c.Assert(err, IsNil)
 		err = binloger.Close()
 		c.Assert(err, IsNil)
 	}

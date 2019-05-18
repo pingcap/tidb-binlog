@@ -47,6 +47,7 @@ func (s *logSuite) TestLog(c *C) {
 
 func (s *logSuite) TestInitLogger(c *C) {
 	f := path.Join(c.MkDir(), "test")
-	InitLogger("error", f)
+	err := InitLogger("error", f)
+	c.Assert(err, IsNil)
 	c.Assert(log.GetLevel(), Equals, zapcore.ErrorLevel)
 }

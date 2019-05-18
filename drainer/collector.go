@@ -16,6 +16,7 @@ package drainer
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,7 +89,11 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	if err := session.RegisterStore("tikv", tikv.Driver{}); err != nil {
+		if !strings.Contains(err.Error(), "already registered") {
+			return nil, errors.Trace(err)
+		}
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := newStore(tiPath)
 	if err != nil {
@@ -155,7 +160,9 @@ func (c *Collector) Start(ctx context.Context) {
 
 	// add all the pump to merger
 	c.merger.Stop()
-	c.updateStatus(ctx)
+	if err := c.updateStatus(ctx); err != nil {
+		log.Error(err.Error())
+	}
 	c.merger.Continue()
 
 	// update status when had pump notify or reach wait time
@@ -167,7 +174,9 @@ func (c *Collector) Start(ctx context.Context) {
 			nr.err = c.updateStatus(ctx)
 			nr.wg.Done()
 		case <-time.After(c.interval):
-			c.updateStatus(ctx)
+			if err := c.updateStatus(ctx); err != nil {
+				log.Error(err.Error())
+			}
 		case err := <-c.errCh:
 			log.Error("collector meets error", zap.Error(err))
 			return

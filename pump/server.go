@@ -584,23 +584,23 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 	tsStr := mux.Vars(r)["ts"]
 	ts, err := strconv.ParseInt(tsStr, 10, 64)
 	if err != nil {
-		w.Write([]byte(fmt.Sprintf("invalid parameter ts: %s", tsStr)))
+		fmt.Fprintf(w, "invalid parameter ts: %s", tsStr)
 		return
 	}
 
 	binlog, err := s.storage.GetBinlog(ts)
 	if err != nil {
-		w.Write([]byte(err.Error()))
+		fmt.Fprint(w, err.Error())
 		return
 	}
 
-	w.Write([]byte(binlog.String()))
+	fmt.Fprint(w, binlog.String())
 	if len(binlog.PrewriteValue) > 0 {
 		prewriteValue := new(pb.PrewriteValue)
 		prewriteValue.Unmarshal(binlog.PrewriteValue)
 
-		w.Write([]byte("\n\n PrewriteValue: \n"))
-		w.Write([]byte(prewriteValue.String()))
+		fmt.Fprint(w, "\n\n PrewriteValue: \n")
+		fmt.Fprint(w, prewriteValue.String())
 	}
 }
 

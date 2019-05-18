@@ -144,7 +144,9 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	// Parse again to replace with command line options
-	cfg.FlagSet.Parse(arguments)
+	if err := cfg.FlagSet.Parse(arguments); err != nil {
+		return errors.Trace(err)
+	}
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
