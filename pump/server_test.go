@@ -536,13 +536,14 @@ func (s *listenSuite) TestWrongAddr(c *C) {
 }
 
 func (s *listenSuite) TestUnbindableAddr(c *C) {
-	_, err := listen("unix", "http://testing/12")
+	_, err := listen("tcp", "http://asdf;klj:7979/12")
 	c.Assert(err, ErrorMatches, ".*fail to start.*")
 }
 
 func (s *listenSuite) TestReturnListener(c *C) {
 	var l net.Listener
-	l, err := listen("tcp", "http://localhost")
+	l, err := listen("tcp", "http://localhost:17979")
 	c.Assert(err, IsNil)
+	defer l.Close()
 	c.Assert(l, NotNil)
 }

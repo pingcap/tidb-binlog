@@ -805,9 +805,9 @@ func listen(network, addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", addr)
 	}
-	listener, err := net.Listen(network, URL.Path)
+	listener, err := net.Listen(network, URL.Host)
 	if err != nil {
-		return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Path)
+		return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Host)
 	}
 	return listener, nil
 }
