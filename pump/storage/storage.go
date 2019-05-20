@@ -922,9 +922,11 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					err = a.feedPreWriteValue(binlog)
 					if err != nil {
 						if errors.Cause(err) == leveldb.ErrNotFound {
-							// prevent the pump client write C-binlog to not the according P-binlog of pump instance.
-							// the old version client indeed write C-binlog to random instance once write failed.
-							log.Error("feedPreWriteValue not found: %+v", binlog)
+							// In pump-client, a C-binlog should always be sent to the same pump instance as the matching P-binlog.
+							// But in some older versions of pump-client, writing of C-binlog would fallback to some other instances when the correct one is unavailable.
+							// When this error occurs, we may assume that the matching P-binlog is on a different pump instance.
+							// And it would  query TiKV for the matching C-binlog. So it should be OK to ignore the error here.
+							log.Error("Matching P-binlog not found", binlog)
 							continue
 						}
 
