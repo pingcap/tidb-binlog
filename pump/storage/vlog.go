@@ -271,7 +271,7 @@ func (vlog *valueLog) close() error {
 func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
 	logFile, err := vlog.getFileRLocked(vp.Fid)
 	if err != nil {
-		return nil, errors.Annotatef(err, "get file failed: %d", vp.Fid)
+		return nil, errors.Annotatef(err, "get file(id: %d) failed", vp.Fid)
 	}
 
 	defer logFile.lock.RUnlock()
