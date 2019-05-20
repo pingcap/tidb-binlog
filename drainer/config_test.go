@@ -16,12 +16,19 @@ package drainer
 import (
 	"testing"
 
+	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 )
 
+var testEtcdCluster *integration.ClusterV3
+
 // Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { TestingT(t) }
+func Test(t *testing.T) {
+	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
+	defer testEtcdCluster.Terminate(t)
+	TestingT(t)
+}
 
 var _ = Suite(&testDrainerSuite{})
 
@@ -66,6 +73,14 @@ func (t *testDrainerSuite) TestValidate(c *C) {
 	c.Assert(err, ErrorMatches, ".*EtcdURLs.*")
 
 	cfg.EtcdURLs = "http://127.0.0.1:2379,http://192.168.12.12:2379"
+	err = cfg.validate()
+	c.Assert(err, IsNil)
+
+	cfg.Compressor = "urada"
+	err = cfg.validate()
+	c.Assert(err, ErrorMatches, ".*Invalid compressor.*")
+
+	cfg.Compressor = "gzip"
 	err = cfg.validate()
 	c.Assert(err, IsNil)
 }

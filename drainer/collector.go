@@ -70,7 +70,6 @@ type Collector struct {
 	merger *Merger
 
 	errCh chan error
-	wg    sync.WaitGroup
 }
 
 var (
@@ -123,10 +122,7 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 }
 
 func (c *Collector) publishBinlogs(ctx context.Context) {
-	defer func() {
-		c.wg.Done()
-		log.Info("publishBinlogs quit")
-	}()
+	defer log.Info("publishBinlogs quit")
 
 	for {
 		select {
@@ -144,44 +140,23 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
-	defer func() {
-		for _, p := range c.pumps {
-			p.Close()
-		}
-		if err := c.reg.Close(); err != nil {
-			log.Error(err.Error())
-		}
-
-		c.wg.Wait()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		c.publishBinlogs(ctx)
+		wg.Done()
 	}()
 
-	c.wg.Add(1)
-	go c.publishBinlogs(ctx)
+	c.keepUpdatingStatus(ctx, c.updateStatus)
 
-	// add all the pump to merger
-	c.merger.Stop()
-	if err := c.updateStatus(ctx); err != nil {
+	for _, p := range c.pumps {
+		p.Close()
+	}
+	if err := c.reg.Close(); err != nil {
 		log.Error(err.Error())
 	}
-	c.merger.Continue()
 
-	// update status when had pump notify or reach wait time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case nr := <-c.notifyChan:
-			nr.err = c.updateStatus(ctx)
-			nr.wg.Done()
-		case <-time.After(c.interval):
-			if err := c.updateStatus(ctx); err != nil {
-				log.Error(err.Error())
-			}
-		case err := <-c.errCh:
-			log.Error("collector meets error", zap.Error(err))
-			return
-		}
-	}
+	wg.Wait()
 }
 
 // updateCollectStatus updates the http status of the Collector.
@@ -349,6 +324,31 @@ func (c *Collector) handlePumpStatusUpdate(ctx context.Context, n *node.Status) 
 			delete(c.pumps, n.NodeID)
 			log.Info("node of cluster has been removed and release the connection to it",
 				zap.String("nodeID", p.nodeID), zap.Uint64("clusterID", p.clusterID))
+		}
+	}
+}
+
+func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context.Context) error) {
+	// add all the pump to merger
+	c.merger.Stop()
+	fUpdate(ctx)
+	c.merger.Continue()
+
+	// update status when had pump notify or reach wait time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case nr := <-c.notifyChan:
+			nr.err = fUpdate(ctx)
+			nr.wg.Done()
+		case <-time.After(c.interval):
+			if err := fUpdate(ctx); err != nil {
+				log.Error("Failed to update collector status", zap.Error(err))
+			}
+		case err := <-c.errCh:
+			log.Error("collector meets error", zap.Error(err))
+			return
 		}
 	}
 }
