@@ -546,6 +546,7 @@ func (a *Append) GCTS(ts int64) {
 }
 
 func (a *Append) doGCTS(ts int64) {
+	log.Info("start gc", zap.Int64("ts", ts))
 	irange := &util.Range{
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
@@ -571,6 +572,7 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	a.vlog.gcTS(ts)
+	log.Info("finish gc", zap.Int64("ts", ts))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
@@ -841,7 +843,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "get  pointer of P-Binlog(ts: %d) failed", cbinlog.StartTs)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
@@ -851,7 +853,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "read P-Binlog value failed, vp: %+v", vp)
 	}
 
 	pbinlog := new(pb.Binlog)
@@ -940,6 +942,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				} else {
 					err = a.feedPreWriteValue(binlog)
 					if err != nil {
+						if errors.Cause(err) == leveldb.ErrNotFound {
+							// In pump-client, a C-binlog should always be sent to the same pump instance as the matching P-binlog.
+							// But in some older versions of pump-client, writing of C-binlog would fallback to some other instances when the correct one is unavailable.
+							// When this error occurs, we may assume that the matching P-binlog is on a different pump instance.
+							// And it would  query TiKV for the matching C-binlog. So it should be OK to ignore the error here.
+							log.Error("Matching P-binlog not found", zap.Int64("commit ts", binlog.CommitTs))
+							continue
+						}
+
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
 						log.Error("feed pre write value failed", zap.Error(err))
 						iter.Release()
