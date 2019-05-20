@@ -14,13 +14,13 @@
 package drainer
 
 import (
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -55,8 +56,16 @@ func (t *testServerSuite) TestGetLatestTS(c *C) {
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	flatternStr := strings.ReplaceAll(string(body), "\n", " ")
-	c.Assert(flatternStr, Matches, `.*"ts": 1984.*`)
+	var decoded util.Response
+	err := json.Unmarshal(body, &decoded)
+	c.Assert(err, IsNil)
+	c.Assert(decoded.Code, Equals, 200)
+	data, ok := decoded.Data.(map[string]interface{})
+	c.Assert(ok, IsTrue)
+	c.Assert(data, HasKey, "ts")
+	ts, ok := data["ts"].(float64)
+	c.Assert(ok, IsTrue)
+	c.Assert(int64(ts), Equals, int64(1984))
 }
 
 func (t *testServerSuite) TestNotify(c *C) {
@@ -160,10 +169,13 @@ func (s *applyActionSuite) TestShouldCheckNodeID(c *C) {
 
 	resp := w.Result()
 	body, _ := ioutil.ReadAll(resp.Body)
-
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
-	flatternStr := strings.ReplaceAll(string(body), "\n", " ")
-	c.Assert(flatternStr, Matches, ".*invalid nodeID drainer-42.*")
+
+	var decoded util.Response
+	err := json.Unmarshal(body, &decoded)
+	c.Assert(err, IsNil)
+	c.Assert(decoded.Code, Equals, 3)
+	c.Assert(decoded.Message, Matches, ".*invalid nodeID drainer-42.*")
 }
 
 func (s *applyActionSuite) TestShouldCheckState(c *C) {
@@ -177,8 +189,12 @@ func (s *applyActionSuite) TestShouldCheckState(c *C) {
 	resp := w.Result()
 	body, _ := ioutil.ReadAll(resp.Body)
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
-	flatternStr := strings.ReplaceAll(string(body), "\n", " ")
-	c.Assert(flatternStr, Matches, ".*apply close failed!.*")
+
+	var decoded util.Response
+	err := json.Unmarshal(body, &decoded)
+	c.Assert(err, IsNil)
+	c.Assert(decoded.Code, Equals, 3)
+	c.Assert(decoded.Message, Matches, ".*apply close failed!.*")
 }
 
 func (s *applyActionSuite) TestShouldApplyAction(c *C) {
@@ -199,12 +215,16 @@ func (s *applyActionSuite) TestShouldApplyAction(c *C) {
 
 		c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
-		flatternStr := strings.ReplaceAll(string(body), "\n", " ")
+		var decoded util.Response
+		err := json.Unmarshal(body, &decoded)
+		c.Assert(err, IsNil)
 		if expect != "" {
-			c.Assert(flatternStr, Matches, ".*success.*")
+			c.Assert(decoded.Code, Equals, 200)
+			c.Assert(decoded.Message, Matches, ".*success.*")
 			c.Assert(s.server.status.State, Equals, expect)
 		} else {
-			c.Assert(flatternStr, Matches, ".*invalid action.*")
+			c.Assert(decoded.Code, Equals, 3)
+			c.Assert(decoded.Message, Matches, ".*invalid action.*")
 			c.Assert(s.server.status.State, Equals, node.Online) // State unchanged
 		}
 	}
