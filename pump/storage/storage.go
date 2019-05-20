@@ -525,6 +525,7 @@ func (a *Append) GCTS(ts int64) {
 }
 
 func (a *Append) doGCTS(ts int64) {
+	log.Info("start gc ts: ", ts)
 	irange := &util.Range{
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
@@ -550,6 +551,7 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	a.vlog.gcTS(ts)
+	log.Info("finish gc ts: ", ts)
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
@@ -820,23 +822,23 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Annotatef(err, "get value pointer failed ts(%d)", cbinlog.StartTs)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Annotatef(err, "read value failed, vp: %+v", vp)
 	}
 
 	pbinlog := new(pb.Binlog)
 	err = pbinlog.Unmarshal(pvalue)
 	if err != nil {
-		errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	cbinlog.StartTs = pbinlog.StartTs
@@ -895,7 +897,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 				value, err := a.vlog.readValue(vp)
 				if err != nil {
-					log.Error(err)
+					log.Error(errors.ErrorStack(err))
 					iter.Release()
 					errorCount.WithLabelValues("read_value").Add(1.0)
 					return
@@ -904,7 +906,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				binlog := new(pb.Binlog)
 				err = binlog.Unmarshal(value)
 				if err != nil {
-					log.Error(err)
+					log.Error(errors.ErrorStack(err))
 					iter.Release()
 					return
 				}
@@ -919,6 +921,13 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				} else {
 					err = a.feedPreWriteValue(binlog)
 					if err != nil {
+						if errors.Cause(err) == leveldb.ErrNotFound {
+							// prevent the pump client write C-binlog to not the according P-binlog of pump instance.
+							// the old version client indeed write C-binlog to random instance once write failed.
+							log.Error("feedPreWriteValue not found: %+v", binlog)
+							continue
+						}
+
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
 						log.Error(err)
 						iter.Release()

@@ -240,7 +240,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 
 errHandle:
 	lossBinlogCacheCounter.Add(1)
-	log.Errorf("write binlog error %v", err)
+	log.Errorf("write binlog error %+v", err)
 	ret.Errmsg = err.Error()
 	return ret, err
 }

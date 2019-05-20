@@ -73,12 +73,12 @@ func encodeRecord(writer io.Writer, payload []byte) (int, error) {
 
 	n, err := writer.Write(header)
 	if err != nil {
-		return n, errors.Trace(err)
+		return n, errors.Annotate(err, "write header failed")
 	}
 
 	n, err = writer.Write(payload)
 	if err != nil {
-		return int(headerLength) + n, errors.Trace(err)
+		return int(headerLength) + n, errors.Annotate(err, "write payload failed")
 	}
 
 	return int(headerLength) + len(payload), nil
@@ -108,14 +108,12 @@ func (r *Record) isValid() bool {
 func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 	fd, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotatef(err, "open file %s failed", name)
 	}
 
 	info, err := fd.Stat()
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotatef(err, "stat file %s failed", name)
 	}
 
 	logReporter := func(bytes int, reason error) {
@@ -200,8 +198,8 @@ func (lf *logFile) finalize() error {
 	return errors.Trace(lf.fdatasync())
 }
 
-func (lf *logFile) close() {
-	lf.fd.Close()
+func (lf *logFile) close() error {
+	return lf.fd.Close()
 }
 
 // recover scan all the record get the state like maxTS which only saved when the file is finalized
@@ -272,8 +270,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 	record = new(Record)
 	err = record.readHeader(reader)
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotate(err, "read header failed")
 	}
 
 	if record.magic != recordMagic {
@@ -286,8 +283,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 		record.payload = make([]byte, record.length)
 		_, err = io.ReadFull(reader, record.payload)
 		if err != nil {
-			err = errors.Trace(err)
-			return
+			return nil, errors.Annotate(err, "read failed")
 		}
 	} else {
 		buf := new(bytes.Buffer)
@@ -300,8 +296,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 	}
 
 	if !record.isValid() {
-		err = errors.New("checksum mismatch")
-		return
+		return nil, errors.New("checksum mismatch")
 	}
 
 	return
