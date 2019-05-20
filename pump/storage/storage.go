@@ -832,7 +832,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		return errors.Annotatef(err, "read value failed, vp: %+v", vp)
+		return errors.Annotatef(err, "read P-Binlog value failed, vp: %+v", vp)
 	}
 
 	pbinlog := new(pb.Binlog)
