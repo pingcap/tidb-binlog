@@ -283,7 +283,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 		record.payload = make([]byte, record.length)
 		_, err = io.ReadFull(reader, record.payload)
 		if err != nil {
-			return nil, errors.Annotate(err, "read failed")
+			return nil, errors.Annotate(err, "read payload failed")
 		}
 	} else {
 		buf := new(bytes.Buffer)
