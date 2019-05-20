@@ -278,7 +278,7 @@ func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
 
 	record, err := logFile.readRecord(vp.Offset)
 	if err != nil {
-		return nil, errors.Annotatef(err, "read failed at: %+v", vp)
+		return nil, errors.Annotatef(err, "read record at %+v failed", vp)
 	}
 
 	return record.payload, nil
