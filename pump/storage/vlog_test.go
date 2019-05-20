@@ -121,11 +121,12 @@ func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 
 	// test scan start at the middle point of request
 	idx := len(reqs) / 2
-	vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
+	err = vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
 		c.Assert(record.payload, check.DeepEquals, reqs[idx].payload, check.Commentf("data read back not equal"))
 		idx++
 		return nil
 	})
+	c.Assert(err, check.IsNil)
 }
 
 func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {

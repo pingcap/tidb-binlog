@@ -347,7 +347,8 @@ func (s *batchManagerSuite) TestShouldExecAccumulatedDMLs(c *check.C) {
 		}
 		txn := Txn{DMLs: dmls}
 		txns = append(txns, &txn)
-		bm.put(&txn)
+		err := bm.put(&txn)
+		c.Assert(err, check.IsNil)
 	}
 	c.Assert(executed, check.HasLen, 5)
 	c.Assert(calledback, check.DeepEquals, txns[:3])
@@ -394,7 +395,8 @@ func (s *runSuite) TestShouldExecuteAllPendingDMLsOnClose(c *check.C) {
 
 	signal := make(chan struct{})
 	go func() {
-		loader.Run()
+		err := loader.Run()
+		c.Assert(err, check.IsNil)
 		close(signal)
 	}()
 
@@ -428,7 +430,10 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 		successTxn: make(chan *Txn, 10),
 	}
 
-	go loader.Run()
+	go func() {
+		err := loader.Run()
+		c.Assert(err, check.IsNil)
+	}()
 	defer close(loader.input)
 
 	addTxn := func(i int) {

@@ -424,7 +424,9 @@ func createTiStore(urls string) (kv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	if err := session.RegisterStore("tikv", tikv.Driver{}); err != nil {
+		return nil, errors.Trace(err)
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := session.NewStore(tiPath)
 	if err != nil {

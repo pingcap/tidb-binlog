@@ -37,7 +37,9 @@ func main() {
 		log.Fatal("verifying flags failed. See 'arbiter --help'.", zap.Error(err))
 	}
 
-	util.InitLogger(cfg.LogLevel, cfg.LogFile)
+	if err := util.InitLogger(cfg.LogLevel, cfg.LogFile); err != nil {
+		log.Fatal("Failed to initialize log", zap.Error(err))
+	}
 	// may too many noise, discard sarama log now
 	sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
 
