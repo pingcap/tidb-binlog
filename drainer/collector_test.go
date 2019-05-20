@@ -38,6 +38,10 @@ func (cp dummyCheckpoint) TS() int64 {
 	return cp.commitTS
 }
 
+func (cp dummyCheckpoint) Close() error {
+	return nil
+}
+
 type dummyStore struct {
 	kv.Storage
 }
@@ -216,10 +220,8 @@ var _ = Suite(&publishSuite{})
 
 func (s *publishSuite) assertStopInTime(ctx context.Context, col *Collector, c *C) {
 	signal := make(chan struct{})
-	col.wg.Add(1)
 	go func() {
 		col.publishBinlogs(ctx)
-		col.wg.Wait()
 		close(signal)
 	}()
 
@@ -371,4 +373,93 @@ func (s *reportErrSuite) TestErrReported(c *C) {
 	col := Collector{errCh: make(chan error, 3)}
 	col.reportErr(context.Background(), errors.New("report"))
 	c.Assert(<-col.errCh, ErrorMatches, "report")
+}
+
+type keepUpdatingSuite struct{}
+
+var _ = Suite(&keepUpdatingSuite{})
+
+func (s *keepUpdatingSuite) waitForSignal(c *C, signal <-chan struct{}, msg string) {
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal(msg)
+	}
+}
+
+func (s *keepUpdatingSuite) TestShouldStopWhenDone(c *C) {
+	var callCount int
+	ctx, cancel := context.WithCancel(context.Background())
+	col := Collector{
+		merger:   &Merger{},
+		interval: 10 * time.Second,
+	}
+	signal := make(chan struct{})
+	go func() {
+		col.keepUpdatingStatus(ctx, func(ctx context.Context) error {
+			callCount++
+			return nil
+		})
+		close(signal)
+	}()
+
+	cancel()
+
+	s.waitForSignal(c, signal, "Doesn't stop in time after canceled")
+	c.Assert(callCount, Equals, 1)
+}
+
+func (s *keepUpdatingSuite) TestShouldStopOnErr(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	col := Collector{
+		merger:   &Merger{},
+		interval: time.Second,
+		errCh:    make(chan error, 1),
+	}
+	signal := make(chan struct{})
+	go func() {
+		col.keepUpdatingStatus(ctx, func(ctx context.Context) error {
+			return nil
+		})
+		close(signal)
+	}()
+	col.errCh <- errors.New("Terrible error")
+	s.waitForSignal(c, signal, "Doesn't stop in time after error occurs")
+}
+
+func (s *keepUpdatingSuite) TestShouldUpdateWhenNotified(c *C) {
+	var callCount int
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	col := Collector{
+		merger:     &Merger{},
+		notifyChan: make(chan *notifyResult),
+		interval:   10 * time.Second,
+	}
+	go col.keepUpdatingStatus(ctx, func(ctx context.Context) error {
+		defer func() {
+			callCount++
+		}()
+		if callCount%2 == 0 {
+			return errors.New("testing")
+		}
+		return nil
+	})
+	signal := make(chan struct{})
+	go func() {
+		// Start from 1 since the first call is outside the loop
+		for i := 1; i < 10; i++ {
+			err := col.Notify()
+			if i%2 == 0 {
+				c.Assert(err, ErrorMatches, "testing")
+			} else {
+				c.Assert(err, IsNil)
+			}
+		}
+		close(signal)
+	}()
+	// Wait until all notifies finish or timeout
+	s.waitForSignal(c, signal, "Notifies don't finish in time")
+	c.Assert(callCount, Equals, 10)
 }
