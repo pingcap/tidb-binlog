@@ -108,7 +108,7 @@ func (r *Record) isValid() bool {
 func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 	fd, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, errors.Annotatef(err, "open file %s failed", name)
+		return nil, errors.Trace(err)
 	}
 
 	info, err := fd.Stat()
