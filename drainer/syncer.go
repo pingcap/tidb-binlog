@@ -222,7 +222,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 				eventCounter.WithLabelValues("savepoint").Add(1)
 			}
 			delay := oracle.GetPhysical(time.Now()) - oracle.ExtractPhysical(uint64(ts))
-			checkpointDelayGauge.Set(float64(delay) / 1e3)
+			checkpointDelayHistogram.Observe(float64(delay) / 1e3)
 		}
 	}
 
