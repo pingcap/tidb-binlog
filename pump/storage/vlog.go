@@ -319,13 +319,13 @@ func (vlog *valueLog) write(reqs []*request) error {
 		if vlog.writableOffset() > vlog.opt.ValueLogFileSize {
 			err := curFile.finalize()
 			if err != nil {
-				return errors.Annotate(err, "finalize file failed")
+				return errors.Annotatef(err, "finalize file %s failed", curFile.path)
 			}
 
 			id := atomic.AddUint32(&vlog.maxFid, 1)
 			curFile, err = vlog.createLogFile(id)
 			if err != nil {
-				return errors.Annotate(err, "create file failed")
+				return errors.Annotatef(err, "create file id %d failed", id)
 			}
 		}
 		return nil
