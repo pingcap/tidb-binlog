@@ -304,7 +304,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 		if vlog.sync {
 			err = curFile.fdatasync()
 			if err != nil {
-				return errors.Annotate(err, "fdatasync failed")
+				return errors.Annotate(err, "fdatasync file %s failed", curFile.path)
 			}
 		}
 
