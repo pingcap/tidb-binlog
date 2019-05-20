@@ -346,38 +346,17 @@ func execSQL(db *sql.DB, sql string) error {
 	return nil
 }
 
-func createDBs(cfg util.DBConfig, count int) ([]*sql.DB, error) {
-	dbs := make([]*sql.DB, 0, count)
-	for i := 0; i < count; i++ {
-		db, err := util.CreateDB(cfg)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		dbs = append(dbs, db)
-	}
-
-	return dbs, nil
-}
-
-func closeDBs(dbs []*sql.DB) {
-	for _, db := range dbs {
-		err := util.CloseDB(db)
-		if err != nil {
-			log.Errorf("close db failed - %v", err)
-		}
-	}
-}
-
 // RunTest will call writeSrc and check if src is contisitent with dst
 func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)) {
 	writeSrc(src)
 
+	tick := time.NewTicker(time.Second * 5)
+	defer tick.Stop()
 	timeout := time.After(time.Second * 240)
 
 	for {
 		select {
-		case <-time.Tick(time.Second * 5):
+		case <-tick.C:
 			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
