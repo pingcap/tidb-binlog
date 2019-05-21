@@ -507,7 +507,7 @@ func (s *Server) gcBinlogFile() {
 			}
 			log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
 
-			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1e6
+			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 			if safeTSO < gcTS {
 				gcTS = safeTSO
