@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	etcdDialTimeout   = 5 * time.Second
-	createRegistryFuc = createRegistry
+	etcdDialTimeout          = 5 * time.Second
+	createRegistryFuc        = createRegistry
+	newEtcdClientFromCfgFunc = etcd.NewClientFromCfg
 )
 
 // QueryNodesByKind returns specified nodes, like pumps/drainers
@@ -89,7 +90,7 @@ func createRegistry(urls string) (*node.EtcdRegistry, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := etcd.NewClientFromCfg(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
+	cli, err := newEtcdClientFromCfgFunc(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

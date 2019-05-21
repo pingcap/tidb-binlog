@@ -167,7 +167,7 @@ func (c *Config) validate() error {
 	switch c.DestType {
 	case "mysql":
 		if c.DestDB == nil {
-			return errors.New("dest-db config must not be emtpy")
+			return errors.New("dest-db config must not be empty")
 		}
 		return nil
 	case "print":
