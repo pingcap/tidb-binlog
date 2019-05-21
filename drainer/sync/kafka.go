@@ -159,7 +159,7 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 func (p *KafkaSyncer) run() {
 	var wg sync.WaitGroup
 
-	// handle successs from producer
+	// handle successes from producer
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

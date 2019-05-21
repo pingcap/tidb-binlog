@@ -206,7 +206,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 		// skip the wrongly write binlog by pump client previous
 		if binlog.StartTs == 0 && binlog.CommitTs == 0 {
-			log.Info("skip emtpy binlog")
+			log.Info("skip empty binlog")
 			return nil
 		}
 
