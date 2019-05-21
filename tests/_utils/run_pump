@@ -9,7 +9,7 @@ OUT_DIR=/tmp/tidb_binlog_test
 # kill pump, util no pump process is running
 while :
 do
-        pump_num=`ps aux > temp && grep "pump -log-file ${OUT_DIR}/pump_${PORT}.log" temp | wc -l && rm temp`
+        pump_num=`pgrep "pump -log-file ${OUT_DIR}/pump_${PORT}.log" | wc -l`
         if [ $pump_num -ne 0 ]; then
                 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump:$PORT || true
                 sleep 1
