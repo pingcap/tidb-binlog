@@ -30,6 +30,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var newPDClientFunc = pd.NewClient
+
 // GenerateMetaInfo generates Meta from pd
 func GenerateMetaInfo(cfg *Config) error {
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
@@ -56,7 +58,7 @@ func GetTSO(cfg *Config) (int64, error) {
 		return 0, errors.Trace(err)
 	}
 
-	pdCli, err := pd.NewClient(ectdEndpoints, pd.SecurityOption{
+	pdCli, err := newPDClientFunc(ectdEndpoints, pd.SecurityOption{
 		CAPath:   cfg.SSLCA,
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,
