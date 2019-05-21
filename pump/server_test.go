@@ -16,12 +16,14 @@ package pump
 import (
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
@@ -277,10 +279,16 @@ var _ = Suite(&printServerInfoSuite{})
 
 type dummyStorage struct {
 	storage.Storage
+	gcTS        int64
+	maxCommitTS int64
 }
 
-func (ds dummyStorage) MaxCommitTS() int64 {
-	return 1024
+func (ds *dummyStorage) MaxCommitTS() int64 {
+	return ds.maxCommitTS
+}
+
+func (ds *dummyStorage) GCTS(ts int64) {
+	ds.gcTS = ts
 }
 
 func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
@@ -296,7 +304,7 @@ func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
 	defer hook.TearDown()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	server := &Server{storage: dummyStorage{}, ctx: ctx}
+	server := &Server{storage: &dummyStorage{}, ctx: ctx}
 	signal := make(chan struct{})
 
 	server.wg.Add(1)
@@ -430,4 +438,112 @@ func (s *closeSuite) TestSkipIfAlreadyClosed(c *C) {
 	server.Close()
 
 	c.Assert(len(hook.Entrys), Less, 2)
+}
+
+type gcBinlogFileSuite struct{}
+
+var _ = Suite(&gcBinlogFileSuite{})
+
+func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
+	storage := dummyStorage{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: 1003, State: node.Online})
+	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
+	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
+	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: 1001, State: node.Offline})
+
+	server := Server{
+		ctx:        ctx,
+		storage:    &storage,
+		node:       &pumpNode{EtcdRegistry: registry},
+		gcDuration: time.Hour,
+	}
+
+	// Set a shorter interval because we don't really want to wait 1 hour
+	origInterval := gcInterval
+	gcInterval = 100 * time.Microsecond
+	defer func() {
+		gcInterval = origInterval
+	}()
+
+	server.wg.Add(1)
+	go server.gcBinlogFile()
+
+	// Give the GC goroutine some time to do the job,
+	// the latency of the underlying etcd query can be much larger than gcInterval
+	time.Sleep(1000 * gcInterval)
+	cancel()
+
+	c.Assert(storage.gcTS, Equals, int64(1002))
+}
+
+type waitCommitTSSuite struct{}
+
+var _ = Suite(&waitCommitTSSuite{})
+
+func (s *waitCommitTSSuite) TestShouldStoppedWhenDone(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	storage := dummyStorage{maxCommitTS: 1024}
+	server := Server{
+		storage: &storage,
+		ctx:     ctx,
+	}
+	signal := make(chan struct{})
+	go func() {
+		err := server.waitUntilCommitTSSaved(ctx, int64(2000), time.Millisecond)
+		close(signal)
+		c.Assert(err, ErrorMatches, "context canceled")
+	}()
+	cancel()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time when done")
+	}
+}
+
+func (s *waitCommitTSSuite) TestShouldWaitUntilTs(c *C) {
+	storage := dummyStorage{maxCommitTS: 1024}
+	server := Server{
+		storage: &storage,
+		ctx:     context.Background(),
+	}
+	signal := make(chan struct{})
+	go func() {
+		err := server.waitUntilCommitTSSaved(server.ctx, int64(2000), time.Millisecond)
+		close(signal)
+		c.Assert(err, IsNil)
+	}()
+	storage.maxCommitTS = 2000
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after ts is reached")
+	}
+}
+
+type listenSuite struct{}
+
+var _ = Suite(&listenSuite{})
+
+func (s *listenSuite) TestWrongAddr(c *C) {
+	_, err := listen("unix", "://asdf:1231:123:12")
+	c.Assert(err, ErrorMatches, ".*invalid .* socket addr.*")
+}
+
+func (s *listenSuite) TestUnbindableAddr(c *C) {
+	_, err := listen("tcp", "http://asdf;klj:7979/12")
+	c.Assert(err, ErrorMatches, ".*fail to start.*")
+}
+
+func (s *listenSuite) TestReturnListener(c *C) {
+	var l net.Listener
+	l, err := listen("tcp", "http://localhost:17979")
+	c.Assert(err, IsNil)
+	defer l.Close()
+	c.Assert(l, NotNil)
 }
