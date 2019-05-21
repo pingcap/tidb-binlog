@@ -1,6 +1,12 @@
 # TiDB-Binlog
 All notable changes to this project are documented in this file.
 
+## [2.1.10]
+- Fix all issues reported by static linters of golangci-lint [#599](https://github.com/pingcap/tidb-binlog/pull/599)
+- Drainer: Ignore empty string when getting compressor config [#598](https://github.com/pingcap/tidb-binlog/pull/598)
+- Update [parser](https://github.com/pingcap/parser) to the same [version](https://github.com/pingcap/parser/tree/361d2d4f774d779e3292d48af37bdce8f4ca88bf) as used in TiDB  [#608](https://github.com/pingcap/tidb-binlog/pull/608)
+- Refine some log in storage module [#607](https://github.com/pingcap/tidb-binlog/pull/607)
+
 ## [2.1.9]
 - Drainer: Fix when pk is handle and value overflow int64 [#574](https://github.com/pingcap/tidb-binlog/pull/574)
 - Drainer: Remove pb compress config and change downstream name 'pb' to 'file' [#575](https://github.com/pingcap/tidb-binlog/pull/575)
