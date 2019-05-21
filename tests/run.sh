@@ -127,12 +127,12 @@ if [ "${1-}" = '--debug' ]; then
     read line
 fi
 
-# set to the case name you want to run only for debug
-do_case=""
+# List the case names to run, separate them by space, eg. "binlog gencol"
+do_cases=""
 
 for script in ./*/run.sh; do
     test_name="$(basename "$(dirname "$script")")"
-    if [[ $do_case != "" && $test_name != $do_case ]]; then
+    if [[ $do_cases != "" && ! $do_cases =~ (^|[[:space:]])$test_name($|[[:space:]]) ]]; then
         continue
     fi
 
