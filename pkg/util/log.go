@@ -60,7 +60,7 @@ func (l *Log) Print(label string, fn func()) {
 // _globalP is the global ZapProperties in log
 var _globalP *log.ZapProperties
 
-// InitLogger initalizes logger
+// InitLogger initializes logger
 func InitLogger(level string, file string) error {
 	cfg := &log.Config{
 		Level: level,

@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -221,4 +222,50 @@ func (s *adjustValueSuite) TestAdjustDuration(c *C) {
 
 	AdjustDuration(&d, time.Duration(time.Hour))
 	c.Assert(d, Equals, time.Duration(time.Second))
+}
+
+type tryUntilSuccSuite struct{}
+
+var _ = Suite(&tryUntilSuccSuite{})
+
+func (s *tryUntilSuccSuite) TestShouldStopWhenDone(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	signal := make(chan struct{})
+	go func() {
+		err := TryUntilSuccess(ctx, 10*time.Millisecond, "Testing", func() error {
+			return errors.New("Just Failed")
+		})
+		close(signal)
+		c.Assert(err, ErrorMatches, "context canceled")
+	}()
+	cancel()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after done")
+	}
+}
+
+func (s *tryUntilSuccSuite) TestShouldStopOnSuccess(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var callCount int
+	signal := make(chan struct{})
+	go func() {
+		err := TryUntilSuccess(ctx, time.Millisecond, "Testing", func() error {
+			callCount++
+			if callCount < 3 {
+				return errors.New("Just Failed")
+			}
+			return nil
+		})
+		close(signal)
+		c.Assert(err, IsNil)
+	}()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after done")
+	}
+	c.Assert(callCount, Equals, 3)
 }
