@@ -69,6 +69,15 @@ var (
 			Help:      "save checkpoint tso of drainer.",
 		})
 
+	checkpointDelayHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "checkpoint_delay_seconds",
+			Help:      "How much the downstream checkpoint lag behind",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22),
+		})
+
 	executeHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -123,6 +132,7 @@ func init() {
 	registry.MustRegister(ddlJobsCounter)
 	registry.MustRegister(errorCount)
 	registry.MustRegister(checkpointTSOGauge)
+	registry.MustRegister(checkpointDelayHistogram)
 	registry.MustRegister(eventCounter)
 	registry.MustRegister(executeHistogram)
 	registry.MustRegister(binlogReachDurationHistogram)

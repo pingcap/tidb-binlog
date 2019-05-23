@@ -221,6 +221,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 				lastSaveTS = ts
 				eventCounter.WithLabelValues("savepoint").Add(1)
 			}
+			delay := oracle.GetPhysical(time.Now()) - oracle.ExtractPhysical(uint64(ts))
+			checkpointDelayHistogram.Observe(float64(delay) / 1e3)
 		}
 	}
 
@@ -269,7 +271,7 @@ func (s *Syncer) run() error {
 	var b *binlogItem
 
 	var fakeBinlog *pb.Binlog
-	var pushFakeBinlog chan<- *pb.Binlog = nil
+	var pushFakeBinlog chan<- *pb.Binlog
 
 	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
