@@ -75,7 +75,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "checkpoint_delay_seconds",
 			Help:      "How much the downstream checkpoint lag behind",
-			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22),
 		})
 
 	executeHistogram = prometheus.NewHistogram(
