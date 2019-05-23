@@ -142,6 +142,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
+	db.SetMaxIdleConns(opts.workerCount)
 
 	return s, nil
 }

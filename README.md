@@ -1,6 +1,8 @@
 # TiDB-Binlog
 
-[![Coverage Status](https://coveralls.io/repos/github/pingcap/tidb-binlog/badge.svg?branch=HEAD&t=9Zn2om)](https://coveralls.io/github/pingcap/tidb-binlog?branch=HEAD)
+[![Build Status](https://internal.pingcap.net/idc-jenkins/buildStatus/icon?job=build_tidb_binlog_master)](https://internal.pingcap.net/idc-jenkins/job/build_tidb_binlog_master/)
+[![Coverage Status](https://coveralls.io/repos/github/pingcap/tidb-binlog/badge.svg?branch=master&t=9Zn2om)](https://coveralls.io/github/pingcap/tidb-binlog?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/tidb-binlog)](https://goreportcard.com/report/github.com/pingcap/tidb-binlog)
 
 ## TiDB-Binlog introduction
 
