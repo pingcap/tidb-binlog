@@ -59,7 +59,7 @@ type Collector struct {
 
 	syncedCheckTime int
 
-	// notifyChan notifies the new pump is comming
+	// notifyChan notifies the new pump is coming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
 	mu struct {

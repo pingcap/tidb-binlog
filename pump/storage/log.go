@@ -36,7 +36,7 @@ record :=
   checksum: uint32   // checksum of payload
   payload:  uint8[length]    // binlog 数据
 footer :=
-  maxTS: uint64     // the max ts of all binlog in this log file, so we can check if we can safe delete the file when gc accroding to ts
+  maxTS: uint64     // the max ts of all binlog in this log file, so we can check if we can safe delete the file when gc according to ts
   fileEndMagic: uint32  // check if the file has a footer
 */
 

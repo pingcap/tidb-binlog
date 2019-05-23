@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -149,6 +150,27 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 	}
 
 	return errors.Trace(err)
+}
+
+// TryUntilSuccess retries the given function until error is nil or the context is done,
+// waiting for `waitInterval` time between retries.
+func TryUntilSuccess(ctx context.Context, waitInterval time.Duration, errMsg string, fn func() error) error {
+	for {
+		if err := fn(); err != nil {
+			if errMsg != "" {
+				log.Error(errMsg, zap.Error(err))
+			}
+
+			select {
+			case <-time.After(waitInterval):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		return nil
+	}
 }
 
 // QueryLatestTsFromPD returns the latest ts
