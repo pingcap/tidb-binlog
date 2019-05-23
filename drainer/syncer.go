@@ -271,7 +271,7 @@ func (s *Syncer) run() error {
 	var b *binlogItem
 
 	var fakeBinlog *pb.Binlog
-	var pushFakeBinlog chan<- *pb.Binlog = nil
+	var pushFakeBinlog chan<- *pb.Binlog
 
 	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
