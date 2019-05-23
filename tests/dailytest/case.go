@@ -165,6 +165,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.run(caseCreateView)
 	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
 
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
@@ -305,7 +306,7 @@ AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
 	for i := 0; i < 42; i++ {
 		for j := 0; j < 3; j++ {
 			mustExec(db, insertSQL, i, j*10+i)
-			if i % 2 == 0 && j == 1 {
+			if i%2 == 0 && j == 1 {
 				mustExec(db, updateSQL, 1111, i)
 			}
 		}
