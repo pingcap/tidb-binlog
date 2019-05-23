@@ -500,7 +500,7 @@ func (s *Server) gcBinlogFile() {
 				continue
 			}
 
-			safeTSO, err := s.getSafeGCTSOForDrainers()
+			safeTSO, err := s.getSafeGCTSOForDrainers(s.ctx)
 			if err != nil {
 				log.Warn("get save gc tso for drainers failed", zap.Error(err))
 				continue
@@ -518,10 +518,10 @@ func (s *Server) gcBinlogFile() {
 	}
 }
 
-func (s *Server) getSafeGCTSOForDrainers() (int64, error) {
+func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 	pumpNode := s.node.(*pumpNode)
 
-	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
+	drainers, err := pumpNode.Nodes(ctx, "drainers")
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -702,7 +702,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		select {
 		case <-time.After(time.Second):
-			safeTSO, err := s.getSafeGCTSOForDrainers()
+			safeTSO, err := s.getSafeGCTSOForDrainers(ctx)
 			if err != nil {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
