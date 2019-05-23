@@ -234,7 +234,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 			t := types.NewTimeDatum(types.CurrentTime(e.GetType().Tp))
 			return fmt.Sprintf("'%v'", t.GetMysqlTime().String()), shouldQuote, nil
 		}
-		return "", false, fmt.Errorf("Function expression %s is not supported.", e.FnName)
+		return "", false, fmt.Errorf("function expression %s is not supported.", e.FnName)
 	case *ast.UnaryOperationExpr:
 		op := ""
 		switch e.Op {
@@ -249,7 +249,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 				op = "+"
 			}
 		default:
-			return "", false, fmt.Errorf("Op %s is not supported.", e.Op.String())
+			return "", false, fmt.Errorf("op %s is not supported.", e.Op.String())
 		}
 		child, _, err := formatFlashLiteral(e.V, ft)
 		if err != nil {
@@ -257,7 +257,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 		}
 		return fmt.Sprintf("%s%s", op, child), shouldQuote, nil
 	default:
-		return "", false, fmt.Errorf("Expression %v is not supported.", e)
+		return "", false, fmt.Errorf("expression %v is not supported.", e)
 	}
 }
 
