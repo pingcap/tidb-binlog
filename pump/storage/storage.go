@@ -551,7 +551,7 @@ func (a *Append) doGCTS(ts int64) {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		if stats.LevelTablesCounts[0] >= l0Trigger {
+		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", stats.LevelTablesCounts[0])
 			time.Sleep(5 * time.Second)
 			continue
