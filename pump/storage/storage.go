@@ -537,9 +537,6 @@ func (a *Append) GCTS(ts int64) {
 func (a *Append) doGCTS(ts int64) {
 	log.Info("start gc ts: ", ts)
 
-	atomic.StoreInt32(&a.gcWorking, 1)
-	defer atomic.StoreInt32(&a.gcWorking, 0)
-
 	batch := new(leveldb.Batch)
 	l0Trigger := defaultStorageKVConfig.CompactionL0Trigger
 	if a.options.KVConfig != nil && a.options.KVConfig.CompactionL0Trigger > 0 {
