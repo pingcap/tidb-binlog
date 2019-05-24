@@ -554,6 +554,7 @@ func (a *Append) doGCTS(ts int64) {
 		if stats.LevelTablesCounts[0] >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", stats.LevelTablesCounts[0])
 			time.Sleep(5 * time.Second)
+			continue
 		}
 
 		irange := &util.Range{
@@ -575,7 +576,9 @@ func (a *Append) doGCTS(ts int64) {
 			}
 		}
 
-		if !iter.Next() {
+		iter.Release()
+
+		if deleteBatch < 100 {
 			if batch.Len() > 0 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
