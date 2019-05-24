@@ -53,7 +53,6 @@ require (
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190523142557-0e01d883c5c5
 	golang.org/x/text v0.3.2 // indirect
-	golang.org/x/tools v0.0.0-20190523174634-38d8bcfa38af // indirect
 	google.golang.org/appengine v1.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20181004005441-af9cb2a35e7f // indirect
 	google.golang.org/grpc v1.12.0

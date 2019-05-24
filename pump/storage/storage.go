@@ -575,7 +575,7 @@ func (a *Append) doGCTS(ts int64) {
 			}
 		}
 
-		if iter.Next() == false {
+		if !iter.Next() {
 			if batch.Len() > 0 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
