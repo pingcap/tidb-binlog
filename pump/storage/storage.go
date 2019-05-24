@@ -843,7 +843,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
-		return errors.Annotatef(err, "get  pointer of P-Binlog(ts: %d) failed", cbinlog.StartTs)
+		return errors.Annotatef(err, "get pointer of P-Binlog(ts: %d) failed", cbinlog.StartTs)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
