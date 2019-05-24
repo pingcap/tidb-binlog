@@ -521,13 +521,17 @@ func (a *Append) GCTS(ts int64) {
 	a.saveGCTSToDB(ts)
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 
-	if atomic.LoadInt32(&a.gcWorking) == 1 {
+	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
 		return
 	}
 
-	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
-	// so we forward a little bit to make sure we can get the according P binlog
-	go a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
+	go func() {
+		defer atomic.StoreInt32(&a.gcWorking, 0)
+		// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
+		// so we forward a little bit to make sure we can get the according P binlog
+		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
+	}()
+
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -579,6 +583,7 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error(err)
 				}
+				batch.Reset()
 			}
 			break
 		}
