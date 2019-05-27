@@ -268,16 +268,15 @@ func (vlog *valueLog) close() error {
 	if vlog.writableOffset() >= finalizeFileSizeAtClose {
 		err = curFile.finalize()
 		if err != nil {
-			return errors.Trace(err)
+			return errors.Annotatef(err, "finalize file %s failed", curFile.path)
 		}
 	}
 
 	for _, logFile := range vlog.filesMap {
-		err = logFile.fd.Close()
+		err = logFile.close()
 		if err != nil {
-			return err
+			return errors.Annotatef(err, "close %s failed", logFile.path)
 		}
-
 	}
 
 	return nil
@@ -286,15 +285,15 @@ func (vlog *valueLog) close() error {
 func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
 	logFile, err := vlog.getFileRLocked(vp.Fid)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "get file(id: %d) failed", vp.Fid)
 	}
+
+	defer logFile.lock.RUnlock()
 
 	record, err := logFile.readRecord(vp.Offset)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "read record at %+v failed", vp)
 	}
-
-	logFile.lock.RUnlock()
 
 	return record.payload, nil
 }
@@ -319,7 +318,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 		if vlog.sync {
 			err = curFile.fdatasync()
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "fdatasync file %s failed", curFile.path)
 			}
 		}
 
@@ -334,13 +333,13 @@ func (vlog *valueLog) write(reqs []*request) error {
 		if vlog.writableOffset() > vlog.opt.ValueLogFileSize {
 			err := curFile.finalize()
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "finalize file %s failed", curFile.path)
 			}
 
 			id := atomic.AddUint32(&vlog.maxFid, 1)
 			curFile, err = vlog.createLogFile(id)
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "create file id %d failed", id)
 			}
 		}
 		return nil
@@ -360,7 +359,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 		if writeNow {
 			if err := toDisk(); err != nil {
-				return err
+				return errors.Annotate(err, "write to disk failed")
 			}
 		}
 	}
@@ -429,7 +428,11 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 
 	for _, logFile := range toDeleteFiles {
 		logFile.lock.Lock()
-		err := os.Remove(logFile.path)
+		err := logFile.close()
+		if err != nil {
+			log.Error("close file failed", zap.String("path", logFile.path), zap.Error(err))
+		}
+		err = os.Remove(logFile.path)
 		if err != nil {
 			log.Error("remove file failed", zap.String("path", logFile.path), zap.Error(err))
 		}
