@@ -16,8 +16,11 @@ package syncer
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
 )
@@ -29,6 +32,10 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 		txn.DDL = new(loader.DDL)
 		// for table DDL, pb.Binlog.DdlQuery will be "use <db>; create..."
 		txn.DDL.SQL = string(binlog.DdlQuery)
+		txn.DDL.Database, txn.DDL.Table, err = parserSchemaTableFromDDL(txn.DDL.SQL)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
 		for _, event := range data.GetEvents() {
@@ -133,6 +140,66 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 			zap.String("mysql type", col.MysqlType),
 			zap.Reflect("value", val.GetValue()))
 		args = append(args, val.GetValue())
+	}
+
+	return
+}
+
+// parserSchemaTableFromDDL parse ddl query to get schema and table
+// ddl like use test; create table ....
+func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
+	stmts, _, err := parser.New().Parse(ddlQuery, "", "")
+	if err != nil {
+		return "", "", err
+	}
+
+	for _, stmt := range stmts {
+		switch node := stmt.(type) {
+		case *ast.UseStmt:
+			schema = node.DBName
+		case *ast.CreateDatabaseStmt:
+			schema = node.Name
+		case *ast.DropDatabaseStmt:
+			schema = node.Name
+		case *ast.TruncateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.AlterTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropTableStmt:
+			// now only support drop one table in a ddl
+			if len(node.Tables[0].Schema.O) != 0 {
+				schema = node.Tables[0].Schema.O
+			}
+			table = node.Tables[0].Name.O
+		case *ast.RenameTableStmt:
+			if len(node.NewTable.Schema.O) != 0 {
+				schema = node.NewTable.Schema.O
+			}
+			table = node.NewTable.Name.O
+		default:
+			return "", "", errors.Errorf("unknown ddl type, ddl: %s", ddlQuery)
+		}
 	}
 
 	return
