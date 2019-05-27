@@ -206,6 +206,14 @@ func (s *loaderImpl) Close() {
 var utilGetTableInfo = getTableInfo
 
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+	if len(schema) == 0 {
+		return nil, errors.New("schema is empty")
+	}
+
+	if len(table) == 0 {
+		return nil, nil
+	}
+
 	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
@@ -484,7 +492,9 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
-			s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
+			if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
+				log.Errorf("refresh table info failed, %v", err)
+			}
 		},
 	}
 }
