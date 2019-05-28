@@ -23,7 +23,7 @@ use-checksum=true
 
 [[check-tables]]
 schema = "reparo_test"
-tables = ["test"]
+tables = ["~.*"]
 
 [target-db]
 host = "127.0.0.1"

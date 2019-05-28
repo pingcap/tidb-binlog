@@ -9,19 +9,14 @@ ms=$(date +'%s')
 ts=$(($ms*1000<<18))
 args="-initial-commit-ts=$ts"
 down_run_sql "DROP DATABASE IF EXISTS tidb_binlog"
+run_sql "CREATE DATABASE IF NOT EXISTS \`reparo_test\`"
 rm -rf /tmp/tidb_binlog_test/data.drainer
 
 run_drainer "$args" &
 
-run_sql "DROP DATABASE IF EXISTS \`reparo_test\`;"
-run_sql "CREATE DATABASE \`reparo_test\`"
-run_sql "CREATE TABLE \`reparo_test\`.\`test\`(\`id\` int, \`name\` varchar(10), \`all\` varchar(10), PRIMARY KEY(\`id\`))"
+GO111MODULE=on go build -o out
 
-run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(1, 'a', 'a'), (2, 'b', 'b')"
-run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(3, 'c', 'c'), (4, 'd', 'c')"
-run_sql "UPDATE \`reparo_test\`.\`test\` SET \`name\` = 'bb' where \`id\` = 2"
-run_sql "DELETE FROM \`reparo_test\`.\`test\` WHERE \`id\` = '1'"
-run_sql "INSERT INTO \`reparo_test\`.\`test\` VALUES(5, 'e', 'e')"
+./out -config ./config.toml > ${OUT_DIR-/tmp}/$TEST_NAME.out 2>&1
 
 sleep 5
 

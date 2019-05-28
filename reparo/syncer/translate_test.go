@@ -21,7 +21,9 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 			DdlQuery: []byte("use db1; create table table1(id int)"),
 		}: {
 			DDL: &loader.DDL{
-				SQL: "use db1; create table table1(id int)",
+				SQL:      "use db1; create table table1(id int)",
+				Database: "db1",
+				Table:    "table1",
 			},
 		},
 		// TODO add dml test

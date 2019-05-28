@@ -3,6 +3,8 @@ package syncer
 import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb/util/codec"
@@ -15,6 +17,13 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 		txn.DDL = new(loader.DDL)
 		// for table DDL, pb.Binlog.DdlQuery will be "use <db>; create..."
 		txn.DDL.SQL = string(binlog.DdlQuery)
+		txn.DDL.Database, txn.DDL.Table, err = parserSchemaTableFromDDL(txn.DDL.SQL)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(txn.DDL.Database) == 0 {
+			return nil, errors.Errorf("can't parse database name from DDL %s", binlog.DdlQuery)
+		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
 		for _, event := range data.GetEvents() {
@@ -111,6 +120,79 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 		val = formatValue(val, tp)
 		log.Debugf("%s(%s): %v", col.Name, col.MysqlType, val.GetValue())
 		args = append(args, val.GetValue())
+	}
+
+	return
+}
+
+// parserSchemaTableFromDDL parses ddl query to get schema and table
+// ddl like `use test; create table`
+func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
+	stmts, _, err := parser.New().Parse(ddlQuery, "", "")
+	if err != nil {
+		return "", "", err
+	}
+
+	haveUseStmt := false
+
+	for _, stmt := range stmts {
+		switch node := stmt.(type) {
+		case *ast.UseStmt:
+			haveUseStmt = true
+			schema = node.DBName
+		case *ast.CreateDatabaseStmt:
+			schema = node.Name
+		case *ast.DropDatabaseStmt:
+			schema = node.Name
+		case *ast.TruncateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.AlterTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropTableStmt:
+			// FIXME: may drop more than one table in a ddl
+			if len(node.Tables[0].Schema.O) != 0 {
+				schema = node.Tables[0].Schema.O
+			}
+			table = node.Tables[0].Name.O
+		case *ast.RenameTableStmt:
+			if len(node.NewTable.Schema.O) != 0 {
+				schema = node.NewTable.Schema.O
+			}
+			table = node.NewTable.Name.O
+		default:
+			return "", "", errors.Errorf("unknown ddl type, ddl: %s", ddlQuery)
+		}
+	}
+
+	if haveUseStmt {
+		if len(stmts) != 2 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
+		}
+	} else {
+		if len(stmts) != 1 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
+		}
 	}
 
 	return
