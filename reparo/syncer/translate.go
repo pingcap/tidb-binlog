@@ -190,7 +190,7 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 			}
 			table = node.Table.Name.O
 		case *ast.DropTableStmt:
-			// now only support drop one table in a ddl
+			// FIXME: may drop more than one table in a ddl
 			if len(node.Tables[0].Schema.O) != 0 {
 				schema = node.Tables[0].Schema.O
 			}
