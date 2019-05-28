@@ -148,8 +148,8 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 	return
 }
 
-// parserSchemaTableFromDDL parse ddl query to get schema and table
-// ddl like use test; create table ....
+// parserSchemaTableFromDDL parses ddl query to get schema and table
+// ddl like `use test; create table`
 func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
 	stmts, _, err := parser.New().Parse(ddlQuery, "", "")
 	if err != nil {
