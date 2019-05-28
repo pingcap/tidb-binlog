@@ -545,6 +545,10 @@ func (b *batchManager) put(txn *Txn) error {
 	// we always executor the previous dmls when we meet ddl,
 	// and executor ddl one by one.
 	if txn.isDDL() {
+		if len(txn.DDL.Database) == 0 {
+			return errors.Errorf("get DDL Txn with empty database, ddl: %s", txn.DDL.SQL)
+		}
+
 		if err := b.execAccumulatedDMLs(); err != nil {
 			return errors.Trace(err)
 		}
