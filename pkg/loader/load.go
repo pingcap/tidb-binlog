@@ -495,7 +495,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
 			if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
-				log.Error("refresh table info failed", zap.Error(err))
+				log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
 			}
 		},
 	}
