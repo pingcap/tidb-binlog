@@ -206,6 +206,16 @@ func (s *loaderImpl) Close() {
 var utilGetTableInfo = getTableInfo
 
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+	log.Info("refresh table info", zap.String("schema", schema), zap.String("table", table))
+
+	if len(schema) == 0 {
+		return nil, errors.New("schema is empty")
+	}
+
+	if len(table) == 0 {
+		return nil, nil
+	}
+
 	info, err = utilGetTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
@@ -484,7 +494,9 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
-			s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
+			if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
+				log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
+			}
 		},
 	}
 }
@@ -533,6 +545,10 @@ func (b *batchManager) put(txn *Txn) error {
 	// we always executor the previous dmls when we meet ddl,
 	// and executor ddl one by one.
 	if txn.isDDL() {
+		if len(txn.DDL.Database) == 0 {
+			return errors.Errorf("get DDL Txn with empty database, ddl: %s", txn.DDL.SQL)
+		}
+
 		if err := b.execAccumulatedDMLs(); err != nil {
 			return errors.Trace(err)
 		}
