@@ -36,6 +36,9 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if len(txn.DDL.Database) == 0 {
+			return nil, errors.Errorf("can't parse database name from DDL %s", binlog.DdlQuery)
+		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
 		for _, event := range data.GetEvents() {

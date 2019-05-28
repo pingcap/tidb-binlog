@@ -206,6 +206,8 @@ func (s *loaderImpl) Close() {
 var utilGetTableInfo = getTableInfo
 
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+	log.Info("refresh table info", zap.String("schema", schema), zap.String("table", table))
+
 	if len(schema) == 0 {
 		return nil, errors.New("schema is empty")
 	}
