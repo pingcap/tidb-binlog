@@ -156,9 +156,12 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 		return "", "", err
 	}
 
+	haveUseStmt := false
+
 	for _, stmt := range stmts {
 		switch node := stmt.(type) {
 		case *ast.UseStmt:
+			haveUseStmt = true
 			schema = node.DBName
 		case *ast.CreateDatabaseStmt:
 			schema = node.Name
@@ -202,6 +205,16 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 			table = node.NewTable.Name.O
 		default:
 			return "", "", errors.Errorf("unknown ddl type, ddl: %s", ddlQuery)
+		}
+	}
+
+	if haveUseStmt {
+		if len(stmts) != 2 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
+		}
+	} else {
+		if len(stmts) != 1 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
 		}
 	}
 
