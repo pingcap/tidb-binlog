@@ -3,7 +3,7 @@ data-dir = "/tmp/tidb_binlog_test/data.drainer"
 
 # log-file = ""
 # log-rotate = "hour"
-log-level = "info"
+log-level = "debug"
 
 # start-datetime and stop-datetime enable you to pick a range of binlog to reparo.
 # The datetime format is like '2018-02-28 12:12:12'.
@@ -18,7 +18,6 @@ log-level = "info"
 # dest-type choose a destination, which value can be "mysql", "print".
 # for print, it just prints decoded value.
 dest-type = "mysql"
-#compression = "gzip"
 
 # if dest-type is "mysql" or "tidb", need set dest-db.
 [dest-db]

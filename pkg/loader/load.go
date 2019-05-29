@@ -184,6 +184,16 @@ func (s *Loader) Close() {
 }
 
 func (s *Loader) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
+	log.Infof("refresh table info, schema: %s, table: %s", schema, table)
+
+	if len(schema) == 0 {
+		return nil, errors.New("schema is empty")
+	}
+
+	if len(table) == 0 {
+		return nil, nil
+	}
+
 	info, err = getTableInfo(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
@@ -409,7 +419,9 @@ func (s *Loader) Run() error {
 		}
 
 		s.markSuccess(txn)
-		s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
+		if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
+			log.Errorf("refresh table info failed, database: %s, table: %s, error: %v", txn.DDL.Database, txn.DDL.Table, err)
+		}
 		return nil
 	}
 
@@ -419,6 +431,10 @@ func (s *Loader) Run() error {
 		// we always executor the previous dmls when we meet ddl,
 		// and executor ddl one by one.
 		if txn.isDDL() {
+			if len(txn.DDL.Database) == 0 {
+				return errors.Errorf("get DDL Txn with empty database, ddl: %s", txn.DDL.SQL)
+			}
+
 			if err = execDML(); err != nil {
 				return errors.Trace(err)
 			}
