@@ -732,18 +732,18 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 		var bufReqs []*request
 		var size int
 
-		write := func(reqs []*request) {
-			if len(reqs) == 0 {
+		write := func(batch []*request) {
+			if len(batch) == 0 {
 				return
 			}
-			log.Debug("write requests to value log", zap.Reflect("requests", reqs))
+			log.Debug("write requests to value log", zap.Reflect("requests", batch))
 			beginTime := time.Now()
 			writeBinlogSizeHistogram.WithLabelValues("batch").Observe(float64(size))
 
-			err := a.vlog.write(reqs)
+			err := a.vlog.write(batch)
 			writeBinlogTimeHistogram.WithLabelValues("batch").Observe(time.Since(beginTime).Seconds())
 			if err != nil {
-				for _, req := range reqs {
+				for _, req := range batch {
 					req.err = err
 					req.wg.Done()
 				}
@@ -751,7 +751,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				return
 			}
 
-			for _, req := range reqs {
+			for _, req := range batch {
 				log.Debug("request done", zap.Int64("startTS", req.startTS), zap.Int64("commitTS", req.commitTS))
 				req.wg.Done()
 				// payload is useless anymore, let it GC ASAP
