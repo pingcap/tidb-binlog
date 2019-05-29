@@ -19,7 +19,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
 )
@@ -32,17 +32,17 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		log.S().Errorf("parse cmd flags err %s\n", err)
+		log.Errorf("parse cmd flags err %s\n", err)
 		os.Exit(2)
 	}
 
 	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
 	if err != nil {
-		log.S().Fatal(err)
+		log.Fatal(err)
 	}
 	defer func() {
 		if err := util.CloseDB(sourceDB); err != nil {
-			log.S().Errorf("Failed to close source database: %s\n", err)
+			log.Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
 
