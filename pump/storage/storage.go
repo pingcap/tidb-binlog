@@ -1054,14 +1054,14 @@ type KVConfig struct {
 }
 
 var defaultStorageKVConfig = &KVConfig{
-	BlockCacheCapacity:            8388608,
+	BlockCacheCapacity:            8 * opt.MiB,
 	BlockRestartInterval:          16,
-	BlockSize:                     4096,
+	BlockSize:                     4 * opt.KiB,
 	CompactionL0Trigger:           8,
-	CompactionTableSize:           67108864,
-	CompactionTotalSize:           536870912,
+	CompactionTableSize:           64 * opt.MiB,
+	CompactionTotalSize:           512 * opt.MiB,
 	CompactionTotalSizeMultiplier: 8,
-	WriteBuffer:                   67108864,
+	WriteBuffer:                   64 * opt.MiB,
 	WriteL0PauseTrigger:           24,
 	WriteL0SlowdownTrigger:        17,
 }
