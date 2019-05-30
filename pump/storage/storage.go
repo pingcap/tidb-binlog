@@ -197,27 +197,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	go append.writeToSorter(append.writeToKV(toKV))
 
 	// for handlePointer and headPointer, it's safe to start at a forward point, so we just chose a min point between handlePointer and headPointer, and wirte to KV, will push to sorter after write to KV too
-	err = append.vlog.scan(minPointer, func(vp valuePointer, record *Record) error {
-		binlog := new(pb.Binlog)
-		err := binlog.Unmarshal(record.payload)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		// skip the wrongly write binlog by pump client previous
-		if binlog.StartTs == 0 && binlog.CommitTs == 0 {
-			log.Info("skip empty binlog")
-			return nil
-		}
-
-		request := &request{
-			startTS:      binlog.StartTs,
-			commitTS:     binlog.CommitTs,
-			tp:           binlog.Tp,
-			payload:      record.payload,
-			valuePointer: vp,
-		}
-		toKV <- request
+	err = append.vlog.scanRequests(minPointer, func(req *request) error {
+		toKV <- req
 		return nil
 	})
 
