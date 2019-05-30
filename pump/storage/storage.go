@@ -639,43 +639,12 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 	go func() {
 		defer close(done)
 
-		var batch leveldb.Batch
 		for bufReqs := range batchReqs {
-			batch.Reset()
-			var lastPointer []byte
-			for _, req := range bufReqs {
-				log.Debug("write request to kv", zap.Reflect("request", req))
-				var err error
-
-				pointer, err := req.valuePointer.MarshalBinary()
-				if err != nil {
-					panic(err)
-				}
-
-				lastPointer = pointer
-				batch.Put(encodeTSKey(req.ts()), pointer)
+			if err := a.writeBatchToKV(bufReqs); err != nil {
+				return
 			}
-			batch.Put(headPointerKey, lastPointer)
-
-			for {
-				err := a.metadata.Write(&batch, nil)
-
-				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
-				// we just retry of quit when Append is closed
-				if err != nil {
-					log.Error("write batch failed", zap.Error(err))
-					if a.isClosed() {
-						return
-					}
-					time.Sleep(time.Second)
-					continue
-				}
-				a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
-
-				for _, req := range bufReqs {
-					done <- req
-				}
-				break
+			for _, req := range bufReqs {
+				done <- req
 			}
 		}
 	}()
@@ -1121,4 +1090,40 @@ func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
 
 	return leveldb.OpenFile(kvDir, &opt)
+}
+
+func (a *Append) writeBatchToKV(bufReqs []*request) error {
+	var batch leveldb.Batch
+	var lastPointer []byte
+	for _, req := range bufReqs {
+		log.Info("write request to kv", zap.Reflect("request", req))
+		var err error
+
+		pointer, err := req.valuePointer.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+
+		lastPointer = pointer
+		batch.Put(encodeTSKey(req.ts()), pointer)
+	}
+	batch.Put(headPointerKey, lastPointer)
+
+	for {
+		err := a.metadata.Write(&batch, nil)
+		if err == nil {
+			a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
+			return nil
+		}
+
+		// when write to vlog success, but the disk is full when write to KV here, it will cause write err
+		// we just retry of quit when Append is closed
+		log.Error("Failed to write batch", zap.Error(err))
+		if a.isClosed() {
+			log.Info("Stop writing because the appender is closed.")
+			return err
+		}
+		time.Sleep(time.Second)
+		continue
+	}
 }
