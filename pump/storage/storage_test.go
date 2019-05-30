@@ -269,7 +269,7 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 
 	for i := 0; i < goNum; i++ {
 		wg.Add(1)
-		func() {
+		go func() {
 			defer wg.Done()
 			for {
 				num := atomic.AddInt32(&binlogNum, -1)
