@@ -406,8 +406,7 @@ ForLoop:
 	select {
 	case <-wait:
 	case <-time.After(runWaitThreshold):
-		log.Error("Waiting too long for `Syncer.run` to quit.")
-		<-wait
+		panic("Waiting too long for `Syncer.run` to quit.")
 	}
 
 	close(s.closed)
