@@ -15,10 +15,8 @@ package checkpoint
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -31,15 +29,17 @@ type PbCheckPoint struct {
 	closed          bool
 	initialCommitTS int64
 
-	name     string
-	saveTime time.Time
+	name string
 
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
 
 // NewPb creates a new Pb.
 func NewPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, saveTime: time.Now()}
+	pb := &PbCheckPoint{
+		initialCommitTS: cfg.InitialCommitTS,
+		name:            cfg.CheckPointFile,
+	}
 	err := pb.Load()
 	if err != nil {
 		return pb, errors.Trace(err)
@@ -103,20 +103,7 @@ func (sp *PbCheckPoint) Save(ts int64) error {
 		return errors.Annotatef(err, "write file %s failed", sp.name)
 	}
 
-	sp.saveTime = time.Now()
 	return nil
-}
-
-// Check implements CheckPoint.Check interface
-func (sp *PbCheckPoint) Check(int64) bool {
-	sp.RLock()
-	defer sp.RUnlock()
-
-	if sp.closed {
-		return false
-	}
-
-	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
 // TS implements CheckPoint.TS interface
@@ -138,10 +125,4 @@ func (sp *PbCheckPoint) Close() error {
 
 	sp.closed = true
 	return nil
-}
-
-// String implements CheckPoint.String interface
-func (sp *PbCheckPoint) String() string {
-	ts := sp.TS()
-	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

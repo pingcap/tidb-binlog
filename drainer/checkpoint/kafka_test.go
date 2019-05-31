@@ -40,6 +40,5 @@ func (t *testCheckPointSuite) TestKafka(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(cp.Load()), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(cp.Save(0)), Equals, ErrCheckPointClosed)
-	c.Assert(cp.Check(0), IsFalse)
 	c.Assert(errors.Cause(cp.Close()), Equals, ErrCheckPointClosed)
 }
