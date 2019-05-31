@@ -382,6 +382,30 @@ func (vlog *valueLog) sortedFids() []uint32 {
 	return ret
 }
 
+func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) error {
+	return vlog.scan(start, func(vp valuePointer, record *Record) error {
+		binlog := new(pb.Binlog)
+		err := binlog.Unmarshal(record.payload)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		// skip the wrongly write binlog by pump client previous
+		if binlog.StartTs == 0 && binlog.CommitTs == 0 {
+			log.Info("skip empty binlog")
+			return nil
+		}
+
+		rq := request{
+			startTS:      binlog.StartTs,
+			commitTS:     binlog.CommitTs,
+			tp:           binlog.Tp,
+			valuePointer: vp,
+		}
+		return fn(&rq)
+	})
+}
+
 // currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's OK to hold the vlog.filesLock lock
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
 	vlog.filesLock.Lock()
