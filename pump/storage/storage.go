@@ -1077,7 +1077,7 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 	var batch leveldb.Batch
 	var lastPointer []byte
 	for _, req := range bufReqs {
-		log.Info("write request to kv", zap.Reflect("request", req))
+		log.Debug("write request to kv", zap.Reflect("request", req))
 
 		pointer, err := req.valuePointer.MarshalBinary()
 		if err != nil {
