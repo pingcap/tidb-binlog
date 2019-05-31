@@ -18,11 +18,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/flash"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"go.uber.org/zap"
 )
@@ -34,11 +32,9 @@ type FlashCheckPoint struct {
 	clusterID       uint64
 	initialCommitTS int64
 
-	db       *sql.DB
-	schema   string
-	table    string
-	metaCP   *flash.MetaCheckpoint
-	saveTime time.Time
+	db     *sql.DB
+	schema string
+	table  string
 
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
@@ -86,8 +82,6 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		initialCommitTS: cfg.InitialCommitTS,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
-		metaCP:          flash.GetInstance(),
-		saveTime:        time.Now(),
 	}
 
 	sql := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", sp.schema)
@@ -156,18 +150,7 @@ func (sp *FlashCheckPoint) Save(ts int64) error {
 		return errors.Trace(ErrCheckPointClosed)
 	}
 
-	sp.saveTime = time.Now()
-
-	// Init CP using metaCP's safe CP.
-	forceSave, ok, safeTS := sp.metaCP.PopSafeCP()
-	if forceSave {
-		// If force save, use the CP passed in.
-		safeTS = ts
-	} else if !ok {
-		return nil
-	}
-
-	sp.CommitTS = safeTS
+	sp.CommitTS = ts
 
 	b, err := json.Marshal(sp)
 	if err != nil {
@@ -180,20 +163,6 @@ func (sp *FlashCheckPoint) Save(ts int64) error {
 	err = pkgsql.ExecuteSQLs(sp.db, sqls, args, false)
 
 	return errors.Trace(err)
-}
-
-// Check implements CheckPoint.Check interface
-func (sp *FlashCheckPoint) Check(ts int64) bool {
-	sp.RLock()
-	defer sp.RUnlock()
-
-	if sp.closed {
-		return false
-	}
-
-	sp.metaCP.PushPendingCP(ts)
-
-	return time.Since(sp.saveTime) >= maxSaveTime
 }
 
 // TS implements CheckPoint.TS interface
@@ -218,10 +187,4 @@ func (sp *FlashCheckPoint) Close() error {
 		sp.closed = true
 	}
 	return errors.Trace(err)
-}
-
-// String implements CheckPoint.String interface
-func (sp *FlashCheckPoint) String() string {
-	ts := sp.TS()
-	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

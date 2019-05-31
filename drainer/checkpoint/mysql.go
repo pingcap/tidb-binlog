@@ -16,7 +16,6 @@ package checkpoint
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -37,10 +36,9 @@ type MysqlCheckPoint struct {
 	clusterID       uint64
 	initialCommitTS int64
 
-	db       *sql.DB
-	schema   string
-	table    string
-	saveTime time.Time
+	db     *sql.DB
+	schema string
+	table  string
 	// type, tidb or mysql
 	tp string
 
@@ -70,7 +68,6 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		table:           cfg.Table,
 		tp:              tp,
 		TsMap:           make(map[string]int64),
-		saveTime:        time.Now(),
 	}
 
 	sql := genCreateSchema(sp)
@@ -132,7 +129,6 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	}
 
 	sp.CommitTS = ts
-	sp.saveTime = time.Now()
 
 	// we don't need update tsMap every time.
 	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
@@ -164,18 +160,6 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 	return nil
 }
 
-// Check implements CheckPoint.Check interface
-func (sp *MysqlCheckPoint) Check(int64) bool {
-	sp.RLock()
-	defer sp.RUnlock()
-
-	if sp.closed {
-		return false
-	}
-
-	return time.Since(sp.saveTime) >= maxSaveTime
-}
-
 // TS implements CheckPoint.TS interface
 func (sp *MysqlCheckPoint) TS() int64 {
 	sp.RLock()
@@ -198,10 +182,4 @@ func (sp *MysqlCheckPoint) Close() error {
 		sp.closed = true
 	}
 	return errors.Trace(err)
-}
-
-// String implements CheckPoint.String interface
-func (sp *MysqlCheckPoint) String() string {
-	ts := sp.TS()
-	return fmt.Sprintf("binlog commitTS = %d", ts)
 }

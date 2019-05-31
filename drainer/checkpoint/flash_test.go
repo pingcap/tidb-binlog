@@ -17,11 +17,9 @@ import (
 	"database/sql"
 	"errors"
 	"regexp"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/flash"
 )
 
 type flashSuite struct{}
@@ -35,18 +33,6 @@ func (s *flashSuite) TestcheckFlashConfig(c *C) {
 	c.Assert(cfg.Db.Port, Equals, 9000)
 	c.Assert(cfg.Schema, Equals, "tidb_binlog")
 	c.Assert(cfg.Table, Equals, "checkpoint")
-}
-
-func (s *flashSuite) TestFlashCheckPointString(c *C) {
-	cp := FlashCheckPoint{CommitTS: 1234}
-	c.Assert(cp.String(), Equals, "binlog commitTS = 1234")
-}
-
-func (s *flashSuite) TestCheck(c *C) {
-	cp := FlashCheckPoint{saveTime: time.Now(), metaCP: &flash.MetaCheckpoint{}}
-	c.Assert(cp.Check(1), IsFalse)
-	cp.saveTime = time.Now().Add(-maxSaveTime)
-	c.Assert(cp.Check(1), IsTrue)
 }
 
 func (s *flashSuite) TestClose(c *C) {
@@ -63,10 +49,8 @@ func (s *flashSuite) TestSave(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	cp := FlashCheckPoint{
-		metaCP: &flash.MetaCheckpoint{},
-		db:     db,
+		db: db,
 	}
-	cp.metaCP.Flush(-1, true) // Flush metaCP to turn on forceSave
 	mock.ExpectBegin()
 	mock.ExpectExec("IMPORT INTO.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
