@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +37,7 @@ const (
 	// we finalize the curFile when size >= finalizeFileSizeAtClose when closing the vlog, we don't need to scan the too big curFile to recover the maxTS of the file when reopen the vlog
 	// TODO we can always finalize the curFile when close Storage, and truncate the footer when open if we want to continue writing this file, so no need to scan the file to get the info in footer
 	finalizeFileSizeAtClose = 50 * 1024 // 50K
+	fileExt                 = ".vlog"
 )
 
 // Options is the config options of Append and vlog
@@ -144,7 +146,7 @@ type valueLog struct {
 }
 
 func (vlog *valueLog) filePath(fid uint32) string {
-	return fmt.Sprintf("%s%s%06d.vlog", vlog.dirPath, string(os.PathSeparator), fid)
+	return filepath.Join(vlog.dirPath, fmt.Sprintf("%06d%s", fid, fileExt))
 }
 
 func (vlog *valueLog) getFileRLocked(fid uint32) (*logFile, error) {
@@ -190,21 +192,20 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			continue
 		}
 
-		if !strings.HasSuffix(file.Name(), ".vlog") {
+		fName := file.Name()
+		if !strings.HasSuffix(fName, fileExt) {
 			continue
 		}
 
-		len := len(file.Name())
-		fid64, err := strconv.ParseUint(file.Name()[:len-5], 10, 32)
+		fid64, err := strconv.ParseUint(strings.TrimSuffix(fName, fileExt), 10, 32)
 		if err != nil {
-			return errors.Annotatef(err, "parse file %s err", file.Name())
+			return errors.Annotatef(err, "parse file %s err", fName)
 		}
-
 		fid := uint32(fid64)
 
-		logFile, err := newLogFile(fid, vlog.filePath((fid)))
+		logFile, err := newLogFile(fid, vlog.filePath(fid))
 		if err != nil {
-			return errors.Annotatef(err, "error open file %s", file.Name())
+			return errors.Annotatef(err, "error open file %s", fName)
 		}
 
 		vlog.filesMap[fid] = logFile
