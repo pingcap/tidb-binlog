@@ -1078,7 +1078,6 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 	var lastPointer []byte
 	for _, req := range bufReqs {
 		log.Info("write request to kv", zap.Reflect("request", req))
-		var err error
 
 		pointer, err := req.valuePointer.MarshalBinary()
 		if err != nil {
