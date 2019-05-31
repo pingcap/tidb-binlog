@@ -197,27 +197,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	go append.writeToSorter(append.writeToKV(toKV))
 
 	// for handlePointer and headPointer, it's safe to start at a forward point, so we just chose a min point between handlePointer and headPointer, and wirte to KV, will push to sorter after write to KV too
-	err = append.vlog.scan(minPointer, func(vp valuePointer, record *Record) error {
-		binlog := new(pb.Binlog)
-		err := binlog.Unmarshal(record.payload)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		// skip the wrongly write binlog by pump client previous
-		if binlog.StartTs == 0 && binlog.CommitTs == 0 {
-			log.Info("skip empty binlog")
-			return nil
-		}
-
-		request := &request{
-			startTS:      binlog.StartTs,
-			commitTS:     binlog.CommitTs,
-			tp:           binlog.Tp,
-			payload:      record.payload,
-			valuePointer: vp,
-		}
-		toKV <- request
+	err = append.vlog.scanRequests(minPointer, func(req *request) error {
+		toKV <- req
 		return nil
 	})
 
@@ -546,6 +527,7 @@ func (a *Append) GCTS(ts int64) {
 }
 
 func (a *Append) doGCTS(ts int64) {
+	log.Info("start gc", zap.Int64("ts", ts))
 	irange := &util.Range{
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
@@ -571,6 +553,7 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	a.vlog.gcTS(ts)
+	log.Info("finish gc", zap.Int64("ts", ts))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
@@ -637,43 +620,12 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 	go func() {
 		defer close(done)
 
-		var batch leveldb.Batch
 		for bufReqs := range batchReqs {
-			batch.Reset()
-			var lastPointer []byte
-			for _, req := range bufReqs {
-				log.Debug("write request to kv", zap.Reflect("request", req))
-				var err error
-
-				pointer, err := req.valuePointer.MarshalBinary()
-				if err != nil {
-					panic(err)
-				}
-
-				lastPointer = pointer
-				batch.Put(encodeTSKey(req.ts()), pointer)
+			if err := a.writeBatchToKV(bufReqs); err != nil {
+				return
 			}
-			batch.Put(headPointerKey, lastPointer)
-
-			for {
-				err := a.metadata.Write(&batch, nil)
-
-				// when write to vlog success, but the disk is full when write to KV here, it will cause write err
-				// we just retry of quit when Append is closed
-				if err != nil {
-					log.Error("write batch failed", zap.Error(err))
-					if a.isClosed() {
-						return
-					}
-					time.Sleep(time.Second)
-					continue
-				}
-				a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
-
-				for _, req := range bufReqs {
-					done <- req
-				}
-				break
+			for _, req := range bufReqs {
+				done <- req
 			}
 		}
 	}()
@@ -730,18 +682,18 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 		var bufReqs []*request
 		var size int
 
-		write := func(reqs []*request) {
-			if len(reqs) == 0 {
+		write := func(batch []*request) {
+			if len(batch) == 0 {
 				return
 			}
-			log.Debug("write requests to value log", zap.Reflect("requests", reqs))
+			log.Debug("write requests to value log", zap.Reflect("requests", batch))
 			beginTime := time.Now()
 			writeBinlogSizeHistogram.WithLabelValues("batch").Observe(float64(size))
 
-			err := a.vlog.write(reqs)
+			err := a.vlog.write(batch)
 			writeBinlogTimeHistogram.WithLabelValues("batch").Observe(time.Since(beginTime).Seconds())
 			if err != nil {
-				for _, req := range reqs {
+				for _, req := range batch {
 					req.err = err
 					req.wg.Done()
 				}
@@ -749,7 +701,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				return
 			}
 
-			for _, req := range reqs {
+			for _, req := range batch {
 				log.Debug("request done", zap.Int64("startTS", req.startTS), zap.Int64("commitTS", req.commitTS))
 				req.wg.Done()
 				// payload is useless anymore, let it GC ASAP
@@ -841,7 +793,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "get pointer of P-Binlog(ts: %d) failed", cbinlog.StartTs)
 	}
 
 	err = vp.UnmarshalBinary(vpData)
@@ -851,7 +803,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Annotatef(err, "read P-Binlog value failed, vp: %+v", vp)
 	}
 
 	pbinlog := new(pb.Binlog)
@@ -940,6 +892,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				} else {
 					err = a.feedPreWriteValue(binlog)
 					if err != nil {
+						if errors.Cause(err) == leveldb.ErrNotFound {
+							// In pump-client, a C-binlog should always be sent to the same pump instance as the matching P-binlog.
+							// But in some older versions of pump-client, writing of C-binlog would fallback to some other instances when the correct one is unavailable.
+							// When this error occurs, we may assume that the matching P-binlog is on a different pump instance.
+							// And it would  query TiKV for the matching C-binlog. So it should be OK to ignore the error here.
+							log.Error("Matching P-binlog not found", zap.Int64("commit ts", binlog.CommitTs))
+							continue
+						}
+
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
 						log.Error("feed pre write value failed", zap.Error(err))
 						iter.Release()
@@ -1043,14 +1004,14 @@ type KVConfig struct {
 }
 
 var defaultStorageKVConfig = &KVConfig{
-	BlockCacheCapacity:            8388608,
+	BlockCacheCapacity:            8 * opt.MiB,
 	BlockRestartInterval:          16,
-	BlockSize:                     4096,
+	BlockSize:                     4 * opt.KiB,
 	CompactionL0Trigger:           8,
-	CompactionTableSize:           67108864,
-	CompactionTotalSize:           536870912,
+	CompactionTableSize:           64 * opt.MiB,
+	CompactionTotalSize:           512 * opt.MiB,
 	CompactionTotalSizeMultiplier: 8,
-	WriteBuffer:                   67108864,
+	WriteBuffer:                   64 * opt.MiB,
 	WriteL0PauseTrigger:           24,
 	WriteL0SlowdownTrigger:        17,
 }
@@ -1110,4 +1071,39 @@ func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
 
 	return leveldb.OpenFile(kvDir, &opt)
+}
+
+func (a *Append) writeBatchToKV(bufReqs []*request) error {
+	var batch leveldb.Batch
+	var lastPointer []byte
+	for _, req := range bufReqs {
+		log.Debug("write request to kv", zap.Reflect("request", req))
+
+		pointer, err := req.valuePointer.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+
+		lastPointer = pointer
+		batch.Put(encodeTSKey(req.ts()), pointer)
+	}
+	batch.Put(headPointerKey, lastPointer)
+
+	for {
+		err := a.metadata.Write(&batch, nil)
+		if err == nil {
+			a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
+			return nil
+		}
+
+		// when write to vlog success, but the disk is full when write to KV here, it will cause write err
+		// we just retry of quit when Append is closed
+		log.Error("Failed to write batch", zap.Error(err))
+		if a.isClosed() {
+			log.Info("Stop writing because the appender is closed.")
+			return err
+		}
+		time.Sleep(time.Second)
+		continue
+	}
 }

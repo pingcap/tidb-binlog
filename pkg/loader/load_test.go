@@ -133,7 +133,7 @@ func (cs *LoadSuite) TestSetDMLInfo(c *check.C) {
 	}()
 	ld := loaderImpl{}
 
-	dml := DML{}
+	dml := DML{Database: "test", Table: "t1"}
 	c.Assert(dml.info, check.IsNil)
 	err := ld.setDMLInfo(&dml)
 	c.Assert(err, check.IsNil)

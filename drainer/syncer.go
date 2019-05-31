@@ -32,6 +32,10 @@ import (
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
+// runWaitThreshold is the expected time for `Syncer.run` to quit
+// normally, we take record if it takes longer than this value.
+var runWaitThreshold = 10 * time.Second
+
 // Syncer converts tidb binlog to the specified DB sqls, and sync it to target DB
 type Syncer struct {
 	schema *Schema
@@ -223,6 +227,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 				lastSaveTS = ts
 				eventCounter.WithLabelValues("savepoint").Add(1)
 			}
+			delay := oracle.GetPhysical(time.Now()) - oracle.ExtractPhysical(uint64(ts))
+			checkpointDelayHistogram.Observe(float64(delay) / 1e3)
 		}
 	}
 
@@ -250,16 +256,15 @@ func (s *Syncer) savePoint(ts int64) {
 }
 
 func (s *Syncer) run() error {
-	var wg sync.WaitGroup
+	wait := make(chan struct{})
 
 	fakeBinlogCh := make(chan *pb.Binlog, 1024)
 	var lastSuccessTS int64
 	var fakeBinlogs []*pb.Binlog
 	var fakeBinlogPreAddTS []int64
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer close(wait)
 		s.handleSuccess(fakeBinlogCh, &lastSuccessTS)
 	}()
 
@@ -271,7 +276,7 @@ func (s *Syncer) run() error {
 	var b *binlogItem
 
 	var fakeBinlog *pb.Binlog
-	var pushFakeBinlog chan<- *pb.Binlog = nil
+	var pushFakeBinlog chan<- *pb.Binlog
 
 	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
@@ -396,7 +401,15 @@ ForLoop:
 
 	close(fakeBinlogCh)
 	cerr := s.dsyncer.Close()
-	wg.Wait()
+	if cerr != nil {
+		log.Error("Failed to close syncer", zap.Error(cerr))
+	}
+
+	select {
+	case <-wait:
+	case <-time.After(runWaitThreshold):
+		panic("Waiting too long for `Syncer.run` to quit.")
+	}
 
 	close(s.closed)
 
