@@ -205,8 +205,8 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
 	}
-	if host == "0.0.0.0" {
-		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
+	if !util.IsValidateListenHost(host) {
+		return errors.Errorf("invalid advertiseAddr host: %v", host)
 	}
 
 	// check socketAddr
