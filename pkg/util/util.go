@@ -95,7 +95,7 @@ func IsValidateListenHost(host string) bool {
 			return false
 		}
 	}
-	return host != "localhost" && host != "0.0.0.0"
+	return host != "localhost"
 }
 
 // StdLogger implements samara.StdLogger
