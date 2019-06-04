@@ -206,7 +206,10 @@ func (cfg *Config) validate() error {
 		return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
 	}
 	if !util.IsValidateListenHost(host) {
-		return errors.Errorf("invalid advertiseAddr host: %v", host)
+		isTestEnv := os.Getenv("BINLOG_TEST") == "1"
+		if !(isTestEnv && host == "127.0.0.1") {
+			return errors.Errorf("invalid advertiseAddr host: %v", host)
+		}
 	}
 
 	// check socketAddr

@@ -31,12 +31,25 @@ func (s *testConfigSuite) TestValidate(c *C) {
 	cfg.GC = 1
 	cfg.ListenAddr = "http://:8250"
 	cfg.EtcdURLs = "http://192.168.10.23:7777"
+
 	cfg.AdvertiseAddr = "http://:8250"
 	err := cfg.validate()
 	c.Check(err, ErrorMatches, ".*advertiseAddr.*")
+
 	cfg.AdvertiseAddr = "http://0.0.0.0:8250"
 	err = cfg.validate()
 	c.Check(err, ErrorMatches, ".*advertiseAddr.*")
+
+	os.Setenv("BINLOG_TEST", "1")
+	cfg.AdvertiseAddr = "http://127.0.0.1:8250"
+	err = cfg.validate()
+	c.Check(err, IsNil)
+
+	os.Unsetenv("BINLOG_TEST")
+	cfg.AdvertiseAddr = "http://127.0.0.1:8250"
+	err = cfg.validate()
+	c.Check(err, ErrorMatches, ".*advertiseAddr.*")
+
 	cfg.AdvertiseAddr = "http://192.168.11.11:8250"
 	err = cfg.validate()
 	c.Check(err, IsNil)
