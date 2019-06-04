@@ -79,6 +79,7 @@ type Config struct {
 	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
+	AdvertiseAddr   string          `toml:"advertise-addr" json:"advertise-addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
@@ -109,6 +110,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8249), "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public, default to be the same value as -addr")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
@@ -225,18 +227,12 @@ func (cfg *Config) configFromFile(path string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
-	urllis, err := url.Parse(cfg.ListenAddr)
-	if err != nil {
-		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
+	strictCheck := os.Getenv("BINLOG_TEST") != "1"
+	if err := validateAddr(cfg.ListenAddr, strictCheck); err != nil {
+		return errors.Annotate(err, "invalid addr")
 	}
-
-	var host string
-	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
-		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
-	}
-
-	if !util.IsValidateListenHost(host) {
-		log.Warn("pump may not be able to access drainer using this listen addr config", zap.String("listen addr", host))
+	if err := validateAddr(cfg.AdvertiseAddr, strictCheck); err != nil {
+		return errors.Annotate(err, "invalid advertise-addr")
 	}
 
 	// check EtcdEndpoints
@@ -264,7 +260,9 @@ func (cfg *Config) validate() error {
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
 	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
-	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
+	util.AdjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
+	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
+	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 
@@ -347,5 +345,24 @@ func (cfg *Config) adjustConfig() error {
 	cfg.SyncerCfg.adjustWorkCount()
 	cfg.SyncerCfg.adjustDoDBAndTable()
 
+	return nil
+}
+
+func validateAddr(addr string, strict bool) error {
+	urllis, err := url.Parse(addr)
+	if err != nil {
+		return errors.Errorf("failed to parse addr %v: %v", addr, err)
+	}
+
+	var host string
+	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
+		return errors.Errorf("invalid host %v: %v", urllis.Host, err)
+	}
+
+	if !util.IsValidateListenHost(host) {
+		if !(strict && host == "127.0.0.1") {
+			return errors.Errorf("pump may not be able to access drainer using this addr %s", addr)
+		}
+	}
 	return nil
 }

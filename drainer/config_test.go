@@ -61,9 +61,13 @@ func (t *testDrainerSuite) TestValidate(c *C) {
 
 	cfg.ListenAddr = "http://123：9091"
 	err := cfg.validate()
-	c.Assert(err, ErrorMatches, ".*ListenAddr.*")
-	cfg.ListenAddr = "http://192.168.10.12:9091"
+	c.Assert(err, ErrorMatches, ".*invalid addr.*")
 
+	cfg.ListenAddr = "http://192.168.10.12:9091"
+	err = cfg.validate()
+	c.Assert(err, ErrorMatches, ".*invalid advertise-addr.*")
+
+	cfg.AdvertiseAddr = "http://192.168.10.12:9091"
 	cfg.EtcdURLs = "127.0.0.1:2379,127.0.0.1:2380"
 	err = cfg.validate()
 	c.Assert(err, ErrorMatches, ".*EtcdURLs.*")
