@@ -48,8 +48,11 @@ var (
 	defaultBatchSize          = 20
 )
 
+// should be only used for unit test to create mock db
+var createDB = loader.CreateDB
+
 func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
-	db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"database/sql"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -13,16 +14,25 @@ type testMysqlSuite struct{}
 var _ = check.Suite(&testMysqlSuite{})
 
 func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
+	var (
+		mock sqlmock.Sqlmock
+	)
 	originWorkerCount := defaultWorkerCount
 	defaultWorkerCount = 1
 	defer func() {
 		defaultWorkerCount = originWorkerCount
 	}()
 
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	oldCreateDB := createDB
+	createDB = func(string, string, string, int) (db *sql.DB, err error) {
+		db, mock, err = sqlmock.New()
+		return
+	}
+	defer func() {
+		createDB = oldCreateDB
+	}()
 
-	syncer, err := newMysqlSyncerFromSQLDB(db)
+	syncer, err := newMysqlSyncer(&DBConfig{})
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
