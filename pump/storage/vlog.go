@@ -44,6 +44,7 @@ const (
 type Options struct {
 	ValueLogFileSize int64
 	Sync             bool
+	KVChanCap        int
 
 	KVConfig *KVConfig
 }
@@ -65,6 +66,12 @@ func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
 // WithValueLogFileSize set the ValueLogFileSize
 func (o *Options) WithValueLogFileSize(size int64) *Options {
 	o.ValueLogFileSize = size
+	return o
+}
+
+// WithKVChanCap set the KVChanCap
+func (o *Options) WithKVChanCap(size int) *Options {
+	o.KVChanCap = size
 	return o
 }
 

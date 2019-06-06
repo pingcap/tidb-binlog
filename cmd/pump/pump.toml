@@ -31,6 +31,7 @@ pd-urls = "http://127.0.0.1:2379"
 # Set to `true` (default) for best reliability, which prevents data loss when there is a power failure.
 # sync-log = true
 #
+# kv_chan_cap = 0
 # we suggest using the default config of the embedded LSM DB now, do not change it useless you know what you are doing
 # [storage.kv]
 # block-cache-capacity = 8388608

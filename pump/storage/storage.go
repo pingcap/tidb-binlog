@@ -135,7 +135,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	writeCh := make(chan *request, chanSize)
+	writeCh := make(chan *request, options.KVChanCap)
 	append = &Append{
 		dir:            dir,
 		vlog:           vlog,
@@ -1016,8 +1016,18 @@ func getStorageSize(dir string) (size storageSize, err error) {
 
 // Config holds the configuration of storage
 type Config struct {
-	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
-	KV      *KVConfig `toml:"kv" json:"kv"`
+	SyncLog   *bool     `toml:"sync-log" json:"sync-log"`
+	KVChanCap int       `toml:"kv_chan_cap" json:"kv_chan_cap"`
+	KV        *KVConfig `toml:"kv" json:"kv"`
+}
+
+// GetKVChanCap return kv_chan_cap config option
+func (c *Config) GetKVChanCap() int {
+	if c.KVChanCap <= 0 {
+		return chanSize
+	}
+
+	return c.KVChanCap
 }
 
 // GetSyncLog return sync-log config option
