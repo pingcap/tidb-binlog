@@ -143,6 +143,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	options = options.WithKVConfig(cfg.Storage.KV)
 	options = options.WithSync(cfg.Storage.GetSyncLog())
 	options = options.WithKVChanCap(cfg.Storage.GetKVChanCap())
+	options = options.WithSlowWriteDuration(cfg.Storage.GetSlowWriteDuration())
 
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {

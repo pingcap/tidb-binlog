@@ -41,6 +41,7 @@ import (
 const (
 	maxTxnTimeoutSecond int64 = 600
 	chanSize                  = 1 << 20
+	slowWriteDuration         = 1.0
 )
 
 var (
@@ -611,9 +612,14 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 	request := new(request)
 
 	defer func() {
-		writeBinlogTimeHistogram.WithLabelValues("single").Observe(time.Since(beginTime).Seconds())
+		duration := time.Since(beginTime).Seconds()
+		writeBinlogTimeHistogram.WithLabelValues("single").Observe(duration)
 		if request.err != nil {
 			errorCount.WithLabelValues("write_binlog").Add(1.0)
+		}
+
+		if duration > a.options.SlowWriteDuration {
+			log.Warn("take a long time to write binlog", zap.Stringer("binlog type", binlog.Tp), zap.Int64("commit TS", binlog.StartTs), zap.Int64("start TS", binlog.CommitTs), zap.Int("length", len(binlog.PrewriteValue)))
 		}
 	}()
 
@@ -1016,9 +1022,10 @@ func getStorageSize(dir string) (size storageSize, err error) {
 
 // Config holds the configuration of storage
 type Config struct {
-	SyncLog   *bool     `toml:"sync-log" json:"sync-log"`
-	KVChanCap int       `toml:"kv_chan_cap" json:"kv_chan_cap"`
-	KV        *KVConfig `toml:"kv" json:"kv"`
+	SyncLog           *bool     `toml:"sync-log" json:"sync-log"`
+	KVChanCap         int       `toml:"kv_chan_cap" json:"kv_chan_cap"`
+	SlowWriteDuration float64   `toml:"slow_write_duration" json:"slow_write_duration"`
+	KV                *KVConfig `toml:"kv" json:"kv"`
 }
 
 // GetKVChanCap return kv_chan_cap config option
@@ -1028,6 +1035,15 @@ func (c *Config) GetKVChanCap() int {
 	}
 
 	return c.KVChanCap
+}
+
+// GetSlowWriteDuration return slow write duration
+func (c *Config) GetSlowWriteDuration() float64 {
+	if c.SlowWriteDuration <= 0 {
+		return slowWriteDuration
+	}
+
+	return c.SlowWriteDuration
 }
 
 // GetSyncLog return sync-log config option
