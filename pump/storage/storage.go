@@ -40,8 +40,10 @@ import (
 
 const (
 	maxTxnTimeoutSecond int64 = 600
-	chanSize                  = 1 << 20
-	slowWriteDuration         = 1.0
+	// the channel to buffer binlog meta, pump will block write binlog request if the channel is full
+	chanSize = 1 << 20
+	// if pump takes a long time to write binlog, pump will display the binlog meta information (unit: Second)
+	slowWriteDuration = 1.0
 )
 
 var (

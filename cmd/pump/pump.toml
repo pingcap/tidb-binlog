@@ -31,13 +31,6 @@ pd-urls = "http://127.0.0.1:2379"
 # Set to `true` (default) for best reliability, which prevents data loss when there is a power failure.
 # sync-log = true
 #
-# the channel to buffer binlog meta, pump will block write binlog request if the channel is full
-# kv_chan_cap = 4194304
-#
-# if pump takes a long time to write binlog, pump will display the binlog meta information
-# now the unit is `Second`
-# slow_write_duration = 2
-#
 # we suggest using the default config of the embedded LSM DB now, do not change it useless you know what you are doing
 # [storage.kv]
 # block-cache-capacity = 8388608
