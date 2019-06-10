@@ -619,7 +619,7 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 		}
 
 		if duration > a.options.SlowWriteDuration {
-			log.Warn("take a long time to write binlog", zap.Stringer("binlog type", binlog.Tp), zap.Int64("commit TS", binlog.StartTs), zap.Int64("start TS", binlog.CommitTs), zap.Int("length", len(binlog.PrewriteValue)))
+			log.Warn("take a long time to write binlog", zap.Stringer("binlog type", binlog.Tp), zap.Int64("commit TS", binlog.CommitTs), zap.Int64("start TS", binlog.StartTs), zap.Int("length", len(binlog.PrewriteValue)))
 		}
 	}()
 

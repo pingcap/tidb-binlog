@@ -35,6 +35,7 @@ pd-urls = "http://127.0.0.1:2379"
 # kv_chan_cap = 4194304
 #
 # if pump takes a long time to write binlog, pump will display the binlog meta information
+# now the unit is `Second`
 # slow_write_duration = 2
 #
 # we suggest using the default config of the embedded LSM DB now, do not change it useless you know what you are doing
