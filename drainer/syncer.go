@@ -180,6 +180,7 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 	successes := s.dsyncer.Successes()
 	var lastSaveTS int64
+	lastSaveTime := time.Now()
 
 	for {
 		if successes == nil && fakeBinlog == nil {
@@ -220,8 +221,9 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 
 		ts := atomic.LoadInt64(lastTS)
 		if ts > lastSaveTS {
-			if saveNow || s.cp.Check(ts) {
+			if saveNow || time.Since(lastSaveTime) > 3*time.Second {
 				s.savePoint(ts)
+				lastSaveTime = time.Now()
 				lastSaveTS = ts
 				eventCounter.WithLabelValues("savepoint").Add(1)
 			}
