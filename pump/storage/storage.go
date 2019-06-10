@@ -86,6 +86,7 @@ type Append struct {
 	tiLockResolver *tikv.LockResolver
 	latestTS       int64
 
+	gcWorking     int32
 	gcTS          int64
 	maxCommitTS   int64
 	headPointer   valuePointer
@@ -521,34 +522,73 @@ func (a *Append) GCTS(ts int64) {
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
-	// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
-	// so we forward a little bit to make sure we can get the according P binlog
-	a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
+
+	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
+		return
+	}
+
+	go func() {
+		defer atomic.StoreInt32(&a.gcWorking, 0)
+		// for commit binlog TS ts_c, we may need to get the according P binlog ts_p(ts_p < ts_c
+		// so we forward a little bit to make sure we can get the according P binlog
+		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
+	}()
+
 }
 
 func (a *Append) doGCTS(ts int64) {
 	log.Info("start gc", zap.Int64("ts", ts))
-	irange := &util.Range{
-		Start: encodeTSKey(0),
-		Limit: encodeTSKey(ts + 1),
-	}
-	iter := a.metadata.NewIterator(irange, nil)
+
 	batch := new(leveldb.Batch)
-	for iter.Next() {
-		batch.Delete(iter.Key())
-		if batch.Len() == 1024 {
-			err := a.metadata.Write(batch, nil)
-			if err != nil {
-				log.Error("write batch failed", zap.Error(err))
-			}
-			batch.Reset()
-		}
+	l0Trigger := defaultStorageKVConfig.CompactionL0Trigger
+	if a.options.KVConfig != nil && a.options.KVConfig.CompactionL0Trigger > 0 {
+		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
-	if batch.Len() > 0 {
-		err := a.metadata.Write(batch, nil)
+	for {
+		var stats leveldb.DBStats
+		err := a.metadata.Stats(&stats)
 		if err != nil {
-			log.Error("write batch failed", zap.Error(err))
+			log.Error("Stats failed", zap.Error(err))
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
+			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", stats.LevelTablesCounts[0]))
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		irange := &util.Range{
+			Start: encodeTSKey(0),
+			Limit: encodeTSKey(ts + 1),
+		}
+		iter := a.metadata.NewIterator(irange, nil)
+
+		deleteBatch := 0
+		for iter.Next() && deleteBatch < 100 {
+			batch.Delete(iter.Key())
+			if batch.Len() == 1024 {
+				err := a.metadata.Write(batch, nil)
+				if err != nil {
+					log.Error("write batch failed", zap.Error(err))
+				}
+				batch.Reset()
+				deleteBatch++
+			}
+		}
+
+		iter.Release()
+
+		if deleteBatch < 100 {
+			if batch.Len() > 0 {
+				err := a.metadata.Write(batch, nil)
+				if err != nil {
+					log.Error("write batch failed", zap.Error(err))
+				}
+				batch.Reset()
+			}
+			break
 		}
 	}
 
