@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
@@ -83,6 +84,7 @@ type Append struct {
 	metadata       *leveldb.DB
 	sorter         *sorter
 	tiStore        kv.Storage
+	helper         *Helper
 	tiLockResolver *tikv.LockResolver
 	latestTS       int64
 
@@ -135,6 +137,16 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
+	tikvStorage, ok := tiStore.(tikv.Storage)
+	if !ok {
+		return nil, errors.New("not tikv.Storage")
+	}
+
+	helper := &Helper{
+		Store:       tikvStorage,
+		RegionCache: tikvStorage.GetRegionCache(),
+	}
+
 	writeCh := make(chan *request, chanSize)
 	append = &Append{
 		dir:            dir,
@@ -143,6 +155,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		writeCh:        writeCh,
 		options:        options,
 		tiStore:        tiStore,
+		helper:         helper,
 		tiLockResolver: tiLockResolver,
 
 		close:     make(chan struct{}),
@@ -342,22 +355,92 @@ func (a *Append) updateStatus() {
 	}
 }
 
+// Write a commit binlog myself if the status is committed,
+// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+func (a *Append) writeCBinlog(pbinlog *pb.Binlog, commitTS int64) error {
+	// write the commit binlog myself
+	cbinlog := new(pb.Binlog)
+	cbinlog.Tp = pb.BinlogType_Commit
+	cbinlog.StartTs = pbinlog.StartTs
+	cbinlog.CommitTs = commitTS
+
+	req := a.writeBinlog(cbinlog)
+	if req.err != nil {
+		return errors.Annotate(req.err, "writeBinlog failed")
+	}
+
+	// when writeBinlog return success, the pointer will be write to kv async,
+	// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
+	// we update maxCommitTS
+	// write the ts -> pointer to KV here to make sure it.
+	pointer, err := req.valuePointer.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
+	if err != nil {
+		return errors.Annotate(req.err, "put into metadata failed")
+	}
+
+	return nil
+}
+
 func (a *Append) resolve(startTS int64) bool {
 	latestTS := atomic.LoadInt64(&a.latestTS)
 	if latestTS <= 0 {
 		return false
 	}
 
+	pbinlog, err := a.readBinlogByTS(startTS)
+	if err != nil {
+		log.Error(errors.ErrorStack(err))
+		return false
+	}
+
+	resp, err := a.helper.GetMvccByEncodedKey(pbinlog.PrewriteKey)
+	if err != nil {
+		log.Error("GetMvccByEncodedKey failed", zap.Error(err))
+	} else if resp.RegionError != nil {
+		log.Error("GetMvccByEncodedKey failed", zap.Stringer("RegionError", resp.RegionError))
+	} else if len(resp.Error) > 0 {
+		log.Error("GetMvccByEncodedKey failed", zap.String("Error", resp.Error))
+	} else {
+		for _, w := range resp.Info.Writes {
+			if !(int64(w.StartTs) == startTS) {
+				continue
+			}
+
+			if w.Type != kvrpcpb.Op_Rollback {
+				// Sanity checks
+				if int64(w.CommitTs) <= startTS {
+					log.Warn("op type not Rollback, but have unexpect commit ts",
+						zap.Int64("startTS", startTS),
+						zap.Uint64("commitTS", w.CommitTs))
+					return false
+				}
+
+				err := a.writeCBinlog(pbinlog, int64(w.CommitTs))
+				if err != nil {
+					log.Error("writeCBinlog failed", zap.Error(err))
+					return false
+				}
+			} else {
+				// Will get the same value as start ts if it's rollback, set to 0 for log
+				w.CommitTs = 0
+			}
+
+			log.Info("known txn is committed or rollback from tikv",
+				zap.Int64("start ts", startTS),
+				zap.Uint64("commit ts", w.CommitTs))
+			return true
+		}
+	}
+
 	startSecond := oracle.ExtractPhysical(uint64(startTS)) / int64(time.Second/time.Millisecond)
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
 
 	if maxSecond-startSecond <= maxTxnTimeoutSecond {
-		return false
-	}
-
-	pbinlog, err := a.readBinlogByTS(startTS)
-	if err != nil {
-		log.Error(errors.ErrorStack(err))
 		return false
 	}
 
@@ -375,35 +458,14 @@ func (a *Append) resolve(startTS int64) bool {
 		// Write a commit binlog myself if the status is committed,
 		// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
 		if status.IsCommitted() {
-			// write the commit binlog myself
-			cbinlog := new(pb.Binlog)
-			cbinlog.Tp = pb.BinlogType_Commit
-			cbinlog.StartTs = pbinlog.StartTs
-			cbinlog.CommitTs = int64(status.CommitTS())
-
-			req := a.writeBinlog(cbinlog)
-			if req.err != nil {
-				log.Error("writeBinlog failed", zap.Error(req.err))
-				return false
-			}
-
-			// when writeBinlog return success, the pointer will be write to kv async,
-			// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
-			// we update maxCommitTS
-			// write the ts -> pointer to KV here to make sure it.
-			pointer, err := req.valuePointer.MarshalBinary()
+			err := a.writeCBinlog(pbinlog, int64(status.CommitTS()))
 			if err != nil {
-				panic(err)
-			}
-
-			err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
-			if err != nil {
-				log.Error("put into metadata failed", zap.Error(req.err))
+				log.Error("writeCBinlog failed", zap.Error(err))
 				return false
 			}
 		}
 
-		log.Info("known txn is committed from tikv",
+		log.Info("known txn is committed or rollback from tikv",
 			zap.Int64("start ts", startTS),
 			zap.Uint64("commit ts", status.CommitTS()))
 		return true
