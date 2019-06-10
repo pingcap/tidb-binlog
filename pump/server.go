@@ -610,7 +610,7 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := healper.GetMvccByEncodedKey(binlog.PrewriteKey)
 		if err != nil {
-			fmt.Fprintf(w, "GetMvccByEncodedKey failed: %s", err, err.Error())
+			fmt.Fprintf(w, "GetMvccByEncodedKey failed: %s", err.Error())
 			return
 		}
 
