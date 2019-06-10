@@ -44,7 +44,7 @@ const (
 type Options struct {
 	ValueLogFileSize   int64
 	Sync               bool
-	ChanCapacity       int
+	KVChanCapacity     int
 	SlowWriteThreshold float64
 
 	KVConfig *KVConfig
@@ -55,7 +55,7 @@ func DefaultOptions() *Options {
 	return &Options{
 		ValueLogFileSize:   500 * (1 << 20),
 		Sync:               true,
-		ChanCapacity:       chanCapacity,
+		KVChanCapacity:     chanCapacity,
 		SlowWriteThreshold: slowWriteThreshold,
 	}
 }
@@ -78,9 +78,9 @@ func (o *Options) WithValueLogFileSize(size int64) *Options {
 	return o
 }
 
-// WithChanCapacity set the ChanCapacity
-func (o *Options) WithChanCapacity(capacity int) *Options {
-	o.ChanCapacity = capacity
+// WithKVChanCapacity set the ChanCapacity
+func (o *Options) WithKVChanCapacity(capacity int) *Options {
+	o.KVChanCapacity = capacity
 	return o
 }
 
