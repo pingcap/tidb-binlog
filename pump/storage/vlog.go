@@ -42,8 +42,10 @@ const (
 
 // Options is the config options of Append and vlog
 type Options struct {
-	ValueLogFileSize int64
-	Sync             bool
+	ValueLogFileSize   int64
+	Sync               bool
+	KVChanCapacity     int
+	SlowWriteThreshold float64
 
 	KVConfig *KVConfig
 }
@@ -51,8 +53,10 @@ type Options struct {
 // DefaultOptions return the default options
 func DefaultOptions() *Options {
 	return &Options{
-		ValueLogFileSize: 500 * (1 << 20),
-		Sync:             true,
+		ValueLogFileSize:   500 * (1 << 20),
+		Sync:               true,
+		KVChanCapacity:     chanCapacity,
+		SlowWriteThreshold: slowWriteThreshold,
 	}
 }
 
@@ -62,9 +66,21 @@ func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
 	return o
 }
 
+// WithSlowWriteThreshold set the Config
+func (o *Options) WithSlowWriteThreshold(threshold float64) *Options {
+	o.SlowWriteThreshold = threshold
+	return o
+}
+
 // WithValueLogFileSize set the ValueLogFileSize
 func (o *Options) WithValueLogFileSize(size int64) *Options {
 	o.ValueLogFileSize = size
+	return o
+}
+
+// WithKVChanCapacity set the ChanCapacity
+func (o *Options) WithKVChanCapacity(capacity int) *Options {
+	o.KVChanCapacity = capacity
 	return o
 }
 

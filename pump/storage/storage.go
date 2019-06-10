@@ -41,7 +41,9 @@ import (
 
 const (
 	maxTxnTimeoutSecond int64 = 600
-	chanSize                  = 1 << 20
+	chanCapacity              = 1 << 20
+	// if pump takes a long time to write binlog, pump will display the binlog meta information (unit: Second)
+	slowWriteThreshold = 1.0
 )
 
 var (
@@ -147,7 +149,8 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		RegionCache: tikvStorage.GetRegionCache(),
 	}
 
-	writeCh := make(chan *request, chanSize)
+	writeCh := make(chan *request, chanCapacity)
+
 	append = &Append{
 		dir:            dir,
 		vlog:           vlog,
@@ -673,9 +676,14 @@ func (a *Append) writeBinlog(binlog *pb.Binlog) *request {
 	request := new(request)
 
 	defer func() {
-		writeBinlogTimeHistogram.WithLabelValues("single").Observe(time.Since(beginTime).Seconds())
+		duration := time.Since(beginTime).Seconds()
+		writeBinlogTimeHistogram.WithLabelValues("single").Observe(duration)
 		if request.err != nil {
 			errorCount.WithLabelValues("write_binlog").Add(1.0)
+		}
+
+		if duration > a.options.SlowWriteThreshold {
+			log.Warn("take a long time to write binlog", zap.Stringer("binlog type", binlog.Tp), zap.Int64("commit TS", binlog.CommitTs), zap.Int64("start TS", binlog.StartTs), zap.Int("length", len(binlog.PrewriteValue)))
 		}
 	}()
 
@@ -715,7 +723,7 @@ func (a *Append) writeToSorter(reqs chan *request) {
 }
 
 func (a *Append) writeToKV(reqs chan *request) chan *request {
-	done := make(chan *request, chanSize)
+	done := make(chan *request, chanCapacity)
 
 	batchReqs := a.batchRequest(reqs, 128)
 
@@ -776,7 +784,7 @@ func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*reque
 }
 
 func (a *Append) writeToValueLog(reqs chan *request) chan *request {
-	done := make(chan *request, chanSize)
+	done := make(chan *request, a.options.KVChanCapacity)
 
 	go func() {
 		defer close(done)
@@ -1078,8 +1086,29 @@ func getStorageSize(dir string) (size storageSize, err error) {
 
 // Config holds the configuration of storage
 type Config struct {
-	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
-	KV      *KVConfig `toml:"kv" json:"kv"`
+	SyncLog *bool `toml:"sync-log" json:"sync-log"`
+	// the channel to buffer binlog meta, pump will block write binlog request if the channel is full
+	KVChanCapacity     int       `toml:"kv_chan_cap" json:"kv_chan_cap"`
+	SlowWriteThreshold float64   `toml:"slow_write_threshold" json:"slow_write_threshold"`
+	KV                 *KVConfig `toml:"kv" json:"kv"`
+}
+
+// GetKVChanCapacity return kv_chan_cap config option
+func (c *Config) GetKVChanCapacity() int {
+	if c.KVChanCapacity <= 0 {
+		return chanCapacity
+	}
+
+	return c.KVChanCapacity
+}
+
+// GetSlowWriteThreshold return slow write threshold
+func (c *Config) GetSlowWriteThreshold() float64 {
+	if c.SlowWriteThreshold <= 0 {
+		return slowWriteThreshold
+	}
+
+	return c.SlowWriteThreshold
 }
 
 // GetSyncLog return sync-log config option
