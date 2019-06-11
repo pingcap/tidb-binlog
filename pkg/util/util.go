@@ -63,8 +63,13 @@ func DefaultListenAddr(port int32) string {
 
 // IsValidateListenHost judge the host is validate listen host or not.
 func IsValidateListenHost(host string) bool {
-	if host == "127.0.0.1" || host == "localhost" || host == "0.0.0.0" {
+	if len(host) == 0 {
 		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() {
+			return false
+		}
 	}
 	return true
 }
