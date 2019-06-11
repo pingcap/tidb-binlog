@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Copy from https://github.com/pingcap/tidb/blob/71def9c7263432c0dfa6a5960f6db824775177c9/store/helper/helper.go#L47
+// we can use it directly if we upgrade to the latest version of TiDB dependency.
+
 package storage
 
 import (

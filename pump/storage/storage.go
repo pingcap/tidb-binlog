@@ -359,7 +359,7 @@ func (a *Append) updateStatus() {
 }
 
 // Write a commit binlog myself if the status is committed,
-// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+// otherwise we can just ignore it, we will not get the commit binlog while iterating the kv by ts
 func (a *Append) writeCBinlog(pbinlog *pb.Binlog, commitTS int64) error {
 	// write the commit binlog myself
 	cbinlog := new(pb.Binlog)
@@ -410,17 +410,17 @@ func (a *Append) resolve(startTS int64) bool {
 		log.Error("GetMvccByEncodedKey failed", zap.String("Error", resp.Error))
 	} else {
 		for _, w := range resp.Info.Writes {
-			if !(int64(w.StartTs) == startTS) {
+			if int64(w.StartTs) != startTS {
 				continue
 			}
 
 			if w.Type != kvrpcpb.Op_Rollback {
 				// Sanity checks
 				if int64(w.CommitTs) <= startTS {
-					log.Warn("op type not Rollback, but have unexpect commit ts",
+					log.Error("op type not Rollback, but have unexpect commit ts",
 						zap.Int64("startTS", startTS),
 						zap.Uint64("commitTS", w.CommitTs))
-					return false
+					break
 				}
 
 				err := a.writeCBinlog(pbinlog, int64(w.CommitTs))

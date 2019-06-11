@@ -603,12 +603,12 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 
 	if len(binlog.PrewriteKey) > 0 {
 		tikvStorage := s.tiStore.(tikv.Storage)
-		healper := storage.Helper{
+		helper := storage.Helper{
 			Store:       tikvStorage,
 			RegionCache: tikvStorage.GetRegionCache(),
 		}
 
-		resp, err := healper.GetMvccByEncodedKey(binlog.PrewriteKey)
+		resp, err := helper.GetMvccByEncodedKey(binlog.PrewriteKey)
 		if err != nil {
 			fmt.Fprintf(w, "GetMvccByEncodedKey failed: %s", err.Error())
 			return
