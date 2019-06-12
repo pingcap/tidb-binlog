@@ -847,15 +847,24 @@ func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*reque
 }
 
 func (a *Append) writeToValueLog(reqs chan *request) chan *request {
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan *request, a.options.KVChanCapacity)
+	slowChaser := newSlowChaser(a.vlog, 3*time.Second, done)
+	go slowChaser.Run(ctx)
 
 	go func() {
-		defer close(done)
+		defer func() {
+			close(done)
+			cancel()
+		}()
 
 		var bufReqs []*request
 		var size int
 
 		write := func(batch []*request) {
+			slowChaser.WriteLock.Lock()
+			defer slowChaser.WriteLock.Unlock()
+
 			if len(batch) == 0 {
 				return
 			}
@@ -879,7 +888,19 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				req.wg.Done()
 				// payload is useless anymore, let it GC ASAP
 				req.payload = nil
-				done <- req
+			}
+
+			if slowChaser.IsOn() {
+				return
+			}
+		SEND:
+			for _, req := range batch {
+				select {
+				case done <- req:
+				default:
+					slowChaser.TurnOn(&req.valuePointer)
+					break SEND
+				}
 			}
 		}
 
