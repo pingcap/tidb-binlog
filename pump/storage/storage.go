@@ -139,16 +139,6 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	tikvStorage, ok := tiStore.(tikv.Storage)
-	if !ok {
-		return nil, errors.New("not tikv.Storage")
-	}
-
-	helper := &Helper{
-		Store:       tikvStorage,
-		RegionCache: tikvStorage.GetRegionCache(),
-	}
-
 	writeCh := make(chan *request, chanCapacity)
 
 	append = &Append{
@@ -158,7 +148,6 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		writeCh:        writeCh,
 		options:        options,
 		tiStore:        tiStore,
-		helper:         helper,
 		tiLockResolver: tiLockResolver,
 
 		close:     make(chan struct{}),
@@ -193,6 +182,16 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	})
 
 	if tiStore != nil {
+		tikvStorage, ok := tiStore.(tikv.Storage)
+		if !ok {
+			return nil, errors.New("not tikv.Storage")
+		}
+
+		append.helper = &Helper{
+			Store:       tikvStorage,
+			RegionCache: tikvStorage.GetRegionCache(),
+		}
+
 		sorter.setResolver(append.resolve)
 	}
 
