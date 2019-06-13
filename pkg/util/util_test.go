@@ -119,6 +119,11 @@ func (s *getAddrIPSuite) TestShouldRetIPV4(c *C) {
 		IP: net.ParseIP("192.168.1.2"),
 	}
 	c.Assert(getAddrDefaultIP(&addr), Equals, "192.168.1.2")
+
+	addr2 := net.IPAddr{
+		IP: net.ParseIP("192.168.1.3"),
+	}
+	c.Assert(getAddrDefaultIP(&addr2), Equals, "192.168.1.3")
 }
 
 func (s *getAddrIPSuite) TestShouldIgnoreLoopback(c *C) {
