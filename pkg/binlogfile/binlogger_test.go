@@ -232,7 +232,7 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 		c.Assert(suffix, Equals, uint64(i))
 	}
 
-	// The one with index 0 should be collected
+	// The one with index 0 should be garbage collected
 	b.GC(time.Millisecond, binlog.Pos{Suffix: 1})
 	names, err = ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
