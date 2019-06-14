@@ -336,7 +336,9 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			}
 			log.Info("GC binlog file", zap.String("file name", fileName))
 		} else if time.Since(fi.ModTime()) > days {
-			log.Warn("binlog file is already reach the gc time, but data is not send to kafka, position is %v", zap.String("name", fileName), zap.Reflect("position", pos))
+			log.Warn(
+				"binlog file is old enough to be garbage collected, but the position is behind the safe point",
+				zap.String("name", fileName), zap.Any("position", pos))
 		}
 	}
 }
