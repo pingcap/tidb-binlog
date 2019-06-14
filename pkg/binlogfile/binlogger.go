@@ -338,7 +338,7 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 		} else if time.Since(fi.ModTime()) > days {
 			log.Warn(
 				"binlog file is old enough to be garbage collected, but the position is behind the safe point",
-				zap.String("name", fileName), zap.Any("position", pos))
+				zap.String("name", fileName), zap.Stringer("position", &pos))
 		}
 	}
 }
