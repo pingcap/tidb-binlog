@@ -351,12 +351,12 @@ func (cfg *Config) adjustConfig() error {
 func validateAddr(addr string, strict bool) error {
 	urllis, err := url.Parse(addr)
 	if err != nil {
-		return errors.Errorf("failed to parse addr %v: %v", addr, err)
+		return errors.Annotate(err, fmt.Sprintf("failed to parse addr %v", addr))
 	}
 
 	var host string
 	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
-		return errors.Errorf("invalid host %v: %v", urllis.Host, err)
+		return errors.Annotate(err, fmt.Sprintf("invalid host %v", urllis.Host))
 	}
 
 	if !util.IsValidateListenHost(host) {
