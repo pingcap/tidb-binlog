@@ -36,17 +36,19 @@ type testDrainerSuite struct{}
 
 func (t *testDrainerSuite) TestConfig(c *C) {
 	args := []string{
-		"-metrics-addr", "127.0.0.1:9091",
+		"-metrics-addr", "192.168.15.10:9091",
 		"-txn-batch", "1",
 		"-data-dir", "data.drainer",
 		"-dest-db-type", "mysql",
 		"-config", "../cmd/drainer/drainer.toml",
+		"-addr", "192.168.15.10:8257",
+		"-advertise-addr", "192.168.15.10:8257",
 	}
 
 	cfg := NewConfig()
 	err := cfg.Parse(args)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.MetricsAddr, Equals, "127.0.0.1:9091")
+	c.Assert(cfg.MetricsAddr, Equals, "192.168.15.10:9091")
 	c.Assert(cfg.DataDir, Equals, "data.drainer")
 	c.Assert(cfg.SyncerCfg.TxnBatch, Equals, 1)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "mysql")
@@ -100,4 +102,15 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
 	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
 	c.Assert(cfg.SyncerCfg.DisableDispatch, IsTrue)
+}
+
+type validateAddrSuite struct{}
+
+var _ = Suite(&validateAddrSuite{})
+
+func (s *validateAddrSuite) TestStrictOrNot(c *C) {
+	err := validateAddr("http://127.0.0.1:9090", true)
+	c.Assert(err, NotNil)
+	err = validateAddr("http://127.0.0.1:9090", false)
+	c.Assert(err, IsNil)
 }

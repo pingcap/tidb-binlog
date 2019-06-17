@@ -360,8 +360,12 @@ func validateAddr(addr string, strict bool) error {
 	}
 
 	if !util.IsValidateListenHost(host) {
-		if !(strict && host == "127.0.0.1") {
-			return errors.Errorf("pump may not be able to access drainer using this addr %s", addr)
+		err := errors.Errorf("pump may not be able to access drainer using this addr %s", addr)
+		if strict {
+			return err
+		}
+		if host != "127.0.0.1" && host != "localhost" {
+			return err
 		}
 	}
 	return nil
