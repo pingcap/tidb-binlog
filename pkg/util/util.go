@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -236,4 +237,10 @@ func AdjustDuration(v *time.Duration, defValue time.Duration) {
 	if *v == 0 {
 		*v = defValue
 	}
+}
+
+// IsInTestMode returns true if the BINLOG_TEST environment
+// variable is set.
+func IsInTestMode() bool {
+	return os.Getenv("BINLOG_TEST") == "1"
 }
