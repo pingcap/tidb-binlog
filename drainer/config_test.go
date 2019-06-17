@@ -19,6 +19,7 @@ import (
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var testEtcdCluster *integration.ClusterV3
@@ -102,6 +103,20 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
 	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
 	c.Assert(cfg.SyncerCfg.DisableDispatch, IsTrue)
+
+	cfg = NewConfig()
+	err = cfg.adjustConfig()
+	c.Assert(err, IsNil)
+	c.Assert(cfg.ListenAddr, Equals, "http://"+util.DefaultListenAddr(8249))
+	c.Assert(cfg.AdvertiseAddr, Equals, cfg.ListenAddr)
+
+	cfg = NewConfig()
+	cfg.ListenAddr = "0.0.0.0:8257"
+	cfg.AdvertiseAddr = "192.168.15.12:8257"
+	err = cfg.adjustConfig()
+	c.Assert(err, IsNil)
+	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
+	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
 }
 
 type validateAddrSuite struct{}
