@@ -56,15 +56,3 @@ func NewSaramaConfig(kafkaVersion string, metricsPrefix string) (*sarama.Config,
 
 	return config, nil
 }
-
-// CreateKafkaConsumer creates a kafka consumer
-func CreateKafkaConsumer(kafkaAddrs []string, kafkaVersion string) (sarama.Consumer, error) {
-	kafkaCfg, err := NewSaramaConfig(kafkaVersion, "drainer.")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	kafkaCfg.Consumer.Return.Errors = true
-
-	return sarama.NewConsumer(kafkaAddrs, kafkaCfg)
-}
