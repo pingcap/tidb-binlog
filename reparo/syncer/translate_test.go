@@ -42,6 +42,85 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 			},
 		},
 		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("create table `db1`.`table1`(id int)"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "create table `db1`.`table1`(id int)",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop database db1"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop database db1",
+				Database: "db1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("truncate table `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "truncate table `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("create index uk on `db1`.`table1` (`uk`)"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "create index uk on `db1`.`table1` (`uk`)",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop index uk on `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop index uk on `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("alter table `db1`.`table1` add column c int"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "alter table `db1`.`table1` add column c int",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop table `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop table `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("rename table `db1`.`table1` to `db1`.`table2`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "rename table `db1`.`table1` to `db1`.`table2`",
+				Database: "db1",
+				Table:    "table2",
+			},
+		},
+		{
 			Tp: pb.BinlogType_DML,
 			DmlData: &pb.DMLData{
 				Events: generateDMLEvents(c),
