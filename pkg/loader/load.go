@@ -244,7 +244,7 @@ func needRefreshTableInfo(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false
+		return true
 	}
 
 	switch stmt.(type) {
