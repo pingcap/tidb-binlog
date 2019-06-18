@@ -226,12 +226,10 @@ func (cfg *Config) configFromFile(path string) error {
 
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
-	// check ListenAddr
-	strictCheck := os.Getenv("BINLOG_TEST") != "1"
-	if err := validateAddr(cfg.ListenAddr, strictCheck); err != nil {
+	if err := validateAddr(cfg.ListenAddr); err != nil {
 		return errors.Annotate(err, "invalid addr")
 	}
-	if err := validateAddr(cfg.AdvertiseAddr, strictCheck); err != nil {
+	if err := validateAddr(cfg.AdvertiseAddr); err != nil {
 		return errors.Annotate(err, "invalid advertise-addr")
 	}
 
@@ -348,7 +346,7 @@ func (cfg *Config) adjustConfig() error {
 	return nil
 }
 
-func validateAddr(addr string, strict bool) error {
+func validateAddr(addr string) error {
 	urllis, err := url.Parse(addr)
 	if err != nil {
 		return errors.Annotatef(err, "failed to parse addr %v", addr)
@@ -360,13 +358,7 @@ func validateAddr(addr string, strict bool) error {
 	}
 
 	if !util.IsValidateListenHost(host) {
-		err := errors.Errorf("pump may not be able to access drainer using this addr %s", addr)
-		if strict {
-			return err
-		}
-		if host != "127.0.0.1" && host != "localhost" {
-			return err
-		}
+		log.Warn("pump may not be able to access drainer using this addr", zap.String("listen addr", addr))
 	}
 	return nil
 }

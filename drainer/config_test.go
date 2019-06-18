@@ -118,14 +118,3 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
 }
-
-type validateAddrSuite struct{}
-
-var _ = Suite(&validateAddrSuite{})
-
-func (s *validateAddrSuite) TestStrictOrNot(c *C) {
-	err := validateAddr("http://127.0.0.1:9090", true)
-	c.Assert(err, NotNil)
-	err = validateAddr("http://127.0.0.1:9090", false)
-	c.Assert(err, IsNil)
-}
