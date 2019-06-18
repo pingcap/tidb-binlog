@@ -33,10 +33,10 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	tests := map[*pb.Binlog]*loader.Txn{
 		{
 			Tp:       pb.BinlogType_DDL,
-			DdlQuery: []byte("use db1; create table table1(id int)"),
+			DdlQuery: []byte("use db1;create table table1(id int)"),
 		}: {
 			DDL: &loader.DDL{
-				SQL:      "use db1; create table table1(id int)",
+				SQL:      "create table table1(id int)",
 				Database: "db1",
 				Table:    "table1",
 			},
@@ -163,6 +163,21 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
 		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs)
+	}
+}
+
+func (s *testTranslateSuite) TestTrimUse(c *check.C) {
+	tests := []struct {
+		Origin string
+		Expect string
+	}{
+		{"use a;create table a(id int);", "create table a(id int);"},
+		{"create database a;", "create database a;"},
+	}
+
+	for _, test := range tests {
+		get := trimUse(test.Origin)
+		c.Assert(get, check.Equals, test.Expect)
 	}
 }
 

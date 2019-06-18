@@ -14,6 +14,8 @@
 package syncer
 
 import (
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
@@ -25,14 +27,25 @@ import (
 	"go.uber.org/zap"
 )
 
+func trimUse(sql string) string {
+	split := strings.Split(sql, ";")
+	if len(split) > 0 && strings.HasPrefix(split[0], "use ") {
+		return strings.Join(split[1:], ";")
+	}
+
+	return sql
+}
+
 func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 	switch binlog.Tp {
 	case pb.BinlogType_DDL:
 		txn.DDL = new(loader.DDL)
-		// for table DDL, pb.Binlog.DdlQuery will be "use <db>; create..."
-		txn.DDL.SQL = string(binlog.DdlQuery)
-		txn.DDL.Database, txn.DDL.Table, err = parserSchemaTableFromDDL(txn.DDL.SQL)
+		// If it is not create database statement, pb.Binlog.DdlQuery will be "use <db>; create..."
+		// trim the "use..." to make it as expected by `loader.Txn`
+		// we should better just pass the database context into pb.Binlog
+		txn.DDL.SQL = trimUse(string(binlog.DdlQuery))
+		txn.DDL.Database, txn.DDL.Table, err = parserSchemaTableFromDDL(string(binlog.DdlQuery))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
