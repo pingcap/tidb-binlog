@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -81,6 +82,7 @@ type Server struct {
 	lastWriteBinlogUnixNano int64
 	pdCli                   pd.Client
 	cfg                     *Config
+	tiStore                 kv.Storage
 
 	writeBinlogCount int64
 	alivePullerCount int64
@@ -166,6 +168,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
+		tiStore:    tiStore,
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
 		cfg:        cfg,
@@ -597,6 +600,23 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "\n\n PrewriteValue: \n")
 		fmt.Fprint(w, prewriteValue.String())
 	}
+
+	if len(binlog.PrewriteKey) > 0 {
+		tikvStorage := s.tiStore.(tikv.Storage)
+		helper := storage.Helper{
+			Store:       tikvStorage,
+			RegionCache: tikvStorage.GetRegionCache(),
+		}
+
+		resp, err := helper.GetMvccByEncodedKey(binlog.PrewriteKey)
+		if err != nil {
+			fmt.Fprintf(w, "GetMvccByEncodedKey failed: %s", err.Error())
+			return
+		}
+
+		fmt.Fprint(w, "\n\n GetMvccByEncodedKey: \n")
+		fmt.Fprint(w, resp.String())
+	}
 }
 
 // PumpStatus returns all pumps' status.
@@ -782,6 +802,11 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
+
+	if s.tiStore != nil {
+		s.tiStore.Close()
+	}
+	log.Info("has closed tiStore")
 }
 
 func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInterval time.Duration) error {
