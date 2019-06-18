@@ -143,9 +143,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		)
 	}
 
-	advURL, err := url.Parse(cfg.ListenAddr)
+	advURL, err := url.Parse(cfg.AdvertiseAddr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
+		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
 	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
