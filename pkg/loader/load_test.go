@@ -236,6 +236,24 @@ func (s *isCreateDBDDLSuite) TestCreateDBSQL(c *check.C) {
 	c.Assert(isCreateDatabaseDDL("create database `db2`;"), check.IsTrue)
 }
 
+type needRefreshTableInfoSuite struct{}
+
+var _ = check.Suite(&needRefreshTableInfoSuite{})
+
+func (s *needRefreshTableInfoSuite) TestNeedRefreshTableInfo(c *check.C) {
+	cases := map[string]bool{
+		"DROP TABLE a":           false,
+		"DROP DATABASE a":        false,
+		"TRUNCATE TABLE a":       false,
+		"CREATE DATABASE a":      false,
+		"CREATE TABLE a(id int)": true,
+	}
+
+	for sql, res := range cases {
+		c.Assert(needRefreshTableInfo(sql), check.Equals, res)
+	}
+}
+
 type execDDLSuite struct{}
 
 var _ = check.Suite(&execDDLSuite{})

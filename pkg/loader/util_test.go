@@ -30,6 +30,21 @@ var _ = check.Suite(&UtilSuite{})
 func (cs *UtilSuite) SetUpTest(c *check.C) {
 }
 
+func (cs *UtilSuite) TestGetTableInfoTableNotExist(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+
+	defer db.Close()
+
+	// return empty rows
+	columnRows := sqlmock.NewRows([]string{"Field", "Extra"})
+	mock.ExpectQuery(regexp.QuoteMeta(colsSQL)).WithArgs("test", "test1").WillReturnRows(columnRows)
+
+	_, err = getTableInfo(db, "test", "test1")
+	c.Assert(err, check.Equals, ErrTableNotExist)
+
+}
+
 func (cs *UtilSuite) TestGetTableInfo(c *check.C) {
 	db, mock, err := sqlmock.New()
 
