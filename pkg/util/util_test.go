@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"os"
 	"testing"
 	"time"
 
@@ -47,13 +46,6 @@ type dummyStore struct {
 
 func (s dummyStore) CurrentVersion() (kv.Version, error) {
 	return s.ver, s.err
-}
-
-func (s *utilSuite) TestIsInTestMode(c *C) {
-	c.Assert(IsInTestMode(), IsFalse)
-	os.Setenv("BINLOG_TEST", "1")
-	defer os.Unsetenv("BINLOG_TEST")
-	c.Assert(IsInTestMode(), IsTrue)
 }
 
 func (s *utilSuite) TestQueryLatestTsFromPD(c *C) {

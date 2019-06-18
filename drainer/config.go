@@ -227,7 +227,7 @@ func (cfg *Config) configFromFile(path string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check ListenAddr
-	strictCheck := !util.IsInTestMode()
+	strictCheck := os.Getenv("BINLOG_TEST") != "1"
 	if err := validateAddr(cfg.ListenAddr, strictCheck); err != nil {
 		return errors.Annotate(err, "invalid addr")
 	}
