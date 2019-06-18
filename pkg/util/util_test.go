@@ -276,3 +276,54 @@ func (s *tryUntilSuccSuite) TestShouldStopOnSuccess(c *C) {
 	}
 	c.Assert(callCount, Equals, 3)
 }
+
+type retryCtxSuite struct{}
+
+var _ = Suite(&retryCtxSuite{})
+
+func (s *retryCtxSuite) TestOnlyRetrySpecifiedTimes(c *C) {
+	ctx := context.Background()
+	var callCount int
+	err := RetryContext(ctx, 2, time.Microsecond, 3, func(ictx context.Context) error {
+		callCount++
+		return errors.New("Fail")
+	})
+	c.Assert(err, ErrorMatches, "Fail")
+	c.Assert(callCount, Equals, 2)
+}
+
+func (s *retryCtxSuite) TestRetryUntilTimeout(c *C) {
+	ctx, cancel := context.WithTimeout(context.Background(), 200 * time.Millisecond)
+	defer cancel()
+	var callCount int
+	err := RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {
+		callCount++
+		return errors.New("Fail")
+	})
+	c.Assert(err, ErrorMatches, "Fail")
+	c.Assert(callCount, Less, 10)
+
+	callCount = 0
+	err = RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {
+		select {
+		case <-ictx.Done():
+			return errors.New("Canceled")
+		}
+	})
+	c.Assert(err, ErrorMatches, "Canceled")
+	c.Assert(callCount, Equals, 0)
+}
+
+func (s *retryCtxSuite) TestSuccessAfterRetry(c *C) {
+	ctx := context.Background()
+	var callCount int
+	err := RetryContext(ctx, 5, time.Microsecond, 2, func(ictx context.Context) error {
+		callCount++
+		if callCount == 2 {
+			return nil
+		}
+		return errors.New("Fail")
+	})
+	c.Assert(err, IsNil)
+	c.Assert(callCount, Equals, 2)
+}
