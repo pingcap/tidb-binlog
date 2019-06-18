@@ -293,7 +293,7 @@ func (s *retryCtxSuite) TestOnlyRetrySpecifiedTimes(c *C) {
 }
 
 func (s *retryCtxSuite) TestRetryUntilTimeout(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), 200 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	var callCount int
 	err := RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {

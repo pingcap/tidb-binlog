@@ -175,13 +175,25 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 
 func notifyDrainer(ctx context.Context, c *node.Status, dialerOpts []grpc.DialOption) error {
 	log.Info("Start trying to notify drainer", zap.String("addr", c.Addr))
-	clientConn, err := grpc.DialContext(ctx, c.Addr, dialerOpts...)
+	var clientConn *grpc.ClientConn
+	err := util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
+		log.Debug("Connecting drainer", zap.String("addr", c.Addr))
+		var err error
+		clientConn, err = grpc.DialContext(ctx, c.Addr, dialerOpts...)
+		return err
+	})
 	if err != nil {
 		return errors.Annotatef(err, "connect drainer(%s)", c.Addr)
 	}
+	defer clientConn.Close()
+
 	drainer := pb.NewCisternClient(clientConn)
-	_, err = drainer.Notify(ctx, nil)
-	clientConn.Close()
+
+	err = util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
+		log.Debug("Notifying drainer", zap.String("addr", c.Addr))
+		_, err := drainer.Notify(ctx, nil)
+		return err
+	})
 	if err != nil {
 		return errors.Annotatef(err, "notify drainer(%s)", c.Addr)
 	}
