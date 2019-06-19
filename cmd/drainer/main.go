@@ -34,6 +34,8 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	rand.Seed(time.Now().UTC().UnixNano())
 
+	version.PrintVersionInfo("Drainer")
+
 	cfg := drainer.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
 		log.Fatal("verifying flags failed, See 'drainer --help'.", zap.Error(err))
@@ -42,7 +44,6 @@ func main() {
 	if err := util.InitLogger(cfg.LogLevel, cfg.LogFile); err != nil {
 		log.Fatal("Failed to initialize log", zap.Error(err))
 	}
-	version.PrintVersionInfo("Drainer")
 	log.Info("start drainer...", zap.Reflect("config", cfg))
 
 	bs, err := drainer.NewServer(cfg)
