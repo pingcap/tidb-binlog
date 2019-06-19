@@ -248,7 +248,7 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// 1k payload per record
-	payload := make([]byte, 1<<10)
+	payload := make([]byte, 1024)
 	req := &request{
 		payload: payload,
 	}
