@@ -305,11 +305,12 @@ func (s *retryCtxSuite) TestRetryUntilTimeout(c *C) {
 
 	callCount = 0
 	err = RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {
+		callCount++
 		<-ictx.Done()
 		return errors.New("Canceled")
 	})
 	c.Assert(err, ErrorMatches, "Canceled")
-	c.Assert(callCount, Equals, 0)
+	c.Assert(callCount, Equals, 1)
 }
 
 func (s *retryCtxSuite) TestSuccessAfterRetry(c *C) {
