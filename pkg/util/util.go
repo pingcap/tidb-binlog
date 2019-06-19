@@ -157,6 +157,9 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 	return errors.Trace(err)
 }
 
+// RetryContext retries the specified `fn` until it returns no error or the context is canceled,
+// for at most `retryCount` times.
+// The wait time before the `i`th retry is calculated with `sleepTime` * (`backoffFactor` ** i).
 func RetryContext(ctx context.Context, retryCount int, sleepTime time.Duration, backoffFactor int, fn func(context.Context) error) error {
 	var err error
 	for i := 0; i < retryCount; i++ {
