@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/docker/docker/pkg/mount"
 	"github.com/pingcap/check"
@@ -32,6 +33,10 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 
 	size := "40k"
 	err := mount.ForceMount("tmpfs", dir, "tmpfs", fmt.Sprintf("size=%s", size))
+	if strings.Contains(err.Error(), "operation not permitted") {
+		c.Skip("operation not permitted to using mount")
+	}
+
 	c.Assert(err, check.IsNil)
 	defer func() {
 		err := mount.Unmount(dir)
