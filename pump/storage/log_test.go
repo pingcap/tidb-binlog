@@ -63,7 +63,7 @@ func (lfs *LogFileSuit) SetUpTest(c *check.C) {
 	name := path.Join(os.TempDir(), strconv.Itoa(fid))
 	c.Log("file path: ", name)
 
-	lf, err := newLogFile(uint32(fid), name)
+	lf, err := NewLogFile(uint32(fid), name)
 	c.Assert(err, check.IsNil)
 	lfs.lf = lf
 }
@@ -128,7 +128,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 
 	// should get the later one record write
 	var recordGet *Record
-	err = lf.scan(0, func(vp valuePointer, record *Record) error {
+	err = lf.Scan(0, func(vp ValuePointer, record *Record) error {
 		if recordGet != nil {
 			c.Fatal("get more than on record")
 		}
@@ -137,7 +137,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 		c.Assert(record.payload, check.BytesEquals, payload)
 
 		return nil
-	})
+	}, nil)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(recordGet, check.NotNil)
@@ -180,10 +180,10 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 		}
 	}
 
-	err = lf.scan(0, func(vp valuePointer, record *Record) error {
+	err = lf.Scan(0, func(vp ValuePointer, record *Record) error {
 		scanBackPayloads = append(scanBackPayloads, record.payload)
 		return nil
-	})
+	}, nil)
 	c.Assert(err, check.IsNil)
 
 	rd := bufio.NewReader(io.NewSectionReader(lf.fd, 0, int64(size)))
@@ -241,13 +241,13 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 
 	// read by scan and check if if's equal
 	idx := 0
-	err = lf.scan(0, func(vp valuePointer, r *Record) error {
+	err = lf.Scan(0, func(vp ValuePointer, r *Record) error {
 		c.Assert(r.payload, check.DeepEquals, records[idx].payload)
 		c.Assert(recordOffsets[idx], check.Equals, vp.Offset)
 		idx++
 
 		return nil
-	})
+	}, nil)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(idx, check.Equals, len(records))
@@ -256,7 +256,7 @@ func (lfs *LogFileSuit) TestLogFile(c *check.C) {
 	c.Assert(int(lf.maxTS), check.Equals, 0, check.Commentf("lf.maxTS should be 0, we didn't update it"))
 
 	lf.close()
-	lf, err = newLogFile(lf.fid, lf.path)
+	lf, err = NewLogFile(lf.fid, lf.path)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(lf.maxTS, check.Equals, lfs.maxTS)

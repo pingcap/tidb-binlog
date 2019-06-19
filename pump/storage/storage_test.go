@@ -204,16 +204,16 @@ func (as *AppendSuit) TestReadWritePointer(c *check.C) {
 	defer cleanAppend(append)
 
 	// check return zero valuePointer when the key not exist
-	var readVP valuePointer
+	var readVP ValuePointer
 	var err error
 	readVP, err = append.readPointer([]byte("no_exist_key"))
 	c.Assert(err, check.IsNil)
-	c.Assert(readVP, check.Equals, valuePointer{})
+	c.Assert(readVP, check.Equals, ValuePointer{})
 
 	// test with random key and valuePointer value
 	fuzz := fuzz.New().NilChance(0)
 	for i := 0; i < 100; i++ {
-		var vp valuePointer
+		var vp ValuePointer
 		var key []byte
 		fuzz.Fuzz(&vp)
 		// offset should >= 0, so just take abs(vp.Offset), when the random value is negative
@@ -325,7 +325,7 @@ func (s *OpenDBSuit) SetUpTest(c *check.C) {
 }
 
 func (s *OpenDBSuit) TestWhenConfigIsNotProvided(c *check.C) {
-	_, err := openMetadataDB(s.dir, nil)
+	_, err := OpenMetadataDB(s.dir, nil)
 	c.Assert(err, check.IsNil)
 }
 
@@ -334,7 +334,7 @@ func (s *OpenDBSuit) TestProvidedConfigValsNotOverwritten(c *check.C) {
 		BlockRestartInterval: 32,
 		WriteL0PauseTrigger:  12,
 	}
-	_, err := openMetadataDB(s.dir, &cf)
+	_, err := OpenMetadataDB(s.dir, &cf)
 	c.Assert(err, check.IsNil)
 	c.Assert(cf.BlockRestartInterval, check.Equals, 32)
 	c.Assert(cf.WriteL0PauseTrigger, check.Equals, 12)

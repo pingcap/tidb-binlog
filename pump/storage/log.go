@@ -73,6 +73,15 @@ type Record struct {
 	payload  []byte
 }
 
+func (r *Record) GetBinlog() (*pb.Binlog, error) {
+	binlog := new(pb.Binlog)
+	err := binlog.Unmarshal(r.payload)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return binlog, nil
+}
+
 func (r *Record) recordLength() int64 {
 	return headerLength + int64(len(r.payload))
 }
@@ -119,7 +128,8 @@ func (r *Record) isValid() bool {
 	return crc32.Checksum(r.payload, crcTable) == r.checksum
 }
 
-func newLogFile(fid uint32, name string) (lf *logFile, err error) {
+// NewLogFile opens a vlog with specified fid and name.
+func NewLogFile(fid uint32, name string) (lf *logFile, err error) {
 	fd, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -218,7 +228,7 @@ func (lf *logFile) close() error {
 
 // recover scan all the record get the state like maxTS which only saved when the file is finalized
 func (lf *logFile) recover() error {
-	err := lf.scan(0, func(vp valuePointer, r *Record) error {
+	err := lf.Scan(0, func(vp ValuePointer, r *Record) error {
 		// save ts in header to avoid this?
 		b := new(pb.Binlog)
 		err := b.Unmarshal(r.payload)
@@ -235,7 +245,7 @@ func (lf *logFile) recover() error {
 		}
 
 		return nil
-	})
+	}, nil)
 
 	return errors.Trace(err)
 }
@@ -347,7 +357,11 @@ func (lf *logFile) reportCorruption(bytes int, err error) {
 }
 
 // scan is *Not* thread safe
-func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Record) error) error {
+func (lf *logFile) Scan(
+	startOffset int64,
+	fn func(vp ValuePointer, record *Record) error,
+	onCorruption func(offset int64, length int, err error),
+) error {
 	info, err := lf.fd.Stat()
 	if err != nil {
 		return err
@@ -367,10 +381,13 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 		if err != nil {
 			offset = offset + 1
 			reader = bufio.NewReader(io.NewSectionReader(lf.fd, offset, size-offset))
-			bytes, seekErr := seekToNextRecord(reader)
+			nSkipped, seekErr := seekToNextRecord(reader)
+			if onCorruption != nil {
+				onCorruption(offset-1, nSkipped+1, err)
+			}
 			if seekErr == nil {
-				offset += int64(bytes)
-				lf.reportCorruption(bytes+1, err)
+				offset += int64(nSkipped)
+				lf.reportCorruption(nSkipped+1, err)
 				continue
 			}
 
@@ -382,7 +399,7 @@ func (lf *logFile) scan(startOffset int64, fn func(vp valuePointer, record *Reco
 
 			return errors.Trace(seekErr)
 		}
-		err = fn(valuePointer{Fid: lf.fid, Offset: offset}, r)
+		err = fn(ValuePointer{Fid: lf.fid, Offset: offset}, r)
 		if err != nil {
 			return errors.Trace(err)
 		}

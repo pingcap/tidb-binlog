@@ -93,8 +93,8 @@ type Append struct {
 	gcWorking     int32
 	gcTS          int64
 	maxCommitTS   int64
-	headPointer   valuePointer
-	handlePointer valuePointer
+	headPointer   ValuePointer
+	handlePointer ValuePointer
 
 	sortItems          chan sortItem
 	handleSortItemQuit chan struct{}
@@ -134,7 +134,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	}
 
 	kvDir := path.Join(dir, "kv")
-	metadata, err := openMetadataDB(kvDir, options.KVConfig)
+	metadata, err := OpenMetadataDB(kvDir, options.KVConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -234,7 +234,7 @@ func (a *Append) persistHandlePointer(item sortItem) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	var pointer valuePointer
+	var pointer ValuePointer
 	err = pointer.UnmarshalBinary(pointerData)
 	if err != nil {
 		return errors.Trace(err)
@@ -483,7 +483,7 @@ func (a *Append) GetBinlog(ts int64) (*pb.Binlog, error) {
 }
 
 func (a *Append) readBinlogByTS(ts int64) (*pb.Binlog, error) {
-	var vp valuePointer
+	var vp ValuePointer
 
 	vpData, err := a.metadata.Get(encodeTSKey(ts), nil)
 	if err != nil {
@@ -865,8 +865,8 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	return done
 }
 
-func (a *Append) readPointer(key []byte) (valuePointer, error) {
-	var vp valuePointer
+func (a *Append) readPointer(key []byte) (ValuePointer, error) {
+	var vp ValuePointer
 	value, err := a.metadata.Get(key, nil)
 	if err != nil {
 		// return zero value when not found
@@ -884,7 +884,7 @@ func (a *Append) readPointer(key []byte) (valuePointer, error) {
 	return vp, nil
 }
 
-func (a *Append) savePointer(key []byte, vp valuePointer) error {
+func (a *Append) savePointer(key []byte, vp ValuePointer) error {
 	value, err := vp.MarshalBinary()
 	if err != nil {
 		return errors.Trace(err)
@@ -898,7 +898,7 @@ func (a *Append) savePointer(key []byte, vp valuePointer) error {
 }
 
 func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
-	var vp valuePointer
+	var vp ValuePointer
 
 	vpData, err := a.metadata.Get(encodeTSKey(cbinlog.StartTs), nil)
 	if err != nil {
@@ -966,7 +966,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
 			for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
-				var vp valuePointer
+				var vp ValuePointer
 				err := vp.UnmarshalBinary(iter.Value())
 				// should never happen
 				if err != nil {
@@ -1179,7 +1179,7 @@ func setDefaultStorageConfig(cf *KVConfig) {
 	}
 }
 
-func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
+func OpenMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	if cf == nil {
 		cf = defaultStorageKVConfig
 	} else {

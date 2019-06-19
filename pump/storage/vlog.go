@@ -96,7 +96,7 @@ type request struct {
 	tp       pb.BinlogType
 
 	payload      []byte
-	valuePointer valuePointer
+	valuePointer ValuePointer
 	wg           sync.WaitGroup
 	err          error
 }
@@ -113,12 +113,12 @@ func (r *request) String() string {
 	return fmt.Sprintf("{ts: %d, payload len: %d, valuePointer: %+v}", r.ts(), len(r.payload), r.valuePointer)
 }
 
-type valuePointer struct {
+type ValuePointer struct {
 	Fid    uint32
 	Offset int64
 }
 
-func (vp valuePointer) less(other valuePointer) bool {
+func (vp ValuePointer) less(other ValuePointer) bool {
 	if vp.Fid != other.Fid {
 		return vp.Fid < other.Fid
 	}
@@ -127,7 +127,7 @@ func (vp valuePointer) less(other valuePointer) bool {
 }
 
 // MarshalBinary never return not nil err now
-func (vp *valuePointer) MarshalBinary() (data []byte, err error) {
+func (vp *ValuePointer) MarshalBinary() (data []byte, err error) {
 	data = make([]byte, 12)
 	binary.LittleEndian.PutUint32(data, vp.Fid)
 	binary.LittleEndian.PutUint64(data[4:], uint64(vp.Offset))
@@ -136,7 +136,7 @@ func (vp *valuePointer) MarshalBinary() (data []byte, err error) {
 }
 
 // UnmarshalBinary implement encoding.BinaryMarshal
-func (vp *valuePointer) UnmarshalBinary(data []byte) error {
+func (vp *ValuePointer) UnmarshalBinary(data []byte) error {
 	if len(data) < 12 {
 		return errors.New("not enough data")
 	}
@@ -213,13 +213,12 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			continue
 		}
 
-		fid64, err := strconv.ParseUint(strings.TrimSuffix(fName, fileExt), 10, 32)
+		fid, err := ParseFid(fName)
 		if err != nil {
-			return errors.Annotatef(err, "parse file %s err", fName)
+			return errors.Trace(err)
 		}
-		fid := uint32(fid64)
 
-		logFile, err := newLogFile(fid, vlog.filePath(fid))
+		logFile, err := NewLogFile(fid, vlog.filePath(fid))
 		if err != nil {
 			return errors.Annotatef(err, "error open file %s", fName)
 		}
@@ -260,7 +259,7 @@ func (vlog *valueLog) openOrCreateFiles() error {
 
 func (vlog *valueLog) createLogFile(fid uint32) (*logFile, error) {
 	path := vlog.filePath(fid)
-	logFile, err := newLogFile(fid, path)
+	logFile, err := NewLogFile(fid, path)
 	if err != nil {
 		return nil, errors.Annotate(err, "unable to create log file")
 	}
@@ -299,7 +298,7 @@ func (vlog *valueLog) close() error {
 	return nil
 }
 
-func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
+func (vlog *valueLog) readValue(vp ValuePointer) ([]byte, error) {
 	logFile, err := vlog.getFileRLocked(vp.Fid)
 	if err != nil {
 		return nil, errors.Annotatef(err, "get file(id: %d) failed", vp.Fid)
@@ -398,10 +397,9 @@ func (vlog *valueLog) sortedFids() []uint32 {
 	return ret
 }
 
-func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) error {
-	return vlog.scan(start, func(vp valuePointer, record *Record) error {
-		binlog := new(pb.Binlog)
-		err := binlog.Unmarshal(record.payload)
+func (vlog *valueLog) scanRequests(start ValuePointer, fn func(*request) error) error {
+	return vlog.scan(start, func(vp ValuePointer, record *Record) error {
+		binlog, err := record.GetBinlog()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -423,7 +421,7 @@ func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) 
 }
 
 // currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's OK to hold the vlog.filesLock lock
-func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
+func (vlog *valueLog) scan(start ValuePointer, fn func(vp ValuePointer, record *Record) error) error {
 	vlog.filesLock.Lock()
 	defer vlog.filesLock.Unlock()
 
@@ -438,7 +436,7 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 		if fid == start.Fid {
 			startOffset = start.Offset
 		}
-		err := lf.scan(startOffset, fn)
+		err := lf.Scan(startOffset, fn, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -479,4 +477,14 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 		}
 		logFile.lock.Unlock()
 	}
+}
+
+// ParseFid parses the given file name for the Fid.
+func ParseFid(fName string) (uint32, error) {
+	fName = strings.TrimSuffix(filepath.Base(fName), fileExt)
+	fid64, err := strconv.ParseUint(fName, 10, 32)
+	if err != nil {
+		return 0, errors.Annotatef(err, "failed to parse fid from %s", fName)
+	}
+	return uint32(fid64), nil
 }

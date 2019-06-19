@@ -121,7 +121,7 @@ func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 
 	// test scan start at the middle point of request
 	idx := len(reqs) / 2
-	err = vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
+	err = vlog.scan(reqs[idx].valuePointer, func(vp ValuePointer, record *Record) error {
 		c.Assert(record.payload, check.DeepEquals, reqs[idx].payload, check.Commentf("data read back not equal"))
 		idx++
 		return nil
@@ -171,7 +171,7 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 	vlog := newVlog(c)
 	defer os.RemoveAll(vlog.dirPath)
 
-	var pointers []valuePointer
+	var pointers []ValuePointer
 	// write 100 * 10 = 1000M
 	for i := 0; i < 100; i++ {
 		req := &request{
@@ -208,11 +208,11 @@ type ValuePointerSuite struct {
 var _ = check.Suite(&ValuePointerSuite{})
 
 func (vps *ValuePointerSuite) TestValuePointerMarshalBinary(c *check.C) {
-	var vp valuePointer
+	var vp ValuePointer
 	fuzz := fuzz.New()
 	fuzz.Fuzz(&vp)
 
-	var expect valuePointer
+	var expect ValuePointer
 	data, err := vp.MarshalBinary()
 	c.Assert(err, check.IsNil)
 
