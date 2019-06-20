@@ -48,6 +48,12 @@ func main() {
 
 	// Open LevelDB
 	metadb, err := storage.OpenMetadataDB(*kvDir, nil)
+	defer func() {
+		err := metadb.Close()
+		if err != nil {
+			log.Error("Failed to close metadb", zap.Error(err))
+		}
+	}()
 	if err != nil {
 		log.Fatal("Failed to open LevelDB", zap.String("path", *kvDir), zap.Error(err))
 	}
