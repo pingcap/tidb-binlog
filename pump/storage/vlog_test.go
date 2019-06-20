@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"syscall"
 	"time"
 
 	fuzz "github.com/google/gofuzz"
@@ -220,4 +221,60 @@ func (vps *ValuePointerSuite) TestValuePointerMarshalBinary(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(vp, check.Equals, expect)
+}
+
+// Test when no disk space write fail
+// and should recover after disk space are free up
+// set file size resource limit to make it write fail like no disk space
+func (vs *VlogSuit) TestNoSpace(c *check.C) {
+	dir := c.MkDir()
+	c.Log("use dir: ", dir)
+
+	var origRlimit syscall.Rlimit
+	err := syscall.Getrlimit(syscall.RLIMIT_FSIZE, &origRlimit)
+	c.Assert(err, check.IsNil)
+
+	// set file size limit to be 20k
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 20 * 1024, Max: origRlimit.Max})
+	c.Assert(err, check.IsNil)
+
+	defer func() {
+		err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &origRlimit)
+		c.Assert(err, check.IsNil)
+	}()
+
+	vlog := new(valueLog)
+	err = vlog.open(dir, DefaultOptions())
+	c.Assert(err, check.IsNil)
+
+	// 1k payload per record
+	payload := make([]byte, 1024)
+	req := &request{
+		payload: payload,
+	}
+
+	// should be enough space to write 19 records
+	for i := 0; i < 19; i++ {
+		err = vlog.write([]*request{req})
+		c.Assert(err, check.IsNil)
+	}
+
+	// failed because only 20k space available and may write a incomplete record
+	err = vlog.write([]*request{req})
+	c.Assert(err, check.NotNil)
+
+	// increase file size limit to be 40k
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 40 * 1024, Max: origRlimit.Max})
+	c.Assert(err, check.IsNil)
+
+	// should write success now
+	err = vlog.write([]*request{req})
+	c.Assert(err, check.IsNil)
+
+	// read back normally
+	_, err = vlog.readValue(req.valuePointer)
+	c.Assert(err, check.IsNil)
+
+	err = vlog.close()
+	c.Assert(err, check.IsNil)
 }
