@@ -179,7 +179,7 @@ func notifyDrainer(ctx context.Context, c *node.Status, dialerOpts []grpc.DialOp
 	err := util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
 		log.Info("Connecting drainer", zap.String("addr", c.Addr))
 		var err error
-		clientConn, err = grpc.DialContext(ctx, c.Addr, dialerOpts...)
+		clientConn, err = grpc.DialContext(ictx, c.Addr, dialerOpts...)
 		return err
 	})
 	if err != nil {
@@ -191,7 +191,7 @@ func notifyDrainer(ctx context.Context, c *node.Status, dialerOpts []grpc.DialOp
 
 	err = util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
 		log.Info("Notifying drainer", zap.String("addr", c.Addr))
-		_, err := drainer.Notify(ctx, nil)
+		_, err := drainer.Notify(ictx, nil)
 		return err
 	})
 	if err != nil {
