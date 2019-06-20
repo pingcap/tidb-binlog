@@ -30,6 +30,7 @@ func main() {
 	// Parse args
 	kvDir := flag.String("kv_dir", "", "path of the pump kv directory")
 	repair := flag.Bool("repair", false, "repair the offsets in LevelDB")
+	checkAll := flag.Bool("check_all", false, "check all file")
 	flag.Parse()
 	path := flag.Arg(0)
 
@@ -64,7 +65,7 @@ func main() {
 		0,
 		func(vp storage.ValuePointer, record *storage.Record) error {
 			// We are only interested in records after the corruption position
-			if corruptionPos == -1 {
+			if corruptionPos == -1 && *checkAll == false {
 				return nil
 			}
 			bl, err := record.GetBinlog()
@@ -81,13 +82,13 @@ func main() {
 				if err := metadb.Put(key, data, nil); err != nil {
 					log.Fatal("Failed to repair pointer", zap.Error(err), zap.Int64("offset", vp.Offset))
 				}
-				log.Info("Fixed", zap.Int64("offset", vp.Offset), zap.ByteString("key", key))
+				log.Info("Fixed", zap.Int64("offset", vp.Offset), zap.Binary("key", key))
 				return nil
 			}
 
 			pointer, err := getSavedPointer(metadb, key)
 			if err != nil {
-				log.Error("Failed to get saved data", zap.Error(err), zap.ByteString("key", key))
+				log.Error("Failed to get saved data", zap.Error(err), zap.Binary("key", key))
 				return nil
 			}
 
@@ -127,13 +128,7 @@ func encodeKey(bl *pb.Binlog) []byte {
 func getSavedPointer(db *leveldb.DB, key []byte) (*storage.ValuePointer, error) {
 	pointerData, err := db.Get(key, nil)
 	if err != nil {
-		if err == leveldb.ErrNotFound {
-			log.Fatal(
-				"Key not found, please make sure the kv directory is correct",
-				zap.ByteString("key", key),
-			)
-		}
-		return nil, errors.Annotate(err, "get from leveldb")
+		return nil, errors.Annotatef(err, "get from leveldb key: %v", key)
 	}
 	var pointer storage.ValuePointer
 	err = pointer.UnmarshalBinary(pointerData)
