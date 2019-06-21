@@ -263,7 +263,7 @@ func (cfg *Config) adjustConfig() error {
 	// adjust configuration
 	adjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	adjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
-	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
+	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
 	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	adjustString(&cfg.DataDir, defaultDataDir)
 	adjustInt(&cfg.DetectInterval, defaultDetectInterval)
