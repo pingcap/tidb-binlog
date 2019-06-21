@@ -328,6 +328,8 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 	toDisk := func() error {
 		n, err := curFile.fd.Write(vlog.buf.Bytes())
+		atomic.AddInt64(&vlog.writableLogOffset, int64(n))
+
 		if err != nil {
 			return errors.Annotatef(err, "unable to write to log file: %s", curFile.path)
 		}
@@ -338,7 +340,6 @@ func (vlog *valueLog) write(reqs []*request) error {
 			}
 		}
 
-		atomic.AddInt64(&vlog.writableLogOffset, int64(n))
 		for _, req := range bufReqs {
 			curFile.updateMaxTS(req.ts())
 		}

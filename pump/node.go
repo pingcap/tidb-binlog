@@ -152,26 +152,51 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	dialerOpt := grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-		return net.DialTimeout("tcp", addr, timeout)
-	})
+
+	dialerOpts := []grpc.DialOption{
+		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+			return net.DialTimeout("tcp", addr, timeout)
+		}),
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
+	}
 
 	for _, c := range drainers {
-		if c.State == node.Online {
-			log.Info("start try to notify drainer", zap.String("addr", c.Addr))
-			clientConn, err := grpc.Dial(c.Addr, dialerOpt, grpc.WithInsecure())
-			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
-			}
-			drainer := pb.NewCisternClient(clientConn)
-			_, err = drainer.Notify(ctx, nil)
-			clientConn.Close()
-			if err != nil {
-				return errors.Errorf("notify drainer(%s); but return error(%v)", c.Addr, err)
-			}
+		if c.State != node.Online {
+			continue
+		}
+		if err := notifyDrainer(ctx, c, dialerOpts); err != nil {
+			return errors.Trace(err)
 		}
 	}
 
+	return nil
+}
+
+func notifyDrainer(ctx context.Context, c *node.Status, dialerOpts []grpc.DialOption) error {
+	log.Info("Start trying to notify drainer", zap.String("addr", c.Addr))
+	var clientConn *grpc.ClientConn
+	err := util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
+		log.Info("Connecting drainer", zap.String("addr", c.Addr))
+		var err error
+		clientConn, err = grpc.DialContext(ictx, c.Addr, dialerOpts...)
+		return err
+	})
+	if err != nil {
+		return errors.Annotatef(err, "connect drainer(%s)", c.Addr)
+	}
+	defer clientConn.Close()
+
+	drainer := pb.NewCisternClient(clientConn)
+
+	err = util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
+		log.Info("Notifying drainer", zap.String("addr", c.Addr))
+		_, err := drainer.Notify(ictx, nil)
+		return err
+	})
+	if err != nil {
+		return errors.Annotatef(err, "notify drainer(%s)", c.Addr)
+	}
 	return nil
 }
 
