@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tipb/go-binlog"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -505,30 +505,26 @@ func (s *Server) gcBinlogFile() {
 				continue
 			}
 
-			safeTSO, err := s.getSafeGCTSOForDrainers(s.ctx)
-			if err != nil {
-				log.Warn("get save gc tso for drainers failed", zap.Error(err))
-				continue
-			}
-			log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
-
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
-			if safeTSO < gcTS {
-				gcTS = safeTSO
-			}
 			log.Info("send gc request to storage", zap.Int64("ts", gcTS))
+
+			// detect where drainer's checkpoint is old than pump gc pointer
+			// it also means binlog events is loss for this drainer
+			s.getSafeGCTSOForDrainers(s.ctx, gcTS)
+
 			s.storage.GCTS(gcTS)
 		}
 	}
 }
 
-func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
+func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64, error) {
 	pumpNode := s.node.(*pumpNode)
 
 	drainers, err := pumpNode.Nodes(ctx, "drainers")
 	if err != nil {
-		return 0, errors.Trace(err)
+		log.Error("fail to query status of drainers", zap.String("node ID", s.node.ID()), zap.Error(err))
+		return 0, errors.Annotatef(err, "fail to query status of drainers")
 	}
 
 	var minTSO int64 = math.MaxInt64
@@ -537,6 +533,15 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 			continue
 		}
 
+		if gcTS > 0 && drainer.MaxCommitTS < gcTS {
+			log.Error("drainer's checkpoint is older than pump gc ts, some binlogs are purged",
+				zap.String("pump", s.node.ID()),
+				zap.String("drainer", drainer.NodeID),
+				zap.Int64("gc ts", gcTS),
+				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
+			)
+			binlogPurgedCounter.WithLabelValues("drainer", drainer.NodeID).Inc()
+		}
 		if drainer.MaxCommitTS < minTSO {
 			minTSO = drainer.MaxCommitTS
 		}
@@ -724,7 +729,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		select {
 		case <-time.After(time.Second):
-			safeTSO, err := s.getSafeGCTSOForDrainers(ctx)
+			safeTSO, err := s.getSafeGCTSOForDrainers(ctx, 0)
 			if err != nil {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break

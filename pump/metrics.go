@@ -37,6 +37,14 @@ var (
 			Name:      "loss_binlog_count",
 			Help:      "Total loss binlog count",
 		})
+
+	binlogPurgedCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "binlog_purge_count",
+			Help:      "binlog purge count > 0 means some binlog was purged",
+		}, []string{"drainer"})
 )
 
 var registry = prometheus.NewRegistry()
