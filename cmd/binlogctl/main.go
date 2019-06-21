@@ -61,7 +61,7 @@ func main() {
 	case ctl.OfflineDrainer:
 		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, close)
 	default:
-		err = errors.Errorf("cmd %s not supported", cfg.Command)
+		err = errors.NotSupportedf("cmd %s", cfg.Command)
 	}
 
 	if err != nil {
