@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
@@ -470,6 +471,9 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 		gcInterval = origInterval
 	}()
 
+	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
+	gcTS := int64(oracle.EncodeTSO(millisecond))
+
 	server.wg.Add(1)
 	go server.gcBinlogFile()
 
@@ -478,7 +482,7 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	time.Sleep(1000 * gcInterval)
 	cancel()
 
-	c.Assert(storage.gcTS, Equals, int64(1002))
+	c.Assert(storage.gcTS, GreaterEqual, gcTS)
 }
 
 type waitCommitTSSuite struct{}
