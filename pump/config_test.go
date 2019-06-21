@@ -13,6 +13,29 @@ var _ = Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 
+func (s *testConfigSuite) TestValidate(c *C) {
+	cfg := Config{}
+	cfg.GC = 1
+	cfg.ListenAddr = "http://:8250"
+	cfg.EtcdURLs = "http://192.168.10.23:7777"
+
+	cfg.AdvertiseAddr = "http://:8250"
+	err := cfg.validate()
+	c.Check(err, ErrorMatches, ".*advertiseAddr.*")
+
+	cfg.AdvertiseAddr = "http://0.0.0.0:8250"
+	err = cfg.validate()
+	c.Check(err, ErrorMatches, ".*advertiseAddr.*")
+
+	cfg.AdvertiseAddr = "http://127.0.0.1:8250"
+	err = cfg.validate()
+	c.Check(err, IsNil)
+
+	cfg.AdvertiseAddr = "http://192.168.11.11:8250"
+	err = cfg.validate()
+	c.Check(err, IsNil)
+}
+
 func (s *testConfigSuite) TestConfigParsingCmdLineFlags(c *C) {
 	args := []string{
 		"--addr", "192.168.199.100:8260",

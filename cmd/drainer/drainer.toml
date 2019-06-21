@@ -2,7 +2,10 @@
 
 # addr (i.e. 'host:port') to listen on for drainer connections
 # will register this addr into etcd
-# addr = "127.0.0.1:8249"
+addr = "127.0.0.1:8249"
+
+# addr(i.e. 'host:port') to advertise to the public
+advertise-addr = ""
 
 # the interval time (in seconds) of detect pumps' status
 detect-interval = 10
