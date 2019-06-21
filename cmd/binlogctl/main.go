@@ -17,6 +17,7 @@ import (
 	"flag"
 	"os"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	ctl "github.com/pingcap/tidb-binlog/binlogctl"
 	"github.com/pingcap/tidb-binlog/pkg/node"
@@ -59,6 +60,8 @@ func main() {
 		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, close)
 	case ctl.OfflineDrainer:
 		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, close)
+	default:
+		err = errors.NotSupportedf("cmd %s", cfg.Command)
 	}
 
 	if err != nil {
