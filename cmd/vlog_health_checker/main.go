@@ -72,6 +72,10 @@ func main() {
 			if err != nil {
 				log.Fatal("Failed to get binlog", zap.Int64("offset", vp.Offset), zap.Error(err))
 			}
+			// Ignore rollback binlogs
+			if bl.Tp == pb.BinlogType_Rollback {
+				return nil
+			}
 			key := encodeKey(bl)
 
 			if *repair {
