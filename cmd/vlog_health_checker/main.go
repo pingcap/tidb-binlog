@@ -30,7 +30,6 @@ func main() {
 	// Parse args
 	kvDir := flag.String("kv_dir", "", "path of the pump kv directory")
 	repair := flag.Bool("repair", false, "repair the offsets in LevelDB")
-	checkAll := flag.Bool("check_all", false, "check all file")
 	flag.Parse()
 	path := flag.Arg(0)
 
@@ -65,10 +64,6 @@ func main() {
 	logFile.Scan(
 		0,
 		func(vp storage.ValuePointer, record *storage.Record) error {
-			// We are only interested in records after the corruption position
-			if corruptionPos == -1 && !*checkAll {
-				return nil
-			}
 			bl, err := record.GetBinlog()
 			if err != nil {
 				log.Fatal("Failed to get binlog", zap.Int64("offset", vp.Offset), zap.Error(err))
