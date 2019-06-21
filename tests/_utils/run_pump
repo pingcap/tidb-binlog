@@ -20,7 +20,7 @@ done
 
 echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump_$PORT.log"
 
-BINLOG_TEST=1 pump -log-file $OUT_DIR/pump_$PORT.log --addr=0.0.0.0:$PORT \
+pump -log-file $OUT_DIR/pump_$PORT.log --addr=0.0.0.0:$PORT \
         --advertise-addr=127.0.0.1:$PORT \
         --pd-urls=http://127.0.0.1:2379 \
         --data-dir=$OUT_DIR/pump_$PORT \
