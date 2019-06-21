@@ -38,7 +38,7 @@ func main() {
 	log.Info("Target vlog", zap.String("path", path))
 	fid, err := storage.ParseFid(path)
 	if err != nil {
-		log.Fatal("Failed to  parse fid", zap.Error(err), zap.String("path", path))
+		log.Fatal("Failed to parse fid", zap.Error(err), zap.String("path", path))
 	}
 	log.Info("Parse fid", zap.Uint32("fid", fid))
 	logFile, err := storage.NewLogFile(fid, path)
@@ -96,8 +96,18 @@ func main() {
 				return nil
 			}
 
-			if pointer.Fid != vp.Fid || pointer.Offset != vp.Offset {
-				log.Info("Pointer mismatch detected", zap.Reflect("get", pointer), zap.Reflect("expected", vp))
+			if pointer.Fid != fid {
+				// Reading a different Fid, this should never happen
+				log.Fatal("Fid mismatch", zap.Uint32("get", pointer.Fid), zap.Uint32("expected", fid))
+			}
+
+			if pointer.Offset != vp.Offset {
+				log.Info(
+					"Pointer offset mismatch",
+					zap.Int64("get", pointer.Offset),
+					zap.Int64("expected", vp.Offset),
+					zap.Int64("diff", vp.Offset - pointer.Offset),
+				)
 			}
 			return nil
 		},
