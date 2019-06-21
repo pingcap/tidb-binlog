@@ -65,7 +65,7 @@ func main() {
 		0,
 		func(vp storage.ValuePointer, record *storage.Record) error {
 			// We are only interested in records after the corruption position
-			if corruptionPos == -1 && *checkAll == false {
+			if corruptionPos == -1 && !*checkAll {
 				return nil
 			}
 			bl, err := record.GetBinlog()
