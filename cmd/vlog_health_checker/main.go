@@ -61,6 +61,7 @@ func main() {
 	log.Info("LevelDB opened")
 
 	var corruptionPos int64 = -1
+	checked := make(map[int64]struct{}, 64)
 	logFile.Scan(
 		0,
 		func(vp storage.ValuePointer, record *storage.Record) error {
@@ -76,6 +77,12 @@ func main() {
 			if bl.Tp == pb.BinlogType_Rollback {
 				return nil
 			}
+			tso := getTSO(bl)
+			if _, ok := checked[tso]; ok {
+				log.Info("Skip duplicate binlog", zap.Int64("tso", tso))
+				return nil
+			}
+			checked[tso] = struct{}{}
 			key := encodeKey(bl)
 
 			if *repair {
@@ -106,7 +113,7 @@ func main() {
 					"Pointer offset mismatch",
 					zap.Int64("get", pointer.Offset),
 					zap.Int64("expected", vp.Offset),
-					zap.Int64("diff", vp.Offset - pointer.Offset),
+					zap.Int64("diff", vp.Offset-pointer.Offset),
 				)
 			}
 			return nil
@@ -122,13 +129,16 @@ func main() {
 	}
 }
 
-func encodeKey(bl *pb.Binlog) []byte {
-	var ts int64
+func getTSO(bl *pb.Binlog) int64 {
 	if bl.Tp == pb.BinlogType_Prewrite {
-		ts = bl.StartTs
+		return bl.StartTs
 	} else {
-		ts = bl.CommitTs
+		return bl.CommitTs
 	}
+}
+
+func encodeKey(bl *pb.Binlog) []byte {
+	ts := getTSO(bl)
 
 	buf := make([]byte, 8+len(tsKeyPrefix))
 	copy(buf, tsKeyPrefix)
