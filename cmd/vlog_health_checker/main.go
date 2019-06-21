@@ -101,9 +101,7 @@ func main() {
 			if pointer.Fid != fid {
 				// Reading a different Fid, this should never happen
 				log.Fatal("Fid mismatch", zap.Uint32("get", pointer.Fid), zap.Uint32("expected", fid))
-			}
-
-			if pointer.Offset != vp.Offset {
+			} else if pointer.Offset != vp.Offset {
 				log.Info(
 					"Pointer offset mismatch",
 					zap.Int64("get", pointer.Offset),
