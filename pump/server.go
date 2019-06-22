@@ -83,6 +83,7 @@ type Server struct {
 	pdCli                   pd.Client
 	cfg                     *Config
 	tiStore                 kv.Storage
+	gcTS                    int64
 
 	writeBinlogCount int64
 	alivePullerCount int64
@@ -265,6 +266,11 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
+
+	gcTS := atomic.LoadInt64(&s.gcTS)
+	if last < gcTS {
+		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
+	}
 
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
@@ -507,13 +513,14 @@ func (s *Server) gcBinlogFile() {
 
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
-			log.Info("send gc request to storage", zap.Int64("ts", gcTS))
 
+			realGCTS := s.storage.GCTS(gcTS)
+			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS), zap.Int64("real gc ts", realGCTS))
+
+			atomic.StoreInt64(&s.gcTS, realGCTS)
 			// detect where drainer's checkpoint is old than pump gc pointer
 			// it also means binlog events is loss for this drainer
-			s.getSafeGCTSOForDrainers(s.ctx, gcTS)
-
-			s.storage.GCTS(gcTS)
+			s.getSafeGCTSOForDrainers(s.ctx, realGCTS)
 		}
 	}
 }
@@ -535,7 +542,6 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 
 		if gcTS > 0 && drainer.MaxCommitTS < gcTS {
 			log.Error("drainer's checkpoint is older than pump gc ts, some binlogs are purged",
-				zap.String("pump", s.node.ID()),
 				zap.String("drainer", drainer.NodeID),
 				zap.Int64("gc ts", gcTS),
 				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
@@ -737,7 +743,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 			if safeTSO >= fakeBinlog.CommitTs {
 				return nil
 			}
-			log.Info("Waiting for drainer to consume binlog",
+			log.Warn("Waiting for drainer to consume binlog",
 				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
 				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
 			if _, err = s.writeFakeBinlog(); err != nil {
