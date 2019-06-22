@@ -131,7 +131,7 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 type noOpStorage struct{}
 
 func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GCTS(ts int64)                              {}
+func (s *noOpStorage) GCTS(ts int64) int64                        { return 0 }
 func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
 func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
@@ -288,8 +288,9 @@ func (ds *dummyStorage) MaxCommitTS() int64 {
 	return ds.maxCommitTS
 }
 
-func (ds *dummyStorage) GCTS(ts int64) {
+func (ds *dummyStorage) GCTS(ts int64) int64 {
 	ds.gcTS = ts
+	return ts
 }
 
 func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
