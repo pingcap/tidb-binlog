@@ -46,14 +46,6 @@ type writeBinlogSuite struct{}
 
 var _ = Suite(&writeBinlogSuite{})
 
-func (s *writeBinlogSuite) TestIgnoreEmptyRequest(c *C) {
-	server := &Server{}
-	resp, err := server.WriteBinlog(context.Background(), &binlog.WriteBinlogReq{})
-	c.Assert(resp, NotNil)
-	c.Assert(err, IsNil)
-	c.Assert(server.writeBinlogCount, Equals, int64(0))
-}
-
 func (s *writeBinlogSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 	server := &Server{clusterID: 42}
 	req := &binlog.WriteBinlogReq{}

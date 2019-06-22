@@ -317,10 +317,11 @@ func (a *Append) updateSize() error {
 	size, err := getStorageSize(a.dir)
 	if err != nil {
 		return errors.Annotate(err, "update storage size failed")
-	} else {
-		storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
-		storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
 	}
+
+	storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+	storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+
 	atomic.StoreUint64(&a.storageSize.available, size.available)
 	atomic.StoreUint64(&a.storageSize.capacity, size.capacity)
 	return nil

@@ -40,8 +40,10 @@ func encodeTSKey(ts int64) []byte {
 	return buf
 }
 
+// HumanizeBytes is used for humanize configure
 type HumanizeBytes uint64
 
+// Uint64 return bytes
 func (b HumanizeBytes) Uint64() uint64 {
 	return uint64(b)
 }
