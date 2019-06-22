@@ -530,7 +530,7 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 
 	drainers, err := pumpNode.Nodes(ctx, "drainers")
 	if err != nil {
-		log.Error("fail to query status of drainers", zap.String("node ID", s.node.ID()), zap.Error(err))
+		log.Error("fail to query status of drainers", zap.Error(err))
 		return 0, errors.Annotatef(err, "fail to query status of drainers")
 	}
 
@@ -546,7 +546,7 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 				zap.Int64("gc ts", gcTS),
 				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
 			)
-			binlogPurgedCounter.WithLabelValues("drainer", drainer.NodeID).Inc()
+			binlogPurgedCounter.WithLabelValues(drainer.NodeID).Inc()
 		}
 		if drainer.MaxCommitTS < minTSO {
 			minTSO = drainer.MaxCommitTS
