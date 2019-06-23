@@ -478,6 +478,7 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 		if err != nil {
 			log.Error("remove file failed", zap.String("path", logFile.path), zap.Error(err))
 		}
+		log.Info("remove file", zap.String("path", logFile.path))
 		logFile.lock.Unlock()
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -597,7 +598,6 @@ func (a *Append) GCTS(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -610,15 +610,22 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	for {
-		var stats leveldb.DBStats
-		err := a.metadata.Stats(&stats)
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
-			log.Error("Stats failed", zap.Error(err))
+			log.Error("GetProperty failed", zap.Error(err))
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
-			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", stats.LevelTablesCounts[0]))
+
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			log.Error("parse int failed", zap.String("str", nStr), zap.Error(err))
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		if l0Num >= l0Trigger {
+			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -630,8 +637,12 @@ func (a *Append) doGCTS(ts int64) {
 		iter := a.metadata.NewIterator(irange, nil)
 
 		deleteBatch := 0
+		var lastKey []byte
+
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
+			lastKey = iter.Key()
+
 			if batch.Len() == 1024 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
@@ -653,6 +664,10 @@ func (a *Append) doGCTS(ts int64) {
 				batch.Reset()
 			}
 			break
+		}
+
+		if len(lastKey) > 0 {
+			a.vlog.gcTS(decodeTSKey(lastKey))
 		}
 	}
 
