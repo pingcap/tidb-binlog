@@ -54,6 +54,7 @@ var (
 	notifyDrainerTimeout     = time.Second * 10
 	serverInfoOutputInterval = time.Second * 10
 	gcInterval               = time.Hour
+	earlyAlertGC             = 20 * time.Hour
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -514,13 +515,16 @@ func (s *Server) gcBinlogFile() {
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 
+			alertGCMS := millisecond - earlyAlertGC.Nanoseconds()/1000/1000
+			alertGCTS := int64(oracle.EncodeTSO(alertGCMS))
+
 			realGCTS := s.storage.GCTS(gcTS)
 			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS), zap.Int64("real gc ts", realGCTS))
 
 			atomic.StoreInt64(&s.gcTS, realGCTS)
 			// detect where drainer's checkpoint is old than pump gc pointer
 			// it also means binlog events is loss for this drainer
-			s.getSafeGCTSOForDrainers(s.ctx, realGCTS)
+			s.getSafeGCTSOForDrainers(s.ctx, alertGCTS)
 		}
 	}
 }
