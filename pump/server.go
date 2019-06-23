@@ -515,7 +515,7 @@ func (s *Server) gcBinlogFile() {
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 
-			alertGCMS := millisecond - earlyAlertGC.Nanoseconds()/1000/1000
+			alertGCMS := millisecond + earlyAlertGC.Nanoseconds()/1000/1000
 			alertGCTS := int64(oracle.EncodeTSO(alertGCMS))
 
 			realGCTS := s.storage.GCTS(gcTS)
