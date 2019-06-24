@@ -612,16 +612,14 @@ func (a *Append) doGCTS(ts int64) {
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
-			log.Error("GetProperty failed", zap.Error(err))
-			time.Sleep(5 * time.Second)
-			continue
+			log.Error("get `leveldb.num-files-at-level0` property failed", zap.Error(err))
+			return
 		}
 
 		l0Num, err := strconv.Atoi(nStr)
 		if err != nil {
-			log.Error("parse int failed", zap.String("str", nStr), zap.Error(err))
-			time.Sleep(5 * time.Second)
-			continue
+			log.Error("parse `leveldb.num-files-at-level0` result to int failed", zap.String("str", nStr), zap.Error(err))
+			return
 		}
 
 		if l0Num >= l0Trigger {

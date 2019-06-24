@@ -391,7 +391,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
-	router.HandleFunc("/debug/gc/trigger", s.TriggerGC).Methods("GET")
+	router.HandleFunc("/debug/gc/trigger", s.TriggerGC).Methods("POST")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", promhttp.Handler())
@@ -588,7 +588,7 @@ func (s *Server) TriggerGC(w http.ResponseWriter, r *http.Request) {
 	select {
 	case s.triggerGC <- time.Now():
 		fmt.Fprintln(w, "trigger gc success")
-	case <-time.After(time.Second):
+	default:
 		fmt.Fprintln(w, "gc is working")
 	}
 }
