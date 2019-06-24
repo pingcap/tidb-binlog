@@ -17,9 +17,13 @@ import "strings"
 
 // GenColumnPlaceholders generates placeholders in question mark format,like "?,?,?".
 func GenColumnPlaceholders(length int) string {
-	values := make([]string, length)
+	var b strings.Builder
+	b.Grow(2 * length)
 	for i := 0; i < length; i++ {
-		values[i] = "?"
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte('?')
 	}
-	return strings.Join(values, ",")
+	return b.String()
 }
