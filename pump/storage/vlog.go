@@ -149,9 +149,6 @@ func (vp *valuePointer) UnmarshalBinary(data []byte) error {
 type valueLog struct {
 	buf *bytes.Buffer // buf to write to the current log file
 
-	// writable offset of the curFile(the max fid file)
-	writableLogOffset int64
-
 	dirPath   string
 	sync      bool
 	maxFid    uint32
@@ -245,13 +242,6 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			if err != nil {
 				return errors.Annotatef(err, "error create new file")
 			}
-		} else {
-			info, err := curFile.fd.Stat()
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			vlog.writableLogOffset = info.Size()
 		}
 	}
 
@@ -264,8 +254,6 @@ func (vlog *valueLog) createLogFile(fid uint32) (*logFile, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "unable to create log file")
 	}
-
-	vlog.writableLogOffset = 0
 
 	vlog.filesLock.Lock()
 	vlog.filesMap[fid] = logFile
@@ -282,7 +270,7 @@ func (vlog *valueLog) close() error {
 	curFile := vlog.filesMap[vlog.maxFid]
 
 	// finalize the curFile when it's tool big, so when restart, we don't need to scan the too big curFile to recover the maxTS of the file
-	if vlog.writableOffset() >= finalizeFileSizeAtClose {
+	if curFile.GetWriteOffset() >= finalizeFileSizeAtClose {
 		err = curFile.finalize()
 		if err != nil {
 			return errors.Annotatef(err, "finalize file %s failed", curFile.path)
@@ -315,10 +303,6 @@ func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
 	return record.payload, nil
 }
 
-func (vlog *valueLog) writableOffset() int64 {
-	return atomic.LoadInt64(&vlog.writableLogOffset)
-}
-
 // write is thread-unsafe by design and should not be called concurrently.
 func (vlog *valueLog) write(reqs []*request) error {
 	vlog.filesLock.RLock()
@@ -328,17 +312,9 @@ func (vlog *valueLog) write(reqs []*request) error {
 	var bufReqs []*request
 
 	toDisk := func() error {
-		n, err := curFile.fd.Write(vlog.buf.Bytes())
-		atomic.AddInt64(&vlog.writableLogOffset, int64(n))
-
+		err := curFile.Write(vlog.buf.Bytes(), vlog.sync)
 		if err != nil {
-			return errors.Annotatef(err, "unable to write to log file: %s", curFile.path)
-		}
-		if vlog.sync {
-			err = curFile.fdatasync()
-			if err != nil {
-				return errors.Annotatef(err, "fdatasync file %s failed", curFile.path)
-			}
+			return errors.Trace(err)
 		}
 
 		for _, req := range bufReqs {
@@ -348,7 +324,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 		bufReqs = bufReqs[:0]
 
 		// rotate file
-		if vlog.writableOffset() > vlog.opt.ValueLogFileSize {
+		if curFile.GetWriteOffset() > vlog.opt.ValueLogFileSize {
 			err := curFile.finalize()
 			if err != nil {
 				return errors.Annotatef(err, "finalize file %s failed", curFile.path)
@@ -365,7 +341,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 	for _, req := range reqs {
 		req.valuePointer.Fid = curFile.fid
-		req.valuePointer.Offset = vlog.writableOffset() + int64(vlog.buf.Len())
+		req.valuePointer.Offset = curFile.GetWriteOffset() + int64(vlog.buf.Len())
 		_, err := encodeRecord(vlog.buf, req.payload)
 		if err != nil {
 			return errors.Trace(err)
@@ -373,7 +349,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 		bufReqs = append(bufReqs, req)
 
-		writeNow := vlog.writableOffset()+int64(vlog.buf.Len()) > vlog.opt.ValueLogFileSize
+		writeNow := curFile.GetWriteOffset()+int64(vlog.buf.Len()) > vlog.opt.ValueLogFileSize
 
 		if writeNow {
 			if err := toDisk(); err != nil {

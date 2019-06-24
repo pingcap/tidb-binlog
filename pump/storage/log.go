@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -50,6 +51,8 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 type logFile struct {
 	fid  uint32
 	path string
+
+	writeOffset int64
 
 	// guard fd
 	lock sync.RWMutex
@@ -139,6 +142,7 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 		fd:                 fd,
 		path:               name,
 		corruptionReporter: logReporter,
+		writeOffset:        info.Size(),
 	}
 
 	if info.Size() >= fileFooterLength {
@@ -184,6 +188,35 @@ func (lf *logFile) updateMaxTS(ts int64) {
 	if ts > lf.maxTS {
 		lf.maxTS = ts
 	}
+}
+
+// IncWriteOffset moves the write offset forward for n bytes and returns the new offset.
+func (lf *logFile) IncWriteOffset(n int64) int64 {
+	return atomic.AddInt64(&lf.writeOffset, n)
+}
+
+// GetWriteOffset returns the write offset of the log file.
+func (lf *logFile) GetWriteOffset() int64 {
+	return atomic.LoadInt64(&lf.writeOffset)
+}
+
+// Write writes data to disk and update the write offset.
+// If sync is set, it also cares to call `fsync` to make sure
+// the buffered data is flushed to disk.
+func (lf *logFile) Write(data []byte, sync bool) error {
+	n, err := lf.fd.Write(data)
+	lf.IncWriteOffset(int64(n))
+
+	if err != nil {
+		return errors.Annotatef(err, "unable to write to log file: %s", lf.path)
+	}
+	if sync {
+		err = lf.fdatasync()
+		if err != nil {
+			return errors.Annotatef(err, "fdatasync file %s failed", lf.path)
+		}
+	}
+	return nil
 }
 
 // finalize write the footer to the file, then we never write this file anymore
