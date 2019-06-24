@@ -43,7 +43,7 @@ var (
 			Namespace: "binlog",
 			Subsystem: "pump",
 			Name:      "binlog_purge_count",
-			Help:      "binlog purge count > 0 means some binlog was purged",
+			Help:      "binlog purge count > 0 means some unread binlog was purged",
 		}, []string{"drainer"})
 )
 
