@@ -522,14 +522,13 @@ func (s *Server) gcBinlogFile() {
 			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS), zap.Int64("real gc ts", realGCTS))
 
 			atomic.StoreInt64(&s.gcTS, realGCTS)
-			// detect where drainer's checkpoint is old than pump gc pointer
-			// it also means binlog events is loss for this drainer
-			s.getSafeGCTSOForDrainers(s.ctx, alertGCTS)
+			// detect whether the binlog before drainer's checkpoint had been purged
+			s.detechDrainerCheckPoints(s.ctx, alertGCTS)
 		}
 	}
 }
 
-func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64, error) {
+func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 	pumpNode := s.node.(*pumpNode)
 
 	drainers, err := pumpNode.Nodes(ctx, "drainers")
@@ -544,7 +543,29 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 			continue
 		}
 
-		if gcTS > 0 && drainer.MaxCommitTS < gcTS {
+		if drainer.MaxCommitTS < minTSO {
+			minTSO = drainer.MaxCommitTS
+		}
+	}
+
+	return minTSO, nil
+}
+
+func (s *Server) detechDrainerCheckPoints(ctx context.Context, gcTS int64) {
+	pumpNode := s.node.(*pumpNode)
+
+	drainers, err := pumpNode.Nodes(ctx, "drainers")
+	if err != nil {
+		log.Error("fail to query status of drainers", zap.Error(err))
+		return
+	}
+
+	for _, drainer := range drainers {
+		if drainer.State == node.Offline {
+			continue
+		}
+
+		if drainer.MaxCommitTS < gcTS {
 			log.Error("drainer's checkpoint is older than pump gc ts, some binlogs are purged",
 				zap.String("drainer", drainer.NodeID),
 				zap.Int64("gc ts", gcTS),
@@ -553,12 +574,7 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 			// will add test when binlog have failpoint
 			binlogPurgedCounter.WithLabelValues(drainer.NodeID).Inc()
 		}
-		if drainer.MaxCommitTS < minTSO {
-			minTSO = drainer.MaxCommitTS
-		}
 	}
-
-	return minTSO, nil
 }
 
 func (s *Server) startMetrics() {
@@ -740,7 +756,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	for {
 		select {
 		case <-time.After(time.Second):
-			safeTSO, err := s.getSafeGCTSOForDrainers(ctx, 0)
+			safeTSO, err := s.getSafeGCTSOForDrainers(ctx)
 			if err != nil {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
