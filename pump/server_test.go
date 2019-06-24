@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tipb/go-binlog"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -453,11 +453,6 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
 	registry := node.NewEtcdRegistry(cli, time.Second)
-	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: 1003, State: node.Online})
-	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
-	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
-	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: 1001, State: node.Offline})
-
 	server := Server{
 		ctx:        ctx,
 		storage:    &storage,
@@ -465,15 +460,26 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 		gcDuration: time.Hour,
 	}
 
+	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
+	gcTS := int64(oracle.EncodeTSO(millisecond))
+
+	inAlertGCMS := millisecond + 10*time.Minute.Nanoseconds()/1000/1000
+	inAlertGCTS := int64(oracle.EncodeTSO(inAlertGCMS))
+
+	outAlertGCMS := millisecond + (earlyAlertGC+10*time.Minute).Nanoseconds()/1000/1000
+	outAlertGCTS := int64(oracle.EncodeTSO(outAlertGCMS))
+
+	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
+	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
+	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
+	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: outAlertGCTS, State: node.Offline})
+
 	// Set a shorter interval because we don't really want to wait 1 hour
 	origInterval := gcInterval
 	gcInterval = 100 * time.Microsecond
 	defer func() {
 		gcInterval = origInterval
 	}()
-
-	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
-	gcTS := int64(oracle.EncodeTSO(millisecond))
 
 	server.wg.Add(1)
 	go server.gcBinlogFile()
@@ -484,6 +490,7 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	cancel()
 
 	c.Assert(storage.gcTS, GreaterEqual, gcTS)
+	// todo: add in and out of alert test while binlog has failpoint
 }
 
 type waitCommitTSSuite struct{}

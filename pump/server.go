@@ -550,6 +550,7 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context, gcTS int64) (int64
 				zap.Int64("gc ts", gcTS),
 				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
 			)
+			// will add test when binlog have failpoint
 			binlogPurgedCounter.WithLabelValues(drainer.NodeID).Inc()
 		}
 		if drainer.MaxCommitTS < minTSO {
