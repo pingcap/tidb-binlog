@@ -69,7 +69,7 @@ func main() {
 				log.Fatal("Failed to get binlog", zap.Int64("offset", vp.Offset), zap.Error(err))
 			}
 			// Ignore binlogs with zero CommitTs, eg. rollback binlogs
-			if bl.CommitTs == 0 {
+			if bl.Tp == pb.BinlogType_Rollback && bl.CommitTs == 0 {
 				return nil
 			}
 			tso := getTSO(bl)
