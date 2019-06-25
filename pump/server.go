@@ -523,7 +523,7 @@ func (s *Server) gcBinlogFile() {
 
 			atomic.StoreInt64(&s.gcTS, realGCTS)
 			// detect whether the binlog before drainer's checkpoint had been purged
-			s.detechDrainerCheckPoints(s.ctx, alertGCTS)
+			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
 		}
 	}
 }
@@ -551,7 +551,7 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 	return minTSO, nil
 }
 
-func (s *Server) detechDrainerCheckPoints(ctx context.Context, gcTS int64) {
+func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
 	pumpNode := s.node.(*pumpNode)
 
 	drainers, err := pumpNode.Nodes(ctx, "drainers")
