@@ -80,18 +80,6 @@ func main() {
 			checked[tso] = struct{}{}
 			key := encodeKey(bl)
 
-			if *repair {
-				data, err := vp.MarshalBinary()
-				if err != nil {
-					log.Fatal("Failed to marshal pointer", zap.Error(err), zap.Int64("offset", vp.Offset))
-				}
-				if err := metadb.Put(key, data, nil); err != nil {
-					log.Fatal("Failed to repair pointer", zap.Error(err), zap.Int64("offset", vp.Offset))
-				}
-				log.Info("Fixed", zap.Int64("offset", vp.Offset), zap.Binary("key", key))
-				return nil
-			}
-
 			pointer, err := getSavedPointer(metadb, key)
 			if err != nil {
 				log.Error("Failed to get saved data", zap.Error(err), zap.Binary("key", key))
@@ -108,6 +96,17 @@ func main() {
 					zap.Int64("expected", vp.Offset),
 					zap.Int64("diff", vp.Offset-pointer.Offset),
 				)
+				if *repair {
+					data, err := vp.MarshalBinary()
+					if err != nil {
+						log.Fatal("Failed to marshal pointer", zap.Error(err), zap.Int64("offset", vp.Offset))
+					}
+					if err := metadb.Put(key, data, nil); err != nil {
+						log.Fatal("Failed to repair pointer", zap.Error(err), zap.Int64("offset", vp.Offset))
+					}
+					log.Info("Fixed", zap.Int64("offset", vp.Offset), zap.Binary("key", key))
+					return nil
+				}
 			}
 			return nil
 		},
