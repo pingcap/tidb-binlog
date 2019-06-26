@@ -604,9 +604,6 @@ func (a *Append) GC(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
-	return
-
 }
 
 func (a *Append) doGCTS(ts int64) {
