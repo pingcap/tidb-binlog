@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"database/sql"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -13,23 +14,37 @@ type testMysqlSuite struct{}
 var _ = check.Suite(&testMysqlSuite{})
 
 func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
+	s.testMysqlSyncer(c, true)
+	s.testMysqlSyncer(c, false)
+}
+
+func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
+	var (
+		mock sqlmock.Sqlmock
+	)
 	originWorkerCount := defaultWorkerCount
 	defaultWorkerCount = 1
 	defer func() {
 		defaultWorkerCount = originWorkerCount
 	}()
 
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	oldCreateDB := createDB
+	createDB = func(string, string, string, int) (db *sql.DB, err error) {
+		db, mock, err = sqlmock.New()
+		return
+	}
+	defer func() {
+		createDB = oldCreateDB
+	}()
 
-	syncer, err := newMysqlSyncerFromSQLDB(db)
+	syncer, err := newMysqlSyncer(&DBConfig{}, safemode)
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	mock.ExpectQuery("SELECT column_name, extra FROM information_schema.columns").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("a", "").AddRow("b", ""))
+	mock.ExpectQuery("SELECT column_name, extra FROM information_schema.columns").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("a", "").AddRow("b", "").AddRow("c", ""))
 
 	rows := sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"})
 	mock.ExpectQuery("SELECT non_unique, index_name, seq_in_index, column_name FROM information_schema.statistics").
@@ -37,9 +52,18 @@ func (s *testMysqlSuite) TestMysqlSyncer(c *check.C) {
 		WillReturnRows(rows)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	insertPattern := "INSERT INTO"
+	if safemode {
+		insertPattern = "REPLACE INTO"
+	}
+	mock.ExpectExec(insertPattern).WithArgs(1, "test", nil).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("DELETE FROM").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("UPDATE").WithArgs("abc").WillReturnResult(sqlmock.NewResult(0, 1))
+	if safemode {
+		mock.ExpectExec("DELETE FROM").WithArgs().WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(insertPattern).WithArgs(nil, nil, "abc").WillReturnResult(sqlmock.NewResult(0, 1))
+	} else {
+		mock.ExpectExec("UPDATE").WithArgs("abc", "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	}
 	mock.ExpectCommit()
 
 	syncTest(c, Syncer(syncer))

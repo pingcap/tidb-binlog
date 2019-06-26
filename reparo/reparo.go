@@ -23,7 +23,7 @@ type Reparo struct {
 func New(cfg *Config) (*Reparo, error) {
 	log.Infof("cfg %+v", cfg)
 
-	syncer, err := syncer.New(cfg.DestType, cfg.DestDB)
+	syncer, err := syncer.New(cfg.DestType, cfg.DestDB, cfg.SafeMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
