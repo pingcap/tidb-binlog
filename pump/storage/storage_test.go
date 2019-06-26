@@ -115,16 +115,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 }
 
 func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
-	as.testWriteBinlogAndPullBack(c, 128, 1)
-
-	// write a 500M binlog
-	as.testWriteBinlogAndPullBack(c, 500*1<<20, 1)
-
-	as.testWriteBinlogAndPullBack(c, 128, 1024)
-
-	as.testWriteBinlogAndPullBack(c, 128, 1024*10)
-
-	as.testWriteBinlogAndPullBack(c, 1<<20, 1024)
+	as.testWriteBinlogAndPullBack(c, -1, 1024)
 }
 
 func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int32) {
@@ -256,18 +247,24 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 }
 
 // test helper to write binlogNum binlog to append
+// If `prewriteValueSize` is less than or equal to 0, the size of prewriteValue for
+// binlogs will be random integers between [1, 1024].
 func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int32) {
-	prewriteValue := make([]byte, prewriteValueSize)
+	fixedValueSize := prewriteValueSize > 0
+	var prewriteValue []byte
+	if fixedValueSize {
+		prewriteValue = make([]byte, prewriteValueSize)
+	} else {
+		prewriteValue = make([]byte, 1024)
+	}
 	var ts int64
 	getTS := func() int64 {
 		return atomic.AddInt64(&ts, 1)
 	}
 
-	goNum := 512
-
 	var wg sync.WaitGroup
 
-	for i := 0; i < goNum; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -281,10 +278,15 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 				binlog.Tp = pb.BinlogType_Prewrite
 				startTS := getTS()
 				binlog.StartTs = startTS
-				binlog.PrewriteValue = prewriteValue
+				if fixedValueSize {
+					binlog.PrewriteValue = prewriteValue
+				} else {
+					size := 1 + rand.Intn(len(prewriteValue))
+					binlog.PrewriteValue = prewriteValue[:size]
+					b.Log("Setting prewrite value of length", size)
+				}
 
-				err := append.WriteBinlog(binlog)
-				if err != nil {
+				if err := append.WriteBinlog(binlog); err != nil {
 					b.Fatal(err)
 				}
 
@@ -293,8 +295,7 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 				binlog.Tp = pb.BinlogType_Commit
 				binlog.StartTs = startTS
 				binlog.CommitTs = getTS()
-				err = append.WriteBinlog(binlog)
-				if err != nil {
+				if err := append.WriteBinlog(binlog); err != nil {
 					b.Fatal(err)
 				}
 			}

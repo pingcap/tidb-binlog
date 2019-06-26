@@ -35,9 +35,9 @@ type Reparo struct {
 
 // New creates a Reparo object.
 func New(cfg *Config) (*Reparo, error) {
-	log.Info("New Reparo", zap.Reflect("config", cfg))
+	log.Info("New Reparo", zap.Stringer("config", cfg))
 
-	syncer, err := syncer.New(cfg.DestType, cfg.DestDB)
+	syncer, err := syncer.New(cfg.DestType, cfg.DestDB, cfg.SafeMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

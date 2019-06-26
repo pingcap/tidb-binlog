@@ -35,13 +35,13 @@ type VlogSuit struct{}
 var _ = check.Suite(&VlogSuit{})
 
 func randRequest() *request {
-	var payload []byte
 	var ts int64
 	f := fuzz.New().NumElements(1, 20).NilChance(0)
 	f.Fuzz(&ts)
-	binlog := new(pb.Binlog)
-	binlog.StartTs = ts
-	binlog.Tp = pb.BinlogType_Prewrite
+	binlog := pb.Binlog{
+		StartTs: ts,
+		Tp:      pb.BinlogType_Prewrite,
+	}
 	payload, err := binlog.Marshal()
 	if err != nil {
 		panic(err)
@@ -94,19 +94,18 @@ func (vs *VlogSuit) TestSingleWriteRead(c *check.C) {
 func (vs *VlogSuit) TestBatchWriteRead(c *check.C) {
 	testBatchWriteRead(c, 1, DefaultOptions())
 
-	testBatchWriteRead(c, 1024, DefaultOptions())
+	testBatchWriteRead(c, 128, DefaultOptions())
 
 	// set small valueLogFileSize, so we can test multi log file case
-	testBatchWriteRead(c, 4096, DefaultOptions().WithValueLogFileSize(500))
+	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(500))
 }
 
 func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 	vlog := newVlogWithOptions(c, options)
 	defer os.RemoveAll(vlog.dirPath)
 
-	n := reqNum
-	var reqs []*request
-	for i := 0; i < n; i++ {
+	reqs := make([]*request, 0, reqNum)
+	for i := 0; i < reqNum; i++ {
 		reqs = append(reqs, randRequest())
 	}
 
@@ -137,8 +136,8 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 	dirPath := vlog.dirPath
 	opt := vlog.opt
 
-	n := 100
-	var reqs []*request
+	n := 50
+	reqs := make([]*request, 0, n*3)
 	for i := 0; i < n; i++ {
 		// close and open back every time
 		var err = vlog.close()
@@ -169,19 +168,23 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 }
 
 func (vs *VlogSuit) TestGCTS(c *check.C) {
-	vlog := newVlog(c)
+	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(512))
 	defer os.RemoveAll(vlog.dirPath)
 
-	var pointers []valuePointer
-	// write 100 * 10 = 1000M
-	for i := 0; i < 100; i++ {
-		req := &request{
+	payload := make([]byte, 128)
+	requests := make([]*request, 100)
+	// 100 * 128 > 512 guarantees that multiple log files are created
+	for i := 0; i < len(requests); i++ {
+		requests[i] = &request{
 			startTS: int64(i),
 			tp:      pb.BinlogType_Prewrite,
-			payload: make([]byte, 10*(1<<20)),
+			payload: payload,
 		}
-		err := vlog.write([]*request{req})
-		c.Assert(err, check.IsNil)
+	}
+	err := vlog.write(requests)
+	c.Assert(err, check.IsNil)
+	pointers := make([]valuePointer, 0, len(requests))
+	for _, req := range requests {
 		pointers = append(pointers, req.valuePointer)
 	}
 
@@ -193,7 +196,6 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 
 	c.Assert(after, check.Less, before, check.Commentf("no file is deleted"))
 
-	var err error
 	// ts 0 has been gc
 	_, err = vlog.readValue(pointers[0])
 	c.Assert(err, check.NotNil)
