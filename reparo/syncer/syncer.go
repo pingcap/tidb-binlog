@@ -29,10 +29,10 @@ type Syncer interface {
 }
 
 // New creates a new executor based on the name.
-func New(name string, cfg *DBConfig) (Syncer, error) {
+func New(name string, cfg *DBConfig, safemode bool) (Syncer, error) {
 	switch name {
 	case "mysql":
-		return newMysqlSyncer(cfg)
+		return newMysqlSyncer(cfg, safemode)
 	case "print":
 		return newPrintSyncer()
 	case "memory":
