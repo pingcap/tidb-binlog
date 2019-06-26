@@ -43,7 +43,7 @@ require (
 	github.com/soheilhy/cmux v0.1.2
 	github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
-	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
+	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/unrolled/render v0.0.0-20180807193321-4206df6ff701
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
