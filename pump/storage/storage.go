@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -619,7 +620,6 @@ func (a *Append) GCTS(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -631,16 +631,23 @@ func (a *Append) doGCTS(ts int64) {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
+	deleteNum := 0
+
 	for {
-		var stats leveldb.DBStats
-		err := a.metadata.Stats(&stats)
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
-			log.Error("Stats failed", zap.Error(err))
-			time.Sleep(5 * time.Second)
-			continue
+			log.Error("get `leveldb.num-files-at-level0` property failed", zap.Error(err))
+			return
 		}
-		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
-			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", stats.LevelTablesCounts[0]))
+
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			log.Error("parse `leveldb.num-files-at-level0` result to int failed", zap.String("str", nStr), zap.Error(err))
+			return
+		}
+
+		if l0Num >= l0Trigger {
+			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -652,8 +659,13 @@ func (a *Append) doGCTS(ts int64) {
 		iter := a.metadata.NewIterator(irange, nil)
 
 		deleteBatch := 0
+		var lastKey []byte
+
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
+			deleteNum++
+			lastKey = iter.Key()
+
 			if batch.Len() == 1024 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
@@ -676,10 +688,16 @@ func (a *Append) doGCTS(ts int64) {
 			}
 			break
 		}
+
+		if len(lastKey) > 0 {
+			a.vlog.gcTS(decodeTSKey(lastKey))
+		}
+
+		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
 	a.vlog.gcTS(ts)
-	log.Info("finish gc", zap.Int64("ts", ts))
+	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
