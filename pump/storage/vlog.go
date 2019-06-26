@@ -450,6 +450,8 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 
 // delete data <= gcTS
 func (vlog *valueLog) gcTS(gcTS int64) {
+	log.Info("gc vlog", zap.Int64("ts", gcTS))
+
 	vlog.filesLock.Lock()
 	var toDeleteFiles []*logFile
 

@@ -609,6 +609,8 @@ func (a *Append) doGCTS(ts int64) {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
+	deleteNum := 0
+
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
@@ -639,6 +641,7 @@ func (a *Append) doGCTS(ts int64) {
 
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
+			deleteNum++
 			lastKey = iter.Key()
 
 			if batch.Len() == 1024 {
@@ -667,10 +670,12 @@ func (a *Append) doGCTS(ts int64) {
 		if len(lastKey) > 0 {
 			a.vlog.gcTS(decodeTSKey(lastKey))
 		}
+
+		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
 	a.vlog.gcTS(ts)
-	log.Info("finish gc", zap.Int64("ts", ts))
+	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
