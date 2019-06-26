@@ -14,6 +14,7 @@
 package reparo
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -37,7 +38,7 @@ const (
 
 // Config is the main configuration for the retore tool.
 type Config struct {
-	*flag.FlagSet
+	*flag.FlagSet `toml:"-" json:"-"`
 	Dir           string `toml:"data-dir" json:"data-dir"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
@@ -55,6 +56,8 @@ type Config struct {
 
 	LogFile  string `toml:"log-file" json:"log-file"`
 	LogLevel string `toml:"log-level" json:"log-level"`
+
+	SafeMode bool `toml:"safe-mode" json:"safe-mode"`
 
 	configFile   string
 	printVersion bool
@@ -79,7 +82,17 @@ func NewConfig() *Config {
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")
+	fs.BoolVar(&c.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	return c
+}
+
+func (c *Config) String() string {
+	cfgBytes, err := json.Marshal(c)
+	if err != nil {
+		log.Error("marshal config failed", zap.Error(err))
+	}
+
+	return string(cfgBytes)
 }
 
 // Parse parses keys/values from command line flags and toml configuration file.
