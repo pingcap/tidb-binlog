@@ -247,6 +247,8 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 }
 
 // test helper to write binlogNum binlog to append
+// If `prewriteValueSize` is less than or equal to 0, the size of prewriteValue for
+// binlogs will be random integers between [1, 1024].
 func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int32) {
 	fixedValueSize := prewriteValueSize > 0
 	var prewriteValue []byte
@@ -279,7 +281,7 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 				if fixedValueSize {
 					binlog.PrewriteValue = prewriteValue
 				} else {
-					size := 1 + rand.Intn(len(prewriteValue)-1)
+					size := 1 + rand.Intn(len(prewriteValue))
 					binlog.PrewriteValue = prewriteValue[:size]
 					b.Log("Setting prewrite value of length", size)
 				}
