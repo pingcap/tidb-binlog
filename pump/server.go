@@ -51,10 +51,11 @@ import (
 )
 
 var (
-	notifyDrainerTimeout     = time.Second * 10
-	serverInfoOutputInterval = time.Second * 10
-	gcInterval               = time.Hour
-	earlyAlertGC             = 20 * time.Hour
+	notifyDrainerTimeout             = time.Second * 10
+	serverInfoOutputInterval         = time.Second * 10
+	gcInterval                       = time.Hour
+	earlyAlertGC                     = 20 * time.Hour
+	detectDrainterCheckpointIntervel = 10 * time.Minute
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -84,7 +85,6 @@ type Server struct {
 	pdCli                   pd.Client
 	cfg                     *Config
 	tiStore                 kv.Storage
-	gcTS                    int64
 
 	writeBinlogCount int64
 	alivePullerCount int64
@@ -268,7 +268,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
 
-	gcTS := atomic.LoadInt64(&s.gcTS)
+	gcTS := s.storage.GetGCTS()
 	if last < gcTS {
 		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
 	}
@@ -375,6 +375,9 @@ func (s *Server) Start() error {
 	s.wg.Add(1)
 	go s.printServerInfo()
 
+	s.wg.Add(1)
+	go s.detectDrainerCheckpoint()
+
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
 
@@ -479,6 +482,29 @@ func (s *Server) genForwardBinlog() {
 	}
 }
 
+func (s *Server) detectDrainerCheckpoint() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(detectDrainterCheckpointIntervel)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			log.Info("detect drainer checkpoint routine exit")
+			return
+		case <-ticker.C:
+			gcTS := s.storage.GetGCTS()
+			alertGCMS := earlyAlertGC.Nanoseconds() / 1000 / 1000
+			alertGCTS := gcTS + int64(oracle.EncodeTSO(alertGCMS))
+
+			log.Info("use gc ts to detect drainer checkpoint", zap.Int64("gc ts", gcTS))
+			// detect whether the binlog before drainer's checkpoint had been purged
+			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
+		}
+	}
+}
+
 func (s *Server) printServerInfo() {
 	defer s.wg.Done()
 
@@ -495,6 +521,7 @@ func (s *Server) printServerInfo() {
 				zap.Int64("writeBinlogCount", atomic.LoadInt64(&s.writeBinlogCount)),
 				zap.Int64("alivePullerCount", atomic.LoadInt64(&s.alivePullerCount)),
 				zap.Int64("MaxCommitTS", s.storage.MaxCommitTS()))
+
 		}
 	}
 }
@@ -515,15 +542,8 @@ func (s *Server) gcBinlogFile() {
 			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 			gcTS := int64(oracle.EncodeTSO(millisecond))
 
-			alertGCMS := millisecond + earlyAlertGC.Nanoseconds()/1000/1000
-			alertGCTS := int64(oracle.EncodeTSO(alertGCMS))
-
-			realGCTS := s.storage.GCTS(gcTS)
-			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS), zap.Int64("real gc ts", realGCTS))
-
-			atomic.StoreInt64(&s.gcTS, realGCTS)
-			// detect whether the binlog before drainer's checkpoint had been purged
-			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
+			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
+			s.storage.GC(gcTS)
 		}
 	}
 }

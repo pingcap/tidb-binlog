@@ -63,7 +63,9 @@ type Storage interface {
 	WriteBinlog(binlog *pb.Binlog) error
 
 	// delete <= ts
-	GCTS(ts int64) int64
+	GC(ts int64)
+
+	GetGCTS() int64
 
 	MaxCommitTS() int64
 
@@ -575,12 +577,17 @@ func (a *Append) Close() error {
 	return err
 }
 
-// GCTS implement Storage.GCTS
-func (a *Append) GCTS(ts int64) int64 {
+// GetGCTS implement Storage.GetGCTS
+func (a *Append) GetGCTS() int64 {
+	return atomic.LoadInt64(&a.gcTS)
+}
+
+// GC implement Storage.GC
+func (a *Append) GC(ts int64) {
 	lastTS := atomic.LoadInt64(&a.gcTS)
 	if ts <= lastTS {
 		log.Info("ignore gc request", zap.Int64("ts", ts), zap.Int64("lastTS", lastTS))
-		return lastTS
+		return
 	}
 
 	atomic.StoreInt64(&a.gcTS, ts)
@@ -588,7 +595,7 @@ func (a *Append) GCTS(ts int64) int64 {
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 
 	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
-		return lastTS
+		return
 	}
 
 	go func() {
@@ -598,7 +605,7 @@ func (a *Append) GCTS(ts int64) int64 {
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
 
-	return ts
+	return
 
 }
 
