@@ -44,7 +44,7 @@ const (
 	chanCapacity              = 1 << 20
 	// if pump takes a long time to write binlog, pump will display the binlog meta information (unit: Second)
 	slowWriteThreshold               = 1.0
-	defaultStopWriteAtAvailableSpace = 1 << 30
+	defaultStopWriteAtAvailableSpace = 10 * (1 << 30)
 )
 
 var (
@@ -316,7 +316,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 func (a *Append) updateSize() error {
 	size, err := getStorageSize(a.dir)
 	if err != nil {
-		return errors.Annotate(err, "update storage size failed")
+		return errors.Annotatef(err, "update storage size failed, dir: %s", a.dir)
 	}
 
 	storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))

@@ -33,8 +33,8 @@ pd-urls = "http://127.0.0.1:2379"
 
 # stop write when disk available space less then the configured size
 # 42 MB -> 42000000, 42 mib -> 44040192
-# default: 1 gib
-# stop-write-at-available-space = "1 gib"
+# default: 10 gib
+# stop-write-at-available-space = "10 gib"
 
 #
 # we suggest using the default config of the embedded LSM DB now, do not change it useless you know what you are doing

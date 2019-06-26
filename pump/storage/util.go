@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dustin/go-humanize"
+	"github.com/pingcap/errors"
 )
 
 var tsKeyPrefix = []byte("ts:")
@@ -59,7 +60,7 @@ func (b *HumanizeBytes) UnmarshalText(text []byte) error {
 
 	n, err := humanize.ParseBytes(string(text))
 	if err != nil {
-		return err
+		return errors.Annotatef(err, "test: %s", string(text))
 	}
 
 	*b = HumanizeBytes(n)
