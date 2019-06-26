@@ -16,6 +16,9 @@ package storage
 import (
 	"encoding/binary"
 	"sync/atomic"
+
+	"github.com/dustin/go-humanize"
+	"github.com/pingcap/errors"
 )
 
 var tsKeyPrefix = []byte("ts:")
@@ -36,6 +39,32 @@ func encodeTSKey(ts int64) []byte {
 	binary.BigEndian.PutUint64(b, uint64(ts))
 
 	return buf
+}
+
+// HumanizeBytes is used for humanize configure
+type HumanizeBytes uint64
+
+// Uint64 return bytes
+func (b HumanizeBytes) Uint64() uint64 {
+	return uint64(b)
+}
+
+// UnmarshalText implements UnmarshalText
+func (b *HumanizeBytes) UnmarshalText(text []byte) error {
+	var err error
+
+	if len(text) == 0 {
+		*b = 0
+		return nil
+	}
+
+	n, err := humanize.ParseBytes(string(text))
+	if err != nil {
+		return errors.Annotatef(err, "text: %s", string(text))
+	}
+
+	*b = HumanizeBytes(n)
+	return nil
 }
 
 // test helper

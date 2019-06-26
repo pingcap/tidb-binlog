@@ -147,6 +147,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	options = options.WithSync(cfg.Storage.GetSyncLog())
 	options = options.WithKVChanCapacity(cfg.Storage.GetKVChanCapacity())
 	options = options.WithSlowWriteThreshold(cfg.Storage.GetSlowWriteThreshold())
+	options = options.WithStopWriteAtAvailableSpace(cfg.Storage.GetStopWriteAtAvailableSpace())
 
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {
@@ -179,12 +180,6 @@ func NewServer(cfg *Config) (*Server, error) {
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
-	// pump client will write some empty Payload to detect whether pump is working, should avoid this
-	if in.Payload == nil {
-		ret := new(binlog.WriteBinlogResp)
-		return ret, nil
-	}
-
 	atomic.AddInt64(&s.writeBinlogCount, 1)
 	return s.writeBinlog(ctx, in, false)
 }

@@ -44,7 +44,8 @@ const (
 	maxTxnTimeoutSecond int64 = 600
 	chanCapacity              = 1 << 20
 	// if pump takes a long time to write binlog, pump will display the binlog meta information (unit: Second)
-	slowWriteThreshold = 1.0
+	slowWriteThreshold               = 1.0
+	defaultStopWriteAtAvailableSpace = 10 * (1 << 30)
 )
 
 var (
@@ -81,8 +82,9 @@ var _ Storage = &Append{}
 
 // Append implement the Storage interface
 type Append struct {
-	dir  string
-	vlog *valueLog
+	dir         string
+	vlog        *valueLog
+	storageSize storageSize
 
 	metadata       *leveldb.DB
 	sorter         *sorter
@@ -224,6 +226,11 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	}
 
 	append.wg.Add(1)
+	err = append.updateSize()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	go append.updateStatus()
 	return
 }
@@ -307,6 +314,20 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 	return quit
 }
 
+func (a *Append) updateSize() error {
+	size, err := getStorageSize(a.dir)
+	if err != nil {
+		return errors.Annotatef(err, "update storage size failed, dir: %s", a.dir)
+	}
+
+	storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+	storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+
+	atomic.StoreUint64(&a.storageSize.available, size.available)
+	atomic.StoreUint64(&a.storageSize.capacity, size.capacity)
+	return nil
+}
+
 func (a *Append) updateStatus() {
 	defer a.wg.Done()
 
@@ -336,12 +357,9 @@ func (a *Append) updateStatus() {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		case <-updateSize:
-			size, err := getStorageSize(a.dir)
+			err := a.updateSize()
 			if err != nil {
-				log.Error("update sotrage size failed", zap.Error(err))
-			} else {
-				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
-				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+				log.Error("update size failed", zap.Error(err))
 			}
 		case <-logStatsTicker.C:
 			var stats leveldb.DBStats
@@ -356,6 +374,10 @@ func (a *Append) updateStatus() {
 			}
 		}
 	}
+}
+
+func (a *Append) writableOfSpace() bool {
+	return atomic.LoadUint64(&a.storageSize.available) > a.options.StopWriteAtAvailableSpace
 }
 
 // Write a commit binlog myself if the status is committed,
@@ -683,8 +705,25 @@ func (a *Append) MaxCommitTS() int64 {
 	return atomic.LoadInt64(&a.maxCommitTS)
 }
 
+func isFakeBinlog(binlog *pb.Binlog) bool {
+	return binlog.StartTs > 0 && binlog.StartTs == binlog.CommitTs
+}
+
 // WriteBinlog implement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
+	if !a.writableOfSpace() {
+		// still accept fake binlog, so will not block drainer if fake binlog writes success
+		if !isFakeBinlog(binlog) {
+			return ErrNoAvailableSpace
+		}
+	}
+
+	// pump client will write some empty Payload to detect whether pump is working, should avoid this
+	// Unmarshal(nil) will success...
+	if binlog.StartTs == 0 && binlog.CommitTs == 0 {
+		return nil
+	}
+
 	return errors.Trace(a.writeBinlog(binlog).err)
 }
 
@@ -1067,8 +1106,8 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 }
 
 type storageSize struct {
-	capacity  int
-	available int
+	capacity  uint64
+	available uint64
 }
 
 func getStorageSize(dir string) (size storageSize, err error) {
@@ -1095,8 +1134,8 @@ func getStorageSize(dir string) (size storageSize, err error) {
 	}
 
 	// Available blocks * size per block = available space in bytes
-	size.available = int(stat.Bavail) * int(bSize)
-	size.capacity = int(stat.Blocks) * int(bSize)
+	size.available = stat.Bavail * bSize
+	size.capacity = stat.Blocks * bSize
 
 	return
 }
@@ -1105,9 +1144,10 @@ func getStorageSize(dir string) (size storageSize, err error) {
 type Config struct {
 	SyncLog *bool `toml:"sync-log" json:"sync-log"`
 	// the channel to buffer binlog meta, pump will block write binlog request if the channel is full
-	KVChanCapacity     int       `toml:"kv_chan_cap" json:"kv_chan_cap"`
-	SlowWriteThreshold float64   `toml:"slow_write_threshold" json:"slow_write_threshold"`
-	KV                 *KVConfig `toml:"kv" json:"kv"`
+	KVChanCapacity            int            `toml:"kv_chan_cap" json:"kv_chan_cap"`
+	SlowWriteThreshold        float64        `toml:"slow_write_threshold" json:"slow_write_threshold"`
+	KV                        *KVConfig      `toml:"kv" json:"kv"`
+	StopWriteAtAvailableSpace *HumanizeBytes `toml:"stop-write-at-available-space" json:"stop-write-at-available-space"`
 }
 
 // GetKVChanCapacity return kv_chan_cap config option
@@ -1126,6 +1166,15 @@ func (c *Config) GetSlowWriteThreshold() float64 {
 	}
 
 	return c.SlowWriteThreshold
+}
+
+// GetStopWriteAtAvailableSpace return stop write available space
+func (c *Config) GetStopWriteAtAvailableSpace() uint64 {
+	if c.StopWriteAtAvailableSpace == nil {
+		return defaultStopWriteAtAvailableSpace
+	}
+
+	return c.StopWriteAtAvailableSpace.Uint64()
 }
 
 // GetSyncLog return sync-log config option
