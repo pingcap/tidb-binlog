@@ -78,6 +78,7 @@ type Server struct {
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	gcDuration time.Duration
+	triggerGC  chan time.Time
 	metrics    *util.MetricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
@@ -148,6 +149,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	options = options.WithSync(cfg.Storage.GetSyncLog())
 	options = options.WithKVChanCapacity(cfg.Storage.GetKVChanCapacity())
 	options = options.WithSlowWriteThreshold(cfg.Storage.GetSlowWriteThreshold())
+	options = options.WithStopWriteAtAvailableSpace(cfg.Storage.GetStopWriteAtAvailableSpace())
 
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {
@@ -174,17 +176,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
 		cfg:        cfg,
+		triggerGC:  make(chan time.Time),
 	}, nil
 }
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
-	// pump client will write some empty Payload to detect whether pump is working, should avoid this
-	if in.Payload == nil {
-		ret := new(binlog.WriteBinlogResp)
-		return ret, nil
-	}
-
 	atomic.AddInt64(&s.writeBinlogCount, 1)
 	return s.writeBinlog(ctx, in, false)
 }
@@ -399,6 +396,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
+	router.HandleFunc("/debug/gc/trigger", s.TriggerGC).Methods("POST")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", promhttp.Handler())
@@ -534,17 +532,20 @@ func (s *Server) gcBinlogFile() {
 		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
+		case <-s.triggerGC:
+			log.Info("trigger gc now")
 		case <-time.After(gcInterval):
-			if s.gcDuration == 0 {
-				continue
-			}
-
-			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
-			gcTS := int64(oracle.EncodeTSO(millisecond))
-
-			log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
-			s.storage.GC(gcTS)
 		}
+
+		if s.gcDuration == 0 {
+			continue
+		}
+
+		millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
+		gcTS := int64(oracle.EncodeTSO(millisecond))
+
+		log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
+		s.storage.GC(gcTS)
 	}
 }
 
@@ -627,6 +628,16 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 // Status exposes pumps' status to HTTP handler.
 func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 	s.PumpStatus().Status(w, r)
+}
+
+// TriggerGC trigger pump to gc now
+func (s *Server) TriggerGC(w http.ResponseWriter, r *http.Request) {
+	select {
+	case s.triggerGC <- time.Now():
+		fmt.Fprintln(w, "trigger gc success")
+	default:
+		fmt.Fprintln(w, "gc is working")
+	}
 }
 
 // BinlogByTS exposes api get get binlog by ts

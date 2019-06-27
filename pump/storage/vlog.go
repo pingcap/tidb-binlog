@@ -42,10 +42,11 @@ const (
 
 // Options is the config options of Append and vlog
 type Options struct {
-	ValueLogFileSize   int64
-	Sync               bool
-	KVChanCapacity     int
-	SlowWriteThreshold float64
+	ValueLogFileSize          int64
+	Sync                      bool
+	KVChanCapacity            int
+	SlowWriteThreshold        float64
+	StopWriteAtAvailableSpace uint64
 
 	KVConfig *KVConfig
 }
@@ -63,6 +64,12 @@ func DefaultOptions() *Options {
 // WithKVConfig set the Config
 func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
 	o.KVConfig = kvConfig
+	return o
+}
+
+// WithStopWriteAtAvailableSpace set the Config
+func (o *Options) WithStopWriteAtAvailableSpace(bytes uint64) *Options {
+	o.StopWriteAtAvailableSpace = bytes
 	return o
 }
 
@@ -450,6 +457,8 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 
 // delete data <= gcTS
 func (vlog *valueLog) gcTS(gcTS int64) {
+	log.Info("gc vlog", zap.Int64("ts", gcTS))
+
 	vlog.filesLock.Lock()
 	var toDeleteFiles []*logFile
 
@@ -478,6 +487,7 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 		if err != nil {
 			log.Error("remove file failed", zap.String("path", logFile.path), zap.Error(err))
 		}
+		log.Info("remove file", zap.String("path", logFile.path))
 		logFile.lock.Unlock()
 	}
 }
