@@ -51,11 +51,11 @@ import (
 )
 
 var (
-	notifyDrainerTimeout             = time.Second * 10
-	serverInfoOutputInterval         = time.Second * 10
-	gcInterval                       = time.Hour
-	earlyAlertGC                     = 20 * time.Hour
-	detectDrainterCheckpointIntervel = 10 * time.Minute
+	notifyDrainerTimeout            = time.Second * 10
+	serverInfoOutputInterval        = time.Second * 10
+	gcInterval                      = time.Hour
+	earlyAlertGC                    = 20 * time.Hour
+	detectDrainerCheckpointInterval = 10 * time.Minute
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -483,7 +483,7 @@ func (s *Server) genForwardBinlog() {
 func (s *Server) detectDrainerCheckpoint() {
 	defer s.wg.Done()
 
-	ticker := time.NewTicker(detectDrainterCheckpointIntervel)
+	ticker := time.NewTicker(detectDrainerCheckpointInterval)
 	defer ticker.Stop()
 
 	for {

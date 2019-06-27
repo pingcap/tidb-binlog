@@ -42,7 +42,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "pump",
-			Name:      "binlog_purge_count",
+			Name:      "detected_drainer_binlog_purge_count",
 			Help:      "binlog purge count > 0 means some unread binlog was purged",
 		}, []string{"id"})
 )
