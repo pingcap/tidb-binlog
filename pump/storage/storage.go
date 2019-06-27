@@ -65,7 +65,9 @@ type Storage interface {
 	WriteBinlog(binlog *pb.Binlog) error
 
 	// delete <= ts
-	GCTS(ts int64)
+	GC(ts int64)
+
+	GetGCTS() int64
 
 	MaxCommitTS() int64
 
@@ -598,8 +600,13 @@ func (a *Append) Close() error {
 	return err
 }
 
-// GCTS implement Storage.GCTS
-func (a *Append) GCTS(ts int64) {
+// GetGCTS implement Storage.GetGCTS
+func (a *Append) GetGCTS() int64 {
+	return atomic.LoadInt64(&a.gcTS)
+}
+
+// GC implement Storage.GC
+func (a *Append) GC(ts int64) {
 	lastTS := atomic.LoadInt64(&a.gcTS)
 	if ts <= lastTS {
 		log.Info("ignore gc request", zap.Int64("ts", ts), zap.Int64("lastTS", lastTS))

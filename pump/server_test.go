@@ -27,7 +27,8 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
-	"github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -122,7 +123,8 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 type noOpStorage struct{}
 
 func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GCTS(ts int64)                              {}
+func (s *noOpStorage) GetGCTS() int64                             { return 0 }
+func (s *noOpStorage) GC(ts int64)                                {}
 func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
 func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
@@ -279,7 +281,11 @@ func (ds *dummyStorage) MaxCommitTS() int64 {
 	return ds.maxCommitTS
 }
 
-func (ds *dummyStorage) GCTS(ts int64) {
+func (ds *dummyStorage) GetGCTS() int64 {
+	return ds.gcTS
+}
+
+func (ds *dummyStorage) GC(ts int64) {
 	ds.gcTS = ts
 }
 
@@ -443,17 +449,26 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
 	registry := node.NewEtcdRegistry(cli, time.Second)
-	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: 1003, State: node.Online})
-	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
-	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
-	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: 1001, State: node.Offline})
-
 	server := Server{
 		ctx:        ctx,
 		storage:    &storage,
 		node:       &pumpNode{EtcdRegistry: registry},
 		gcDuration: time.Hour,
 	}
+
+	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
+	gcTS := int64(oracle.EncodeTSO(millisecond))
+
+	inAlertGCMS := millisecond + 10*time.Minute.Nanoseconds()/1000/1000
+	inAlertGCTS := int64(oracle.EncodeTSO(inAlertGCMS))
+
+	outAlertGCMS := millisecond + (earlyAlertGC+10*time.Minute).Nanoseconds()/1000/1000
+	outAlertGCTS := int64(oracle.EncodeTSO(outAlertGCMS))
+
+	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
+	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
+	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
+	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: outAlertGCTS, State: node.Offline})
 
 	// Set a shorter interval because we don't really want to wait 1 hour
 	origInterval := gcInterval
@@ -470,7 +485,8 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	time.Sleep(1000 * gcInterval)
 	cancel()
 
-	c.Assert(storage.gcTS, Equals, int64(1002))
+	c.Assert(storage.gcTS, GreaterEqual, gcTS)
+	// todo: add in and out of alert test while binlog has failpoint
 }
 
 type waitCommitTSSuite struct{}
