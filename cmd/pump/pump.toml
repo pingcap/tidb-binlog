@@ -30,6 +30,12 @@ pd-urls = "http://127.0.0.1:2379"
 # [storage]
 # Set to `true` (default) for best reliability, which prevents data loss when there is a power failure.
 # sync-log = true
+
+# stop write when disk available space less then the configured size
+# 42 MB -> 42000000, 42 mib -> 44040192
+# default: 10 gib
+# stop-write-at-available-space = "10 gib"
+
 #
 # we suggest using the default config of the embedded LSM DB now, do not change it useless you know what you are doing
 # [storage.kv]
