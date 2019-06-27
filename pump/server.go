@@ -269,7 +269,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	last := in.StartFrom.Offset
 
 	gcTS := s.storage.GetGCTS()
-	if last < gcTS {
+	if last <= gcTS {
 		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
 	}
 
@@ -592,7 +592,7 @@ func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
 				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
 			)
 			// will add test when binlog have failpoint
-			binlogPurgedCounter.WithLabelValues(drainer.NodeID).Inc()
+			detectedDrainerBinlogPurged.WithLabelValues(drainer.NodeID).Inc()
 		}
 	}
 }
