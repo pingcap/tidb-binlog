@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tipb/go-binlog"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -51,9 +51,11 @@ import (
 )
 
 var (
-	notifyDrainerTimeout     = time.Second * 10
-	serverInfoOutputInterval = time.Second * 10
-	gcInterval               = time.Hour
+	notifyDrainerTimeout            = time.Second * 10
+	serverInfoOutputInterval        = time.Second * 10
+	gcInterval                      = time.Hour
+	earlyAlertGC                    = 20 * time.Hour
+	detectDrainerCheckpointInterval = 10 * time.Minute
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -263,6 +265,11 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
 
+	gcTS := s.storage.GetGCTS()
+	if last <= gcTS {
+		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
+	}
+
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
@@ -364,6 +371,9 @@ func (s *Server) Start() error {
 
 	s.wg.Add(1)
 	go s.printServerInfo()
+
+	s.wg.Add(1)
+	go s.detectDrainerCheckpoint()
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
@@ -470,6 +480,29 @@ func (s *Server) genForwardBinlog() {
 	}
 }
 
+func (s *Server) detectDrainerCheckpoint() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(detectDrainerCheckpointInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			log.Info("detect drainer checkpoint routine exit")
+			return
+		case <-ticker.C:
+			gcTS := s.storage.GetGCTS()
+			alertGCMS := earlyAlertGC.Nanoseconds() / 1000 / 1000
+			alertGCTS := gcTS + int64(oracle.EncodeTSO(alertGCMS))
+
+			log.Info("use gc ts to detect drainer checkpoint", zap.Int64("gc ts", gcTS))
+			// detect whether the binlog before drainer's checkpoint had been purged
+			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
+		}
+	}
+}
+
 func (s *Server) printServerInfo() {
 	defer s.wg.Done()
 
@@ -486,6 +519,7 @@ func (s *Server) printServerInfo() {
 				zap.Int64("writeBinlogCount", atomic.LoadInt64(&s.writeBinlogCount)),
 				zap.Int64("alivePullerCount", atomic.LoadInt64(&s.alivePullerCount)),
 				zap.Int64("MaxCommitTS", s.storage.MaxCommitTS()))
+
 		}
 	}
 }
@@ -507,20 +541,11 @@ func (s *Server) gcBinlogFile() {
 			continue
 		}
 
-		safeTSO, err := s.getSafeGCTSOForDrainers(s.ctx)
-		if err != nil {
-			log.Warn("get save gc tso for drainers failed", zap.Error(err))
-			continue
-		}
-		log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
-
 		millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
 		gcTS := int64(oracle.EncodeTSO(millisecond))
-		if safeTSO < gcTS {
-			gcTS = safeTSO
-		}
-		log.Info("send gc request to storage", zap.Int64("ts", gcTS))
-		s.storage.GCTS(gcTS)
+
+		log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
+		s.storage.GC(gcTS)
 	}
 }
 
@@ -529,7 +554,8 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 
 	drainers, err := pumpNode.Nodes(ctx, "drainers")
 	if err != nil {
-		return 0, errors.Trace(err)
+		log.Error("fail to query status of drainers", zap.Error(err))
+		return 0, errors.Annotatef(err, "fail to query status of drainers")
 	}
 
 	var minTSO int64 = math.MaxInt64
@@ -544,6 +570,32 @@ func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 	}
 
 	return minTSO, nil
+}
+
+func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
+	pumpNode := s.node.(*pumpNode)
+
+	drainers, err := pumpNode.Nodes(ctx, "drainers")
+	if err != nil {
+		log.Error("fail to query status of drainers", zap.Error(err))
+		return
+	}
+
+	for _, drainer := range drainers {
+		if drainer.State == node.Offline {
+			continue
+		}
+
+		if drainer.MaxCommitTS < gcTS {
+			log.Error("drainer's checkpoint is older than pump gc ts, some binlogs are purged",
+				zap.String("drainer", drainer.NodeID),
+				zap.Int64("gc ts", gcTS),
+				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
+			)
+			// will add test when binlog have failpoint
+			detectedDrainerBinlogPurged.WithLabelValues(drainer.NodeID).Inc()
+		}
+	}
 }
 
 func (s *Server) startMetrics() {
@@ -743,7 +795,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 			if safeTSO >= fakeBinlog.CommitTs {
 				return nil
 			}
-			log.Info("Waiting for drainer to consume binlog",
+			log.Warn("Waiting for drainer to consume binlog",
 				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
 				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
 			if _, err = s.writeFakeBinlog(); err != nil {
