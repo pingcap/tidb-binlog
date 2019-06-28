@@ -613,6 +613,14 @@ func (a *Append) GC(ts int64) {
 		return
 	}
 
+	if atomic.LoadInt64(&a.maxCommitTS) <= ts {
+		log.Info("Ignore unsafe gc request, may affect unsorted binlogs",
+			zap.Int64("ts", ts),
+			zap.Int64("lastTS", lastTS),
+		)
+		return
+	}
+
 	atomic.StoreInt64(&a.gcTS, ts)
 	a.saveGCTSToDB(ts)
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
