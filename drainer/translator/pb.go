@@ -244,10 +244,10 @@ func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []strin
 			return nil, errors.Trace(err)
 		}
 		col := pb.Column{
-			Name: colName[i],
-			Tp: []byte{tp[i]},
+			Name:      colName[i],
+			Tp:        []byte{tp[i]},
 			MysqlType: mysqlType[i],
-			Value: val,
+			Value:     val,
 		}
 
 		colVal, err := col.Marshal()
@@ -274,10 +274,10 @@ func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []strin
 			return nil, errors.Trace(err)
 		}
 		col := pb.Column{
-			Name: colName[i],
-			Tp: []byte{tp[i]},
-			MysqlType: mysqlType[i],
-			Value: val,
+			Name:         colName[i],
+			Tp:           []byte{tp[i]},
+			MysqlType:    mysqlType[i],
+			Value:        val,
 			ChangedValue: changedVal,
 		}
 
