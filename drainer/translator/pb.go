@@ -236,17 +236,18 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 }
 
 func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
-	var cols [][]byte
-	var err error
+	cols := make([][]byte, 0, len(row))
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range row {
-		col := &pb.Column{}
-		col.Name = colName[i]
-		col.Tp = []byte{tp[i]}
-		col.MysqlType = mysqlType[i]
-		col.Value, err = codec.EncodeValue(sc, nil, []types.Datum{c}...)
+		val, err := codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		col := pb.Column{
+			Name: colName[i],
+			Tp: []byte{tp[i]},
+			MysqlType: mysqlType[i],
+			Value: val,
 		}
 
 		colVal, err := col.Marshal()
@@ -260,22 +261,24 @@ func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []strin
 }
 
 func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
-	var cols [][]byte
-	var err error
+	cols := make([][]byte, 0, len(oldRow))
 	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range oldRow {
-		col := &pb.Column{}
-		col.Name = colName[i]
-		col.Tp = []byte{tp[i]}
-		col.MysqlType = mysqlType[i]
-		col.Value, err = codec.EncodeValue(sc, nil, []types.Datum{c}...)
+		val, err := codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
-		col.ChangedValue, err = codec.EncodeValue(sc, nil, []types.Datum{newRow[i]}...)
+		changedVal, err := codec.EncodeValue(sc, nil, []types.Datum{newRow[i]}...)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		col := pb.Column{
+			Name: colName[i],
+			Tp: []byte{tp[i]},
+			MysqlType: mysqlType[i],
+			Value: val,
+			ChangedValue: changedVal,
 		}
 
 		colVal, err := col.Marshal()
