@@ -1099,6 +1099,10 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				last = decodeTSKey(iter.Key())
 			}
 			iter.Release()
+			err := iter.Error()
+			if err != nil {
+				log.Error("encounter iterator error", zap.Error(err))
+			}
 
 			select {
 			case <-ctx.Done():
