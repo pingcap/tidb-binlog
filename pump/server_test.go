@@ -127,18 +127,18 @@ func (s *noOpStorage) GetGCTS() int64                             { return 0 }
 func (s *noOpStorage) GC(ts int64)                                {}
 func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
 func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
-func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
-	return make(chan []byte)
+func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan *storage.ReadBinlogResponse {
+	return make(chan *storage.ReadBinlogResponse)
 }
 func (s *noOpStorage) Close() error { return nil }
 
 type fakePullable struct{ noOpStorage }
 
-func (s *fakePullable) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
-	chl := make(chan []byte)
+func (s *fakePullable) PullCommitBinlog(ctx context.Context, last int64) <-chan *storage.ReadBinlogResponse {
+	chl := make(chan *storage.ReadBinlogResponse)
 	go func() {
 		for i := 0; i < 3; i++ {
-			chl <- []byte(fmt.Sprintf("payload_%d", i))
+			chl <- &storage.ReadBinlogResponse{Payload: []byte(fmt.Sprintf("payload_%d", i))}
 		}
 		close(chl)
 	}()
