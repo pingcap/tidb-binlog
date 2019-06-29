@@ -30,6 +30,13 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	// OldestTS is uesed to fetch binlog from OldestTS
+	OldestTS int64 = 0
+	// ErrorPurgedBinlog indicates binlog was purged
+	ErrorPurgedBinlog = errors.New("binlog was purged")
+)
+
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
 func DefaultIP() (ip string, err error) {
 	ip = "127.0.0.1"

@@ -265,30 +265,31 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
 
-	gcTS := s.storage.GetGCTS()
-	if last <= gcTS {
-		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
-	}
-
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
-	binlogs := s.storage.PullCommitBinlog(ctx, last)
+	binlogsChan := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
 		select {
-		case data, ok := <-binlogs:
+		case response, ok := <-binlogsChan:
 			if !ok {
 				return nil
 			}
+
+			if response.Err != nil {
+				log.Error("fail to  pull Binlogs", zap.Reflect("request", in), zap.Error(response.Err))
+				return response.Err
+			}
+
 			resp := new(binlog.PullBinlogResp)
 
-			resp.Entity.Payload = data
+			resp.Entity.Payload = response.Payload
 			err = stream.Send(resp)
 			if err != nil {
 				log.Warn("send failed", zap.Error(err))
 				return err
 			}
-			log.Debug("PullBinlogs send binlog payload success", zap.Int("len", len(data)))
+			log.Debug("PullBinlogs send binlog payload success", zap.Int("length", len(response.Payload)))
 		case <-stream.Context().Done():
 			log.Debug("stream done", zap.Error(stream.Context().Err()))
 			return nil
