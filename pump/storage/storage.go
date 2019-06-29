@@ -1037,12 +1037,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 		}
 	}()
 
-	gcTS := atomic.LoadInt64(&a.gcTS)
-	if last < gcTS {
-		log.Warn("last ts less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
-		last = gcTS
-	}
-
 	responseChan := make(chan *ReadBinlogResponse, 5)
 
 	irange := &util.Range{
@@ -1059,6 +1053,14 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 			irange.Start = encodeTSKey(startTS)
 			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
 			iter := a.metadata.NewIterator(irange, nil)
+
+			gcTS := atomic.LoadInt64(&a.gcTS)
+			if last < gcTS {
+				log.Warn("some binlogs was pugred, cause read from last ts is less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
+				iter.Release()
+				a.responseBinlogError(ctx, responseChan, errors.Annotatef(butil.ErrorPurgedBinlog, "read binlog from last ts %d", last))
+				return
+			}
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 

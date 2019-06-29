@@ -31,8 +31,6 @@ import (
 )
 
 var (
-	// OldestTS is uesed to fetch binlog from OldestTS
-	OldestTS int64 = 0
 	// ErrorPurgedBinlog indicates binlog was purged
 	ErrorPurgedBinlog = errors.New("binlog was purged")
 )
