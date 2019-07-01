@@ -406,20 +406,26 @@ func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) 
 	})
 }
 
-// currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's OK to hold the vlog.filesLock lock
+// scan visits binlogs in order starting from the specified position.
+// There are two limitations to the usage of scan:
+// 1. Binlogs added in new logFiles after scan starts are not visible, so don't assume
+//    that every single binlog added would be visited
+// 2. If GC is running concurrently, logFiles may be closed and deleted, thus breaking the scanning.
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
-	vlog.filesLock.Lock()
-	defer vlog.filesLock.Unlock()
-
+	vlog.filesLock.RLock()
 	fids := vlog.sortedFids()
-
+	var lfs []*logFile
 	for _, fid := range fids {
-		if fid < start.Fid {
-			continue
+		if fid >= start.Fid {
+			lf := vlog.filesMap[fid]
+			lfs = append(lfs, lf)
 		}
-		lf := vlog.filesMap[fid]
+	}
+	vlog.filesLock.RUnlock()
+
+	for _, lf := range lfs {
 		var startOffset int64
-		if fid == start.Fid {
+		if lf.fid == start.Fid {
 			startOffset = start.Offset
 		}
 		err := lf.scan(startOffset, fn)
