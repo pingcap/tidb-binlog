@@ -606,7 +606,7 @@ func (a *Append) GetGCTS() int64 {
 	return atomic.LoadInt64(&a.gcTS)
 }
 
-func (a *Append) sveGCTS(ts int64) {
+func (a *Append) saveGCTS(ts int64) {
 	gcTS := atomic.LoadInt64(&a.gcTS)
 	if ts <= gcTS {
 		log.Error("try to gc a already gc location, something must be wrong", zap.Int64("gc ts", gcTS), zap.Int64("ongoing gc ts", ts))
@@ -628,6 +628,12 @@ func (a *Append) GC(ts int64) {
 
 	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
 		return
+	}
+
+	maxSortedCommitTS := atomic.LoadInt64(&a.maxCommitTS)
+	if ts > maxSortedCommitTS {
+		log.Warn("gc ts is larger than max sorted commit ts, set gc ts to max sorted commit ts", zap.Int64("gc ts", ts), zap.Int64("max sorted commit ts", maxSortedCommitTS))
+		ts = maxSortedCommitTS
 	}
 
 	go func() {
@@ -682,16 +688,10 @@ func (a *Append) doGCTS(ts int64) {
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
 			deleteNum++
-			cuurentTS := decodeTSKey(iter.Key())
-
-			// don't delete the ts not sorted
-			if cuurentTS >= atomic.LoadInt64(&a.maxCommitTS) {
-				break
-			}
-			lastTS = cuurentTS
+			lastTS := decodeTSKey(iter.Key())
 
 			if batch.Len() == 1024 {
-				a.sveGCTS(lastTS)
+				a.saveGCTS(lastTS)
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
@@ -705,7 +705,7 @@ func (a *Append) doGCTS(ts int64) {
 
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
-				a.sveGCTS(lastTS)
+				a.saveGCTS(lastTS)
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
@@ -997,7 +997,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	pvalue, err := a.vlog.readValue(vp)
 	if err != nil {
-		return errors.Annotatef(butil.ErrorPurgedBinlog, "read P-Binlog value failed, vp: %+v", vp)
+		return errors.Annotatef(err, "read P-Binlog value failed, vp: %+v", vp)
 	}
 
 	pbinlog := new(pb.Binlog)
@@ -1038,12 +1038,14 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 		}
 	}()
 
-	responseChan := make(chan *ReadBinlogResponse, 5)
-
-	irange := &util.Range{
-		Start: encodeTSKey(0),
-		Limit: encodeTSKey(math.MaxInt64),
-	}
+	var (
+		responseChan = make(chan *ReadBinlogResponse, 5)
+		responseErr  error
+		irange       = &util.Range{
+			Start: encodeTSKey(0),
+			Limit: encodeTSKey(math.MaxInt64),
+		}
+	)
 
 	go func() {
 		defer close(responseChan)
@@ -1057,7 +1059,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 
 			gcTS := atomic.LoadInt64(&a.gcTS)
 			if last < gcTS {
-				log.Warn("some binlogs was pugred, cause read from last ts is less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
+				log.Error("some binlogs was pugred, cause read from last ts is less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
 				iter.Release()
 				a.responseBinlogError(ctx, responseChan, errors.Annotatef(butil.ErrorPurgedBinlog, "read binlog from last ts %d", last))
 				return
@@ -1077,20 +1079,16 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 
 				value, err := a.vlog.readValue(vp)
 				if err != nil {
-					log.Error("read value failed", zap.Reflect("value pointer", vp), zap.Error(err))
-					iter.Release()
 					errorCount.WithLabelValues("read_value").Add(1.0)
-					a.responseBinlogError(ctx, responseChan, errors.Annotatef(butil.ErrorPurgedBinlog, "read binlog at %+v", vp))
-					return
+					responseErr = errors.Annotatef(err, "read binlog at %+v", vp)
+					break
 				}
 
 				binlog := new(pb.Binlog)
 				err = binlog.Unmarshal(value)
 				if err != nil {
-					log.Error("Unmarshal Binlog failed", zap.Error(err))
-					iter.Release()
-					a.responseBinlogError(ctx, responseChan, errors.Annotatef(err, "unmarshal binlog at %+v", vp))
-					return
+					responseErr = errors.Annotatef(err, "unmarshal binlog at %+v", vp)
+					break
 				}
 
 				if binlog.Tp == pb.BinlogType_Prewrite {
@@ -1113,19 +1111,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 						}
 
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
-						log.Error("feed pre write value failed", zap.Error(err))
-						iter.Release()
-						a.responseBinlogError(ctx, responseChan, errors.Trace(err))
-						return
+						responseErr = errors.Annotatef(err, "feed prewrite binlog %+v", binlog)
+						break
 					}
 				}
 
 				value, err = binlog.Marshal()
 				if err != nil {
-					log.Error("marshal failed", zap.Error(err))
-					iter.Release()
-					a.responseBinlogError(ctx, responseChan, errors.Annotatef(err, "marshal binlog %+v", binlog))
-					return
+					responseErr = errors.Annotatef(err, "marshal binlog %+v", binlog)
+					break
 				}
 
 				select {
@@ -1139,6 +1133,12 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *ReadB
 				last = decodeTSKey(iter.Key())
 			}
 			iter.Release()
+			if responseErr != nil {
+				log.Error("fail to read binlog", zap.Error(responseErr))
+				a.responseBinlogError(ctx, responseChan, responseErr)
+				return
+			}
+
 			err := iter.Error()
 			if err != nil {
 				log.Error("encounter iterator error", zap.Error(err))

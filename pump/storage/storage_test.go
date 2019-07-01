@@ -182,18 +182,6 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	err := append.metadata.Write(&batch, nil)
 	c.Assert(err, check.IsNil)
 
-	append.maxCommitTS = 2
-	append.doGCTS(gcTS)
-	for i = 1; i < n; i++ {
-		_, err := append.metadata.Get(encodeTSKey(i), nil)
-		if i <= append.maxCommitTS {
-			c.Assert(err, check.Equals, leveldb.ErrNotFound, check.Commentf("after gc still found ts: %v", i))
-		} else {
-			c.Assert(err, check.IsNil, check.Commentf("can't found ts: %v", i))
-		}
-	}
-
-	append.maxCommitTS = 11
 	append.doGCTS(gcTS)
 	for i = 1; i < n; i++ {
 		_, err := append.metadata.Get(encodeTSKey(i), nil)
