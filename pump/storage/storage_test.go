@@ -171,14 +171,16 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	defer cleanAppend(append)
 
 	var (
-		i    int64
-		gcTS int64 = 10
-		n    int64 = 1 << 11
+		i     int64
+		gcTS  int64 = 10
+		n     int64 = 1 << 11
+		batch leveldb.Batch
 	)
 	for i = 1; i < n; i++ {
-		err := append.metadata.Put(encodeTSKey(i), value, nil)
-		c.Assert(err, check.IsNil)
+		batch.Put(encodeTSKey(i), value)
 	}
+	err := append.metadata.Write(&batch, nil)
+	c.Assert(err, check.IsNil)
 
 	append.maxCommitTS = 2
 	append.doGCTS(gcTS)
@@ -286,11 +288,13 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 				if num < 0 {
 					return
 				}
-				// write P binlog
-				binlog := new(pb.Binlog)
-				binlog.Tp = pb.BinlogType_Prewrite
 				startTS := getTS()
-				binlog.StartTs = startTS
+
+				// write P binlog
+				binlog := pb.Binlog{
+					Tp:      pb.BinlogType_Prewrite,
+					StartTs: startTS,
+				}
 				if fixedValueSize {
 					binlog.PrewriteValue = prewriteValue
 				} else {
@@ -299,16 +303,17 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 					b.Log("Setting prewrite value of length", size)
 				}
 
-				if err := append.WriteBinlog(binlog); err != nil {
+				if err := append.WriteBinlog(&binlog); err != nil {
 					b.Fatal(err)
 				}
 
 				// write C binlog
-				binlog = new(pb.Binlog)
-				binlog.Tp = pb.BinlogType_Commit
-				binlog.StartTs = startTS
-				binlog.CommitTs = getTS()
-				if err := append.WriteBinlog(binlog); err != nil {
+				binlog = pb.Binlog{
+					Tp:       pb.BinlogType_Commit,
+					StartTs:  startTS,
+					CommitTs: getTS(),
+				}
+				if err := append.WriteBinlog(&binlog); err != nil {
 					b.Fatal(err)
 				}
 			}

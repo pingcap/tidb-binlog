@@ -136,7 +136,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 	dirPath := vlog.dirPath
 	opt := vlog.opt
 
-	n := 50
+	n := 10
 	reqs := make([]*request, 0, n*3)
 	for i := 0; i < n; i++ {
 		// close and open back every time
@@ -205,8 +205,7 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-type ValuePointerSuite struct {
-}
+type ValuePointerSuite struct{}
 
 var _ = check.Suite(&ValuePointerSuite{})
 
