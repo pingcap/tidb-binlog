@@ -144,7 +144,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 			select {
 			case value := <-values:
 				getBinlog := new(pb.Binlog)
-				err := getBinlog.Unmarshal(value)
+				err := getBinlog.Unmarshal(value.Payload)
 				c.Assert(err, check.IsNil)
 				binlogs = append(binlogs, getBinlog)
 				if len(binlogs) == int(binlogNum) {
@@ -170,16 +170,29 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	append := newAppend(c)
 	defer cleanAppend(append)
 
-	var i int64
-	var n int64 = 1 << 11
+	var (
+		i    int64
+		gcTS int64 = 10
+		n    int64 = 1 << 11
+	)
 	for i = 1; i < n; i++ {
 		err := append.metadata.Put(encodeTSKey(i), value, nil)
 		c.Assert(err, check.IsNil)
 	}
 
-	var gcTS int64 = 10
+	append.maxCommitTS = 2
 	append.doGCTS(gcTS)
+	for i = 1; i < n; i++ {
+		_, err := append.metadata.Get(encodeTSKey(i), nil)
+		if i <= append.maxCommitTS {
+			c.Assert(err, check.Equals, leveldb.ErrNotFound, check.Commentf("after gc still found ts: %v", i))
+		} else {
+			c.Assert(err, check.IsNil, check.Commentf("can't found ts: %v", i))
+		}
+	}
 
+	append.maxCommitTS = 11
+	append.doGCTS(gcTS)
 	for i = 1; i < n; i++ {
 		_, err := append.metadata.Get(encodeTSKey(i), nil)
 		if i <= gcTS {

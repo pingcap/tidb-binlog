@@ -682,12 +682,13 @@ func (a *Append) doGCTS(ts int64) {
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
 			deleteNum++
-			lastTS = decodeTSKey(iter.Key())
+			cuurentTS := decodeTSKey(iter.Key())
 
 			// don't delete the ts not sorted
-			if lastTS > atomic.LoadInt64(&a.maxCommitTS) {
+			if cuurentTS >= atomic.LoadInt64(&a.maxCommitTS) {
 				break
 			}
+			lastTS = cuurentTS
 
 			if batch.Len() == 1024 {
 				a.sveGCTS(lastTS)
