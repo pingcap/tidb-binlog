@@ -58,7 +58,6 @@ func (sc *slowChaser) turnOff() {
 	log.Info("Slow chaser turned off")
 }
 
-// TODO: Add support for cancelling with context
 func (sc *slowChaser) Run(ctx context.Context) {
 	for {
 		// It should be OK to check periodically here,
