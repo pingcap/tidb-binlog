@@ -29,7 +29,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 	items := make(chan sortItem)
 	oracle := newMemOracle()
 
-	threadNum := 10
+	const threadNum = 10
 
 	var wg sync.WaitGroup
 
@@ -71,7 +71,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 					tp:     pb.BinlogType_Commit,
 				}
 
-				time.Sleep(time.Millisecond * time.Duration(rand.Int63()%maxLatency))
+				time.Sleep(time.Microsecond * time.Duration(rand.Int63()%maxLatency))
 			}
 
 		}()
