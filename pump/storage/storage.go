@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,12 +22,14 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
 )
 
 const (
-	maxTxnTimeoutSecond int64 = 600
-	chanSize                  = 1 << 20
+	maxTxnTimeoutSecond              int64 = 600
+	chanSize                               = 1 << 20
+	defaultStopWriteAtAvailableSpace       = 10 * (1 << 30)
 )
 
 var (
@@ -63,8 +66,9 @@ var _ Storage = &Append{}
 
 // Append implement the Storage interface
 type Append struct {
-	dir  string
-	vlog *valueLog
+	dir         string
+	vlog        *valueLog
+	storageSize storageSize
 
 	metadata       *leveldb.DB
 	sorter         *sorter
@@ -210,6 +214,11 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	}
 
 	append.wg.Add(1)
+	err = append.updateSize()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	go append.updateStatus()
 	return
 }
@@ -291,6 +300,20 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 	return quit
 }
 
+func (a *Append) updateSize() error {
+	size, err := getStorageSize(a.dir)
+	if err != nil {
+		return errors.Annotatef(err, "update storage size failed, dir: %s", a.dir)
+	}
+
+	storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+	storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+
+	atomic.StoreUint64(&a.storageSize.available, size.available)
+	atomic.StoreUint64(&a.storageSize.capacity, size.capacity)
+	return nil
+}
+
 func (a *Append) updateStatus() {
 	defer a.wg.Done()
 
@@ -320,12 +343,9 @@ func (a *Append) updateStatus() {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		case <-updateSize:
-			size, err := getStorageSize(a.dir)
+			err := a.updateSize()
 			if err != nil {
-				log.Error("update sotrage size err: ", err)
-			} else {
-				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
-				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+				log.Error("update size failed", zap.Error(err))
 			}
 		case <-logStatsTicker.C:
 			var stats leveldb.DBStats
@@ -340,6 +360,10 @@ func (a *Append) updateStatus() {
 			}
 		}
 	}
+}
+
+func (a *Append) writableOfSpace() bool {
+	return atomic.LoadUint64(&a.storageSize.available) > a.options.StopWriteAtAvailableSpace
 }
 
 func (a *Append) resolve(startTS int64) bool {
@@ -531,7 +555,6 @@ func (a *Append) GCTS(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -543,16 +566,23 @@ func (a *Append) doGCTS(ts int64) {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
+	deleteNum := 0
+
 	for {
-		var stats leveldb.DBStats
-		err := a.metadata.Stats(&stats)
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
-			log.Error(err)
-			time.Sleep(5 * time.Second)
-			continue
+			log.Errorf("get `leveldb.num-files-at-level0` property failed: %+v", err)
+			return
 		}
-		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
-			log.Info("wait some time to gc cause too many L0 file", stats.LevelTablesCounts[0])
+
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			log.Errorf("parse `leveldb.num-files-at-level0` result to int failed, str: %s err: %+v", nStr, err)
+			return
+		}
+
+		if l0Num >= l0Trigger {
+			log.Infof("wait some time to gc cause too many L0 file, files: %d", l0Num)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -564,8 +594,13 @@ func (a *Append) doGCTS(ts int64) {
 		iter := a.metadata.NewIterator(irange, nil)
 
 		deleteBatch := 0
+		var lastKey []byte
+
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
+			deleteNum++
+			lastKey = iter.Key()
+
 			if batch.Len() == 1024 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
@@ -588,10 +623,16 @@ func (a *Append) doGCTS(ts int64) {
 			}
 			break
 		}
+
+		if len(lastKey) > 0 {
+			a.vlog.gcTS(decodeTSKey(lastKey))
+		}
+
+		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
 	a.vlog.gcTS(ts)
-	log.Info("finish gc ts: ", ts)
+	log.Infof("finish gc, ts: %d delete num: %d", ts, deleteNum)
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
@@ -599,8 +640,25 @@ func (a *Append) MaxCommitTS() int64 {
 	return atomic.LoadInt64(&a.maxCommitTS)
 }
 
+func isFakeBinlog(binlog *pb.Binlog) bool {
+	return binlog.StartTs > 0 && binlog.StartTs == binlog.CommitTs
+}
+
 // WriteBinlog implement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
+	if !a.writableOfSpace() {
+		// still accept fake binlog, so will not block drainer if fake binlog writes success
+		if !isFakeBinlog(binlog) {
+			return ErrNoAvailableSpace
+		}
+	}
+
+	// pump client will write some empty Payload to detect whether pump is working, should avoid this
+	// Unmarshal(nil) will success...
+	if binlog.StartTs == 0 && binlog.CommitTs == 0 {
+		return nil
+	}
+
 	return errors.Trace(a.writeBinlog(binlog).err)
 }
 
@@ -1009,8 +1067,8 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 }
 
 type storageSize struct {
-	capacity  int
-	available int
+	capacity  uint64
+	available uint64
 }
 
 func getStorageSize(dir string) (size storageSize, err error) {
@@ -1037,16 +1095,26 @@ func getStorageSize(dir string) (size storageSize, err error) {
 	}
 
 	// Available blocks * size per block = available space in bytes
-	size.available = int(stat.Bavail) * int(bSize)
-	size.capacity = int(stat.Blocks) * int(bSize)
+	size.available = stat.Bavail * bSize
+	size.capacity = stat.Blocks * bSize
 
 	return
 }
 
 // Config holds the configuration of storage
 type Config struct {
-	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
-	KV      *KVConfig `toml:"kv" json:"kv"`
+	SyncLog                   *bool          `toml:"sync-log" json:"sync-log"`
+	KV                        *KVConfig      `toml:"kv" json:"kv"`
+	StopWriteAtAvailableSpace *HumanizeBytes `toml:"stop-write-at-available-space" json:"stop-write-at-available-space"`
+}
+
+// GetStopWriteAtAvailableSpace return stop write available space
+func (c *Config) GetStopWriteAtAvailableSpace() uint64 {
+	if c.StopWriteAtAvailableSpace == nil {
+		return defaultStopWriteAtAvailableSpace
+	}
+
+	return c.StopWriteAtAvailableSpace.Uint64()
 }
 
 // GetSyncLog return sync-log config option
