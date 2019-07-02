@@ -402,6 +402,8 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 
 // delete data <= gcTS
 func (vlog *valueLog) gcTS(gcTS int64) {
+	log.Infof("gc vlog, ts: %d", gcTS)
+
 	vlog.filesLock.Lock()
 	var toDeleteFiles []*logFile
 
@@ -430,6 +432,7 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 		if err != nil {
 			log.Errorf("remove file %s err: %v", logFile.path, err)
 		}
+		log.Infof("remove file, path: %s", logFile.path)
 		logFile.lock.Unlock()
 	}
 }
