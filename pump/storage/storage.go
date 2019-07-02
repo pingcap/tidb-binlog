@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
+	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
 )
 
@@ -531,7 +533,6 @@ func (a *Append) GCTS(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -543,16 +544,23 @@ func (a *Append) doGCTS(ts int64) {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
+	deleteNum := 0
+
 	for {
-		var stats leveldb.DBStats
-		err := a.metadata.Stats(&stats)
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
-			log.Error(err)
-			time.Sleep(5 * time.Second)
-			continue
+			log.Errorf("get `leveldb.num-files-at-level0` property failed: %+v", err)
+			return
 		}
-		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
-			log.Info("wait some time to gc cause too many L0 file", stats.LevelTablesCounts[0])
+
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			log.Errorf("parse `leveldb.num-files-at-level0` result to int failed, str: %s err: %+v", nStr, err)
+			return
+		}
+
+		if l0Num >= l0Trigger {
+			log.Infof("wait some time to gc cause too many L0 file, files: %d", l0Num)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -564,8 +572,13 @@ func (a *Append) doGCTS(ts int64) {
 		iter := a.metadata.NewIterator(irange, nil)
 
 		deleteBatch := 0
+		var lastKey []byte
+
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
+			deleteNum++
+			lastKey = iter.Key()
+
 			if batch.Len() == 1024 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
@@ -588,10 +601,16 @@ func (a *Append) doGCTS(ts int64) {
 			}
 			break
 		}
+
+		if len(lastKey) > 0 {
+			a.vlog.gcTS(decodeTSKey(lastKey))
+		}
+
+		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
 	a.vlog.gcTS(ts)
-	log.Info("finish gc ts: ", ts)
+	log.Infof("finish gc, ts: %d delete num: %d", ts, deleteNum)
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
