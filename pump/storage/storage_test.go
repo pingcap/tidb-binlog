@@ -142,8 +142,13 @@ func (as *AppendSuit) TestVlogsShouldBeInSyncWhenDownStreamRecovers(c *check.C) 
 		r := <-written
 		c.Assert(r.startTS, check.Equals, int64(i)+1)
 	}
-	time.Sleep(500 * time.Millisecond)
-	for i := 11; i <= 2000; i++ {
+	time.Sleep(300 * time.Millisecond)
+	for i := 11; i < 500; i++ {
+		r := <-written
+		c.Assert(r.startTS, check.Equals, int64(i))
+	}
+	time.Sleep(300 * time.Millisecond)
+	for i := 500; i <= 2000; i++ {
 		r := <-written
 		c.Assert(r.startTS, check.Equals, int64(i))
 	}
