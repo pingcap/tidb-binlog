@@ -44,12 +44,10 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	mock.ExpectQuery("SELECT column_name, extra FROM information_schema.columns").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("a", "").AddRow("b", "").AddRow("c", ""))
+	mock.ExpectQuery("show columns from `test`.`t1`").WillReturnRows(sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).AddRow("a", "int", "YES", "", "NULL", "").AddRow("b", "varchar(24)", "YES", "", "NULL", "").AddRow("c", "varchar(24)", "YES", "", "NULL", ""))
 
-	rows := sqlmock.NewRows([]string{"non_unique", "index_name", "seq_in_index", "column_name"})
-	mock.ExpectQuery("SELECT non_unique, index_name, seq_in_index, column_name FROM information_schema.statistics").
-		WithArgs("test", "t1").
-		WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"Table", "Non_unique", "Key_name", "Seq_in_index", "Column_name", "Collation", "Cardinality", "Sub_part", "Packed", "Null", "Index_type", "Comment", "Index_comment"})
+	mock.ExpectQuery("show index from `test`.`t1`").WillReturnRows(rows)
 
 	mock.ExpectBegin()
 	insertPattern := "INSERT INTO"
