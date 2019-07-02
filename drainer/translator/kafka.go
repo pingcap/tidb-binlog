@@ -94,9 +94,7 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 		info := new(obinlog.ColumnInfo)
 		info.Name = col.Name.O
 		info.MysqlType = types.TypeToStr(col.Tp, col.Charset)
-		if mysql.HasPriKeyFlag(col.Flag) {
-			info.IsPrimaryKey = true
-		}
+		info.IsPrimaryKey = mysql.HasPriKeyFlag(col.Flag)
 		columnInfos = append(columnInfos, info)
 	}
 	table.ColumnInfo = columnInfos
