@@ -3,7 +3,6 @@ package pump
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -556,29 +555,6 @@ func (s *Server) gcBinlogFile() {
 		log.Infof("send gc request to storage, ts: %d", gcTS)
 		s.storage.GC(gcTS)
 	}
-}
-
-func (s *Server) getSafeGCTSOForDrainers() (int64, error) {
-	pumpNode := s.node.(*pumpNode)
-
-	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
-	if err != nil {
-		log.Error("fail to query status of drainers %v", err)
-		return 0, errors.Annotatef(err, "fail to query status of drainers")
-	}
-
-	var minTSO int64 = math.MaxInt64
-	for _, drainer := range drainers {
-		if drainer.State == node.Offline {
-			continue
-		}
-
-		if drainer.MaxCommitTS < minTSO {
-			minTSO = drainer.MaxCommitTS
-		}
-	}
-
-	return minTSO, nil
 }
 
 func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
