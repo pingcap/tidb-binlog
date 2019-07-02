@@ -89,7 +89,7 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 	table.SchemaName = proto.String(schema)
 	table.TableName = proto.String(tableInfo.Name.O)
 	// get obinlog.ColumnInfo
-	var columnInfos []*obinlog.ColumnInfo
+	columnInfos := make([]*obinlog.ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		info := new(obinlog.ColumnInfo)
 		info.Name = col.Name.O
