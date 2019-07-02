@@ -38,8 +38,6 @@ import (
 var (
 	notifyDrainerTimeout            = time.Second * 10
 	pdReconnTimes                   = 30
-	serverInfoOutputInterval        = time.Second * 10
-	gcInterval                      = time.Hour
 	earlyAlertGC                    = 20 * time.Hour
 	detectDrainerCheckpointInterval = 10 * time.Minute
 	// GlobalConfig is global config of pump
@@ -509,7 +507,7 @@ func (s *Server) detectDrainerCheckpoint() {
 			alertGCMS := earlyAlertGC.Nanoseconds() / 1000 / 1000
 			alertGCTS := gcTS + int64(oracle.EncodeTSO(alertGCMS))
 
-			log.Infof("use gc ts  %d to detect drainer checkpoint", gcTS)
+			log.Infof("use gc ts %d to detect drainer checkpoint", gcTS)
 			// detect whether the binlog before drainer's checkpoint had been purged
 			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
 		}
