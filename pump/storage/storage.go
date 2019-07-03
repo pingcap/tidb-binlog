@@ -857,7 +857,7 @@ func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*reque
 func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan *request, a.options.KVChanCapacity)
-	slowChaser := newSlowChaser(a.vlog, 3*time.Second, done)
+	slowChaser := newSlowChaser(a.vlog, time.Second, done)
 	go slowChaser.Run(ctx)
 
 	go func() {

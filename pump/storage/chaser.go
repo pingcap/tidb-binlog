@@ -24,13 +24,19 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	slowCatchUpThreshold = time.Second
+	recoveryCoolDown     = time.Minute
+)
+
 type slowChaser struct {
-	on              int32
-	vlog            *valueLog
-	lastUnreadPtr   *valuePointer
-	recoveryTimeout time.Duration
-	output          chan *request
-	WriteLock       sync.Mutex
+	on                 int32
+	vlog               *valueLog
+	lastUnreadPtr      *valuePointer
+	recoveryTimeout    time.Duration
+	lastRecoverAttempt time.Time
+	output             chan *request
+	WriteLock          sync.Mutex
 }
 
 func newSlowChaser(vlog *valueLog, recoveryTimeout time.Duration, output chan *request) *slowChaser {
@@ -80,12 +86,20 @@ func (sc *slowChaser) Run(ctx context.Context) {
 			continue
 		}
 
+		t0 := time.Now()
 		err := sc.catchUp()
 		if err != nil {
 			log.Error("Failed to catch up", zap.Error(err))
 			continue
 		}
+		isSlowCatchUp := time.Since(t0) >= slowCatchUpThreshold
+		hasRecentRecoverAttempt := time.Since(sc.lastRecoverAttempt) <= recoveryCoolDown
 
+		if isSlowCatchUp || hasRecentRecoverAttempt {
+			continue
+		}
+
+		sc.lastRecoverAttempt = time.Now()
 		// Try to recover from slow mode in a limited time
 		// Once we hold the write lock, we can be sure the vlog is not being appended
 		sc.WriteLock.Lock()
