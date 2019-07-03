@@ -80,6 +80,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 				return
 			}
 		}
+		ticker.Stop()
 
 		if sc.lastUnreadPtr == nil {
 			log.Error("lastUnreadPtr should never be nil when slowChaser is on")
