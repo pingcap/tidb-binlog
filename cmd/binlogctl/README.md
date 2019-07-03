@@ -25,7 +25,7 @@ Usage of binlogctl:
 		set time zone if you want to save time info in the savepoint file, for example `Asia/Shanghai` for CST time and `Local` for the local time
 ```
 
-## Example
+## Examples
 
 ### Query Pump/Drainer
 
