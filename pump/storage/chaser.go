@@ -66,21 +66,10 @@ func (sc *slowChaser) turnOff() {
 
 func (sc *slowChaser) Run(ctx context.Context) {
 	for {
-		// It should be OK to check periodically here,
-		// because compared to scanning, the overhead introduced by
-		// sleeping and waking up is trivial.
-		// And it's less error prone than using sync.Cond.
-		ticker := time.NewTicker(500 * time.Millisecond)
-		for !sc.IsOn() {
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				ticker.Stop()
-				log.Info("Slow chaser quits")
-				return
-			}
+		if canceled := sc.waitUntilTurnedOn(ctx, 500 * time.Millisecond); canceled {
+			log.Info("Slow chaser quits")
+			return
 		}
-		ticker.Stop()
 
 		if sc.lastUnreadPtr == nil {
 			log.Error("lastUnreadPtr should never be nil when slowChaser is on")
@@ -152,4 +141,21 @@ func (sc *slowChaser) catchUpWithTimeout(timeout time.Duration) error {
 		return nil
 	})
 	return err
+}
+
+func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.Duration) bool {
+	// It should be OK to check periodically here,
+	// because compared to scanning, the overhead introduced by
+	// sleeping and waking up is trivial.
+	// And it's less error prone than using sync.Cond.
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+	for !sc.IsOn() {
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return true
+		}
+	}
+	return false
 }
