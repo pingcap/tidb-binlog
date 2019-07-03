@@ -119,6 +119,7 @@ func (sc *slowChaser) catchUp() error {
 }
 
 func (sc *slowChaser) catchUpWithTimeout(timeout time.Duration) error {
+	log.Info("Scanning requests to recover", zap.Any("start", sc.lastUnreadPtr))
 	errTimeout := errors.New("Recovery Timeout")
 	t0 := time.Now()
 	err := sc.vlog.scanRequests(*sc.lastUnreadPtr, func(req *request) error {
