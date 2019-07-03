@@ -86,6 +86,11 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		hasRecentRecoverAttempt := time.Since(sc.lastRecoverAttempt) <= recoveryCoolDown
 
 		if isSlowCatchUp || hasRecentRecoverAttempt {
+			log.Info(
+				"Skip recovery for now",
+				zap.Bool("slow catch up", isSlowCatchUp),
+				zap.Bool("recently attempted recovery", hasRecentRecoverAttempt),
+			)
 			continue
 		}
 
