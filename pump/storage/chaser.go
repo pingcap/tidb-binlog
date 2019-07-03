@@ -65,14 +65,9 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		// sleeping and waking up is trivial.
 		// And it's less error prone than using sync.Cond.
 		ticker := time.NewTicker(500 * time.Millisecond)
-	CHECK:
-		for {
+		for !sc.IsOn() {
 			select {
 			case <-ticker.C:
-				if sc.IsOn() {
-					ticker.Stop()
-					break CHECK
-				}
 			case <-ctx.Done():
 				ticker.Stop()
 				log.Info("Slow chaser quits")
