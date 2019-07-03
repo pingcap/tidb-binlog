@@ -66,7 +66,7 @@ func (sc *slowChaser) turnOff() {
 
 func (sc *slowChaser) Run(ctx context.Context) {
 	for {
-		if canceled := sc.waitUntilTurnedOn(ctx, 500 * time.Millisecond); canceled {
+		if canceled := sc.waitUntilTurnedOn(ctx, 500*time.Millisecond); canceled {
 			log.Info("Slow chaser quits")
 			return
 		}
