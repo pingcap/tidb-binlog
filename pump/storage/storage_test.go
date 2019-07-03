@@ -120,14 +120,22 @@ func (as *AppendSuit) TestBlockedWriteKVShouldNotStopWritingVlogs(c *check.C) {
 }
 
 func (as *AppendSuit) TestVlogsShouldBeInSyncWhenDownStreamRecovers(c *check.C) {
-	store := newAppendWithOptions(c, DefaultOptions().WithKVChanCapacity(10))
+	opts := DefaultOptions().WithKVChanCapacity(10).WithValueLogFileSize(9000)
+	store := newAppendWithOptions(c, opts)
 	incoming := make(chan *request, 100)
 	written := store.writeToValueLog(incoming)
 
+	const nReqs = 3000
+
 	finished := make(chan struct{})
 	go func() {
-		reqs := createDummyReqs(2000)
-		for _, r := range reqs {
+		reqs := createDummyReqs(nReqs)
+		for _, r := range reqs[:nReqs/2] {
+			r.wg.Add(1)
+			incoming <- r
+		}
+		time.Sleep(100 * time.Millisecond)
+		for _, r := range reqs[nReqs/2:] {
 			r.wg.Add(1)
 			incoming <- r
 		}
@@ -138,20 +146,29 @@ func (as *AppendSuit) TestVlogsShouldBeInSyncWhenDownStreamRecovers(c *check.C) 
 	}()
 	<-finished
 
-	for i := 0; i < 10; i++ {
+	receivedTs := make([]int64, 0, nReqs)
+	for i := 0; i < nReqs/3; i++ {
 		r := <-written
-		c.Assert(r.startTS, check.Equals, int64(i)+1)
+		receivedTs = append(receivedTs, r.startTS)
 	}
-	time.Sleep(300 * time.Millisecond)
-	for i := 11; i < 500; i++ {
+	time.Sleep(200 * time.Millisecond)
+	for i := 0; i < nReqs/3; i++ {
 		r := <-written
-		c.Assert(r.startTS, check.Equals, int64(i))
+		receivedTs = append(receivedTs, r.startTS)
 	}
-	time.Sleep(300 * time.Millisecond)
-	for i := 500; i <= 2000; i++ {
+	time.Sleep(200 * time.Millisecond)
+	lastTs := receivedTs[len(receivedTs)-1]
+	for lastTs < nReqs {
 		r := <-written
-		c.Assert(r.startTS, check.Equals, int64(i))
+		receivedTs = append(receivedTs, r.startTS)
+		lastTs = r.startTS
 	}
+	c.Assert(len(receivedTs), check.GreaterEqual, nReqs)
+	for i := 1; i < len(receivedTs); i++ {
+		c.Assert(receivedTs[i], check.GreaterEqual, receivedTs[i-1])
+	}
+	c.Assert(receivedTs[0], check.Equals, int64(1))
+	c.Assert(receivedTs[len(receivedTs)-1], check.Equals, int64(nReqs))
 }
 
 func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
