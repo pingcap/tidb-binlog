@@ -106,6 +106,6 @@ func printInsertOrDeleteEvent(row [][]byte) {
 		}
 
 		tp := col.Tp[0]
-		fmt.Printf("%s(%s): %s \n", col.Name, col.MysqlType, formatValueToString(val, tp))
+		fmt.Printf("%s(%s): %s\n", col.Name, col.MysqlType, formatValueToString(val, tp))
 	}
 }
