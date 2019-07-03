@@ -256,7 +256,12 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	case mysql.TypeSet:
 		data = types.NewDatum(data.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		data = types.NewDatum(data.GetBytes())
+		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
+		val, err := data.GetBinaryLiteral().ToInt(nil)
+		if err != nil {
+			return types.Datum{}, err
+		}
+		data = types.NewUintDatum(val)
 	}
 
 	return data, nil
