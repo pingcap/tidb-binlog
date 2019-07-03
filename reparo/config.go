@@ -70,7 +70,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")
-	fs.BoolVar(&c.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
+	fs.BoolVar(&c.SafeMode, "safe-mode", false, "enable safe mode to support reentrant")
 	return c
 }
 
