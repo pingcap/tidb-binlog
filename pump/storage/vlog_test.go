@@ -138,6 +138,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 
 	n := 10
 	reqs := make([]*request, 0, n*3)
+	batch := make([]*request, 0, 3)
 	for i := 0; i < n; i++ {
 		// close and open back every time
 		var err = vlog.close()
@@ -147,13 +148,15 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		err = vlog.open(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
+		batch = batch[:0]
 		// write a few request
 		for j := 0; j < 3; j++ {
 			req := randRequest()
-			reqs = append(reqs, req)
-			err = vlog.write([]*request{req})
-			c.Assert(err, check.IsNil)
+			batch = append(batch, req)
 		}
+		err = vlog.write(batch)
+		c.Assert(err, check.IsNil)
+		reqs = append(reqs, batch...)
 	}
 
 	c.Log("reqs len: ", len(reqs))
