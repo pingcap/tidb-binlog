@@ -97,7 +97,7 @@ func (vs *VlogSuit) TestBatchWriteRead(c *check.C) {
 	testBatchWriteRead(c, 128, DefaultOptions())
 
 	// set small valueLogFileSize, so we can test multi log file case
-	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(500))
+	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(3000))
 }
 
 func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
@@ -168,12 +168,12 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 }
 
 func (vs *VlogSuit) TestGCTS(c *check.C) {
-	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(512))
+	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(2048))
 	defer os.RemoveAll(vlog.dirPath)
 
 	payload := make([]byte, 128)
 	requests := make([]*request, 100)
-	// 100 * 128 > 512 guarantees that multiple log files are created
+	// 100 * 128 > 2048 guarantees that multiple log files are created
 	for i := 0; i < len(requests); i++ {
 		requests[i] = &request{
 			startTS: int64(i),
