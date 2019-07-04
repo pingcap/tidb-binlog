@@ -328,6 +328,22 @@ func (as *AppendSuit) TestResolve(c *check.C) {
 	// is there a fake or mock kv.Storage and tikv.LockResolver to easy the test?
 }
 
+func (as *AppendSuit) TestWriteCBinlog(c *check.C) {
+	a := newAppend(c)
+	defer cleanAppend(a)
+
+	pBinlog := pb.Binlog{StartTs: 42}
+	var commitTs int64 = 50
+	err := a.writeCBinlog(&pBinlog, commitTs)
+	c.Assert(err, check.IsNil)
+
+	cBinlog, err := a.readBinlogByTS(commitTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(cBinlog.StartTs, check.Equals, pBinlog.StartTs)
+	c.Assert(cBinlog.CommitTs, check.Equals, commitTs)
+	c.Assert(cBinlog.Tp, check.Equals, pb.BinlogType_Commit)
+}
+
 type OpenDBSuit struct {
 	dir string
 }
