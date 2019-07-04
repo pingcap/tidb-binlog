@@ -106,18 +106,34 @@ var case2Clean = []string{`
 }
 
 var case3 = []string{`
-CREATE TABLE a(id INT PRIMARY KEY, a1 INT);
+CREATE TABLE binlog_case3(id INT PRIMARY KEY, a1 INT);
 `,
 	`
-INSERT INTO a(id, a1) VALUES(1,1),(2,1);
+INSERT INTO binlog_case3(id, a1) VALUES(1,1),(2,1);
 `,
 	`
-ALTER TABLE a ADD UNIQUE INDEX aidx(a1);
+ALTER TABLE binlog_case3 ADD UNIQUE INDEX aidx(a1);
 `,
 }
 
 var case3Clean = []string{
-	`DROP TABLE a`,
+	`DROP TABLE binlog_case3`,
+}
+
+var case4 = []string{`
+CREATE TABLE binlog_case4(a BIT(1) NOT NULL);
+`,
+	`
+INSERT INTO binlog_case4 VALUES (0x01);
+`,
+	`
+UPDATE binlog_case4 SET a = 0x00;
+`,
+}
+
+var case4Clean = []string{`
+	DROP TABLE binlog_case4;
+`,
 }
 
 type testRunner struct {
@@ -159,6 +175,10 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs(case3Clean)
+
+	// run case4
+	tr.execSQLs(case4)
+	tr.execSQLs(case4Clean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})

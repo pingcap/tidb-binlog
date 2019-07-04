@@ -15,6 +15,7 @@ package loader
 
 import (
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	. "github.com/pingcap/tidb/types"
 )
 
 // SlaveBinlogToTxn translate the Binlog format into Txn
@@ -83,6 +84,10 @@ func columnToArg(mysqlType string, c *pb.Column) (arg interface{}) {
 		if mysqlType == "json" {
 			var str string = string(c.GetBytesValue())
 			return str
+		}
+		if mysqlType == "bit" {
+			val, _ := BinaryLiteral(c.GetBytesValue()).ToInt(nil)
+			return val
 		}
 		return c.GetBytesValue()
 	}
