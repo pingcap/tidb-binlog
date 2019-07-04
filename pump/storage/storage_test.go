@@ -118,7 +118,7 @@ func (as *AppendSuit) TestWriteBinlogAndPullBack(c *check.C) {
 	as.testWriteBinlogAndPullBack(c, -1, 1024)
 }
 
-func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int32) {
+func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize int, binlogNum int) {
 	appendStorage := newAppend(c)
 	defer cleanAppend(appendStorage)
 
@@ -251,7 +251,7 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 // test helper to write binlogNum binlog to append
 // If `prewriteValueSize` is less than or equal to 0, the size of prewriteValue for
 // binlogs will be random integers between [1, 1024].
-func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int32) {
+func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int) {
 	fixedValueSize := prewriteValueSize > 0
 	var prewriteValue []byte
 	if fixedValueSize {
@@ -260,21 +260,29 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int3
 		prewriteValue = make([]byte, 1024)
 	}
 	var ts int64
+
+	seq := make(chan struct{}, 10)
+	go func() {
+		for i := 0 ; i < binlogNum; i++ {
+			seq <- struct{}{}
+		}
+		close(seq)
+	}()
 	getTS := func() int64 {
 		return atomic.AddInt64(&ts, 1)
 	}
 
+	nWorkers := 256
+	if binlogNum < nWorkers {
+		nWorkers = binlogNum
+	}
 	var wg sync.WaitGroup
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < nWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for {
-				num := atomic.AddInt32(&binlogNum, -1)
-				if num < 0 {
-					return
-				}
+			for range seq {
 				startTS := getTS()
 
 				// write P binlog
