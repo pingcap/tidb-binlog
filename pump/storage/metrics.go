@@ -75,6 +75,23 @@ var (
 			Help:      "Bucketed histogram of write time (s) of  binlog.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 20),
 		}, []string{"type"})
+
+	slowChaserCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "slow_chaser_count",
+			Help:      "The number of times of various slow chaser state changes.",
+		}, []string{"type"})
+
+	slowChaserCatchUpTimeHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "slow_chaser_catchup_time_seconds",
+			Help:      "How long the catch up step takes to run.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22),
+		})
 )
 
 // InitMetircs register the metrics to registry
@@ -86,4 +103,6 @@ func InitMetircs(registry *prometheus.Registry) {
 	registry.MustRegister(writeBinlogSizeHistogram)
 	registry.MustRegister(writeBinlogTimeHistogram)
 	registry.MustRegister(storageSizeGauge)
+	registry.MustRegister(slowChaserCount)
+	registry.MustRegister(slowChaserCatchUpTimeHistogram)
 }

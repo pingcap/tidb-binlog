@@ -56,12 +56,14 @@ func (sc *slowChaser) TurnOn(lastUnreadPtr *valuePointer) {
 	sc.lastUnreadPtr = lastUnreadPtr
 	atomic.StoreInt32(&sc.on, 1)
 	log.Info("Slow chaser turned on")
+	slowChaserCount.WithLabelValues("turned_on").Add(1.0)
 }
 
 func (sc *slowChaser) turnOff() {
 	atomic.StoreInt32(&sc.on, 0)
 	sc.lastUnreadPtr = nil
 	log.Info("Slow chaser turned off")
+	slowChaserCount.WithLabelValues("turned_off").Add(1.0)
 }
 
 func (sc *slowChaser) Run(ctx context.Context) {
@@ -82,7 +84,9 @@ func (sc *slowChaser) Run(ctx context.Context) {
 			log.Error("Failed to catch up", zap.Error(err))
 			continue
 		}
-		isSlowCatchUp := time.Since(t0) >= slowCatchUpThreshold
+		tCatchUp := time.Since(t0)
+		slowChaserCatchUpTimeHistogram.Observe(float64(tCatchUp) / float64(time.Second))
+		isSlowCatchUp := tCatchUp >= slowCatchUpThreshold
 		hasRecentRecoverAttempt := time.Since(sc.lastRecoverAttempt) <= recoveryCoolDown
 
 		if isSlowCatchUp || hasRecentRecoverAttempt {
@@ -98,6 +102,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		// Try to recover from slow mode in a limited time
 		// Once we hold the write lock, we can be sure the vlog is not being appended
 		sc.WriteLock.Lock()
+		slowChaserCount.WithLabelValues("recovery").Add(1.0)
 		log.Info("Stopped writing temporarily to recover from slow mode")
 		// Try to catch up with scanning again, if this successed, we can be sure
 		// that all vlogs have been sent to the downstream, and it's safe to turn
@@ -115,6 +120,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 }
 
 func (sc *slowChaser) catchUp() error {
+	slowChaserCount.WithLabelValues("catch_up").Add(1.0)
 	log.Info("Scanning requests to catch up with vlog", zap.Any("start", sc.lastUnreadPtr))
 	count := 0
 	err := sc.vlog.scanRequests(*sc.lastUnreadPtr, func(req *request) error {
