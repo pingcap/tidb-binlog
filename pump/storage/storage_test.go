@@ -263,7 +263,7 @@ func populateBinlog(b Log, append *Append, prewriteValueSize int, binlogNum int)
 
 	seq := make(chan struct{}, 10)
 	go func() {
-		for i := 0 ; i < binlogNum; i++ {
+		for i := 0; i < binlogNum; i++ {
 			seq <- struct{}{}
 		}
 		close(seq)
