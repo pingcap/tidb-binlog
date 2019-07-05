@@ -89,7 +89,12 @@ func main() {
 			case msg := <-breader.Messages():
 				str := msg.Binlog.String()
 				log.S().Debugf("recv: %.2000s", str)
-				ld.Input() <- loader.SlaveBinlogToTxn(msg.Binlog)
+				txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+				if err != nil {
+					log.S().Error(errors.ErrorStack(err))
+					log.S().Fatal(err)
+				}
+				ld.Input() <- txn
 			case txn := <-ld.Successes():
 				log.S().Debug("succ: ", txn)
 			}

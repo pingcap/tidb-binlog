@@ -105,7 +105,6 @@ var case2Clean = []string{`
 	DROP TABLE binlog_case2`,
 }
 
-// Table name changed in TOOL-1346
 var case3 = []string{`
 CREATE TABLE binlog_case3(id INT PRIMARY KEY, a1 INT);
 `,
@@ -121,8 +120,7 @@ var case3Clean = []string{
 	`DROP TABLE binlog_case3`,
 }
 
-// Ref issue: TOOL-1346
-// test bit value synchronization for drainer -> mysql and drainer -> kafka -> mysql
+// Test issue: TOOL-1346
 var case4 = []string{`
 CREATE TABLE binlog_case4(a BIT(1) NOT NULL);
 `,
