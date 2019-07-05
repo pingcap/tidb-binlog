@@ -104,7 +104,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		sc.WriteLock.Lock()
 		slowChaserCount.WithLabelValues("recovery").Add(1.0)
 		log.Info("Stopped writing temporarily to recover from slow mode")
-		// Try to catch up with scanning again, if this successed, we can be sure
+		// Try to catch up with scanning again, if this succeeds, we can be sure
 		// that all vlogs have been sent to the downstream, and it's safe to turn
 		// off the slow chaser
 		err = sc.catchUpWithTimeout(sc.recoveryTimeout)
