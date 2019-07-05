@@ -14,8 +14,9 @@
 package loader
 
 import (
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
-	. "github.com/pingcap/tidb/types"
+	types "github.com/pingcap/tidb/types"
 )
 
 // SlaveBinlogToTxn translate the Binlog format into Txn
@@ -85,8 +86,15 @@ func columnToArg(mysqlType string, c *pb.Column) (arg interface{}) {
 			var str string = string(c.GetBytesValue())
 			return str
 		}
+		// issues: TOOL-1346 and TOOL-1374
+		// for downstream = mysql
+		// it work for tidb to update binary by translating []byte to uint64
 		if mysqlType == "bit" {
-			val, _ := BinaryLiteral(c.GetBytesValue()).ToInt(nil)
+			val, err := types.BinaryLiteral(c.GetBytesValue()).ToInt(nil)
+			if err != nil {
+				log.S().Error(err)
+				return nil
+			}
 			return val
 		}
 		return c.GetBytesValue()
