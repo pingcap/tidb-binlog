@@ -58,6 +58,8 @@ var (
 	// save valuePointer headPointer, for binlog in vlog not after headPointer, we have save it in metadata db
 	// at start up, we can scan the vlog from headPointer and save the ts -> valuePointer to metadata db
 	headPointerKey = []byte("!binlog!headPointer")
+	// If the kv channel blocks for more than this value, turn on the slow chaser
+	slowChaserThreshold = 3 * time.Second
 )
 
 // Storage is the interface to handle binlog storage
@@ -910,7 +912,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			for _, req := range batch {
 				select {
 				case done <- req:
-				case <-time.After(3 * time.Second):
+				case <-time.After(slowChaserThreshold):
 					slowChaser.TurnOn(&req.valuePointer)
 					break SEND
 				}

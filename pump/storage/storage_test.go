@@ -81,6 +81,11 @@ func (as *AppendSuit) TestNewAppend(c *check.C) {
 }
 
 func (as *AppendSuit) TestBlockedWriteKVShouldNotStopWritingVlogs(c *check.C) {
+	origThres := slowChaserThreshold
+	defer func() {
+		slowChaserThreshold = origThres
+	}()
+	slowChaserThreshold = 10 * time.Millisecond
 	// Set KVChanCapacity to be extremely small so that we can feed it up
 	store := newAppendWithOptions(c, DefaultOptions().WithKVChanCapacity(10))
 	incoming := make(chan *request, 100)
@@ -120,6 +125,11 @@ func (as *AppendSuit) TestBlockedWriteKVShouldNotStopWritingVlogs(c *check.C) {
 }
 
 func (as *AppendSuit) TestVlogsShouldBeInSyncWhenDownStreamRecovers(c *check.C) {
+	origThres := slowChaserThreshold
+	defer func() {
+		slowChaserThreshold = origThres
+	}()
+	slowChaserThreshold = 10 * time.Millisecond
 	opts := DefaultOptions().WithKVChanCapacity(10).WithValueLogFileSize(9000)
 	store := newAppendWithOptions(c, opts)
 	incoming := make(chan *request, 100)
