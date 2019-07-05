@@ -859,7 +859,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	done := make(chan *request, a.options.KVChanCapacity)
 	slowChaser := newSlowChaser(a.vlog, time.Second, done)
 	slowChaserStopped := make(chan struct{})
-	go func () {
+	go func() {
 		slowChaser.Run(ctx)
 		close(slowChaserStopped)
 	}()
