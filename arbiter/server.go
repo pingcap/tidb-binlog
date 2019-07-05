@@ -266,7 +266,10 @@ func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) {
 	dest := ld.Input()
 	for msg := range source {
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
-		txn := loader.SlaveBinlogToTxn(msg.Binlog)
+		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+		if err != nil {
+			log.Error("transfer binlog failed", zap.Error(err))
+		}
 		txn.Metadata = msg
 		dest <- txn
 
