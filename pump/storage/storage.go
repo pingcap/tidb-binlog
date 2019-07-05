@@ -907,7 +907,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 					size = 0
 					bufReqs = bufReqs[:0]
 				}
-			case <-time.After(time.Millisecond):
+			default:
 				if len(bufReqs) > 0 {
 					write(bufReqs)
 					size = 0
