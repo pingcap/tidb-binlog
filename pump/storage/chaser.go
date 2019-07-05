@@ -85,7 +85,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 			continue
 		}
 		tCatchUp := time.Since(t0)
-		slowChaserCatchUpTimeHistogram.Observe(float64(tCatchUp) / float64(time.Second))
+		slowChaserCatchUpTimeHistogram.Observe(tCatchUp.Seconds())
 		isSlowCatchUp := tCatchUp >= slowCatchUpThreshold
 		hasRecentRecoverAttempt := time.Since(sc.lastRecoverAttempt) <= recoveryCoolDown
 
