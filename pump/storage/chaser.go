@@ -44,7 +44,6 @@ func newSlowChaser(vlog *valueLog, recoveryTimeout time.Duration, output chan *r
 		recoveryTimeout: recoveryTimeout,
 		vlog:            vlog,
 		output:          output,
-		WriteLock:       sync.Mutex{},
 	}
 }
 
