@@ -67,9 +67,12 @@ func (sc *slowChaser) turnOff() {
 
 func (sc *slowChaser) Run(ctx context.Context) {
 	for {
-		if canceled := sc.waitUntilTurnedOn(ctx, 500*time.Millisecond); canceled {
-			log.Info("Slow chaser quits")
-			return
+		if err := sc.waitUntilTurnedOn(ctx, 500*time.Millisecond); err != nil {
+			if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
+				log.Info("Slow chaser quits")
+				return
+			}
+			log.Fatal("Slow chaser got unexpected error when waiting", zap.Error(err))
 		}
 
 		if sc.lastUnreadPtr == nil {
@@ -78,7 +81,7 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		}
 
 		t0 := time.Now()
-		err := sc.catchUp()
+		err := sc.catchUp(ctx)
 		if err != nil {
 			log.Error("Failed to catch up", zap.Error(err))
 			continue
@@ -106,7 +109,9 @@ func (sc *slowChaser) Run(ctx context.Context) {
 		// Try to catch up with scanning again, if this succeeds, we can be sure
 		// that all vlogs have been sent to the downstream, and it's safe to turn
 		// off the slow chaser
-		err = sc.catchUpWithTimeout(sc.recoveryTimeout)
+		timeoutCtx, cancel := context.WithTimeout(ctx, sc.recoveryTimeout)
+		err = sc.catchUp(timeoutCtx)
+		cancel()
 		if err != nil {
 			log.Error("Failed to recover from slow mode", zap.Error(err))
 			sc.WriteLock.Unlock()
@@ -118,13 +123,17 @@ func (sc *slowChaser) Run(ctx context.Context) {
 	}
 }
 
-func (sc *slowChaser) catchUp() error {
+func (sc *slowChaser) catchUp(ctx context.Context) error {
 	slowChaserCount.WithLabelValues("catch_up").Add(1.0)
 	log.Info("Scanning requests to catch up with vlog", zap.Any("start", sc.lastUnreadPtr))
 	count := 0
 	err := sc.vlog.scanRequests(*sc.lastUnreadPtr, func(req *request) error {
 		sc.lastUnreadPtr = &req.valuePointer
-		sc.output <- req
+		select {
+		case sc.output <- req:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		count++
 		return nil
 	})
@@ -132,28 +141,14 @@ func (sc *slowChaser) catchUp() error {
 	return errors.Trace(err)
 }
 
-func (sc *slowChaser) catchUpWithTimeout(timeout time.Duration) error {
-	log.Info("Scanning requests to recover", zap.Any("start", sc.lastUnreadPtr))
-	errTimeout := errors.New("Recovery Timeout")
-	t0 := time.Now()
-	err := sc.vlog.scanRequests(*sc.lastUnreadPtr, func(req *request) error {
-		if time.Since(t0) >= timeout {
-			return errTimeout
-		}
-		sc.lastUnreadPtr = &req.valuePointer
-		timeLeft := sc.recoveryTimeout - time.Since(t0)
-		select {
-		case sc.output <- req:
-		case <-time.After(timeLeft):
-			// Return a custom error here to stop scanning
-			return errTimeout
-		}
-		return nil
-	})
-	return err
-}
-
-func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.Duration) (canceled bool) {
+// waitUntilTurnedOn returns nil when the the slow chaser is on;
+// it returns context.Canceled when the context is canceled.
+func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	// It should be OK to check periodically here,
 	// because compared to scanning, the overhead introduced by
 	// sleeping and waking up is trivial.
@@ -164,8 +159,8 @@ func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
-			return true
+			return ctx.Err()
 		}
 	}
-	return false
+	return nil
 }

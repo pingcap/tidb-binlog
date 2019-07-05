@@ -858,12 +858,17 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan *request, a.options.KVChanCapacity)
 	slowChaser := newSlowChaser(a.vlog, time.Second, done)
-	go slowChaser.Run(ctx)
+	slowChaserStopped := make(chan struct{})
+	go func () {
+		slowChaser.Run(ctx)
+		close(slowChaserStopped)
+	}()
 
 	go func() {
 		defer func() {
-			close(done)
 			cancel()
+			<-slowChaserStopped
+			close(done)
 		}()
 
 		var bufReqs []*request

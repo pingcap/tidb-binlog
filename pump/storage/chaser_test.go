@@ -30,8 +30,8 @@ func (s *waitUntilTurnedOnSuite) TestShouldStopWhenCanceled(c *C) {
 	signal := make(chan struct{})
 	checkInterval := time.Second
 	go func() {
-		canceled := sc.waitUntilTurnedOn(ctx, checkInterval)
-		c.Assert(canceled, IsTrue)
+		err := sc.waitUntilTurnedOn(ctx, checkInterval)
+		c.Assert(err, Equals, context.Canceled)
 		close(signal)
 	}()
 
@@ -51,8 +51,8 @@ func (s *waitUntilTurnedOnSuite) TestShouldReturnWhenTurnedOn(c *C) {
 	signal := make(chan struct{})
 	checkInterval := time.Second
 	go func() {
-		canceled := sc.waitUntilTurnedOn(ctx, checkInterval)
-		c.Assert(canceled, IsFalse)
+		err := sc.waitUntilTurnedOn(ctx, checkInterval)
+		c.Assert(err, IsNil)
 		close(signal)
 	}()
 
@@ -61,5 +61,25 @@ func (s *waitUntilTurnedOnSuite) TestShouldReturnWhenTurnedOn(c *C) {
 	case <-signal:
 	case <-time.After(checkInterval):
 		c.Fatal("Wait doesn't stop in time after turned on.")
+	}
+}
+
+type runSuite struct{}
+
+var _ = Suite(&runSuite{})
+
+func (rs *runSuite) TestCanBeStoppedWhenWaiting(c *C) {
+	sc := slowChaser{}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		sc.Run(ctx)
+		close(stopped)
+	}()
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(500 * time.Millisecond):
+		c.Fatal("Takes too long to stop slow chaser")
 	}
 }
