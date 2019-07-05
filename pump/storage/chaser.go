@@ -154,7 +154,7 @@ func (sc *slowChaser) catchUpWithTimeout(timeout time.Duration) error {
 	return err
 }
 
-func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.Duration) bool {
+func (sc *slowChaser) waitUntilTurnedOn(ctx context.Context, checkInterval time.Duration) (canceled bool) {
 	// It should be OK to check periodically here,
 	// because compared to scanning, the overhead introduced by
 	// sleeping and waking up is trivial.
