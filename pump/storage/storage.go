@@ -910,7 +910,7 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			for _, req := range batch {
 				select {
 				case done <- req:
-				case <-time.After(10 * time.Millisecond):
+				case <-time.After(3 * time.Second):
 					slowChaser.TurnOn(&req.valuePointer)
 					break SEND
 				}
