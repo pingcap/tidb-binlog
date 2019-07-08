@@ -110,8 +110,6 @@ func (sp *MysqlCheckPoint) Load() error {
 	return nil
 }
 
-var getTidbPos = pkgsql.GetTidbPosition
-
 // Save implements checkpoint.Save interface
 func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	sp.Lock()
