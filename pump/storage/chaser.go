@@ -29,9 +29,13 @@ var (
 	recoveryCoolDown     = time.Minute
 )
 
+type valLogScanner interface {
+	scanRequests(valuePointer, func(*request) error) error
+}
+
 type slowChaser struct {
 	on                 int32
-	vlog               *valueLog
+	vlog               valLogScanner
 	lastUnreadPtr      *valuePointer
 	recoveryTimeout    time.Duration
 	lastRecoverAttempt time.Time
@@ -39,7 +43,7 @@ type slowChaser struct {
 	WriteLock          sync.Mutex
 }
 
-func newSlowChaser(vlog *valueLog, recoveryTimeout time.Duration, output chan *request) *slowChaser {
+func newSlowChaser(vlog valLogScanner, recoveryTimeout time.Duration, output chan *request) *slowChaser {
 	return &slowChaser{
 		recoveryTimeout: recoveryTimeout,
 		vlog:            vlog,
