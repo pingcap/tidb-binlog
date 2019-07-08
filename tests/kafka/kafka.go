@@ -91,7 +91,6 @@ func main() {
 				log.S().Debugf("recv: %.2000s", str)
 				txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 				if err != nil {
-					log.S().Error(errors.ErrorStack(err))
 					log.S().Fatal(err)
 				}
 				ld.Input() <- txn

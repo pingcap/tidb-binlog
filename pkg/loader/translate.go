@@ -15,7 +15,7 @@ package loader
 
 import (
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
-	types "github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/types"
 )
 
 // SlaveBinlogToTxn translate the Binlog format into Txn
@@ -39,14 +39,14 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn, err error) {
 				// setup values
 				dml.Values, err = getColVals(table, mut.Row.GetColumns())
 				if err != nil {
-					return txn, err
+					return nil, err
 				}
 
 				// setup old values
 				if dml.Tp == UpdateDMLType {
 					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns())
 					if err != nil {
-						return txn, err
+						return nil, err
 					}
 				}
 				txn.DMLs = append(txn.DMLs, dml)

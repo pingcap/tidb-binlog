@@ -182,8 +182,11 @@ func (s *Server) Run() error {
 
 	wg.Add(1)
 	go func() {
-		syncBinlogs(s.kafkaReader.Messages(), s.load)
+		err := syncBinlogs(s.kafkaReader.Messages(), s.load)
 		wg.Done()
+		if err != nil {
+			s.Close()
+		}
 	}()
 
 	err := s.load.Run()
@@ -262,13 +265,14 @@ func (s *Server) loadStatus() (int, error) {
 	return status, errors.Trace(err)
 }
 
-func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) {
+func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) (err error) {
 	dest := ld.Input()
 	for msg := range source {
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
 		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 		if err != nil {
 			log.Error("transfer binlog failed", zap.Error(err))
+			return err
 		}
 		txn.Metadata = msg
 		dest <- txn
@@ -277,4 +281,5 @@ func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) {
 		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))
 	}
 	ld.Close()
+	return nil
 }
