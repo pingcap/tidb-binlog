@@ -16,7 +16,6 @@ package checkpoint
 import (
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -55,21 +54,15 @@ func (s *saveSuite) TestShouldSaveCheckpoint(c *C) {
 }
 
 func (s *saveSuite) TestShouldUpdateTsMap(c *C) {
-	origGet := getTidbPos
-	getTidbPos = func(db *sql.DB) (int64, error) {
-		return 3333, nil
-	}
-	defer func() { getTidbPos = origGet }()
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(0, 0))
 	cp := MysqlCheckPoint{
-		db:       db,
-		schema:   "db",
-		table:    "tbl",
-		tp:       "tidb",
-		snapshot: time.Now().Add(-time.Minute),
-		TsMap:    make(map[string]int64),
+		db:     db,
+		schema: "db",
+		table:  "tbl",
+		tp:     "tidb",
+		TsMap:  make(map[string]int64),
 	}
 	err = cp.Save(65536, 3333)
 	c.Assert(err, IsNil)

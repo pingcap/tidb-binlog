@@ -573,13 +573,8 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 		return errors.Trace(err)
 	}
 
-	finishTS := int64(0)
-	if b.needGetFinishTS {
-		finishTS = b.getFinishTS()
-	}
-
 	if b.fDMLsSuccessCallback != nil {
-		b.txns[len(b.txns)-1].FinishTS = finishTS
+		b.txns[len(b.txns)-1].FinishTS = b.getFinishTS()
 		b.fDMLsSuccessCallback(b.txns...)
 	}
 	b.txns = b.txns[:0]
@@ -596,10 +591,7 @@ func (b *batchManager) execDDL(txn *Txn) error {
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
 	}
 
-	if b.needGetFinishTS {
-		txn.FinishTS = b.getFinishTS()
-	}
-
+	txn.FinishTS = b.getFinishTS()
 	b.fDDLSuccessCallback(txn)
 	return nil
 }
@@ -633,8 +625,7 @@ func (b *batchManager) put(txn *Txn) error {
 }
 
 func (b *batchManager) getFinishTS() int64 {
-	if time.Since(b.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
-		b.lastUpdateFinishTSTime = time.Now()
+	if b.needGetFinishTS && time.Since(b.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
 		finishTS, err := pkgsql.GetTidbPosition(b.db)
 		if err != nil {
 			errCode, ok := pkgsql.GetSQLErrCode(err)
@@ -643,6 +634,7 @@ func (b *batchManager) getFinishTS() int64 {
 				log.Warn("get ts from slave cluster failed", zap.Error(err))
 			}
 		}
+		b.lastUpdateFinishTSTime = time.Now()
 
 		return finishTS
 	}
