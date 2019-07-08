@@ -40,11 +40,13 @@ func (cs *LoadSuite) TestOptions(c *check.C) {
 	var o options
 	WorkerCount(42)(&o)
 	BatchSize(1024)(&o)
+	DownstreamTp(tidbTp)(&o)
 	var mg MetricsGroup
 	Metrics(&mg)(&o)
 	c.Assert(o.workerCount, check.Equals, 42)
 	c.Assert(o.batchSize, check.Equals, 1024)
 	c.Assert(o.metrics, check.Equals, &mg)
+	c.Assert(o.downstreamTp, check.Equals, tidbTp)
 }
 
 func (cs *LoadSuite) TestGetExecutor(c *check.C) {

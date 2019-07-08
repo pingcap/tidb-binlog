@@ -106,7 +106,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 			return nil, errors.Annotate(err, "fail to create flash dsyncer")
 		}
 	case "mysql", "tidb":
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode)
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -187,7 +187,10 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			break
 		}
 
-		var saveNow = false
+		var (
+			saveNow  = false
+			finishTS int64
+		)
 
 		select {
 		case item, ok := <-successes:
@@ -203,9 +206,10 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 				atomic.StoreInt64(lastTS, ts)
 			}
 
-			// save ASAP for DDL
-			if item.Binlog.DdlJobId > 0 {
+			// save ASAP for DDL, and if FinishTS > 0, we should save the ts map
+			if item.Binlog.DdlJobId > 0 || item.FinishTS > 0 {
 				saveNow = true
+				finishTS = item.FinishTS
 			}
 
 		case binlog, ok := <-fakeBinlog:
@@ -222,7 +226,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 		ts := atomic.LoadInt64(lastTS)
 		if ts > lastSaveTS {
 			if saveNow || time.Since(lastSaveTime) > 3*time.Second {
-				s.savePoint(ts)
+				s.savePoint(ts, finishTS)
 				lastSaveTime = time.Now()
 				lastSaveTS = ts
 				eventCounter.WithLabelValues("savepoint").Add(1)
@@ -234,20 +238,20 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 
 	ts := atomic.LoadInt64(lastTS)
 	if ts > lastSaveTS {
-		s.savePoint(ts)
+		s.savePoint(ts, 0)
 		eventCounter.WithLabelValues("savepoint").Add(1)
 	}
 
 	log.Info("handleSuccess quit")
 }
 
-func (s *Syncer) savePoint(ts int64) {
+func (s *Syncer) savePoint(ts, slaveTS int64) {
 	if ts < s.cp.TS() {
 		log.Error("save ts is less than checkpoint ts %d", zap.Int64("save ts", ts), zap.Int64("checkpoint ts", s.cp.TS()))
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts)
+	err := s.cp.Save(ts, slaveTS)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}

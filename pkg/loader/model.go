@@ -58,6 +58,8 @@ type Txn struct {
 	DMLs []*DML
 	DDL  *DDL
 
+	FinishTS int64
+
 	// This field is used to hold arbitrary data you wish to include so it
 	// will be available when receiving on the Successes channel
 	Metadata interface{}

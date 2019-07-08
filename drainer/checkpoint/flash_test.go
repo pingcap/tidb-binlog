@@ -54,7 +54,7 @@ func (s *flashSuite) TestSave(c *C) {
 	mock.ExpectBegin()
 	mock.ExpectExec("IMPORT INTO.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
-	err = cp.Save(1024)
+	err = cp.Save(1024, 0)
 	c.Assert(err, IsNil)
 }
 

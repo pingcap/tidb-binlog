@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	tmysql "github.com/pingcap/tidb/mysql"
 )
 
 const (
@@ -38,11 +39,15 @@ const (
 	maxDDLRetryCount = 5
 
 	execLimitMultiple = 3
+
+	tidbTp  = "tidb"
+	mysqlTp = "mysql"
 )
 
 var (
-	execDDLRetryWait = time.Second
-	fNewBatchManager = newBatchManager
+	execDDLRetryWait           = time.Second
+	fNewBatchManager           = newBatchManager
+	updateLastFinishTSInterval = time.Minute
 )
 
 // Loader is used to load data to mysql
@@ -79,6 +84,9 @@ type loaderImpl struct {
 	// always true now
 	// merge the same primary key DML sequence, then batch insert
 	merge bool
+
+	// value can be tidb or mysql
+	downstreamTp string
 }
 
 // MetricsGroup contains metrics of Loader
@@ -88,15 +96,17 @@ type MetricsGroup struct {
 }
 
 type options struct {
-	workerCount int
-	batchSize   int
-	metrics     *MetricsGroup
+	workerCount  int
+	batchSize    int
+	metrics      *MetricsGroup
+	downstreamTp string
 }
 
 var defaultLoaderOptions = options{
-	workerCount: 16,
-	batchSize:   20,
-	metrics:     nil,
+	workerCount:  16,
+	batchSize:    20,
+	metrics:      nil,
+	downstreamTp: mysqlTp,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -116,6 +126,18 @@ func BatchSize(n int) Option {
 	}
 }
 
+// DownstreamTp set downstream type, values can be tidb or mysql
+func DownstreamTp(tp string) Option {
+	return func(o *options) {
+		if tp == tidbTp || tp == mysqlTp {
+			o.downstreamTp = tp
+		} else {
+			log.Warn("downstream type is not supported, use mysql as default", zap.String("type", tp))
+			o.downstreamTp = mysqlTp
+		}
+	}
+}
+
 // Metrics set metrics of loader
 func Metrics(m *MetricsGroup) Option {
 	return func(o *options) {
@@ -132,13 +154,14 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 
 	s := &loaderImpl{
-		db:          db,
-		workerCount: opts.workerCount,
-		batchSize:   opts.batchSize,
-		metrics:     opts.metrics,
-		input:       make(chan *Txn, 1024),
-		successTxn:  make(chan *Txn, 1024),
-		merge:       true,
+		db:           db,
+		workerCount:  opts.workerCount,
+		batchSize:    opts.batchSize,
+		metrics:      opts.metrics,
+		input:        make(chan *Txn, 1024),
+		successTxn:   make(chan *Txn, 1024),
+		merge:        true,
+		downstreamTp: opts.downstreamTp,
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
@@ -509,6 +532,7 @@ func (s *loaderImpl) getExecutor() *executor {
 
 func newBatchManager(s *loaderImpl) *batchManager {
 	return &batchManager{
+		db:                   s.db,
 		limit:                s.batchSize * s.workerCount * execLimitMultiple,
 		fExecDMLs:            s.execDMLs,
 		fDMLsSuccessCallback: s.markSuccess,
@@ -521,10 +545,13 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				}
 			}
 		},
+		needGetFinishTS:        s.downstreamTp == tidbTp,
+		lastUpdateFinishTSTime: time.Now(),
 	}
 }
 
 type batchManager struct {
+	db                   *gosql.DB
 	txns                 []*Txn
 	dmls                 []*DML
 	limit                int
@@ -532,9 +559,12 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
+
+	needGetFinishTS        bool
+	lastUpdateFinishTSTime time.Time
 }
 
-func (b *batchManager) execAccumulatedDMLs() error {
+func (b *batchManager) execAccumulatedDMLs() (err error) {
 	if len(b.dmls) == 0 {
 		return nil
 	}
@@ -543,7 +573,13 @@ func (b *batchManager) execAccumulatedDMLs() error {
 		return errors.Trace(err)
 	}
 
+	finishTS := int64(0)
+	if b.needGetFinishTS {
+		finishTS = b.getFinishTS()
+	}
+
 	if b.fDMLsSuccessCallback != nil {
+		b.txns[len(b.txns)-1].FinishTS = finishTS
 		b.fDMLsSuccessCallback(b.txns...)
 	}
 	b.txns = b.txns[:0]
@@ -558,6 +594,10 @@ func (b *batchManager) execDDL(txn *Txn) error {
 			return errors.Trace(err)
 		}
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
+	}
+
+	if b.needGetFinishTS {
+		txn.FinishTS = b.getFinishTS()
 	}
 
 	b.fDDLSuccessCallback(txn)
@@ -590,4 +630,22 @@ func (b *batchManager) put(txn *Txn) error {
 		}
 	}
 	return nil
+}
+
+func (b *batchManager) getFinishTS() int64 {
+	if time.Since(b.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
+		b.lastUpdateFinishTSTime = time.Now()
+		finishTS, err := pkgsql.GetTidbPosition(b.db)
+		if err != nil {
+			errCode, ok := pkgsql.GetSQLErrCode(err)
+			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
+			if !ok || int(errCode) != tmysql.ErrUnknown {
+				log.Warn("get ts from slave cluster failed", zap.Error(err))
+			}
+		}
+
+		return finishTS
+	}
+
+	return 0
 }

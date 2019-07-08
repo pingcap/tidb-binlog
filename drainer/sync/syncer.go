@@ -24,6 +24,9 @@ type Item struct {
 	PrewriteValue *pb.PrewriteValue // only for DML
 	Schema        string
 	Table         string
+
+	// the finish TS executed in downstream, only for tidb
+	FinishTS int64
 }
 
 // Syncer sync binlog item to downstream

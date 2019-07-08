@@ -142,7 +142,7 @@ func (sp *FlashCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *FlashCheckPoint) Save(ts int64) error {
+func (sp *FlashCheckPoint) Save(ts, slaveTS int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
