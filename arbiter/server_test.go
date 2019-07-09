@@ -407,7 +407,17 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	}()
 	ld := dummyLoader{input: dest}
 
-	err := syncBinlogs(source, &ld)
+	res := make(chan error)
+	var err error = nil
+	go func() {
+		for err := range res {
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	syncBinlogs(source, &ld, res)
 	c.Assert(err, IsNil)
 
 	c.Assert(len(dest), Equals, 2)
