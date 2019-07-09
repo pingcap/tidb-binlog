@@ -40,29 +40,3 @@ func (s *p8sSuite) TestCanBeStopped(c *C) {
 		c.Fatal("Doesn't stop in time")
 	}
 }
-
-func (s *p8sSuite) TestAddToPusher(c *C) {
-	mc := NewMetricClient("localhost:9999", 10*time.Millisecond, prometheus.NewRegistry())
-
-	// Set up the mock function
-	var nCalled int
-	orig := addToPusher
-	addToPusher = func(job string, grouping map[string]string, url string, g prometheus.Gatherer) error {
-		c.Assert(job, Equals, "binlog")
-		c.Assert(grouping, DeepEquals, map[string]string{"instance": "pump-1"})
-		c.Assert(url, Equals, mc.addr)
-		c.Assert(g, DeepEquals, mc.registry)
-		nCalled++
-		return nil
-	}
-	defer func() {
-		addToPusher = orig
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*mc.interval)
-	defer cancel()
-	go mc.Start(ctx, map[string]string{"instance": "pump-1"})
-	<-ctx.Done()
-	c.Assert(nCalled, GreaterEqual, 4)
-	c.Assert(nCalled, LessEqual, 6)
-}

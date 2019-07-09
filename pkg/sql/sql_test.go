@@ -164,13 +164,13 @@ func (s *sqlSuite) TestExecuteTxnSuccess(c *C) {
 	var metricFix io_prometheus_client.Metric
 	histogramFix.WithLabelValues("execFix").Observe((time.Millisecond * delay1).Seconds())
 	histogramFix.WithLabelValues("execFix").Observe((time.Millisecond*delay2 + diffDuration).Seconds())
-	err = histogramFix.WithLabelValues("execFix").Write(&metricFix)
+	err = histogramFix.WithLabelValues("execFix").(prometheus.Metric).Write(&metricFix)
 	c.Assert(err, IsNil)
 	upperBound := metricFix.Histogram.GetSampleSum()
 
 	// extract the content of the histogram.
 	var metric io_prometheus_client.Metric
-	err = histogram.WithLabelValues("exec").Write(&metric)
+	err = histogram.WithLabelValues("exec").(prometheus.Metric).Write(&metric)
 	c.Assert(err, IsNil)
 	c.Assert(metric.Histogram.GetSampleCount(), Equals, uint64(2))
 	sum := metric.Histogram.GetSampleSum()
