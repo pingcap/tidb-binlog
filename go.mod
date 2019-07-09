@@ -5,26 +5,21 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.0
 	github.com/Shopify/sarama v1.18.0
 	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
-	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
-	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 // indirect
 	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/dustin/go-humanize v1.0.0
 	github.com/eapache/go-resiliency v1.1.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v0.0.0-20180227141424-093482f3f8ce // indirect
-	github.com/etcd-io/gofail v0.0.0-20180808172546-51ce9a71510a // indirect
 	github.com/go-sql-driver/mysql v1.4.0
 	github.com/gogo/protobuf v1.2.0
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.1
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/gorilla/mux v1.6.2
-	github.com/juju/errors v0.0.0-20190207033735-e65537c515d7 // indirect
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
-	github.com/pingcap/gofail v0.0.0-20181217135706-6a951c1e42c3 // indirect
 	github.com/pingcap/kvproto v0.0.0-20190703131923-d9830856b531
 	github.com/pingcap/log v0.0.0-20190307075452-bd41d9273596
 	github.com/pingcap/parser v0.0.0-20190709031113-f5e853fce911
