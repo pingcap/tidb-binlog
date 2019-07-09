@@ -216,7 +216,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	s.tg.Go("heartbeat", func() {
 		defer func() {
 			close(errc)
-			s.Close()
+			defer func() { go s.Close() }()
 		}()
 
 		for {
@@ -251,7 +251,7 @@ func (s *Server) Start() error {
 	}()
 
 	s.tg.GoNoPanic("collect", func() {
-		defer s.Close()
+		defer func() { go s.Close() }()
 		s.collector.Start(s.ctx)
 	})
 
@@ -262,7 +262,7 @@ func (s *Server) Start() error {
 	}
 
 	s.tg.GoNoPanic("syncer", func() {
-		defer s.Close()
+		defer func() { go s.Close() }()
 		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
 		}
