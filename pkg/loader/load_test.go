@@ -475,3 +475,33 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 	time.Sleep(10 * time.Millisecond)
 	c.Assert(executed, check.HasLen, 7)
 }
+
+type markSuccessesSuite struct{}
+
+var _ = check.Suite(&markSuccessesSuite{})
+
+func (ms *markSuccessesSuite) TestShouldSetFinishTS(c *check.C) {
+	origF := fGetFinishTS
+	defer func() {
+		fGetFinishTS = origF
+	}()
+	fGetFinishTS = func(*sql.DB) int64 {
+		return 88881234
+	}
+	loader := &loaderImpl{downstreamTp: tidbTp, successTxn: make(chan *Txn, 64)}
+	loader.markSuccess([]*Txn{}...) // Make sure it won't break when no txns are passed
+	txns := []*Txn{
+		{Metadata: 1},
+		{Metadata: 3},
+		{Metadata: 5},
+	}
+	loader.markSuccess(txns...)
+	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, fGetFinishTS(nil))
+
+	txns = []*Txn{
+		{Metadata: 7},
+		{Metadata: 8},
+	}
+	loader.markSuccess(txns...)
+	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(0))
+}

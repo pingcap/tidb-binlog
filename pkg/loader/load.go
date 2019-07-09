@@ -47,6 +47,7 @@ const (
 var (
 	execDDLRetryWait           = time.Second
 	fNewBatchManager           = newBatchManager
+	fGetFinishTS               = getFinishTS
 	updateLastFinishTSInterval = time.Minute
 )
 
@@ -86,7 +87,8 @@ type loaderImpl struct {
 	merge bool
 
 	// value can be tidb or mysql
-	downstreamTp string
+	downstreamTp           string
+	lastUpdateFinishTSTime time.Time
 }
 
 // MetricsGroup contains metrics of Loader
@@ -204,6 +206,10 @@ func (s *loaderImpl) GetSafeMode() bool {
 }
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
+	if s.downstreamTp == tidbTp && len(txns) > 0 && time.Since(s.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
+		txns[len(txns)-1].FinishTS = fGetFinishTS(s.db)
+		s.lastUpdateFinishTSTime = time.Now()
+	}
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
@@ -532,7 +538,6 @@ func (s *loaderImpl) getExecutor() *executor {
 
 func newBatchManager(s *loaderImpl) *batchManager {
 	return &batchManager{
-		db:                   s.db,
 		limit:                s.batchSize * s.workerCount * execLimitMultiple,
 		fExecDMLs:            s.execDMLs,
 		fDMLsSuccessCallback: s.markSuccess,
@@ -545,13 +550,10 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				}
 			}
 		},
-		needGetFinishTS:        s.downstreamTp == tidbTp,
-		lastUpdateFinishTSTime: time.Now(),
 	}
 }
 
 type batchManager struct {
-	db                   *gosql.DB
 	txns                 []*Txn
 	dmls                 []*DML
 	limit                int
@@ -559,9 +561,6 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
-
-	needGetFinishTS        bool
-	lastUpdateFinishTSTime time.Time
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
@@ -574,7 +573,6 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 	}
 
 	if b.fDMLsSuccessCallback != nil {
-		b.txns[len(b.txns)-1].FinishTS = b.getFinishTS()
 		b.fDMLsSuccessCallback(b.txns...)
 	}
 	b.txns = b.txns[:0]
@@ -591,7 +589,6 @@ func (b *batchManager) execDDL(txn *Txn) error {
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
 	}
 
-	txn.FinishTS = b.getFinishTS()
 	b.fDDLSuccessCallback(txn)
 	return nil
 }
@@ -624,20 +621,15 @@ func (b *batchManager) put(txn *Txn) error {
 	return nil
 }
 
-func (b *batchManager) getFinishTS() int64 {
-	if b.needGetFinishTS && time.Since(b.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
-		finishTS, err := pkgsql.GetTidbPosition(b.db)
-		if err != nil {
-			errCode, ok := pkgsql.GetSQLErrCode(err)
-			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
-			if !ok || int(errCode) != tmysql.ErrUnknown {
-				log.Warn("get ts from slave cluster failed", zap.Error(err))
-			}
+func getFinishTS(db *gosql.DB) int64 {
+	finishTS, err := pkgsql.GetTidbPosition(db)
+	if err != nil {
+		errCode, ok := pkgsql.GetSQLErrCode(err)
+		// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
+		if !ok || int(errCode) != tmysql.ErrUnknown {
+			log.Warn("get ts from slave cluster failed", zap.Error(err))
 		}
-		b.lastUpdateFinishTSTime = time.Now()
-
-		return finishTS
+		return 0
 	}
-
-	return 0
+	return finishTS
 }
