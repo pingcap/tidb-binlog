@@ -80,6 +80,107 @@ func (as *AppendSuit) TestNewAppend(c *check.C) {
 	append.Close()
 }
 
+func (as *AppendSuit) TestBlockedWriteKVShouldNotStopWritingVlogs(c *check.C) {
+	origThres := slowChaserThreshold
+	defer func() {
+		slowChaserThreshold = origThres
+	}()
+	slowChaserThreshold = 10 * time.Millisecond
+	// Set KVChanCapacity to be extremely small so that we can feed it up
+	store := newAppendWithOptions(c, DefaultOptions().WithKVChanCapacity(10))
+	incoming := make(chan *request, 100)
+	// We are not calling WriteBinlog here, instead, we set up an isolated
+	// instance of writeToValueLog so that we can control the input and output
+	// channels.
+	written := store.writeToValueLog(incoming)
+
+	// Send many requests to simulate WriteBinlog calls
+	finished := make(chan struct{})
+	go func() {
+		reqs := createDummyReqs(4000)
+		for _, r := range reqs {
+			r.wg.Add(1)
+			incoming <- r
+		}
+		for _, r := range reqs {
+			r.wg.Wait()
+		}
+		close(finished)
+	}()
+
+	// The tiny `written` channel is never consumed, once it's full,
+	// no new requests can be sent to it.
+	// The slowChaser should detect this and make sure writes are not blocked.
+	select {
+	case <-finished:
+		c.Assert(
+			len(written),
+			check.Equals,
+			store.options.KVChanCapacity,
+			check.Commentf("No consumer of the written channel is set up, it should be full at this point"),
+		)
+	case <-time.After(1 * time.Second):
+		c.Fatal("Takes too long to finish writing binlogs, writing may have been blocked.")
+	}
+}
+
+func (as *AppendSuit) TestVlogsShouldBeInSyncWhenDownStreamRecovers(c *check.C) {
+	origThres := slowChaserThreshold
+	defer func() {
+		slowChaserThreshold = origThres
+	}()
+	slowChaserThreshold = 10 * time.Millisecond
+	opts := DefaultOptions().WithKVChanCapacity(10).WithValueLogFileSize(9000)
+	store := newAppendWithOptions(c, opts)
+	incoming := make(chan *request, 100)
+	written := store.writeToValueLog(incoming)
+
+	const nReqs = 3000
+
+	finished := make(chan struct{})
+	go func() {
+		reqs := createDummyReqs(nReqs)
+		for _, r := range reqs[:nReqs/2] {
+			r.wg.Add(1)
+			incoming <- r
+		}
+		time.Sleep(100 * time.Millisecond)
+		for _, r := range reqs[nReqs/2:] {
+			r.wg.Add(1)
+			incoming <- r
+		}
+		for _, r := range reqs {
+			r.wg.Wait()
+		}
+		close(finished)
+	}()
+	<-finished
+
+	receivedTs := make([]int64, 0, nReqs)
+	for i := 0; i < nReqs/3; i++ {
+		r := <-written
+		receivedTs = append(receivedTs, r.startTS)
+	}
+	time.Sleep(200 * time.Millisecond)
+	for i := 0; i < nReqs/3; i++ {
+		r := <-written
+		receivedTs = append(receivedTs, r.startTS)
+	}
+	time.Sleep(200 * time.Millisecond)
+	lastTs := receivedTs[len(receivedTs)-1]
+	for lastTs < nReqs {
+		r := <-written
+		receivedTs = append(receivedTs, r.startTS)
+		lastTs = r.startTS
+	}
+	c.Assert(len(receivedTs), check.GreaterEqual, nReqs)
+	for i := 1; i < len(receivedTs); i++ {
+		c.Assert(receivedTs[i], check.GreaterEqual, receivedTs[i-1])
+	}
+	c.Assert(receivedTs[0], check.Equals, int64(1))
+	c.Assert(receivedTs[len(receivedTs)-1], check.Equals, int64(nReqs))
+}
+
 func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	append := newAppend(c)
 	defer cleanAppend(append)
@@ -369,4 +470,26 @@ func (s *OpenDBSuit) TestProvidedConfigValsNotOverwritten(c *check.C) {
 	c.Assert(cf.BlockRestartInterval, check.Equals, 32)
 	c.Assert(cf.WriteL0PauseTrigger, check.Equals, 12)
 	c.Assert(cf.BlockCacheCapacity, check.Equals, defaultStorageKVConfig.BlockCacheCapacity)
+}
+
+func createDummyReqs(n int) []*request {
+	reqs := make([]*request, 0, n)
+	for i := 0; i < n; i++ {
+		ts := int64(i) + 1
+		binlog := pb.Binlog{
+			StartTs: ts,
+			Tp:      pb.BinlogType_Prewrite,
+		}
+		payload, err := binlog.Marshal()
+		if err != nil {
+			panic(err)
+		}
+		r := &request{
+			startTS: ts,
+			payload: payload,
+			tp:      pb.BinlogType_Prewrite,
+		}
+		reqs = append(reqs, r)
+	}
+	return reqs
 }
