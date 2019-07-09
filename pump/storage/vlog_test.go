@@ -248,13 +248,13 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 	err = vlog.open(dir, DefaultOptions())
 	c.Assert(err, check.IsNil)
 
-	// 1k payload per record
+	// Size of the encoded record should be 1024 + headerLength = 1040
 	payload := make([]byte, 1024)
 	req := &request{
 		payload: payload,
 	}
 
-	// should be enough space to write 19 records
+	// Enough space for 19 * 1040
 	for i := 0; i < 19; i++ {
 		err = vlog.write([]*request{req})
 		c.Assert(err, check.IsNil)
@@ -264,8 +264,8 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 	err = vlog.write([]*request{req})
 	c.Assert(err, check.NotNil)
 
-	// increase file size limit to be 40k
-	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 40 * 1024, Max: origRlimit.Max})
+	// increase file size limit to have enough space for one more request
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 20*1024 + 1040, Max: origRlimit.Max})
 	c.Assert(err, check.IsNil)
 
 	// should write success now

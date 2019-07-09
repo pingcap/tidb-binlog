@@ -317,6 +317,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 	vlog.filesLock.RUnlock()
 
 	var bufReqs []*request
+	vlog.buf.Reset()
 
 	toDisk := func() error {
 		err := curFile.Write(vlog.buf.Bytes(), vlog.sync)
