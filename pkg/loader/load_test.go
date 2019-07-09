@@ -505,7 +505,6 @@ func (ms *markSuccessesSuite) TestShouldSetFinishTS(c *check.C) {
 	loader.markSuccess(txns...)
 	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(0))
 
-
 	originUpdateLastFinishTSInterval := updateLastFinishTSInterval
 	updateLastFinishTSInterval = 0
 	defer func() {
