@@ -498,10 +498,15 @@ func (ms *markSuccessesSuite) TestShouldSetFinishTS(c *check.C) {
 	loader.markSuccess(txns...)
 	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, fGetFinishTS(nil))
 
+	originUpdateLastFinishTSInterval := updateLastFinishTSInterval
+	updateLastFinishTSInterval = 0
+	defer func() {
+		updateLastFinishTSInterval = originUpdateLastFinishTSInterval
+	}()
 	txns = []*Txn{
 		{Metadata: 7},
 		{Metadata: 8},
 	}
 	loader.markSuccess(txns...)
-	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(0))
+	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(88881234))
 }
