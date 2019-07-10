@@ -216,7 +216,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	s.tg.Go("heartbeat", func() {
 		defer func() {
 			close(errc)
-			defer func() { go s.Close() }()
+			go s.Close()
 		}()
 
 		for {
