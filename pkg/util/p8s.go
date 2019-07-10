@@ -24,7 +24,7 @@ import (
 )
 
 var (
-// addToPusher = push.AddFromGatherer
+	addToPusher = addFromGatherer
 )
 
 // NewMetricClient returns a pointer to a MetricClient
@@ -50,15 +50,19 @@ func (mc MetricClient) Start(ctx context.Context, grouping map[string]string) {
 		case <-ctx.Done():
 			return
 		case <-time.After(mc.interval):
-			pusher := push.New(mc.addr, "binlog")
-			// add grouping
-			for k, v := range grouping {
-				pusher = pusher.Grouping(k, v)
-			}
-			pusher = pusher.Gatherer(mc.registry)
-			if err := pusher.Add(); err != nil {
+			if err := addToPusher("binlog", grouping, mc.addr, mc.registry); err != nil {
 				log.Error("push metrics to Prometheus Pushgateway failed", zap.Error(err))
 			}
 		}
 	}
+}
+
+func addFromGatherer(job string, grouping map[string]string, url string, g prometheus.Gatherer) error {
+	pusher := push.New(url, job)
+	// add grouping
+	for k, v := range grouping {
+		pusher = pusher.Grouping(k, v)
+	}
+	pusher = pusher.Gatherer(g)
+	return pusher.Add()
 }
