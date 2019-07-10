@@ -45,10 +45,10 @@ const (
 )
 
 var (
-	execDDLRetryWait           = time.Second
-	fNewBatchManager           = newBatchManager
-	fGetFinishTS               = getFinishTS
-	updateLastFinishTSInterval = time.Minute
+	execDDLRetryWait            = time.Second
+	fNewBatchManager            = newBatchManager
+	fGetAppliedTS               = getAppliedTS
+	updateLastAppliedTSInterval = time.Minute
 )
 
 // Loader is used to load data to mysql
@@ -87,8 +87,8 @@ type loaderImpl struct {
 	merge bool
 
 	// value can be tidb or mysql
-	downstreamTp           string
-	lastUpdateFinishTSTime time.Time
+	downstreamTp            string
+	lastUpdateAppliedTSTime time.Time
 }
 
 // MetricsGroup contains metrics of Loader
@@ -206,9 +206,9 @@ func (s *loaderImpl) GetSafeMode() bool {
 }
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
-	if s.downstreamTp == tidbTp && len(txns) > 0 && time.Since(s.lastUpdateFinishTSTime) > updateLastFinishTSInterval {
-		txns[len(txns)-1].FinishTS = fGetFinishTS(s.db)
-		s.lastUpdateFinishTSTime = time.Now()
+	if s.downstreamTp == tidbTp && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
+		txns[len(txns)-1].AppliedTS = fGetAppliedTS(s.db)
+		s.lastUpdateAppliedTSTime = time.Now()
 	}
 	for _, txn := range txns {
 		s.successTxn <- txn
@@ -621,8 +621,8 @@ func (b *batchManager) put(txn *Txn) error {
 	return nil
 }
 
-func getFinishTS(db *gosql.DB) int64 {
-	finishTS, err := pkgsql.GetTidbPosition(db)
+func getAppliedTS(db *gosql.DB) int64 {
+	appliedTS, err := pkgsql.GetTidbPosition(db)
 	if err != nil {
 		errCode, ok := pkgsql.GetSQLErrCode(err)
 		// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
@@ -631,5 +631,5 @@ func getFinishTS(db *gosql.DB) int64 {
 		}
 		return 0
 	}
-	return finishTS
+	return appliedTS
 }

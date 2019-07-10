@@ -25,8 +25,8 @@ type Item struct {
 	Schema        string
 	Table         string
 
-	// the finish TS executed in downstream, only for tidb
-	FinishTS int64
+	// the applied TS executed in downstream, only for tidb
+	AppliedTS int64
 }
 
 // Syncer sync binlog item to downstream

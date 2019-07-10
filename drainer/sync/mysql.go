@@ -107,7 +107,7 @@ func (m *MysqlSyncer) run() {
 
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*Item)
-			item.FinishTS = txn.FinishTS
+			item.AppliedTS = txn.AppliedTS
 			m.success <- item
 		}
 		close(m.success)

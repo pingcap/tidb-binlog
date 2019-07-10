@@ -188,8 +188,8 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 		}
 
 		var (
-			saveNow  = false
-			finishTS int64
+			saveNow   = false
+			appliedTS int64
 		)
 
 		select {
@@ -207,9 +207,9 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			}
 
 			// save ASAP for DDL, and if FinishTS > 0, we should save the ts map
-			if item.Binlog.DdlJobId > 0 || item.FinishTS > 0 {
+			if item.Binlog.DdlJobId > 0 || item.AppliedTS > 0 {
 				saveNow = true
-				finishTS = item.FinishTS
+				appliedTS = item.AppliedTS
 			}
 
 		case binlog, ok := <-fakeBinlog:
@@ -226,9 +226,10 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 		ts := atomic.LoadInt64(lastTS)
 		if ts > lastSaveTS {
 			if saveNow || time.Since(lastSaveTime) > 3*time.Second {
-				s.savePoint(ts, finishTS)
+				s.savePoint(ts, appliedTS)
 				lastSaveTime = time.Now()
 				lastSaveTS = ts
+				appliedTS = 0
 				eventCounter.WithLabelValues("savepoint").Add(1)
 			}
 			delay := oracle.GetPhysical(time.Now()) - oracle.ExtractPhysical(uint64(ts))

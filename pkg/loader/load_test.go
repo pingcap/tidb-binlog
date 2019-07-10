@@ -480,12 +480,12 @@ type markSuccessesSuite struct{}
 
 var _ = check.Suite(&markSuccessesSuite{})
 
-func (ms *markSuccessesSuite) TestShouldSetFinishTS(c *check.C) {
-	origF := fGetFinishTS
+func (ms *markSuccessesSuite) TestShouldSetAppliedTS(c *check.C) {
+	origF := fGetAppliedTS
 	defer func() {
-		fGetFinishTS = origF
+		fGetAppliedTS = origF
 	}()
-	fGetFinishTS = func(*sql.DB) int64 {
+	fGetAppliedTS = func(*sql.DB) int64 {
 		return 88881234
 	}
 	loader := &loaderImpl{downstreamTp: tidbTp, successTxn: make(chan *Txn, 64)}
@@ -496,24 +496,24 @@ func (ms *markSuccessesSuite) TestShouldSetFinishTS(c *check.C) {
 		{Metadata: 5},
 	}
 	loader.markSuccess(txns...)
-	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, fGetFinishTS(nil))
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, fGetAppliedTS(nil))
 
 	txns = []*Txn{
 		{Metadata: 7},
 		{Metadata: 8},
 	}
 	loader.markSuccess(txns...)
-	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(0))
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, int64(0))
 
-	originUpdateLastFinishTSInterval := updateLastFinishTSInterval
-	updateLastFinishTSInterval = 0
+	originUpdateLastAppliedTSInterval := updateLastAppliedTSInterval
+	updateLastAppliedTSInterval = 0
 	defer func() {
-		updateLastFinishTSInterval = originUpdateLastFinishTSInterval
+		updateLastAppliedTSInterval = originUpdateLastAppliedTSInterval
 	}()
 	txns = []*Txn{
 		{Metadata: 9},
 		{Metadata: 10},
 	}
 	loader.markSuccess(txns...)
-	c.Assert(txns[len(txns)-1].FinishTS, check.Equals, int64(88881234))
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, int64(88881234))
 }
