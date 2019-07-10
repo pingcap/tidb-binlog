@@ -2,6 +2,7 @@ package executor
 
 import (
 	"database/sql"
+	"github.com/pingcap/tidb-binlog/drainer/translator"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -30,7 +31,7 @@ func newMysql(cfg *DBConfig, sqlMode *string) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	return pkgsql.ExecuteSQLsWithHistogram(m.db, sqls, args, isDDL, QueryHistogramVec)
+	return pkgsql.ExecuteSQLsWithHistogram(m.db, translator.SplitWithSemicolons(sqls), args, isDDL, QueryHistogramVec)
 }
 
 func (m *mysqlExecutor) Close() error {

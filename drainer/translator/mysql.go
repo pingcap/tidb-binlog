@@ -664,3 +664,13 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 
 	return oldRow, newRow, nil
 }
+
+// To make it compatible with sql that cannot execute multiple statements at once
+func SplitWithSemicolons(sqls[] string) []string{
+	nsqls := make([]string, 0)
+	for _, sql := range sqls {
+		s := strings.SplitAfter(sql, ";")
+		nsqls = append(nsqls, s[: len(s) - 1: len(s) - 1]...)
+	}
+	return nsqls
+}
