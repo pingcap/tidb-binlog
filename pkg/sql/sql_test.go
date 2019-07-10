@@ -126,20 +126,29 @@ const (
 )
 
 func (s *sqlSuite) TestExecuteTxnSuccess(c *C) {
+	var (
+		delay1 time.Duration = 201
+		delay2 time.Duration = 101
+	)
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec(testQuery1).
 		WithArgs(1).
-		WillDelayFor(time.Millisecond * 201).
+		WillDelayFor(time.Millisecond * delay1).
 		WillReturnResult(sqlmock.NewResult(18, 102))
 	s.mock.ExpectExec(testQuery2).
 		WithArgs(0).
-		WillDelayFor(time.Millisecond * 101).
+		WillDelayFor(time.Millisecond * delay2).
 		WillReturnResult(sqlmock.NewResult(19, 63))
 	s.mock.ExpectCommit()
 
+	startTime := time.Now()
 	histogram := prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{Buckets: prometheus.LinearBuckets(0, 0.1, 5)},
 		[]string{"exec"},
+	)
+	histogramFix := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Buckets: prometheus.LinearBuckets(0, 0.1, 5)},
+		[]string{"execFix"},
 	)
 	err := ExecuteTxnWithHistogram(
 		s.db,
@@ -148,15 +157,25 @@ func (s *sqlSuite) TestExecuteTxnSuccess(c *C) {
 		histogram,
 	)
 	c.Assert(err, IsNil)
+	diffDuration := time.Since(startTime.Add(time.Millisecond * time.Duration((delay1 + delay2))))
+
+	// there exists some code running between db exec and prometheus histogram observation,
+	// so we calcuate the diff duration to make the sample_sum check more accurate.
+	var metricFix io_prometheus_client.Metric
+	histogramFix.WithLabelValues("execFix").Observe((time.Millisecond * delay1).Seconds())
+	histogramFix.WithLabelValues("execFix").Observe((time.Millisecond*delay2 + diffDuration).Seconds())
+	err = histogramFix.WithLabelValues("execFix").(prometheus.Metric).Write(&metricFix)
+	c.Assert(err, IsNil)
+	upperBound := metricFix.Histogram.GetSampleSum()
 
 	// extract the content of the histogram.
 	var metric io_prometheus_client.Metric
-	err = histogram.WithLabelValues("exec").Write(&metric)
+	err = histogram.WithLabelValues("exec").(prometheus.Metric).Write(&metric)
 	c.Assert(err, IsNil)
 	c.Assert(metric.Histogram.GetSampleCount(), Equals, uint64(2))
 	sum := metric.Histogram.GetSampleSum()
-	c.Assert(sum, GreaterEqual, 0.302)
-	c.Assert(sum, LessEqual, 0.357)
+	c.Assert(sum, Greater, 0.302)
+	c.Assert(sum, Less, upperBound)
 	buckets := metric.Histogram.GetBucket()
 	c.Assert(buckets, HasLen, 5)
 	c.Logf("buckets = %q", buckets)

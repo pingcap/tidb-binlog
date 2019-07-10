@@ -14,21 +14,44 @@
 package syncer
 
 import (
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
 )
+
+func trimUse(sql string) string {
+	split := strings.Split(sql, ";")
+	if len(split) > 0 && strings.HasPrefix(split[0], "use ") {
+		return strings.Join(split[1:], ";")
+	}
+
+	return sql
+}
 
 func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 	switch binlog.Tp {
 	case pb.BinlogType_DDL:
 		txn.DDL = new(loader.DDL)
-		// for table DDL, pb.Binlog.DdlQuery will be "use <db>; create..."
-		txn.DDL.SQL = string(binlog.DdlQuery)
+		// If it is not create database statement, pb.Binlog.DdlQuery will be "use <db>; create..."
+		// trim the "use..." to make it as expected by `loader.Txn`
+		// we should better just pass the database context into pb.Binlog
+		txn.DDL.SQL = trimUse(string(binlog.DdlQuery))
+		txn.DDL.Database, txn.DDL.Table, err = parserSchemaTableFromDDL(string(binlog.DdlQuery))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(txn.DDL.Database) == 0 {
+			return nil, errors.Errorf("can't parse database name from DDL %s", binlog.DdlQuery)
+		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
 		for _, event := range data.GetEvents() {
@@ -133,6 +156,79 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 			zap.String("mysql type", col.MysqlType),
 			zap.Reflect("value", val.GetValue()))
 		args = append(args, val.GetValue())
+	}
+
+	return
+}
+
+// parserSchemaTableFromDDL parses ddl query to get schema and table
+// ddl like `use test; create table`
+func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
+	stmts, _, err := parser.New().Parse(ddlQuery, "", "")
+	if err != nil {
+		return "", "", err
+	}
+
+	haveUseStmt := false
+
+	for _, stmt := range stmts {
+		switch node := stmt.(type) {
+		case *ast.UseStmt:
+			haveUseStmt = true
+			schema = node.DBName
+		case *ast.CreateDatabaseStmt:
+			schema = node.Name
+		case *ast.DropDatabaseStmt:
+			schema = node.Name
+		case *ast.TruncateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.CreateTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropIndexStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.AlterTableStmt:
+			if len(node.Table.Schema.O) != 0 {
+				schema = node.Table.Schema.O
+			}
+			table = node.Table.Name.O
+		case *ast.DropTableStmt:
+			// FIXME: may drop more than one table in a ddl
+			if len(node.Tables[0].Schema.O) != 0 {
+				schema = node.Tables[0].Schema.O
+			}
+			table = node.Tables[0].Name.O
+		case *ast.RenameTableStmt:
+			if len(node.NewTable.Schema.O) != 0 {
+				schema = node.NewTable.Schema.O
+			}
+			table = node.NewTable.Name.O
+		default:
+			return "", "", errors.Errorf("unknown ddl type, ddl: %s", ddlQuery)
+		}
+	}
+
+	if haveUseStmt {
+		if len(stmts) != 2 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
+		}
+	} else {
+		if len(stmts) != 1 {
+			return "", "", errors.Errorf("invalid ddl %s", ddlQuery)
+		}
 	}
 
 	return

@@ -79,6 +79,7 @@ type Config struct {
 	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
+	AdvertiseAddr   string          `toml:"advertise-addr" json:"advertise-addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
 	DetectInterval  int             `toml:"detect-interval" json:"detect-interval"`
 	EtcdURLs        string          `toml:"pd-urls" json:"pd-urls"`
@@ -109,6 +110,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8249), "addr (i.e. 'host:port') to listen on for drainer connections")
+	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public, default to be the same value as -addr")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
 	fs.IntVar(&cfg.DetectInterval, "detect-interval", defaultDetectInterval, "the interval time (in seconds) of detect pumps' status")
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of PD endpoints")
@@ -126,9 +128,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
-	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disbale detect causality")
+	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
-	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't dectect new binlog after many minute, we think the all binlog is all synced")
+	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 
 	return cfg
@@ -166,7 +168,9 @@ func (cfg *Config) Parse(args []string) error {
 		}
 	}
 	// parse again to replace with command line options
-	cfg.FlagSet.Parse(args)
+	if err := cfg.FlagSet.Parse(args); err != nil {
+		return errors.Trace(err)
+	}
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
@@ -222,19 +226,11 @@ func (cfg *Config) configFromFile(path string) error {
 
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
-	// check ListenAddr
-	urllis, err := url.Parse(cfg.ListenAddr)
-	if err != nil {
-		return errors.Errorf("parse ListenAddr error: %s, %v", cfg.ListenAddr, err)
+	if err := validateAddr(cfg.ListenAddr); err != nil {
+		return errors.Annotate(err, "invalid addr")
 	}
-
-	var host string
-	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
-		return errors.Errorf("bad ListenAddr host format: %s, %v", urllis.Host, err)
-	}
-
-	if !util.IsValidateListenHost(host) {
-		log.Fatal("invalid listen addr, drainer will register this ip into etcd, pump must access drainer, change the listen addr config", zap.String("listen addr", host))
+	if err := validateAddr(cfg.AdvertiseAddr); err != nil {
+		return errors.Annotate(err, "invalid advertise-addr")
 	}
 
 	// check EtcdEndpoints
@@ -262,7 +258,9 @@ func (cfg *Config) validate() error {
 func (cfg *Config) adjustConfig() error {
 	// adjust configuration
 	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
-	cfg.ListenAddr = "http://" + cfg.ListenAddr // add 'http:' scheme to facilitate parsing
+	util.AdjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
+	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
+	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 
@@ -345,5 +343,22 @@ func (cfg *Config) adjustConfig() error {
 	cfg.SyncerCfg.adjustWorkCount()
 	cfg.SyncerCfg.adjustDoDBAndTable()
 
+	return nil
+}
+
+func validateAddr(addr string) error {
+	urllis, err := url.Parse(addr)
+	if err != nil {
+		return errors.Annotatef(err, "failed to parse addr %v", addr)
+	}
+
+	var host string
+	if host, _, err = net.SplitHostPort(urllis.Host); err != nil {
+		return errors.Annotatef(err, "invalid host %v", urllis.Host)
+	}
+
+	if !util.IsValidateListenHost(host) {
+		log.Warn("pump may not be able to access drainer using this addr", zap.String("listen addr", addr))
+	}
 	return nil
 }

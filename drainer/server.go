@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -48,6 +48,7 @@ import (
 var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
+	getPdClient       = util.GetPdClient
 )
 
 type drainerKeyType string
@@ -62,7 +63,7 @@ type Server struct {
 	collector *Collector
 	tcpAddr   string
 	gs        *grpc.Server
-	metrics   *metricClient
+	metrics   *util.MetricClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	tg        taskGroup
@@ -95,7 +96,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := util.GetPdClient(cfg.EtcdURLs, cfg.Security)
+	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -133,17 +134,18 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	var metrics *metricClient
+	var metrics *util.MetricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
-		metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
-		}
+		metrics = util.NewMetricClient(
+			cfg.MetricsAddr,
+			time.Duration(cfg.MetricsInterval)*time.Second,
+			registry,
+		)
 	}
 
-	advURL, err := url.Parse(cfg.ListenAddr)
+	advURL, err := url.Parse(cfg.AdvertiseAddr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.ListenAddr)
+		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
 	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
@@ -214,7 +216,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	s.tg.Go("heartbeat", func() {
 		defer func() {
 			close(errc)
-			s.Close()
+			go s.Close()
 		}()
 
 		for {
@@ -235,8 +237,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
 func (s *Server) Start() error {
 	// register drainer
-	err := s.updateStatus()
-	if err != nil {
+	if err := s.updateStatus(); err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("register success", zap.String("drainer node id", s.ID))
@@ -250,20 +251,19 @@ func (s *Server) Start() error {
 	}()
 
 	s.tg.GoNoPanic("collect", func() {
-		defer s.Close()
+		defer func() { go s.Close() }()
 		s.collector.Start(s.ctx)
 	})
 
 	if s.metrics != nil {
 		s.tg.GoNoPanic("metrics", func() {
-			s.metrics.Start(s.ctx, s.ID)
+			s.metrics.Start(s.ctx, map[string]string{"instance": s.ID})
 		})
 	}
 
 	s.tg.GoNoPanic("syncer", func() {
-		defer s.Close()
-		err := s.syncer.Start()
-		if err != nil {
+		defer func() { go s.Close() }()
+		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
 		}
 	})
@@ -285,13 +285,8 @@ func (s *Server) Start() error {
 	binlog.RegisterCisternServer(s.gs, s)
 	go s.gs.Serve(grpcL)
 
-	router := mux.NewRouter()
-	router.HandleFunc("/status", s.collector.Status).Methods("GET")
-	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
-	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	router := s.initAPIRouter()
 	http.Handle("/", router)
-	prometheus.DefaultGatherer = registry
-	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
 
@@ -309,12 +304,12 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		IndentJSON: true,
 	})
 
-	nodeID := mux.Vars(r)["nodeID"]
-	action := mux.Vars(r)["action"]
+	vars := mux.Vars(r)
+	nodeID, action := vars["nodeID"], vars["action"]
 	log.Info("receive apply action request", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.ID {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
 		return
 	}
 
@@ -334,7 +329,7 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		s.status.State = node.Closing
 	default:
 		s.statusMu.Unlock()
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid action %s", action))
 		return
 	}
 	s.statusMu.Unlock()
@@ -388,6 +383,16 @@ func (s *Server) updateStatus() error {
 	return nil
 }
 
+func (s *Server) initAPIRouter() *mux.Router {
+	router := mux.NewRouter()
+	router.HandleFunc("/status", s.collector.Status).Methods("GET")
+	router.HandleFunc("/commit_ts", s.GetLatestTS).Methods("GET")
+	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
+	prometheus.DefaultGatherer = registry
+	router.Handle("/metrics", promhttp.Handler())
+	return router
+}
+
 // Close stops all goroutines started by drainer server gracefully
 func (s *Server) Close() {
 	if !atomic.CompareAndSwapInt32(&s.isClosed, 0, 1) {
@@ -423,9 +428,11 @@ func createTiStore(urls string) (kv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	if err := store.Register("tikv", tikv.Driver{}); err != nil {
+		return nil, errors.Trace(err)
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := session.NewStore(tiPath)
+	tiStore, err := store.New(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

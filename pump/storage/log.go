@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,7 +37,7 @@ record :=
   checksum: uint32   // checksum of payload
   payload:  uint8[length]    // binlog 数据
 footer :=
-  maxTS: uint64     // the max ts of all binlog in this log file, so we can check if we can safe delete the file when gc accroding to ts
+  maxTS: uint64     // the max ts of all binlog in this log file, so we can check if we can safe delete the file when gc according to ts
   fileEndMagic: uint32  // check if the file has a footer
 */
 
@@ -50,6 +51,8 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 type logFile struct {
 	fid  uint32
 	path string
+
+	writeOffset int64
 
 	// guard fd
 	lock sync.RWMutex
@@ -87,12 +90,12 @@ func encodeRecord(writer io.Writer, payload []byte) (int, error) {
 
 	n, err := writer.Write(header)
 	if err != nil {
-		return n, errors.Trace(err)
+		return n, errors.Annotate(err, "write header failed")
 	}
 
 	n, err = writer.Write(payload)
 	if err != nil {
-		return int(headerLength) + n, errors.Trace(err)
+		return int(headerLength) + n, errors.Annotate(err, "write payload failed")
 	}
 
 	return int(headerLength) + len(payload), nil
@@ -122,14 +125,12 @@ func (r *Record) isValid() bool {
 func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 	fd, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Trace(err)
 	}
 
 	info, err := fd.Stat()
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotatef(err, "stat file %s failed", name)
 	}
 
 	logReporter := func(bytes int, reason error) {
@@ -141,6 +142,7 @@ func newLogFile(fid uint32, name string) (lf *logFile, err error) {
 		fd:                 fd,
 		path:               name,
 		corruptionReporter: logReporter,
+		writeOffset:        info.Size(),
 	}
 
 	if info.Size() >= fileFooterLength {
@@ -188,6 +190,35 @@ func (lf *logFile) updateMaxTS(ts int64) {
 	}
 }
 
+// IncWriteOffset moves the write offset forward for n bytes and returns the new offset.
+func (lf *logFile) IncWriteOffset(n int64) int64 {
+	return atomic.AddInt64(&lf.writeOffset, n)
+}
+
+// GetWriteOffset returns the write offset of the log file.
+func (lf *logFile) GetWriteOffset() int64 {
+	return atomic.LoadInt64(&lf.writeOffset)
+}
+
+// Write writes data to disk and update the write offset.
+// If sync is set, it also cares to call `fsync` to make sure
+// the buffered data is flushed to disk.
+func (lf *logFile) Write(data []byte, sync bool) error {
+	n, err := lf.fd.Write(data)
+	lf.IncWriteOffset(int64(n))
+
+	if err != nil {
+		return errors.Annotatef(err, "unable to write to log file: %s", lf.path)
+	}
+	if sync {
+		err = lf.fdatasync()
+		if err != nil {
+			return errors.Annotatef(err, "fdatasync file %s failed", lf.path)
+		}
+	}
+	return nil
+}
+
 // finalize write the footer to the file, then we never write this file anymore
 func (lf *logFile) finalize() error {
 	if lf.end {
@@ -214,8 +245,8 @@ func (lf *logFile) finalize() error {
 	return errors.Trace(lf.fdatasync())
 }
 
-func (lf *logFile) close() {
-	lf.fd.Close()
+func (lf *logFile) close() error {
+	return lf.fd.Close()
 }
 
 // recover scan all the record get the state like maxTS which only saved when the file is finalized
@@ -286,8 +317,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 	record = new(Record)
 	err = record.readHeader(reader)
 	if err != nil {
-		err = errors.Trace(err)
-		return
+		return nil, errors.Annotate(err, "read header failed")
 	}
 
 	if record.magic != recordMagic {
@@ -300,8 +330,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 		record.payload = make([]byte, record.length)
 		_, err = io.ReadFull(reader, record.payload)
 		if err != nil {
-			err = errors.Trace(err)
-			return
+			return nil, errors.Annotate(err, "read payload failed")
 		}
 	} else {
 		buf := new(bytes.Buffer)
@@ -314,8 +343,7 @@ func readRecord(reader io.Reader) (record *Record, err error) {
 	}
 
 	if !record.isValid() {
-		err = errors.New("checksum mismatch")
-		return
+		return nil, errors.New("checksum mismatch")
 	}
 
 	return

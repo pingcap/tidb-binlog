@@ -16,16 +16,19 @@ package pump
 import (
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
-	"github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -43,14 +46,6 @@ func TestPump(t *testing.T) {
 type writeBinlogSuite struct{}
 
 var _ = Suite(&writeBinlogSuite{})
-
-func (s *writeBinlogSuite) TestIgnoreEmptyRequest(c *C) {
-	server := &Server{}
-	resp, err := server.WriteBinlog(context.Background(), &binlog.WriteBinlogReq{})
-	c.Assert(resp, NotNil)
-	c.Assert(err, IsNil)
-	c.Assert(server.writeBinlogCount, Equals, int64(0))
-}
 
 func (s *writeBinlogSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 	server := &Server{clusterID: 42}
@@ -128,7 +123,8 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 type noOpStorage struct{}
 
 func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GCTS(ts int64)                              {}
+func (s *noOpStorage) GetGCTS() int64                             { return 0 }
+func (s *noOpStorage) GC(ts int64)                                {}
 func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
 func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
@@ -277,10 +273,20 @@ var _ = Suite(&printServerInfoSuite{})
 
 type dummyStorage struct {
 	storage.Storage
+	gcTS        int64
+	maxCommitTS int64
 }
 
-func (ds dummyStorage) MaxCommitTS() int64 {
-	return 1024
+func (ds *dummyStorage) MaxCommitTS() int64 {
+	return ds.maxCommitTS
+}
+
+func (ds *dummyStorage) GetGCTS() int64 {
+	return ds.gcTS
+}
+
+func (ds *dummyStorage) GC(ts int64) {
+	ds.gcTS = ts
 }
 
 func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
@@ -296,7 +302,7 @@ func (s *printServerInfoSuite) TestReturnWhenServerIsDone(c *C) {
 	defer hook.TearDown()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	server := &Server{storage: dummyStorage{}, ctx: ctx}
+	server := &Server{storage: &dummyStorage{}, ctx: ctx}
 	signal := make(chan struct{})
 
 	server.wg.Add(1)
@@ -430,4 +436,122 @@ func (s *closeSuite) TestSkipIfAlreadyClosed(c *C) {
 	server.Close()
 
 	c.Assert(len(hook.Entrys), Less, 2)
+}
+
+type gcBinlogFileSuite struct{}
+
+var _ = Suite(&gcBinlogFileSuite{})
+
+func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
+	storage := dummyStorage{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	server := Server{
+		ctx:        ctx,
+		storage:    &storage,
+		node:       &pumpNode{EtcdRegistry: registry},
+		gcDuration: time.Hour,
+	}
+
+	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
+	gcTS := int64(oracle.EncodeTSO(millisecond))
+
+	inAlertGCMS := millisecond + 10*time.Minute.Nanoseconds()/1000/1000
+	inAlertGCTS := int64(oracle.EncodeTSO(inAlertGCMS))
+
+	outAlertGCMS := millisecond + (earlyAlertGC+10*time.Minute).Nanoseconds()/1000/1000
+	outAlertGCTS := int64(oracle.EncodeTSO(outAlertGCMS))
+
+	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
+	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
+	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
+	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: outAlertGCTS, State: node.Offline})
+
+	// Set a shorter interval because we don't really want to wait 1 hour
+	origInterval := gcInterval
+	gcInterval = 100 * time.Microsecond
+	defer func() {
+		gcInterval = origInterval
+	}()
+
+	server.wg.Add(1)
+	go server.gcBinlogFile()
+
+	// Give the GC goroutine some time to do the job,
+	// the latency of the underlying etcd query can be much larger than gcInterval
+	time.Sleep(1000 * gcInterval)
+	cancel()
+
+	c.Assert(storage.gcTS, GreaterEqual, gcTS)
+	// todo: add in and out of alert test while binlog has failpoint
+}
+
+type waitCommitTSSuite struct{}
+
+var _ = Suite(&waitCommitTSSuite{})
+
+func (s *waitCommitTSSuite) TestShouldStoppedWhenDone(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	storage := dummyStorage{maxCommitTS: 1024}
+	server := Server{
+		storage: &storage,
+		ctx:     ctx,
+	}
+	signal := make(chan struct{})
+	go func() {
+		err := server.waitUntilCommitTSSaved(ctx, int64(2000), time.Millisecond)
+		close(signal)
+		c.Assert(err, ErrorMatches, "context canceled")
+	}()
+	cancel()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time when done")
+	}
+}
+
+func (s *waitCommitTSSuite) TestShouldWaitUntilTs(c *C) {
+	storage := dummyStorage{maxCommitTS: 1024}
+	server := Server{
+		storage: &storage,
+		ctx:     context.Background(),
+	}
+	signal := make(chan struct{})
+	go func() {
+		err := server.waitUntilCommitTSSaved(server.ctx, int64(2000), time.Millisecond)
+		close(signal)
+		c.Assert(err, IsNil)
+	}()
+	storage.maxCommitTS = 2000
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after ts is reached")
+	}
+}
+
+type listenSuite struct{}
+
+var _ = Suite(&listenSuite{})
+
+func (s *listenSuite) TestWrongAddr(c *C) {
+	_, err := listen("unix", "://asdf:1231:123:12")
+	c.Assert(err, ErrorMatches, ".*invalid .* socket addr.*")
+}
+
+func (s *listenSuite) TestUnbindableAddr(c *C) {
+	_, err := listen("tcp", "http://asdf;klj:7979/12")
+	c.Assert(err, ErrorMatches, ".*fail to start.*")
+}
+
+func (s *listenSuite) TestReturnListener(c *C) {
+	var l net.Listener
+	l, err := listen("tcp", "http://localhost:17979")
+	c.Assert(err, IsNil)
+	defer l.Close()
+	c.Assert(l, NotNil)
 }

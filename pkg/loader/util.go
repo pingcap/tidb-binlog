@@ -23,6 +23,11 @@ import (
 	"github.com/pingcap/errors"
 )
 
+var (
+	// ErrTableNotExist means the table not exist.
+	ErrTableNotExist = errors.New("table not exist")
+)
+
 const (
 	colsSQL = `
 SELECT column_name, extra FROM information_schema.columns
@@ -52,6 +57,9 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	info = new(tableInfo)
 
 	if info.columns, err = getColsOfTbl(db, schema, table); err != nil {
+		if err == ErrTableNotExist {
+			return nil, err
+		}
 		return nil, errors.Trace(err)
 	}
 
@@ -171,6 +179,12 @@ func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 	if err = rows.Err(); err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// if no any columns returns, means the table not exist.
+	if len(cols) == 0 {
+		return nil, ErrTableNotExist
+	}
+
 	return cols, nil
 }
 

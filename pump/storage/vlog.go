@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,12 +37,16 @@ const (
 	// we finalize the curFile when size >= finalizeFileSizeAtClose when closing the vlog, we don't need to scan the too big curFile to recover the maxTS of the file when reopen the vlog
 	// TODO we can always finalize the curFile when close Storage, and truncate the footer when open if we want to continue writing this file, so no need to scan the file to get the info in footer
 	finalizeFileSizeAtClose = 50 * 1024 // 50K
+	fileExt                 = ".vlog"
 )
 
 // Options is the config options of Append and vlog
 type Options struct {
-	ValueLogFileSize int64
-	Sync             bool
+	ValueLogFileSize          int64
+	Sync                      bool
+	KVChanCapacity            int
+	SlowWriteThreshold        float64
+	StopWriteAtAvailableSpace uint64
 
 	KVConfig *KVConfig
 }
@@ -49,8 +54,10 @@ type Options struct {
 // DefaultOptions return the default options
 func DefaultOptions() *Options {
 	return &Options{
-		ValueLogFileSize: 500 * (1 << 20),
-		Sync:             true,
+		ValueLogFileSize:   500 * (1 << 20),
+		Sync:               true,
+		KVChanCapacity:     chanCapacity,
+		SlowWriteThreshold: slowWriteThreshold,
 	}
 }
 
@@ -60,9 +67,27 @@ func (o *Options) WithKVConfig(kvConfig *KVConfig) *Options {
 	return o
 }
 
+// WithStopWriteAtAvailableSpace set the Config
+func (o *Options) WithStopWriteAtAvailableSpace(bytes uint64) *Options {
+	o.StopWriteAtAvailableSpace = bytes
+	return o
+}
+
+// WithSlowWriteThreshold set the Config
+func (o *Options) WithSlowWriteThreshold(threshold float64) *Options {
+	o.SlowWriteThreshold = threshold
+	return o
+}
+
 // WithValueLogFileSize set the ValueLogFileSize
 func (o *Options) WithValueLogFileSize(size int64) *Options {
 	o.ValueLogFileSize = size
+	return o
+}
+
+// WithKVChanCapacity set the ChanCapacity
+func (o *Options) WithKVChanCapacity(capacity int) *Options {
+	o.KVChanCapacity = capacity
 	return o
 }
 
@@ -131,9 +156,6 @@ func (vp *valuePointer) UnmarshalBinary(data []byte) error {
 type valueLog struct {
 	buf *bytes.Buffer // buf to write to the current log file
 
-	// writable offset of the curFile(the max fid file)
-	writableLogOffset int64
-
 	dirPath   string
 	sync      bool
 	maxFid    uint32
@@ -144,7 +166,7 @@ type valueLog struct {
 }
 
 func (vlog *valueLog) filePath(fid uint32) string {
-	return fmt.Sprintf("%s%s%06d.vlog", vlog.dirPath, string(os.PathSeparator), fid)
+	return filepath.Join(vlog.dirPath, fmt.Sprintf("%06d%s", fid, fileExt))
 }
 
 func (vlog *valueLog) getFileRLocked(fid uint32) (*logFile, error) {
@@ -190,21 +212,20 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			continue
 		}
 
-		if !strings.HasSuffix(file.Name(), ".vlog") {
+		fName := file.Name()
+		if !strings.HasSuffix(fName, fileExt) {
 			continue
 		}
 
-		len := len(file.Name())
-		fid64, err := strconv.ParseUint(file.Name()[:len-5], 10, 32)
+		fid64, err := strconv.ParseUint(strings.TrimSuffix(fName, fileExt), 10, 32)
 		if err != nil {
-			return errors.Annotatef(err, "parse file %s err", file.Name())
+			return errors.Annotatef(err, "parse file %s err", fName)
 		}
-
 		fid := uint32(fid64)
 
-		logFile, err := newLogFile(fid, vlog.filePath((fid)))
+		logFile, err := newLogFile(fid, vlog.filePath(fid))
 		if err != nil {
-			return errors.Annotatef(err, "error open file %s", file.Name())
+			return errors.Annotatef(err, "error open file %s", fName)
 		}
 
 		vlog.filesMap[fid] = logFile
@@ -228,13 +249,6 @@ func (vlog *valueLog) openOrCreateFiles() error {
 			if err != nil {
 				return errors.Annotatef(err, "error create new file")
 			}
-		} else {
-			info, err := curFile.fd.Stat()
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			vlog.writableLogOffset = info.Size()
 		}
 	}
 
@@ -247,8 +261,6 @@ func (vlog *valueLog) createLogFile(fid uint32) (*logFile, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "unable to create log file")
 	}
-
-	vlog.writableLogOffset = 0
 
 	vlog.filesLock.Lock()
 	vlog.filesMap[fid] = logFile
@@ -265,19 +277,18 @@ func (vlog *valueLog) close() error {
 	curFile := vlog.filesMap[vlog.maxFid]
 
 	// finalize the curFile when it's tool big, so when restart, we don't need to scan the too big curFile to recover the maxTS of the file
-	if vlog.writableOffset() >= finalizeFileSizeAtClose {
+	if curFile.GetWriteOffset() >= finalizeFileSizeAtClose {
 		err = curFile.finalize()
 		if err != nil {
-			return errors.Trace(err)
+			return errors.Annotatef(err, "finalize file %s failed", curFile.path)
 		}
 	}
 
 	for _, logFile := range vlog.filesMap {
-		err = logFile.fd.Close()
+		err = logFile.close()
 		if err != nil {
-			return err
+			return errors.Annotatef(err, "close %s failed", logFile.path)
 		}
-
 	}
 
 	return nil
@@ -286,21 +297,17 @@ func (vlog *valueLog) close() error {
 func (vlog *valueLog) readValue(vp valuePointer) ([]byte, error) {
 	logFile, err := vlog.getFileRLocked(vp.Fid)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "get file(id: %d) failed", vp.Fid)
 	}
+
+	defer logFile.lock.RUnlock()
 
 	record, err := logFile.readRecord(vp.Offset)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "read record at %+v failed", vp)
 	}
 
-	logFile.lock.RUnlock()
-
 	return record.payload, nil
-}
-
-func (vlog *valueLog) writableOffset() int64 {
-	return atomic.LoadInt64(&vlog.writableLogOffset)
 }
 
 // write is thread-unsafe by design and should not be called concurrently.
@@ -310,20 +317,14 @@ func (vlog *valueLog) write(reqs []*request) error {
 	vlog.filesLock.RUnlock()
 
 	var bufReqs []*request
+	vlog.buf.Reset()
 
 	toDisk := func() error {
-		n, err := curFile.fd.Write(vlog.buf.Bytes())
+		err := curFile.Write(vlog.buf.Bytes(), vlog.sync)
 		if err != nil {
-			return errors.Annotatef(err, "unable to write to log file: %s", curFile.path)
-		}
-		if vlog.sync {
-			err = curFile.fdatasync()
-			if err != nil {
-				return errors.Trace(err)
-			}
+			return errors.Trace(err)
 		}
 
-		atomic.AddInt64(&vlog.writableLogOffset, int64(n))
 		for _, req := range bufReqs {
 			curFile.updateMaxTS(req.ts())
 		}
@@ -331,16 +332,16 @@ func (vlog *valueLog) write(reqs []*request) error {
 		bufReqs = bufReqs[:0]
 
 		// rotate file
-		if vlog.writableOffset() > vlog.opt.ValueLogFileSize {
+		if curFile.GetWriteOffset() > vlog.opt.ValueLogFileSize {
 			err := curFile.finalize()
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "finalize file %s failed", curFile.path)
 			}
 
 			id := atomic.AddUint32(&vlog.maxFid, 1)
 			curFile, err = vlog.createLogFile(id)
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "create file id %d failed", id)
 			}
 		}
 		return nil
@@ -348,7 +349,7 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 	for _, req := range reqs {
 		req.valuePointer.Fid = curFile.fid
-		req.valuePointer.Offset = vlog.writableOffset() + int64(vlog.buf.Len())
+		req.valuePointer.Offset = curFile.GetWriteOffset() + int64(vlog.buf.Len())
 		_, err := encodeRecord(vlog.buf, req.payload)
 		if err != nil {
 			return errors.Trace(err)
@@ -356,11 +357,11 @@ func (vlog *valueLog) write(reqs []*request) error {
 
 		bufReqs = append(bufReqs, req)
 
-		writeNow := vlog.writableOffset()+int64(vlog.buf.Len()) > vlog.opt.ValueLogFileSize
+		writeNow := curFile.GetWriteOffset()+int64(vlog.buf.Len()) > vlog.opt.ValueLogFileSize
 
 		if writeNow {
 			if err := toDisk(); err != nil {
-				return err
+				return errors.Annotate(err, "write to disk failed")
 			}
 		}
 	}
@@ -382,20 +383,50 @@ func (vlog *valueLog) sortedFids() []uint32 {
 	return ret
 }
 
-// currently we only use this in NewAppend** to scan the record which not write to KV but in the value log, so it's OK to hold the vlog.filesLock lock
-func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
-	vlog.filesLock.Lock()
-	defer vlog.filesLock.Unlock()
-
-	fids := vlog.sortedFids()
-
-	for _, fid := range fids {
-		if fid < start.Fid {
-			continue
+func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) error {
+	return vlog.scan(start, func(vp valuePointer, record *Record) error {
+		binlog := new(pb.Binlog)
+		err := binlog.Unmarshal(record.payload)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		lf := vlog.filesMap[fid]
+
+		// skip the wrongly write binlog by pump client previous
+		if binlog.StartTs == 0 && binlog.CommitTs == 0 {
+			log.Info("skip empty binlog")
+			return nil
+		}
+
+		rq := request{
+			startTS:      binlog.StartTs,
+			commitTS:     binlog.CommitTs,
+			tp:           binlog.Tp,
+			valuePointer: vp,
+		}
+		return fn(&rq)
+	})
+}
+
+// scan visits binlogs in order starting from the specified position.
+// There are two limitations to the usage of scan:
+// 1. Binlogs added in new logFiles after scan starts are not visible, so don't assume
+//    that every single binlog added would be visited
+// 2. If GC is running concurrently, logFiles may be closed and deleted, thus breaking the scanning.
+func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
+	vlog.filesLock.RLock()
+	fids := vlog.sortedFids()
+	var lfs []*logFile
+	for _, fid := range fids {
+		if fid >= start.Fid {
+			lf := vlog.filesMap[fid]
+			lfs = append(lfs, lf)
+		}
+	}
+	vlog.filesLock.RUnlock()
+
+	for _, lf := range lfs {
 		var startOffset int64
-		if fid == start.Fid {
+		if lf.fid == start.Fid {
 			startOffset = start.Offset
 		}
 		err := lf.scan(startOffset, fn)
@@ -409,6 +440,8 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 
 // delete data <= gcTS
 func (vlog *valueLog) gcTS(gcTS int64) {
+	log.Info("gc vlog", zap.Int64("ts", gcTS))
+
 	vlog.filesLock.Lock()
 	var toDeleteFiles []*logFile
 
@@ -429,10 +462,15 @@ func (vlog *valueLog) gcTS(gcTS int64) {
 
 	for _, logFile := range toDeleteFiles {
 		logFile.lock.Lock()
-		err := os.Remove(logFile.path)
+		err := logFile.close()
+		if err != nil {
+			log.Error("close file failed", zap.String("path", logFile.path), zap.Error(err))
+		}
+		err = os.Remove(logFile.path)
 		if err != nil {
 			log.Error("remove file failed", zap.String("path", logFile.path), zap.Error(err))
 		}
+		log.Info("remove file", zap.String("path", logFile.path))
 		logFile.lock.Unlock()
 	}
 }

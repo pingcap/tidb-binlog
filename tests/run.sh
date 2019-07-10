@@ -127,21 +127,30 @@ if [ "${1-}" = '--debug' ]; then
     read line
 fi
 
-# set to the case name you want to run only for debug
-do_case=""
-
-for script in ./*/run.sh; do
-    test_name="$(basename "$(dirname "$script")")"
-    if [[ $do_case != "" && $test_name != $do_case ]]; then
-        continue
-    fi
-
+run_case() {
+    local case=$1
+    local script=$2
     echo "Running test $script..."
     PATH="$pwd/../bin:$pwd/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
-    TEST_NAME=$test_name \
+    TEST_NAME=$case \
     sh "$script"
-done
+}
+
+# List the case names to run, eg. ("binlog" "kafka")
+do_cases=()
+
+if [ ${#do_cases[@]} -eq 0 ]; then
+    for script in ./*/run.sh; do
+        test_name="$(basename "$(dirname "$script")")"
+        run_case $test_name $script
+    done
+else
+    for case in "${do_cases[@]}"; do
+        script="./$case/run.sh"
+        run_case $case $script
+    done
+fi
 
 # with color
 echo "\033[0;36m<<< Run all test success >>>\033[0m"

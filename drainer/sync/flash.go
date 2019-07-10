@@ -106,7 +106,9 @@ func (batch *flashRowBatch) flushInternal(db *sql.DB) (_ int64, err error) {
 	}
 	defer func() {
 		if err != nil {
-			tx.Rollback()
+			if err := tx.Rollback(); err != nil {
+				log.Error(err.Error())
+			}
 		}
 	}()
 

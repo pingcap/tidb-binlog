@@ -36,7 +36,8 @@ func (s *signalSuite) TestShouldCallFunc(c *C) {
 	})
 
 	pid := syscall.Getpid()
-	syscall.Kill(pid, syscall.SIGINT)
+	err := syscall.Kill(pid, syscall.SIGINT)
+	c.Assert(err, IsNil)
 
 	select {
 	case s := <-received:
@@ -56,7 +57,8 @@ func (s *signalSuite) TestShouldDumpStack(c *C) {
 	SetupSignalHandler(func(s os.Signal) {})
 
 	pid := syscall.Getpid()
-	syscall.Kill(pid, syscall.SIGUSR1)
+	err := syscall.Kill(pid, syscall.SIGUSR1)
+	c.Assert(err, IsNil)
 
 	time.Sleep(time.Second)
 

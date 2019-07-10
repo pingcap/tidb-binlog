@@ -19,9 +19,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tidb-binlog/pkg/node"
 	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
 	"golang.org/x/net/context"
 )
@@ -35,9 +38,7 @@ type RegisrerTestClient interface {
 }
 
 func (t *testNodeSuite) TestNode(c *C) {
-	tmpDir, err := ioutil.TempDir(os.TempDir(), "nodetest")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := c.MkDir()
 
 	etcdClient := testEtcdCluster.RandClient()
 	listenAddr := "http://127.0.0.1:8250"
@@ -118,4 +119,52 @@ func (s *ReadLocalNodeIDSuite) TestCanReadNodeID(c *C) {
 	nodeID, err := readLocalNodeID(dir)
 	c.Assert(err, IsNil)
 	c.Assert(nodeID, Equals, "this-node")
+}
+
+type heartbeatSuite struct{}
+
+var _ = Suite(&heartbeatSuite{})
+
+func (s *heartbeatSuite) TestShouldCloseErrorChannel(c *C) {
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "heartbeat")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	p := pumpNode{
+		heartbeatInterval: time.Second,
+		status:            &node.Status{},
+		EtcdRegistry:      registry,
+		getMaxCommitTs: func() int64 {
+			return 42
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := p.Heartbeat(ctx)
+	cancel()
+	select {
+	case _, ok := <-errc:
+		c.Assert(ok, IsFalse)
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't close errc in time")
+	}
+}
+
+func (s *heartbeatSuite) TestShouldUpdateStatus(c *C) {
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "heartbeat")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	status := node.Status{}
+	var maxCommitTs int64
+	p := pumpNode{
+		heartbeatInterval: 10 * time.Millisecond,
+		status:            &status,
+		EtcdRegistry:      registry,
+		getMaxCommitTs: func() int64 {
+			maxCommitTs++
+			return maxCommitTs
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p.Heartbeat(ctx)
+	time.Sleep(3 * p.heartbeatInterval)
+	cancel()
+	c.Assert(p.status.MaxCommitTS, Greater, int64(0))
+	c.Assert(p.status.MaxCommitTS, LessEqual, int64(3))
 }

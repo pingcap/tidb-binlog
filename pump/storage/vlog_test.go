@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"syscall"
 	"time"
 
 	fuzz "github.com/google/gofuzz"
@@ -34,13 +35,13 @@ type VlogSuit struct{}
 var _ = check.Suite(&VlogSuit{})
 
 func randRequest() *request {
-	var payload []byte
 	var ts int64
 	f := fuzz.New().NumElements(1, 20).NilChance(0)
 	f.Fuzz(&ts)
-	binlog := new(pb.Binlog)
-	binlog.StartTs = ts
-	binlog.Tp = pb.BinlogType_Prewrite
+	binlog := pb.Binlog{
+		StartTs: ts,
+		Tp:      pb.BinlogType_Prewrite,
+	}
 	payload, err := binlog.Marshal()
 	if err != nil {
 		panic(err)
@@ -93,19 +94,18 @@ func (vs *VlogSuit) TestSingleWriteRead(c *check.C) {
 func (vs *VlogSuit) TestBatchWriteRead(c *check.C) {
 	testBatchWriteRead(c, 1, DefaultOptions())
 
-	testBatchWriteRead(c, 1024, DefaultOptions())
+	testBatchWriteRead(c, 128, DefaultOptions())
 
 	// set small valueLogFileSize, so we can test multi log file case
-	testBatchWriteRead(c, 4096, DefaultOptions().WithValueLogFileSize(500))
+	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(3000))
 }
 
 func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 	vlog := newVlogWithOptions(c, options)
 	defer os.RemoveAll(vlog.dirPath)
 
-	n := reqNum
-	var reqs []*request
-	for i := 0; i < n; i++ {
+	reqs := make([]*request, 0, reqNum)
+	for i := 0; i < reqNum; i++ {
 		reqs = append(reqs, randRequest())
 	}
 
@@ -121,11 +121,12 @@ func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
 
 	// test scan start at the middle point of request
 	idx := len(reqs) / 2
-	vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
+	err = vlog.scan(reqs[idx].valuePointer, func(vp valuePointer, record *Record) error {
 		c.Assert(record.payload, check.DeepEquals, reqs[idx].payload, check.Commentf("data read back not equal"))
 		idx++
 		return nil
 	})
+	c.Assert(err, check.IsNil)
 }
 
 func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
@@ -135,8 +136,9 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 	dirPath := vlog.dirPath
 	opt := vlog.opt
 
-	n := 100
-	var reqs []*request
+	n := 10
+	reqs := make([]*request, 0, n*3)
+	batch := make([]*request, 0, 3)
 	for i := 0; i < n; i++ {
 		// close and open back every time
 		var err = vlog.close()
@@ -146,13 +148,15 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		err = vlog.open(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
+		batch = batch[:0]
 		// write a few request
 		for j := 0; j < 3; j++ {
 			req := randRequest()
-			reqs = append(reqs, req)
-			err = vlog.write([]*request{req})
-			c.Assert(err, check.IsNil)
+			batch = append(batch, req)
 		}
+		err = vlog.write(batch)
+		c.Assert(err, check.IsNil)
+		reqs = append(reqs, batch...)
 	}
 
 	c.Log("reqs len: ", len(reqs))
@@ -167,19 +171,23 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 }
 
 func (vs *VlogSuit) TestGCTS(c *check.C) {
-	vlog := newVlog(c)
+	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(2048))
 	defer os.RemoveAll(vlog.dirPath)
 
-	var pointers []valuePointer
-	// write 100 * 10 = 1000M
-	for i := 0; i < 100; i++ {
-		req := &request{
+	payload := make([]byte, 128)
+	requests := make([]*request, 100)
+	// 100 * 128 > 2048 guarantees that multiple log files are created
+	for i := 0; i < len(requests); i++ {
+		requests[i] = &request{
 			startTS: int64(i),
 			tp:      pb.BinlogType_Prewrite,
-			payload: make([]byte, 10*(1<<20)),
+			payload: payload,
 		}
-		err := vlog.write([]*request{req})
-		c.Assert(err, check.IsNil)
+	}
+	err := vlog.write(requests)
+	c.Assert(err, check.IsNil)
+	pointers := make([]valuePointer, 0, len(requests))
+	for _, req := range requests {
 		pointers = append(pointers, req.valuePointer)
 	}
 
@@ -191,7 +199,6 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 
 	c.Assert(after, check.Less, before, check.Commentf("no file is deleted"))
 
-	var err error
 	// ts 0 has been gc
 	_, err = vlog.readValue(pointers[0])
 	c.Assert(err, check.NotNil)
@@ -201,8 +208,7 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-type ValuePointerSuite struct {
-}
+type ValuePointerSuite struct{}
 
 var _ = check.Suite(&ValuePointerSuite{})
 
@@ -219,4 +225,60 @@ func (vps *ValuePointerSuite) TestValuePointerMarshalBinary(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Assert(vp, check.Equals, expect)
+}
+
+// Test when no disk space write fail
+// and should recover after disk space are free up
+// set file size resource limit to make it write fail like no disk space
+func (vs *VlogSuit) TestNoSpace(c *check.C) {
+	dir := c.MkDir()
+	c.Log("use dir: ", dir)
+
+	var origRlimit syscall.Rlimit
+	err := syscall.Getrlimit(syscall.RLIMIT_FSIZE, &origRlimit)
+	c.Assert(err, check.IsNil)
+
+	// set file size limit to be 20k
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 20 * 1024, Max: origRlimit.Max})
+	c.Assert(err, check.IsNil)
+
+	defer func() {
+		err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &origRlimit)
+		c.Assert(err, check.IsNil)
+	}()
+
+	vlog := new(valueLog)
+	err = vlog.open(dir, DefaultOptions())
+	c.Assert(err, check.IsNil)
+
+	// Size of the encoded record should be 1024 + headerLength = 1040
+	payload := make([]byte, 1024)
+	req := &request{
+		payload: payload,
+	}
+
+	// Enough space for 19 * 1040
+	for i := 0; i < 19; i++ {
+		err = vlog.write([]*request{req})
+		c.Assert(err, check.IsNil)
+	}
+
+	// failed because only 20k space available and may write a incomplete record
+	err = vlog.write([]*request{req})
+	c.Assert(err, check.NotNil)
+
+	// increase file size limit to have enough space for one more request
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 20*1024 + 1040, Max: origRlimit.Max})
+	c.Assert(err, check.IsNil)
+
+	// should write success now
+	err = vlog.write([]*request{req})
+	c.Assert(err, check.IsNil)
+
+	// read back normally
+	_, err = vlog.readValue(req.valuePointer)
+	c.Assert(err, check.IsNil)
+
+	err = vlog.close()
+	c.Assert(err, check.IsNil)
 }

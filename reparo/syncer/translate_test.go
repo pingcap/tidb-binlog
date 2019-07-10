@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -33,10 +33,91 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	tests := map[*pb.Binlog]*loader.Txn{
 		{
 			Tp:       pb.BinlogType_DDL,
-			DdlQuery: []byte("use db1; create table table1(id int)"),
+			DdlQuery: []byte("use db1;create table table1(id int)"),
 		}: {
 			DDL: &loader.DDL{
-				SQL: "use db1; create table table1(id int)",
+				SQL:      "create table table1(id int)",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("create table `db1`.`table1`(id int)"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "create table `db1`.`table1`(id int)",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop database db1"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop database db1",
+				Database: "db1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("truncate table `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "truncate table `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("create index uk on `db1`.`table1` (`uk`)"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "create index uk on `db1`.`table1` (`uk`)",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop index uk on `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop index uk on `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("alter table `db1`.`table1` add column c int"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "alter table `db1`.`table1` add column c int",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("drop table `db1`.`table1`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "drop table `db1`.`table1`",
+				Database: "db1",
+				Table:    "table1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("rename table `db1`.`table1` to `db1`.`table2`"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "rename table `db1`.`table1` to `db1`.`table2`",
+				Database: "db1",
+				Table:    "table2",
 			},
 		},
 		{
@@ -82,6 +163,21 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
 		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs)
+	}
+}
+
+func (s *testTranslateSuite) TestTrimUse(c *check.C) {
+	tests := []struct {
+		Origin string
+		Expect string
+	}{
+		{"use a;create table a(id int);", "create table a(id int);"},
+		{"create database a;", "create database a;"},
+	}
+
+	for _, test := range tests {
+		get := trimUse(test.Origin)
+		c.Assert(get, check.Equals, test.Expect)
 	}
 }
 

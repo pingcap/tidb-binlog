@@ -63,11 +63,12 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
-	DataDir           string          `toml:"data-dir" json:"data-dir"`
-	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
-	GC                int             `toml:"gc" json:"gc"`
-	LogFile           string          `toml:"log-file" json:"log-file"`
-	Security          security.Config `toml:"security" json:"security"`
+	DataDir           string `toml:"data-dir" json:"data-dir"`
+	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	// pump only stores binlog events whose ts >= current time - GC(day)
+	GC       int             `toml:"gc" json:"gc"`
+	LogFile  string          `toml:"log-file" json:"log-file"`
+	Security security.Config `toml:"security" json:"security"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
 
@@ -144,7 +145,9 @@ func (cfg *Config) Parse(arguments []string) error {
 	}
 
 	// Parse again to replace with command line options
-	cfg.FlagSet.Parse(arguments)
+	if err := cfg.FlagSet.Parse(arguments); err != nil {
+		return errors.Trace(err)
+	}
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
@@ -203,8 +206,8 @@ func (cfg *Config) validate() error {
 	if err != nil {
 		return errors.Errorf("bad AdvertiseAddr host format: %s, %v", urladv.Host, err)
 	}
-	if host == "0.0.0.0" {
-		return errors.New("advertiseAddr host is not allowed to be set to 0.0.0.0")
+	if len(host) == 0 || host == "0.0.0.0" {
+		return errors.Errorf("invalid advertiseAddr host: %v", host)
 	}
 
 	// check socketAddr

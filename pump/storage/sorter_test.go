@@ -57,7 +57,9 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 	if expectMaxCommitTS != nil {
 		c.Assert(maxCommitTS, check.DeepEquals, expectMaxCommitTS)
 	}
-
+	for i := 1; i < len(maxCommitTS); i++ {
+		c.Assert(maxCommitTS[i], check.Greater, maxCommitTS[i-1])
+	}
 	c.Assert(maxTS, check.Equals, maxCommitTS[len(maxCommitTS)-1])
 }
 
@@ -134,25 +136,25 @@ func (s *SorterSuite) TestSorter(c *check.C) {
 
 	// test random data
 	items = items[:0]
-	for item := range newItemGenerator(5000, 10, 0) {
+	for item := range newItemGenerator(500, 10, 0) {
 		items = append(items, item)
 	}
 	testSorter(c, items, nil)
 
 	items = items[:0]
-	for item := range newItemGenerator(50000, 1, 0) {
+	for item := range newItemGenerator(5000, 1, 0) {
 		items = append(items, item)
 	}
 	testSorter(c, items, nil)
 
 	items = items[:0]
-	for item := range newItemGenerator(5000, 10, 10) {
+	for item := range newItemGenerator(500, 10, 10) {
 		items = append(items, item)
 	}
 	testSorter(c, items, nil)
 
 	items = items[:0]
-	for item := range newItemGenerator(50000, 1, 10) {
+	for item := range newItemGenerator(5000, 1, 10) {
 		items = append(items, item)
 	}
 	testSorter(c, items, nil)

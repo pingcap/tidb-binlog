@@ -163,6 +163,10 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
 
+	tr.run(caseCreateView)
+	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
+
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
 		start := time.Now()
@@ -229,10 +233,10 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		if err != nil {
 			log.S().Fatal(err)
 		}
-		// insert 50 * 1M
+		// insert 5 * 1M
 		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
 		var data = make([]byte, 1<<20)
-		for i := 0; i < 50; i++ {
+		for i := 0; i < 5; i++ {
 			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
 			if err != nil {
 				log.S().Fatal(err)
@@ -281,6 +285,34 @@ CREATE TABLE gen_contacts (
 		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i, i)); err != nil {
 			log.S().Fatal(err)
 		}
+	}
+}
+
+func caseCreateView(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE base_for_view (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	user_id INT NOT NULL,
+	amount INT NOT NULL
+);`)
+
+	mustExec(db, `
+CREATE VIEW view_user_sum (user_id, total)
+AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
+
+	insertSQL := "INSERT INTO base_for_view(user_id, amount) VALUES(?, ?);"
+	updateSQL := "UPDATE base_for_view SET amount = ? WHERE user_id = ?;"
+	deleteSQL := "DELETE FROM base_for_view WHERE user_id = ? AND amount = ?;"
+	for i := 0; i < 42; i++ {
+		for j := 0; j < 3; j++ {
+			mustExec(db, insertSQL, i, j*10+i)
+			if i%2 == 0 && j == 1 {
+				mustExec(db, updateSQL, 1111, i)
+			}
+		}
+	}
+	for i := 0; i < 10; i++ {
+		mustExec(db, deleteSQL, i, 1111)
 	}
 }
 

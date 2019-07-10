@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/opcode"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
@@ -234,7 +234,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 			t := types.NewTimeDatum(types.CurrentTime(e.GetType().Tp))
 			return fmt.Sprintf("'%v'", t.GetMysqlTime().String()), shouldQuote, nil
 		}
-		return "", false, errors.New(fmt.Sprintf("Function expression %s is not supported.", e.FnName))
+		return "", false, fmt.Errorf("function expression %s is not supported", e.FnName)
 	case *ast.UnaryOperationExpr:
 		op := ""
 		switch e.Op {
@@ -249,7 +249,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 				op = "+"
 			}
 		default:
-			return "", false, errors.New(fmt.Sprintf("Op %s is not supported.", e.Op.String()))
+			return "", false, fmt.Errorf("op %s is not supported", e.Op.String())
 		}
 		child, _, err := formatFlashLiteral(e.V, ft)
 		if err != nil {
@@ -257,7 +257,7 @@ func formatFlashLiteral(expr ast.ExprNode, ft *types.FieldType) (string, bool, e
 		}
 		return fmt.Sprintf("%s%s", op, child), shouldQuote, nil
 	default:
-		return "", false, errors.New(fmt.Sprintf("Expression %v is not supported.", e))
+		return "", false, fmt.Errorf("expression %v is not supported", e)
 	}
 }
 

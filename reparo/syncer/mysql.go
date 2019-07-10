@@ -48,21 +48,25 @@ var (
 	defaultBatchSize          = 20
 )
 
-func newMysqlSyncer(cfg *DBConfig) (*mysqlSyncer, error) {
-	db, err := loader.CreateDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
+// should be only used for unit test to create mock db
+var createDB = loader.CreateDB
+
+func newMysqlSyncer(cfg *DBConfig, safemode bool) (*mysqlSyncer, error) {
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	return newMysqlSyncerFromSQLDB(db)
+	return newMysqlSyncerFromSQLDB(db, safemode)
 }
 
-func newMysqlSyncerFromSQLDB(db *sql.DB) (*mysqlSyncer, error) {
+func newMysqlSyncerFromSQLDB(db *sql.DB, safemode bool) (*mysqlSyncer, error) {
 	loader, err := loader.NewLoader(db, loader.WorkerCount(defaultWorkerCount), loader.BatchSize(defaultBatchSize))
 	if err != nil {
 		return nil, errors.Annotate(err, "new loader failed")
 	}
 
+	loader.SetSafeMode(safemode)
 	syncer := &mysqlSyncer{db: db, loader: loader}
 	syncer.runLoader()
 

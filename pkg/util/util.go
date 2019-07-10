@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -86,8 +87,13 @@ func DefaultListenAddr(port int32) string {
 
 // IsValidateListenHost judge the host is validate listen host or not.
 func IsValidateListenHost(host string) bool {
+	if len(host) == 0 {
+		return false
+	}
 	if ip := net.ParseIP(host); ip != nil {
-		return !ip.IsLoopback()
+		if ip.IsLoopback() {
+			return false
+		}
 	}
 	return host != "localhost"
 }
@@ -149,6 +155,48 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 	}
 
 	return errors.Trace(err)
+}
+
+// RetryContext retries the specified `fn` until it returns no error or the context is canceled,
+// for at most `retryCount` times.
+// The wait time before the `i`th retry is calculated with `sleepTime` * (`backoffFactor` ** i).
+func RetryContext(ctx context.Context, retryCount int, sleepTime time.Duration, backoffFactor int, fn func(context.Context) error) error {
+	var err error
+	for i := 0; i < retryCount; i++ {
+		err = fn(ctx)
+		if err == nil {
+			break
+		}
+
+		select {
+		case <-time.After(sleepTime):
+		case <-ctx.Done():
+			return err
+		}
+		sleepTime = sleepTime * time.Duration(backoffFactor)
+	}
+	return err
+}
+
+// TryUntilSuccess retries the given function until error is nil or the context is done,
+// waiting for `waitInterval` time between retries.
+func TryUntilSuccess(ctx context.Context, waitInterval time.Duration, errMsg string, fn func() error) error {
+	for {
+		if err := fn(); err != nil {
+			if errMsg != "" {
+				log.Error(errMsg, zap.Error(err))
+			}
+
+			select {
+			case <-time.After(waitInterval):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+
+		return nil
+	}
 }
 
 // QueryLatestTsFromPD returns the latest ts

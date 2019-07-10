@@ -43,7 +43,10 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 func checkTest(c *C, dir string) {
 	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
-	defer CloseBinlogger(bl)
+	defer func() {
+		err := CloseBinlogger(bl)
+		c.Assert(err, IsNil)
+	}()
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
@@ -58,7 +61,8 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate()
+	err = b.rotate()
+	c.Assert(err, IsNil)
 
 	_, err = bl.WriteTail(&binlog.Entity{Payload: []byte("binlogtest")})
 	c.Assert(err, IsNil)
@@ -202,20 +206,40 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	dir := c.MkDir()
 	bl, err := OpenBinlogger(dir)
 	c.Assert(err, IsNil)
-	defer CloseBinlogger(bl)
+	// 1. A binlog file with index 0 is created at this point
+	defer func() {
+		err := CloseBinlogger(bl)
+		c.Assert(err, IsNil)
+	}()
 
 	b, ok := bl.(*binlogger)
 	c.Assert(ok, IsTrue)
-	b.rotate()
+	err = b.rotate()
+	// 2. rotate creates a new binlog file with index 1
+	c.Assert(err, IsNil)
 
+	// No binlog files should be collected,
+	// because both of the files has an index that's >= 0
 	time.Sleep(10 * time.Millisecond)
-	b.GC(time.Millisecond, binlog.Pos{})
+	b.GC(time.Millisecond, binlog.Pos{Suffix: 0})
 
 	names, err := ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 2)
-	c.Assert(names[0], Equals, BinlogName(0))
-	c.Assert(names[1], Equals, BinlogName(1))
+	for i, name := range names {
+		suffix, _, err := ParseBinlogName(name)
+		c.Assert(err, IsNil)
+		c.Assert(suffix, Equals, uint64(i))
+	}
+
+	// The one with index 0 should be garbage collected
+	b.GC(time.Millisecond, binlog.Pos{Suffix: 1})
+	names, err = ReadBinlogNames(b.dir)
+	c.Assert(err, IsNil)
+	c.Assert(names, HasLen, 1)
+	suffix, _, err := ParseBinlogName(names[0])
+	c.Assert(err, IsNil)
+	c.Assert(suffix, Equals, uint64(1))
 }
 
 func (s *testBinloggerSuite) TestSeekBinlog(c *C) {

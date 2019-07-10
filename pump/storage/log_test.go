@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 
 	fuzz "github.com/google/gofuzz"
@@ -73,6 +74,18 @@ func (lfs *LogFileSuit) TearDownTest(c *check.C) {
 	os.Remove(lfs.lf.path)
 }
 
+func (lfs *LogFileSuit) TestWriteOffset(c *check.C) {
+	dir := c.MkDir()
+	f, err := newLogFile(1024, filepath.Join(dir, "1024.vlog"))
+	c.Assert(err, check.IsNil)
+	c.Assert(f.GetWriteOffset(), check.Equals, int64(0))
+
+	data := make([]byte, 379)
+	err = f.Write(data, true)
+	c.Assert(err, check.IsNil)
+	c.Assert(f.GetWriteOffset(), check.Equals, int64(379))
+}
+
 func (lfs *LogFileSuit) TestSeekToNextRecord(c *check.C) {
 	buffer := new(bytes.Buffer)
 
@@ -107,7 +120,6 @@ func (lfs *LogFileSuit) TestSeekToNextRecord(c *check.C) {
 			c.Assert(err, check.NotNil)
 			c.Assert(bytes, check.Equals, len(data)-idx)
 		}
-
 	}
 }
 
@@ -128,7 +140,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 
 	// should get the later one record write
 	var recordGet *Record
-	lf.scan(0, func(vp valuePointer, record *Record) error {
+	err = lf.scan(0, func(vp valuePointer, record *Record) error {
 		if recordGet != nil {
 			c.Fatal("get more than on record")
 		}
@@ -138,6 +150,7 @@ func (lfs *LogFileSuit) TestSimpleCorruption(c *check.C) {
 
 		return nil
 	})
+	c.Assert(err, check.IsNil)
 
 	c.Assert(recordGet, check.NotNil)
 }

@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -22,10 +23,10 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap/zapcore"
 )
@@ -65,6 +66,8 @@ func (s *utilSuite) TestIsValidateListenHost(c *C) {
 	c.Assert(IsValidateListenHost("192.168.3.72"), IsTrue)
 	c.Assert(IsValidateListenHost("localhost"), IsFalse)
 	c.Assert(IsValidateListenHost("127.0.0.1"), IsFalse)
+	c.Assert(IsValidateListenHost("0.0.0.0"), IsTrue)
+	c.Assert(IsValidateListenHost(""), IsFalse)
 	c.Assert(IsValidateListenHost("::1"), IsFalse)
 }
 
@@ -116,6 +119,11 @@ func (s *getAddrIPSuite) TestShouldRetIPV4(c *C) {
 		IP: net.ParseIP("192.168.1.2"),
 	}
 	c.Assert(getAddrDefaultIP(&addr), Equals, "192.168.1.2")
+
+	addr2 := net.IPAddr{
+		IP: net.ParseIP("192.168.1.3"),
+	}
+	c.Assert(getAddrDefaultIP(&addr2), Equals, "192.168.1.3")
 }
 
 func (s *getAddrIPSuite) TestShouldIgnoreLoopback(c *C) {
@@ -221,4 +229,100 @@ func (s *adjustValueSuite) TestAdjustDuration(c *C) {
 
 	AdjustDuration(&d, time.Duration(time.Hour))
 	c.Assert(d, Equals, time.Duration(time.Second))
+}
+
+type tryUntilSuccSuite struct{}
+
+var _ = Suite(&tryUntilSuccSuite{})
+
+func (s *tryUntilSuccSuite) TestShouldStopWhenDone(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	signal := make(chan struct{})
+	go func() {
+		err := TryUntilSuccess(ctx, 10*time.Millisecond, "Testing", func() error {
+			return errors.New("Just Failed")
+		})
+		close(signal)
+		c.Assert(err, ErrorMatches, "context canceled")
+	}()
+	cancel()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after done")
+	}
+}
+
+func (s *tryUntilSuccSuite) TestShouldStopOnSuccess(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var callCount int
+	signal := make(chan struct{})
+	go func() {
+		err := TryUntilSuccess(ctx, time.Millisecond, "Testing", func() error {
+			callCount++
+			if callCount < 3 {
+				return errors.New("Just Failed")
+			}
+			return nil
+		})
+		close(signal)
+		c.Assert(err, IsNil)
+	}()
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		c.Fatal("Doesn't stop in time after done")
+	}
+	c.Assert(callCount, Equals, 3)
+}
+
+type retryCtxSuite struct{}
+
+var _ = Suite(&retryCtxSuite{})
+
+func (s *retryCtxSuite) TestOnlyRetrySpecifiedTimes(c *C) {
+	ctx := context.Background()
+	var callCount int
+	err := RetryContext(ctx, 2, time.Microsecond, 3, func(ictx context.Context) error {
+		callCount++
+		return errors.New("Fail")
+	})
+	c.Assert(err, ErrorMatches, "Fail")
+	c.Assert(callCount, Equals, 2)
+}
+
+func (s *retryCtxSuite) TestRetryUntilTimeout(c *C) {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	var callCount int
+	err := RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {
+		callCount++
+		return errors.New("Fail")
+	})
+	c.Assert(err, ErrorMatches, "Fail")
+	c.Assert(callCount, Less, 10)
+
+	callCount = 0
+	err = RetryContext(ctx, 10, time.Millisecond, 2, func(ictx context.Context) error {
+		callCount++
+		<-ictx.Done()
+		return errors.New("Canceled")
+	})
+	c.Assert(err, ErrorMatches, "Canceled")
+	c.Assert(callCount, Equals, 1)
+}
+
+func (s *retryCtxSuite) TestSuccessAfterRetry(c *C) {
+	ctx := context.Background()
+	var callCount int
+	err := RetryContext(ctx, 5, time.Microsecond, 2, func(ictx context.Context) error {
+		callCount++
+		if callCount == 2 {
+			return nil
+		}
+		return errors.New("Fail")
+	})
+	c.Assert(err, IsNil)
+	c.Assert(callCount, Equals, 2)
 }

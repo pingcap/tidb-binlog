@@ -34,10 +34,11 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
-	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/kv"
+	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tipb/go-binlog"
+	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -50,8 +51,11 @@ import (
 )
 
 var (
-	notifyDrainerTimeout     = time.Second * 10
-	serverInfoOutputInterval = time.Second * 10
+	notifyDrainerTimeout            = time.Second * 10
+	serverInfoOutputInterval        = time.Second * 10
+	gcInterval                      = time.Hour
+	earlyAlertGC                    = 20 * time.Hour
+	detectDrainerCheckpointInterval = 10 * time.Minute
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 )
@@ -74,12 +78,14 @@ type Server struct {
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 	gcDuration time.Duration
-	metrics    *metricClient
+	triggerGC  chan time.Time
+	metrics    *util.MetricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
 	pdCli                   pd.Client
 	cfg                     *Config
+	tiStore                 kv.Storage
 
 	writeBinlogCount int64
 	alivePullerCount int64
@@ -98,12 +104,13 @@ func init() {
 
 // NewServer returns a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
-	var metrics *metricClient
+	var metrics *util.MetricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
-		metrics = &metricClient{
-			addr:     cfg.MetricsAddr,
-			interval: cfg.MetricsInterval,
-		}
+		metrics = util.NewMetricClient(
+			cfg.MetricsAddr,
+			time.Duration(cfg.MetricsInterval)*time.Second,
+			registry,
+		)
 	}
 
 	// get pd client and cluster ID
@@ -130,9 +137,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	kvstore.Register("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := session.NewStore(tiPath)
+	tiStore, err := kvstore.New(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -140,6 +147,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	options := storage.DefaultOptions()
 	options = options.WithKVConfig(cfg.Storage.KV)
 	options = options.WithSync(cfg.Storage.GetSyncLog())
+	options = options.WithKVChanCapacity(cfg.Storage.GetKVChanCapacity())
+	options = options.WithSlowWriteThreshold(cfg.Storage.GetSlowWriteThreshold())
+	options = options.WithStopWriteAtAvailableSpace(cfg.Storage.GetStopWriteAtAvailableSpace())
 
 	storage, err := storage.NewAppendWithResolver(cfg.DataDir, options, tiStore, lockResolver)
 	if err != nil {
@@ -162,20 +172,16 @@ func NewServer(cfg *Config) (*Server, error) {
 		ctx:        ctx,
 		cancel:     cancel,
 		metrics:    metrics,
+		tiStore:    tiStore,
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
 		cfg:        cfg,
+		triggerGC:  make(chan time.Time),
 	}, nil
 }
 
 // WriteBinlog implements the gRPC interface of pump server
 func (s *Server) WriteBinlog(ctx context.Context, in *binlog.WriteBinlogReq) (*binlog.WriteBinlogResp, error) {
-	// pump client will write some empty Payload to detect whether pump is working, should avoid this
-	if in.Payload == nil {
-		ret := new(binlog.WriteBinlogResp)
-		return ret, nil
-	}
-
 	atomic.AddInt64(&s.writeBinlogCount, 1)
 	return s.writeBinlog(ctx, in, false)
 }
@@ -259,6 +265,11 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	// don't use pos.Suffix now, use offset like last commitTS
 	last := in.StartFrom.Offset
 
+	gcTS := s.storage.GetGCTS()
+	if last <= gcTS {
+		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
+	}
+
 	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
@@ -332,26 +343,18 @@ func (s *Server) Start() error {
 	// start a UNIX listener
 	var unixLis net.Listener
 	if s.unixAddr != "" {
-		unixURL, err := url.Parse(s.unixAddr)
+		unixLis, err = listen("unix", s.unixAddr)
 		if err != nil {
-			return errors.Annotatef(err, "invalid listening socket addr (%s)", s.unixAddr)
-		}
-		unixLis, err = net.Listen("unix", unixURL.Path)
-		if err != nil {
-			return errors.Annotatef(err, "fail to start UNIX on %s", unixURL.Path)
+			return errors.Trace(err)
 		}
 	}
 
 	log.Debug("init success")
 
 	// start a TCP listener
-	tcpURL, err := url.Parse(s.tcpAddr)
+	tcpLis, err := listen("tcp", s.tcpAddr)
 	if err != nil {
-		return errors.Annotatef(err, "invalid listening tcp addr (%s)", s.tcpAddr)
-	}
-	tcpLis, err := net.Listen("tcp", tcpURL.Host)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
+		return errors.Trace(err)
 	}
 
 	// start generate binlog if pump doesn't receive new binlogs
@@ -368,6 +371,9 @@ func (s *Server) Start() error {
 
 	s.wg.Add(1)
 	go s.printServerInfo()
+
+	s.wg.Add(1)
+	go s.detectDrainerCheckpoint()
 
 	// register pump with gRPC server and start to serve listeners
 	binlog.RegisterPumpServer(s.gs, s)
@@ -390,6 +396,7 @@ func (s *Server) Start() error {
 	router.HandleFunc("/state/{nodeID}/{action}", s.ApplyAction).Methods("PUT")
 	router.HandleFunc("/drainers", s.AllDrainers).Methods("GET")
 	router.HandleFunc("/debug/binlog/{ts}", s.BinlogByTS).Methods("GET")
+	router.HandleFunc("/debug/gc/trigger", s.TriggerGC).Methods("POST")
 	http.Handle("/", router)
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", promhttp.Handler())
@@ -473,6 +480,29 @@ func (s *Server) genForwardBinlog() {
 	}
 }
 
+func (s *Server) detectDrainerCheckpoint() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(detectDrainerCheckpointInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			log.Info("detect drainer checkpoint routine exit")
+			return
+		case <-ticker.C:
+			gcTS := s.storage.GetGCTS()
+			alertGCMS := earlyAlertGC.Nanoseconds() / 1000 / 1000
+			alertGCTS := gcTS + int64(oracle.EncodeTSO(alertGCMS))
+
+			log.Info("use gc ts to detect drainer checkpoint", zap.Int64("gc ts", gcTS))
+			// detect whether the binlog before drainer's checkpoint had been purged
+			s.detectDrainerCheckPoints(s.ctx, alertGCTS)
+		}
+	}
+}
+
 func (s *Server) printServerInfo() {
 	defer s.wg.Done()
 
@@ -489,6 +519,7 @@ func (s *Server) printServerInfo() {
 				zap.Int64("writeBinlogCount", atomic.LoadInt64(&s.writeBinlogCount)),
 				zap.Int64("alivePullerCount", atomic.LoadInt64(&s.alivePullerCount)),
 				zap.Int64("MaxCommitTS", s.storage.MaxCommitTS()))
+
 		}
 	}
 }
@@ -501,35 +532,30 @@ func (s *Server) gcBinlogFile() {
 		case <-s.ctx.Done():
 			log.Info("gcBinlogFile exit")
 			return
-		case <-time.After(time.Hour):
-			if s.gcDuration == 0 {
-				continue
-			}
-
-			safeTSO, err := s.getSaveGCTSOForDrainers()
-			if err != nil {
-				log.Warn("get save gc tso for drainers failed", zap.Error(err))
-				continue
-			}
-			log.Info("get safe ts for drainers success", zap.Int64("ts", safeTSO))
-
-			millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
-			gcTS := int64(oracle.EncodeTSO(millisecond))
-			if safeTSO < gcTS {
-				gcTS = safeTSO
-			}
-			log.Info("send gc request to storage", zap.Int64("ts", gcTS))
-			s.storage.GCTS(gcTS)
+		case <-s.triggerGC:
+			log.Info("trigger gc now")
+		case <-time.After(gcInterval):
 		}
+
+		if s.gcDuration == 0 {
+			continue
+		}
+
+		millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
+		gcTS := int64(oracle.EncodeTSO(millisecond))
+
+		log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
+		s.storage.GC(gcTS)
 	}
 }
 
-func (s *Server) getSaveGCTSOForDrainers() (int64, error) {
+func (s *Server) getSafeGCTSOForDrainers(ctx context.Context) (int64, error) {
 	pumpNode := s.node.(*pumpNode)
 
-	drainers, err := pumpNode.Nodes(s.ctx, "drainers")
+	drainers, err := pumpNode.Nodes(ctx, "drainers")
 	if err != nil {
-		return 0, errors.Trace(err)
+		log.Error("fail to query status of drainers", zap.Error(err))
+		return 0, errors.Annotatef(err, "fail to query status of drainers")
 	}
 
 	var minTSO int64 = math.MaxInt64
@@ -546,6 +572,32 @@ func (s *Server) getSaveGCTSOForDrainers() (int64, error) {
 	return minTSO, nil
 }
 
+func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
+	pumpNode := s.node.(*pumpNode)
+
+	drainers, err := pumpNode.Nodes(ctx, "drainers")
+	if err != nil {
+		log.Error("fail to query status of drainers", zap.Error(err))
+		return
+	}
+
+	for _, drainer := range drainers {
+		if drainer.State == node.Offline {
+			continue
+		}
+
+		if drainer.MaxCommitTS < gcTS {
+			log.Error("drainer's checkpoint is older than pump gc ts, some binlogs are purged",
+				zap.String("drainer", drainer.NodeID),
+				zap.Int64("gc ts", gcTS),
+				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
+			)
+			// will add test when binlog have failpoint
+			detectedDrainerBinlogPurged.WithLabelValues(drainer.NodeID).Inc()
+		}
+	}
+}
+
 func (s *Server) startMetrics() {
 	defer s.wg.Done()
 
@@ -553,7 +605,7 @@ func (s *Server) startMetrics() {
 		return
 	}
 	log.Info("start metricClient")
-	s.metrics.Start(s.ctx, s.node.ID())
+	s.metrics.Start(s.ctx, map[string]string{"instance": s.node.ID()})
 	log.Info("startMetrics exit")
 }
 
@@ -578,28 +630,55 @@ func (s *Server) Status(w http.ResponseWriter, r *http.Request) {
 	s.PumpStatus().Status(w, r)
 }
 
+// TriggerGC trigger pump to gc now
+func (s *Server) TriggerGC(w http.ResponseWriter, r *http.Request) {
+	select {
+	case s.triggerGC <- time.Now():
+		fmt.Fprintln(w, "trigger gc success")
+	default:
+		fmt.Fprintln(w, "gc is working")
+	}
+}
+
 // BinlogByTS exposes api get get binlog by ts
 func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 	tsStr := mux.Vars(r)["ts"]
 	ts, err := strconv.ParseInt(tsStr, 10, 64)
 	if err != nil {
-		w.Write([]byte(fmt.Sprintf("invalid parameter ts: %s", tsStr)))
+		fmt.Fprintf(w, "invalid parameter ts: %s", tsStr)
 		return
 	}
 
 	binlog, err := s.storage.GetBinlog(ts)
 	if err != nil {
-		w.Write([]byte(err.Error()))
+		fmt.Fprint(w, err.Error())
 		return
 	}
 
-	w.Write([]byte(binlog.String()))
+	fmt.Fprint(w, binlog.String())
 	if len(binlog.PrewriteValue) > 0 {
 		prewriteValue := new(pb.PrewriteValue)
 		prewriteValue.Unmarshal(binlog.PrewriteValue)
 
-		w.Write([]byte("\n\n PrewriteValue: \n"))
-		w.Write([]byte(prewriteValue.String()))
+		fmt.Fprint(w, "\n\n PrewriteValue: \n")
+		fmt.Fprint(w, prewriteValue.String())
+	}
+
+	if len(binlog.PrewriteKey) > 0 {
+		tikvStorage := s.tiStore.(tikv.Storage)
+		helper := storage.Helper{
+			Store:       tikvStorage,
+			RegionCache: tikvStorage.GetRegionCache(),
+		}
+
+		resp, err := helper.GetMvccByEncodedKey(binlog.PrewriteKey)
+		if err != nil {
+			fmt.Fprintf(w, "GetMvccByEncodedKey failed: %s", err.Error())
+			return
+		}
+
+		fmt.Fprint(w, "\n\n GetMvccByEncodedKey: \n")
+		fmt.Fprint(w, resp.String())
 	}
 }
 
@@ -689,79 +768,39 @@ func (s *Server) getTSO() (int64, error) {
 // return if and only if it's safe to offline or context is canceled
 func (s *Server) waitSafeToOffline(ctx context.Context) error {
 	var fakeBinlog *pb.Binlog
-	var err error
 
-	// write a fake binlog
-	for {
-		fakeBinlog, err = s.writeFakeBinlog()
-		if err != nil {
-			log.Error("write fake binlog failed", zap.Error(err))
-
-			select {
-			case <-time.After(time.Second):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
-		}
-
-		break
+	err := util.TryUntilSuccess(ctx, time.Second, "Failed to write fake binlog", func() (e error) {
+		fakeBinlog, e = s.writeFakeBinlog()
+		return
+	})
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	// check storage has handle this fake binlog
-	for {
-		maxCommitTS := s.storage.MaxCommitTS()
-		if maxCommitTS < fakeBinlog.CommitTs {
-			log.Info("max commit TS in storage less than fake binlog commit ts",
-				zap.Int64("max commit ts", maxCommitTS),
-				zap.Int64("fake binlog commit ts", fakeBinlog.CommitTs))
-			select {
-			case <-time.After(time.Second):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
-		}
-
-		break
+	if err := s.waitUntilCommitTSSaved(ctx, fakeBinlog.CommitTs, time.Second); err != nil {
+		return errors.Trace(ctx.Err())
 	}
 
-	log.Debug("start to check offline safe for drainers")
+	log.Debug("Start waiting until all drainers have consumed the last fake binlog")
 
-	// check drainer has consume fake binlog we just write
 	for {
 		select {
 		case <-time.After(time.Second):
-			pumpNode := s.node.(*pumpNode)
-			drainers, err := pumpNode.Nodes(ctx, "drainers")
+			safeTSO, err := s.getSafeGCTSOForDrainers(ctx)
 			if err != nil {
-				log.Error("get nodes failed", zap.Error(err))
+				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
 			}
-			needByDrainer := false
-			for _, drainer := range drainers {
-				if drainer.State == node.Offline {
-					continue
-				}
-
-				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
-					log.Info("wait for drainer to consume binlog",
-						zap.String("drainer NodeID", drainer.NodeID),
-						zap.Int64("drainer MaxCommitTS", drainer.MaxCommitTS),
-						zap.Int64("Binlog CommiTS", fakeBinlog.CommitTs))
-					needByDrainer = true
-					break
-				}
-			}
-			if !needByDrainer {
+			if safeTSO >= fakeBinlog.CommitTs {
 				return nil
 			}
-
-			_, err = s.writeFakeBinlog()
-			if err != nil {
+			log.Warn("Waiting for drainer to consume binlog",
+				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
+				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
+			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
 			}
-
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		}
@@ -826,4 +865,39 @@ func (s *Server) Close() {
 		s.pdCli.Close()
 	}
 	log.Info("has closed pdCli")
+
+	if s.tiStore != nil {
+		s.tiStore.Close()
+	}
+	log.Info("has closed tiStore")
+}
+
+func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInterval time.Duration) error {
+	for {
+		maxCommitTS := s.storage.MaxCommitTS()
+		if maxCommitTS < ts {
+			log.Info("The max commit ts saved is less than expected commit ts",
+				zap.Int64("max commit ts", maxCommitTS),
+				zap.Int64("expected commit ts", ts))
+			select {
+			case <-time.After(checkInterval):
+				continue
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			}
+		}
+		return nil
+	}
+}
+
+func listen(network, addr string) (net.Listener, error) {
+	URL, err := url.Parse(addr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", addr)
+	}
+	listener, err := net.Listen(network, URL.Host)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Host)
+	}
+	return listener, nil
 }

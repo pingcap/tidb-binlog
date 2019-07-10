@@ -16,6 +16,7 @@ package drainer
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
@@ -58,7 +59,7 @@ type Collector struct {
 
 	syncedCheckTime int
 
-	// notifyChan notifies the new pump is comming
+	// notifyChan notifies the new pump is coming
 	notifyChan chan *notifyResult
 	// expose savepoints to HTTP.
 	mu struct {
@@ -69,14 +70,13 @@ type Collector struct {
 	merger *Merger
 
 	errCh chan error
-	wg    sync.WaitGroup
 }
 
 var (
 	getDDLJobRetryWait = time.Second
 
 	// Make it possible to mock the following functions in tests
-	newStore      = session.NewStore
+	newStore      = store.New
 	newClient     = etcd.NewClientFromCfg
 	fDDLJobGetter = getDDLJob
 )
@@ -88,7 +88,11 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	if err := store.Register("tikv", tikv.Driver{}); err != nil {
+		if !strings.Contains(err.Error(), "already registered") {
+			return nil, errors.Trace(err)
+		}
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := newStore(tiPath)
 	if err != nil {
@@ -118,10 +122,7 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 }
 
 func (c *Collector) publishBinlogs(ctx context.Context) {
-	defer func() {
-		c.wg.Done()
-		log.Info("publishBinlogs quit")
-	}()
+	defer log.Info("publishBinlogs quit")
 
 	for {
 		select {
@@ -139,40 +140,23 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 
 // Start run a loop of collecting binlog from pumps online
 func (c *Collector) Start(ctx context.Context) {
-	defer func() {
-		for _, p := range c.pumps {
-			p.Close()
-		}
-		if err := c.reg.Close(); err != nil {
-			log.Error(err.Error())
-		}
-
-		c.wg.Wait()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		c.publishBinlogs(ctx)
+		wg.Done()
 	}()
 
-	c.wg.Add(1)
-	go c.publishBinlogs(ctx)
+	c.keepUpdatingStatus(ctx, c.updateStatus)
 
-	// add all the pump to merger
-	c.merger.Stop()
-	c.updateStatus(ctx)
-	c.merger.Continue()
-
-	// update status when had pump notify or reach wait time
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case nr := <-c.notifyChan:
-			nr.err = c.updateStatus(ctx)
-			nr.wg.Done()
-		case <-time.After(c.interval):
-			c.updateStatus(ctx)
-		case err := <-c.errCh:
-			log.Error("collector meets error", zap.Error(err))
-			return
-		}
+	for _, p := range c.pumps {
+		p.Close()
 	}
+	if err := c.reg.Close(); err != nil {
+		log.Error(err.Error())
+	}
+
+	wg.Wait()
 }
 
 // updateCollectStatus updates the http status of the Collector.
@@ -340,6 +324,31 @@ func (c *Collector) handlePumpStatusUpdate(ctx context.Context, n *node.Status) 
 			delete(c.pumps, n.NodeID)
 			log.Info("node of cluster has been removed and release the connection to it",
 				zap.String("nodeID", p.nodeID), zap.Uint64("clusterID", p.clusterID))
+		}
+	}
+}
+
+func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context.Context) error) {
+	// add all the pump to merger
+	c.merger.Stop()
+	fUpdate(ctx)
+	c.merger.Continue()
+
+	// update status when had pump notify or reach wait time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case nr := <-c.notifyChan:
+			nr.err = fUpdate(ctx)
+			nr.wg.Done()
+		case <-time.After(c.interval):
+			if err := fUpdate(ctx); err != nil {
+				log.Error("Failed to update collector status", zap.Error(err))
+			}
+		case err := <-c.errCh:
+			log.Error("collector meets error", zap.Error(err))
+			return
 		}
 	}
 }

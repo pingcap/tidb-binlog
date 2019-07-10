@@ -14,15 +14,8 @@
 package pump
 
 import (
-	"os"
-	"time"
-
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
-	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -42,6 +35,14 @@ var (
 			Name:      "loss_binlog_count",
 			Help:      "Total loss binlog count",
 		})
+
+	detectedDrainerBinlogPurged = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump",
+			Name:      "detected_drainer_binlog_purge_count",
+			Help:      "binlog purge count > 0 means some unread binlog was purged",
+		}, []string{"id"})
 )
 
 var registry = prometheus.NewRegistry()
@@ -49,37 +50,9 @@ var registry = prometheus.NewRegistry()
 func init() {
 	storage.InitMetircs(registry)
 
-	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 
 	registry.MustRegister(rpcHistogram)
 	registry.MustRegister(lossBinlogCacheCounter)
-}
-
-type metricClient struct {
-	addr     string
-	interval int
-}
-
-// Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(ctx context.Context, pumpID string) {
-	log.Debug("start prometheus metrics client", zap.String("addr", mc.addr), zap.Int("interval", mc.interval))
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("metricClient exit Start")
-			return
-		case <-time.After(time.Duration(mc.interval) * time.Second):
-			err := push.AddFromGatherer(
-				"binlog",
-				map[string]string{"instance": pumpID},
-				mc.addr,
-				registry,
-			)
-			if err != nil {
-				log.Error("could not push metrics to Prometheus Pushgateway", zap.Error(err))
-			}
-		}
-	}
 }

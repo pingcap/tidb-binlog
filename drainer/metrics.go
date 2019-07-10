@@ -14,15 +14,8 @@
 package drainer
 
 import (
-	"os"
-	"time"
-
-	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/push"
-	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -74,6 +67,15 @@ var (
 			Help:      "save checkpoint tso of drainer.",
 		})
 
+	checkpointDelayHistogram = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "drainer",
+			Name:      "checkpoint_delay_seconds",
+			Help:      "How much the downstream checkpoint lag behind",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22),
+		})
+
 	executeHistogram = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "binlog",
@@ -122,12 +124,13 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 	registry.MustRegister(pumpPositionGauge)
 	registry.MustRegister(ddlJobsCounter)
 	registry.MustRegister(errorCount)
 	registry.MustRegister(checkpointTSOGauge)
+	registry.MustRegister(checkpointDelayHistogram)
 	registry.MustRegister(eventCounter)
 	registry.MustRegister(executeHistogram)
 	registry.MustRegister(binlogReachDurationHistogram)
@@ -137,30 +140,4 @@ func init() {
 
 	// for pb using it
 	bf.InitMetircs(registry)
-}
-
-type metricClient struct {
-	addr     string
-	interval int
-}
-
-// Start run a loop of pushing metrics to Prometheus Pushgateway.
-func (mc *metricClient) Start(ctx context.Context, drainerID string) {
-	log.Debug("start prometheus metrics client", zap.String("addr", mc.addr), zap.Int("interval second", mc.interval))
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Duration(mc.interval) * time.Second):
-			err := push.AddFromGatherer(
-				"binlog",
-				map[string]string{"instance": drainerID},
-				mc.addr,
-				registry,
-			)
-			if err != nil {
-				log.Error("push metrics to Prometheus Pushgateway failed", zap.Error(err))
-			}
-		}
-	}
 }
