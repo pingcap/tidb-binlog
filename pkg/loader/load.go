@@ -125,7 +125,7 @@ func BatchSize(n int) Option {
 	}
 }
 
-// DownstreamTp set downstream type, values can be tidb or mysql
+// SaveAppliedTS set downstream type, values can be tidb or mysql
 func SaveAppliedTS(save bool) Option {
 	return func(o *options) {
 		o.saveAppliedTS = save
