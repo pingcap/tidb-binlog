@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	addToPusher = push.AddFromGatherer
+	addToPusher = addFromGatherer
 )
 
 // NewMetricClient returns a pointer to a MetricClient
@@ -55,4 +55,14 @@ func (mc MetricClient) Start(ctx context.Context, grouping map[string]string) {
 			}
 		}
 	}
+}
+
+func addFromGatherer(job string, grouping map[string]string, url string, g prometheus.Gatherer) error {
+	pusher := push.New(url, job)
+	// add grouping
+	for k, v := range grouping {
+		pusher = pusher.Grouping(k, v)
+	}
+	pusher = pusher.Gatherer(g)
+	return pusher.Add()
 }

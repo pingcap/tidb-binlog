@@ -14,8 +14,6 @@
 package pump
 
 import (
-	"os"
-
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -52,7 +50,7 @@ var registry = prometheus.NewRegistry()
 func init() {
 	storage.InitMetircs(registry)
 
-	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 
 	registry.MustRegister(rpcHistogram)
