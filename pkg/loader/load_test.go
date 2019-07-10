@@ -40,13 +40,13 @@ func (cs *LoadSuite) TestOptions(c *check.C) {
 	var o options
 	WorkerCount(42)(&o)
 	BatchSize(1024)(&o)
-	DownstreamTp(tidbTp)(&o)
+	SaveAppliedTS(true)(&o)
 	var mg MetricsGroup
 	Metrics(&mg)(&o)
 	c.Assert(o.workerCount, check.Equals, 42)
 	c.Assert(o.batchSize, check.Equals, 1024)
 	c.Assert(o.metrics, check.Equals, &mg)
-	c.Assert(o.downstreamTp, check.Equals, tidbTp)
+	c.Assert(o.saveAppliedTS, check.Equals, true)
 }
 
 func (cs *LoadSuite) TestGetExecutor(c *check.C) {
@@ -488,7 +488,7 @@ func (ms *markSuccessesSuite) TestShouldSetAppliedTS(c *check.C) {
 	fGetAppliedTS = func(*sql.DB) int64 {
 		return 88881234
 	}
-	loader := &loaderImpl{downstreamTp: tidbTp, successTxn: make(chan *Txn, 64)}
+	loader := &loaderImpl{saveAppliedTS: true, successTxn: make(chan *Txn, 64)}
 	loader.markSuccess([]*Txn{}...) // Make sure it won't break when no txns are passed
 	txns := []*Txn{
 		{Metadata: 1},

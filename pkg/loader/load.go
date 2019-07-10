@@ -39,9 +39,6 @@ const (
 	maxDDLRetryCount = 5
 
 	execLimitMultiple = 3
-
-	tidbTp  = "tidb"
-	mysqlTp = "mysql"
 )
 
 var (
@@ -87,7 +84,7 @@ type loaderImpl struct {
 	merge bool
 
 	// value can be tidb or mysql
-	downstreamTp            string
+	saveAppliedTS           bool
 	lastUpdateAppliedTSTime time.Time
 }
 
@@ -98,17 +95,17 @@ type MetricsGroup struct {
 }
 
 type options struct {
-	workerCount  int
-	batchSize    int
-	metrics      *MetricsGroup
-	downstreamTp string
+	workerCount   int
+	batchSize     int
+	metrics       *MetricsGroup
+	saveAppliedTS bool
 }
 
 var defaultLoaderOptions = options{
-	workerCount:  16,
-	batchSize:    20,
-	metrics:      nil,
-	downstreamTp: mysqlTp,
+	workerCount:   16,
+	batchSize:     20,
+	metrics:       nil,
+	saveAppliedTS: false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -129,14 +126,9 @@ func BatchSize(n int) Option {
 }
 
 // DownstreamTp set downstream type, values can be tidb or mysql
-func DownstreamTp(tp string) Option {
+func SaveAppliedTS(save bool) Option {
 	return func(o *options) {
-		if tp == tidbTp || tp == mysqlTp {
-			o.downstreamTp = tp
-		} else {
-			log.Warn("downstream type is not supported, use mysql as default", zap.String("type", tp))
-			o.downstreamTp = mysqlTp
-		}
+		o.saveAppliedTS = save
 	}
 }
 
@@ -156,14 +148,14 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 
 	s := &loaderImpl{
-		db:           db,
-		workerCount:  opts.workerCount,
-		batchSize:    opts.batchSize,
-		metrics:      opts.metrics,
-		input:        make(chan *Txn, 1024),
-		successTxn:   make(chan *Txn, 1024),
-		merge:        true,
-		downstreamTp: opts.downstreamTp,
+		db:            db,
+		workerCount:   opts.workerCount,
+		batchSize:     opts.batchSize,
+		metrics:       opts.metrics,
+		input:         make(chan *Txn, 1024),
+		successTxn:    make(chan *Txn, 1024),
+		merge:         true,
+		saveAppliedTS: opts.saveAppliedTS,
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
@@ -206,7 +198,7 @@ func (s *loaderImpl) GetSafeMode() bool {
 }
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
-	if s.downstreamTp == tidbTp && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
+	if s.saveAppliedTS && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
 		txns[len(txns)-1].AppliedTS = fGetAppliedTS(s.db)
 		s.lastUpdateAppliedTSTime = time.Now()
 	}
