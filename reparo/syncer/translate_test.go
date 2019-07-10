@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/codec"
 )
 
