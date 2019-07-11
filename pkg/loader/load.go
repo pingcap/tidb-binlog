@@ -30,8 +30,8 @@ import (
 
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
+	tmysql "github.com/pingcap/parser/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	tmysql "github.com/pingcap/tidb/mysql"
 )
 
 const (

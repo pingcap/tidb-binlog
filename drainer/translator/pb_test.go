@@ -17,8 +17,8 @@ import (
 	"fmt"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
