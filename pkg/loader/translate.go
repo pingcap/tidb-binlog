@@ -19,8 +19,9 @@ import (
 )
 
 // SlaveBinlogToTxn translate the Binlog format into Txn
-func SlaveBinlogToTxn(binlog *pb.Binlog) (txn *Txn, err error) {
-	txn = new(Txn)
+func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
+	txn := new(Txn)
+	var err error
 	switch binlog.Type {
 	case pb.BinlogType_DDL:
 		data := binlog.DdlData

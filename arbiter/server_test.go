@@ -408,7 +408,7 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	ld := dummyLoader{input: dest}
 
 	res := make(chan error)
-	var err error = nil
+	var err error
 	go func() {
 		for err := range res {
 			if err != nil {
