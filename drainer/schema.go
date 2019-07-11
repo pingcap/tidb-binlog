@@ -326,7 +326,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionCreateTable, model.ActionCreateView:
+	case model.ActionCreateTable, model.ActionCreateView, model.ActionRecoverTable:
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)

@@ -323,10 +323,10 @@ func (t *testTranslatorSuite) TestFlashGenDDLSQL(c *C) {
 		Equals,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `dt` DateTime DEFAULT '1998-08-08 13:13:13';")
 	// Current_timestamp for Timestamp.
-	check("alter table Test add column ts timestamp not null default current_timestamp'",
+	check("alter table Test add column ts timestamp not null default current_timestamp",
 		Matches,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `ts` DateTime DEFAULT '"+dtRegex+"';")
-	check("alter table Test add column ts timestamp not null default current_timestamp()'",
+	check("alter table Test add column ts timestamp not null default current_timestamp()",
 		Matches,
 		"ALTER TABLE `test_schema`.`test` ADD COLUMN `ts` DateTime DEFAULT '"+dtRegex+"';")
 	// Time(duration).

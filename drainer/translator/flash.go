@@ -207,7 +207,7 @@ func GenFlashDDLSQL(sql string, schema string) (string, error) {
 	ddlParser := getParser()
 	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", errors.Annotatef(err, "parse sql failed: %s", sql)
 	}
 
 	switch stmt := stmt.(type) {
