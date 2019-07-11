@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
-	tmysql "github.com/pingcap/parser/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
