@@ -169,8 +169,14 @@ func (p *KafkaSyncer) syncDMLPartitionBySchema(binlog *obinlog.Binlog, item *Ite
 	}
 
 	for schema, tables := range tablesBySchema {
-		binlog.DmlData.Tables = tables
-		if err := p.saveBinlog(binlog, item, sarama.StringEncoder(schema)); err != nil {
+		l := obinlog.Binlog{
+			Type:     binlog.Type,
+			CommitTs: binlog.CommitTs,
+			DmlData: &obinlog.DMLData{
+				Tables: tables,
+			},
+		}
+		if err := p.saveBinlog(&l, item, sarama.StringEncoder(schema)); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -178,12 +184,15 @@ func (p *KafkaSyncer) syncDMLPartitionBySchema(binlog *obinlog.Binlog, item *Ite
 }
 
 func (p *KafkaSyncer) syncDMLPartitionByTable(binlog *obinlog.Binlog, item *Item) error {
-	tables := binlog.DmlData.Tables
-
-	binlog.DmlData.Tables = make([]*obinlog.Table, 1)
-	for _, table := range tables {
-		binlog.DmlData.Tables[0] = table
-		if err := p.saveBinlog(binlog, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName)); err != nil {
+	for _, table := range binlog.DmlData.Tables {
+		l := obinlog.Binlog{
+			Type:     binlog.Type,
+			CommitTs: binlog.CommitTs,
+			DmlData: &obinlog.DMLData{
+				Tables: []*obinlog.Table{table},
+			},
+		}
+		if err := p.saveBinlog(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName)); err != nil {
 			return errors.Trace(err)
 		}
 	}
