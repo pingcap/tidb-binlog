@@ -180,23 +180,15 @@ func (s *Server) Run() error {
 		wg.Done()
 	}()
 
-	res := make(chan error)
-	wg.Add(1)
-	var syncErr error = nil
-	go func() {
-		defer wg.Done()
-		for syncErr = range res {
-			if syncErr != nil {
-				s.Close()
-				break
-			}
-		}
-	}()
+	var syncErr error
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		syncBinlogs(s.kafkaReader.Messages(), s.load, res)
+		syncErr = syncBinlogs(s.kafkaReader.Messages(), s.load)
+		if syncErr != nil {
+			s.Close()
+		}
 	}()
 
 	err := s.load.Run()
@@ -279,20 +271,15 @@ func (s *Server) loadStatus() (int, error) {
 	return status, errors.Trace(err)
 }
 
-func syncBinlogs(source <-chan *reader.Message, ld loader.Loader, res chan error) {
+func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) (err error) {
 	dest := ld.Input()
-	var txn *loader.Txn
-	var err error = nil
+	defer ld.Close()
 	for msg := range source {
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
-		if err != nil {
-			continue
-		}
-		txn, err = loader.SlaveBinlogToTxn(msg.Binlog)
+		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 		if err != nil {
 			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))
-			res <- err
-			continue
+			return err
 		}
 		txn.Metadata = msg
 		dest <- txn
@@ -300,6 +287,5 @@ func syncBinlogs(source <-chan *reader.Message, ld loader.Loader, res chan error
 		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
 		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))
 	}
-	ld.Close()
-	close(res)
+	return nil
 }
