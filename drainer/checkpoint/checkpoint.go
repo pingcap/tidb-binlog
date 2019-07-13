@@ -31,7 +31,7 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(int64) error
+	Save(int64, int64) error
 
 	// Pos gets position information.
 	TS() int64
