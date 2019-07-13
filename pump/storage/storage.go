@@ -59,6 +59,8 @@ var (
 	// save valuePointer headPointer, for binlog in vlog not after headPointer, we have save it in metadata db
 	// at start up, we can scan the vlog from headPointer and save the ts -> valuePointer to metadata db
 	headPointerKey = []byte("!binlog!headPointer")
+	// If the kv channel blocks for more than this value, turn on the slow chaser
+	slowChaserThreshold = 3 * time.Second
 )
 
 // Storage is the interface to handle binlog storage
@@ -868,15 +870,29 @@ func (a *Append) batchRequest(reqs chan *request, maxBatchNum int) chan []*reque
 }
 
 func (a *Append) writeToValueLog(reqs chan *request) chan *request {
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan *request, a.options.KVChanCapacity)
+	slowChaser := newSlowChaser(a.vlog, time.Second, done)
+	slowChaserStopped := make(chan struct{})
+	go func() {
+		slowChaser.Run(ctx)
+		close(slowChaserStopped)
+	}()
 
 	go func() {
-		defer close(done)
+		defer func() {
+			cancel()
+			<-slowChaserStopped
+			close(done)
+		}()
 
 		var bufReqs []*request
 		var size int
 
 		write := func(batch []*request) {
+			slowChaser.WriteLock.Lock()
+			defer slowChaser.WriteLock.Unlock()
+
 			if len(batch) == 0 {
 				return
 			}
@@ -900,7 +916,19 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 				req.wg.Done()
 				// payload is useless anymore, let it GC ASAP
 				req.payload = nil
-				done <- req
+			}
+
+			if slowChaser.IsOn() {
+				return
+			}
+		SEND:
+			for _, req := range batch {
+				select {
+				case done <- req:
+				case <-time.After(slowChaserThreshold):
+					slowChaser.TurnOn(&req.valuePointer)
+					break SEND
+				}
 			}
 		}
 

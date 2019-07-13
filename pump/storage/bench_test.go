@@ -75,7 +75,7 @@ func benchmarkPull(b *testing.B, prewriteValueSize int, binlogNum int) {
 	append := newAppend(b)
 	defer os.RemoveAll(append.dir)
 
-	populateBinlog(b, append, prewriteValueSize, int32(binlogNum))
+	populateBinlog(b, append, prewriteValueSize, binlogNum)
 
 	runtime.GC()
 	b.ResetTimer()

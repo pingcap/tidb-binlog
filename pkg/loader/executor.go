@@ -119,7 +119,7 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 	}
 
 	var sqls strings.Builder
-	var argss []interface{}
+	argss := make([]interface{}, 0, len(deletes))
 
 	for _, dml := range deletes {
 		sql, args := dml.sql()

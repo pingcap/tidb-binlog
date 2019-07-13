@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
+	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	binlog "github.com/pingcap/tipb/go-binlog"
@@ -137,9 +137,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	session.RegisterStore("tikv", tikv.Driver{})
+	kvstore.Register("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := session.NewStore(tiPath)
+	tiStore, err := kvstore.New(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -24,9 +24,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	tipb "github.com/pingcap/tipb/go-binlog"
@@ -207,7 +207,7 @@ func GenFlashDDLSQL(sql string, schema string) (string, error) {
 	ddlParser := getParser()
 	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", errors.Annotatef(err, "parse sql failed: %s", sql)
 	}
 
 	switch stmt := stmt.(type) {

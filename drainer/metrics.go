@@ -14,8 +14,6 @@
 package drainer
 
 import (
-	"os"
-
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -126,7 +124,7 @@ var (
 var registry = prometheus.NewRegistry()
 
 func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 	registry.MustRegister(pumpPositionGauge)
 	registry.MustRegister(ddlJobsCounter)

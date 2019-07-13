@@ -103,7 +103,7 @@ func (dml *DML) primaryKeys() []string {
 func (dml *DML) primaryKeyValues() []interface{} {
 	names := dml.primaryKeys()
 
-	var values []interface{}
+	values := make([]interface{}, 0, len(names))
 	for _, name := range names {
 		v := dml.Values[name]
 		values = append(values, v)
@@ -145,7 +145,7 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 
 	names := dml.primaryKeys()
 
-	var values []interface{}
+	values := make([]interface{}, 0, len(names))
 	for _, name := range names {
 		v := dml.OldValues[name]
 		values = append(values, v)

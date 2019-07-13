@@ -97,7 +97,7 @@ func (vs *VlogSuit) TestBatchWriteRead(c *check.C) {
 	testBatchWriteRead(c, 128, DefaultOptions())
 
 	// set small valueLogFileSize, so we can test multi log file case
-	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(500))
+	testBatchWriteRead(c, 1024, DefaultOptions().WithValueLogFileSize(3000))
 }
 
 func testBatchWriteRead(c *check.C, reqNum int, options *Options) {
@@ -138,6 +138,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 
 	n := 10
 	reqs := make([]*request, 0, n*3)
+	batch := make([]*request, 0, 3)
 	for i := 0; i < n; i++ {
 		// close and open back every time
 		var err = vlog.close()
@@ -147,13 +148,15 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		err = vlog.open(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
+		batch = batch[:0]
 		// write a few request
 		for j := 0; j < 3; j++ {
 			req := randRequest()
-			reqs = append(reqs, req)
-			err = vlog.write([]*request{req})
-			c.Assert(err, check.IsNil)
+			batch = append(batch, req)
 		}
+		err = vlog.write(batch)
+		c.Assert(err, check.IsNil)
+		reqs = append(reqs, batch...)
 	}
 
 	c.Log("reqs len: ", len(reqs))
@@ -168,12 +171,12 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 }
 
 func (vs *VlogSuit) TestGCTS(c *check.C) {
-	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(512))
+	vlog := newVlogWithOptions(c, DefaultOptions().WithValueLogFileSize(2048))
 	defer os.RemoveAll(vlog.dirPath)
 
 	payload := make([]byte, 128)
 	requests := make([]*request, 100)
-	// 100 * 128 > 512 guarantees that multiple log files are created
+	// 100 * 128 > 2048 guarantees that multiple log files are created
 	for i := 0; i < len(requests); i++ {
 		requests[i] = &request{
 			startTS: int64(i),
@@ -248,13 +251,13 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 	err = vlog.open(dir, DefaultOptions())
 	c.Assert(err, check.IsNil)
 
-	// 1k payload per record
+	// Size of the encoded record should be 1024 + headerLength = 1040
 	payload := make([]byte, 1024)
 	req := &request{
 		payload: payload,
 	}
 
-	// should be enough space to write 19 records
+	// Enough space for 19 * 1040
 	for i := 0; i < 19; i++ {
 		err = vlog.write([]*request{req})
 		c.Assert(err, check.IsNil)
@@ -264,8 +267,8 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 	err = vlog.write([]*request{req})
 	c.Assert(err, check.NotNil)
 
-	// increase file size limit to be 40k
-	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 40 * 1024, Max: origRlimit.Max})
+	// increase file size limit to have enough space for one more request
+	err = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &syscall.Rlimit{Cur: 20*1024 + 1040, Max: origRlimit.Max})
 	c.Assert(err, check.IsNil)
 
 	// should write success now
