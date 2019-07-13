@@ -40,11 +40,13 @@ func (cs *LoadSuite) TestOptions(c *check.C) {
 	var o options
 	WorkerCount(42)(&o)
 	BatchSize(1024)(&o)
+	SaveAppliedTS(true)(&o)
 	var mg MetricsGroup
 	Metrics(&mg)(&o)
 	c.Assert(o.workerCount, check.Equals, 42)
 	c.Assert(o.batchSize, check.Equals, 1024)
 	c.Assert(o.metrics, check.Equals, &mg)
+	c.Assert(o.saveAppliedTS, check.Equals, true)
 }
 
 func (cs *LoadSuite) TestGetExecutor(c *check.C) {
@@ -472,4 +474,46 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 	}
 	time.Sleep(10 * time.Millisecond)
 	c.Assert(executed, check.HasLen, 7)
+}
+
+type markSuccessesSuite struct{}
+
+var _ = check.Suite(&markSuccessesSuite{})
+
+func (ms *markSuccessesSuite) TestShouldSetAppliedTS(c *check.C) {
+	origF := fGetAppliedTS
+	defer func() {
+		fGetAppliedTS = origF
+	}()
+	fGetAppliedTS = func(*sql.DB) int64 {
+		return 88881234
+	}
+	loader := &loaderImpl{saveAppliedTS: true, successTxn: make(chan *Txn, 64)}
+	loader.markSuccess([]*Txn{}...) // Make sure it won't break when no txns are passed
+	txns := []*Txn{
+		{Metadata: 1},
+		{Metadata: 3},
+		{Metadata: 5},
+	}
+	loader.markSuccess(txns...)
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, fGetAppliedTS(nil))
+
+	txns = []*Txn{
+		{Metadata: 7},
+		{Metadata: 8},
+	}
+	loader.markSuccess(txns...)
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, int64(0))
+
+	originUpdateLastAppliedTSInterval := updateLastAppliedTSInterval
+	updateLastAppliedTSInterval = 0
+	defer func() {
+		updateLastAppliedTSInterval = originUpdateLastAppliedTSInterval
+	}()
+	txns = []*Txn{
+		{Metadata: 9},
+		{Metadata: 10},
+	}
+	loader.markSuccess(txns...)
+	c.Assert(txns[len(txns)-1].AppliedTS, check.Equals, int64(88881234))
 }

@@ -16,7 +16,6 @@ package checkpoint
 import (
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -50,28 +49,22 @@ func (s *saveSuite) TestShouldSaveCheckpoint(c *C) {
 	c.Assert(err, IsNil)
 	mock.ExpectExec("replace into db.tbl.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	cp := MysqlCheckPoint{db: db, schema: "db", table: "tbl", tp: "other"}
-	err = cp.Save(1111)
+	err = cp.Save(1111, 0)
 	c.Assert(err, IsNil)
 }
 
 func (s *saveSuite) TestShouldUpdateTsMap(c *C) {
-	origGet := getTidbPos
-	getTidbPos = func(db *sql.DB) (int64, error) {
-		return 3333, nil
-	}
-	defer func() { getTidbPos = origGet }()
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(0, 0))
 	cp := MysqlCheckPoint{
-		db:       db,
-		schema:   "db",
-		table:    "tbl",
-		tp:       "tidb",
-		snapshot: time.Now().Add(-time.Minute),
-		TsMap:    make(map[string]int64),
+		db:     db,
+		schema: "db",
+		table:  "tbl",
+		tp:     "tidb",
+		TsMap:  make(map[string]int64),
 	}
-	err = cp.Save(65536)
+	err = cp.Save(65536, 3333)
 	c.Assert(err, IsNil)
 	c.Assert(cp.TsMap["master-ts"], Equals, int64(65536))
 	c.Assert(cp.TsMap["slave-ts"], Equals, int64(3333))

@@ -30,7 +30,7 @@ func (t *testCheckPointSuite) TestKafka(c *C) {
 	c.Assert(cp.TS(), Equals, int64(0))
 
 	testTs := int64(1)
-	err = cp.Save(testTs)
+	err = cp.Save(testTs, 0)
 	c.Assert(err, IsNil)
 	ts := cp.TS()
 	c.Assert(ts, Equals, testTs)
@@ -39,6 +39,6 @@ func (t *testCheckPointSuite) TestKafka(c *C) {
 	err = cp.Close()
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(cp.Load()), Equals, ErrCheckPointClosed)
-	c.Assert(errors.Cause(cp.Save(0)), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(cp.Save(0, 0)), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(cp.Close()), Equals, ErrCheckPointClosed)
 }

@@ -30,6 +30,7 @@ import (
 
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
+	tmysql "github.com/pingcap/parser/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
@@ -41,8 +42,10 @@ const (
 )
 
 var (
-	execDDLRetryWait = time.Second
-	fNewBatchManager = newBatchManager
+	execDDLRetryWait            = time.Second
+	fNewBatchManager            = newBatchManager
+	fGetAppliedTS               = getAppliedTS
+	updateLastAppliedTSInterval = time.Minute
 )
 
 // Loader is used to load data to mysql
@@ -79,6 +82,10 @@ type loaderImpl struct {
 	// always true now
 	// merge the same primary key DML sequence, then batch insert
 	merge bool
+
+	// value can be tidb or mysql
+	saveAppliedTS           bool
+	lastUpdateAppliedTSTime time.Time
 }
 
 // MetricsGroup contains metrics of Loader
@@ -88,15 +95,17 @@ type MetricsGroup struct {
 }
 
 type options struct {
-	workerCount int
-	batchSize   int
-	metrics     *MetricsGroup
+	workerCount   int
+	batchSize     int
+	metrics       *MetricsGroup
+	saveAppliedTS bool
 }
 
 var defaultLoaderOptions = options{
-	workerCount: 16,
-	batchSize:   20,
-	metrics:     nil,
+	workerCount:   16,
+	batchSize:     20,
+	metrics:       nil,
+	saveAppliedTS: false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -116,6 +125,13 @@ func BatchSize(n int) Option {
 	}
 }
 
+// SaveAppliedTS set downstream type, values can be tidb or mysql
+func SaveAppliedTS(save bool) Option {
+	return func(o *options) {
+		o.saveAppliedTS = save
+	}
+}
+
 // Metrics set metrics of loader
 func Metrics(m *MetricsGroup) Option {
 	return func(o *options) {
@@ -132,13 +148,14 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 
 	s := &loaderImpl{
-		db:          db,
-		workerCount: opts.workerCount,
-		batchSize:   opts.batchSize,
-		metrics:     opts.metrics,
-		input:       make(chan *Txn, 1024),
-		successTxn:  make(chan *Txn, 1024),
-		merge:       true,
+		db:            db,
+		workerCount:   opts.workerCount,
+		batchSize:     opts.batchSize,
+		metrics:       opts.metrics,
+		input:         make(chan *Txn, 1024),
+		successTxn:    make(chan *Txn, 1024),
+		merge:         true,
+		saveAppliedTS: opts.saveAppliedTS,
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
@@ -181,6 +198,10 @@ func (s *loaderImpl) GetSafeMode() bool {
 }
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
+	if s.saveAppliedTS && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
+		txns[len(txns)-1].AppliedTS = fGetAppliedTS(s.db)
+		s.lastUpdateAppliedTSTime = time.Now()
+	}
 	for _, txn := range txns {
 		s.successTxn <- txn
 	}
@@ -534,7 +555,7 @@ type batchManager struct {
 	fDDLSuccessCallback  func(*Txn)
 }
 
-func (b *batchManager) execAccumulatedDMLs() error {
+func (b *batchManager) execAccumulatedDMLs() (err error) {
 	if len(b.dmls) == 0 {
 		return nil
 	}
@@ -590,4 +611,17 @@ func (b *batchManager) put(txn *Txn) error {
 		}
 	}
 	return nil
+}
+
+func getAppliedTS(db *gosql.DB) int64 {
+	appliedTS, err := pkgsql.GetTidbPosition(db)
+	if err != nil {
+		errCode, ok := pkgsql.GetSQLErrCode(err)
+		// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
+		if !ok || int(errCode) != tmysql.ErrUnknown {
+			log.Warn("get ts from slave cluster failed", zap.Error(err))
+		}
+		return 0
+	}
+	return appliedTS
 }

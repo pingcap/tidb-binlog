@@ -34,7 +34,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 
 	testTs := int64(1)
 	// save ts
-	err = meta.Save(testTs)
+	err = meta.Save(testTs, 0)
 	c.Assert(err, IsNil)
 	// check ts
 	ts := meta.TS()
@@ -64,6 +64,6 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 	err = meta.Close()
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(meta.Load()), Equals, ErrCheckPointClosed)
-	c.Assert(errors.Cause(meta.Save(0)), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(meta.Save(0, 0)), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(meta.Close()), Equals, ErrCheckPointClosed)
 }
