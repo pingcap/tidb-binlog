@@ -34,7 +34,8 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDDL(c *C) {
 			DdlQuery:   []byte(sql),
 		},
 	}
-	txn := SlaveBinlogToTxn(&binlog)
+	txn, err := SlaveBinlogToTxn(&binlog)
+	c.Assert(err, IsNil)
 	c.Assert(txn.DDL.Database, Equals, db)
 	c.Assert(txn.DDL.Table, Equals, table)
 	c.Assert(txn.DDL.SQL, Equals, sql)
@@ -80,7 +81,8 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDML(c *C) {
 	binlog := pb.Binlog{
 		DmlData: &dml,
 	}
-	txn := SlaveBinlogToTxn(&binlog)
+	txn, err := SlaveBinlogToTxn(&binlog)
+	c.Assert(err, IsNil)
 	c.Assert(txn.DMLs, HasLen, 2)
 	for _, dml := range txn.DMLs {
 		c.Assert(dml.Database, Equals, db)
@@ -115,32 +117,45 @@ var _ = Suite(&columnToArgSuite{})
 
 func (s *columnToArgSuite) TestHandleMySQLJSON(c *C) {
 	colVal := `{"key": "value"}`
-	arg := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)})
+	arg, err := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)})
+	c.Assert(err, IsNil)
 	c.Assert(arg, Equals, colVal)
 }
 
 func (s *columnToArgSuite) TestGetCorrectArgs(c *C) {
 	isNull := true
 	col := &pb.Column{IsNull: &isNull}
-	c.Assert(columnToArg("", col), IsNil)
+	val, err := columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, IsNil)
 
 	var i64 int64 = 666
 	col = &pb.Column{Int64Value: &i64}
-	c.Assert(columnToArg("", col), Equals, i64)
+	val, err = columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, Equals, i64)
 
 	var u64 uint64 = 777
 	col = &pb.Column{Uint64Value: &u64}
-	c.Assert(columnToArg("", col), Equals, u64)
+	val, err = columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, Equals, u64)
 
 	var d float64 = 3.14
 	col = &pb.Column{DoubleValue: &d}
-	c.Assert(columnToArg("", col), Equals, d)
+	val, err = columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, Equals, d)
 
 	var b []byte = []byte{1, 2, 3}
 	col = &pb.Column{BytesValue: b}
-	c.Assert(columnToArg("", col), DeepEquals, b)
+	val, err = columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, DeepEquals, b)
 
 	var ss string = "hello world"
 	col = &pb.Column{StringValue: &ss}
-	c.Assert(columnToArg("", col), DeepEquals, ss)
+	val, err = columnToArg("", col)
+	c.Assert(err, IsNil)
+	c.Assert(val, DeepEquals, ss)
 }
