@@ -50,12 +50,13 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
-	DataDir           string          `toml:"data-dir" json:"data-dir"`
-	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
-	GC                int             `toml:"gc" json:"gc"`
-	LogFile           string          `toml:"log-file" json:"log-file"`
-	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
-	Security          security.Config `toml:"security" json:"security"`
+	DataDir           string `toml:"data-dir" json:"data-dir"`
+	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	// pump only stores binlog events whose ts >= current time - GC(day)
+	GC        int             `toml:"gc" json:"gc"`
+	LogFile   string          `toml:"log-file" json:"log-file"`
+	LogRotate string          `toml:"log-rotate" json:"log-rotate"`
+	Security  security.Config `toml:"security" json:"security"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
 
