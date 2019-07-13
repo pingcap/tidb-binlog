@@ -70,7 +70,7 @@ var (
 var Registry = prometheus.NewRegistry()
 
 func init() {
-	Registry.MustRegister(prometheus.NewProcessCollector(os.Getpid(), ""))
+	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	Registry.MustRegister(prometheus.NewGoCollector())
 
 	Registry.MustRegister(checkpointTSOGauge)

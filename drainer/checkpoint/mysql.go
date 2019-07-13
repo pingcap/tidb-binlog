@@ -17,16 +17,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	tmysql "github.com/pingcap/tidb/mysql"
 )
 
 // MysqlCheckPoint is a local savepoint struct for mysql
@@ -44,8 +39,6 @@ type MysqlCheckPoint struct {
 
 	CommitTS int64            `toml:"commitTS" json:"commitTS"`
 	TsMap    map[string]int64 `toml:"ts-map" json:"ts-map"`
-
-	snapshot time.Time
 }
 
 var sqlOpenDB = pkgsql.OpenDB
@@ -117,10 +110,8 @@ func (sp *MysqlCheckPoint) Load() error {
 	return nil
 }
 
-var getTidbPos = pkgsql.GetTidbPosition
-
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts int64) error {
+func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -130,20 +121,9 @@ func (sp *MysqlCheckPoint) Save(ts int64) error {
 
 	sp.CommitTS = ts
 
-	// we don't need update tsMap every time.
-	if sp.tp == "tidb" && time.Since(sp.snapshot) > time.Minute {
-		sp.snapshot = time.Now()
-		slaveTS, err := getTidbPos(sp.db)
-		if err != nil {
-			// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
-			errCode, ok := pkgsql.GetSQLErrCode(err)
-			if !ok || int(errCode) != tmysql.ErrUnknown {
-				log.Warn("get ts from slave cluster failed", zap.Error(err))
-			}
-		} else {
-			sp.TsMap["master-ts"] = ts
-			sp.TsMap["slave-ts"] = slaveTS
-		}
+	if slaveTS > 0 {
+		sp.TsMap["master-ts"] = ts
+		sp.TsMap["slave-ts"] = slaveTS
 	}
 
 	b, err := json.Marshal(sp)

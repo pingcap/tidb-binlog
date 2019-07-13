@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
@@ -216,7 +216,7 @@ func (s *Server) heartbeat(ctx context.Context) <-chan error {
 	s.tg.Go("heartbeat", func() {
 		defer func() {
 			close(errc)
-			s.Close()
+			go s.Close()
 		}()
 
 		for {
@@ -251,7 +251,7 @@ func (s *Server) Start() error {
 	}()
 
 	s.tg.GoNoPanic("collect", func() {
-		defer s.Close()
+		defer func() { go s.Close() }()
 		s.collector.Start(s.ctx)
 	})
 
@@ -262,7 +262,7 @@ func (s *Server) Start() error {
 	}
 
 	s.tg.GoNoPanic("syncer", func() {
-		defer s.Close()
+		defer func() { go s.Close() }()
 		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
 		}
@@ -428,11 +428,11 @@ func createTiStore(urls string) (kv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if err := session.RegisterStore("tikv", tikv.Driver{}); err != nil {
+	if err := store.Register("tikv", tikv.Driver{}); err != nil {
 		return nil, errors.Trace(err)
 	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := session.NewStore(tiPath)
+	tiStore, err := store.New(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

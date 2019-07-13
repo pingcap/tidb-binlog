@@ -27,8 +27,8 @@ import (
 
 // test different data type of mysql
 // mysql will change boolean to tinybit(1)
-var case1 = []string{`
-CREATE TABLE  binlog_case1 (
+var caseMultiDataType = []string{`
+CREATE TABLE  binlog_multi_data_type (
 	id INT AUTO_INCREMENT,
 	t_boolean BOOLEAN,
 	t_bigint BIGINT,
@@ -51,7 +51,7 @@ CREATE TABLE  binlog_case1 (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 `,
 	`
-INSERT INTO binlog_case1(t_boolean, t_bigint, t_double, t_decimal, t_bit
+INSERT INTO binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
 	,t_date, t_datetime, t_timestamp, t_time, t_year
 	,t_char, t_varchar, t_blob, t_text, t_enum
 	,t_set, t_json) VALUES
@@ -61,63 +61,80 @@ INSERT INTO binlog_case1(t_boolean, t_bigint, t_double, t_decimal, t_bit
 	,'a,b', NULL);
 `,
 	`
-INSERT INTO binlog_case1(t_boolean) VALUES(TRUE);
+INSERT INTO binlog_multi_data_type(t_boolean) VALUES(TRUE);
 `,
 	`
-INSERT INTO binlog_case1(t_boolean) VALUES(FALSE);
+INSERT INTO binlog_multi_data_type(t_boolean) VALUES(FALSE);
 `,
 	// minmum value of bigint
 	`
-INSERT INTO binlog_case1(t_bigint) VALUES(-9223372036854775808);
+INSERT INTO binlog_multi_data_type(t_bigint) VALUES(-9223372036854775808);
 `,
 	// maximum value of bigint
 	`
-INSERT INTO binlog_case1(t_bigint) VALUES(9223372036854775807);
+INSERT INTO binlog_multi_data_type(t_bigint) VALUES(9223372036854775807);
 `,
 	`
-INSERT INTO binlog_case1(t_json) VALUES('{"key1": "value1", "key2": "value2"}');
+INSERT INTO binlog_multi_data_type(t_json) VALUES('{"key1": "value1", "key2": "value2"}');
 `,
 }
 
-var case1Clean = []string{`
-	DROP TABLE binlog_case1`,
+var caseMultiDataTypeClean = []string{`
+	DROP TABLE binlog_multi_data_type`,
 }
 
 // https://internal.pingcap.net/jira/browse/TOOL-714
-var case2 = []string{`
-CREATE TABLE binlog_case2 (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));
+var caseUKWithNoPK = []string{`
+CREATE TABLE binlog_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));
 `,
 	`
-INSERT INTO binlog_case2(id, a1, a3) VALUES(1, 1, NULL);
+INSERT INTO binlog_uk_with_no_pk(id, a1, a3) VALUES(1, 1, NULL);
 `,
 	`
-INSERT INTO binlog_case2(id, a1, a3) VALUES(2, 1, NULL);
+INSERT INTO binlog_uk_with_no_pk(id, a1, a3) VALUES(2, 1, NULL);
 `,
 	`
-UPDATE binlog_case2 SET id = 10 WHERE id = 1;
+UPDATE binlog_uk_with_no_pk SET id = 10 WHERE id = 1;
 `,
 	`
-UPDATE binlog_case2 SET id = 100 WHERE id = 10;
+UPDATE binlog_uk_with_no_pk SET id = 100 WHERE id = 10;
 `,
 }
 
-var case2Clean = []string{`
-	DROP TABLE binlog_case2`,
+var caseUKWithNoPKClean = []string{`
+	DROP TABLE binlog_uk_with_no_pk`,
 }
 
-var case3 = []string{`
-CREATE TABLE a(id INT PRIMARY KEY, a1 INT);
+var casePKAddDuplicateUK = []string{`
+CREATE TABLE binlog_pk_add_duplicate_uk(id INT PRIMARY KEY, a1 INT);
 `,
 	`
-INSERT INTO a(id, a1) VALUES(1,1),(2,1);
+INSERT INTO binlog_pk_add_duplicate_uk(id, a1) VALUES(1,1),(2,1);
 `,
 	`
-ALTER TABLE a ADD UNIQUE INDEX aidx(a1);
+ALTER TABLE binlog_pk_add_duplicate_uk ADD UNIQUE INDEX aidx(a1);
 `,
 }
 
-var case3Clean = []string{
-	`DROP TABLE a`,
+var casePKAddDuplicateUKClean = []string{
+	`DROP TABLE binlog_pk_add_duplicate_uk`,
+}
+
+// Test issue: TOOL-1346
+var caseInsertBit = []string{`
+CREATE TABLE binlog_insert_bit(a BIT(1) NOT NULL);
+`,
+	`
+INSERT INTO binlog_insert_bit VALUES (0x01);
+`,
+	`
+UPDATE binlog_insert_bit SET a = 0x00;
+`,
+}
+
+var caseInsertBitClean = []string{`
+	DROP TABLE binlog_insert_bit;
+`,
 }
 
 type testRunner struct {
@@ -145,23 +162,31 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	runPKcases(tr)
 
-	tr.execSQLs(case1)
-	tr.execSQLs(case1Clean)
+	tr.execSQLs(caseMultiDataType)
+	tr.execSQLs(caseMultiDataTypeClean)
 
-	tr.execSQLs(case2)
-	tr.execSQLs(case2Clean)
+	tr.execSQLs(caseUKWithNoPK)
+	tr.execSQLs(caseUKWithNoPKClean)
 
-	// run case3
+	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
-		err := execSQLs(src, case3)
+		err := execSQLs(src, casePKAddDuplicateUK)
 		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
 			log.S().Fatal(err)
 		}
 	})
-	tr.execSQLs(case3Clean)
+	tr.execSQLs(casePKAddDuplicateUKClean)
+
+	// run caseInsertBit
+	tr.execSQLs(caseInsertBit)
+	tr.execSQLs(caseInsertBitClean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
+
+	tr.run(caseCreateView)
+	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
 
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
@@ -281,6 +306,34 @@ CREATE TABLE gen_contacts (
 		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i, i)); err != nil {
 			log.S().Fatal(err)
 		}
+	}
+}
+
+func caseCreateView(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE base_for_view (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	user_id INT NOT NULL,
+	amount INT NOT NULL
+);`)
+
+	mustExec(db, `
+CREATE VIEW view_user_sum (user_id, total)
+AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
+
+	insertSQL := "INSERT INTO base_for_view(user_id, amount) VALUES(?, ?);"
+	updateSQL := "UPDATE base_for_view SET amount = ? WHERE user_id = ?;"
+	deleteSQL := "DELETE FROM base_for_view WHERE user_id = ? AND amount = ?;"
+	for i := 0; i < 42; i++ {
+		for j := 0; j < 3; j++ {
+			mustExec(db, insertSQL, i, j*10+i)
+			if i%2 == 0 && j == 1 {
+				mustExec(db, updateSQL, 1111, i)
+			}
+		}
+	}
+	for i := 0; i < 10; i++ {
+		mustExec(db, deleteSQL, i, 1111)
 	}
 }
 

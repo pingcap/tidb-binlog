@@ -19,21 +19,25 @@ log-level = "info"
 # for print, it just prints decoded value.
 dest-type = "mysql"
 
+# Enable safe mode to make reparo reentrant, which value can be "true", "false". If the value is "true", reparo will change the "update" command into "delete+replace".   
+# The default value of safe-mode is false. 
+# safe-mode = false
+
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regular expression , start with '~' declare use regular expression.
 #
 #replicate-do-db = ["~^b.*","s1"]
 #[[replicate-do-table]]
-#db-name ="test"
+#db-name = "test"
 #tbl-name = "log"
 
 #[[replicate-do-table]]
-#db-name ="test"
+#db-name = "test"
 #tbl-name = "~^a.*"
 
 #replicate-ignore-db = ["~^c.*","s2"]
 #[[replicate-ignore-table]]
-#db-name ="test"
+#db-name = "test"
 #tbl-name = "~^a.*"
 
 [dest-db]

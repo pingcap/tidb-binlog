@@ -38,14 +38,14 @@ type MysqlSyncer struct {
 var createDB = loader.CreateDBWithSQLMode
 
 // NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string) (*MysqlSyncer, error) {
+func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string) (*MysqlSyncer, error) {
 	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,
@@ -107,6 +107,7 @@ func (m *MysqlSyncer) run() {
 
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*Item)
+			item.AppliedTS = txn.AppliedTS
 			m.success <- item
 		}
 		close(m.success)

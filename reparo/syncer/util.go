@@ -16,7 +16,7 @@ package syncer
 import (
 	"fmt"
 
-	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 )
 
