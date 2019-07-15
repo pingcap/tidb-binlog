@@ -71,7 +71,7 @@ func TiBinlogToSlaveBinlog(
 
 		iter := newSequenceIterator(&mut)
 		for {
-			table, err := nextTable(schema, info, iter)
+			table, err := nextRow(schema, info, iter)
 			if err != nil {
 				if errors.Cause(err) == io.EOF {
 					break
@@ -273,7 +273,7 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, row []byte) 
 	return mut, nil
 }
 
-func nextTable(schema string, info *model.TableInfo, iter *sequenceIterator) (*obinlog.Table, error) {
+func nextRow(schema string, info *model.TableInfo, iter *sequenceIterator) (*obinlog.Table, error) {
 	mutType, row, err := iter.next()
 	if err != nil {
 		return nil, errors.Trace(err)
