@@ -276,42 +276,40 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 		defer close(quit)
 
 		var toSaveItem sortItem
-		var toSave <-chan time.Time
-		for {
-			select {
-			case item, ok := <-items:
-				if !ok {
-					if toSave != nil {
-						err := a.persistHandlePointer(toSaveItem)
-						if err != nil {
-							log.Error(errors.ErrorStack(err))
-						}
-					}
-					return
-				}
-				// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
-				// or this should never happen
-				if item.commit < atomic.LoadInt64(&a.maxCommitTS) {
-					log.Warn("sortItem's commit ts less than append.maxCommitTS",
-						zap.Int64("ts", item.commit),
-						zap.Int64("maxCommitTS", a.maxCommitTS))
+
+		ticker := time.NewTicker(handlePtrSaveInterval)
+		defer ticker.Stop()
+		go func() {
+			for range ticker.C {
+				if toSaveItem == (sortItem{}) {
 					continue
 				}
-				atomic.StoreInt64(&a.maxCommitTS, item.commit)
-				maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
-				toSaveItem = item
-				if toSave == nil {
-					toSave = time.After(handlePtrSaveInterval)
-				}
-				log.Debug("get sort item", zap.Reflect("item", item))
-			case <-toSave:
 				err := a.persistHandlePointer(toSaveItem)
 				if err != nil {
 					log.Error(errors.ErrorStack(err))
 				}
-				toSave = nil
 			}
+		}()
 
+		for item := range items {
+			// the commitTS we get from sorter is monotonic increasing, unless we forward the handlePointer at start up
+			// or this should never happen
+			if item.commit < atomic.LoadInt64(&a.maxCommitTS) {
+				log.Warn("sortItem's commit ts less than append.maxCommitTS",
+					zap.Int64("ts", item.commit),
+					zap.Int64("maxCommitTS", a.maxCommitTS))
+				continue
+			}
+			atomic.StoreInt64(&a.maxCommitTS, item.commit)
+			maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
+			toSaveItem = item
+			log.Debug("get sort item", zap.Reflect("item", item))
+		}
+		if toSaveItem != (sortItem{}) {
+			err := a.persistHandlePointer(toSaveItem)
+			if err != nil {
+				log.Error(errors.ErrorStack(err))
+			}
 		}
 	}()
 
