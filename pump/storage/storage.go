@@ -60,6 +60,8 @@ var (
 	headPointerKey = []byte("!binlog!headPointer")
 	// If the kv channel blocks for more than this value, turn on the slow chaser
 	slowChaserThreshold = 3 * time.Second
+	// Values of handlePointer and MaxCommitTS will be saved at most once per interval
+	handlePtrSaveInterval = time.Second
 )
 
 // Storage is the interface to handle binlog storage
@@ -273,8 +275,6 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 	go func() {
 		defer close(quit)
 
-		// we save the handlePointer and maxCommitTS to metadata at most once in persistAtLeastTime
-		persistAtLeastTime := time.Second
 		var toSaveItem sortItem
 		var toSave <-chan time.Time
 		for {
@@ -301,7 +301,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 				maxCommitTSGauge.Set(float64(oracle.ExtractPhysical(uint64(item.commit))))
 				toSaveItem = item
 				if toSave == nil {
-					toSave = time.After(persistAtLeastTime)
+					toSave = time.After(handlePtrSaveInterval)
 				}
 				log.Debug("get sort item", zap.Reflect("item", item))
 			case <-toSave:

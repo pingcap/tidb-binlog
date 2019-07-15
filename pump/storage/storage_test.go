@@ -191,9 +191,14 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	append, err = NewAppend(append.dir, append.options)
 	c.Assert(err, check.IsNil)
 
+	origHdlPtrSaveInt := handlePtrSaveInterval
+	handlePtrSaveInterval = time.Millisecond
+	defer func() {
+		handlePtrSaveInterval = origHdlPtrSaveInt
+	}()
 	// populate some data and close open back to check the status
 	populateBinlog(c, append, 128, 1)
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Millisecond * 100)
 
 	gcTS := append.gcTS
 	maxCommitTS := append.maxCommitTS
