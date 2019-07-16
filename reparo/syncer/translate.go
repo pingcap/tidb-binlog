@@ -197,3 +197,8 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 
 	return
 }
+
+// export function parserSchemaTableFromDDL
+func ParserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
+	return parserSchemaTableFromDDL(ddlQuery)
+}

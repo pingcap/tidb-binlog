@@ -31,7 +31,11 @@ func newMysql(cfg *DBConfig, sqlMode *string) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
-	sqls, args = translator.SplitWithSemicolons(sqls, args)
+	var err error
+	sqls, args, err = translator.SplitOnlyDDLs(sqls, args)
+	if err != nil {
+		return err
+	}
 	return pkgsql.ExecuteSQLsWithHistogram(m.db, sqls, args, isDDL, QueryHistogramVec)
 }
 

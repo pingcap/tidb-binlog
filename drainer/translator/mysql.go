@@ -16,6 +16,7 @@ import (
 	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
@@ -665,17 +666,42 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	return oldRow, newRow, nil
 }
 
-// SplitWithSemicolons is used to make it compatible with some SQL
+func splitSingleDDL(sql string) ([]string, error) {
+	sqls := make([]string, 0)
+	act := strings.Split(sql, " ")[0]
+	// if the sql start with "use", it's a DDL
+	if act == "use" {
+		schema, _, err := syncer.ParserSchemaTableFromDDL(sql)
+		if err != nil {
+			return nil, err
+		}
+		useStmt := fmt.Sprintf("use `%s`;", schema)
+		sqlStmt := sql[0: len(useStmt)]
+		if useStmt != sqlStmt{
+			return nil, errors.Errorf("useStmt %s doesn't match sqlStmt %s in genDDL style", useStmt, sqlStmt)
+		}
+		sqls = append(sqls, sqlStmt)
+		sqls = append(sqls, sql[len(useStmt) + 1:])
+	} else {
+		sqls = append(sqls, sql)
+	}
+	return sqls, nil
+}
+
+// SplitOnlyDDLs is used to make it compatible with some SQL
 // that cannot execute multiple statements at once
-func SplitWithSemicolons(sqls []string, args [][]interface{}) ([]string, [][]interface{}) {
+func SplitOnlyDDLs(sqls []string, args [][]interface{}) ([]string, [][]interface{}, error) {
 	nsqls := make([]string, 0)
 	nargs := make([][]interface{}, 0)
 	for i, sql := range sqls {
-		s := strings.SplitAfter(sql, ";")
-		for j := 0; j < len(s)-1; j++ {
+		s, err := splitSingleDDL(sql)
+		if err != nil {
+			return nil, nil, err
+		}
+		for j := 0; j < len(s) - 1; j++ {
 			nargs = append(nargs, args[i])
 		}
-		nsqls = append(nsqls, s[:len(s)-1:len(s)-1]...)
+		nsqls = append(nsqls, s[:len(s) - 1:len(s) - 1]...)
 	}
-	return nsqls, nargs
+	return nsqls, nargs, nil
 }
