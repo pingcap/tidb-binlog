@@ -329,6 +329,13 @@ func (a *Append) updateSize() error {
 
 	atomic.StoreUint64(&a.storageSize.available, size.available)
 	atomic.StoreUint64(&a.storageSize.capacity, size.capacity)
+
+	if !a.writableOfSpace() {
+		log.Warn("no available space, you may want to free up some space or decrease `stop-write-at-available-space` configuration",
+			zap.Uint64("available", size.available),
+			zap.Uint64("StopWriteAtAvailableSpace", a.options.StopWriteAtAvailableSpace))
+	}
+
 	return nil
 }
 
@@ -731,7 +738,7 @@ func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
 	if !a.writableOfSpace() {
 		// still accept fake binlog, so will not block drainer if fake binlog writes success
 		if !isFakeBinlog(binlog) {
-			return ErrNoAvailableSpace
+			return errors.Errorf("no available space, available: %d, StopWriteAtAvailableSpace: %d", atomic.LoadUint64(&a.storageSize.available), a.options.StopWriteAtAvailableSpace)
 		}
 	}
 
