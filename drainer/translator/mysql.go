@@ -676,12 +676,12 @@ func splitSingleDDL(sql string) ([]string, error) {
 			return nil, err
 		}
 		useStmt := fmt.Sprintf("use `%s`;", schema)
-		sqlStmt := sql[0: len(useStmt)]
-		if useStmt != sqlStmt{
+		sqlStmt := sql[0:len(useStmt)]
+		if useStmt != sqlStmt {
 			return nil, errors.Errorf("useStmt %s doesn't match sqlStmt %s in genDDL style", useStmt, sqlStmt)
 		}
 		sqls = append(sqls, sqlStmt)
-		sqls = append(sqls, sql[len(useStmt) + 1:])
+		sqls = append(sqls, sql[len(useStmt)+1:])
 	} else {
 		sqls = append(sqls, sql)
 	}
@@ -698,10 +698,10 @@ func SplitOnlyDDLs(sqls []string, args [][]interface{}) ([]string, [][]interface
 		if err != nil {
 			return nil, nil, err
 		}
-		for j := 0; j < len(s) - 1; j++ {
+		for j := 0; j < len(s); j++ {
 			nargs = append(nargs, args[i])
 		}
-		nsqls = append(nsqls, s[:len(s) - 1:len(s) - 1]...)
+		nsqls = append(nsqls, s...)
 	}
 	return nsqls, nargs, nil
 }
