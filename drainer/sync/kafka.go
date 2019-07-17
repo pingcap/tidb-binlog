@@ -48,6 +48,7 @@ const (
 type KafkaSyncer struct {
 	addr     []string
 	producer sarama.AsyncProducer
+	cli      sarama.Client
 	topic    string
 
 	toBeAckCommitTSMu sync.Mutex
@@ -126,7 +127,11 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
-	executor.producer, err = newAsyncProducer(executor.addr, config)
+	executor.cli, err = sarama.NewClient(executor.addr, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	executor.producer, err = sarama.NewAsyncProducerFromClient(executor.cli)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -134,6 +139,14 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	go executor.run()
 
 	return executor, nil
+}
+
+func (p *KafkaSyncer) getPartitions() ([]int32, error) {
+	partitions, err := p.cli.Partitions(p.topic)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return partitions, nil
 }
 
 // Sync implements Syncer interface
@@ -283,6 +296,9 @@ func (p *KafkaSyncer) run() {
 			p.toBeAckCommitTSMu.Unlock()
 		case <-p.shutdown:
 			err := p.producer.Close()
+			if err == nil {
+				err = p.cli.Close()
+			}
 			p.setErr(err)
 
 			wg.Wait()
