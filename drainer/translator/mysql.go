@@ -278,17 +278,12 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
 	ddlParser := parser.New()
 	ddlParser.SetSQLMode(m.sqlMode)
-	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
+	_ , err := ddlParser.ParseOneStmt(sql, "", "")
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
-	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
-	if isCreateDatabase {
-		return fmt.Sprintf("%s;", sql), nil
-	}
-
-	return fmt.Sprintf("use `%s`; %s;", schema, sql), nil
+	return fmt.Sprintf("%s;", sql), nil
 }
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
@@ -664,44 +659,4 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 	}
 
 	return oldRow, newRow, nil
-}
-
-func splitSingleDDL(sql string) ([]string, error) {
-	sqls := make([]string, 0)
-	act := strings.Split(sql, " ")[0]
-	// if the sql start with "use", it's a DDL
-	if act == "use" {
-		schema, _, err := syncer.ParserSchemaTableFromDDL(sql)
-		if err != nil {
-			return nil, err
-		}
-		useStmt := fmt.Sprintf("use `%s`;", schema)
-		sqlStmt := sql[0:len(useStmt)]
-		if useStmt != sqlStmt {
-			return nil, errors.Errorf("useStmt %s doesn't match sqlStmt %s in genDDL style", useStmt, sqlStmt)
-		}
-		sqls = append(sqls, sqlStmt)
-		sqls = append(sqls, sql[len(useStmt)+1:])
-	} else {
-		sqls = append(sqls, sql)
-	}
-	return sqls, nil
-}
-
-// SplitOnlyDDLs is used to make it compatible with some SQL
-// that cannot execute multiple statements at once
-func SplitOnlyDDLs(sqls []string, args [][]interface{}) ([]string, [][]interface{}, error) {
-	nsqls := make([]string, 0)
-	nargs := make([][]interface{}, 0)
-	for i, sql := range sqls {
-		s, err := splitSingleDDL(sql)
-		if err != nil {
-			return nil, nil, err
-		}
-		for j := 0; j < len(s); j++ {
-			nargs = append(nargs, args[i])
-		}
-		nsqls = append(nsqls, s...)
-	}
-	return nsqls, nargs, nil
 }

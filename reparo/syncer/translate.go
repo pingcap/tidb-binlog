@@ -197,8 +197,3 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 
 	return
 }
-
-// ParserSchemaTableFromDDL is an export function of parserSchemaTableFromDDL
-func ParserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error) {
-	return parserSchemaTableFromDDL(ddlQuery)
-}
