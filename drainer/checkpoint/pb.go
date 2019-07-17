@@ -81,7 +81,7 @@ func (sp *PbCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *PbCheckPoint) Save(ts int64) error {
+func (sp *PbCheckPoint) Save(ts, slaveTS int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 

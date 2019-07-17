@@ -41,7 +41,7 @@ func newKafka(cfg *Config) (CheckPoint, error) {
 }
 
 // Save implements CheckPoint.Save()
-func (cp *KafkaCheckpoint) Save(ts int64) error {
+func (cp *KafkaCheckpoint) Save(ts, slaveTS int64) error {
 	cp.Lock()
 	defer cp.Unlock()
 
@@ -54,5 +54,5 @@ func (cp *KafkaCheckpoint) Save(ts int64) error {
 		return nil
 	}
 
-	return cp.PbCheckPoint.Save(ts)
+	return cp.PbCheckPoint.Save(ts, slaveTS)
 }
