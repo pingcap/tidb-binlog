@@ -3,6 +3,9 @@ package executor
 import (
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pingcap/errors"
@@ -14,25 +17,38 @@ var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
 	db *sql.DB
+	sqlMode mysql.SQLMode
 	*baseError
 }
 
-func newMysql(cfg *DBConfig, sqlMode *string) (Executor, error) {
-	db, err := pkgsql.OpenDBWithSQLMode("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password, sqlMode)
+func newMysql(cfg *DBConfig, strSQLMode *string) (Executor, error) {
+	db, err := pkgsql.OpenDBWithSQLMode("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password, strSQLMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	sqlMode, err := mysql.GetSQLMode(*strSQLMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &mysqlExecutor{
 		db:        db,
+		sqlMode:   sqlMode,
 		baseError: newBaseError(),
 	}, nil
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
 	if isDDL {
-		// the index of table is not empty
-		if args[0][1] != "" {
+		ddlParser := parser.New()
+		ddlParser.SetSQLMode(m.sqlMode)
+		stmt, err := ddlParser.ParseOneStmt(sqls[0], "", "")
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
+		if !isCreateDatabase {
 			schema := args[0][0]
 			useSQL := fmt.Sprintf("use %s;", schema)
 			sqls = append([]string{useSQL}, sqls...)

@@ -273,7 +273,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	return fmt.Sprintf("%s;", sql), nil
+	return sql + ";", nil
 }
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {
