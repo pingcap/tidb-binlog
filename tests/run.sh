@@ -63,8 +63,21 @@ start_services() {
         --client-urls http://127.0.0.1:2379 \
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
+
     # wait until PD is online...
     while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
+        sleep 1
+    done
+
+    echo "Starting downstream PD..."
+    pd-server \
+        --client-urls http://127.0.0.1:2381 \
+		--peer-urls http://127.0.0.1:2382 \
+        --log-file "$OUT_DIR/down_pd.log" \
+        --data-dir "$OUT_DIR/down_pd" &
+
+    # wait until downstream PD is online...
+    while ! curl -o /dev/null -sf http://127.0.0.1:2381/pd/api/v1/version; do
         sleep 1
     done
 
@@ -88,6 +101,15 @@ EOF
         -s "$OUT_DIR/tikv" &
     sleep 1
 
+    echo "Starting downstream TiKV..."
+    tikv-server \
+        --pd 127.0.0.1:2381 \
+        -A 127.0.0.1:20161 \
+        --log-file "$OUT_DIR/down_tikv.log" \
+        -C "$OUT_DIR/tikv-config.toml" \
+        -s "$OUT_DIR/down_tikv" &
+    sleep 1
+
 
     echo "Starting Pump..."
     run_pump &
@@ -100,7 +122,8 @@ EOF
     echo "Starting Downstream TiDB..."
     tidb-server \
         -P 3306 \
-        --path=$OUT_DIR/tidb \
+        --store tikv \
+        --path 127.0.0.1:2381 \
         --status=20080 \
         --log-file "$OUT_DIR/down_tidb.log" &
 

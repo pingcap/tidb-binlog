@@ -28,7 +28,7 @@ import (
 // test different data type of mysql
 // mysql will change boolean to tinybit(1)
 var caseMultiDataType = []string{`
-CREATE TABLE  binlog_multi_data_type (
+CREATE TABLE binlog_multi_data_type (
 	id INT AUTO_INCREMENT,
 	t_boolean BOOLEAN,
 	t_bigint BIGINT,
@@ -137,6 +137,40 @@ var caseInsertBitClean = []string{`
 `,
 }
 
+// Test issue: TOOL-1407
+var caseRecoverAndInsert = []string{`
+CREATE TABLE binlog_recover_and_insert(id INT, a INT);
+`,
+	`
+INSERT INTO binlog_recover_and_insert(id, a) VALUES(1, -1);
+`,
+	`
+UPDATE binlog_recover_and_insert SET a = -5 WHERE id = 1;
+`,
+	`
+DROP TABLE binlog_recover_and_insert;
+`,
+	`
+RECOVER TABLE binlog_recover_and_insert;
+`,
+	// make sure we can insert and update data after recovery
+	`
+INSERT INTO binlog_recover_and_insert(id, a) VALUES(2, -3);
+`,
+	`
+UPDATE binlog_recover_and_insert SET a = -7 WHERE id = 2;
+`,
+	// check whether older data exists
+	`
+UPDATE binlog_recover_and_insert SET a = -9 WHERE id = 1;
+`,
+}
+
+var caseRecoverAndInsertClean = []string{`
+	DROP TABLE binlog_recover_and_insert;
+`,
+}
+
 type testRunner struct {
 	src    *sql.DB
 	dst    *sql.DB
@@ -180,6 +214,10 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	// run caseInsertBit
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
+
+	// run caseRecoverAndInsert
+	tr.execSQLs(caseRecoverAndInsert)
+	tr.execSQLs(caseRecoverAndInsertClean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
