@@ -86,9 +86,15 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	ID, err := genDrainerID(cfg.ListenAddr)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var ID string
+	if cfg.NodeID != "" {
+		ID = cfg.NodeID
+	} else {
+		var err error
+		ID, err = genDrainerID(cfg.ListenAddr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
