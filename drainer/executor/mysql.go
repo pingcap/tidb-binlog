@@ -34,8 +34,8 @@ func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs [
 		// the index of table is not empty
 		if args[0][1] != "" {
 			schema := args[0][0]
-			useSql := fmt.Sprintf("use %s;", schema)
-			sqls = append([]string{useSql}, sqls...)
+			useSQL := fmt.Sprintf("use %s;", schema)
+			sqls = append([]string{useSQL}, sqls...)
 		}
 		args = make([][]interface{}, len(sqls))
 	}
