@@ -150,7 +150,7 @@ func IgnoreDDLError(err error) bool {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
-		tddl.ErrCantDropFieldOrKey.Code(), tmysql.ErrDupKeyName:
+		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), tmysql.ErrDupKeyName:
 		return true
 	default:
 		return false
