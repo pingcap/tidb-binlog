@@ -16,7 +16,7 @@ import (
 var QueryHistogramVec *prometheus.HistogramVec
 
 type mysqlExecutor struct {
-	db *sql.DB
+	db      *sql.DB
 	sqlMode mysql.SQLMode
 	*baseError
 }
