@@ -153,16 +153,9 @@ DROP TABLE binlog_recover_and_insert;
 	`
 RECOVER TABLE binlog_recover_and_insert;
 `,
-	// make sure we can insert and update data after recovery
+	// make sure we can insert data after recovery
 	`
 INSERT INTO binlog_recover_and_insert(id, a) VALUES(2, -3);
-`,
-	`
-UPDATE binlog_recover_and_insert SET a = -7 WHERE id = 2;
-`,
-	// check whether older data exists
-	`
-UPDATE binlog_recover_and_insert SET a = -9 WHERE id = 1;
 `,
 }
 

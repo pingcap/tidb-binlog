@@ -64,25 +64,6 @@ func TruncateTestTable(db *sql.DB, tableSQLs []string) {
 	}
 }
 
-// RecoverTestTable recovers test table
-func RecoverTestTable(db *sql.DB, tableSQLs []string) {
-	for i := range tableSQLs {
-		table := newTable()
-		err := parseTableSQL(table, tableSQLs[i])
-		if err != nil {
-			log.S().Fatal(err)
-		}
-		err = execSQL(db, fmt.Sprintf("drop table %s", table.name))
-		if err != nil {
-			log.S().Fatal(err)
-		}
-		err = execSQL(db, fmt.Sprintf("recover table %s", table.name))
-		if err != nil {
-			log.S().Fatal(err)
-		}
-	}
-}
-
 // DropTestTable drops test table
 func DropTestTable(db *sql.DB, tableSQLs []string) {
 	for i := range tableSQLs {

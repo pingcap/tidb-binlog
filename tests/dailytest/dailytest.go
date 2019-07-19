@@ -67,11 +67,6 @@ create table ntest(
 	})
 
 	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
-		// recover test table
-		RecoverTestTable(sourceDB, TableSQLs)
-	})
-
-	RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
 		// drop test table
 		DropTestTable(sourceDB, TableSQLs)
 	})

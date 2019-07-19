@@ -72,7 +72,7 @@ start_services() {
     echo "Starting downstream PD..."
     pd-server \
         --client-urls http://127.0.0.1:2381 \
-		--peer-urls http://127.0.0.1:2382 \
+        --peer-urls http://127.0.0.1:2382 \
         --log-file "$OUT_DIR/down_pd.log" \
         --data-dir "$OUT_DIR/down_pd" &
 
