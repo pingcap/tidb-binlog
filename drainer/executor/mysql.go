@@ -26,7 +26,11 @@ func newMysql(cfg *DBConfig, strSQLMode *string) (Executor, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sqlMode, err := mysql.GetSQLMode(*strSQLMode)
+	var StrSQLMode string
+	if strSQLMode != nil {
+		StrSQLMode = *strSQLMode
+	}
+	sqlMode, err := mysql.GetSQLMode(StrSQLMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
