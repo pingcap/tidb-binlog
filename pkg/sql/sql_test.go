@@ -83,6 +83,7 @@ func (s *SQLErrSuite) TestGetSQLErrCode(c *C) {
 func (s *SQLErrSuite) TestIgnoreDDLError(c *C) {
 	c.Assert(IgnoreDDLError(&mysql.MySQLError{Number: 1146}), IsTrue)
 	c.Assert(IgnoreDDLError(&mysql.MySQLError{Number: 1032}), IsFalse)
+	c.Assert(IgnoreDDLError(&mysql.MySQLError{Number: 1176}), IsTrue)
 }
 
 type sqlSuite struct {
