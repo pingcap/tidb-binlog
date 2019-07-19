@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -63,7 +65,7 @@ func (s *testNodesSuite) TestApplyAction(c *C) {
 	registerPumpForTest(c, "test", url)
 
 	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump)
-	c.Assert(err, ErrorMatches, "nodeID test2 not found")
+	c.Assert(errors.IsNotFound(err), IsTrue)
 
 	// TODO: handle log information and add check
 	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
