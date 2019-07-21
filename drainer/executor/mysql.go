@@ -39,6 +39,7 @@ func newMysql(cfg *DBConfig, strSQLMode *string) (Executor, error) {
 }
 
 func (m *mysqlExecutor) Execute(sqls []string, args [][]interface{}, commitTSs []int64, isDDL bool) error {
+	// Original DDLs don't need args. The args for DDL is medium for passing schema and table to help splitting sqls.
 	if isDDL {
 		ddlParser := parser.New()
 		ddlParser.SetSQLMode(m.sqlMode)
