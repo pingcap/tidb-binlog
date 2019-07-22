@@ -220,8 +220,21 @@ func (c *SyncerConfig) adjustDoDBAndTable() {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	metaData, err := toml.DecodeFile(path, cfg)
+
+	// If any items in confFile file are not mapped into the Config struct, issue
+	// an error and stop the server from starting.
+	if err == nil {
+		if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+			var undecodedItems []string
+			for _, item := range undecoded {
+				undecodedItems = append(undecodedItems, item.String())
+			}
+			err = errors.New(fmt.Sprintf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", ")))
+		}
+	}
+
+	return err
 }
 
 // validate checks whether the configuration is valid

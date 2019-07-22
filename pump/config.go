@@ -80,18 +80,6 @@ type Config struct {
 	Storage         storage.Config `toml:"storage" json:"storage"`
 }
 
-// The ErrConfigValidationFailed error is used so that external callers can do a type assertion
-// to defer handling of this specific error when someone does not want strict type checking.
-// This is needed only because logging hasn't been set up at the time we parse the config file.
-// This should all be ripped out once strict config checking is made the default behavior.
-type ErrConfigValidationFailed struct {
-	err string
-}
-
-func (e *ErrConfigValidationFailed) Error() string {
-	return e.err
-}
-
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
 	cfg := &Config{
@@ -197,7 +185,7 @@ func (cfg *Config) configFromFile(path string) error {
 			for _, item := range undecoded {
 				undecodedItems = append(undecodedItems, item.String())
 			}
-			err = &ErrConfigValidationFailed{fmt.Sprintf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))}
+			err = errors.New(fmt.Sprintf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", ")))
 		}
 	}
 

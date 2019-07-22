@@ -14,6 +14,10 @@
 package drainer
 
 import (
+	"bytes"
+	"github.com/BurntSushi/toml"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/coreos/etcd/integration"
@@ -117,4 +121,54 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
+}
+
+func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
+	yc := struct {
+		DataDir                string `toml:"data-dir" json:"data-dir"`
+		ListenAddr             string `toml:"addr" json:"addr"`
+		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
+		UnrecognizedOptionTest bool   `toml:"unrecognized-option-test" json:"unrecognized-option-test"`
+	}{
+		"data.drainer",
+		"192.168.15.10:8257",
+		"192.168.15.10:8257",
+		true,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, IsNil)
+
+	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "drainer_config")
+	defer os.Remove(tmpfile.Name())
+
+	args := []string{
+		"--config",
+		tmpfile.Name(),
+		"-L", "debug",
+	}
+
+	os.Clearenv()
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, ErrorMatches, ".*contained unknown configuration options:.*")
+}
+
+func mustSuccess(c *C, err error) {
+	c.Assert(err, IsNil)
+}
+
+func mustCreateCfgFile(c *C, b []byte, prefix string) *os.File {
+	tmpfile, err := ioutil.TempFile("", prefix)
+	mustSuccess(c, err)
+
+	_, err = tmpfile.Write(b)
+	mustSuccess(c, err)
+
+	err = tmpfile.Close()
+	mustSuccess(c, err)
+
+	return tmpfile
 }
