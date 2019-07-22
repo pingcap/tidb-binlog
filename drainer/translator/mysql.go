@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	parsermysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/dml"
@@ -275,19 +273,7 @@ func (m *mysqlTranslator) genDeleteSQL(schema string, table *model.TableInfo, co
 }
 
 func (m *mysqlTranslator) GenDDLSQL(sql string, schema string, commitTS int64) (string, error) {
-	ddlParser := parser.New()
-	ddlParser.SetSQLMode(m.sqlMode)
-	stmt, err := ddlParser.ParseOneStmt(sql, "", "")
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
-	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
-	if isCreateDatabase {
-		return fmt.Sprintf("%s;", sql), nil
-	}
-
-	return fmt.Sprintf("use `%s`; %s;", schema, sql), nil
+	return sql + ";", nil
 }
 
 func (m *mysqlTranslator) genWhere(table *model.TableInfo, columns []*model.ColumnInfo, data []interface{}) (string, []interface{}, error) {

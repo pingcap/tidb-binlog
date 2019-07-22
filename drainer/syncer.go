@@ -515,9 +515,9 @@ func (s *Syncer) run(jobs []*model.Job) error {
 
 				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
 				var args []interface{}
-				// for kafka, we want to know the relate schema and table, get it while args now
+				// for kafka, mysql and tidb, we want to know the relate schema and table, get it while args now
 				// in executor
-				if s.cfg.DestDBType == "kafka" {
+				if s.cfg.DestDBType == "kafka" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "tidb" {
 					args = []interface{}{schema, table}
 				}
 				job := newDDLJob(sql, args, "", commitTS, b.nodeID)
