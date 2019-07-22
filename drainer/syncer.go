@@ -316,6 +316,11 @@ ForLoop:
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
+		if isIgnoreTxnCommitTS(s.cfg.IgnoreTxnCommitTS, commitTS) {
+			log.Warn("skip txn", zap.Stringer("binlog", b.binlog))
+			continue
+		}
+
 		if startTS == commitTS {
 			fakeBinlogs = append(fakeBinlogs, binlog)
 			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddComitTS)
@@ -394,6 +399,10 @@ ForLoop:
 				beginTime := time.Now()
 				s.itemsWg.Add(1)
 				lastAddComitTS = binlog.GetCommitTs()
+
+				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
+					zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
 					err = errors.Annotate(err, "add to dsyncer failed")
@@ -450,6 +459,15 @@ func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (i
 	}
 
 	return
+}
+
+func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
+	for _, ignoreTS := range ignoreTxnCommitTS {
+		if ignoreTS == ts {
+			return true
+		}
+	}
+	return false
 }
 
 // Add adds binlogItem to the syncer's input channel

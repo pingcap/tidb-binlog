@@ -173,6 +173,13 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	c.Assert(syncer.GetLatestCommitTS(), check.Greater, lastNoneFakeTS)
 }
 
+func (s *syncerSuite) TestIsIgnoreTxnCommitTS(c *check.C) {
+	c.Assert(isIgnoreTxnCommitTS(nil, 1), check.IsFalse)
+	c.Assert(isIgnoreTxnCommitTS([]int64{1, 3}, 1), check.IsTrue)
+	c.Assert(isIgnoreTxnCommitTS([]int64{1, 3}, 2), check.IsFalse)
+	c.Assert(isIgnoreTxnCommitTS([]int64{1, 3}, 3), check.IsTrue)
+}
+
 func getEmptyPrewriteValue(schemaVersion int64, tableID int64) (data []byte) {
 	pv := &pb.PrewriteValue{
 		SchemaVersion: schemaVersion,
