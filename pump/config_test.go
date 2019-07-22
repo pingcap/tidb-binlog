@@ -84,7 +84,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	yc := struct {
 		ListenAddr        string `toml:"addr" json:"addr"`
-		AdvertiseAddr     string `toml:"advertiser-addr" json:"advertise-addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
 		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 		BinlogDir         string `toml:"data-dir" json:"data-dir"`
 		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
@@ -114,6 +114,43 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	cfg := NewConfig()
 	mustSuccess(c, cfg.Parse(args))
 	validateConfig(c, cfg)
+}
+
+func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
+	yc := struct {
+		ListenAddr             string `toml:"addr" json:"addr"`
+		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs               string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir              string `toml:"data-dir" json:"data-dir"`
+		HeartbeatInterval      uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+		UnrecognizedOptionTest bool   `toml:"unrecognized-option-test" json:"unrecognized-option-test"`
+	}{
+		"192.168.199.100:8260",
+		"192.168.199.100:8260",
+		"http://192.168.199.110:2379,http://hostname:2379",
+		"/tmp/pump",
+		1500,
+		true,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, IsNil)
+
+	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "pump_config")
+	defer os.Remove(tmpfile.Name())
+
+	args := []string{
+		"--config",
+		tmpfile.Name(),
+		"-L", "debug",
+	}
+
+	os.Clearenv()
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, ErrorMatches, ".*contained unknown configuration options.*")
 }
 
 func mustSuccess(c *C, err error) {

@@ -80,6 +80,18 @@ type Config struct {
 	Storage         storage.Config `toml:"storage" json:"storage"`
 }
 
+// The ErrConfigValidationFailed error is used so that external callers can do a type assertion
+// to defer handling of this specific error when someone does not want strict type checking.
+// This is needed only because logging hasn't been set up at the time we parse the config file.
+// This should all be ripped out once strict config checking is made the default behavior.
+type ErrConfigValidationFailed struct {
+	err string
+}
+
+func (e *ErrConfigValidationFailed) Error() string {
+	return e.err
+}
+
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
 	cfg := &Config{
@@ -175,8 +187,21 @@ func (cfg *Config) Parse(arguments []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	metaData, err := toml.DecodeFile(path, cfg)
+
+	// If any items in confFile file are not mapped into the Config struct, issue
+	// an error and stop the server from starting.
+	if err == nil {
+		if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+			var undecodedItems []string
+			for _, item := range undecoded {
+				undecodedItems = append(undecodedItems, item.String())
+			}
+			err = &ErrConfigValidationFailed{fmt.Sprintf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))}
+		}
+	}
+
+	return err
 }
 
 // validate checks whether the configuration is valid
