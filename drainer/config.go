@@ -45,19 +45,20 @@ var (
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
-	StrSQLMode       *string            `toml:"sql-mode" json:"sql-mode"`
-	SQLMode          mysql.SQLMode      `toml:"-" json:"-"`
-	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
-	IgnoreTables     []filter.TableName `toml:"ignore-table" json:"ignore-table"`
-	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
-	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *executor.DBConfig `toml:"to" json:"to"`
-	DoTables         []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
-	DestDBType       string             `toml:"db-type" json:"db-type"`
-	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
-	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
+	StrSQLMode        *string            `toml:"sql-mode" json:"sql-mode"`
+	SQLMode           mysql.SQLMode      `toml:"-" json:"-"`
+	IgnoreTxnCommitTS []int64            `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	IgnoreSchemas     string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
+	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
+	To                *executor.DBConfig `toml:"to" json:"to"`
+	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	DestDBType        string             `toml:"db-type" json:"db-type"`
+	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
+	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
 }
 
 // Config holds the configuration of drainer
