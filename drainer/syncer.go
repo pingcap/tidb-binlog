@@ -400,7 +400,7 @@ ForLoop:
 				s.itemsWg.Add(1)
 				lastAddComitTS = binlog.GetCommitTs()
 
-				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` for skip this ddl if need",
+				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
 					zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
 
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
