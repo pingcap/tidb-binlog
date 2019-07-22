@@ -16,7 +16,6 @@ package drainer
 import (
 	"bytes"
 	"github.com/BurntSushi/toml"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -141,8 +140,11 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "drainer_config")
-	defer os.Remove(tmpfile.Name())
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "drainer_config")
+	if tmpfile != nil && len(tmpfile.Name()) > 0 {
+		defer os.Remove(tmpfile.Name())
+	}
+	c.Assert(err, IsNil)
 
 	args := []string{
 		"--config",
@@ -154,21 +156,4 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options:.*")
-}
-
-func mustSuccess(c *C, err error) {
-	c.Assert(err, IsNil)
-}
-
-func mustCreateCfgFile(c *C, b []byte, prefix string) *os.File {
-	tmpfile, err := ioutil.TempFile("", prefix)
-	mustSuccess(c, err)
-
-	_, err = tmpfile.Write(b)
-	mustSuccess(c, err)
-
-	err = tmpfile.Close()
-	mustSuccess(c, err)
-
-	return tmpfile
 }

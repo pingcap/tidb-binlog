@@ -15,7 +15,7 @@ package pump
 
 import (
 	"bytes"
-	"io/ioutil"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -101,7 +101,12 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "pump_config")
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "pump_config")
+	if tmpfile != nil && len(tmpfile.Name()) > 0 {
+		defer os.Remove(tmpfile.Name())
+	}
+	c.Assert(err, IsNil)
+
 	defer os.Remove(tmpfile.Name())
 
 	args := []string{
@@ -138,7 +143,9 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "pump_config")
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "pump_config")
+	c.Assert(err, IsNil)
+
 	defer os.Remove(tmpfile.Name())
 
 	args := []string{
@@ -155,19 +162,6 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 
 func mustSuccess(c *C, err error) {
 	c.Assert(err, IsNil)
-}
-
-func mustCreateCfgFile(c *C, b []byte, prefix string) *os.File {
-	tmpfile, err := ioutil.TempFile("", prefix)
-	mustSuccess(c, err)
-
-	_, err = tmpfile.Write(b)
-	mustSuccess(c, err)
-
-	err = tmpfile.Close()
-	mustSuccess(c, err)
-
-	return tmpfile
 }
 
 func validateConfig(c *C, cfg *Config) {
