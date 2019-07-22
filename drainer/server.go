@@ -86,12 +86,9 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	var ID string
-	if cfg.NodeID != "" {
-		ID = cfg.NodeID
-	} else {
+	if cfg.NodeID == "" {
 		var err error
-		ID, err = genDrainerID(cfg.ListenAddr)
+		cfg.NodeID, err = genDrainerID(cfg.ListenAddr)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -154,10 +151,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
-	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(cfg.NodeID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
 
 	return &Server{
-		ID:        ID,
+		ID:        cfg.NodeID,
 		host:      advURL.Host,
 		cfg:       cfg,
 		collector: c,
