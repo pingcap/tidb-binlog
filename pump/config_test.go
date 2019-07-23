@@ -15,11 +15,10 @@ package pump
 
 import (
 	"bytes"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	"os"
-
 	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"os"
 )
 
 var _ = Suite(&testConfigSuite{})
@@ -101,13 +100,8 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "pump_config")
-	if tmpfile != nil && len(tmpfile.Name()) > 0 {
-		defer os.Remove(tmpfile.Name())
-	}
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), c.MkDir(), "pump_config")
 	c.Assert(err, IsNil)
-
-	defer os.Remove(tmpfile.Name())
 
 	args := []string{
 		"--config",
@@ -143,10 +137,8 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "pump_config")
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), c.MkDir(), "pump_config_invalid")
 	c.Assert(err, IsNil)
-
-	defer os.Remove(tmpfile.Name())
 
 	args := []string{
 		"--config",

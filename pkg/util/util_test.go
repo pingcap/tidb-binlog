@@ -18,7 +18,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"net"
-	"os"
 	"testing"
 	"time"
 
@@ -115,10 +114,7 @@ func (s *utilSuite) TestStdLogger(c *C) {
 func (s *utilSuite) TestCreateCfgFile(c *C) {
 	var msg = []byte("hello world!")
 	filename := "TestCreateCfg"
-	tmpfile, err := CreateCfgFile(msg, filename)
-	if tmpfile != nil && len(tmpfile.Name()) > 0 {
-		defer os.Remove(tmpfile.Name())
-	}
+	tmpfile, err := CreateCfgFile(msg, c.MkDir(), filename)
 	c.Assert(err, IsNil)
 	b, err := ioutil.ReadFile(tmpfile.Name())
 	c.Assert(err, IsNil)

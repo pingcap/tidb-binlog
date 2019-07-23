@@ -262,8 +262,8 @@ func AdjustDuration(v *time.Duration, defValue time.Duration) {
 }
 
 // CreateCfgFile creates and writes b as config file to dir prefix
-func CreateCfgFile(b []byte, prefix string) (*os.File, error) {
-	tmpfile, err := ioutil.TempFile("", prefix)
+func CreateCfgFile(b []byte, dir, prefix string) (*os.File, error) {
+	tmpfile, err := ioutil.TempFile(dir, prefix)
 	if err != nil {
 		return tmpfile, errors.Trace(err)
 	}

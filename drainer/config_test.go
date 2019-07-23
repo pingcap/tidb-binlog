@@ -140,10 +140,7 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile, err := util.CreateCfgFile(buf.Bytes(), "drainer_config")
-	if tmpfile != nil && len(tmpfile.Name()) > 0 {
-		defer os.Remove(tmpfile.Name())
-	}
+	tmpfile, err := util.CreateCfgFile(buf.Bytes(), c.MkDir(), "drainer_config_invalid")
 	c.Assert(err, IsNil)
 
 	args := []string{

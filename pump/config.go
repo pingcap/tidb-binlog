@@ -185,7 +185,7 @@ func (cfg *Config) configFromFile(path string) error {
 			for _, item := range undecoded {
 				undecodedItems = append(undecodedItems, item.String())
 			}
-			err = errors.New(fmt.Sprintf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", ")))
+			err = errors.Errorf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
 		}
 	}
 
