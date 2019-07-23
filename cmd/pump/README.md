@@ -34,7 +34,7 @@ pump is a daemon that receives realtime binlog from tidb-server and writes in se
   -metrics-interval int
       prometheus client push interval in second, set "0" to disable prometheus push (default 15)
   -node-id string
-      the ID of pump node; if not specify, we will generate one from hostname and the listening port
+      the ID of pump node; if not specified, we will generate one from hostname and the listening port
   -pd-urls string
       a comma separated list of the PD endpoints (default "http://127.0.0.1:2379")
   -zookeeper-addrs string
