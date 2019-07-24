@@ -59,25 +59,27 @@ var (
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
-	StrSQLMode       *string            `toml:"sql-mode" json:"sql-mode"`
-	SQLMode          mysql.SQLMode      `toml:"-" json:"-"`
-	IgnoreSchemas    string             `toml:"ignore-schemas" json:"ignore-schemas"`
-	IgnoreTables     []filter.TableName `toml:"ignore-table" json:"ignore-table"`
-	TxnBatch         int                `toml:"txn-batch" json:"txn-batch"`
-	WorkerCount      int                `toml:"worker-count" json:"worker-count"`
-	To               *dsync.DBConfig    `toml:"to" json:"to"`
-	DoTables         []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs            []string           `toml:"replicate-do-db" json:"replicate-do-db"`
-	DestDBType       string             `toml:"db-type" json:"db-type"`
-	DisableDispatch  bool               `toml:"disable-dispatch" json:"disable-dispatch"`
-	SafeMode         bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality bool               `toml:"disable-detect" json:"disable-detect"`
+	StrSQLMode        *string            `toml:"sql-mode" json:"sql-mode"`
+	SQLMode           mysql.SQLMode      `toml:"-" json:"-"`
+	IgnoreTxnCommitTS []int64            `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	IgnoreSchemas     string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
+	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
+	To                *dsync.DBConfig    `toml:"to" json:"to"`
+	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	DestDBType        string             `toml:"db-type" json:"db-type"`
+	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
+	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
 }
 
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
+	NodeID          string          `toml:"node-id" json:"node-id"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
 	AdvertiseAddr   string          `toml:"advertise-addr" json:"advertise-addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
@@ -109,6 +111,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
 	}
+	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of drainer node; if not specified, we will generate one from hostname and the listening port")
 	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8249), "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public, default to be the same value as -addr")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
