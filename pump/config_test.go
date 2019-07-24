@@ -75,6 +75,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 	os.Setenv("PUMP_ADDR", "192.168.199.200:9000")
 	os.Setenv("PUMP_PD_URLS", "http://127.0.0.1:2379,http://localhost:2379")
 	os.Setenv("PUMP_DATA_DIR", "/tmp/pump")
+	defer os.Clearenv()
 
 	cfg := NewConfig()
 	mustSuccess(c, cfg.Parse(args))

@@ -77,13 +77,14 @@ func (s *testConfigSuite) TestAdjustDoDBAndTable(c *check.C) {
 
 func (s *testConfigSuite) TestParseConfigFileWithInvalidArgs(c *check.C) {
 	yc := struct {
-		Dir           string `toml:"data-dir" json:"data-dir"`
-		StartDatetime string `toml:"start-datetime" json:"start-datetime"`
-		StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
-		StartTSO      int64  `toml:"start-tso" json:"start-tso"`
-		StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
-		LogFile       string `toml:"log-file" json:"log-file"`
-		LogLevel      string `toml:"log-level" json:"log-level"`
+		Dir                    string `toml:"data-dir" json:"data-dir"`
+		StartDatetime          string `toml:"start-datetime" json:"start-datetime"`
+		StopDatetime           string `toml:"stop-datetime" json:"stop-datetime"`
+		StartTSO               int64  `toml:"start-tso" json:"start-tso"`
+		StopTSO                int64  `toml:"stop-tso" json:"stop-tso"`
+		LogFile                string `toml:"log-file" json:"log-file"`
+		LogLevel               string `toml:"log-level" json:"log-level"`
+		UnrecognizedOptionTest bool   `toml:"unrecognized-option-test" json:"unrecognized-option-test"`
 	}{
 		"/tmp/reparo",
 		"",
@@ -92,6 +93,7 @@ func (s *testConfigSuite) TestParseConfigFileWithInvalidArgs(c *check.C) {
 		0,
 		"tmp/reparo/reparo.log",
 		"debug",
+		true,
 	}
 
 	var buf bytes.Buffer
