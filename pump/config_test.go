@@ -15,11 +15,12 @@ package pump
 
 import (
 	"bytes"
-	"github.com/BurntSushi/toml"
-	. "github.com/pingcap/check"
 	"io/ioutil"
 	"os"
 	"path"
+
+	"github.com/BurntSushi/toml"
+	. "github.com/pingcap/check"
 )
 
 var _ = Suite(&testConfigSuite{})

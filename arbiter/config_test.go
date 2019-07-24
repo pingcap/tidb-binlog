@@ -16,12 +16,12 @@ package arbiter
 import (
 	"bytes"
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
 	"path"
 	"runtime"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/check"
 )
 

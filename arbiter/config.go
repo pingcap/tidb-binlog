@@ -17,13 +17,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"go.uber.org/zap"
-	"os"
 )
 
 const (

@@ -16,11 +16,11 @@ package reparo
 import (
 	"bytes"
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
 	"path"
 	"runtime"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 )

@@ -15,11 +15,11 @@ package drainer
 
 import (
 	"bytes"
-	"github.com/BurntSushi/toml"
 	"io/ioutil"
 	"path"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"

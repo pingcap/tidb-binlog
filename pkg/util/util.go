@@ -16,11 +16,11 @@ package util
 import (
 	"context"
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"net"
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
