@@ -185,7 +185,7 @@ func RetryContext(ctx context.Context, retryCount int, sleepTime time.Duration, 
 func StrictDecodeFile(path, component string, cfg interface{}) error {
 	metaData, err := toml.DecodeFile(path, cfg)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
@@ -197,7 +197,7 @@ func StrictDecodeFile(path, component string, cfg interface{}) error {
 							component, path, strings.Join(undecodedItems, ", "))
 	}
 
-	return err
+	return errors.Trace(err)
 }
 
 // TryUntilSuccess retries the given function until error is nil or the context is done,
