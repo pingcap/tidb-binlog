@@ -194,7 +194,7 @@ func StrictDecodeFile(path, component string, cfg interface{}) error {
 			undecodedItems = append(undecodedItems, item.String())
 		}
 		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
-							component, path, strings.Join(undecodedItems, ", "))
+			component, path, strings.Join(undecodedItems, ", "))
 	}
 
 	return errors.Trace(err)
