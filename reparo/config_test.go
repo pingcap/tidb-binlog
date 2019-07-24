@@ -14,7 +14,10 @@
 package reparo
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/BurntSushi/toml"
+	"io/ioutil"
 	"path"
 	"runtime"
 
@@ -70,6 +73,44 @@ func (s *testConfigSuite) TestAdjustDoDBAndTable(c *check.C) {
 	c.Assert(config.DoTables[0].Table, check.Equals, "table1")
 	c.Assert(config.DoDBs[0], check.Equals, "test1")
 	c.Assert(config.DoDBs[1], check.Equals, "test2")
+}
+
+func (s *testConfigSuite) TestParseConfigFileWithInvalidArgs(c *check.C) {
+	yc := struct {
+		Dir           string `toml:"data-dir" json:"data-dir"`
+		StartDatetime string `toml:"start-datetime" json:"start-datetime"`
+		StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
+		StartTSO      int64  `toml:"start-tso" json:"start-tso"`
+		StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
+		LogFile       string `toml:"log-file" json:"log-file"`
+		LogLevel      string `toml:"log-level" json:"log-level"`
+	}{
+		"/tmp/reparo",
+		"",
+		"",
+		0,
+		0,
+		"tmp/reparo/reparo.log",
+		"debug",
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, check.IsNil)
+
+	configFilename := path.Join(c.MkDir(), "reparo_config_invalid.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, check.IsNil)
+
+	args := []string{
+		"--config",
+		configFilename,
+	}
+
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, check.ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
 }
 
 func getTemplateConfigFilePath() string {

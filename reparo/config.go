@@ -168,8 +168,22 @@ func (c *Config) adjustDoDBAndTable() {
 }
 
 func (c *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, c)
-	return errors.Trace(err)
+	metaData, err := toml.DecodeFile(path, c)
+
+	// If any items in confFile file are not mapped into the Config struct, issue
+	// an error and stop the server from starting.
+	if err != nil {
+		return err
+	}
+	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
+		}
+		err = errors.Errorf("reparo config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
+	}
+
+	return err
 }
 
 func (c *Config) validate() error {

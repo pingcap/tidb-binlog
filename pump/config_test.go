@@ -111,7 +111,6 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 		"-L", "debug",
 	}
 
-	os.Clearenv()
 	cfg := NewConfig()
 	mustSuccess(c, cfg.Parse(args))
 	validateConfig(c, cfg)
@@ -149,7 +148,6 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 		"-L", "debug",
 	}
 
-	os.Clearenv()
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")

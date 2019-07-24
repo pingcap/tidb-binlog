@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"github.com/BurntSushi/toml"
 	"io/ioutil"
-	"os"
 	"path"
 	"testing"
 
@@ -152,7 +151,6 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 		"-L", "debug",
 	}
 
-	os.Clearenv()
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
