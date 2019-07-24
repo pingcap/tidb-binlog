@@ -16,7 +16,9 @@ package drainer
 import (
 	"bytes"
 	"github.com/BurntSushi/toml"
+	"io/ioutil"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/coreos/etcd/integration"
@@ -140,17 +142,18 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile, err := util.CreateCfgFile(buf.Bytes(), c.MkDir(), "drainer_config_invalid")
+	configFilename := path.Join(c.MkDir(), "drainer_config_invalid.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{
 		"--config",
-		tmpfile.Name(),
+		configFilename,
 		"-L", "debug",
 	}
 
 	os.Clearenv()
 	cfg := NewConfig()
 	err = cfg.Parse(args)
-	c.Assert(err, ErrorMatches, ".*contained unknown configuration options:.*")
+	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
 }

@@ -179,14 +179,15 @@ func (cfg *Config) configFromFile(path string) error {
 
 	// If any items in confFile file are not mapped into the Config struct, issue
 	// an error and stop the server from starting.
-	if err == nil {
-		if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
-			var undecodedItems []string
-			for _, item := range undecoded {
-				undecodedItems = append(undecodedItems, item.String())
-			}
-			err = errors.Errorf("config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
+	if err != nil {
+		return err
+	}
+	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
 		}
+		err = errors.Errorf("pump config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
 	}
 
 	return err

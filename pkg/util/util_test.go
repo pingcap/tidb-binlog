@@ -16,7 +16,6 @@ package util
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net"
 	"testing"
 	"time"
@@ -109,16 +108,6 @@ func (s *utilSuite) TestStdLogger(c *C) {
 	c.Assert(entrys[0].Message, Matches, ".*hola:Hello,.*")
 	c.Assert(entrys[1].Message, Matches, ".*hola: 42!.*")
 	c.Assert(entrys[2].Message, Matches, ".*hola:Goodbye!.*")
-}
-
-func (s *utilSuite) TestCreateCfgFile(c *C) {
-	var msg = []byte("hello world!")
-	filename := "TestCreateCfg"
-	tmpfile, err := CreateCfgFile(msg, c.MkDir(), filename)
-	c.Assert(err, IsNil)
-	b, err := ioutil.ReadFile(tmpfile.Name())
-	c.Assert(err, IsNil)
-	c.Assert(string(b), Equals, string(msg))
 }
 
 type getAddrIPSuite struct{}

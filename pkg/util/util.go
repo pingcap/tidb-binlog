@@ -16,9 +16,7 @@ package util
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"os"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -259,24 +257,4 @@ func AdjustDuration(v *time.Duration, defValue time.Duration) {
 	if *v == 0 {
 		*v = defValue
 	}
-}
-
-// CreateCfgFile creates and writes b as config file to dir prefix
-func CreateCfgFile(b []byte, dir, prefix string) (*os.File, error) {
-	tmpfile, err := ioutil.TempFile(dir, prefix)
-	if err != nil {
-		return tmpfile, errors.Trace(err)
-	}
-
-	_, err = tmpfile.Write(b)
-	if err != nil {
-		return tmpfile, errors.Trace(err)
-	}
-
-	err = tmpfile.Close()
-	if err != nil {
-		return tmpfile, errors.Trace(err)
-	}
-
-	return tmpfile, nil
 }
