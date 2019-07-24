@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -175,22 +174,7 @@ func (cfg *Config) Parse(arguments []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	metaData, err := toml.DecodeFile(path, cfg)
-
-	// If any items in confFile file are not mapped into the Config struct, issue
-	// an error and stop the server from starting.
-	if err != nil {
-		return err
-	}
-	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
-		var undecodedItems []string
-		for _, item := range undecoded {
-			undecodedItems = append(undecodedItems, item.String())
-		}
-		err = errors.Errorf("pump config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
-	}
-
-	return err
+	return util.StrictDecodeFile(path, "pump", cfg)
 }
 
 // validate checks whether the configuration is valid

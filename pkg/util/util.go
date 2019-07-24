@@ -16,7 +16,9 @@ package util
 import (
 	"context"
 	"fmt"
+	"github.com/BurntSushi/toml"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -175,6 +177,26 @@ func RetryContext(ctx context.Context, retryCount int, sleepTime time.Duration, 
 		}
 		sleepTime = sleepTime * time.Duration(backoffFactor)
 	}
+	return err
+}
+
+// StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
+// into the Config struct, issue an error and stop the server from starting.
+func StrictDecodeFile(path, component string, cfg interface{}) error {
+	metaData, err := toml.DecodeFile(path, cfg)
+	if err != nil {
+		return err
+	}
+
+	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
+		}
+		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
+							component, path, strings.Join(undecodedItems, ", "))
+	}
+
 	return err
 }
 

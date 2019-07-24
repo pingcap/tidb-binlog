@@ -17,15 +17,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
-	"strings"
-
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"go.uber.org/zap"
+	"os"
 )
 
 const (
@@ -191,20 +189,5 @@ func (cfg *Config) adjustConfig() error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	metaData, err := toml.DecodeFile(path, cfg)
-
-	// If any items in confFile file are not mapped into the Config struct, issue
-	// an error and stop the server from starting.
-	if err != nil {
-		return err
-	}
-	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
-		var undecodedItems []string
-		for _, item := range undecoded {
-			undecodedItems = append(undecodedItems, item.String())
-		}
-		err = errors.Errorf("arbiter config file %s contained unknown configuration options: %s", path, strings.Join(undecodedItems, ", "))
-	}
-
-	return err
+	return util.StrictDecodeFile(path, "arbiter", cfg)
 }
