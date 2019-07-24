@@ -21,11 +21,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -168,8 +168,7 @@ func (c *Config) adjustDoDBAndTable() {
 }
 
 func (c *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, c)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "reparo", c)
 }
 
 func (c *Config) validate() error {

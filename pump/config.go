@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -175,8 +174,7 @@ func (cfg *Config) Parse(arguments []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "pump", cfg)
 }
 
 // validate checks whether the configuration is valid
