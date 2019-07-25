@@ -55,10 +55,10 @@ func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.Histogram
 	return e
 }
 
-func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration) error {
+func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration, stopRetry func() bool) error {
 	err := util.RetryOnError(retryNum, backoff, "execTableBatchRetry", func() error {
 		return e.execTableBatch(dmls)
-	})
+	}, stopRetry)
 	return errors.Trace(err)
 }
 
@@ -237,11 +237,11 @@ func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error
 	return errors.Trace(errg.Wait())
 }
 
-func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
+func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration, stopRetry func() bool) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryOnError(retryNum, backoff, "singleExec", func() error {
 			return e.singleExec(dmls, safeMode)
-		})
+		}, stopRetry)
 		if err != nil {
 			return errors.Trace(err)
 		}

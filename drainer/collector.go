@@ -263,9 +263,7 @@ func (c *Collector) syncBinlog(item *binlogItem) error {
 				var err1 error
 				job, err1 = fDDLJobGetter(c.tiStore, binlog.DdlJobId)
 				return err1
-			}, func() bool {
-				return false
-			})
+			}, nil)
 
 			if err != nil {
 				log.Error("get DDL job failed", zap.Int64("id", binlog.DdlJobId), zap.Error(err))

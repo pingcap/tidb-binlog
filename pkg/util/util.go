@@ -144,7 +144,7 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 }
 
 // RetryOnError defines a action with retry when fn returns error
-func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error, needBreak func() bool) error {
+func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error, stopRetry func() bool) error {
 	var err error
 	for i := 0; i < retryCount; i++ {
 		err = fn()
@@ -152,7 +152,7 @@ func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn fun
 			break
 		}
 
-		if needBreak() {
+		if stopRetry != nil && stopRetry() {
 			break
 		}
 

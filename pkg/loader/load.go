@@ -228,6 +228,10 @@ func (s *loaderImpl) Close() {
 	atomic.StoreInt32(&s.closed, 1)
 }
 
+func (s *loaderImpl) isClosed() bool {
+	return (atomic.LoadInt32(&s.closed) == 1)
+}
+
 var utilGetTableInfo = getTableInfo
 
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
@@ -300,7 +304,7 @@ func isCreateDatabaseDDL(sql string) bool {
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
-	err := util.RetryOnError(maxDDLRetryCount, execDDLRetryWait, "execDDL", func() error {
+	execDDLFn := func() error {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
@@ -325,7 +329,9 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 
 		log.Info("exec ddl success", zap.String("sql", ddl.SQL))
 		return nil
-	})
+	}
+
+	err := util.RetryOnError(maxDDLRetryCount, execDDLRetryWait, "execDDL", execDDLFn, s.isClosed)
 
 	return errors.Trace(err)
 }
@@ -341,7 +347,7 @@ func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
 		dmls := dmls
 
 		errg.Go(func() error {
-			err := executor.singleExecRetry(dmls, s.GetSafeMode(), maxDMLRetryCount, time.Second)
+			err := executor.singleExecRetry(dmls, s.GetSafeMode(), maxDMLRetryCount, time.Second, s.isClosed)
 			return err
 		})
 	}
@@ -406,7 +412,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 		// https://golang.org/doc/faq#closures_and_goroutines
 		dmls := dmls
 		errg.Go(func() error {
-			err := executor.execTableBatchRetry(dmls, maxDMLRetryCount, time.Second)
+			err := executor.execTableBatchRetry(dmls, maxDMLRetryCount, time.Second, s.isClosed)
 			return err
 		})
 	}
