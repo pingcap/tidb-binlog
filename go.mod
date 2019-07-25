@@ -3,14 +3,10 @@ module github.com/pingcap/tidb-binlog
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.3.0
-	github.com/Shopify/sarama v1.18.0
-	github.com/Shopify/toxiproxy v2.1.3+incompatible // indirect
+	github.com/Shopify/sarama v1.23.1
 	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/dustin/go-humanize v1.0.0
-	github.com/eapache/go-resiliency v1.1.0 // indirect
-	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
-	github.com/eapache/queue v0.0.0-20180227141424-093482f3f8ce // indirect
-	github.com/go-sql-driver/mysql v1.4.0
+	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gogo/protobuf v1.2.0
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.1
@@ -29,7 +25,7 @@ require (
 	github.com/pingcap/tipb v0.0.0-20190428032612-535e1abaa330
 	github.com/prometheus/client_golang v0.9.0
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
-	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
+	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
 	github.com/siddontang/go-mysql v0.0.0-20190618002340-dbe0224ac097 // indirect
@@ -40,8 +36,9 @@ require (
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.uber.org/zap v1.9.1
-	golang.org/x/net v0.0.0-20190108225652-1e06a53dbb7e
+	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
-	golang.org/x/sys v0.0.0-20190109145017-48ac38b7c8cb
+	golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
 	google.golang.org/grpc v1.17.0
+	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
