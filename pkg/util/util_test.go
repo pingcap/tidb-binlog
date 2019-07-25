@@ -180,10 +180,7 @@ func (s *retrySuite) TestShouldReturnErr(c *C) {
 func (s *retrySuite) TestStopRetry(c *C) {
 	callCount := 0
 	stopRetry := func() bool {
-		if callCount >= 5 {
-			return true
-		}
-		return false
+		return callCount >= 5
 	}
 	err := RetryOnError(10, time.Millisecond, "", func() error {
 		callCount++
