@@ -86,6 +86,9 @@ type loaderImpl struct {
 	// value can be tidb or mysql
 	saveAppliedTS           bool
 	lastUpdateAppliedTSTime time.Time
+
+	// 1 means true, 0 means false
+	closed int32
 }
 
 // MetricsGroup contains metrics of Loader
@@ -222,6 +225,7 @@ func (s *loaderImpl) Successes() <-chan *Txn {
 // Run will quit when all data is drained
 func (s *loaderImpl) Close() {
 	close(s.input)
+	atomic.StoreInt32(&s.closed, 1)
 }
 
 var utilGetTableInfo = getTableInfo
