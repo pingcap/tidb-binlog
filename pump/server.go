@@ -236,9 +236,9 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 errHandle:
 	lossBinlogCacheCounter.Add(1)
 	if strings.HasPrefix(err.Error(), "no online") {
-		log.Warn("reject write binlog for not online state, statue: %s", s.node.NodeStatus().State)
+		log.Warnf("reject write binlog for not online state, statue: %s", s.node.NodeStatus().State)
 	} else {
-		log.Error("write binlog failed %+v", err)
+		log.Errorf("write binlog failed %+v", err)
 	}
 	ret.Errmsg = err.Error()
 	return ret, err

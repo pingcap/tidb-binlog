@@ -346,7 +346,7 @@ func (a *Append) updateStatus() {
 		case <-updateSize:
 			err := a.updateSize()
 			if err != nil {
-				log.Error("update size failed: %+v", err)
+				log.Errorf("update size failed: %+v", err)
 			}
 		case <-logStatsTicker.C:
 			var stats leveldb.DBStats
