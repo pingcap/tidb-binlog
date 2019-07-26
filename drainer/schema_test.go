@@ -278,6 +278,7 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 	dbName := model.NewCIStr("Test")
 	colName := model.NewCIStr("A")
 	tbName := model.NewCIStr("T")
+	newTbName := model.NewCIStr("RT")
 
 	// check rollback done job
 	job := &model.Job{ID: 1, State: model.JobStateRollbackDone}
@@ -328,9 +329,10 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: model.ActionCreateSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
 		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: model.ActionCreateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
 		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: model.ActionAddColumn, binlogInfo: &model.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "truncateTable", jobID: 11, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 10, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table T;", resultQuery: "drop table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "truncateTable", jobID: 10, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "renameTable", jobID: 11, schemaID: 2, tableID: 10, jobType: model.ActionRenameTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "rename table T to RT;", resultQuery: "rename table T to RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
+		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 12, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table RT;", resultQuery: "drop table RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 8, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
 	}
 
 	for _, testCase := range testCases {
@@ -340,6 +342,10 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 			tblInfo.Columns = []*model.ColumnInfo{colInfo}
 		case "truncateTable":
 			tblInfo.ID = 10
+		case "renameTable":
+			tblInfo.ID = 12
+			tblInfo.Name = newTbName
+
 		}
 
 		job = &model.Job{
@@ -361,6 +367,10 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		case "createTable":
 			_, ok := schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
+		case "renameTable":
+			tb, ok := schema.TableByID(tblInfo.ID)
+			c.Assert(ok, IsTrue)
+			c.Assert(tblInfo.Name, Equals, tb.Name)
 		case "addColumn", "truncateTable":
 			tb, ok := schema.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
