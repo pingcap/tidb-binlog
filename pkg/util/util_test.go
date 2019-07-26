@@ -149,7 +149,7 @@ func (s *retrySuite) TestShouldNotRetryOnSuccess(c *C) {
 	err := RetryOnError(10, time.Millisecond, "", func() error {
 		callCount++
 		return nil
-	}, nil)
+	})
 	c.Assert(err, IsNil)
 	c.Assert(callCount, Equals, 1)
 }
@@ -162,7 +162,7 @@ func (s *retrySuite) TestShouldRetry(c *C) {
 			return errors.New("Fail")
 		}
 		return nil
-	}, nil)
+	})
 	c.Assert(err, IsNil)
 	c.Assert(callCount, Equals, 3)
 }
@@ -172,22 +172,9 @@ func (s *retrySuite) TestShouldReturnErr(c *C) {
 	err := RetryOnError(4, time.Microsecond, "", func() error {
 		callCount++
 		return errors.New("Fail")
-	}, nil)
+	})
 	c.Assert(err, ErrorMatches, "Fail")
 	c.Assert(callCount, Equals, 4)
-}
-
-func (s *retrySuite) TestStopRetry(c *C) {
-	callCount := 0
-	stopRetry := func() bool {
-		return callCount >= 5
-	}
-	err := RetryOnError(10, time.Millisecond, "", func() error {
-		callCount++
-		return errors.New("Fail")
-	}, stopRetry)
-	c.Assert(err, ErrorMatches, "Fail")
-	c.Assert(callCount, Equals, 5)
 }
 
 type getPdClientSuite struct{}

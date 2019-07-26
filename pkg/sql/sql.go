@@ -64,7 +64,7 @@ func ExecuteSQLsWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, i
 
 	err := util.RetryOnError(retryCount, RetryWaitTime, "[SQL]", func() error {
 		return ExecuteTxnWithHistogram(db, sqls, args, hist)
-	}, nil)
+	})
 
 	return errors.Trace(err)
 }
