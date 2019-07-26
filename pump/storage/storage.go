@@ -22,7 +22,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
-	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
 )
 
@@ -347,7 +346,7 @@ func (a *Append) updateStatus() {
 		case <-updateSize:
 			err := a.updateSize()
 			if err != nil {
-				log.Error("update size failed", zap.Error(err))
+				log.Errorf("update size failed: %+v", err)
 			}
 		case <-logStatsTicker.C:
 			var stats leveldb.DBStats
@@ -635,7 +634,7 @@ func (a *Append) doGCTS(ts int64) {
 			a.vlog.gcTS(decodeTSKey(lastKey))
 		}
 
-		log.Info("has delete", zap.Int("delete num", deleteNum))
+		log.Infof("has delete %d number", deleteNum)
 	}
 
 	a.vlog.gcTS(ts)
