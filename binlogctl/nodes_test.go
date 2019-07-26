@@ -23,10 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
-
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 )
