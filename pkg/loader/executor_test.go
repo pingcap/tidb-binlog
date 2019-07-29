@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -63,7 +64,7 @@ func (s *executorSuite) TestSplitExecDML(c *C) {
 
 	var counter int32
 
-	err = e.splitExecDML(dmls, func(group []*DML) error {
+	err = e.splitExecDML(context.Background(), dmls, func(ctx context.Context, group []*DML) error {
 		atomic.AddInt32(&counter, 1)
 		if len(group) < 2 {
 			return errors.New("fake")
@@ -95,7 +96,7 @@ func (s *singleExecSuite) resetMock(c *C) {
 func (s *singleExecSuite) TestFailedToBeginTx(c *C) {
 	s.dbMock.ExpectBegin().WillReturnError(errors.New("begin"))
 	e := newExecutor(s.db)
-	err := e.singleExec([]*DML{}, true)
+	err := e.singleExec(context.Background(), []*DML{}, true)
 	c.Assert(err, ErrorMatches, "begin")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
@@ -122,7 +123,7 @@ func (s *singleExecSuite) TestInsert(c *C) {
 	s.dbMock.ExpectCommit()
 
 	e := newExecutor(s.db)
-	err := e.singleExec([]*DML{&dml}, false)
+	err := e.singleExec(context.Background(), []*DML{&dml}, false)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
@@ -134,7 +135,7 @@ func (s *singleExecSuite) TestInsert(c *C) {
 	s.dbMock.ExpectCommit()
 
 	e = newExecutor(s.db)
-	err = e.singleExec([]*DML{&dml}, true)
+	err = e.singleExec(context.Background(), []*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
@@ -168,7 +169,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 		WithArgs("tester").WillReturnError(errors.New("del"))
 
 	e := newExecutor(s.db)
-	err := e.singleExec([]*DML{&dml}, true)
+	err := e.singleExec(context.Background(), []*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
@@ -182,7 +183,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 		WithArgs("tester", 2019).WillReturnError(errors.New("replace"))
 
 	e = newExecutor(s.db)
-	err = e.singleExec([]*DML{&dml}, true)
+	err = e.singleExec(context.Background(), []*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "replace")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 
@@ -196,7 +197,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	s.dbMock.ExpectCommit()
 
 	e = newExecutor(s.db)
-	err = e.singleExec([]*DML{&dml}, true)
+	err = e.singleExec(context.Background(), []*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }
@@ -210,7 +211,7 @@ func (s *bulkDelSuite) TestCanHandleEmptySlice(c *C) {
 	c.Assert(err, IsNil)
 
 	e := newExecutor(db)
-	err = e.bulkDelete([]*DML{})
+	err = e.bulkDelete(context.Background(), []*DML{})
 	c.Assert(err, IsNil)
 }
 
@@ -244,7 +245,7 @@ func (s *bulkDelSuite) TestDeleteInBulk(c *C) {
 	mock.ExpectCommit()
 
 	e := newExecutor(db)
-	err = e.bulkDelete(dmls)
+	err = e.bulkDelete(context.Background(), dmls)
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
@@ -258,7 +259,7 @@ func (s *bulkReplaceSuite) TestCanHandleEmptySlice(c *C) {
 	c.Assert(err, IsNil)
 
 	e := newExecutor(db)
-	err = e.bulkReplace([]*DML{})
+	err = e.bulkReplace(context.Background(), []*DML{})
 	c.Assert(err, IsNil)
 }
 
@@ -291,7 +292,7 @@ func (s *bulkReplaceSuite) TestReplaceInBulk(c *C) {
 	mock.ExpectCommit()
 
 	e := newExecutor(db)
-	err = e.bulkReplace(dmls)
+	err = e.bulkReplace(context.Background(), dmls)
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
