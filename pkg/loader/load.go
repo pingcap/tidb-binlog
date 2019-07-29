@@ -294,7 +294,6 @@ func needRefreshTableInfo(sql string) bool {
 }
 
 func isCreateDatabaseDDL(sql string) bool {
-	log.Info("isCreateDatabaseDDL", zap.String("sql", sql))
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
