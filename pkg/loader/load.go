@@ -87,6 +87,8 @@ type loaderImpl struct {
 	saveAppliedTS           bool
 	lastUpdateAppliedTSTime time.Time
 
+	// TODO: remove this ctx, context shouldn't stored in struct
+	// https://github.com/pingcap/tidb-binlog/pull/691#issuecomment-515387824
 	ctx    context.Context
 	cancel context.CancelFunc
 }
