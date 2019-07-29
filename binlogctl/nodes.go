@@ -63,25 +63,18 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 		return errors.Trace(err)
 	}
 
-	nodes, err := registry.Nodes(context.Background(), node.NodePrefix[kind])
+	n, err := registry.Node(context.Background(), node.NodePrefix[kind], nodeID)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for _, n := range nodes {
-		if n.NodeID != nodeID {
-			continue
-		}
-		switch state {
-		case node.Online, node.Pausing, node.Paused, node.Closing, node.Offline:
-			n.State = state
-			return registry.UpdateNode(context.Background(), node.NodePrefix[kind], n)
-		default:
-			return errors.Errorf("state %s is illegal", state)
-		}
+	switch state {
+	case node.Online, node.Pausing, node.Paused, node.Closing, node.Offline:
+		n.State = state
+		return registry.UpdateNode(context.Background(), node.NodePrefix[kind], n)
+	default:
+		return errors.Errorf("state %s is illegal", state)
 	}
-
-	return errors.NotFoundf("node %s, id %s from etcd %s", kind, nodeID, urls)
 }
 
 // createRegistry returns an ectd registry
@@ -105,31 +98,23 @@ func ApplyAction(urls, kind, nodeID string, action string) error {
 		return errors.Trace(err)
 	}
 
-	nodes, err := registry.Nodes(context.Background(), node.NodePrefix[kind])
+	n, err := registry.Node(context.Background(), node.NodePrefix[kind], nodeID)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for _, n := range nodes {
-		if n.NodeID != nodeID {
-			continue
-		}
-
-		client := &http.Client{}
-		url := fmt.Sprintf("http://%s/state/%s/%s", n.Addr, n.NodeID, action)
-		log.Debug("send put http request", zap.String("url", url))
-		req, err := http.NewRequest("PUT", url, nil)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		_, err = client.Do(req)
-		if err == nil {
-			log.Info("apply action on node success", zap.String("action", action), zap.String("NodeID", n.NodeID))
-			return nil
-		}
-
+	var client http.Client
+	url := fmt.Sprintf("http://%s/state/%s/%s", n.Addr, n.NodeID, action)
+	log.Debug("send put http request", zap.String("url", url))
+	req, err := http.NewRequest("PUT", url, nil)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	_, err = client.Do(req)
+	if err == nil {
+		log.Info("Apply action on node success", zap.String("action", action), zap.String("NodeID", n.NodeID))
+		return nil
+	}
 
-	return errors.NotFoundf("nodeID %s", nodeID)
+	return errors.Trace(err)
 }
