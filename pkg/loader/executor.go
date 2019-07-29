@@ -239,8 +239,8 @@ func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(ctx 
 
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
-		err := util.RetryContext(ctx, retryNum, backoff, 1, func(ctx1 context.Context) error {
-			return e.singleExec(ctx1, dmls, safeMode)
+		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
+			return e.singleExec(ctx, dmls, safeMode)
 		})
 		if err != nil {
 			return errors.Trace(err)

@@ -294,6 +294,7 @@ func needRefreshTableInfo(sql string) bool {
 }
 
 func isCreateDatabaseDDL(sql string) bool {
+	log.Info("isCreateDatabaseDDL", zap.String("sql", sql))
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
@@ -307,21 +308,21 @@ func isCreateDatabaseDDL(sql string) bool {
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
-	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(ctx1 context.Context) error {
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
-			_, err = tx.ExecContext(ctx1, fmt.Sprintf("use %s;", quoteName(ddl.Database)))
+			_, err = tx.ExecContext(s.ctx, fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				tx.Rollback()
 				return err
 			}
 		}
 
-		if _, err = tx.ExecContext(ctx1, ddl.SQL); err != nil {
+		if _, err = tx.ExecContext(s.ctx, ddl.SQL); err != nil {
 			tx.Rollback()
 			return err
 		}
