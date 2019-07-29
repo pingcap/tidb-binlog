@@ -221,7 +221,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 // splitExecDML split dmls to size of e.batchSize and call exec concurrently
 func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(ctx context.Context, dmls []*DML) error) error {
-	errg, _ := errgroup.WithContext(context.Background())
+	errg, _ := errgroup.WithContext(ctx)
 
 	for _, split := range splitDMLs(dmls, e.batchSize) {
 		split := split

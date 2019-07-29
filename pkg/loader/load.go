@@ -305,21 +305,21 @@ func isCreateDatabaseDDL(sql string) bool {
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
-	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(ctx1 context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
-			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
+			_, err = tx.ExecContext(ctx1 ,fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				tx.Rollback()
 				return err
 			}
 		}
 
-		if _, err = tx.Exec(ddl.SQL); err != nil {
+		if _, err = tx.ExecContext(ctx1, ddl.SQL); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -336,7 +336,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
-	errg, _ := errgroup.WithContext(context.Background())
+	errg, _ := errgroup.WithContext(s.ctx)
 
 	for _, dmls := range byHash {
 		if len(dmls) == 0 {
@@ -405,7 +405,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	batchTables, singleDMLs := s.groupDMLs(dmls)
 
 	executor := s.getExecutor()
-	errg, _ := errgroup.WithContext(context.Background())
+	errg, _ := errgroup.WithContext(s.ctx)
 
 	for _, dmls := range batchTables {
 		// https://golang.org/doc/faq#closures_and_goroutines
