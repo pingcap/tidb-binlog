@@ -128,7 +128,10 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case mergeItem := <-c.merger.Output():
+		case mergeItem, ok := <-c.merger.Output():
+			if !ok {
+				return
+			}
 			item := mergeItem.(*binlogItem)
 			if err := c.syncBinlog(item); err != nil {
 				c.reportErr(ctx, err)
@@ -155,6 +158,7 @@ func (c *Collector) Start(ctx context.Context) {
 	if err := c.reg.Close(); err != nil {
 		log.Error(err.Error())
 	}
+	c.merger.Close()
 
 	wg.Wait()
 }

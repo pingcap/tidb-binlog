@@ -135,3 +135,25 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 		currentTs = ts
 	}
 }
+
+func (s *testMergerSuite) TestCloseMerger(c *C) {
+	sourceNum := 5
+	sources := make([]MergeSource, sourceNum)
+	for i := 0; i < sourceNum; i++ {
+		source := MergeSource{
+			ID:     strconv.Itoa(i),
+			Source: make(chan MergeItem),
+		}
+		sources[i] = source
+	}
+	merger := NewMerger(0, normalStrategy, sources...)
+	merger.Close()
+	time.Sleep(time.Second)
+	c.Assert(merger.isClosed(), IsTrue)
+	select {
+	case _, ok := <-merger.Output():
+		c.Assert(ok, IsFalse)
+	case <-time.After(time.Second * 2):
+		c.Fatal("Fail to close merger's output")
+	}
+}

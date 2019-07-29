@@ -242,6 +242,7 @@ func (m *Merger) run() {
 		m.resetSourceChanged()
 
 		if m.isClosed() {
+			log.Info("merger is closed successfully")
 			return
 		}
 
