@@ -314,14 +314,14 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
-			_, err = tx.ExecContext(s.ctx, fmt.Sprintf("use %s;", quoteName(ddl.Database)))
+			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				tx.Rollback()
 				return err
 			}
 		}
 
-		if _, err = tx.ExecContext(s.ctx, ddl.SQL); err != nil {
+		if _, err = tx.Exec(ddl.SQL); err != nil {
 			tx.Rollback()
 			return err
 		}

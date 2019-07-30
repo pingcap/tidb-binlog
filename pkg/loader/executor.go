@@ -69,9 +69,9 @@ type tx struct {
 }
 
 // wrap of sql.Tx.Exec()
-func (tx *tx) exec(ctx context.Context, query string, args ...interface{}) (gosql.Result, error) {
+func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	start := time.Now()
-	res, err := tx.Tx.ExecContext(ctx, query, args...)
+	res, err := tx.Tx.Exec(query, args...)
 	if tx.queryHistogramVec != nil {
 		tx.queryHistogramVec.WithLabelValues("exec").Observe(time.Since(start).Seconds())
 	}
@@ -79,8 +79,8 @@ func (tx *tx) exec(ctx context.Context, query string, args ...interface{}) (gosq
 	return res, err
 }
 
-func (tx *tx) autoRollbackExec(ctx context.Context, query string, args ...interface{}) (res gosql.Result, err error) {
-	res, err = tx.exec(ctx, query, args...)
+func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
+	res, err = tx.exec(query, args...)
 	if err != nil {
 		log.Error("exec fail", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
 		tx.Rollback()
@@ -113,7 +113,7 @@ func (e *executor) begin() (*tx, error) {
 	}, nil
 }
 
-func (e *executor) bulkDelete(ctx context.Context, deletes []*DML) error {
+func (e *executor) bulkDelete(deletes []*DML) error {
 	if len(deletes) == 0 {
 		return nil
 	}
@@ -132,7 +132,7 @@ func (e *executor) bulkDelete(ctx context.Context, deletes []*DML) error {
 		return errors.Trace(err)
 	}
 	sql := sqls.String()
-	_, err = tx.autoRollbackExec(ctx, sql, argss...)
+	_, err = tx.autoRollbackExec(sql, argss...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -141,7 +141,7 @@ func (e *executor) bulkDelete(ctx context.Context, deletes []*DML) error {
 	return errors.Trace(err)
 }
 
-func (e *executor) bulkReplace(ctx context.Context, inserts []*DML) error {
+func (e *executor) bulkReplace(inserts []*DML) error {
 	if len(inserts) == 0 {
 		return nil
 	}
@@ -172,7 +172,7 @@ func (e *executor) bulkReplace(ctx context.Context, inserts []*DML) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = tx.autoRollbackExec(ctx, builder.String(), args...)
+	_, err = tx.autoRollbackExec(builder.String(), args...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -220,13 +220,13 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 }
 
 // splitExecDML split dmls to size of e.batchSize and call exec concurrently
-func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(ctx context.Context, dmls []*DML) error) error {
+func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(dmls []*DML) error) error {
 	errg, _ := errgroup.WithContext(ctx)
 
 	for _, split := range splitDMLs(dmls, e.batchSize) {
 		split := split
 		errg.Go(func() error {
-			err := exec(ctx, split)
+			err := exec(split)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -240,7 +240,7 @@ func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(ctx 
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			return e.singleExec(ctx, dmls, safeMode)
+			return e.singleExec(dmls, safeMode)
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -250,7 +250,7 @@ func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode
 	return nil
 }
 
-func (e *executor) singleExec(ctx context.Context, dmls []*DML, safeMode bool) error {
+func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
@@ -259,25 +259,25 @@ func (e *executor) singleExec(ctx context.Context, dmls []*DML, safeMode bool) e
 	for _, dml := range dmls {
 		if safeMode && dml.Tp == UpdateDMLType {
 			sql, args := dml.deleteSQL()
-			_, err := tx.autoRollbackExec(ctx, sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			sql, args = dml.replaceSQL()
-			_, err = tx.autoRollbackExec(ctx, sql, args...)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql, args := dml.replaceSQL()
-			_, err := tx.autoRollbackExec(ctx, sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
 			sql, args := dml.sql()
-			_, err := tx.autoRollbackExec(ctx, sql, args...)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
