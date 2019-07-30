@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"os"
+	"path"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
@@ -75,6 +76,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 	os.Setenv("PUMP_ADDR", "192.168.199.200:9000")
 	os.Setenv("PUMP_PD_URLS", "http://127.0.0.1:2379,http://localhost:2379")
 	os.Setenv("PUMP_DATA_DIR", "/tmp/pump")
+	defer os.Clearenv()
 
 	cfg := NewConfig()
 	mustSuccess(c, cfg.Parse(args))
@@ -84,7 +86,7 @@ func (s *testConfigSuite) TestConfigParsingEnvFlags(c *C) {
 func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	yc := struct {
 		ListenAddr        string `toml:"addr" json:"addr"`
-		AdvertiseAddr     string `toml:"advertiser-addr" json:"advertise-addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
 		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 		BinlogDir         string `toml:"data-dir" json:"data-dir"`
 		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
@@ -101,36 +103,60 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	err := e.Encode(yc)
 	c.Assert(err, IsNil)
 
-	tmpfile := mustCreateCfgFile(c, buf.Bytes(), "pump_config")
-	defer os.Remove(tmpfile.Name())
+	configFilename := path.Join(c.MkDir(), "pump_config.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, IsNil)
 
 	args := []string{
 		"--config",
-		tmpfile.Name(),
+		configFilename,
 		"-L", "debug",
 	}
 
-	os.Clearenv()
 	cfg := NewConfig()
 	mustSuccess(c, cfg.Parse(args))
 	validateConfig(c, cfg)
 }
 
-func mustSuccess(c *C, err error) {
+func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
+	yc := struct {
+		ListenAddr             string `toml:"addr" json:"addr"`
+		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs               string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir              string `toml:"data-dir" json:"data-dir"`
+		HeartbeatInterval      uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+		UnrecognizedOptionTest bool   `toml:"unrecognized-option-test" json:"unrecognized-option-test"`
+	}{
+		"192.168.199.100:8260",
+		"192.168.199.100:8260",
+		"http://192.168.199.110:2379,http://hostname:2379",
+		"/tmp/pump",
+		1500,
+		true,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
 	c.Assert(err, IsNil)
+
+	configFilename := path.Join(c.MkDir(), "pump_config_invalid.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, IsNil)
+
+	args := []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+	}
+
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
 }
 
-func mustCreateCfgFile(c *C, b []byte, prefix string) *os.File {
-	tmpfile, err := ioutil.TempFile("", prefix)
-	mustSuccess(c, err)
-
-	_, err = tmpfile.Write(b)
-	mustSuccess(c, err)
-
-	err = tmpfile.Close()
-	mustSuccess(c, err)
-
-	return tmpfile
+func mustSuccess(c *C, err error) {
+	c.Assert(err, IsNil)
 }
 
 func validateConfig(c *C, cfg *Config) {
