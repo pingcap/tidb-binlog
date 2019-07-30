@@ -154,6 +154,6 @@ func (s *testMergerSuite) TestCloseMerger(c *C) {
 	case _, ok := <-merger.Output():
 		c.Assert(ok, IsFalse)
 	case <-time.After(time.Second * 2):
-		c.Fatal("Fail to close merger's output")
+		c.Fatal("Fail to close merger's output in 2s")
 	}
 }
