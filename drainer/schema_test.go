@@ -345,7 +345,6 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		case "renameTable":
 			tblInfo.ID = 12
 			tblInfo.Name = newTbName
-
 		}
 
 		job = &model.Job{

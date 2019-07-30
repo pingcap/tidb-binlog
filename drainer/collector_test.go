@@ -543,7 +543,7 @@ func (s *keepUpdatingSuite) TestUpdateStatus(c *C) {
 	var TS int64 = 5
 	err = col.updateStatus(ctx)
 	c.Assert(err, IsNil)
-	c.Assert(col.mu, NotNil)
+	c.Assert(col.mu.status, NotNil)
 	c.Assert(col.mu.status.LastTS, Equals, TS)
 	c.Assert(col.mu.status.Synced, IsFalse)
 	c.Assert(col.mu.status.PumpPos["test"], Equals, TS)
