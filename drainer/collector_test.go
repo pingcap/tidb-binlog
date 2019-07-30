@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 
@@ -48,6 +49,59 @@ type dummyStore struct {
 
 type collectorSuite struct{}
 
+type dummyStorage struct {
+	kv.Storage
+}
+
+func (ds dummyStorage) Begin() (kv.Transaction, error) {
+	return nil, nil
+}
+
+func (ds dummyStorage) BeginWithStartTS(startTS uint64) (kv.Transaction, error) {
+	return nil, nil
+}
+
+func (ds dummyStorage) GetSnapshot(ver kv.Version) (kv.Snapshot, error) {
+	return nil, nil
+}
+
+func (ds dummyStorage) GetClient() kv.Client {
+	return nil
+}
+
+func (ds dummyStorage) Close() error {
+	return nil
+}
+
+func (ds dummyStorage) UUID() string {
+	return ""
+}
+
+func (ds dummyStorage) CurrentVersion() (kv.Version, error) {
+	return kv.NewVersion(2), nil
+}
+
+func (ds dummyStorage) GetOracle() oracle.Oracle {
+	return nil
+}
+
+func (ds dummyStorage) SupportDeleteRange() (supported bool) {
+	return false
+}
+
+func (ds dummyStorage) Name() string {
+	return ""
+}
+
+func (ds dummyStorage) Describe() string {
+	return ""
+}
+
+func (ds dummyStorage) ShowStatus(ctx context.Context, key string) (interface{}, error) {
+	return nil, nil
+}
+
+var DefaultRootPath = "/tidb-binlog/v1"
 var _ = Suite(&collectorSuite{})
 
 func (s *collectorSuite) TestUpdateCollectStatus(c *C) {
@@ -462,4 +516,35 @@ func (s *keepUpdatingSuite) TestShouldUpdateWhenNotified(c *C) {
 	// Wait until all notifies finish or timeout
 	s.waitForSignal(c, signal, "Notifies don't finish in time")
 	c.Assert(callCount, Equals, 10)
+}
+
+func (s *keepUpdatingSuite) TestUpdateStatus(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	etcdClient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
+	r := node.NewEtcdRegistry(etcdClient, time.Duration(5)*time.Second)
+	ns := &node.Status{
+		NodeID:  "test",
+		Addr:    "test",
+		State:   node.Online,
+		IsAlive: true,
+	}
+	err := r.UpdateNode(context.Background(), "pumps", ns)
+	c.Assert(err, IsNil)
+
+	col := Collector{
+		merger:     &Merger{latestTS: 5, sources: map[string]MergeSource{}},
+		notifyChan: make(chan *notifyResult),
+		interval:   10 * time.Second,
+		reg:        r,
+		pumps:      map[string]*Pump{},
+		tiStore:    dummyStorage{},
+	}
+	var TS int64 = 5
+	err = col.updateStatus(ctx)
+	c.Assert(err, IsNil)
+	c.Assert(col.mu, NotNil)
+	c.Assert(col.mu.status.LastTS, Equals, TS)
+	c.Assert(col.mu.status.Synced, IsFalse)
+	c.Assert(col.mu.status.PumpPos["test"], Equals, TS)
 }
