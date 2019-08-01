@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -63,7 +64,7 @@ func (s *executorSuite) TestSplitExecDML(c *C) {
 
 	var counter int32
 
-	err = e.splitExecDML(dmls, func(group []*DML) error {
+	err = e.splitExecDML(context.Background(), dmls, func(group []*DML) error {
 		atomic.AddInt32(&counter, 1)
 		if len(group) < 2 {
 			return errors.New("fake")

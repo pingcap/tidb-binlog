@@ -14,6 +14,7 @@
 package loader
 
 import (
+	"context"
 	"database/sql"
 	"reflect"
 	"time"
@@ -58,6 +59,7 @@ func (cs *LoadSuite) TestGetExecutor(c *check.C) {
 		metrics: &MetricsGroup{
 			QueryHistogramVec: &prometheus.HistogramVec{},
 		},
+		ctx: context.Background(),
 	}
 	var e *executor = loader.getExecutor()
 	c.Assert(e.db, check.DeepEquals, loader.db)
@@ -268,7 +270,7 @@ func (s *execDDLSuite) TestShouldExecInTransaction(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db}
+	loader := &loaderImpl{db: db, ctx: context.Background()}
 
 	ddl := DDL{SQL: "CREATE TABLE"}
 	err = loader.execDDL(&ddl)
@@ -284,7 +286,7 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db}
+	loader := &loaderImpl{db: db, ctx: context.Background()}
 
 	ddl := DDL{SQL: "CREATE TABLE", Database: "test_db"}
 	err = loader.execDDL(&ddl)
