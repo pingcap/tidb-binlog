@@ -55,9 +55,9 @@ func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.Histogram
 	return e
 }
 
-func (e *executor) execTableBatchRetry(dmls []*DML, retryNum int, backoff time.Duration) error {
-	err := util.RetryOnError(retryNum, backoff, "execTableBatchRetry", func() error {
-		return e.execTableBatch(dmls)
+func (e *executor) execTableBatchRetry(ctx context.Context, dmls []*DML, retryNum int, backoff time.Duration) error {
+	err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
+		return e.execTableBatch(ctx, dmls)
 	})
 	return errors.Trace(err)
 }
@@ -186,7 +186,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 // use replace to handle the update unique index case(see https://github.com/pingcap/tidb-binlog/pull/437/files)
 // or we can simply check if it update unique index column or not, and for update change to (delete + insert)
 // the final result should has no duplicate entry or the origin dmls is wrong.
-func (e *executor) execTableBatch(dmls []*DML) error {
+func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -199,19 +199,19 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 	log.Debug("merge dmls", zap.Reflect("dmls", dmls), zap.Reflect("merged", types))
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
-		if err := e.splitExecDML(allDeletes, e.bulkDelete); err != nil {
+		if err := e.splitExecDML(ctx, allDeletes, e.bulkDelete); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allInserts, ok := types[InsertDMLType]; ok {
-		if err := e.splitExecDML(allInserts, e.bulkReplace); err != nil {
+		if err := e.splitExecDML(ctx, allInserts, e.bulkReplace); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
-		if err := e.splitExecDML(allUpdates, e.bulkReplace); err != nil {
+		if err := e.splitExecDML(ctx, allUpdates, e.bulkReplace); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -220,8 +220,8 @@ func (e *executor) execTableBatch(dmls []*DML) error {
 }
 
 // splitExecDML split dmls to size of e.batchSize and call exec concurrently
-func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error {
-	errg, _ := errgroup.WithContext(context.Background())
+func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(dmls []*DML) error) error {
+	errg, _ := errgroup.WithContext(ctx)
 
 	for _, split := range splitDMLs(dmls, e.batchSize) {
 		split := split
@@ -237,9 +237,9 @@ func (e *executor) splitExecDML(dmls []*DML, exec func(dmls []*DML) error) error
 	return errors.Trace(errg.Wait())
 }
 
-func (e *executor) singleExecRetry(allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
+func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
-		err := util.RetryOnError(retryNum, backoff, "singleExec", func() error {
+		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
 			return e.singleExec(dmls, safeMode)
 		})
 		if err != nil {

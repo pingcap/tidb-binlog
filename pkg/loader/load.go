@@ -86,6 +86,11 @@ type loaderImpl struct {
 	// value can be tidb or mysql
 	saveAppliedTS           bool
 	lastUpdateAppliedTSTime time.Time
+
+	// TODO: remove this ctx, context shouldn't stored in struct
+	// https://github.com/pingcap/tidb-binlog/pull/691#issuecomment-515387824
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // MetricsGroup contains metrics of Loader
@@ -147,6 +152,8 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		o(&opts)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	s := &loaderImpl{
 		db:            db,
 		workerCount:   opts.workerCount,
@@ -156,6 +163,9 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:    make(chan *Txn, 1024),
 		merge:         true,
 		saveAppliedTS: opts.saveAppliedTS,
+
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
@@ -222,6 +232,7 @@ func (s *loaderImpl) Successes() <-chan *Txn {
 // Run will quit when all data is drained
 func (s *loaderImpl) Close() {
 	close(s.input)
+	s.cancel()
 }
 
 var utilGetTableInfo = getTableInfo
@@ -296,7 +307,7 @@ func isCreateDatabaseDDL(sql string) bool {
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 
-	err := util.RetryOnError(maxDDLRetryCount, execDDLRetryWait, "execDDL", func() error {
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
@@ -327,7 +338,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
-	errg, _ := errgroup.WithContext(context.Background())
+	errg, _ := errgroup.WithContext(s.ctx)
 
 	for _, dmls := range byHash {
 		if len(dmls) == 0 {
@@ -337,7 +348,7 @@ func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
 		dmls := dmls
 
 		errg.Go(func() error {
-			err := executor.singleExecRetry(dmls, s.GetSafeMode(), maxDMLRetryCount, time.Second)
+			err := executor.singleExecRetry(s.ctx, dmls, s.GetSafeMode(), maxDMLRetryCount, time.Second)
 			return err
 		})
 	}
@@ -396,13 +407,13 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	batchTables, singleDMLs := s.groupDMLs(dmls)
 
 	executor := s.getExecutor()
-	errg, _ := errgroup.WithContext(context.Background())
+	errg, _ := errgroup.WithContext(s.ctx)
 
 	for _, dmls := range batchTables {
 		// https://golang.org/doc/faq#closures_and_goroutines
 		dmls := dmls
 		errg.Go(func() error {
-			err := executor.execTableBatchRetry(dmls, maxDMLRetryCount, time.Second)
+			err := executor.execTableBatchRetry(s.ctx, dmls, maxDMLRetryCount, time.Second)
 			return err
 		})
 	}
