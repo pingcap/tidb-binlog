@@ -148,7 +148,6 @@ func (s *testMergerSuite) TestCloseMerger(c *C) {
 	}
 	merger := NewMerger(0, normalStrategy, sources...)
 	merger.Close()
-	time.Sleep(time.Second)
 	c.Assert(merger.isClosed(), IsTrue)
 	select {
 	case _, ok := <-merger.Output():

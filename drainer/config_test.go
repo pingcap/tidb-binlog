@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/parser/mysql"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pkg/zk"
-	gozk "github.com/samuel/go-zookeeper/zk"
+	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 var testEtcdCluster *integration.ClusterV3
@@ -163,7 +163,7 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 var _ = Suite(&testKafkaSuite{})
 
 type testKafkaSuite struct {
-	origNewZKFromConnectionString func(connectionString string, dialTimeout, sessionTimeout time.Duration) (*zk.Client, error)
+	origNewZKFromConnectionString func(connectionString string, dialTimeout, sessionTimeout time.Duration) (*pkgzk.Client, error)
 }
 
 func (t *testKafkaSuite) SetUpTest(c *C) {
@@ -174,15 +174,13 @@ func (t *testKafkaSuite) TearDownTest(c *C) {
 	newZKFromConnectionString = t.origNewZKFromConnectionString
 }
 
-type MockConn struct {
-}
+type MockConn struct{}
 
-func (m *MockConn) Close() {
-}
-func (m *MockConn) Children(path string) ([]string, *gozk.Stat, error) {
+func (m *MockConn) Close() {}
+func (m *MockConn) Children(path string) ([]string, *zk.Stat, error) {
 	return []string{"0", "1"}, nil, nil
 }
-func (m *MockConn) Get(path string) ([]byte, *gozk.Stat, error) {
+func (m *MockConn) Get(path string) ([]byte, *zk.Stat, error) {
 	if path[len(path)-1] == '0' {
 		return []byte(`{"version":2,"host":"192.0.2.1","port":9092}`), nil, nil
 	} else if path[len(path)-1] == '1' {
@@ -201,8 +199,8 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 		"-addr", "192.168.15.10:8257",
 		"-advertise-addr", "192.168.15.10:8257",
 	}
-	newZKFromConnectionString = func(connectionString string, dialTimeout, sessionTimeout time.Duration) (client *zk.Client, e error) {
-		return zk.NewWithConnection(&MockConn{}, nil), nil
+	newZKFromConnectionString = func(connectionString string, dialTimeout, sessionTimeout time.Duration) (client *pkgzk.Client, e error) {
+		return pkgzk.NewWithConnection(&MockConn{}, nil), nil
 	}
 
 	// Without Zookeeper address
