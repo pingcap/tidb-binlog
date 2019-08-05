@@ -149,6 +149,16 @@ func (s *sorter) pushTSItem(item sortItem) {
 func (s *sorter) run() {
 	defer s.wg.Done()
 
+	go func() {
+		// Avoid if no any more pushTSItem call so block at s.cond.Wait() in run() waiting the matching c-binlog
+		for range time.Tick(3 * time.Second) {
+			s.cond.Signal()
+			if s.isClosed() {
+				return
+			}
+		}
+	}()
+
 	var maxTSItem sortItem
 	for {
 		s.cond.L.Lock()

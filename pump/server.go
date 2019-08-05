@@ -216,7 +216,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		goto errHandle
 	}
 
-	if !isFakeBinlog {
+	if !isFakeBinlog && blog.Tp == binlog.BinlogType_Prewrite {
 		state := s.node.NodeStatus().State
 		if state != node.Online {
 			err = errors.Errorf("no online: %v", state)
