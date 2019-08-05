@@ -46,6 +46,10 @@ type dummyStore struct {
 	kv.Storage
 }
 
+func (ds dummyStore) CurrentVersion() (kv.Version, error) {
+	return kv.NewVersion(2), nil
+}
+
 type collectorSuite struct{}
 
 var _ = Suite(&collectorSuite{})
@@ -462,4 +466,39 @@ func (s *keepUpdatingSuite) TestShouldUpdateWhenNotified(c *C) {
 	// Wait until all notifies finish or timeout
 	s.waitForSignal(c, signal, "Notifies don't finish in time")
 	c.Assert(callCount, Equals, 10)
+}
+
+type updateStatusSuite struct{}
+
+var _ = Suite(&updateStatusSuite{})
+
+func (s *updateStatusSuite) TestUpdateBothPumpAndCollectorStatus(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	etcdClient := etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath)
+	r := node.NewEtcdRegistry(etcdClient, time.Duration(5)*time.Second)
+	ns := &node.Status{
+		NodeID:  "test",
+		Addr:    "test",
+		State:   node.Online,
+		IsAlive: true,
+	}
+	err := r.UpdateNode(ctx, "pumps", ns)
+	c.Assert(err, IsNil)
+
+	var latestTS int64 = 5
+	col := Collector{
+		merger:     &Merger{latestTS: latestTS, sources: map[string]MergeSource{}},
+		notifyChan: make(chan *notifyResult),
+		interval:   10 * time.Second,
+		reg:        r,
+		pumps:      map[string]*Pump{},
+		tiStore:    dummyStore{},
+	}
+	err = col.updateStatus(ctx)
+	c.Assert(err, IsNil)
+	c.Assert(col.mu.status, NotNil)
+	c.Assert(col.mu.status.LastTS, Equals, latestTS)
+	c.Assert(col.mu.status.Synced, IsFalse)
+	c.Assert(col.mu.status.PumpPos["test"], Equals, latestTS)
 }

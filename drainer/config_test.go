@@ -18,12 +18,16 @@ import (
 	"io/ioutil"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
+	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 var testEtcdCluster *integration.ClusterV3
@@ -154,4 +158,75 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
+}
+
+var _ = Suite(&testKafkaSuite{})
+
+type testKafkaSuite struct {
+	origNewZKFromConnectionString func(connectionString string, dialTimeout, sessionTimeout time.Duration) (*pkgzk.Client, error)
+}
+
+func (t *testKafkaSuite) SetUpTest(c *C) {
+	t.origNewZKFromConnectionString = newZKFromConnectionString
+}
+
+func (t *testKafkaSuite) TearDownTest(c *C) {
+	newZKFromConnectionString = t.origNewZKFromConnectionString
+}
+
+type MockConn struct{}
+
+func (m *MockConn) Close() {}
+func (m *MockConn) Children(path string) ([]string, *zk.Stat, error) {
+	return []string{"0", "1"}, nil, nil
+}
+func (m *MockConn) Get(path string) ([]byte, *zk.Stat, error) {
+	if path[len(path)-1] == '0' {
+		return []byte(`{"version":2,"host":"192.0.2.1","port":9092}`), nil, nil
+	} else if path[len(path)-1] == '1' {
+		return []byte(`{"version":2,"host":"192.0.2.2","port":9092}`), nil, nil
+	}
+	return nil, nil, nil
+}
+
+func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
+	args := []string{
+		"-metrics-addr", "192.168.15.10:9091",
+		"-txn-batch", "1",
+		"-data-dir", "data.drainer",
+		"-dest-db-type", "kafka",
+		"-config", "../cmd/drainer/drainer.toml",
+		"-addr", "192.168.15.10:8257",
+		"-advertise-addr", "192.168.15.10:8257",
+	}
+	newZKFromConnectionString = func(connectionString string, dialTimeout, sessionTimeout time.Duration) (client *pkgzk.Client, e error) {
+		return pkgzk.NewWithConnection(&MockConn{}, nil), nil
+	}
+
+	// Without Zookeeper address
+	cfg := NewConfig()
+	err := cfg.Parse(args)
+	c.Assert(err, IsNil)
+	// kafka asserts
+	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, defaultKafkaAddrs)
+	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
+	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
+
+	// With Zookeeper address
+	cfg = NewConfig()
+	cfg.SyncerCfg.To = new(dsync.DBConfig)
+	cfg.SyncerCfg.To.ZKAddrs = "host1:2181"
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+	c.Assert(cfg.MetricsAddr, Equals, "192.168.15.10:9091")
+	c.Assert(cfg.DataDir, Equals, "data.drainer")
+	c.Assert(cfg.SyncerCfg.TxnBatch, Equals, 1)
+	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "kafka")
+	var strSQLMode *string
+	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, strSQLMode)
+	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
+	// kafka asserts
+	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, `(192\.0\.2\.1:9092,192\.0\.2\.2:9092|192\.0\.2\.2:9092,192\.0\.2\.1:9092)`)
+	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
+	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
 }
