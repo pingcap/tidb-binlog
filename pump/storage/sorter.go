@@ -151,7 +151,9 @@ func (s *sorter) run() {
 
 	go func() {
 		// Avoid if no any more pushTSItem call so block at s.cond.Wait() in run() waiting the matching c-binlog
-		for range time.Tick(3 * time.Second) {
+		tick := time.NewTicker(3 * time.Second)
+		defer tick.Stop()
+		for range tick.C {
 			s.cond.Signal()
 			if s.isClosed() {
 				return
