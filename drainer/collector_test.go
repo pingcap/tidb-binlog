@@ -50,8 +50,6 @@ func (ds dummyStore) CurrentVersion() (kv.Version, error) {
 	return kv.NewVersion(2), nil
 }
 
-var DefaultRootPath = "/tidb-binlog/v1"
-
 type collectorSuite struct{}
 
 var _ = Suite(&collectorSuite{})
@@ -474,10 +472,10 @@ type updateStatusSuite struct{}
 
 var _ = Suite(&updateStatusSuite{})
 
-func (s *updateStatusSuite) TestUpdateStatus(c *C) {
+func (s *updateStatusSuite) TestUpdateBothPumpAndCollectorStatus(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	etcdClient := etcd.NewClient(testEtcdCluster.RandClient(), DefaultRootPath)
+	etcdClient := etcd.NewClient(testEtcdCluster.RandClient(), node.DefaultRootPath)
 	r := node.NewEtcdRegistry(etcdClient, time.Duration(5)*time.Second)
 	ns := &node.Status{
 		NodeID:  "test",
