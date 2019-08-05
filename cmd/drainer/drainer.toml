@@ -52,6 +52,9 @@ safe-mode = false
 # valid values are "mysql", "file", "tidb", "flash", "kafka"
 db-type = "mysql"
 
+# ignore syncing the txn with specified commit ts to downstream
+ignore-txn-commit-ts = []
+
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 

@@ -452,6 +452,11 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
+		if isIgnoreTxnCommitTS(s.cfg.IgnoreTxnCommitTS, commitTS) {
+			log.Warnf("skip txn, binlog: %s", b.binlog.String())
+			continue
+		}
+
 		if startTS == commitTS {
 			// generate fake binlog job
 			s.addJob(newFakeJob(commitTS, b.nodeID))
@@ -513,7 +518,7 @@ func (s *Syncer) run(jobs []*model.Job) error {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
+				log.Infof("[ddl][start]%s[commit ts]%v, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed", sql, commitTS)
 				var args []interface{}
 				// for kafka, mysql and tidb, we want to know the relate schema and table, get it while args now
 				// in executor
@@ -628,6 +633,15 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 	s.addJob(job)
 
 	return nil
+}
+
+func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
+	for _, ignoreTS := range ignoreTxnCommitTS {
+		if ignoreTS == ts {
+			return true
+		}
+	}
+	return false
 }
 
 // Add adds binlogItem to the syncer's input channel
