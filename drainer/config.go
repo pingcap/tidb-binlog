@@ -51,9 +51,10 @@ const (
 )
 
 var (
-	maxBinlogItemCount     int
-	defaultBinlogItemCount = 16 << 12
-	supportedCompressors   = [...]string{"gzip"}
+	maxBinlogItemCount        int
+	defaultBinlogItemCount    = 16 << 12
+	supportedCompressors      = [...]string{"gzip"}
+	newZKFromConnectionString = zk.NewFromConnectionString
 )
 
 // SyncerConfig is the Syncer's configuration.
@@ -278,7 +279,7 @@ func (cfg *Config) adjustConfig() error {
 	if cfg.SyncerCfg.DestDBType == "kafka" {
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
-			zkClient, err := zk.NewFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
+			zkClient, err := newZKFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
 			if err != nil {
 				return errors.Trace(err)
 			}
