@@ -1362,6 +1362,7 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 	}
 }
 
+// AllMatched implement Storage.AllMatched
 func (a *Append) AllMatched() bool {
 	return a.sorter.allMatched()
 }
