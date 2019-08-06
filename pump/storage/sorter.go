@@ -124,6 +124,16 @@ func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 	s.resolver = resolver
 }
 
+func (s *sorter) allMatched() bool {
+	var match bool
+
+	s.lock.Lock()
+	match = len(s.waitStartTS) == 0
+	s.lock.Unlock()
+
+	return match
+}
+
 func (s *sorter) pushTSItem(item sortItem) {
 	if s.isClosed() {
 		// i think we can just panic
@@ -188,6 +198,7 @@ func (s *sorter) run() {
 				// we may get the C binlog soon at start up time
 				if time.Since(getTime) > time.Second {
 					if s.resolver != nil && s.resolver(item.start) {
+						delete(s.waitStartTS, item.start)
 						break
 					}
 				}
