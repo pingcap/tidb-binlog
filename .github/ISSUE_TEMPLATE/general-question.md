@@ -12,4 +12,4 @@ Before asking a question, make sure you have:
 - Googled your question.
 - Searched open and closed [GitHub issues](https://github.com/pingcap/tidb-binlog/issues?utf8=%E2%9C%93&q=is%3Aissue)
 - Read related documentation:
-  - [TiDB-Binlog Official Tutorial](https://pingcap.com/docs-cn/dev/how-to/get-started/tidb-binlog/)
+  - [TiDB Doc](https://pingcap.com/docs/)
