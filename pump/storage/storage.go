@@ -73,6 +73,9 @@ type Storage interface {
 
 	GetGCTS() int64
 
+	// AllMatched return if all the P-binlog have the matching C-binlog
+	AllMatched() bool
+
 	MaxCommitTS() int64
 
 	// GetBinlog return the binlog of ts
@@ -1358,4 +1361,9 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 		time.Sleep(time.Second)
 		continue
 	}
+}
+
+// AllMatched implement Storage.AllMatched
+func (a *Append) AllMatched() bool {
+	return a.sorter.allMatched()
 }

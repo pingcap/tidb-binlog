@@ -124,6 +124,13 @@ func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 	s.resolver = resolver
 }
 
+func (s *sorter) allMatched() bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return len(s.waitStartTS) == 0
+}
+
 func (s *sorter) pushTSItem(item sortItem) {
 	if s.isClosed() {
 		// i think we can just panic
@@ -148,6 +155,18 @@ func (s *sorter) pushTSItem(item sortItem) {
 
 func (s *sorter) run() {
 	defer s.wg.Done()
+
+	go func() {
+		// Avoid if no any more pushTSItem call so block at s.cond.Wait() in run() waiting the matching c-binlog
+		tick := time.NewTicker(1 * time.Second)
+		defer tick.Stop()
+		for range tick.C {
+			s.cond.Signal()
+			if s.isClosed() {
+				return
+			}
+		}
+	}()
 
 	var maxTSItem sortItem
 	for {
@@ -176,6 +195,7 @@ func (s *sorter) run() {
 				// we may get the C binlog soon at start up time
 				if time.Since(getTime) > time.Second {
 					if s.resolver != nil && s.resolver(item.start) {
+						delete(s.waitStartTS, item.start)
 						break
 					}
 				}
