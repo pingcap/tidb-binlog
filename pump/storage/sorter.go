@@ -125,13 +125,10 @@ func (s *sorter) setResolver(resolver func(startTS int64) bool) {
 }
 
 func (s *sorter) allMatched() bool {
-	var match bool
-
 	s.lock.Lock()
-	match = len(s.waitStartTS) == 0
-	s.lock.Unlock()
+	defer s.lock.Unlock()
 
-	return match
+	return len(s.waitStartTS) == 0
 }
 
 func (s *sorter) pushTSItem(item sortItem) {
