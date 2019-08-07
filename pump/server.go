@@ -788,7 +788,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	log.Debug("Start waiting until all drainers have consumed the last fake binlog")
 
-	waterMark := s.storage.MaxCommitTS()
+	maxCommitTS := s.storage.MaxCommitTS()
 	for {
 		select {
 		case <-time.After(time.Second):
@@ -797,12 +797,12 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
 			}
-			if safeTSO >= waterMark {
+			if safeTSO >= maxCommitTS {
 				return nil
 			}
 			log.Warn("Waiting for drainer to consume binlog",
 				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
-				zap.Int64("Water mark CommiTS", waterMark))
+				zap.Int64("Need to reach maxCommitTS", maxCommitTS))
 			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
 			}
