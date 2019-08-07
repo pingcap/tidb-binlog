@@ -1346,6 +1346,7 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 			a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
 			return nil
 		}
+		errorCount.WithLabelValues("batch_write_kv").Add(1.0)
 
 		// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 		// we just retry of quit when Append is closed
