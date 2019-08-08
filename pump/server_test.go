@@ -645,3 +645,49 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	c.Assert(p.clusterID, Equals, uint64(8012))
 	p.Close()
 }
+
+type startServerSuite struct {
+	origUtilGetTSO func(pd.Client) (int64, error)
+}
+
+var _ = Suite(&startServerSuite{})
+
+func (s *startServerSuite) SetUpTest(c *C) {
+	s.origUtilGetTSO = utilGetTSO
+}
+
+func (s *startServerSuite) TearDownTest(c *C) {
+	utilGetTSO = s.origUtilGetTSO
+}
+
+func (s *startServerSuite) TestStartPumpServer(c *C) {
+	utilGetTSO = func(pd.Client) (int64, error) {
+		return 42, nil
+	}
+	cfg := &Config{
+		ListenAddr:        "http://192.168.199.100:8260",
+		AdvertiseAddr:     "http://192.168.199.100:8260",
+		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
+		DataDir:           "/tmp/pump",
+		HeartbeatInterval: 1500,
+		LogLevel:          "debug",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
+	p := &Server{
+		dataDir:    cfg.DataDir,
+		storage:    nil,
+		clusterID:  8012,
+		node:       &fakeNode{},
+		tcpAddr:    cfg.ListenAddr,
+		gs:         grpc.NewServer(grpcOpts...),
+		ctx:        ctx,
+		cancel:     cancel,
+		tiStore:    nil,
+		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:      nil,
+		cfg:        cfg,
+		triggerGC:  make(chan time.Time)}
+	err := p.Start()
+	c.Assert(err, IsNil)
+}
