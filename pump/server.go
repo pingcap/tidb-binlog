@@ -218,7 +218,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		goto errHandle
 	}
 
-	if !isFakeBinlog {
+	if !isFakeBinlog && blog.Tp == binlog.BinlogType_Prewrite {
 		state := s.node.NodeStatus().State
 		if state != node.Online {
 			err = errors.Errorf("no online: %v", state)
@@ -758,20 +758,23 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 		maxCommitTS := s.storage.MaxCommitTS()
 		if maxCommitTS < fakeBinlog.CommitTs {
 			log.Info("max commit TS in storage: %d, fake binlog commit ts: %d", maxCommitTS, fakeBinlog.CommitTs)
-			select {
-			case <-time.After(time.Second):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
+		} else if !s.storage.AllMatched() {
+			log.Info("wait all P-binlog to be matched")
+		} else {
+			break
 		}
-
-		break
+		select {
+		case <-time.After(time.Second):
+			continue
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
 	}
 
 	log.Debug("start to check offline safe for drainers")
 
 	// check drainer has consume fake binlog we just write
+	maxCommitTS := s.storage.MaxCommitTS()
 	for {
 		select {
 		case <-time.After(time.Second):
@@ -787,12 +790,13 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 					continue
 				}
 
-				if drainer.MaxCommitTS < fakeBinlog.CommitTs {
-					log.Infof("wait for drainer: %v maxCommitTS: %d, pump maxCommitTS: %d", drainer.NodeID, drainer.MaxCommitTS, fakeBinlog.CommitTs)
+				if drainer.MaxCommitTS < maxCommitTS {
+					log.Infof("wait for drainer: %v maxCommitTS: %d, pump maxCommitTS: %d", drainer.NodeID, drainer.MaxCommitTS, maxCommitTS)
 					needByDrainer = true
 					break
 				}
 			}
+
 			if !needByDrainer {
 				return nil
 			}

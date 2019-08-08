@@ -33,6 +33,8 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 		// we should never push item with commit ts less than lastGetSortItemTS, or something go wrong
 		if item.tp == pb.BinlogType_Commit {
 			c.Assert(item.commit, check.Greater, atomic.LoadInt64(&lastGetSortItemTS))
+		} else if item.tp == pb.BinlogType_Prewrite {
+			c.Assert(sorter.allMatched(), check.IsFalse)
 		}
 
 		if item.commit > maxTS {
@@ -51,6 +53,7 @@ func testSorter(c *check.C, items []sortItem, expectMaxCommitTS []int64) {
 	}
 
 	c.Assert(maxTS, check.Equals, maxCommitTS[len(maxCommitTS)-1])
+	c.Assert(sorter.allMatched(), check.IsTrue)
 }
 
 func (s *SorterSuite) TestSorter(c *check.C) {

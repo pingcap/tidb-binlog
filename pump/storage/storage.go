@@ -52,6 +52,9 @@ type Storage interface {
 
 	GetGCTS() int64
 
+	// AllMatched return if all the P-binlog have the matching C-binlog
+	AllMatched() bool
+
 	MaxCommitTS() int64
 
 	// GetBinlog return the binlog of ts
@@ -1214,4 +1217,9 @@ func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
 
 	return leveldb.OpenFile(kvDir, &opt)
+}
+
+// AllMatched implement Storage.AllMatched
+func (a *Append) AllMatched() bool {
+	return a.sorter.allMatched()
 }
