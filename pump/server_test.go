@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,8 +26,12 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -554,4 +559,61 @@ func (s *listenSuite) TestReturnListener(c *C) {
 	c.Assert(err, IsNil)
 	defer l.Close()
 	c.Assert(l, NotNil)
+}
+
+type mockPdCli struct {
+	pd.Client
+}
+
+func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
+	return 8012
+}
+
+type newServerSuite struct {
+	origGetPdCli            func(string, security.Config) (pd.Client, error)
+	origNewKVStore          func(string) (kv.Storage, error)
+	origNewTiKVLockResolver func([]string, config.Security) (*tikv.LockResolver, error)
+}
+
+var _ = Suite(&newServerSuite{})
+
+func (s *newServerSuite) SetUpTest(c *C) {
+	s.origGetPdCli = getPdClient
+	s.origNewKVStore = newKVStore
+	s.origNewTiKVLockResolver = newTiKVLockResolver
+}
+
+func (s *newServerSuite) TearDownTest(c *C) {
+	getPdClient = s.origGetPdCli
+	newKVStore = s.origNewKVStore
+	newTiKVLockResolver = s.origNewTiKVLockResolver
+}
+
+func (s *newServerSuite) TestCreateNewPumpServerFromConfig(c *C) {
+	cfg := NewConfig()
+	etcdClient := testEtcdCluster.RandClient()
+	args := []string{
+		"--addr", "192.168.199.100:8260",
+		"--pd-urls", strings.Join(etcdClient.Endpoints(), ","),
+		"--data-dir=/tmp/pump",
+		"--heartbeat-interval=1500",
+		"-L", "debug",
+	}
+	err := cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	getPdClient = func(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
+		return &mockPdCli{}, nil
+	}
+
+	newKVStore = func(path string) (kv.Storage, error) {
+		return nil, nil
+	}
+
+	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
+		return nil, nil
+	}
+
+	_, err = NewServer(cfg)
+	c.Assert(err, IsNil)
 }

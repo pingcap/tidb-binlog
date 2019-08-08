@@ -58,6 +58,10 @@ var (
 	detectDrainerCheckpointInterval = 10 * time.Minute
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
+	// functions
+	getPdClient         = util.GetPdClient
+	newKVStore          = kvstore.New
+	newTiKVLockResolver = tikv.NewLockResolver
 )
 
 // Server implements the gRPC interface,
@@ -114,7 +118,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := util.GetPdClient(cfg.EtcdURLs, cfg.Security)
+	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -132,14 +136,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	lockResolver, err := tikv.NewLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
+	lockResolver, err := newTiKVLockResolver(urlv.StringSlice(), cfg.Security.ToTiDBSecurityConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	kvstore.Register("tikv", tikv.Driver{})
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := kvstore.New(tiPath)
+	tiStore, err := newKVStore(tiPath)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
