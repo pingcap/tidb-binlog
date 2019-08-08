@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -122,6 +121,7 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 
 type noOpStorage struct{}
 
+func (s *noOpStorage) AllMatched() bool                           { return true }
 func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
 func (s *noOpStorage) GetGCTS() int64                             { return 0 }
 func (s *noOpStorage) GC(ts int64)                                {}
@@ -272,7 +272,7 @@ type printServerInfoSuite struct{}
 var _ = Suite(&printServerInfoSuite{})
 
 type dummyStorage struct {
-	storage.Storage
+	noOpStorage
 	gcTS        int64
 	maxCommitTS int64
 }
