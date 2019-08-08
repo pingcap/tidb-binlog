@@ -26,7 +26,6 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/config"
@@ -570,7 +569,7 @@ func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
 }
 
 type newServerSuite struct {
-	origGetPdCli            func(string, security.Config) (pd.Client, error)
+	origNewPdCli            func([]string, pd.SecurityOption) (pd.Client, error)
 	origNewKVStore          func(string) (kv.Storage, error)
 	origNewTiKVLockResolver func([]string, config.Security) (*tikv.LockResolver, error)
 }
@@ -578,13 +577,13 @@ type newServerSuite struct {
 var _ = Suite(&newServerSuite{})
 
 func (s *newServerSuite) SetUpTest(c *C) {
-	s.origGetPdCli = getPdClient
+	s.origNewPdCli = util.NewPdCli
 	s.origNewKVStore = newKVStore
 	s.origNewTiKVLockResolver = newTiKVLockResolver
 }
 
 func (s *newServerSuite) TearDownTest(c *C) {
-	getPdClient = s.origGetPdCli
+	util.NewPdCli = s.origNewPdCli
 	newKVStore = s.origNewKVStore
 	newTiKVLockResolver = s.origNewTiKVLockResolver
 }
@@ -602,7 +601,7 @@ func (s *newServerSuite) TestCreateNewPumpServerFromConfig(c *C) {
 	err := cfg.Parse(args)
 	c.Assert(err, IsNil)
 
-	getPdClient = func(etcdURLs string, securityConfig security.Config) (pd.Client, error) {
+	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
 

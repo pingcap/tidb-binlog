@@ -188,12 +188,12 @@ func (s *getPdClientSuite) TestShouldRejectInvalidAddr(c *C) {
 
 func (s *getPdClientSuite) TestShouldRetPdCli(c *C) {
 	expected := dummyCli{}
-	origF := newPdCli
-	newPdCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
+	origF := NewPdCli
+	NewPdCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
 		return expected, nil
 	}
 	defer func() {
-		newPdCli = origF
+		NewPdCli = origF
 	}()
 	cli, err := GetPdClient("http://192.168.101.42:7979", security.Config{})
 	c.Assert(err, IsNil)
