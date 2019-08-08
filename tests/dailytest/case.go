@@ -233,15 +233,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	// swap unique index value
 	tr.run(func(src *sql.DB) {
-		_, err := src.Exec("create table uindex(id int primary key, a1 int unique)")
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(src, "create table uindex(id int primary key, a1 int unique)")
 
-		_, err = src.Exec("insert into uindex(id, a1) values(1, 10),(2,20)")
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(src, "insert into uindex(id, a1) values(1, 10),(2,20)")
 
 		tx, err := src.Begin()
 		if err != nil {
@@ -268,18 +262,12 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 			log.S().Fatal(err)
 		}
 
-		_, err = src.Exec("drop table uindex")
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(src, "drop table uindex")
 	})
 
 	// test big binlog msg
 	tr.run(func(src *sql.DB) {
-		_, err := src.Query("create table binlog_big(id int primary key, data longtext);")
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(src, "create table binlog_big(id int primary key, data longtext);")
 
 		tx, err := src.Begin()
 		if err != nil {
@@ -305,7 +293,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 // caseTblWithGeneratedCol creates a table with generated column,
 // and insert values into the table
 func caseTblWithGeneratedCol(db *sql.DB) {
-	_, err := db.Exec(`
+	mustExec(db, `
 CREATE TABLE gen_contacts (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	first_name VARCHAR(50) NOT NULL,
@@ -314,29 +302,18 @@ CREATE TABLE gen_contacts (
 	fullname VARCHAR(101) GENERATED ALWAYS AS (CONCAT(first_name,' ',last_name)),
 	initial VARCHAR(101) GENERATED ALWAYS AS (CONCAT(LEFT(first_name, 1),' ',LEFT(last_name,1))) STORED
 );`)
-	if err != nil {
-		log.S().Fatal(err)
-	}
 
 	insertSQL := "INSERT INTO gen_contacts(first_name, last_name) VALUES(?, ?);"
 	updateSQL := "UPDATE gen_contacts SET other = fullname WHERE first_name = ?"
 	for i := 0; i < 64; i++ {
-		_, err := db.Query(insertSQL, fmt.Sprintf("John%d", i), fmt.Sprintf("Dow%d", i))
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(db, insertSQL, fmt.Sprintf("John%d", i), fmt.Sprintf("Dow%d", i))
 
 		idxToUpdate := rand.Intn(i + 1)
-		_, err = db.Query(updateSQL, fmt.Sprintf("John%d", idxToUpdate))
-		if err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(db, updateSQL, fmt.Sprintf("John%d", idxToUpdate))
 	}
 	delSQL := "DELETE FROM gen_contacts WHERE fullname = ?"
 	for i := 0; i < 10; i++ {
-		if _, err = db.Query(delSQL, fmt.Sprintf("John%d Dow%d", i, i)); err != nil {
-			log.S().Fatal(err)
-		}
+		mustExec(db, delSQL, fmt.Sprintf("John%d Dow%d", i, i))
 	}
 }
 
@@ -372,10 +349,7 @@ AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
 // then do opNum randomly DML
 func updatePKUK(db *sql.DB, opNum int) error {
 	maxKey := 20
-	_, err := db.Exec("create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
-	if err != nil {
-		return errors.Trace(err)
-	}
+	mustExec(db, "create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
 
 	var pks []int
 	addPK := func(pk int) {
@@ -459,7 +433,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 		i++
 	}
 
-	_, err = db.Exec("DROP TABLE pkuk")
+	_, err := db.Exec("DROP TABLE pkuk")
 	return errors.Trace(err)
 }
 
