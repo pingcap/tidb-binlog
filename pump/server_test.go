@@ -26,6 +26,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/config"
@@ -568,10 +569,13 @@ func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
 	return 8012
 }
 
+func (pc *mockPdCli) Close() {}
+
 type newServerSuite struct {
 	origNewPdCli            func([]string, pd.SecurityOption) (pd.Client, error)
 	origNewKVStore          func(string) (kv.Storage, error)
 	origNewTiKVLockResolver func([]string, config.Security) (*tikv.LockResolver, error)
+	cfg                     *Config
 }
 
 var _ = Suite(&newServerSuite{})
@@ -580,39 +584,64 @@ func (s *newServerSuite) SetUpTest(c *C) {
 	s.origNewPdCli = util.NewPdCli
 	s.origNewKVStore = newKVStore
 	s.origNewTiKVLockResolver = newTiKVLockResolver
+
+	// build config
+	etcdClient := testEtcdCluster.RandClient()
+	s.cfg = &Config{
+		ListenAddr:        "http://192.168.199.100:8260",
+		AdvertiseAddr:     "http://192.168.199.100:8260",
+		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
+		DataDir:           "/tmp/pump",
+		HeartbeatInterval: 1500,
+		LogLevel:          "debug",
+		MetricsAddr:       "192.168.199.100:5000",
+		MetricsInterval:   15,
+		Security: security.Config{
+			SSLCA:   "/path/to/ca.pem",
+			SSLCert: "/path/to/drainer.pem",
+			SSLKey:  "/path/to/drainer-key.pem"},
+	}
 }
 
 func (s *newServerSuite) TearDownTest(c *C) {
 	util.NewPdCli = s.origNewPdCli
 	newKVStore = s.origNewKVStore
 	newTiKVLockResolver = s.origNewTiKVLockResolver
+	s.cfg = nil
 }
 
-func (s *newServerSuite) TestCreateNewPumpServerFromConfig(c *C) {
-	cfg := NewConfig()
-	etcdClient := testEtcdCluster.RandClient()
-	args := []string{
-		"--addr", "192.168.199.100:8260",
-		"--pd-urls", strings.Join(etcdClient.Endpoints(), ","),
-		"--data-dir=/tmp/pump",
-		"--heartbeat-interval=1500",
-		"-L", "debug",
+func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
+	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
+		return nil, errors.New("invalid client")
 	}
-	err := cfg.Parse(args)
-	c.Assert(err, IsNil)
+	p, err := NewServer(s.cfg)
+	c.Assert(p, IsNil)
+	c.Assert(err, ErrorMatches, "invalid client")
+}
 
+func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
 	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
+	s.cfg.EtcdURLs = "testInvalidUrls"
+	p, err := NewServer(s.cfg)
+	c.Assert(p, IsNil)
+	c.Assert(err, ErrorMatches, "URL.*")
+}
 
+func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
+	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
+		return &mockPdCli{}, nil
+	}
+	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
+		return nil, nil
+	}
 	newKVStore = func(path string) (kv.Storage, error) {
 		return nil, nil
 	}
 
-	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
-		return nil, nil
-	}
-
-	_, err = NewServer(cfg)
+	p, err := NewServer(s.cfg)
 	c.Assert(err, IsNil)
+	c.Assert(p.clusterID, Equals, uint64(8012))
+	p.Close()
 }

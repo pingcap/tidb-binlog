@@ -59,8 +59,8 @@ var (
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 	// functions
-	newKVStore          = kvstore.New
 	newTiKVLockResolver = tikv.NewLockResolver
+	newKVStore          = kvstore.New
 )
 
 // Server implements the gRPC interface,
