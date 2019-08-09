@@ -78,11 +78,9 @@ func (n *fakeNode) ShortID() string                                             
 func (n *fakeNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *fakeNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *fakeNode) Notify(ctx context.Context) error                             { return nil }
-func (n *fakeNode) NodeStatus() *node.Status {
-	return &node.Status{State: node.Paused, NodeID: "fakenode-long", Addr: "http://192.168.199.100:8260"}
-}
+func (n *fakeNode) NodeStatus() *node.Status                                     { return &node.Status{State: node.Paused} }
 func (n *fakeNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
-	return []*node.Status{{State: node.Paused, NodeID: "fakenode-long", Addr: "http://192.168.199.100:8260"}}, nil
+	return []*node.Status{}, nil
 }
 func (n *fakeNode) Quit() error { return nil }
 
@@ -650,6 +648,21 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	p.Close()
 }
 
+type startNode struct{}
+
+func (n *startNode) ID() string                                                   { return "startnode-long" }
+func (n *startNode) ShortID() string                                              { return "startnode" }
+func (n *startNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
+func (n *startNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
+func (n *startNode) Notify(ctx context.Context) error                             { return nil }
+func (n *startNode) NodeStatus() *node.Status {
+	return &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}
+}
+func (n *startNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
+	return []*node.Status{{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}}, nil
+}
+func (n *startNode) Quit() error { return nil }
+
 type startServerSuite struct {
 	origUtilGetTSO func(pd.Client) (int64, error)
 }
@@ -684,7 +697,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		dataDir:    cfg.DataDir,
 		storage:    &noOpStorage{},
 		clusterID:  8012,
-		node:       &fakeNode{},
+		node:       &startNode{},
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
 		gs:         grpc.NewServer(grpcOpts...),
@@ -724,14 +737,15 @@ WAIT:
 			c.Assert(err, IsNil)
 			c.Assert(nodesStatus.ErrMsg, Equals, "")
 			c.Assert(nodesStatus.CommitTS, Equals, int64(42))
-			fakeNodeStatus, ok := nodesStatus.StatusMap["fakenode-long"]
+			fakeNodeStatus, ok := nodesStatus.StatusMap["startnode-long"]
 			c.Assert(ok, IsTrue)
-			c.Assert(fakeNodeStatus.NodeID, Equals, "fakenode-long")
+			c.Assert(fakeNodeStatus.NodeID, Equals, "startnode-long")
 			c.Assert(fakeNodeStatus.Addr, Equals, "http://192.168.199.100:8260")
-			c.Assert(fakeNodeStatus.State, Equals, node.Paused)
+			c.Assert(fakeNodeStatus.State, Equals, node.Online)
 			break WAIT
 		case <-timeEnd:
 			c.Fatal("Wait pump second for more than 5 seconds")
 		}
 	}
+
 }
