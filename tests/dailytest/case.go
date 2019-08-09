@@ -235,7 +235,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(func(src *sql.DB) {
 		mustExec(src, "create table uindex(id int primary key, a1 int unique)")
 
-		mustExec(src, "insert into uindex(id, a1) values(1, 10),(2,20)")
+		mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
 
 		tx, err := src.Begin()
 		if err != nil {
