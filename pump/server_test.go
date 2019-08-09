@@ -14,9 +14,12 @@
 package pump
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -33,8 +36,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	binlog "github.com/pingcap/tipb/go-binlog"
-	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -76,9 +78,11 @@ func (n *fakeNode) ShortID() string                                             
 func (n *fakeNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *fakeNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *fakeNode) Notify(ctx context.Context) error                             { return nil }
-func (n *fakeNode) NodeStatus() *node.Status                                     { return &node.Status{State: node.Paused} }
+func (n *fakeNode) NodeStatus() *node.Status {
+	return &node.Status{State: node.Paused, NodeID: "fakenode-long", Addr: "http://192.168.199.100:8260"}
+}
 func (n *fakeNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
-	return []*node.Status{}, nil
+	return []*node.Status{{State: node.Paused, NodeID: "fakenode-long", Addr: "http://192.168.199.100:8260"}}, nil
 }
 func (n *fakeNode) Quit() error { return nil }
 
@@ -127,11 +131,11 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 
 type noOpStorage struct{}
 
-func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GetGCTS() int64                             { return 0 }
-func (s *noOpStorage) GC(ts int64)                                {}
-func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
-func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
+func (s *noOpStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil }
+func (s *noOpStorage) GetGCTS() int64                              { return 0 }
+func (s *noOpStorage) GC(ts int64)                                 {}
+func (s *noOpStorage) MaxCommitTS() int64                          { return 0 }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error)  { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
@@ -199,11 +203,11 @@ func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
 
 type fakeWritable struct {
 	noOpStorage
-	binlogs []pb.Binlog
+	binlogs []binlog.Binlog
 }
 
-func (s *fakeWritable) WriteBinlog(binlog *pb.Binlog) error {
-	s.binlogs = append(s.binlogs, *binlog)
+func (s *fakeWritable) WriteBinlog(binlogItem *binlog.Binlog) error {
+	s.binlogs = append(s.binlogs, *binlogItem)
 	return nil
 }
 
@@ -216,7 +220,7 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 		utilGetTSO = origGetTSO
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
-	storage := fakeWritable{binlogs: make([]pb.Binlog, 1)}
+	storage := fakeWritable{binlogs: make([]binlog.Binlog, 1)}
 	server := &Server{
 		clusterID: 42,
 		storage:   &storage,
@@ -235,7 +239,7 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 	c.Assert(len(storage.binlogs) > 0, IsTrue)
 	var foundFake bool
 	for _, bl := range storage.binlogs {
-		if bl.Tp == pb.BinlogType_Rollback && bl.CommitTs == 42 && bl.StartTs == 42 {
+		if bl.Tp == binlog.BinlogType_Rollback && bl.CommitTs == 42 && bl.StartTs == 42 {
 			foundFake = true
 		}
 	}
@@ -664,9 +668,11 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	utilGetTSO = func(pd.Client) (int64, error) {
 		return 42, nil
 	}
+	etcdClient := testEtcdCluster.RandClient()
 	cfg := &Config{
-		ListenAddr:        "http://192.168.199.100:8260",
-		AdvertiseAddr:     "http://192.168.199.100:8260",
+		ListenAddr:        "http://127.0.0.1:8250",
+		AdvertiseAddr:     "http://127.0.0.1:8260",
+		Socket:            "unix://127.0.0.1:8270/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		DataDir:           "/tmp/pump",
 		HeartbeatInterval: 1500,
@@ -676,10 +682,11 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
 	p := &Server{
 		dataDir:    cfg.DataDir,
-		storage:    nil,
+		storage:    &noOpStorage{},
 		clusterID:  8012,
 		node:       &fakeNode{},
 		tcpAddr:    cfg.ListenAddr,
+		unixAddr:   cfg.Socket,
 		gs:         grpc.NewServer(grpcOpts...),
 		ctx:        ctx,
 		cancel:     cancel,
@@ -688,6 +695,43 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		pdCli:      nil,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time)}
-	err := p.Start()
-	c.Assert(err, IsNil)
+	defer p.Close()
+	go p.Start()
+
+	// wait until the server is online
+	timeEnd := time.After(5 * time.Second)
+	getInterval := time.Tick(500 * time.Microsecond)
+WAIT:
+	for {
+		select {
+		case <-getInterval:
+			resp, err := http.Get("http://127.0.0.1:8250/status")
+			if err != nil {
+				if !strings.Contains(err.Error(), "connect: connection refused") {
+					c.Fatal("Connect to pump server fail, error is " + err.Error())
+				}
+				continue
+			}
+			// should receive valid and correct node status info
+			c.Assert(resp, NotNil)
+			defer resp.Body.Close()
+			bodyByte, err := ioutil.ReadAll(resp.Body)
+			c.Assert(err, IsNil)
+			c.Assert(bodyByte, NotNil)
+
+			nodesStatus := &HTTPStatus{}
+			err = json.Unmarshal(bodyByte, nodesStatus)
+			c.Assert(err, IsNil)
+			c.Assert(nodesStatus.ErrMsg, Equals, "")
+			c.Assert(nodesStatus.CommitTS, Equals, int64(42))
+			fakeNodeStatus, ok := nodesStatus.StatusMap["fakenode-long"]
+			c.Assert(ok, IsTrue)
+			c.Assert(fakeNodeStatus.NodeID, Equals, "fakenode-long")
+			c.Assert(fakeNodeStatus.Addr, Equals, "http://192.168.199.100:8260")
+			c.Assert(fakeNodeStatus.State, Equals, node.Paused)
+			break WAIT
+		case <-timeEnd:
+			c.Fatal("Wait pump second for more than 5 seconds")
+		}
+	}
 }
