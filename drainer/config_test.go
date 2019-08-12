@@ -1,8 +1,12 @@
 package drainer
 
 import (
+	"bytes"
+	"io/ioutil"
+	"path"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -89,4 +93,37 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
+}
+
+func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
+	yc := struct {
+		DataDir                string `toml:"data-dir" json:"data-dir"`
+		ListenAddr             string `toml:"addr" json:"addr"`
+		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
+		UnrecognizedOptionTest bool   `toml:"unrecognized-option-test" json:"unrecognized-option-test"`
+	}{
+		"data.drainer",
+		"192.168.15.10:8257",
+		"192.168.15.10:8257",
+		true,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, IsNil)
+
+	configFilename := path.Join(c.MkDir(), "drainer_config_invalid.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, IsNil)
+
+	args := []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+	}
+
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
 }
