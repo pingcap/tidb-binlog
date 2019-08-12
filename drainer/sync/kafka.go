@@ -53,8 +53,7 @@ type KafkaSyncer struct {
 	cli      sarama.Client
 	topic    string
 
-	toBeAckCommitTSMu sync.Mutex
-	toBeAckCommitTS   map[int64]struct{}
+	msgTracker *msgTracker
 
 	lastSuccessTime time.Time
 
@@ -89,12 +88,12 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	}
 
 	executor := &KafkaSyncer{
-		addr:            strings.Split(cfg.KafkaAddrs, ","),
-		topic:           topic,
-		toBeAckCommitTS: make(map[int64]struct{}),
-		shutdown:        make(chan struct{}),
-		baseSyncer:      newBaseSyncer(tableInfoGetter),
-		partitionMode:   partitionMode(cfg.KafkaPartitionMode),
+		addr:          strings.Split(cfg.KafkaAddrs, ","),
+		topic:         topic,
+		msgTracker:    newMsgTracker(),
+		shutdown:      make(chan struct{}),
+		baseSyncer:    newBaseSyncer(tableInfoGetter),
+		partitionMode: partitionMode(cfg.KafkaPartitionMode),
 	}
 
 	config, err := util.NewSaramaConfig(cfg.KafkaVersion, "kafka.")
@@ -232,12 +231,7 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.
 	msg := &sarama.ProducerMessage{Topic: p.topic, Key: key, Value: sarama.ByteEncoder(data), Partition: 0}
 	msg.Metadata = item
 
-	p.toBeAckCommitTSMu.Lock()
-	if len(p.toBeAckCommitTS) == 0 {
-		p.lastSuccessTime = time.Now()
-	}
-	p.toBeAckCommitTS[binlog.CommitTs] = struct{}{}
-	p.toBeAckCommitTSMu.Unlock()
+	p.msgTracker.Sent(binlog.CommitTs)
 
 	select {
 	case p.producer.Input() <- msg:
@@ -260,12 +254,7 @@ func (p *KafkaSyncer) run() {
 			item := msg.Metadata.(*Item)
 			commitTs := item.Binlog.GetCommitTs()
 			log.Debug("get success msg from producer", zap.Int64("ts", commitTs))
-
-			p.toBeAckCommitTSMu.Lock()
-			p.lastSuccessTime = time.Now()
-			delete(p.toBeAckCommitTS, commitTs)
-			p.toBeAckCommitTSMu.Unlock()
-
+			p.msgTracker.Acked(commitTs)
 			p.success <- item
 		}
 		close(p.success)
@@ -287,15 +276,12 @@ func (p *KafkaSyncer) run() {
 	for {
 		select {
 		case <-checkTick.C:
-			p.toBeAckCommitTSMu.Lock()
-			if len(p.toBeAckCommitTS) > 0 && time.Since(p.lastSuccessTime) > maxWaitTimeToSendMSG {
+			if p.msgTracker.HasWaitedTooLongForAck(maxWaitTimeToSendMSG) {
 				log.Debug("fail to push to kafka")
 				err := errors.Errorf("fail to push msg to kafka after %v, check if kafka is up and working", maxWaitTimeToSendMSG)
 				p.setErr(err)
-				p.toBeAckCommitTSMu.Unlock()
 				return
 			}
-			p.toBeAckCommitTSMu.Unlock()
 		case <-p.shutdown:
 			err := p.producer.Close()
 			if err == nil {
@@ -338,4 +324,52 @@ func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitio
 
 func (p *hashPartitioner) RequiresConsistency() bool {
 	return true
+}
+
+type msgTracker struct {
+	sync.Mutex
+	msgsToBeAcked   map[int64]int
+	lastSuccessTime time.Time
+}
+
+func newMsgTracker() *msgTracker {
+	return &msgTracker{
+		msgsToBeAcked:   make(map[int64]int),
+		lastSuccessTime: time.Now(),
+	}
+}
+
+func (mt *msgTracker) Sent(commitTs int64) {
+	mt.Lock()
+	if !mt.hasPendingUnlocked() {
+		mt.lastSuccessTime = time.Now()
+	}
+	mt.msgsToBeAcked[commitTs] += 1
+	mt.Unlock()
+}
+
+func (mt *msgTracker) Acked(commitTs int64) {
+	mt.Lock()
+	mt.lastSuccessTime = time.Now()
+	mt.msgsToBeAcked[commitTs] -= 1
+	if mt.msgsToBeAcked[commitTs] == 0 {
+		delete(mt.msgsToBeAcked, commitTs)
+	}
+	mt.Unlock()
+}
+
+func (mt *msgTracker) HasPending() bool {
+	mt.Lock()
+	defer mt.Unlock()
+	return mt.hasPendingUnlocked()
+}
+
+func (mt *msgTracker) HasWaitedTooLongForAck(timeout time.Duration) bool {
+	mt.Lock()
+	defer mt.Unlock()
+	return mt.hasPendingUnlocked() && time.Since(mt.lastSuccessTime) > timeout
+}
+
+func (mt *msgTracker) hasPendingUnlocked() bool {
+	return len(mt.msgsToBeAcked) > 0
 }
