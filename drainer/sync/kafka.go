@@ -76,7 +76,7 @@ func partitionMode(mode string) PartitionMode {
 }
 
 // newAsyncProducer will only be changed in unit test for mock
-var newAsyncProducer = sarama.NewAsyncProducer
+var newAsyncProducer = sarama.NewAsyncProducerFromClient
 
 // NewKafka returns a instance of KafkaSyncer
 func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*KafkaSyncer, error) {
@@ -133,7 +133,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	executor.producer, err = sarama.NewAsyncProducerFromClient(executor.cli)
+	executor.producer, err = newAsyncProducer(executor.cli)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

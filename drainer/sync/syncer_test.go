@@ -78,8 +78,8 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 	defer func() {
 		newAsyncProducer = oldNewAsyncProducer
 	}()
-	newAsyncProducer = func(addrs []string, config *sarama.Config) (producer sarama.AsyncProducer, err error) {
-		s.mockProducer = mocks.NewAsyncProducer(c, config)
+	newAsyncProducer = func(cli sarama.Client) (producer sarama.AsyncProducer, err error) {
+		s.mockProducer = mocks.NewAsyncProducer(c, cli.Config())
 		return s.mockProducer, nil
 	}
 
