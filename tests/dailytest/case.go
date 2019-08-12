@@ -14,8 +14,8 @@ import (
 
 // test different data type of mysql
 // mysql will change boolean to tinybit(1)
-var case1 = []string{`
-create table  binlog_case1 (
+var caseMultiDataType = []string{`
+create table binlog_multi_data_type (
 	id int auto_increment,
 	t_boolean boolean,
 	t_bigint BIGINT,
@@ -38,7 +38,7 @@ create table  binlog_case1 (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 `,
 	`
-insert into binlog_case1(t_boolean, t_bigint, t_double, t_decimal, t_bit
+insert into binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
 	,t_date, t_datetime, t_timestamp, t_time, t_year
 	,t_char, t_varchar, t_blob, t_text, t_enum
 	,t_set, t_json) values
@@ -48,63 +48,75 @@ insert into binlog_case1(t_boolean, t_bigint, t_double, t_decimal, t_bit
 	,'a,b', NULL);
 `,
 	`
-insert into binlog_case1(t_boolean) values(TRUE);
+insert into binlog_multi_data_type(t_boolean) values(TRUE);
 `,
 	`
-insert into binlog_case1(t_boolean) values(FALSE);
+insert into binlog_multi_data_type(t_boolean) values(FALSE);
 `,
 	// minmum value of bigint
 	`
-insert into binlog_case1(t_bigint) values(-9223372036854775808);
+insert into binlog_multi_data_type(t_bigint) values(-9223372036854775808);
 `,
 	// maximum value of bigint
 	`
-insert into binlog_case1(t_bigint) values(9223372036854775807);
+insert into binlog_multi_data_type(t_bigint) values(9223372036854775807);
 `,
 	`
-insert into binlog_case1(t_json) values('{"key1": "value1", "key2": "value2"}');
+insert into binlog_multi_data_type(t_json) values('{"key1": "value1", "key2": "value2"}');
 `,
 }
 
-var case1Clean = []string{`
-	drop table binlog_case1`,
+var caseMultiDataTypeClean = []string{`
+	drop table binlog_multi_data_type`,
 }
 
 // https://internal.pingcap.net/jira/browse/TOOL-714
-var case2 = []string{`
-create table binlog_case2 (id int, a1 int, a3 int, unique key dex1(a1, a3));
+var caseUKWithNoPK = []string{`
+create table binlog_uk_with_no_pk (id int, a1 int, a3 int, unique key dex1(a1, a3));
 `,
 	`
-insert into binlog_case2(id, a1, a3) values(1, 1, NULL);
+insert into binlog_uk_with_no_pk(id, a1, a3) values(1, 1, NULL);
 `,
 	`
-insert into binlog_case2(id, a1, a3) values(2, 1, NULL);
+insert into binlog_uk_with_no_pk(id, a1, a3) values(2, 1, NULL);
 `,
 	`
-update binlog_case2 set id = 10 where id = 1;
+update binlog_uk_with_no_pk set id = 10 where id = 1;
 `,
 	`
-update binlog_case2 set id = 100 where id = 10;
+update binlog_uk_with_no_pk set id = 100 where id = 10;
 `,
 }
 
-var case2Clean = []string{`
-	drop table binlog_case2`,
+var caseUKWithNoPKClean = []string{`
+	drop table binlog_uk_with_no_pk`,
 }
 
-var case3 = []string{`
-create table a(id int primary key, a1 int);
+var casePKAddDuplicateUK = []string{`
+create table binlog_pk_add_duplicate_uk(id int primary key, a1 int);
 `,
 	`
-insert into a(id, a1) values(1,1),(2,1);
+insert into binlog_pk_add_duplicate_uk(id, a1) values(1, 1), (2, 1);
 `,
 	`
-alter table a add unique index aidx(a1);
+alter table binlog_pk_add_duplicate_uk add unique index aidx(a1);
 `,
 }
 
-var case3Clean = []string{`
-	drop table a`,
+var casePKAddDuplicateUKClean = []string{`
+	drop table binlog_pk_add_duplicate_uk;`,
+}
+
+var caseSplitRegion = []string{`
+create table binlog_split_region(a int, b int) shard_row_id_bits = 4 pre_split_regions=3;
+`,
+	`
+insert into binlog_split_region(a, b) values(1, 1), (2, 3);
+`,
+}
+
+var caseSplitRegionClean = []string{`
+	drop table binlog_split_region;`,
 }
 
 type testRunner struct {
@@ -131,20 +143,23 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
 	runPKcases(tr)
 
-	tr.execSQLs(case1)
-	tr.execSQLs(case1Clean)
+	tr.execSQLs(caseMultiDataType)
+	tr.execSQLs(caseMultiDataTypeClean)
 
-	tr.execSQLs(case2)
-	tr.execSQLs(case2Clean)
+	tr.execSQLs(caseUKWithNoPK)
+	tr.execSQLs(caseUKWithNoPKClean)
 
-	// run case3
+	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
-		err := execSQLs(src, case3)
+		err := execSQLs(src, casePKAddDuplicateUK)
 		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
 			log.Fatal(err)
 		}
 	})
-	tr.execSQLs(case3Clean)
+	tr.execSQLs(casePKAddDuplicateUKClean)
+
+	tr.execSQLs(caseSplitRegion)
+	tr.execSQLs(caseSplitRegionClean)
 
 	// random op on have both pk and uk table
 	RunTest(src, dst, schema, func(src *sql.DB) {
