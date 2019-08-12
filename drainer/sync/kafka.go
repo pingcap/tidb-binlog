@@ -14,6 +14,7 @@
 package sync
 
 import (
+	"fmt"
 	"hash"
 	"hash/fnv"
 	"strconv"
@@ -239,7 +240,6 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.
 	case <-p.errCh:
 		return errors.Trace(p.err)
 	}
-
 }
 
 func (p *KafkaSyncer) run() {
@@ -323,6 +323,12 @@ func (p *hashPartitioner) PartitionByKey(key sarama.Encoder, numPartitions int32
 }
 
 func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
+	if message.Partition >= 0 {
+		if message.Partition >= numPartitions {
+			return -1, fmt.Errorf("invalid partition %d (maximum: %d)", message.Partition, numPartitions-1)
+		}
+		return message.Partition, nil
+	}
 	return p.PartitionByKey(message.Key, numPartitions)
 }
 

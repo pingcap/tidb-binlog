@@ -87,3 +87,22 @@ func (hs *hashPartitionerSuite) TestDifferentInstancesShouldReturnSamePartition(
 		c.Assert(partition, check.Equals, selected)
 	}
 }
+
+func (hs *hashPartitionerSuite) TestCanSpecifyPartitionDirectly(c *check.C) {
+	const numPartitions int32 = 10
+	partitioner := newHashPartitioner("")
+
+	msg := &sarama.ProducerMessage{Key: sarama.StringEncoder("hello"), Partition: -1}
+	p, err := partitioner.Partition(msg, numPartitions)
+	c.Assert(err, check.IsNil)
+	c.Assert(p, check.GreaterEqual, int32(0))
+
+	msg.Partition = 3
+	p, err = partitioner.Partition(msg, numPartitions)
+	c.Assert(err, check.IsNil)
+	c.Assert(p, check.Equals, int32(3))
+
+	msg.Partition = 10
+	_, err = partitioner.Partition(msg, numPartitions)
+	c.Assert(err, check.NotNil)
+}
