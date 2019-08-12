@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/sarama"
+
 	"github.com/pingcap/check"
 )
 
@@ -63,4 +65,25 @@ func (ts *msgTrackerSuite) TestWaitingTooLongForAck(c *check.C) {
 	tracker.Sent(2)
 	time.Sleep(10 * time.Microsecond)
 	c.Assert(tracker.HasWaitedTooLongForAck(time.Millisecond), check.IsFalse)
+}
+
+type hashPartitionerSuite struct{}
+
+var _ = check.Suite(&hashPartitionerSuite{})
+
+func (hs *hashPartitionerSuite) TestDifferentInstancesShouldReturnSamePartition(c *check.C) {
+	partitioners := []sarama.Partitioner{
+		newHashPartitioner(""),
+		newHashPartitioner(""),
+		newHashPartitioner(""),
+	}
+	msg := &sarama.ProducerMessage{Key: sarama.StringEncoder("hello")}
+	var numPartitions int32 = 7
+	selected, err := partitioners[0].Partition(msg, numPartitions)
+	c.Assert(err, check.IsNil)
+	for _, p := range partitioners[1:] {
+		partition, err := p.Partition(msg, numPartitions)
+		c.Assert(err, check.IsNil)
+		c.Assert(partition, check.Equals, selected)
+	}
 }

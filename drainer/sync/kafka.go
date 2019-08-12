@@ -305,8 +305,8 @@ func newHashPartitioner(topic string) sarama.Partitioner {
 	}
 }
 
-func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
-	bytes, err := message.Key.Encode()
+func (p *hashPartitioner) PartitionByKey(key sarama.Encoder, numPartitions int32) (int32, error) {
+	bytes, err := key.Encode()
 	if err != nil {
 		return -1, err
 	}
@@ -320,6 +320,10 @@ func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitio
 		partition = -partition
 	}
 	return partition, nil
+}
+
+func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
+	return p.PartitionByKey(message.Key, numPartitions)
 }
 
 func (p *hashPartitioner) RequiresConsistency() bool {
