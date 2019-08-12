@@ -216,7 +216,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		goto errHandle
 	}
 
-	if !isFakeBinlog {
+	if !isFakeBinlog && blog.Tp == binlog.BinlogType_Prewrite {
 		state := s.node.NodeStatus().State
 		if state != node.Online {
 			err = errors.Errorf("no online: %v", state)
@@ -788,6 +788,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	log.Debug("Start waiting until all drainers have consumed the last fake binlog")
 
+	maxCommitTS := s.storage.MaxCommitTS()
 	for {
 		select {
 		case <-time.After(time.Second):
@@ -796,12 +797,12 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
 			}
-			if safeTSO >= fakeBinlog.CommitTs {
+			if safeTSO >= maxCommitTS {
 				return nil
 			}
 			log.Warn("Waiting for drainer to consume binlog",
 				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
-				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
+				zap.Int64("Need to reach maxCommitTS", maxCommitTS))
 			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
 			}
@@ -883,14 +884,18 @@ func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInte
 			log.Info("The max commit ts saved is less than expected commit ts",
 				zap.Int64("max commit ts", maxCommitTS),
 				zap.Int64("expected commit ts", ts))
-			select {
-			case <-time.After(checkInterval):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
+		} else if !s.storage.AllMatched() {
+			log.Info("wait all P-binlog to be matched")
+		} else {
+			return nil
 		}
-		return nil
+
+		select {
+		case <-time.After(checkInterval):
+			continue
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
 	}
 }
 
