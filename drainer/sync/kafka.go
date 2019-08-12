@@ -14,6 +14,8 @@
 package sync
 
 import (
+	"hash"
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"sync"
@@ -115,7 +117,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	if executor.partitionMode == PartitionFixed {
 		config.Producer.Partitioner = sarama.NewManualPartitioner
 	} else {
-		config.Producer.Partitioner = sarama.NewReferenceHashPartitioner
+		config.Producer.Partitioner = newHashPartitioner
 	}
 	config.Producer.MaxMessageBytes = 1 << 30
 	config.Producer.Return.Successes = true
@@ -305,4 +307,35 @@ func (p *KafkaSyncer) run() {
 			return
 		}
 	}
+}
+
+type hashPartitioner struct {
+	hasher hash.Hash32
+}
+
+func newHashPartitioner(topic string) sarama.Partitioner {
+	return &hashPartitioner{
+		hasher: fnv.New32a(),
+	}
+}
+
+func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
+	bytes, err := message.Key.Encode()
+	if err != nil {
+		return -1, err
+	}
+	p.hasher.Reset()
+	_, err = p.hasher.Write(bytes)
+	if err != nil {
+		return -1, err
+	}
+	partition := int32(p.hasher.Sum32()) % numPartitions
+	if partition < 0 {
+		partition = -partition
+	}
+	return partition, nil
+}
+
+func (p *hashPartitioner) RequiresConsistency() bool {
+	return true
 }
