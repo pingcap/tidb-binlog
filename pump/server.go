@@ -319,33 +319,10 @@ func (s *Server) startHeartbeat() {
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
-	// register this node
-	ts, err := s.getTSO()
-	if err != nil {
-		return errors.Annotate(err, "fail to get tso from pd")
-	}
-	if err := s.registerNode(context.Background(), node.Online, ts); err != nil {
-		return errors.Annotate(err, "fail to register node to etcd")
-	}
-
-	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
-
-	// notify all cisterns
-	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
-	if err := s.node.Notify(ctx); err != nil {
-		// if fail, refresh this node's state to paused
-		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
-			log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
-		}
-		return errors.Annotate(err, "fail to notify all living drainer")
-	}
-
-	log.Debug("notify success")
-
-	s.startHeartbeat()
 
 	// start a UNIX listener
 	var unixLis net.Listener
+	var err error
 	if s.unixAddr != "" {
 		unixLis, err = listen("unix", s.unixAddr)
 		if err != nil {
@@ -406,6 +383,31 @@ func (s *Server) Start() error {
 	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
+
+	// register this node
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	if err := s.registerNode(context.Background(), node.Online, ts); err != nil {
+		return errors.Annotate(err, "fail to register node to etcd")
+	}
+
+	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
+
+	// notify all cisterns
+	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
+	if err := s.node.Notify(ctx); err != nil {
+		// if fail, refresh this node's state to paused
+		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
+			log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
+		}
+		return errors.Annotate(err, "fail to notify all living drainer")
+	}
+
+	log.Debug("notify success")
+
+	s.startHeartbeat()
 
 	log.Info("start to server request", zap.String("addr", s.tcpAddr))
 	err = m.Serve()
