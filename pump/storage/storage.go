@@ -73,6 +73,9 @@ type Storage interface {
 
 	GetGCTS() int64
 
+	// AllMatched return if all the P-binlog have the matching C-binlog
+	AllMatched() bool
+
 	MaxCommitTS() int64
 
 	// GetBinlog return the binlog of ts
@@ -1346,6 +1349,7 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 			a.headPointer = bufReqs[len(bufReqs)-1].valuePointer
 			return nil
 		}
+		errorCount.WithLabelValues("batch_write_kv").Add(1.0)
 
 		// when write to vlog success, but the disk is full when write to KV here, it will cause write err
 		// we just retry of quit when Append is closed
@@ -1357,4 +1361,9 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 		time.Sleep(time.Second)
 		continue
 	}
+}
+
+// AllMatched implement Storage.AllMatched
+func (a *Append) AllMatched() bool {
+	return a.sorter.allMatched()
 }
