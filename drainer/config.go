@@ -65,6 +65,7 @@ type SyncerConfig struct {
 type Config struct {
 	*flag.FlagSet   `json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
+	NodeID          string          `toml:"node-id" json:"node-id"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
 	AdvertiseAddr   string          `toml:"advertise-addr" json:"advertise-addr"`
 	DataDir         string          `toml:"data-dir" json:"data-dir"`
@@ -98,6 +99,7 @@ func NewConfig() *Config {
 		fmt.Fprintln(os.Stderr, "Usage of drainer:")
 		fs.PrintDefaults()
 	}
+	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of drainer node; if not specified, we will generate one from hostname and the listening port")
 	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8249), "addr (i.e. 'host:port') to listen on for drainer connections")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public, default to be the same value as -addr")
 	fs.StringVar(&cfg.DataDir, "data-dir", defaultDataDir, "drainer data directory path (default data.drainer)")
