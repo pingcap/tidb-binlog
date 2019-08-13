@@ -24,6 +24,7 @@ type binlogItem struct {
 	binlog *pb.Binlog
 	nodeID string
 	job    *model.Job
+	size   int64
 }
 
 // GetCommitTs implements Item interface in merger.go
@@ -41,10 +42,11 @@ func (b *binlogItem) String() string {
 	return fmt.Sprintf("{startTS: %d, commitTS: %d, node: %s}", b.binlog.StartTs, b.binlog.CommitTs, b.nodeID)
 }
 
-func newBinlogItem(b *pb.Binlog, nodeID string) *binlogItem {
+func newBinlogItem(b *pb.Binlog, nodeID string, s int) *binlogItem {
 	itemp := &binlogItem{
 		binlog: b,
 		nodeID: nodeID,
+		size:   int64(s),
 	}
 
 	return itemp

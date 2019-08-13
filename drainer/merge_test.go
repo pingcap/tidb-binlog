@@ -76,7 +76,7 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 			for j := 0; j < binlogNum; j++ {
 				binlog := new(pb.Binlog)
 				binlog.CommitTs = int64(j*100 + id)
-				binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
+				binlogItem := newBinlogItem(binlog, strconv.Itoa(id), 0)
 				sources[id].Source <- binlogItem
 				l.Lock()
 				ts = append(ts, binlog.CommitTs)
@@ -105,7 +105,7 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 		for j := 0; j < binlogNum; j++ {
 			binlog := new(pb.Binlog)
 			binlog.CommitTs = baseTS + int64(j*100+sourceNum)
-			binlogItem := newBinlogItem(binlog, strconv.Itoa(sourceNum))
+			binlogItem := newBinlogItem(binlog, strconv.Itoa(sourceNum), 0)
 			source.Source <- binlogItem
 			l.Lock()
 			ts = append(ts, binlog.CommitTs)
@@ -123,7 +123,7 @@ func (s *testMergerSuite) merge(c *C, strategy string) {
 	l.Unlock()
 	binlog := new(pb.Binlog)
 	binlog.CommitTs = currentMaxTS - 1
-	sources[0].Source <- newBinlogItem(binlog, "0")
+	sources[0].Source <- newBinlogItem(binlog, "0", 0)
 	l.Lock()
 	ts = append(ts, binlog.CommitTs)
 	l.Unlock()

@@ -51,7 +51,10 @@ const (
 )
 
 var (
-	maxBinlogItemCount        int
+	maxBinlogItemCount     int
+	maxBinlogCacheSize     int64
+	defaultBinlogCacheSize int64 = 4 << 30 // 4GB
+
 	defaultBinlogItemCount    = 16 << 12
 	supportedCompressors      = [...]string{"gzip"}
 	newZKFromConnectionString = zk.NewFromConnectionString
@@ -133,6 +136,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
+	fs.Int64Var(&maxBinlogCacheSize, "cache-binlog-cache-size", defaultBinlogCacheSize, "blurry memory usage of binlogs in cache, limit cached memory usage, unit is Byte")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 

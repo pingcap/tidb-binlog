@@ -50,8 +50,12 @@ type Syncer struct {
 	// last time we successfully sync binlog item to downstream
 	lastSyncTime time.Time
 
+	// cached memory size of input channel
+	cachedSize int64
+
 	dsyncer dsync.Syncer
 	itemsWg sync.WaitGroup
+	cond    *sync.Cond
 
 	shutdown chan struct{}
 	closed   chan struct{}
@@ -66,6 +70,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer.lastSyncTime = time.Now()
 	syncer.shutdown = make(chan struct{})
 	syncer.closed = make(chan struct{})
+	syncer.cond = sync.NewCond(new(sync.Mutex))
 
 	var ignoreDBs []string
 	if len(cfg.IgnoreSchemas) > 0 {
@@ -307,6 +312,11 @@ ForLoop:
 			pushFakeBinlog = nil
 			continue
 		case b = <-s.input:
+			s.cond.L.Lock()
+			// has popped new binlog item, minus cachedSize
+			s.cachedSize -= b.size
+			s.cond.Signal()
+			s.cond.L.Unlock()
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
@@ -413,6 +423,10 @@ ForLoop:
 		}
 	}
 
+	// to avoid block at func Add
+	s.input = nil
+	s.cond.Signal()
+
 	close(fakeBinlogCh)
 	cerr := s.dsyncer.Close()
 	if cerr != nil {
@@ -472,9 +486,23 @@ func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
+	s.cond.L.Lock()
+	if b.size >= maxBinlogCacheSize {
+		for s.cachedSize != 0 {
+			s.cond.Wait()
+		}
+	} else {
+		for s.cachedSize+b.size > maxBinlogCacheSize {
+			s.cond.Wait()
+		}
+	}
+	s.cond.L.Unlock()
 	select {
 	case <-s.shutdown:
 	case s.input <- b:
+		s.cond.L.Lock()
+		s.cachedSize += b.size
+		s.cond.L.Unlock()
 		log.Debug("receive publish binlog item", zap.Stringer("item", b))
 	}
 }
