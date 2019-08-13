@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
@@ -209,8 +208,7 @@ func (c *SyncerConfig) adjustDoDBAndTable() {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "drainer", cfg)
 }
 
 func adjustString(v *string, defValue string) {

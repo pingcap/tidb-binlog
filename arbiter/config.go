@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 )
 
@@ -172,6 +172,5 @@ func (cfg *Config) adjustConfig() error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "arbiter", cfg)
 }
