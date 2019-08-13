@@ -146,11 +146,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 }
 
 func (p *KafkaSyncer) getPartitions() ([]int32, error) {
-	partitions, err := p.cli.Partitions(p.topic)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return partitions, nil
+	return p.cli.Partitions(p.topic)
 }
 
 // Sync implements Syncer interface
