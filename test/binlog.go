@@ -46,7 +46,7 @@ create table ntest(
 	a int, 
 	b double DEFAULT 2.0, 
 	c varchar(10), 
-	d time,
+	d time
 );
 `}
 
