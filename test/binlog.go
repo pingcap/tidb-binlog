@@ -43,10 +43,10 @@ create table itest(
 `,
 		`
 create table ntest(
-	a int, 
-	b double DEFAULT 2.0, 
-	c varchar(10), 
-	d time
+	a int DEFAULT NULL, 
+	b double DEFAULT NULL, 
+	c varchar(10) DEFAULT NULL, 
+	d time DEFAULT NULL
 );
 `}
 
