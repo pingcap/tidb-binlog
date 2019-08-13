@@ -55,6 +55,16 @@ func (ts *msgTrackerSuite) TestShouldBeThreadSafe(c *check.C) {
 	c.Assert(tracker.HasPending(), check.IsFalse)
 }
 
+func (ts *msgTrackerSuite) TestIsLastAck(c *check.C) {
+	tracker := newMsgTracker()
+	tracker.Sent(1)
+	tracker.Sent(1)
+	tracker.Sent(1)
+	c.Assert(tracker.Acked(1), check.IsFalse)
+	c.Assert(tracker.Acked(1), check.IsFalse)
+	c.Assert(tracker.Acked(1), check.IsTrue)
+}
+
 func (ts *msgTrackerSuite) TestWaitingTooLongForAck(c *check.C) {
 	tracker := newMsgTracker()
 	tracker.Sent(1)

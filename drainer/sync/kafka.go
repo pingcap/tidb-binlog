@@ -254,8 +254,10 @@ func (p *KafkaSyncer) run() {
 			item := msg.Metadata.(*Item)
 			commitTs := item.Binlog.GetCommitTs()
 			log.Debug("get success msg from producer", zap.Int64("ts", commitTs))
-			p.msgTracker.Acked(commitTs)
-			p.success <- item
+			isLastOne := p.msgTracker.Acked(commitTs)
+			if isLastOne {
+				p.success <- item
+			}
 		}
 		close(p.success)
 	}()
@@ -358,14 +360,16 @@ func (mt *msgTracker) Sent(commitTs int64) {
 	mt.Unlock()
 }
 
-func (mt *msgTracker) Acked(commitTs int64) {
+func (mt *msgTracker) Acked(commitTs int64) (isLastOne bool) {
 	mt.Lock()
 	mt.lastSuccessTime = time.Now()
 	mt.msgsToBeAcked[commitTs] -= 1
 	if mt.msgsToBeAcked[commitTs] == 0 {
 		delete(mt.msgsToBeAcked, commitTs)
+		isLastOne = true
 	}
 	mt.Unlock()
+	return
 }
 
 func (mt *msgTracker) HasPending() bool {
