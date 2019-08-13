@@ -34,15 +34,15 @@ func RunDailyTest(dbCfg util.DBConfig, tableSQLs []string, workerCount int, jobC
 				log.Fatal(err)
 			}
 
-			err = execSQL(dbs[0], "insert into ntest(a, b, c, d) values(NULL, NULL, NULL, NULL)")
-			if err != nil {
-				log.Fatal(err)
+			if i == 2 {
+				err = execSQL(dbs[0], "insert into ntest(a, b, c, d) values(NULL, NULL, NULL, 	NULL)")
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 
 			doProcess(table, dbs, jobCount, workerCount, batch)
 
-			
-			
 		}(i)
 	}
 
