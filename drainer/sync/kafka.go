@@ -176,15 +176,34 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 	default:
 		return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
 	}
-	for range msgs {
-		p.msgTracker.Sent(slaveBinlog.CommitTs)
+	resolvedMsgs, err := p.createResolvedMsgs(slaveBinlog.CommitTs, item)
+	if err != nil {
+		return errors.Trace(err)
 	}
+	msgs = append(msgs, resolvedMsgs...)
+	p.msgTracker.SentN(slaveBinlog.CommitTs, len(msgs))
 	for _, m := range msgs {
 		if err := p.sendMsg(m); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	return nil
+}
+
+func (p *KafkaSyncer) createResolvedMsgs(ts int64, item *Item) ([]*sarama.ProducerMessage, error) {
+	partitions, err := p.getPartitions()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
+	for i, _ := range partitions {
+		m, err := p.newResolvedMsg(ts, int32(i), item)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, nil
 }
 
 func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
@@ -268,6 +287,20 @@ func (p *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encode
 	return msg, nil
 }
 
+func (p *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*sarama.ProducerMessage, error) {
+	bl := obinlog.Binlog{
+		Type:     obinlog.BinlogType_RESOLVED,
+		CommitTs: ts,
+	}
+	data, err := bl.Marshal()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	msg := &sarama.ProducerMessage{Topic: p.topic, Value: sarama.ByteEncoder(data), Partition: partition}
+	msg.Metadata = item
+	return msg, nil
+}
 
 func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
 	msg, err := p.newBinlogMsg(binlog, item, key)
@@ -396,13 +429,17 @@ func newMsgTracker() *msgTracker {
 	}
 }
 
-func (mt *msgTracker) Sent(commitTs int64) {
+func (mt *msgTracker) SentN(commitTs int64, n int) {
 	mt.Lock()
 	if !mt.hasPendingUnlocked() {
 		mt.lastSuccessTime = time.Now()
 	}
-	mt.msgsToBeAcked[commitTs] += 1
+	mt.msgsToBeAcked[commitTs] += n
 	mt.Unlock()
+}
+
+func (mt *msgTracker) Sent(commitTs int64) {
+	mt.SentN(commitTs, 1)
 }
 
 func (mt *msgTracker) Acked(commitTs int64) (isLastOne bool) {
