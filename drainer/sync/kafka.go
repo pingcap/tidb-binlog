@@ -157,32 +157,52 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	switch p.partitionMode {
-	case PartitionFixed:
+	if p.partitionMode == PartitionFixed {
 		return errors.Trace(p.saveBinlog(slaveBinlog, item, nil))
-	case PartitionBySchema:
-		if slaveBinlog.Type == obinlog.BinlogType_DML {
-			return errors.Trace(p.syncDMLPartitionBySchema(slaveBinlog, item))
-		}
-		partitionKey := sarama.StringEncoder(*slaveBinlog.DdlData.SchemaName)
-		return errors.Trace(p.saveBinlog(slaveBinlog, item, partitionKey))
-	case PartitionByTable:
-		if slaveBinlog.Type == obinlog.BinlogType_DML {
-			return errors.Trace(p.syncDMLPartitionByTable(slaveBinlog, item))
-		}
-		partitionKey := sarama.StringEncoder(*slaveBinlog.DdlData.SchemaName + "." + *slaveBinlog.DdlData.TableName)
-		return errors.Trace(p.saveBinlog(slaveBinlog, item, partitionKey))
 	}
-	return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
+
+	var msgs []*sarama.ProducerMessage
+	switch p.partitionMode {
+	case PartitionBySchema:
+		msgs, err = p.splitBinlogBySchema(slaveBinlog, item)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case PartitionByTable:
+		msgs, err = p.splitBinlogByTable(slaveBinlog, item)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	default:
+		return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
+	}
+	for range msgs {
+		p.msgTracker.Sent(slaveBinlog.CommitTs)
+	}
+	for _, m := range msgs {
+		if err := p.sendMsg(m); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
-func (p *KafkaSyncer) syncDMLPartitionBySchema(binlog *obinlog.Binlog, item *Item) error {
+func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+	if binlog.Type == obinlog.BinlogType_DDL {
+		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName)
+		m, err := p.newBinlogMsg(binlog, item, partitionKey)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return []*sarama.ProducerMessage{m}, nil
+	}
+
 	tablesBySchema := make(map[string][]*obinlog.Table)
 	for _, table := range binlog.DmlData.Tables {
 		schemaName := *table.SchemaName
 		tablesBySchema[schemaName] = append(tablesBySchema[schemaName], table)
 	}
-
+	msgs := make([]*sarama.ProducerMessage, 0, len(tablesBySchema))
 	for schema, tables := range tablesBySchema {
 		l := obinlog.Binlog{
 			Type:     binlog.Type,
@@ -191,14 +211,26 @@ func (p *KafkaSyncer) syncDMLPartitionBySchema(binlog *obinlog.Binlog, item *Ite
 				Tables: tables,
 			},
 		}
-		if err := p.saveBinlog(&l, item, sarama.StringEncoder(schema)); err != nil {
-			return errors.Trace(err)
+		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(schema))
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		msgs = append(msgs, m)
 	}
-	return nil
+	return msgs, nil
 }
 
-func (p *KafkaSyncer) syncDMLPartitionByTable(binlog *obinlog.Binlog, item *Item) error {
+func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+	if binlog.Type == obinlog.BinlogType_DDL {
+		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName + "." + *binlog.DdlData.TableName)
+		m, err := p.newBinlogMsg(binlog, item, partitionKey)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return []*sarama.ProducerMessage{m}, nil
+	}
+
+	msgs := make([]*sarama.ProducerMessage, 0, len(binlog.DmlData.Tables))
 	for _, table := range binlog.DmlData.Tables {
 		l := obinlog.Binlog{
 			Type:     binlog.Type,
@@ -207,11 +239,13 @@ func (p *KafkaSyncer) syncDMLPartitionByTable(binlog *obinlog.Binlog, item *Item
 				Tables: []*obinlog.Table{table},
 			},
 		}
-		if err := p.saveBinlog(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName)); err != nil {
-			return errors.Trace(err)
+		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName))
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
+		msgs = append(msgs, m)
 	}
-	return nil
+	return msgs, nil
 }
 
 // Close implements Syncer interface
@@ -223,17 +257,28 @@ func (p *KafkaSyncer) Close() error {
 	return err
 }
 
+func (p *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encoder) (*sarama.ProducerMessage, error) {
+	data, err := bl.Marshal()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	msg := &sarama.ProducerMessage{Topic: p.topic, Key: k, Value: sarama.ByteEncoder(data), Partition: -1}
+	msg.Metadata = it
+	return msg, nil
+}
+
+
 func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
-	data, err := binlog.Marshal()
+	msg, err := p.newBinlogMsg(binlog, item, key)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	msg := &sarama.ProducerMessage{Topic: p.topic, Key: key, Value: sarama.ByteEncoder(data), Partition: 0}
-	msg.Metadata = item
-
 	p.msgTracker.Sent(binlog.CommitTs)
+	return p.sendMsg(msg)
+}
 
+func (p *KafkaSyncer) sendMsg(msg *sarama.ProducerMessage) error {
 	select {
 	case p.producer.Input() <- msg:
 		return nil
