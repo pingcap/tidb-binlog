@@ -44,9 +44,9 @@ create table itest(
 		`
 create table ntest(
 	a int, 
-	b double NOT NULL DEFAULT 2.0, 
-	c varchar(10) NOT NULL, 
-	d time unique
+	b double DEFAULT 2.0, 
+	c varchar(10), 
+	d time,
 );
 `}
 
