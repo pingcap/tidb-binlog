@@ -93,10 +93,6 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 		vals = append(vals, version)
 		vals = append(vals, delFlag)
 
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
-		}
-
 		sqls = append(sqls, sql)
 		values = append(values, vals)
 		var key []string

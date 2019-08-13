@@ -83,10 +83,6 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 			}
 		}
 
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
-		}
-
 		rowData, err := encodeRow(vals, cols, tps, mysqlTypes)
 		if err != nil {
 			return nil, nil, nil, errors.Trace(err)

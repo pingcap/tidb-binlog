@@ -95,10 +95,6 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 			}
 		}
 
-		if len(columnValues) == 0 {
-			panic(errors.New("columnValues is nil"))
-		}
-
 		sqls = append(sqls, sql)
 		values = append(values, vals)
 		// generate dispatching key
