@@ -16,7 +16,7 @@ import (
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
@@ -72,13 +72,16 @@ func init() {
 
 // NewServer return a instance of binlog-server
 func NewServer(cfg *Config) (*Server, error) {
-	ID, err := genDrainerID(cfg.ListenAddr)
-	if err != nil {
-		return nil, errors.Trace(err)
+	if cfg.NodeID == "" {
+		var err error
+		cfg.NodeID, err = genDrainerID(cfg.ListenAddr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	if err1 := os.MkdirAll(cfg.DataDir, 0700); err1 != nil {
-		return nil, err
+		return nil, err1
 	}
 
 	// get pd client and cluster ID
@@ -133,10 +136,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
-	status := node.NewStatus(ID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
+	status := node.NewStatus(cfg.NodeID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
 
 	return &Server{
-		ID:        ID,
+		ID:        cfg.NodeID,
 		host:      advURL.Host,
 		cfg:       cfg,
 		collector: c,

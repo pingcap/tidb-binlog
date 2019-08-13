@@ -3,8 +3,10 @@ package util
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
@@ -139,4 +141,24 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	}
 
 	return int64(version.Ver), nil
+}
+
+// StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
+// into the Config struct, issue an error and stop the server from starting.
+func StrictDecodeFile(path, component string, cfg interface{}) error {
+	metaData, err := toml.DecodeFile(path, cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+		var undecodedItems []string
+		for _, item := range undecoded {
+			undecodedItems = append(undecodedItems, item.String())
+		}
+		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
+			component, path, strings.Join(undecodedItems, ", "))
+	}
+
+	return errors.Trace(err)
 }
