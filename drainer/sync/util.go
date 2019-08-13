@@ -35,6 +35,7 @@ type DBConfig struct {
 	KafkaMaxMessages   int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
 	TopicName          string `toml:"topic-name" json:"topic-name"`
 	KafkaPartitionMode string `toml:"kafka-partition-mode" json:"kafka-partition-mode"`
+	IncludeResolvedTs  bool   `toml:"include-resolved-ts" json:"include-resolved-ts"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
 }

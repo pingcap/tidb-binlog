@@ -61,7 +61,8 @@ type KafkaSyncer struct {
 	shutdown chan struct{}
 	*baseSyncer
 
-	partitionMode PartitionMode
+	partitionMode     PartitionMode
+	includeResolvedTs bool
 }
 
 func partitionMode(mode string) PartitionMode {
@@ -89,12 +90,13 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	}
 
 	executor := &KafkaSyncer{
-		addr:          strings.Split(cfg.KafkaAddrs, ","),
-		topic:         topic,
-		msgTracker:    newMsgTracker(),
-		shutdown:      make(chan struct{}),
-		baseSyncer:    newBaseSyncer(tableInfoGetter),
-		partitionMode: partitionMode(cfg.KafkaPartitionMode),
+		addr:              strings.Split(cfg.KafkaAddrs, ","),
+		topic:             topic,
+		msgTracker:        newMsgTracker(),
+		shutdown:          make(chan struct{}),
+		baseSyncer:        newBaseSyncer(tableInfoGetter),
+		partitionMode:     partitionMode(cfg.KafkaPartitionMode),
+		includeResolvedTs: cfg.IncludeResolvedTs,
 	}
 
 	config, err := util.NewSaramaConfig(cfg.KafkaVersion, "kafka.")
@@ -176,11 +178,13 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 	default:
 		return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
 	}
-	resolvedMsgs, err := p.createResolvedMsgs(slaveBinlog.CommitTs, item)
-	if err != nil {
-		return errors.Trace(err)
+	if p.includeResolvedTs {
+		resolvedMsgs, err := p.createResolvedMsgs(slaveBinlog.CommitTs, item)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		msgs = append(msgs, resolvedMsgs...)
 	}
-	msgs = append(msgs, resolvedMsgs...)
 	p.msgTracker.SentN(slaveBinlog.CommitTs, len(msgs))
 	for _, m := range msgs {
 		if err := p.sendMsg(m); err != nil {
