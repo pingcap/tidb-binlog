@@ -200,6 +200,8 @@ func (s *Server) Run() error {
 
 	wg.Wait()
 
+	// to pass go check
+	syncCancel()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -288,7 +290,7 @@ func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.L
 		select {
 		case dest <- txn:
 		case <-ctx.Done():
-			break
+			return nil
 		}
 
 		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
