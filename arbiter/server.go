@@ -182,10 +182,11 @@ func (s *Server) Run() error {
 
 	var syncErr error
 
+	syncCtx, syncCancel := context.WithCancel(ctx)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		syncErr = syncBinlogs(s.kafkaReader.Messages(), s.load)
+		syncErr = syncBinlogs(s.kafkaReader.Messages(), s.load, syncCtx)
 		if syncErr != nil {
 			s.Close()
 		}
@@ -193,6 +194,7 @@ func (s *Server) Run() error {
 
 	err := s.load.Run()
 	if err != nil {
+		syncCancel()
 		s.Close()
 	}
 
@@ -271,7 +273,7 @@ func (s *Server) loadStatus() (int, error) {
 	return status, errors.Trace(err)
 }
 
-func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) (err error) {
+func syncBinlogs(source <-chan *reader.Message, ld loader.Loader, ctx context.Context) (err error) {
 	dest := ld.Input()
 	defer ld.Close()
 	for msg := range source {
@@ -282,7 +284,12 @@ func syncBinlogs(source <-chan *reader.Message, ld loader.Loader) (err error) {
 			return err
 		}
 		txn.Metadata = msg
-		dest <- txn
+		// avoid block when no process is handling ld.input
+		select {
+		case dest <- txn:
+		case <-ctx.Done():
+			break
+		}
 
 		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
 		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))

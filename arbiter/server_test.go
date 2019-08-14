@@ -407,7 +407,7 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	}()
 	ld := dummyLoader{input: dest}
 
-	err := syncBinlogs(source, &ld)
+	err := syncBinlogs(source, &ld, context.Background())
 	c.Assert(err, IsNil)
 
 	c.Assert(len(dest), Equals, 2)
