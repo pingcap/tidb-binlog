@@ -20,9 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
-
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
@@ -421,44 +419,16 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	c.Assert(ld.closed, IsTrue)
 }
 
-// closed success channel
-type fakeLoader struct {
-	loader.Loader
-	successes chan *loader.Txn
-	input     chan *loader.Txn
-	closed    bool
-}
-
-func (fl fakeLoader) Run() error {
-	return errors.New("some error occurs in loader")
-}
-
-type fakeClient struct {
-	sarama.Client
-}
-
-func (fc fakeClient) Close() {}
-
-func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccursInLoader(c *C) {
+func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 	readerMsgs := make(chan *reader.Message, 1024)
-	fakeLoaderImpl := &fakeLoader{
+	dummyLoaderImpl := &dummyLoader{
 		successes: make(chan *loader.Txn),
 		// input is set small to trigger blocking easily
-		input:  make(chan *loader.Txn, 1),
-		closed: true,
-	}
-	close(fakeLoaderImpl.successes)
-
-	fakeReaderImpl := &reader.Reader{
-		nil, fakeClient{}, readerMsgs, make(chan struct{}), nil,
-	}
-	server := &Server{
-		checkpoint:  dummyCp{},
-		load:        fakeLoaderImpl,
-		kafkaReader: fakeReaderImpl,
+		input: make(chan *loader.Txn, 1),
 	}
 	msg := s.createMsg("test42", "users", "alter table users add column gender smallint")
 	ctx, cancel := context.WithCancel(context.Background())
+	syncCtx, syncCancel := context.WithCancel(ctx)
 	defer cancel()
 	// start a routine keep sending msgs to kafka reader
 	go func() {
@@ -472,12 +442,13 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccursInLoader(c *C) {
 	}()
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- server.Run()
+		errCh <- syncBinlogs(syncCtx, readerMsgs, dummyLoaderImpl)
 	}()
 
+	syncCancel()
 	select {
 	case err := <-errCh:
-		c.Assert(err, ErrorMatches, "some error occurs in loader")
+		c.Assert(err, IsNil)
 	case <-time.After(time.Second):
 		c.Fatal("server doesn't quit in 1s when some error occurs in loader")
 	}
