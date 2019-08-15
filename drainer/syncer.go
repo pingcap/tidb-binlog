@@ -52,6 +52,7 @@ type Syncer struct {
 
 	// cached memory size of input channel
 	cachedSize int64
+	quiting    bool
 
 	dsyncer dsync.Syncer
 	cond    *sync.Cond
@@ -420,7 +421,7 @@ ForLoop:
 	}
 
 	// to avoid block at func Add
-	s.input = nil
+	s.quiting = true
 	s.cond.Signal()
 
 	close(fakeBinlogCh)
@@ -484,11 +485,11 @@ func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
 func (s *Syncer) Add(b *binlogItem) {
 	s.cond.L.Lock()
 	if b.size >= maxBinlogCacheSize {
-		for s.cachedSize != 0 {
+		for s.cachedSize != 0 && !s.quiting {
 			s.cond.Wait()
 		}
 	} else {
-		for s.cachedSize+b.size > maxBinlogCacheSize {
+		for s.cachedSize+b.size > maxBinlogCacheSize && !s.quiting {
 			s.cond.Wait()
 		}
 	}
