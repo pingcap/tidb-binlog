@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
@@ -171,6 +172,137 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	var lastNoneFakeTS int64 = 3
 	c.Assert(cp.TS(), check.Greater, lastNoneFakeTS)
 	c.Assert(syncer.GetLatestCommitTS(), check.Greater, lastNoneFakeTS)
+}
+
+func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
+	cfg := &SyncerConfig{
+		DestDBType: "_intercept",
+	}
+
+	cpFile := c.MkDir() + "/checkpoint"
+	cp, err := checkpoint.NewPb(&checkpoint.Config{CheckPointFile: cpFile})
+	c.Assert(err, check.IsNil)
+
+	syncer, err := NewSyncer(cp, cfg, nil)
+	c.Assert(err, check.IsNil)
+
+	// run syncer
+	go func() {
+		err := syncer.Start()
+		c.Assert(err, check.IsNil, check.Commentf(errors.ErrorStack(err)))
+	}()
+
+	origMaxBinlogCacheSize := maxBinlogCacheSize
+	maxBinlogCacheSize = 1
+	flag := false
+	endSig := make(chan struct{})
+
+	defer func() {
+		close(endSig)
+		c.Assert(flag, check.IsFalse)
+		syncer.Close()
+		maxBinlogCacheSize = origMaxBinlogCacheSize
+	}()
+	// check whether cached size will exceed maxBinlogCacheSize
+	go func() {
+		ticker := time.NewTicker(50 * time.Microsecond)
+		for {
+			select {
+			case <-endSig:
+				return
+			case <-ticker.C:
+				if atomic.LoadInt64(&syncer.cachedSize) > maxBinlogCacheSize {
+					flag = true
+					return
+				}
+			}
+		}
+	}()
+
+	var commitTS, jobID int64
+	// create database test
+	commitTS++
+	jobID++
+	binlog := &pb.Binlog{
+		Tp:       pb.BinlogType_Commit,
+		CommitTs: commitTS,
+		DdlQuery: []byte("create database test"),
+		DdlJobId: jobID,
+	}
+	job := &model.Job{
+		ID:    jobID,
+		Type:  model.ActionCreateSchema,
+		State: model.JobStateSynced,
+		Query: "create database test",
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: 1,
+			DBInfo: &model.DBInfo{
+				ID:   1,
+				Name: model.CIStr{O: "test", L: "test"},
+			},
+		},
+	}
+	syncer.Add(&binlogItem{
+		binlog: binlog,
+		job:    job,
+		size:   1,
+	})
+
+	// create table test.test
+	commitTS++
+	jobID++
+	var testTableID int64 = 2
+	binlog = &pb.Binlog{
+		Tp:       pb.BinlogType_Commit,
+		CommitTs: commitTS,
+		DdlQuery: []byte("create table test.test(id int)"),
+		DdlJobId: jobID,
+	}
+	job = &model.Job{
+		ID:       jobID,
+		SchemaID: 1, // must be the previous create schema id of `test`
+		Type:     model.ActionCreateTable,
+		State:    model.JobStateSynced,
+		Query:    "create table test.test(id int)",
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: 2,
+			TableInfo: &model.TableInfo{
+				ID:   testTableID,
+				Name: model.CIStr{O: "test", L: "test"},
+			},
+		},
+	}
+	syncer.Add(&binlogItem{
+		binlog: binlog,
+		job:    job,
+		size:   1,
+	})
+
+	finished := make(chan struct{})
+	go func() {
+		for ; commitTS <= 10; commitTS++ {
+			binlog := &pb.Binlog{
+				Tp:            pb.BinlogType_Commit,
+				CommitTs:      commitTS,
+				PrewriteValue: getEmptyPrewriteValue(commitTS+1, testTableID),
+			}
+			syncer.Add(&binlogItem{
+				binlog: binlog,
+				size:   1,
+			})
+		}
+		close(finished)
+	}()
+
+	select {
+	case <-finished:
+	case <-time.After(3 * time.Second):
+		c.Fatal("binlogItems haven't been added in 3s")
+	}
+
+	// should get 10 binlog item
+	interceptSyncer := syncer.dsyncer.(*interceptSyncer)
+	c.Assert(interceptSyncer.items, check.HasLen, 10)
 }
 
 func (s *syncerSuite) TestIsIgnoreTxnCommitTS(c *check.C) {
