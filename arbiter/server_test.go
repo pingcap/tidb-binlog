@@ -428,7 +428,6 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 	}
 	msg := s.createMsg("test42", "users", "alter table users add column gender smallint")
 	ctx, cancel := context.WithCancel(context.Background())
-	syncCtx, syncCancel := context.WithCancel(ctx)
 	defer cancel()
 	// start a routine keep sending msgs to kafka reader
 	go func() {
@@ -442,10 +441,10 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 	}()
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- syncBinlogs(syncCtx, readerMsgs, dummyLoaderImpl)
+		errCh <- syncBinlogs(ctx, readerMsgs, dummyLoaderImpl)
 	}()
 
-	syncCancel()
+	cancel()
 	select {
 	case err := <-errCh:
 		c.Assert(err, IsNil)
