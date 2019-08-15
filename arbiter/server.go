@@ -162,7 +162,13 @@ func (s *Server) Close() error {
 
 // Run runs the Server, will quit once encounter error or Server is closed
 func (s *Server) Run() error {
-	defer s.downDB.Close()
+	defer func() {
+		if s.downDB != nil {
+			s.downDB.Close()
+		} else {
+			log.Error("Invalid downDB address, please check the config")
+		}
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

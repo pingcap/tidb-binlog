@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/sarama"
+
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -417,4 +419,66 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	}
 
 	c.Assert(ld.closed, IsTrue)
+}
+
+// closed success channel
+type fakeLoader struct {
+	loader.Loader
+	successes chan *loader.Txn
+	input     chan *loader.Txn
+	closed    bool
+}
+
+func (fl fakeLoader) Run() error {
+	return errors.New("some error occurs in loader")
+}
+
+type fakeClient struct {
+	sarama.Client
+}
+
+func (fc fakeClient) Close() {}
+
+func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccursInLoader(c *C) {
+	readerMsgs := make(chan *reader.Message, 1024)
+	fakeLoaderImpl := &fakeLoader{
+		successes: make(chan *loader.Txn),
+		// input is set small to trigger blocking easily
+		input:  make(chan *loader.Txn, 1),
+		closed: true,
+	}
+	close(fakeLoaderImpl.successes)
+
+	fakeReaderImpl := &reader.Reader{
+		nil, fakeClient{}, readerMsgs, make(chan struct{}), nil,
+	}
+	server := &Server{
+		checkpoint:  dummyCp{},
+		load:        fakeLoaderImpl,
+		kafkaReader: fakeReaderImpl,
+	}
+	msg := s.createMsg("test42", "users", "alter table users add column gender smallint")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// start a routine keep sending msgs to kafka reader
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case readerMsgs <- msg:
+			}
+		}
+	}()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.Run()
+	}()
+
+	select {
+	case err := <-errCh:
+		c.Assert(err, ErrorMatches, "some error occurs in loader")
+	case <-time.After(time.Second):
+		c.Fatal("server doesn't quit in 1s when some error occurs in loader")
+	}
 }
