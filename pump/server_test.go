@@ -29,10 +29,13 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	binlog "github.com/pingcap/tipb/go-binlog"
-	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -125,12 +128,12 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 
 type noOpStorage struct{}
 
-func (s *noOpStorage) AllMatched() bool                           { return true }
-func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GetGCTS() int64                             { return 0 }
-func (s *noOpStorage) GC(ts int64)                                {}
-func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
-func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
+func (s *noOpStorage) AllMatched() bool                            { return true }
+func (s *noOpStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil }
+func (s *noOpStorage) GetGCTS() int64                              { return 0 }
+func (s *noOpStorage) GC(ts int64)                                 {}
+func (s *noOpStorage) MaxCommitTS() int64                          { return 0 }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error)  { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
