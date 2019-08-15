@@ -175,11 +175,17 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 		return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
 	}
 	if p.includeResolvedTs {
-		resolvedMsgs, err := p.createResolvedMsgs(slaveBinlog.CommitTs, item)
+		partitions, err := p.findSelectedPartitions(msgs)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		msgs = append(msgs, resolvedMsgs...)
+		for _, partition := range partitions {
+			m, err := p.newResolvedMsg(slaveBinlog.CommitTs, partition, item)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			msgs = append(msgs, m)
+		}
 	}
 	p.msgTracker.SentN(slaveBinlog.CommitTs, len(msgs))
 	for _, m := range msgs {
@@ -190,20 +196,22 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 	return nil
 }
 
-func (p *KafkaSyncer) createResolvedMsgs(ts int64, item *Item) ([]*sarama.ProducerMessage, error) {
+func (p *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([]int32, error) {
 	partitions, err := p.getPartitions()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
-	for i, _ := range partitions {
-		m, err := p.newResolvedMsg(ts, int32(i), item)
+	numPartitions := int32(len(partitions))
+	partitioner := newHashPartitioner(p.topic).(*hashPartitioner)
+	var selected []int32
+	for _, m := range msgs {
+		partition, err := partitioner.PartitionByKey(m.Key, numPartitions)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		msgs = append(msgs, m)
+		selected = append(selected, partition)
 	}
-	return msgs, nil
+	return selected, nil
 }
 
 func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
