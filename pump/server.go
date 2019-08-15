@@ -219,7 +219,7 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 		goto errHandle
 	}
 
-	if !isFakeBinlog {
+	if !isFakeBinlog && blog.Tp == binlog.BinlogType_Prewrite {
 		state := s.node.NodeStatus().State
 		if state != node.Online {
 			err = errors.Errorf("no online: %v", state)
@@ -322,33 +322,10 @@ func (s *Server) startHeartbeat() {
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
-	// register this node
-	ts, err := s.getTSO()
-	if err != nil {
-		return errors.Annotate(err, "fail to get tso from pd")
-	}
-	if err := s.registerNode(context.Background(), node.Online, ts); err != nil {
-		return errors.Annotate(err, "fail to register node to etcd")
-	}
-
-	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
-
-	// notify all cisterns
-	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
-	if err := s.node.Notify(ctx); err != nil {
-		// if fail, refresh this node's state to paused
-		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
-			log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
-		}
-		return errors.Annotate(err, "fail to notify all living drainer")
-	}
-
-	log.Debug("notify success")
-
-	s.startHeartbeat()
 
 	// start a UNIX listener
 	var unixLis net.Listener
+	var err error
 	if s.unixAddr != "" {
 		unixLis, err = listen("unix", s.unixAddr)
 		if err != nil {
@@ -409,6 +386,31 @@ func (s *Server) Start() error {
 	http.Handle("/metrics", promhttp.Handler())
 
 	go http.Serve(httpL, nil)
+
+	// register this node
+	ts, err := s.getTSO()
+	if err != nil {
+		return errors.Annotate(err, "fail to get tso from pd")
+	}
+	if err := s.registerNode(context.Background(), node.Online, ts); err != nil {
+		return errors.Annotate(err, "fail to register node to etcd")
+	}
+
+	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
+
+	// notify all cisterns
+	ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
+	if err := s.node.Notify(ctx); err != nil {
+		// if fail, refresh this node's state to paused
+		if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
+			log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
+		}
+		return errors.Annotate(err, "fail to notify all living drainer")
+	}
+
+	log.Debug("notify success")
+
+	s.startHeartbeat()
 
 	log.Info("start to server request", zap.String("addr", s.tcpAddr))
 	err = m.Serve()
@@ -791,6 +793,7 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 
 	log.Debug("Start waiting until all drainers have consumed the last fake binlog")
 
+	maxCommitTS := s.storage.MaxCommitTS()
 	for {
 		select {
 		case <-time.After(time.Second):
@@ -799,12 +802,12 @@ func (s *Server) waitSafeToOffline(ctx context.Context) error {
 				log.Error("Failed to get safe GCTS", zap.Error(err))
 				break
 			}
-			if safeTSO >= fakeBinlog.CommitTs {
+			if safeTSO >= maxCommitTS {
 				return nil
 			}
 			log.Warn("Waiting for drainer to consume binlog",
 				zap.Int64("Minimum Drainer MaxCommitTS", safeTSO),
-				zap.Int64("FakeBinlog CommiTS", fakeBinlog.CommitTs))
+				zap.Int64("Need to reach maxCommitTS", maxCommitTS))
 			if _, err = s.writeFakeBinlog(); err != nil {
 				log.Error("write fake binlog failed", zap.Error(err))
 			}
@@ -886,14 +889,18 @@ func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInte
 			log.Info("The max commit ts saved is less than expected commit ts",
 				zap.Int64("max commit ts", maxCommitTS),
 				zap.Int64("expected commit ts", ts))
-			select {
-			case <-time.After(checkInterval):
-				continue
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			}
+		} else if !s.storage.AllMatched() {
+			log.Info("wait all P-binlog to be matched")
+		} else {
+			return nil
 		}
-		return nil
+
+		select {
+		case <-time.After(checkInterval):
+			continue
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		}
 	}
 }
 

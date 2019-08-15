@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,7 +50,6 @@ type Syncer struct {
 	lastSyncTime time.Time
 
 	dsyncer dsync.Syncer
-	itemsWg sync.WaitGroup
 
 	shutdown chan struct{}
 	closed   chan struct{}
@@ -200,7 +198,6 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			}
 
 			s.lastSyncTime = time.Now()
-			s.itemsWg.Done()
 			ts := item.Binlog.CommitTs
 			if ts > atomic.LoadInt64(lastTS) {
 				atomic.StoreInt64(lastTS, ts)
@@ -360,7 +357,6 @@ ForLoop:
 			if !ignore {
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
-				s.itemsWg.Add(1)
 				lastAddComitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
@@ -397,7 +393,6 @@ ForLoop:
 			} else if sql != "" {
 				s.addDDLCount()
 				beginTime := time.Now()
-				s.itemsWg.Add(1)
 				lastAddComitTS = binlog.GetCommitTs()
 
 				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
