@@ -100,7 +100,7 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 	status := &node.Status{
 		NodeID:  nodeID,
 		Addr:    advURL.Host,
-		State:   node.Online,
+		State:   node.Paused,
 		IsAlive: true,
 	}
 
