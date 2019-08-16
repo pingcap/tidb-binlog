@@ -278,7 +278,7 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 
 	finished := make(chan struct{})
 	go func() {
-		for ; commitTS <= 10; commitTS++ {
+		for commitTS++; commitTS <= 10; commitTS++ {
 			binlog := &pb.Binlog{
 				Tp:            pb.BinlogType_Commit,
 				CommitTs:      commitTS,
@@ -296,6 +296,17 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 	case <-time.After(3 * time.Second):
 		c.Fatal("binlogItems haven't been added in 3s")
 	}
+
+	// Add fake binlog
+	time.Sleep(time.Second)
+	commitTS++
+	binlog = &pb.Binlog{
+		StartTs:  commitTS,
+		CommitTs: commitTS,
+	}
+	syncer.Add(&binlogItem{
+		binlog: binlog,
+	})
 
 	// should get 10 binlog item
 	interceptSyncer := syncer.dsyncer.(*interceptSyncer)
