@@ -73,7 +73,7 @@ type binlogItemCache struct {
 	quiting            bool
 }
 
-func NewBinlogItemCache(maxBinlogItemCount int, maxBinlogCacheSize int64) (bc *binlogItemCache) {
+func newBinlogItemCache(maxBinlogItemCount int, maxBinlogCacheSize int64) (bc *binlogItemCache) {
 	return &binlogItemCache{
 		cachedChan:         make(chan *binlogItem, maxBinlogItemCount),
 		maxBinlogCacheSize: maxBinlogCacheSize,

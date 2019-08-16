@@ -153,7 +153,7 @@ var _ = Suite(&syncBinlogSuite{})
 
 func (s *syncBinlogSuite) TestShouldAddToSyncer(c *C) {
 	syncer := Syncer{
-		input: NewBinlogItemCache(1, defaultBinlogCacheSize),
+		input: newBinlogItemCache(1, defaultBinlogCacheSize),
 	}
 	col := Collector{syncer: &syncer}
 
@@ -203,7 +203,7 @@ func (s *syncBinlogSuite) TestShouldSetJob(c *C) {
 	defer func() { fDDLJobGetter = origDDLGetter }()
 
 	syncer := Syncer{
-		input: NewBinlogItemCache(1, defaultBinlogCacheSize),
+		input: newBinlogItemCache(1, defaultBinlogCacheSize),
 	}
 	col := Collector{syncer: &syncer}
 
