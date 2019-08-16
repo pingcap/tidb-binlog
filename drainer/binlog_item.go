@@ -111,15 +111,13 @@ func (bc *binlogItemCache) Push(b *binlogItem, shutdown chan struct{}) chan stru
 func (bc *binlogItemCache) Pop() chan *binlogItem {
 	result := make(chan *binlogItem)
 	go func() {
-		select {
-		case b := <-bc.cachedChan:
-			result <- b
-			bc.cond.L.Lock()
-			// has popped new binlog item, minus cachedSize
-			bc.cachedSize -= b.Size()
-			bc.cond.Signal()
-			bc.cond.L.Unlock()
-		}
+		b := <-bc.cachedChan
+		result <- b
+		bc.cond.L.Lock()
+		// has popped new binlog item, minus cachedSize
+		bc.cachedSize -= b.Size()
+		bc.cond.Signal()
+		bc.cond.L.Unlock()
 	}()
 	return result
 }
