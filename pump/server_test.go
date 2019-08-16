@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,7 +134,9 @@ func (s *noOpStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil 
 func (s *noOpStorage) GetGCTS() int64                              { return 0 }
 func (s *noOpStorage) GC(ts int64)                                 {}
 func (s *noOpStorage) MaxCommitTS() int64                          { return 0 }
-func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error)  { return nil, nil }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) {
+	return nil, errors.New("server_test")
+}
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
@@ -648,7 +651,9 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	p.Close()
 }
 
-type startNode struct{}
+type startNode struct {
+	status *node.Status
+}
 
 func (n *startNode) ID() string                                                   { return "startnode-long" }
 func (n *startNode) ShortID() string                                              { return "startnode" }
@@ -656,10 +661,10 @@ func (n *startNode) RefreshStatus(ctx context.Context, status *node.Status) erro
 func (n *startNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *startNode) Notify(ctx context.Context) error                             { return nil }
 func (n *startNode) NodeStatus() *node.Status {
-	return &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}
+	return n.status
 }
 func (n *startNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
-	return []*node.Status{{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}}, nil
+	return []*node.Status{n.status}, nil
 }
 func (n *startNode) Quit() error { return nil }
 
@@ -685,7 +690,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	cfg := &Config{
 		ListenAddr:        "http://127.0.0.1:8250",
 		AdvertiseAddr:     "http://127.0.0.1:8260",
-		Socket:            "unix://127.0.0.1:8270/hello/world",
+		Socket:            "unix://127.0.0.1:8280/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		DataDir:           "/tmp/pump",
 		HeartbeatInterval: 1500,
@@ -697,7 +702,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		dataDir:    cfg.DataDir,
 		storage:    &noOpStorage{},
 		clusterID:  8012,
-		node:       &startNode{},
+		node:       &startNode{status: &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}},
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
 		gs:         grpc.NewServer(grpcOpts...),
@@ -730,7 +735,6 @@ WAIT:
 			defer resp.Body.Close()
 			bodyByte, err := ioutil.ReadAll(resp.Body)
 			c.Assert(err, IsNil)
-			c.Assert(bodyByte, NotNil)
 
 			nodesStatus := &HTTPStatus{}
 			err = json.Unmarshal(bodyByte, nodesStatus)
@@ -744,8 +748,39 @@ WAIT:
 			c.Assert(fakeNodeStatus.State, Equals, node.Online)
 			break WAIT
 		case <-timeEnd:
-			c.Fatal("Wait pump second for more than 5 seconds")
+			c.Fatal("Wait pump to be online for more than 5 seconds")
 		}
 	}
 
+	// test AllDrainer
+	resultStr := httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
+	c.Assert(strings.Contains(resultStr, "can't provide service"), IsTrue)
+	// test BinlogByTS
+	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/debug/binlog/2")
+	c.Assert(strings.Contains(resultStr, "server_test"), IsTrue)
+	// test triggerGC
+	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
+	c.Assert(strings.Contains(resultStr, "trigger gc success"), IsTrue)
+	// test close node
+	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
+	c.Assert(strings.Contains(resultStr, "success"), IsTrue)
+
+	// wait server 1s for stopping
+	time.Sleep(time.Second)
+	c.Assert(atomic.LoadInt32(&p.isClosed), Equals, int32(1))
+}
+
+// change to receive request of get, post, put
+func httpRequest(c *C, method, url string) string {
+	client := &http.Client{}
+	request, err := http.NewRequest(method, url, nil)
+	c.Assert(err, IsNil)
+	resp, err := client.Do(request)
+	c.Assert(err, IsNil)
+	c.Assert(resp, NotNil)
+	defer resp.Body.Close()
+	bodyByte, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, IsNil)
+	bodyStr := string(bodyByte)
+	return bodyStr
 }
