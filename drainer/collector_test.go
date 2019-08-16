@@ -165,7 +165,7 @@ func (s *syncBinlogSuite) TestShouldAddToSyncer(c *C) {
 
 	c.Assert(err, IsNil)
 	c.Assert(syncer.input.Len(), Equals, 1)
-	get := <-syncer.input.Pop()
+	get := <-syncer.input.Pop(make(chan struct{}))
 	c.Assert(get.binlog.CommitTs, Equals, item.binlog.CommitTs)
 }
 

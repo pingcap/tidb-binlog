@@ -282,6 +282,7 @@ func (s *Syncer) run() error {
 
 	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
+	inputChan := s.input.Pop(s.shutdown)
 ForLoop:
 	for {
 		// check if we can safely push a fake binlog
@@ -303,7 +304,7 @@ ForLoop:
 		case pushFakeBinlog <- fakeBinlog:
 			pushFakeBinlog = nil
 			continue
-		case b = <-s.input.Pop():
+		case b = <-inputChan:
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(s.input.Len()))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
