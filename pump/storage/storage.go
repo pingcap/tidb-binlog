@@ -660,6 +660,12 @@ func (a *Append) doGCTS(ts int64) {
 
 	deleteNum := 0
 
+	irange := &util.Range{
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
+	}
+	iter := a.metadata.NewIterator(irange, nil)
+
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
@@ -678,12 +684,6 @@ func (a *Append) doGCTS(ts int64) {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-
-		irange := &util.Range{
-			Start: encodeTSKey(0),
-			Limit: encodeTSKey(ts + 1),
-		}
-		iter := a.metadata.NewIterator(irange, nil)
 
 		deleteBatch := 0
 		var lastKey []byte
