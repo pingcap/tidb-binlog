@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"sync"
 	"time"
 
 	. "github.com/pingcap/check"
@@ -154,8 +153,7 @@ var _ = Suite(&syncBinlogSuite{})
 
 func (s *syncBinlogSuite) TestShouldAddToSyncer(c *C) {
 	syncer := Syncer{
-		input: make(chan *binlogItem, 1),
-		cond:  sync.NewCond(new(sync.Mutex)),
+		input: NewBinlogItemCache(1, defaultBinlogCacheSize),
 	}
 	col := Collector{syncer: &syncer}
 
@@ -166,8 +164,8 @@ func (s *syncBinlogSuite) TestShouldAddToSyncer(c *C) {
 	err := col.syncBinlog(&item)
 
 	c.Assert(err, IsNil)
-	c.Assert(len(syncer.input), Equals, 1)
-	get := <-syncer.input
+	c.Assert(syncer.input.Len(), Equals, 1)
+	get := <-syncer.input.Pop()
 	c.Assert(get.binlog.CommitTs, Equals, item.binlog.CommitTs)
 }
 
@@ -205,8 +203,7 @@ func (s *syncBinlogSuite) TestShouldSetJob(c *C) {
 	defer func() { fDDLJobGetter = origDDLGetter }()
 
 	syncer := Syncer{
-		input: make(chan *binlogItem, 1),
-		cond:  sync.NewCond(new(sync.Mutex)),
+		input: NewBinlogItemCache(1, defaultBinlogCacheSize),
 	}
 	col := Collector{syncer: &syncer}
 
@@ -342,7 +339,6 @@ func (s *HTTPStatusSuite) TestSyncedShouldBeSet(c *C) {
 	syncer := Syncer{
 		lastSyncTime: time.Now().Add(-time.Minute),
 		cp:           dummyCheckpoint{commitTS: 999},
-		cond:         sync.NewCond(new(sync.Mutex)),
 	}
 	col := Collector{
 		syncer:          &syncer,

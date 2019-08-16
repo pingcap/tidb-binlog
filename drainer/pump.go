@@ -154,8 +154,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				// TODO: add metric here
 				continue
 			}
-			lenPayload := len(resp.Entity.Payload)
-			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(lenPayload))
+			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(resp.Entity.Payload)))
 
 			binlog := new(pb.Binlog)
 			err = binlog.Unmarshal(resp.Entity.Payload)
@@ -169,7 +168,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 			millisecond := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(binlog.CommitTs))
 			binlogReachDurationHistogram.WithLabelValues(p.nodeID).Observe(float64(millisecond) / 1000.0)
 
-			item := newBinlogItem(binlog, p.nodeID, lenPayload)
+			item := newBinlogItem(binlog, p.nodeID)
 			select {
 			case ret <- item:
 				if binlog.CommitTs > last {

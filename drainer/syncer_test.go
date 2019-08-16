@@ -14,7 +14,6 @@
 package drainer
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
@@ -61,7 +60,9 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 
 func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cfg := &SyncerConfig{
-		DestDBType: "_intercept",
+		DestDBType:          "_intercept",
+		MaxCacheBinlogCount: defaultBinlogItemCount,
+		MaxCacheBinlogSize:  defaultBinlogCacheSize,
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
@@ -176,7 +177,9 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 
 func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 	cfg := &SyncerConfig{
-		DestDBType: "_intercept",
+		DestDBType:          "_intercept",
+		MaxCacheBinlogCount: defaultBinlogItemCount,
+		MaxCacheBinlogSize:  30, // the max tested binlog size is 33
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
@@ -192,8 +195,6 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 		c.Assert(err, check.IsNil, check.Commentf(errors.ErrorStack(err)))
 	}()
 
-	origMaxBinlogCacheSize := maxBinlogCacheSize
-	maxBinlogCacheSize = 1
 	flag := false
 	endSig := make(chan struct{})
 
@@ -201,7 +202,6 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 		close(endSig)
 		c.Assert(flag, check.IsFalse)
 		syncer.Close()
-		maxBinlogCacheSize = origMaxBinlogCacheSize
 	}()
 	// check whether cached size will exceed maxBinlogCacheSize
 	go func() {
@@ -211,7 +211,7 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 			case <-endSig:
 				return
 			case <-ticker.C:
-				if atomic.LoadInt64(&syncer.cachedSize) > maxBinlogCacheSize {
+				if syncer.input.cachedSize > 33 {
 					flag = true
 					return
 				}
@@ -245,7 +245,6 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 	syncer.Add(&binlogItem{
 		binlog: binlog,
 		job:    job,
-		size:   1,
 	})
 
 	// create table test.test
@@ -275,7 +274,6 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 	syncer.Add(&binlogItem{
 		binlog: binlog,
 		job:    job,
-		size:   1,
 	})
 
 	finished := make(chan struct{})
@@ -288,7 +286,6 @@ func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 			}
 			syncer.Add(&binlogItem{
 				binlog: binlog,
-				size:   1,
 			})
 		}
 		close(finished)

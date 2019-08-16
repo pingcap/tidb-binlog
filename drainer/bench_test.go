@@ -85,7 +85,7 @@ func CreateMerger(sourceNum int, binlogNum int, strategy string) *Merger {
 		for j := 1; j <= binlogNum/sourceNum+sourceNum; j++ {
 			binlog := new(pb.Binlog)
 			binlog.CommitTs = int64(j*maxSourceSize + id)
-			binlogItem := newBinlogItem(binlog, strconv.Itoa(id), 0)
+			binlogItem := newBinlogItem(binlog, strconv.Itoa(id))
 			sources[id].Source <- binlogItem
 		}
 	}

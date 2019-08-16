@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,19 +42,14 @@ type Syncer struct {
 
 	cfg *SyncerConfig
 
-	input chan *binlogItem
+	input *binlogItemCache
 
 	filter *filter.Filter
 
 	// last time we successfully sync binlog item to downstream
 	lastSyncTime time.Time
 
-	// cached memory size of input channel
-	cachedSize int64
-	quiting    bool
-
 	dsyncer dsync.Syncer
-	cond    *sync.Cond
 
 	shutdown chan struct{}
 	closed   chan struct{}
@@ -66,11 +60,10 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.cp = cp
-	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
+	syncer.input = NewBinlogItemCache(cfg.MaxCacheBinlogCount, cfg.MaxCacheBinlogSize)
 	syncer.lastSyncTime = time.Now()
 	syncer.shutdown = make(chan struct{})
 	syncer.closed = make(chan struct{})
-	syncer.cond = sync.NewCond(new(sync.Mutex))
 
 	var ignoreDBs []string
 	if len(cfg.IgnoreSchemas) > 0 {
@@ -310,13 +303,8 @@ ForLoop:
 		case pushFakeBinlog <- fakeBinlog:
 			pushFakeBinlog = nil
 			continue
-		case b = <-s.input:
-			s.cond.L.Lock()
-			// has popped new binlog item, minus cachedSize
-			s.cachedSize -= b.size
-			s.cond.Signal()
-			s.cond.L.Unlock()
-			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
+		case b = <-s.input.Pop():
+			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(s.input.Len()))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
 
@@ -420,9 +408,7 @@ ForLoop:
 		}
 	}
 
-	// to avoid block at func Add
-	s.quiting = true
-	s.cond.Signal()
+	s.input.Close()
 
 	close(fakeBinlogCh)
 	cerr := s.dsyncer.Close()
@@ -483,24 +469,9 @@ func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
-	s.cond.L.Lock()
-	if b.size >= maxBinlogCacheSize {
-		for s.cachedSize != 0 && !s.quiting {
-			s.cond.Wait()
-		}
-	} else {
-		for s.cachedSize+b.size > maxBinlogCacheSize && !s.quiting {
-			s.cond.Wait()
-		}
-	}
-	s.cond.L.Unlock()
 	select {
 	case <-s.shutdown:
-	case s.input <- b:
-		s.cond.L.Lock()
-		s.cachedSize += b.size
-		s.cond.L.Unlock()
-		log.Debug("receive publish binlog item", zap.Stringer("item", b))
+	case <-s.input.Push(b, s.shutdown):
 	}
 }
 
