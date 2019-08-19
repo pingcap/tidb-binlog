@@ -59,6 +59,7 @@ var (
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 	// functions
+	newPdCli            = pd.NewClient
 	newTiKVLockResolver = tikv.NewLockResolver
 	newKVStore          = kvstore.New
 )

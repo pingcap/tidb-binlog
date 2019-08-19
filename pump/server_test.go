@@ -30,6 +30,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/config"
@@ -586,7 +587,7 @@ type newServerSuite struct {
 var _ = Suite(&newServerSuite{})
 
 func (s *newServerSuite) SetUpTest(c *C) {
-	s.origNewPdCli = util.NewPdCli
+	s.origNewPdCli = newPdCli
 	s.origNewKVStore = newKVStore
 	s.origNewTiKVLockResolver = newTiKVLockResolver
 
@@ -609,14 +610,14 @@ func (s *newServerSuite) SetUpTest(c *C) {
 }
 
 func (s *newServerSuite) TearDownTest(c *C) {
-	util.NewPdCli = s.origNewPdCli
+	newPdCli = s.origNewPdCli
 	newKVStore = s.origNewKVStore
 	newTiKVLockResolver = s.origNewTiKVLockResolver
 	s.cfg = nil
 }
 
 func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
-	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
+	newPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
 		return nil, errors.New("invalid client")
 	}
 	p, err := NewServer(s.cfg)
@@ -625,7 +626,7 @@ func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
 }
 
 func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
-	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
+	newPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
 	s.cfg.EtcdURLs = "testInvalidUrls"
@@ -635,7 +636,7 @@ func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
 }
 
 func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
-	util.NewPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
+	newPdCli = func([]string, pd.SecurityOption) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
 	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
@@ -684,7 +685,7 @@ func (s *startServerSuite) TearDownTest(c *C) {
 
 func (s *startServerSuite) TestStartPumpServer(c *C) {
 	utilGetTSO = func(pd.Client) (int64, error) {
-		return 42, nil
+		return 0, nil
 	}
 	etcdClient := testEtcdCluster.RandClient()
 	cfg := &Config{
@@ -718,11 +719,11 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 
 	// wait until the server is online
 	timeEnd := time.After(5 * time.Second)
-	getInterval := time.Tick(500 * time.Microsecond)
+	getInterval := time.NewTicker(500 * time.Microsecond)
 WAIT:
 	for {
 		select {
-		case <-getInterval:
+		case <-getInterval.C:
 			resp, err := http.Get("http://127.0.0.1:8250/status")
 			if err != nil {
 				if !strings.Contains(err.Error(), "connect: connection refused") {
@@ -740,7 +741,7 @@ WAIT:
 			err = json.Unmarshal(bodyByte, nodesStatus)
 			c.Assert(err, IsNil)
 			c.Assert(nodesStatus.ErrMsg, Equals, "")
-			c.Assert(nodesStatus.CommitTS, Equals, int64(42))
+			c.Assert(nodesStatus.CommitTS, Equals, int64(0))
 			fakeNodeStatus, ok := nodesStatus.StatusMap["startnode-long"]
 			c.Assert(ok, IsTrue)
 			c.Assert(fakeNodeStatus.NodeID, Equals, "startnode-long")
@@ -748,9 +749,11 @@ WAIT:
 			c.Assert(fakeNodeStatus.State, Equals, node.Online)
 			break WAIT
 		case <-timeEnd:
+			getInterval.Stop()
 			c.Fatal("Wait pump to be online for more than 5 seconds")
 		}
 	}
+	getInterval.Stop()
 
 	// test AllDrainer
 	resultStr := httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
@@ -761,13 +764,42 @@ WAIT:
 	// test triggerGC
 	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
 	c.Assert(strings.Contains(resultStr, "trigger gc success"), IsTrue)
-	// test pause node
-	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/pause")
+
+	// change node to pump node
+	registry := node.NewEtcdRegistry(etcdClient, time.Second)
+	p.node = &pumpNode{
+		EtcdRegistry: registry,
+		getMaxCommitTs: func() int64 {
+			return 0
+		},
+	}
+	ns := &node.Status{
+		NodeID:      "start_pump_test",
+		State:       pkgnode.Online,
+		MaxCommitTS: 2,
+	}
+	err := registry.UpdateNode(context.Background(), "drainers", ns)
+	c.Assert(err, IsNil)
+	// test AllDrainer
+	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
+	c.Assert(strings.Contains(resultStr, "start_pump_test"), IsTrue)
+	// test close node
+	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
 	c.Assert(strings.Contains(resultStr, "success"), IsTrue)
 
-	// wait server 1s for stopping
-	time.Sleep(time.Second)
-	c.Assert(atomic.LoadInt32(&p.isClosed), Equals, int32(1))
+	// wait server for closing
+	failTime := time.After(time.Second)
+CLOSE:
+	for {
+		select {
+		case <-time.After(50 * time.Microsecond):
+			if atomic.LoadInt32(&p.isClosed) == 1 {
+				break CLOSE
+			}
+		case <-failTime:
+			c.Fatal("Fail to close server in 1s")
+		}
+	}
 }
 
 // change to receive request of get, post, put
