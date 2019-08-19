@@ -145,64 +145,64 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	return executor, nil
 }
 
-func (p *KafkaSyncer) getPartitions() ([]int32, error) {
-	return p.cli.Partitions(p.topic)
+func (ks *KafkaSyncer) getPartitions() ([]int32, error) {
+	return ks.cli.Partitions(ks.topic)
 }
 
 // Sync implements Syncer interface
-func (p *KafkaSyncer) Sync(item *Item) error {
-	slaveBinlog, err := translator.TiBinlogToSlaveBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+func (ks *KafkaSyncer) Sync(item *Item) error {
+	slaveBinlog, err := translator.TiBinlogToSlaveBinlog(ks.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if p.partitionMode == PartitionFixed {
-		return errors.Trace(p.saveBinlog(slaveBinlog, item, nil))
+	if ks.partitionMode == PartitionFixed {
+		return errors.Trace(ks.saveBinlog(slaveBinlog, item, nil))
 	}
 
 	var msgs []*sarama.ProducerMessage
-	switch p.partitionMode {
+	switch ks.partitionMode {
 	case PartitionBySchema:
-		msgs, err = p.splitBinlogBySchema(slaveBinlog, item)
+		msgs, err = ks.splitBinlogBySchema(slaveBinlog, item)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case PartitionByTable:
-		msgs, err = p.splitBinlogByTable(slaveBinlog, item)
+		msgs, err = ks.splitBinlogByTable(slaveBinlog, item)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	default:
-		return errors.Errorf("Not supported partition mode: %v", p.partitionMode)
+		return errors.Errorf("Not supported partition mode: %v", ks.partitionMode)
 	}
-	if p.includeResolvedTs {
-		partitions, err := p.findSelectedPartitions(msgs)
+	if ks.includeResolvedTs {
+		partitions, err := ks.findSelectedPartitions(msgs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		for _, partition := range partitions {
-			m, err := p.newResolvedMsg(slaveBinlog.CommitTs, partition, item)
+			m, err := ks.newResolvedMsg(slaveBinlog.CommitTs, partition, item)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			msgs = append(msgs, m)
 		}
 	}
-	p.msgTracker.SentN(slaveBinlog.CommitTs, len(msgs))
+	ks.msgTracker.SentN(slaveBinlog.CommitTs, len(msgs))
 	for _, m := range msgs {
-		if err := p.sendMsg(m); err != nil {
+		if err := ks.sendMsg(m); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	return nil
 }
 
-func (p *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([]int32, error) {
-	partitions, err := p.getPartitions()
+func (ks *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([]int32, error) {
+	partitions, err := ks.getPartitions()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	numPartitions := int32(len(partitions))
-	partitioner := newHashPartitioner(p.topic).(*hashPartitioner)
+	partitioner := newHashPartitioner(ks.topic).(*hashPartitioner)
 	var selected []int32
 	for _, m := range msgs {
 		partition, err := partitioner.PartitionByKey(m.Key, numPartitions)
@@ -214,10 +214,10 @@ func (p *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([]
 	return selected, nil
 }
 
-func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+func (ks *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
 	if binlog.Type == obinlog.BinlogType_DDL {
 		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName)
-		m, err := p.newBinlogMsg(binlog, item, partitionKey, -1)
+		m, err := ks.newBinlogMsg(binlog, item, partitionKey, -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -238,7 +238,7 @@ func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([
 				Tables: tables,
 			},
 		}
-		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(schema), -1)
+		m, err := ks.newBinlogMsg(&l, item, sarama.StringEncoder(schema), -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -247,15 +247,15 @@ func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([
 	return msgs, nil
 }
 
-func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+func (ks *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
 	if binlog.Type == obinlog.BinlogType_DDL {
-		partitions, err := p.getPartitions()
+		partitions, err := ks.getPartitions()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
 		for _, pa := range partitions {
-			m, err := p.newBinlogMsg(binlog, item, nil, pa)
+			m, err := ks.newBinlogMsg(binlog, item, nil, pa)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -273,7 +273,7 @@ func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]
 				Tables: []*obinlog.Table{table},
 			},
 		}
-		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName), -1)
+		m, err := ks.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName), -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -283,26 +283,26 @@ func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]
 }
 
 // Close implements Syncer interface
-func (p *KafkaSyncer) Close() error {
-	close(p.shutdown)
+func (ks *KafkaSyncer) Close() error {
+	close(ks.shutdown)
 
-	err := <-p.Error()
+	err := <-ks.Error()
 
 	return err
 }
 
-func (p *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encoder, partition int32) (*sarama.ProducerMessage, error) {
+func (ks *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encoder, partition int32) (*sarama.ProducerMessage, error) {
 	data, err := bl.Marshal()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	msg := &sarama.ProducerMessage{Topic: p.topic, Key: k, Value: sarama.ByteEncoder(data), Partition: partition}
+	msg := &sarama.ProducerMessage{Topic: ks.topic, Key: k, Value: sarama.ByteEncoder(data), Partition: partition}
 	msg.Metadata = it
 	return msg, nil
 }
 
-func (p *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*sarama.ProducerMessage, error) {
+func (ks *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*sarama.ProducerMessage, error) {
 	bl := obinlog.Binlog{
 		Type:     obinlog.BinlogType_RESOLVED,
 		CommitTs: ts,
@@ -312,30 +312,30 @@ func (p *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*sa
 		return nil, errors.Trace(err)
 	}
 
-	msg := &sarama.ProducerMessage{Topic: p.topic, Value: sarama.ByteEncoder(data), Partition: partition}
+	msg := &sarama.ProducerMessage{Topic: ks.topic, Value: sarama.ByteEncoder(data), Partition: partition}
 	msg.Metadata = item
 	return msg, nil
 }
 
-func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
-	msg, err := p.newBinlogMsg(binlog, item, key, -1)
+func (ks *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
+	msg, err := ks.newBinlogMsg(binlog, item, key, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	p.msgTracker.Sent(binlog.CommitTs)
-	return p.sendMsg(msg)
+	ks.msgTracker.Sent(binlog.CommitTs)
+	return ks.sendMsg(msg)
 }
 
-func (p *KafkaSyncer) sendMsg(msg *sarama.ProducerMessage) error {
+func (ks *KafkaSyncer) sendMsg(msg *sarama.ProducerMessage) error {
 	select {
-	case p.producer.Input() <- msg:
+	case ks.producer.Input() <- msg:
 		return nil
-	case <-p.errCh:
-		return errors.Trace(p.err)
+	case <-ks.errCh:
+		return errors.Trace(ks.err)
 	}
 }
 
-func (p *KafkaSyncer) run() {
+func (ks *KafkaSyncer) run() {
 	var wg sync.WaitGroup
 
 	// handle successes from producer
@@ -343,16 +343,16 @@ func (p *KafkaSyncer) run() {
 	go func() {
 		defer wg.Done()
 
-		for msg := range p.producer.Successes() {
+		for msg := range ks.producer.Successes() {
 			item := msg.Metadata.(*Item)
 			commitTs := item.Binlog.GetCommitTs()
 			log.Debug("get success msg from producer", zap.Int64("ts", commitTs))
-			isLastOne := p.msgTracker.Acked(commitTs)
+			isLastOne := ks.msgTracker.Acked(commitTs)
 			if isLastOne {
-				p.success <- item
+				ks.success <- item
 			}
 		}
-		close(p.success)
+		close(ks.success)
 	}()
 
 	// handle errors from producer
@@ -360,7 +360,7 @@ func (p *KafkaSyncer) run() {
 	go func() {
 		defer wg.Done()
 
-		for err := range p.producer.Errors() {
+		for err := range ks.producer.Errors() {
 			panic(err)
 		}
 	}()
@@ -371,18 +371,18 @@ func (p *KafkaSyncer) run() {
 	for {
 		select {
 		case <-checkTick.C:
-			if p.msgTracker.HasWaitedTooLongForAck(maxWaitTimeToSendMSG) {
+			if ks.msgTracker.HasWaitedTooLongForAck(maxWaitTimeToSendMSG) {
 				log.Debug("fail to push to kafka")
 				err := errors.Errorf("fail to push msg to kafka after %v, check if kafka is up and working", maxWaitTimeToSendMSG)
-				p.setErr(err)
+				ks.setErr(err)
 				return
 			}
-		case <-p.shutdown:
-			err := p.producer.Close()
+		case <-ks.shutdown:
+			err := ks.producer.Close()
 			if err == nil {
-				err = p.cli.Close()
+				err = ks.cli.Close()
 			}
-			p.setErr(err)
+			ks.setErr(err)
 
 			wg.Wait()
 			return
@@ -400,34 +400,34 @@ func newHashPartitioner(topic string) sarama.Partitioner {
 	}
 }
 
-func (p *hashPartitioner) PartitionByKey(key sarama.Encoder, numPartitions int32) (int32, error) {
+func (ks *hashPartitioner) PartitionByKey(key sarama.Encoder, numPartitions int32) (int32, error) {
 	bytes, err := key.Encode()
 	if err != nil {
 		return -1, err
 	}
-	p.hasher.Reset()
-	_, err = p.hasher.Write(bytes)
+	ks.hasher.Reset()
+	_, err = ks.hasher.Write(bytes)
 	if err != nil {
 		return -1, err
 	}
-	partition := int32(p.hasher.Sum32()) % numPartitions
+	partition := int32(ks.hasher.Sum32()) % numPartitions
 	if partition < 0 {
 		partition = -partition
 	}
 	return partition, nil
 }
 
-func (p *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
+func (ks *hashPartitioner) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
 	if message.Partition >= 0 {
 		if message.Partition >= numPartitions {
 			return -1, fmt.Errorf("invalid partition %d (maximum: %d)", message.Partition, numPartitions-1)
 		}
 		return message.Partition, nil
 	}
-	return p.PartitionByKey(message.Key, numPartitions)
+	return ks.PartitionByKey(message.Key, numPartitions)
 }
 
-func (p *hashPartitioner) RequiresConsistency() bool {
+func (ks *hashPartitioner) RequiresConsistency() bool {
 	return true
 }
 
