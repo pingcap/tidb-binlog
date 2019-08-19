@@ -766,7 +766,8 @@ WAIT:
 	c.Assert(strings.Contains(resultStr, "trigger gc success"), IsTrue)
 
 	// change node to pump node
-	registry := node.NewEtcdRegistry(etcdClient, time.Second)
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
 	p.node = &pumpNode{
 		EtcdRegistry: registry,
 		getMaxCommitTs: func() int64 {
