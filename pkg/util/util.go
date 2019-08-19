@@ -232,7 +232,7 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	return int64(version.Ver), nil
 }
 
-// Store the function in a variable so that we can mock it when testing
+// NewPdCli stores the function in a variable so that we can mock it when testing
 var NewPdCli = pd.NewClient
 
 // GetPdClient create a PD client
