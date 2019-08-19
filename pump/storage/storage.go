@@ -703,8 +703,6 @@ func (a *Append) doGCTS(ts int64) {
 			}
 		}
 
-		iter.Release()
-
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
 				err := a.metadata.Write(batch, nil)
@@ -712,6 +710,7 @@ func (a *Append) doGCTS(ts int64) {
 					log.Error("write batch failed", zap.Error(err))
 				}
 				batch.Reset()
+				deletedKv.Add(float64(deleteBatch * 1024))
 			}
 			break
 		}
@@ -719,11 +718,15 @@ func (a *Append) doGCTS(ts int64) {
 		if len(lastKey) > 0 {
 			a.vlog.gcTS(decodeTSKey(lastKey))
 		}
-
+		deletedKv.Add(float64(deleteBatch * 1024))
+		doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
+	iter.Release()
+
 	a.vlog.gcTS(ts)
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 

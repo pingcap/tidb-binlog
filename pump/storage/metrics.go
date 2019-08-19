@@ -26,6 +26,22 @@ var (
 			Help:      "gc ts of storage",
 		})
 
+	doneGcTSGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "done_gc_ts",
+			Help:      "the metadata and vlog after this gc ts has been collected",
+		})
+
+	deletedKv = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "deleted_kv",
+			Help:      "deleted kv number",
+		})
+
 	storageSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "binlog",
@@ -97,6 +113,8 @@ var (
 // InitMetircs register the metrics to registry
 func InitMetircs(registry *prometheus.Registry) {
 	registry.MustRegister(gcTSGauge)
+	registry.MustRegister(doneGcTSGauge)
+	registry.MustRegister(deletedKv)
 	registry.MustRegister(maxCommitTSGauge)
 	registry.MustRegister(tikvQueryCount)
 	registry.MustRegister(errorCount)
