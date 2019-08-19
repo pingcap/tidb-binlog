@@ -71,8 +71,6 @@ type binlogItemCache struct {
 	maxBinlogCacheSize int64
 	cond               *sync.Cond
 	quiting            bool
-
-	finished chan struct{}
 }
 
 func newBinlogItemCache(maxBinlogItemCount int, maxBinlogCacheSize int64) (bc *binlogItemCache) {
@@ -80,59 +78,42 @@ func newBinlogItemCache(maxBinlogItemCount int, maxBinlogCacheSize int64) (bc *b
 		cachedChan:         make(chan *binlogItem, maxBinlogItemCount),
 		maxBinlogCacheSize: maxBinlogCacheSize,
 		cond:               sync.NewCond(new(sync.Mutex)),
-		finished:           make(chan struct{}),
 	}
 }
 
-func (bc *binlogItemCache) Push(b *binlogItem, shutdown chan struct{}) chan struct{} {
-	go func() {
+func (bc *binlogItemCache) Push(b *binlogItem, shutdown chan struct{}) {
+	bc.cond.L.Lock()
+	sz := b.Size()
+	if sz >= bc.maxBinlogCacheSize {
+		for bc.cachedSize != 0 && !bc.quiting {
+			bc.cond.Wait()
+		}
+	} else {
+		for bc.cachedSize+sz > bc.maxBinlogCacheSize && !bc.quiting {
+			bc.cond.Wait()
+		}
+	}
+	bc.cond.L.Unlock()
+	select {
+	case <-shutdown:
+	case bc.cachedChan <- b:
 		bc.cond.L.Lock()
-		sz := b.Size()
-		if sz >= bc.maxBinlogCacheSize {
-			for bc.cachedSize != 0 && !bc.quiting {
-				bc.cond.Wait()
-			}
-		} else {
-			for bc.cachedSize+sz > bc.maxBinlogCacheSize && !bc.quiting {
-				bc.cond.Wait()
-			}
-		}
+		bc.cachedSize += sz
 		bc.cond.L.Unlock()
-		select {
-		case <-shutdown:
-		case bc.cachedChan <- b:
-			bc.cond.L.Lock()
-			bc.cachedSize += sz
-			bc.cond.L.Unlock()
-			log.Debug("receive publish binlog item", zap.Stringer("item", b))
-		}
-		bc.finished <- struct{}{}
-	}()
-	return bc.finished
+		log.Debug("receive publish binlog item", zap.Stringer("item", b))
+	}
 }
 
-func (bc *binlogItemCache) Pop(shutdown chan struct{}) chan *binlogItem {
-	result := make(chan *binlogItem)
-	go func() {
-		for !bc.quiting {
-			select {
-			case <-shutdown:
-				return
-			case b := <-bc.cachedChan:
-				select {
-				case <-shutdown:
-					return
-				case result <- b:
-					bc.cond.L.Lock()
-					// has popped new binlog item, minus cachedSize
-					bc.cachedSize -= b.Size()
-					bc.cond.Signal()
-					bc.cond.L.Unlock()
-				}
-			}
-		}
-	}()
-	return result
+func (bc *binlogItemCache) Pop() chan *binlogItem {
+	return bc.cachedChan
+}
+
+func (bc *binlogItemCache) MinusSize(size int64) {
+	bc.cond.L.Lock()
+	// has popped new binlog item, minus cachedSize
+	bc.cachedSize -= size
+	bc.cond.Signal()
+	bc.cond.L.Unlock()
 }
 
 func (bc *binlogItemCache) Close() {

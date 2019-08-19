@@ -282,7 +282,7 @@ func (s *Syncer) run() error {
 
 	var lastAddComitTS int64
 	dsyncError := s.dsyncer.Error()
-	inputChan := s.input.Pop(s.shutdown)
+	inputChan := s.input.Pop()
 ForLoop:
 	for {
 		// check if we can safely push a fake binlog
@@ -305,6 +305,7 @@ ForLoop:
 			pushFakeBinlog = nil
 			continue
 		case b = <-inputChan:
+			s.input.MinusSize(b.Size())
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(s.input.Len()))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
@@ -470,10 +471,7 @@ func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
 
 // Add adds binlogItem to the syncer's input channel
 func (s *Syncer) Add(b *binlogItem) {
-	select {
-	case <-s.shutdown:
-	case <-s.input.Push(b, s.shutdown):
-	}
+	s.input.Push(b, s.shutdown)
 }
 
 // Close closes syncer.
