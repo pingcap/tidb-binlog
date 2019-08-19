@@ -698,6 +698,7 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 				deleteBatch++
 			}
@@ -709,8 +710,8 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
-				deletedKv.Add(float64(deleteBatch * 1024))
 			}
 			break
 		}
@@ -718,7 +719,6 @@ func (a *Append) doGCTS(ts int64) {
 		if len(lastKey) > 0 {
 			a.vlog.gcTS(decodeTSKey(lastKey))
 		}
-		deletedKv.Add(float64(deleteBatch * 1024))
 		doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
