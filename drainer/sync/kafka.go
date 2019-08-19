@@ -217,7 +217,7 @@ func (p *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([]
 func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
 	if binlog.Type == obinlog.BinlogType_DDL {
 		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName)
-		m, err := p.newBinlogMsg(binlog, item, partitionKey)
+		m, err := p.newBinlogMsg(binlog, item, partitionKey, -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -238,7 +238,7 @@ func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([
 				Tables: tables,
 			},
 		}
-		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(schema))
+		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(schema), -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -249,12 +249,19 @@ func (p *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([
 
 func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
 	if binlog.Type == obinlog.BinlogType_DDL {
-		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName + "." + *binlog.DdlData.TableName)
-		m, err := p.newBinlogMsg(binlog, item, partitionKey)
+		partitions, err := p.getPartitions()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return []*sarama.ProducerMessage{m}, nil
+		msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
+		for _, pa := range partitions {
+			m, err := p.newBinlogMsg(binlog, item, nil, pa)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			msgs = append(msgs, m)
+		}
+		return msgs, nil
 	}
 
 	msgs := make([]*sarama.ProducerMessage, 0, len(binlog.DmlData.Tables))
@@ -266,7 +273,7 @@ func (p *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]
 				Tables: []*obinlog.Table{table},
 			},
 		}
-		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName))
+		m, err := p.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName), -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -284,13 +291,13 @@ func (p *KafkaSyncer) Close() error {
 	return err
 }
 
-func (p *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encoder) (*sarama.ProducerMessage, error) {
+func (p *KafkaSyncer) newBinlogMsg(bl *obinlog.Binlog, it *Item, k sarama.Encoder, partition int32) (*sarama.ProducerMessage, error) {
 	data, err := bl.Marshal()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	msg := &sarama.ProducerMessage{Topic: p.topic, Key: k, Value: sarama.ByteEncoder(data), Partition: -1}
+	msg := &sarama.ProducerMessage{Topic: p.topic, Key: k, Value: sarama.ByteEncoder(data), Partition: partition}
 	msg.Metadata = it
 	return msg, nil
 }
@@ -311,7 +318,7 @@ func (p *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*sa
 }
 
 func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
-	msg, err := p.newBinlogMsg(binlog, item, key)
+	msg, err := p.newBinlogMsg(binlog, item, key, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
