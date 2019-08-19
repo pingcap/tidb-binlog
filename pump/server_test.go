@@ -761,8 +761,8 @@ WAIT:
 	// test triggerGC
 	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
 	c.Assert(strings.Contains(resultStr, "trigger gc success"), IsTrue)
-	// test close node
-	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
+	// test pause node
+	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/pause")
 	c.Assert(strings.Contains(resultStr, "success"), IsTrue)
 
 	// wait server 1s for stopping
