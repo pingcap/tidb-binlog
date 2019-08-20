@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
@@ -407,7 +407,7 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	}()
 	ld := dummyLoader{input: dest}
 
-	err := syncBinlogs(source, &ld)
+	err := syncBinlogs(context.Background(), source, &ld)
 	c.Assert(err, IsNil)
 
 	c.Assert(len(dest), Equals, 2)
@@ -417,4 +417,43 @@ func (s *syncBinlogsSuite) TestShouldSendBinlogToLoader(c *C) {
 	}
 
 	c.Assert(ld.closed, IsTrue)
+}
+
+func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
+	readerMsgs := make(chan *reader.Message, 1024)
+	dummyLoaderImpl := &dummyLoader{
+		successes: make(chan *loader.Txn),
+		// input is set small to trigger blocking easily
+		input: make(chan *loader.Txn, 1),
+	}
+	msg := s.createMsg("test42", "users", "alter table users add column gender smallint")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// start a routine keep sending msgs to kafka reader
+	go func() {
+		// make sure there will be some msgs in readerMsgs for test
+		for i := 0; i < 3; i++ {
+			readerMsgs <- msg
+		}
+		defer close(readerMsgs)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case readerMsgs <- msg:
+			}
+		}
+	}()
+	errCh := make(chan error)
+	go func() {
+		errCh <- syncBinlogs(ctx, readerMsgs, dummyLoaderImpl)
+	}()
+
+	cancel()
+	select {
+	case err := <-errCh:
+		c.Assert(err, IsNil)
+	case <-time.After(time.Second):
+		c.Fatal("server doesn't quit in 1s when some error occurs in loader")
+	}
 }
