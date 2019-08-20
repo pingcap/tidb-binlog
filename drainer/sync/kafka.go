@@ -318,7 +318,7 @@ func (ks *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*s
 }
 
 func (ks *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
-	msg, err := ks.newBinlogMsg(binlog, item, key, -1)
+	msg, err := ks.newBinlogMsg(binlog, item, key, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}
