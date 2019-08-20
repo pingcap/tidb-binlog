@@ -60,7 +60,8 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 
 func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cfg := &SyncerConfig{
-		DestDBType: "_intercept",
+		DestDBType:          "_intercept",
+		MaxCacheBinlogCount: 320,
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
