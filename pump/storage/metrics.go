@@ -38,7 +38,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "binlog",
 			Subsystem: "pump_storage",
-			Name:      "deleted_kv",
+			Name:      "deleted_kv_total",
 			Help:      "deleted kv number",
 		})
 
