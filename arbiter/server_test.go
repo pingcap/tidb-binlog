@@ -431,6 +431,10 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 	defer cancel()
 	// start a routine keep sending msgs to kafka reader
 	go func() {
+		// make sure there will be some msgs in readerMsgs for test
+		for i := 0; i < 3; i++ {
+			readerMsgs <- msg
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -438,8 +442,9 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 			case readerMsgs <- msg:
 			}
 		}
+		close(readerMsgs)
 	}()
-	errCh := make(chan error, 1)
+	errCh := make(chan error)
 	go func() {
 		errCh <- syncBinlogs(ctx, readerMsgs, dummyLoaderImpl)
 	}()
