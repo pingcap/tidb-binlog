@@ -21,7 +21,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/config"
@@ -135,9 +133,7 @@ func (s *noOpStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil 
 func (s *noOpStorage) GetGCTS() int64                              { return 0 }
 func (s *noOpStorage) GC(ts int64)                                 {}
 func (s *noOpStorage) MaxCommitTS() int64                          { return 0 }
-func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) {
-	return nil, errors.New("server_test")
-}
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error)  { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
@@ -649,7 +645,6 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	p, err := NewServer(s.cfg)
 	c.Assert(err, IsNil)
 	c.Assert(p.clusterID, Equals, uint64(8012))
-	p.Close()
 }
 
 type startNode struct {
@@ -668,6 +663,28 @@ func (n *startNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
 	return []*node.Status{n.status}, nil
 }
 func (n *startNode) Quit() error { return nil }
+
+type startStorage struct {
+	sig chan struct{} // use sig to notify that the closing work has been done
+}
+
+func (s *startStorage) AllMatched() bool                            { return true }
+func (s *startStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil }
+func (s *startStorage) GetGCTS() int64                              { return 0 }
+func (s *startStorage) GC(ts int64)                                 {}
+func (s *startStorage) MaxCommitTS() int64                          { return 0 }
+func (s *startStorage) GetBinlog(ts int64) (*binlog.Binlog, error) {
+	return nil, errors.New("server_test")
+}
+func (s *startStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+	return make(chan []byte)
+}
+func (s *startStorage) Close() error {
+	s.sig <- struct{}{}
+	// wait for pump server to change node back to startNode, or test etcd server might be closed
+	time.Sleep(20 * time.Microsecond)
+	return nil
+}
 
 type startServerSuite struct {
 	origUtilGetTSO func(pd.Client) (int64, error)
@@ -691,7 +708,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	cfg := &Config{
 		ListenAddr:        "http://127.0.0.1:8250",
 		AdvertiseAddr:     "http://127.0.0.1:8260",
-		Socket:            "unix://127.0.0.1:8280/hello/world",
+		Socket:            "unix://127.0.0.1:" + string(time.Now().UnixNano()) + "/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		DataDir:           "/tmp/pump",
 		HeartbeatInterval: 1500,
@@ -699,11 +716,13 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
+	sig := make(chan struct{})
+	startNodeImpl := &startNode{status: &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}}
 	p := &Server{
 		dataDir:    cfg.DataDir,
-		storage:    &noOpStorage{},
+		storage:    &startStorage{sig: sig},
 		clusterID:  8012,
-		node:       &startNode{status: &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}},
+		node:       startNodeImpl,
 		tcpAddr:    cfg.ListenAddr,
 		unixAddr:   cfg.Socket,
 		gs:         grpc.NewServer(grpcOpts...),
@@ -770,16 +789,17 @@ WAIT:
 	registry := node.NewEtcdRegistry(cli, time.Second)
 	p.node = &pumpNode{
 		EtcdRegistry: registry,
+		status:       &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"},
 		getMaxCommitTs: func() int64 {
 			return 0
 		},
 	}
-	ns := &node.Status{
+	drainerNodeStatus := &node.Status{
 		NodeID:      "start_pump_test",
-		State:       pkgnode.Online,
+		State:       node.Online,
 		MaxCommitTS: 2,
 	}
-	err := registry.UpdateNode(context.Background(), "drainers", ns)
+	err := registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
 	c.Assert(err, IsNil)
 	// test AllDrainer
 	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
@@ -788,18 +808,12 @@ WAIT:
 	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
 	c.Assert(strings.Contains(resultStr, "success"), IsTrue)
 
-	// wait server for closing
-	failTime := time.After(time.Second)
-CLOSE:
-	for {
-		select {
-		case <-time.After(50 * time.Microsecond):
-			if atomic.LoadInt32(&p.isClosed) == 1 {
-				break CLOSE
-			}
-		case <-failTime:
-			c.Fatal("Fail to close server in 1s")
-		}
+	select {
+	case <-sig:
+		// change back to start node to avoid closing the whole etcd server
+		p.node = startNodeImpl
+	case <-time.After(time.Second):
+		c.Fatal("Fail to close server in 1s")
 	}
 }
 
