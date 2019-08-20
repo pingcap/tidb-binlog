@@ -200,7 +200,6 @@ func (s *Server) Run() error {
 
 	wg.Wait()
 
-	// to pass go check
 	syncCancel()
 	if err != nil {
 		return errors.Trace(err)
