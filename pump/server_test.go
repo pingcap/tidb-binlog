@@ -745,9 +745,7 @@ WAIT:
 		case <-getInterval.C:
 			resp, err := http.Get("http://127.0.0.1:8250/status")
 			if err != nil {
-				if !strings.Contains(err.Error(), "connect: connection refused") {
-					c.Fatal("Connect to pump server fail, error is " + err.Error())
-				}
+				c.Assert(err, ErrorMatches, "connect: connection refused")
 				continue
 			}
 			// should receive valid and correct node status info
@@ -776,13 +774,13 @@ WAIT:
 
 	// test AllDrainer
 	resultStr := httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
-	c.Assert(strings.Contains(resultStr, "can't provide service"), IsTrue)
+	c.Assert(resultStr, Matches, "can't provide service")
 	// test BinlogByTS
 	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/debug/binlog/2")
-	c.Assert(strings.Contains(resultStr, "server_test"), IsTrue)
+	c.Assert(resultStr, Matches, "server_test")
 	// test triggerGC
 	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
-	c.Assert(strings.Contains(resultStr, "trigger gc success"), IsTrue)
+	c.Assert(resultStr, Matches, "trigger gc success")
 
 	// change node to pump node
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
@@ -803,10 +801,10 @@ WAIT:
 	c.Assert(err, IsNil)
 	// test AllDrainer
 	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
-	c.Assert(strings.Contains(resultStr, "start_pump_test"), IsTrue)
+	c.Assert(resultStr, Matches, "start_pump_test")
 	// test close node
 	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
-	c.Assert(strings.Contains(resultStr, "success"), IsTrue)
+	c.Assert(resultStr, Matches, "success")
 
 	select {
 	case <-sig:
