@@ -812,8 +812,8 @@ WAIT:
 	case <-sig:
 		// change back to start node to avoid closing the whole etcd server
 		p.node = startNodeImpl
-	case <-time.After(time.Second):
-		c.Fatal("Fail to close server in 1s")
+	case <-time.After(2 * time.Second):
+		c.Fatal("Fail to close server in 2s")
 	}
 }
 
