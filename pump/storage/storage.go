@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package storage
 
 import (
@@ -577,6 +590,12 @@ func (a *Append) doGCTS(ts int64) {
 
 	deleteNum := 0
 
+	irange := &util.Range{
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
+	}
+	iter := a.metadata.NewIterator(irange, nil)
+
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
@@ -596,12 +615,6 @@ func (a *Append) doGCTS(ts int64) {
 			continue
 		}
 
-		irange := &util.Range{
-			Start: encodeTSKey(0),
-			Limit: encodeTSKey(ts + 1),
-		}
-		iter := a.metadata.NewIterator(irange, nil)
-
 		deleteBatch := 0
 		var lastKey []byte
 
@@ -615,12 +628,11 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error(err)
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 				deleteBatch++
 			}
 		}
-
-		iter.Release()
 
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
@@ -628,6 +640,7 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error(err)
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
 			break
@@ -635,12 +648,16 @@ func (a *Append) doGCTS(ts int64) {
 
 		if len(lastKey) > 0 {
 			a.vlog.gcTS(decodeTSKey(lastKey))
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
 
 		log.Infof("has delete %d number", deleteNum)
 	}
 
+	iter.Release()
+
 	a.vlog.gcTS(ts)
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	log.Infof("finish gc, ts: %d delete num: %d", ts, deleteNum)
 }
 
