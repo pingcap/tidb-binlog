@@ -435,6 +435,7 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 		for i := 0; i < 3; i++ {
 			readerMsgs <- msg
 		}
+		defer close(readerMsgs)
 		for {
 			select {
 			case <-ctx.Done():
@@ -442,7 +443,6 @@ func (s *syncBinlogsSuite) TestShouldQuitWhenSomeErrorOccurs(c *C) {
 			case readerMsgs <- msg:
 			}
 		}
-		close(readerMsgs)
 	}()
 	errCh := make(chan error)
 	go func() {
