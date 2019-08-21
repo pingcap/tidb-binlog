@@ -16,6 +16,7 @@ package pump
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,9 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 var _ = Suite(&testNodeSuite{})
@@ -167,4 +170,49 @@ func (s *heartbeatSuite) TestShouldUpdateStatus(c *C) {
 	cancel()
 	c.Assert(p.status.MaxCommitTS, Greater, int64(0))
 	c.Assert(p.status.MaxCommitTS, LessEqual, int64(3))
+}
+
+type notifyDrainerSuite struct{}
+
+var _ = Suite(&notifyDrainerSuite{})
+
+type mockDrainerServer struct {
+	binlog.CisternServer
+	notified bool
+}
+
+func (s *mockDrainerServer) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	s.notified = true
+	return nil, nil
+}
+
+func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
+	host := "127.0.0.1:8249"
+	lis, err := net.Listen("tcp", host)
+	c.Assert(err, IsNil)
+	gs := grpc.NewServer()
+	mockDrainerServerImpl := &mockDrainerServer{notified: false}
+	binlog.RegisterCisternServer(gs, mockDrainerServerImpl)
+	// defer gs.Stop()
+	go gs.Serve(lis)
+
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	pNode := &pumpNode{
+		EtcdRegistry: registry,
+		status:       &node.Status{State: node.Online, NodeID: "pump_notify", Addr: "http://192.168.199.100:8260"},
+		getMaxCommitTs: func() int64 {
+			return 0
+		},
+	}
+	drainerNodeStatus := &node.Status{
+		NodeID: "pump_notify_test",
+		State:  node.Online,
+		Addr:   host,
+	}
+	err = registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
+	c.Assert(err, IsNil)
+	err = pNode.Notify(context.Background())
+	c.Assert(err, IsNil)
+	c.Assert(mockDrainerServerImpl.notified, IsTrue)
 }
