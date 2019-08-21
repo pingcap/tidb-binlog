@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
@@ -664,7 +665,7 @@ func (a *Append) doGCTS(ts int64) {
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
 	}
-	iter := a.metadata.NewIterator(irange, nil)
+	var iter iterator.Iterator
 	defer func() {
 		if iter != nil {
 			iter.Release()
@@ -699,6 +700,9 @@ func (a *Append) doGCTS(ts int64) {
 		var lastKey []byte
 
 		if iter == nil {
+			log.Info("create new gc iter", zap.Int64("ts", ts),
+				zap.Int64("start", decodeTSKey(irange.Start)),
+				zap.Int64("limit", decodeTSKey(irange.Limit)))
 			iter = a.metadata.NewIterator(irange, nil)
 		}
 
@@ -731,6 +735,7 @@ func (a *Append) doGCTS(ts int64) {
 		}
 
 		if len(lastKey) > 0 {
+			irange.Start = lastKey
 			a.vlog.gcTS(decodeTSKey(lastKey))
 			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
