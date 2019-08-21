@@ -128,6 +128,10 @@ func (p *pumpNode) ShortID() string {
 	return p.status.NodeID[0:shortIDLen]
 }
 
+func (p *pumpNode) PreviousStatus(ctx context.Context) (*node.Status, error) {
+	return p.Node(ctx, "pumps", p.status.NodeID)
+}
+
 func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
 	p.Lock()
 	defer p.Unlock()

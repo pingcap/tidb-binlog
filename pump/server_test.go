@@ -67,6 +67,7 @@ type fakeNode struct{}
 
 func (n *fakeNode) ID() string                                                   { return "fakenode-long" }
 func (n *fakeNode) ShortID() string                                              { return "fakenode" }
+func (n *fakeNode) PreviousStatus(ctx context.Context) (*node.Status, error)     { return nil, nil }
 func (n *fakeNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *fakeNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *fakeNode) Notify(ctx context.Context) error                             { return nil }

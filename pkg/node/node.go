@@ -26,6 +26,8 @@ type Node interface {
 	ID() string
 	// a short ID as 8 bytes length
 	ShortID() string
+	// PreviousStatus get node's previous status in etcd server.
+	PreviousStatus(ctx context.Context) (*Status, error)
 	// RefreshStatus refresh node's status.
 	RefreshStatus(ctx context.Context, status *Status) error
 	// Heartbeat refreshes the state of this pump node in etcd periodically
