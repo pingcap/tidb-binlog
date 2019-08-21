@@ -660,6 +660,12 @@ func (a *Append) doGCTS(ts int64) {
 
 	deleteNum := 0
 
+	irange := &util.Range{
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
+	}
+	iter := a.metadata.NewIterator(irange, nil)
+
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
@@ -679,12 +685,6 @@ func (a *Append) doGCTS(ts int64) {
 			continue
 		}
 
-		irange := &util.Range{
-			Start: encodeTSKey(0),
-			Limit: encodeTSKey(ts + 1),
-		}
-		iter := a.metadata.NewIterator(irange, nil)
-
 		deleteBatch := 0
 		var lastKey []byte
 
@@ -698,12 +698,11 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 				deleteBatch++
 			}
 		}
-
-		iter.Release()
 
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
@@ -711,6 +710,7 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
 			break
@@ -718,12 +718,15 @@ func (a *Append) doGCTS(ts int64) {
 
 		if len(lastKey) > 0 {
 			a.vlog.gcTS(decodeTSKey(lastKey))
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
-
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
+	iter.Release()
+
 	a.vlog.gcTS(ts)
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 
