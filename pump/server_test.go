@@ -775,16 +775,16 @@ WAIT:
 	}
 	getInterval.Stop()
 
-	// string converted from json may contain char '\n' which can't be matched with '.' but can be matched with '[\\s\\S]'
+	// string converted from json may contain char '\n' which can't be matched with '.' but can be matched with `[\s\S]`
 	// test AllDrainer
 	resultStr := httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
-	c.Assert(resultStr, Matches, ".*can't provide service[\\s\\S]*")
+	c.Assert(resultStr, Matches, `.*can't provide service[\s\S]*`)
 	// test BinlogByTS
 	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/debug/binlog/2")
-	c.Assert(resultStr, Matches, ".*server_test[\\s\\S]*")
+	c.Assert(resultStr, Matches, `.*server_test[\s\S]*`)
 	// test triggerGC
 	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
-	c.Assert(resultStr, Matches, ".*trigger gc success[\\s\\S]*")
+	c.Assert(resultStr, Matches, `.*trigger gc success[\s\S]*`)
 
 	// change node to pump node
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
@@ -805,10 +805,10 @@ WAIT:
 	c.Assert(err, IsNil)
 	// test AllDrainer
 	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
-	c.Assert(resultStr, Matches, ".*start_pump_test[\\s\\S]*")
+	c.Assert(resultStr, Matches, `.*start_pump_test[\s\S]*`)
 	// test close node
 	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
-	c.Assert(resultStr, Matches, "[\\s\\S]*success[\\s\\S]*")
+	c.Assert(resultStr, Matches, `[\s\S]*success[\s\S]*`)
 
 	select {
 	case sig <- struct{}{}:
