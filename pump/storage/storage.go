@@ -700,7 +700,7 @@ func (a *Append) doGCTS(ts int64) {
 		var lastKey []byte
 
 		if iter == nil {
-			log.Info("create new gc iter", zap.Int64("ts", ts),
+			log.Info("New LevelDB iterator created for GC", zap.Int64("ts", ts),
 				zap.Int64("start", decodeTSKey(irange.Start)),
 				zap.Int64("limit", decodeTSKey(irange.Limit)))
 			iter = a.metadata.NewIterator(irange, nil)
