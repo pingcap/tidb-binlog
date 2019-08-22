@@ -149,10 +149,7 @@ func (e *Client) UpdateOrCreate(ctx context.Context, key string, val string, ttl
 	}
 
 	_, err := e.client.KV.Do(ctx, clientv3.OpPut(key, val, opts...))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 // List returns the trie struct that constructed by the key/value with same prefix
@@ -192,11 +189,7 @@ func (e *Client) Delete(ctx context.Context, key string, withPrefix bool) error 
 	}
 
 	_, err := e.client.KV.Delete(ctx, key, opts...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return errors.Trace(err)
 }
 
 func parseToDirTree(root *Node, path string) *Node {
