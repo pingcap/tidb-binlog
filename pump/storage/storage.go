@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"golang.org/x/sys/unix"
@@ -594,7 +595,13 @@ func (a *Append) doGCTS(ts int64) {
 		Start: encodeTSKey(0),
 		Limit: encodeTSKey(ts + 1),
 	}
-	iter := a.metadata.NewIterator(irange, nil)
+	var iter iterator.Iterator
+	defer func() {
+		if iter != nil {
+			iter.Release()
+			iter = nil
+		}
+	}()
 
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
@@ -611,12 +618,23 @@ func (a *Append) doGCTS(ts int64) {
 
 		if l0Num >= l0Trigger {
 			log.Infof("wait some time to gc cause too many L0 file, files: %d", l0Num)
+			if iter != nil {
+				iter.Release()
+				iter = nil
+			}
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		deleteBatch := 0
 		var lastKey []byte
+
+		if iter == nil {
+			log.Infof("New LevelDB iterator created for GC, start: %d, limit: %d",
+				decodeTSKey(irange.Start),
+				decodeTSKey(irange.Limit))
+			iter = a.metadata.NewIterator(irange, nil)
+		}
 
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
@@ -647,14 +665,13 @@ func (a *Append) doGCTS(ts int64) {
 		}
 
 		if len(lastKey) > 0 {
+			irange.Start = lastKey
 			a.vlog.gcTS(decodeTSKey(lastKey))
 			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
 
 		log.Infof("has delete %d number", deleteNum)
 	}
-
-	iter.Release()
 
 	a.vlog.gcTS(ts)
 	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
