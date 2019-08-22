@@ -187,15 +187,17 @@ func (s *mockDrainerServer) Notify(ctx context.Context, in *binlog.NotifyReq) (*
 }
 
 func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
+	// start mock drainer server
 	host := "127.0.0.1:8249"
 	lis, err := net.Listen("tcp", host)
 	c.Assert(err, IsNil)
 	gs := grpc.NewServer()
 	mockDrainerServerImpl := &mockDrainerServer{notified: false}
 	binlog.RegisterCisternServer(gs, mockDrainerServerImpl)
-	// defer gs.Stop()
+	defer gs.Stop()
 	go gs.Serve(lis)
 
+	// update drainer info in etcd
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
 	registry := node.NewEtcdRegistry(cli, time.Second)
 	pNode := &pumpNode{
@@ -212,6 +214,8 @@ func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
 	}
 	err = registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
 	c.Assert(err, IsNil)
+
+	// notify the mocked drainer
 	err = pNode.Notify(context.Background())
 	c.Assert(err, IsNil)
 	c.Assert(mockDrainerServerImpl.notified, IsTrue)
