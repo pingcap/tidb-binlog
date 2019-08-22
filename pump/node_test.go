@@ -179,6 +179,7 @@ var _ = Suite(&notifyDrainerSuite{})
 type mockDrainerServer struct {
 	binlog.CisternServer
 	notified bool
+	host     string
 }
 
 func (s *mockDrainerServer) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
@@ -186,16 +187,23 @@ func (s *mockDrainerServer) Notify(ctx context.Context, in *binlog.NotifyReq) (*
 	return nil, nil
 }
 
-func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
-	// start mock drainer server
-	host := "127.0.0.1:8249"
-	lis, err := net.Listen("tcp", host)
-	c.Assert(err, IsNil)
+// start mock drainer server
+func (s *mockDrainerServer) Start() (*grpc.Server, error) {
+	lis, err := net.Listen("tcp", s.host)
+	if err != nil {
+		return nil, err
+	}
 	gs := grpc.NewServer()
-	mockDrainerServerImpl := &mockDrainerServer{notified: false}
-	binlog.RegisterCisternServer(gs, mockDrainerServerImpl)
-	defer gs.Stop()
+	binlog.RegisterCisternServer(gs, s)
 	go gs.Serve(lis)
+	return gs, nil
+}
+
+func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
+	mockDrainerServerImpl := &mockDrainerServer{host: "127.0.0.1:8249", notified: false}
+	gs, err := mockDrainerServerImpl.Start()
+	c.Assert(err, IsNil)
+	defer gs.Stop()
 
 	// update drainer info in etcd
 	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
@@ -203,14 +211,11 @@ func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
 	pNode := &pumpNode{
 		EtcdRegistry: registry,
 		status:       &node.Status{State: node.Online, NodeID: "pump_notify", Addr: "http://192.168.199.100:8260"},
-		getMaxCommitTs: func() int64 {
-			return 0
-		},
 	}
 	drainerNodeStatus := &node.Status{
 		NodeID: "pump_notify_test",
 		State:  node.Online,
-		Addr:   host,
+		Addr:   mockDrainerServerImpl.host,
 	}
 	err = registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
 	c.Assert(err, IsNil)
