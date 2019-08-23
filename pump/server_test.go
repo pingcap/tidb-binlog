@@ -14,9 +14,14 @@
 package pump
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
+	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,10 +30,13 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	binlog "github.com/pingcap/tipb/go-binlog"
-	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -121,12 +129,12 @@ func (s *pullBinlogsSuite) TestReturnErrIfClusterIDMismatched(c *C) {
 
 type noOpStorage struct{}
 
-func (s *noOpStorage) AllMatched() bool                           { return true }
-func (s *noOpStorage) WriteBinlog(binlog *pb.Binlog) error        { return nil }
-func (s *noOpStorage) GetGCTS() int64                             { return 0 }
-func (s *noOpStorage) GC(ts int64)                                {}
-func (s *noOpStorage) MaxCommitTS() int64                         { return 0 }
-func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error) { return nil, nil }
+func (s *noOpStorage) AllMatched() bool                            { return true }
+func (s *noOpStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil }
+func (s *noOpStorage) GetGCTS() int64                              { return 0 }
+func (s *noOpStorage) GC(ts int64)                                 {}
+func (s *noOpStorage) MaxCommitTS() int64                          { return 0 }
+func (s *noOpStorage) GetBinlog(ts int64) (*binlog.Binlog, error)  { return nil, nil }
 func (s *noOpStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
 	return make(chan []byte)
 }
@@ -194,11 +202,11 @@ func (s *genForwardBinlogSuite) TestShouldExitWhenCanceled(c *C) {
 
 type fakeWritable struct {
 	noOpStorage
-	binlogs []pb.Binlog
+	binlogs []binlog.Binlog
 }
 
-func (s *fakeWritable) WriteBinlog(binlog *pb.Binlog) error {
-	s.binlogs = append(s.binlogs, *binlog)
+func (s *fakeWritable) WriteBinlog(binlogItem *binlog.Binlog) error {
+	s.binlogs = append(s.binlogs, *binlogItem)
 	return nil
 }
 
@@ -211,7 +219,7 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 		utilGetTSO = origGetTSO
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
-	storage := fakeWritable{binlogs: make([]pb.Binlog, 1)}
+	storage := fakeWritable{binlogs: make([]binlog.Binlog, 1)}
 	server := &Server{
 		clusterID: 42,
 		storage:   &storage,
@@ -230,7 +238,7 @@ func (s *genForwardBinlogSuite) TestSendFakeBinlog(c *C) {
 	c.Assert(len(storage.binlogs) > 0, IsTrue)
 	var foundFake bool
 	for _, bl := range storage.binlogs {
-		if bl.Tp == pb.BinlogType_Rollback && bl.CommitTs == 42 && bl.StartTs == 42 {
+		if bl.Tp == binlog.BinlogType_Rollback && bl.CommitTs == 42 && bl.StartTs == 42 {
 			foundFake = true
 		}
 	}
@@ -554,4 +562,275 @@ func (s *listenSuite) TestReturnListener(c *C) {
 	c.Assert(err, IsNil)
 	defer l.Close()
 	c.Assert(l, NotNil)
+}
+
+type mockPdCli struct {
+	pd.Client
+}
+
+func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
+	return 8012
+}
+
+func (pc *mockPdCli) Close() {}
+
+type newServerSuite struct {
+	origGetPdClientFn         func(string, security.Config) (pd.Client, error)
+	origNewKVStoreFn          func(string) (kv.Storage, error)
+	origNewTiKVLockResolverFn func([]string, config.Security) (*tikv.LockResolver, error)
+	cfg                       *Config
+}
+
+var _ = Suite(&newServerSuite{})
+
+func (s *newServerSuite) SetUpTest(c *C) {
+	s.origGetPdClientFn = getPdClientFn
+	s.origNewKVStoreFn = newKVStoreFn
+	s.origNewTiKVLockResolverFn = newTiKVLockResolverFn
+
+	// build config
+	etcdClient := testEtcdCluster.RandClient()
+	s.cfg = &Config{
+		ListenAddr:        "http://192.168.199.100:8260",
+		AdvertiseAddr:     "http://192.168.199.100:8260",
+		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
+		DataDir:           path.Join(c.MkDir(), "pump"),
+		HeartbeatInterval: 1500,
+		LogLevel:          "debug",
+		MetricsAddr:       "192.168.199.100:5000",
+		MetricsInterval:   15,
+		Security: security.Config{
+			SSLCA:   "/path/to/ca.pem",
+			SSLCert: "/path/to/drainer.pem",
+			SSLKey:  "/path/to/drainer-key.pem"},
+	}
+}
+
+func (s *newServerSuite) TearDownTest(c *C) {
+	getPdClientFn = s.origGetPdClientFn
+	newKVStoreFn = s.origNewKVStoreFn
+	newTiKVLockResolverFn = s.origNewTiKVLockResolverFn
+	s.cfg = nil
+}
+
+func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
+		return nil, errors.New("invalid client")
+	}
+	p, err := NewServer(s.cfg)
+	c.Assert(p, IsNil)
+	c.Assert(err, ErrorMatches, "invalid client")
+}
+
+func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
+		return &mockPdCli{}, nil
+	}
+	s.cfg.EtcdURLs = "testInvalidUrls"
+	p, err := NewServer(s.cfg)
+	c.Assert(p, IsNil)
+	c.Assert(err, ErrorMatches, "URL.*")
+}
+
+func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
+		return &mockPdCli{}, nil
+	}
+	newTiKVLockResolverFn = func([]string, config.Security) (*tikv.LockResolver, error) {
+		return nil, nil
+	}
+	newKVStoreFn = func(path string) (kv.Storage, error) {
+		return nil, nil
+	}
+
+	p, err := NewServer(s.cfg)
+	c.Assert(err, IsNil)
+	c.Assert(p.clusterID, Equals, uint64(8012))
+}
+
+type startNode struct {
+	status *node.Status
+}
+
+func (n *startNode) ID() string                                                   { return "startnode-long" }
+func (n *startNode) ShortID() string                                              { return "startnode" }
+func (n *startNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
+func (n *startNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
+func (n *startNode) Notify(ctx context.Context) error                             { return nil }
+func (n *startNode) NodeStatus() *node.Status {
+	return n.status
+}
+func (n *startNode) NodesStatus(ctx context.Context) ([]*node.Status, error) {
+	return []*node.Status{n.status}, nil
+}
+func (n *startNode) Quit() error { return nil }
+
+type startStorage struct {
+	sig chan struct{} // use sig to notify that the closing work has been done
+}
+
+func (s *startStorage) AllMatched() bool                            { return true }
+func (s *startStorage) WriteBinlog(binlogItem *binlog.Binlog) error { return nil }
+func (s *startStorage) GetGCTS() int64                              { return 0 }
+func (s *startStorage) GC(ts int64)                                 {}
+func (s *startStorage) MaxCommitTS() int64                          { return 0 }
+func (s *startStorage) GetBinlog(ts int64) (*binlog.Binlog, error) {
+	return nil, errors.New("server_test")
+}
+func (s *startStorage) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+	return make(chan []byte)
+}
+func (s *startStorage) Close() error {
+	<-s.sig
+	// wait for pump server to change node back to startNode, or test etcd server might be closed
+	time.Sleep(20 * time.Microsecond)
+	return nil
+}
+
+type startServerSuite struct {
+	origUtilGetTSO func(pd.Client) (int64, error)
+}
+
+var _ = Suite(&startServerSuite{})
+
+func (s *startServerSuite) SetUpTest(c *C) {
+	s.origUtilGetTSO = utilGetTSO
+}
+
+func (s *startServerSuite) TearDownTest(c *C) {
+	utilGetTSO = s.origUtilGetTSO
+}
+
+func (s *startServerSuite) TestStartPumpServer(c *C) {
+	utilGetTSO = func(pd.Client) (int64, error) {
+		return 0, nil
+	}
+	etcdClient := testEtcdCluster.RandClient()
+	cfg := &Config{
+		ListenAddr:        "http://127.0.0.1:8250",
+		AdvertiseAddr:     "http://127.0.0.1:8260",
+		Socket:            "unix://127.0.0.1:" + string(time.Now().UnixNano()) + "/hello/world",
+		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
+		DataDir:           path.Join(c.MkDir(), "pump"),
+		HeartbeatInterval: 1500,
+		LogLevel:          "debug",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
+	sig := make(chan struct{})
+	startNodeImpl := &startNode{status: &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"}}
+	p := &Server{
+		dataDir:    cfg.DataDir,
+		storage:    &startStorage{sig: sig},
+		clusterID:  8012,
+		node:       startNodeImpl,
+		tcpAddr:    cfg.ListenAddr,
+		unixAddr:   cfg.Socket,
+		gs:         grpc.NewServer(grpcOpts...),
+		ctx:        ctx,
+		cancel:     cancel,
+		tiStore:    nil,
+		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:      nil,
+		cfg:        cfg,
+		triggerGC:  make(chan time.Time)}
+	defer func() {
+		close(sig)
+		p.Close()
+	}()
+	go p.Start()
+
+	// wait until the server is online
+	timeEnd := time.After(5 * time.Second)
+	getInterval := time.NewTicker(500 * time.Microsecond)
+WAIT:
+	for {
+		select {
+		case <-getInterval.C:
+			resp, err := http.Get("http://127.0.0.1:8250/status")
+			if err != nil {
+				c.Assert(err, ErrorMatches, ".*connect: connection refused.*")
+				continue
+			}
+			// should receive valid and correct node status info
+			c.Assert(resp, NotNil)
+			defer resp.Body.Close()
+			bodyByte, err := ioutil.ReadAll(resp.Body)
+			c.Assert(err, IsNil)
+
+			nodesStatus := &HTTPStatus{}
+			err = json.Unmarshal(bodyByte, nodesStatus)
+			c.Assert(err, IsNil)
+			c.Assert(nodesStatus.ErrMsg, Equals, "")
+			c.Assert(nodesStatus.CommitTS, Equals, int64(0))
+			fakeNodeStatus, ok := nodesStatus.StatusMap["startnode-long"]
+			c.Assert(ok, IsTrue)
+			c.Assert(fakeNodeStatus.NodeID, Equals, "startnode-long")
+			c.Assert(fakeNodeStatus.Addr, Equals, "http://192.168.199.100:8260")
+			c.Assert(fakeNodeStatus.State, Equals, node.Online)
+			break WAIT
+		case <-timeEnd:
+			getInterval.Stop()
+			c.Fatal("Wait pump to be online for more than 5 seconds")
+		}
+	}
+	getInterval.Stop()
+
+	// string converted from json may contain char '\n' which can't be matched with '.' but can be matched with `[\s\S]`
+	// test AllDrainer
+	resultStr := httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
+	c.Assert(resultStr, Matches, `.*can't provide service[\s\S]*`)
+	// test BinlogByTS
+	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/debug/binlog/2")
+	c.Assert(resultStr, Matches, `.*server_test[\s\S]*`)
+	// test triggerGC
+	resultStr = httpRequest(c, http.MethodPost, "http://127.0.0.1:8250/debug/gc/trigger")
+	c.Assert(resultStr, Matches, `.*trigger gc success[\s\S]*`)
+
+	// change node to pump node
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	p.node = &pumpNode{
+		EtcdRegistry: registry,
+		status:       &node.Status{State: node.Online, NodeID: "startnode-long", Addr: "http://192.168.199.100:8260"},
+		getMaxCommitTs: func() int64 {
+			return 0
+		},
+	}
+	drainerNodeStatus := &node.Status{
+		NodeID:      "start_pump_test",
+		State:       node.Online,
+		MaxCommitTS: 2,
+	}
+	err := registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
+	c.Assert(err, IsNil)
+	// test AllDrainer
+	resultStr = httpRequest(c, http.MethodGet, "http://127.0.0.1:8250/drainers")
+	c.Assert(resultStr, Matches, `.*start_pump_test[\s\S]*`)
+	// test close node
+	resultStr = httpRequest(c, http.MethodPut, "http://127.0.0.1:8250/state/startnode-long/close")
+	c.Assert(resultStr, Matches, `[\s\S]*success[\s\S]*`)
+
+	select {
+	case sig <- struct{}{}:
+		// change back to start node to avoid closing the whole etcd server
+		p.node = startNodeImpl
+	case <-time.After(2 * time.Second):
+		c.Fatal("Fail to close server in 2s")
+	}
+}
+
+// change to receive request of get, post, put
+func httpRequest(c *C, method, url string) string {
+	client := &http.Client{}
+	request, err := http.NewRequest(method, url, nil)
+	c.Assert(err, IsNil)
+	resp, err := client.Do(request)
+	c.Assert(err, IsNil)
+	c.Assert(resp, NotNil)
+	defer resp.Body.Close()
+	bodyByte, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, IsNil)
+	bodyStr := string(bodyByte)
+	return bodyStr
 }
