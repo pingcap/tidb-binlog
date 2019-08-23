@@ -44,6 +44,7 @@ func (s *testZKSuite) setUpTest(c *C) {
 }
 
 func (s *testZKSuite) tearDownTest() {
+	s.client.Close()
 	s.controller.Finish()
 }
 
@@ -80,6 +81,7 @@ func (s *testZKSuite) TestTopics(c *C) {
 	s.mockConn.EXPECT().
 		Children("/brokers/topics").
 		Return(topics, nil, nil)
+	s.mockConn.EXPECT().Close()
 
 	t, err := s.client.Topics()
 	c.Assert(err, IsNil)
@@ -93,6 +95,7 @@ func (s *testZKSuite) TestPartitions(c *C) {
 	s.mockConn.EXPECT().
 		Get("/brokers/topics/a").
 		Return([]byte(`{"version":1,"partitions":{"0":[0,1,3]}}`), nil, nil)
+	s.mockConn.EXPECT().Close()
 
 	p, err := s.client.Partitions("a")
 	c.Assert(err, IsNil)
@@ -112,6 +115,7 @@ func (s *testZKSuite) setUpMockBrokers() {
 		Get("/brokers/ids/1").
 		After(getIDs).
 		Return([]byte(`{"version":2,"host":"192.0.2.2","port":9092}`), nil, nil)
+	s.mockConn.EXPECT().Close()
 }
 
 func (s *testZKSuite) TestBrokers(c *C) {
@@ -144,6 +148,7 @@ func (s *testZKSuite) TestNoKafka(c *C) {
 	defer s.tearDownTest()
 
 	s.mockConn.EXPECT().Children("/brokers/ids").Return(nil, nil, nil)
+	s.mockConn.EXPECT().Close()
 
 	_, err := s.client.KafkaUrls()
 	c.Assert(err, ErrorMatches, "kafka brokers not found in zookeeper")

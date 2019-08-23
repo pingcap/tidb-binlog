@@ -60,7 +60,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.cp = cp
-	syncer.input = newBinlogItemCache(cfg.MaxCacheBinlogCount, cfg.MaxCacheBinlogSize)
+	syncer.input = newBinlogItemCache(maxBinlogItemCount, cfg.MaxCacheBinlogSize)
 	syncer.lastSyncTime = time.Now()
 	syncer.shutdown = make(chan struct{})
 	syncer.closed = make(chan struct{})

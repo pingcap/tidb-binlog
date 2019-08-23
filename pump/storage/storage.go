@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
@@ -660,6 +661,18 @@ func (a *Append) doGCTS(ts int64) {
 
 	deleteNum := 0
 
+	irange := &util.Range{
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
+	}
+	var iter iterator.Iterator
+	defer func() {
+		if iter != nil {
+			iter.Release()
+			iter = nil
+		}
+	}()
+
 	for {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
@@ -675,18 +688,23 @@ func (a *Append) doGCTS(ts int64) {
 
 		if l0Num >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
+			if iter != nil {
+				iter.Release()
+				iter = nil
+			}
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
-		irange := &util.Range{
-			Start: encodeTSKey(0),
-			Limit: encodeTSKey(ts + 1),
-		}
-		iter := a.metadata.NewIterator(irange, nil)
-
 		deleteBatch := 0
 		var lastKey []byte
+
+		if iter == nil {
+			log.Info("New LevelDB iterator created for GC", zap.Int64("ts", ts),
+				zap.Int64("start", decodeTSKey(irange.Start)),
+				zap.Int64("limit", decodeTSKey(irange.Limit)))
+			iter = a.metadata.NewIterator(irange, nil)
+		}
 
 		for iter.Next() && deleteBatch < 100 {
 			batch.Delete(iter.Key())
@@ -698,12 +716,11 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 				deleteBatch++
 			}
 		}
-
-		iter.Release()
 
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
@@ -711,19 +728,22 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
 			break
 		}
 
 		if len(lastKey) > 0 {
+			irange.Start = lastKey
 			a.vlog.gcTS(decodeTSKey(lastKey))
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
-
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 
 	a.vlog.gcTS(ts)
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 

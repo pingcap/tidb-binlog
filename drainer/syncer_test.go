@@ -60,9 +60,8 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 
 func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cfg := &SyncerConfig{
-		DestDBType:          "_intercept",
-		MaxCacheBinlogCount: defaultBinlogItemCount,
-		MaxCacheBinlogSize:  defaultBinlogCacheSize,
+		DestDBType:         "_intercept",
+		MaxCacheBinlogSize: defaultBinlogCacheSize,
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
@@ -177,9 +176,8 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 
 func (s *syncerSuite) TestSyncerCachedSize(c *check.C) {
 	cfg := &SyncerConfig{
-		DestDBType:          "_intercept",
-		MaxCacheBinlogCount: defaultBinlogItemCount,
-		MaxCacheBinlogSize:  30, // the max tested binlog size is 33
+		DestDBType:         "_intercept",
+		MaxCacheBinlogSize: 30, // the max tested binlog size is 33
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
