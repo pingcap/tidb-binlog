@@ -16,6 +16,7 @@ package pump
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,9 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	pkgnode "github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tipb/go-binlog"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 var _ = Suite(&testNodeSuite{})
@@ -167,4 +170,58 @@ func (s *heartbeatSuite) TestShouldUpdateStatus(c *C) {
 	cancel()
 	c.Assert(p.status.MaxCommitTS, Greater, int64(0))
 	c.Assert(p.status.MaxCommitTS, LessEqual, int64(3))
+}
+
+type notifyDrainerSuite struct{}
+
+var _ = Suite(&notifyDrainerSuite{})
+
+type mockDrainerServer struct {
+	binlog.CisternServer
+	notified bool
+	host     string
+}
+
+func (s *mockDrainerServer) Notify(ctx context.Context, in *binlog.NotifyReq) (*binlog.NotifyResp, error) {
+	s.notified = true
+	return nil, nil
+}
+
+// start mock drainer server
+func (s *mockDrainerServer) Start() (*grpc.Server, error) {
+	lis, err := net.Listen("tcp", s.host)
+	if err != nil {
+		return nil, err
+	}
+	gs := grpc.NewServer()
+	binlog.RegisterCisternServer(gs, s)
+	go gs.Serve(lis)
+	return gs, nil
+}
+
+func (s *notifyDrainerSuite) TestNotifyDrainer(c *C) {
+	mockDrainerServerImpl := &mockDrainerServer{host: "127.0.0.1:8249", notified: false}
+	gs, err := mockDrainerServerImpl.Start()
+	c.Assert(err, IsNil)
+	defer gs.Stop()
+
+	// update drainer info in etcd
+	cli := etcd.NewClient(testEtcdCluster.RandClient(), "drainers")
+	registry := node.NewEtcdRegistry(cli, time.Second)
+	pNode := &pumpNode{
+		EtcdRegistry: registry,
+		status:       &node.Status{State: node.Online, NodeID: "pump_notify", Addr: "http://192.168.199.100:8260"},
+	}
+	drainerNodeStatus := &node.Status{
+		NodeID: "pump_notify_test",
+		State:  node.Online,
+		Addr:   mockDrainerServerImpl.host,
+	}
+	err = registry.UpdateNode(context.Background(), "drainers", drainerNodeStatus)
+	c.Assert(err, IsNil)
+
+	// notify the mocked drainer
+	err = pNode.Notify(context.Background())
+	c.Assert(err, IsNil)
+	c.Assert(mockDrainerServerImpl.notified, IsTrue)
 }
