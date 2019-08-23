@@ -59,7 +59,7 @@ var (
 	// GlobalConfig is global config of pump
 	GlobalConfig *globalConfig
 	// functions
-	getPdClient         = util.GetPdClient
+	getPdClientFn       = util.GetPdClient
 	newTiKVLockResolver = tikv.NewLockResolver
 	newKVStore          = kvstore.New
 )
@@ -118,7 +118,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// get pd client and cluster ID
-	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
+	pdCli, err := getPdClientFn(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

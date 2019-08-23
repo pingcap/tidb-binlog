@@ -575,7 +575,7 @@ func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
 func (pc *mockPdCli) Close() {}
 
 type newServerSuite struct {
-	origGetPdClient         func(string, security.Config) (pd.Client, error)
+	origGetPdClientFn       func(string, security.Config) (pd.Client, error)
 	origNewKVStore          func(string) (kv.Storage, error)
 	origNewTiKVLockResolver func([]string, config.Security) (*tikv.LockResolver, error)
 	cfg                     *Config
@@ -584,7 +584,7 @@ type newServerSuite struct {
 var _ = Suite(&newServerSuite{})
 
 func (s *newServerSuite) SetUpTest(c *C) {
-	s.origGetPdClient = getPdClient
+	s.origGetPdClientFn = getPdClientFn
 	s.origNewKVStore = newKVStore
 	s.origNewTiKVLockResolver = newTiKVLockResolver
 
@@ -607,14 +607,14 @@ func (s *newServerSuite) SetUpTest(c *C) {
 }
 
 func (s *newServerSuite) TearDownTest(c *C) {
-	getPdClient = s.origGetPdClient
+	getPdClientFn = s.origGetPdClientFn
 	newKVStore = s.origNewKVStore
 	newTiKVLockResolver = s.origNewTiKVLockResolver
 	s.cfg = nil
 }
 
 func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
-	getPdClient = func(string, security.Config) (pd.Client, error) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return nil, errors.New("invalid client")
 	}
 	p, err := NewServer(s.cfg)
@@ -623,7 +623,7 @@ func (s *newServerSuite) TestCreateNewPumpServerWithInvalidPDClient(c *C) {
 }
 
 func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
-	getPdClient = func(string, security.Config) (pd.Client, error) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
 	s.cfg.EtcdURLs = "testInvalidUrls"
@@ -633,7 +633,7 @@ func (s *newServerSuite) TestCreateNewPumpServerWithInvalidEtcdURLs(c *C) {
 }
 
 func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
-	getPdClient = func(string, security.Config) (pd.Client, error) {
+	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
 	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
