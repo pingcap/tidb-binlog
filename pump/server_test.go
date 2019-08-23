@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -593,7 +594,7 @@ func (s *newServerSuite) SetUpTest(c *C) {
 		ListenAddr:        "http://192.168.199.100:8260",
 		AdvertiseAddr:     "http://192.168.199.100:8260",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
-		DataDir:           "/tmp/pump",
+		DataDir:           path.Join(c.MkDir(), "pump"),
 		HeartbeatInterval: 1500,
 		LogLevel:          "debug",
 		MetricsAddr:       "192.168.199.100:5000",
@@ -710,7 +711,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		AdvertiseAddr:     "http://127.0.0.1:8260",
 		Socket:            "unix://127.0.0.1:" + string(time.Now().UnixNano()) + "/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
-		DataDir:           "/tmp/pump",
+		DataDir:           path.Join(c.MkDir(), "pump"),
 		HeartbeatInterval: 1500,
 		LogLevel:          "debug",
 	}
