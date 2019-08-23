@@ -575,18 +575,18 @@ func (pc *mockPdCli) GetClusterID(ctx context.Context) uint64 {
 func (pc *mockPdCli) Close() {}
 
 type newServerSuite struct {
-	origGetPdClientFn       func(string, security.Config) (pd.Client, error)
-	origNewKVStore          func(string) (kv.Storage, error)
-	origNewTiKVLockResolver func([]string, config.Security) (*tikv.LockResolver, error)
-	cfg                     *Config
+	origGetPdClientFn         func(string, security.Config) (pd.Client, error)
+	origNewKVStoreFn          func(string) (kv.Storage, error)
+	origNewTiKVLockResolverFn func([]string, config.Security) (*tikv.LockResolver, error)
+	cfg                       *Config
 }
 
 var _ = Suite(&newServerSuite{})
 
 func (s *newServerSuite) SetUpTest(c *C) {
 	s.origGetPdClientFn = getPdClientFn
-	s.origNewKVStore = newKVStore
-	s.origNewTiKVLockResolver = newTiKVLockResolver
+	s.origNewKVStoreFn = newKVStoreFn
+	s.origNewTiKVLockResolverFn = newTiKVLockResolverFn
 
 	// build config
 	etcdClient := testEtcdCluster.RandClient()
@@ -608,8 +608,8 @@ func (s *newServerSuite) SetUpTest(c *C) {
 
 func (s *newServerSuite) TearDownTest(c *C) {
 	getPdClientFn = s.origGetPdClientFn
-	newKVStore = s.origNewKVStore
-	newTiKVLockResolver = s.origNewTiKVLockResolver
+	newKVStoreFn = s.origNewKVStoreFn
+	newTiKVLockResolverFn = s.origNewTiKVLockResolverFn
 	s.cfg = nil
 }
 
@@ -636,10 +636,10 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
-	newTiKVLockResolver = func([]string, config.Security) (*tikv.LockResolver, error) {
+	newTiKVLockResolverFn = func([]string, config.Security) (*tikv.LockResolver, error) {
 		return nil, nil
 	}
-	newKVStore = func(path string) (kv.Storage, error) {
+	newKVStoreFn = func(path string) (kv.Storage, error) {
 		return nil, nil
 	}
 
