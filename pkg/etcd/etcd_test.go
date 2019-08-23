@@ -32,7 +32,13 @@ var (
 
 func TestClient(t *testing.T) {
 	ctx, etcdCli, etcdMockCluster = testSetup(t)
-	defer etcdMockCluster.Terminate(t)
+	defer func() {
+		etcdMockCluster.Terminate(t)
+		err := etcdCli.Close()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			t.Fatalf("etcd client close error: %s", err)
+		}
+	}()
 	TestingT(t)
 }
 
