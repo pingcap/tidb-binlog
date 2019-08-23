@@ -51,27 +51,28 @@ const (
 )
 
 var (
+	maxBinlogItemCount        int
+	defaultBinlogItemCount    = 16 << 12
 	supportedCompressors      = [...]string{"gzip"}
 	newZKFromConnectionString = zk.NewFromConnectionString
 )
 
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
-	StrSQLMode          *string            `toml:"sql-mode" json:"sql-mode"`
-	SQLMode             mysql.SQLMode      `toml:"-" json:"-"`
-	IgnoreTxnCommitTS   []int64            `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-	IgnoreSchemas       string             `toml:"ignore-schemas" json:"ignore-schemas"`
-	IgnoreTables        []filter.TableName `toml:"ignore-table" json:"ignore-table"`
-	TxnBatch            int                `toml:"txn-batch" json:"txn-batch"`
-	MaxCacheBinlogCount int                `toml:"cache-binlog-count" json:"cache-binlog-count"`
-	WorkerCount         int                `toml:"worker-count" json:"worker-count"`
-	To                  *dsync.DBConfig    `toml:"to" json:"to"`
-	DoTables            []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
-	DoDBs               []string           `toml:"replicate-do-db" json:"replicate-do-db"`
-	DestDBType          string             `toml:"db-type" json:"db-type"`
-	DisableDispatch     bool               `toml:"disable-dispatch" json:"disable-dispatch"`
-	SafeMode            bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality    bool               `toml:"disable-detect" json:"disable-detect"`
+	StrSQLMode        *string            `toml:"sql-mode" json:"sql-mode"`
+	SQLMode           mysql.SQLMode      `toml:"-" json:"-"`
+	IgnoreTxnCommitTS []int64            `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	IgnoreSchemas     string             `toml:"ignore-schemas" json:"ignore-schemas"`
+	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
+	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
+	To                *dsync.DBConfig    `toml:"to" json:"to"`
+	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
+	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
+	DestDBType        string             `toml:"db-type" json:"db-type"`
+	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
+	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
 }
 
 // Config holds the configuration of drainer
@@ -131,7 +132,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
-	fs.IntVar(&cfg.SyncerCfg.MaxCacheBinlogCount, "cache-binlog-count", cfg.SyncerCfg.WorkerCount*cfg.SyncerCfg.TxnBatch, "blurry count of binlogs in cache, limit cache size (default workerCount * batchSize)")
+	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 
