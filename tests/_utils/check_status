@@ -35,7 +35,7 @@ do
 
     # if status is online, will check the max commit ts, the new max commit ts should greater than the old one.
     if [ $count -ne 1 ] || ([ $STATE == "online" ] && [ $max_commit_ts_new -le $max_commit_ts_old ]); then
-        if [ $i -eq 15 ]; then
+        if [ $i -eq 30 ]; then
             echo "${NODE_ID}'s status is not $STATE, or max commit ts is not update, old max commit ts is $max_commit_ts_old, new max commit ts is $max_commit_ts_new"
             exit 2
         else

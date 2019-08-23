@@ -387,7 +387,7 @@ func (s *Server) Start() error {
 	// get node's previous status
 	previousStatus, err := s.node.PreviousStatus(context.Background())
 	if err != nil {
-		if strings.Contains(err.Error(), "Invalid nodeID") {
+		if strings.Contains(err.Error(), "in etcd not found") {
 			// this node is a new pump node
 			previousStatus = nil
 		} else {
