@@ -65,8 +65,7 @@ func newVlogWithOptions(c *check.C, options *Options) *valueLog {
 	err = os.Mkdir(dir, 0777)
 	c.Assert(err, check.IsNil)
 
-	vlog := new(valueLog)
-	err = vlog.open(dir, options)
+	vlog, err := newValueLog(dir, options)
 	c.Assert(err, check.IsNil)
 
 	return vlog
@@ -144,8 +143,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		var err = vlog.close()
 		c.Assert(err, check.IsNil)
 
-		vlog = new(valueLog)
-		err = vlog.open(dirPath, opt)
+		vlog, err = newValueLog(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
 		batch = batch[:0]
@@ -247,8 +245,7 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}()
 
-	vlog := new(valueLog)
-	err = vlog.open(dir, DefaultOptions())
+	vlog, err := newValueLog(dir, DefaultOptions())
 	c.Assert(err, check.IsNil)
 
 	// Size of the encoded record should be 1024 + headerLength = 1040

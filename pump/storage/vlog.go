@@ -160,9 +160,20 @@ type valueLog struct {
 	sync      bool
 	maxFid    uint32
 	filesLock sync.RWMutex
+	gcGuard   chan struct{}
 	filesMap  map[uint32]*logFile
 
 	opt *Options
+}
+
+func newValueLog(valueDir string, options *Options) (*valueLog, error) {
+	vlog := valueLog{
+		gcGuard: make(chan struct{}, 1),
+	}
+	if err := vlog.open(valueDir, options); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &vlog, nil
 }
 
 func (vlog *valueLog) filePath(fid uint32) string {
@@ -413,6 +424,10 @@ func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) 
 //    that every single binlog added would be visited
 // 2. If GC is running concurrently, logFiles may be closed and deleted, thus breaking the scanning.
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
+	vlog.gcGuard <- struct{}{}
+	defer func() {
+		<-vlog.gcGuard
+	}()
 	vlog.filesLock.RLock()
 	fids := vlog.sortedFids()
 	var lfs []*logFile
@@ -441,6 +456,14 @@ func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *
 // delete data <= gcTS
 func (vlog *valueLog) gcTS(gcTS int64) {
 	log.Info("gc vlog", zap.Int64("ts", gcTS))
+	select {
+	case vlog.gcGuard <- struct{}{}:
+		defer func() {
+			<-vlog.gcGuard
+		}()
+	default:
+		return
+	}
 
 	vlog.filesLock.Lock()
 	var toDeleteFiles []*logFile
