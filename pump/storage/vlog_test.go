@@ -191,10 +191,17 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 
 	before := len(vlog.filesMap)
 	c.Logf("before log file num: %d", before)
+
+	vlog.gcGuard <- struct{}{}
 	vlog.gcTS(90)
 	after := len(vlog.filesMap)
 	c.Logf("after log file num: %d", after)
+	c.Assert(after, check.Equals, before, check.Commentf("gc is not prevented by guard"))
 
+	<-vlog.gcGuard
+	vlog.gcTS(90)
+	after = len(vlog.filesMap)
+	c.Logf("after log file num: %d", after)
 	c.Assert(after, check.Less, before, check.Commentf("no file is deleted"))
 
 	// ts 0 has been gc
