@@ -277,7 +277,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	defer cleanAppend(append)
 
 	var i int64
-	var n int64 = 1 << 11
+	var n int64 = 1024 * 500
 	var batch leveldb.Batch
 	for i = 1; i < n; i++ {
 		batch.Put(encodeTSKey(i), value)
@@ -285,7 +285,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	err := append.metadata.Write(&batch, nil)
 	c.Assert(err, check.IsNil)
 
-	var gcTS int64 = 10
+	var gcTS int64 = 1024 * 300
 	append.doGCTS(gcTS)
 
 	for i = 1; i < n; i++ {
