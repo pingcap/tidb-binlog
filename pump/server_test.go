@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -655,6 +656,7 @@ type startNode struct {
 
 func (n *startNode) ID() string                                                   { return "startnode-long" }
 func (n *startNode) ShortID() string                                              { return "startnode" }
+func (n *startNode) PreviousStatus(ctx context.Context) (*node.Status, error)     { return nil, nil }
 func (n *startNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *startNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *startNode) Notify(ctx context.Context) error                             { return nil }
@@ -710,7 +712,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	cfg := &Config{
 		ListenAddr:        "http://127.0.0.1:8250",
 		AdvertiseAddr:     "http://127.0.0.1:8260",
-		Socket:            "unix://127.0.0.1:" + string(time.Now().UnixNano()) + "/hello/world",
+		Socket:            "unix://127.0.0.1:" + strconv.FormatInt(time.Now().UnixNano(), 10) + "/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		DataDir:           path.Join(c.MkDir(), "pump"),
 		HeartbeatInterval: 1500,
