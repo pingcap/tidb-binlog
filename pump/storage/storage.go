@@ -742,7 +742,6 @@ func (a *Append) doGCTS(ts int64) {
 
 		if len(lastKey) > 0 {
 			irange.Start = lastKey
-			a.vlog.gcTS(decodeTSKey(lastKey))
 			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
 		log.Info("has delete", zap.Int("delete num", deleteNum))
