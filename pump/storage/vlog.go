@@ -160,7 +160,7 @@ type valueLog struct {
 	sync      bool
 	maxFid    uint32
 	filesLock sync.RWMutex
-	gcLock    sync.RWMutex
+	gcLock    sync.Mutex
 	filesMap  map[uint32]*logFile
 
 	opt *Options
