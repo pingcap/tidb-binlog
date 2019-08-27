@@ -94,7 +94,6 @@ func (sp *MysqlCheckPoint) Load() error {
 		sp.CommitTS = sp.initialCommitTS
 		return nil
 	case err != nil:
-		log.Errorf("select checkPoint error %v", err)
 		return errors.Annotatef(err, "QueryRow failed, sql: %s", selectSQL)
 	}
 
