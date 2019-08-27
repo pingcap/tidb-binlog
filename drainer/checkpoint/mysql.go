@@ -86,29 +86,18 @@ func (sp *MysqlCheckPoint) Load() error {
 		sp.Unlock()
 	}()
 
-	sql := genSelectSQL(sp)
-	rows, err := querySQL(sp.db, sql)
-	if err != nil {
-		log.Errorf("select checkPoint error %v", err)
-		return errors.Trace(err)
-	}
-
 	var str string
-	for rows.Next() {
-		err = rows.Scan(&str)
-		if err != nil {
-			log.Errorf("rows Scan error %v", err)
-			return errors.Trace(err)
-		}
-	}
-
-	if len(str) == 0 {
+	selectSQL := genSelectSQL(sp)
+	err := sp.db.QueryRow(selectSQL).Scan(&str)
+	switch {
+	case err == sql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
 		return nil
+	case err != nil:
+		return errors.Annotatef(err, "QueryRow failed, sql: %s", selectSQL)
 	}
 
-	err = json.Unmarshal([]byte(str), sp)
-	if err != nil {
+	if err = json.Unmarshal([]byte(str), sp); err != nil {
 		return errors.Trace(err)
 	}
 
