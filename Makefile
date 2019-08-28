@@ -60,7 +60,7 @@ fmt:
 
 check:
 	bash gitcookie.sh
-	go get github.com/golang/lint/golint
+	go get golang.org/x/lint/golint
 	@echo "vet"
 	@ go tool vet $(FILES) 2>&1 | awk '{print} END{if(NR>0) {exit 1}}'
 	@echo "vet --shadow"
