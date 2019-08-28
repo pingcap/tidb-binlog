@@ -360,7 +360,15 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 					}
 				}
 			}
-			if job.State == model.JobStateCancelled {
+			// according to DDL
+			// only when reach this two state will write binlog:
+			if job.State != model.JobStateSynced && job.State != model.JobStateRollbackDone {
+				log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
+			}
+
+			if skipJob(job) {
+				delete(items, ts)
+			} else if job.State == model.JobStateCancelled {
 				delete(items, ts)
 			} else {
 				item.SetJob(job)
@@ -370,6 +378,15 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 	}
 	ddlJobsCounter.Add(float64(count))
 	return nil
+}
+
+// there's only two status will be in HistoryDDLJob(we fetch at start time):
+// JobStateSynced and JobStateRollbackDone
+// If it fail to commit(to tikv) in 2pc phrase (when changing JobStateDone -> JobStateSynced and add to HistoryDDLJob),
+// then is would't not be add to HistoryDDLJob, and we may get (prewrite + rollback binlog),
+// this binlog event would reach drainer, finally we will get a (p + commit binlog) when tidb retry and successfully commit
+func skipJob(job *model.Job) bool {
+	return !job.IsSynced()
 }
 
 func (p *Pump) getDDLJob(id int64) (*model.Job, error) {
