@@ -364,7 +364,6 @@ func (p *Pump) grabDDLJobs(items map[int64]*binlogItem) error {
 			// only when reach this two state will write binlog:
 			if job.State != model.JobStateSynced && job.State != model.JobStateRollbackDone {
 				log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
-				delete(items, ts)
 			}
 
 			if skipJob(job) {
