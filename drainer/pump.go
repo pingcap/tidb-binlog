@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	binlogChanSize = 10
+	binlogChanSize = 0
 )
 
 // Pump holds the connection to a pump node, and keeps the savepoint of binlog last read
