@@ -38,7 +38,7 @@ const (
 
 var (
 	maxBinlogItemCount     int
-	defaultBinlogItemCount = 16 << 12
+	defaultBinlogItemCount = 0
 	supportedCompressors   = [...]string{"gzip"}
 )
 
