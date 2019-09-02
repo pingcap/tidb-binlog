@@ -52,7 +52,7 @@ const (
 
 var (
 	maxBinlogItemCount        int
-	defaultBinlogItemCount    = 512
+	defaultBinlogItemCount    = 0
 	supportedCompressors      = [...]string{"gzip"}
 	newZKFromConnectionString = zk.NewFromConnectionString
 )
