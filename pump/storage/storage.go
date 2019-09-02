@@ -712,7 +712,7 @@ func (a *Append) doGCTS(ts int64) {
 			iter = a.metadata.NewIterator(irange, nil)
 		}
 
-		for iter.Next() && deleteBatch < 100 {
+		for deleteBatch < 100 && iter.Next() {
 			batch.Delete(iter.Key())
 			deleteNum++
 			lastKey = iter.Key()
