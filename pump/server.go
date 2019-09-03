@@ -388,16 +388,6 @@ func (s *Server) Start() error {
 
 	go http.Serve(httpL, nil)
 
-	// get node's previous status
-	previousStatus, err := s.node.PreviousStatus(context.Background())
-	if err != nil {
-		if strings.Contains(err.Error(), "in etcd not found") {
-			// this node is a new pump node
-			previousStatus = nil
-		} else {
-			return errors.Annotate(err, "fail to get previous node status")
-		}
-	}
 	// register this node
 	ts, err := s.getTSO()
 	if err != nil {
@@ -410,7 +400,7 @@ func (s *Server) Start() error {
 	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
 
 	// notify all cisterns when this pump node is a newly registered one
-	if previousStatus == nil || previousStatus.State != node.Paused {
+	if s.node.NodeStatus().State != node.Paused {
 		ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 		if err := s.node.Notify(ctx); err != nil {
 			// if fail, refresh this node's state to paused

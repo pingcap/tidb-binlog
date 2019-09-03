@@ -76,7 +76,6 @@ type fakeNode struct{}
 
 func (n *fakeNode) ID() string                                                   { return "fakenode-long" }
 func (n *fakeNode) ShortID() string                                              { return "fakenode" }
-func (n *fakeNode) PreviousStatus(ctx context.Context) (*node.Status, error)     { return nil, nil }
 func (n *fakeNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *fakeNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *fakeNode) Notify(ctx context.Context) error                             { return nil }
@@ -656,7 +655,6 @@ type startNode struct {
 
 func (n *startNode) ID() string                                                   { return "startnode-long" }
 func (n *startNode) ShortID() string                                              { return "startnode" }
-func (n *startNode) PreviousStatus(ctx context.Context) (*node.Status, error)     { return nil, nil }
 func (n *startNode) RefreshStatus(ctx context.Context, status *node.Status) error { return nil }
 func (n *startNode) Heartbeat(ctx context.Context) <-chan error                   { return make(chan error) }
 func (n *startNode) Notify(ctx context.Context) error                             { return nil }

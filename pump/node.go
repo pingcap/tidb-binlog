@@ -97,15 +97,29 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 		return nil, errors.Annotatef(err, "invalid configuration of advertise addr(%s)", cfg.AdvertiseAddr)
 	}
 
+	// get node's previous status
+	etcdRegistry := node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout)
+	previousStatus, err := etcdRegistry.Node(context.Background(), "pumps", nodeID)
+	var state string
+	if err != nil {
+		if strings.Contains(err.Error(), "in etcd not found") {
+			// this node is a new pump node
+			state = node.Offline
+		} else {
+			return nil, errors.Annotate(err, "fail to get previous node status")
+		}
+	}
+	state = previousStatus.State
+
 	status := &node.Status{
 		NodeID:  nodeID,
 		Addr:    advURL.Host,
-		State:   node.Paused,
+		State:   state,
 		IsAlive: true,
 	}
 
 	node := &pumpNode{
-		EtcdRegistry:      node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout),
+		EtcdRegistry:      etcdRegistry,
 		status:            status,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
 		getMaxCommitTs:    getMaxCommitTs,
@@ -126,10 +140,6 @@ func (p *pumpNode) ShortID() string {
 		return p.status.NodeID
 	}
 	return p.status.NodeID[0:shortIDLen]
-}
-
-func (p *pumpNode) PreviousStatus(ctx context.Context) (*node.Status, error) {
-	return p.Node(ctx, "pumps", p.status.NodeID)
 }
 
 func (p *pumpNode) RefreshStatus(ctx context.Context, status *node.Status) error {
