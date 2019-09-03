@@ -100,21 +100,14 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 	// get node's previous status
 	etcdRegistry := node.NewEtcdRegistry(cli, cfg.EtcdDialTimeout)
 	previousStatus, err := etcdRegistry.Node(context.Background(), "pumps", nodeID)
-	var state string
-	if err != nil {
-		if strings.Contains(err.Error(), "in etcd not found") {
-			// this node is a new pump node
-			state = node.Offline
-		} else {
-			return nil, errors.Annotate(err, "fail to get previous node status")
-		}
+	if err != nil && !strings.Contains(err.Error(), "in etcd not found") {
+		return nil, errors.Annotate(err, "fail to get previous node status")
 	}
-	state = previousStatus.State
 
 	status := &node.Status{
 		NodeID:  nodeID,
 		Addr:    advURL.Host,
-		State:   state,
+		State:   previousStatus.State,
 		IsAlive: true,
 	}
 
