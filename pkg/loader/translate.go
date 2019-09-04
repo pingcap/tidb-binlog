@@ -9,7 +9,6 @@ import (
 func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	txn := new(Txn)
 	var err error
-	txn = new(Txn)
 	switch binlog.Type {
 	case pb.BinlogType_DDL:
 		data := binlog.DdlData

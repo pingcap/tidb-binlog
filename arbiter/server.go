@@ -200,7 +200,7 @@ func (s *Server) Run() error {
 	go func() {
 		defer wg.Done()
 		defer s.load.Close()
-		syncErr = syncBinlogs(syncCtx, s.kafkaReader.Messages(), *s.load)
+		syncErr = syncBinlogs(syncCtx, s.kafkaReader.Messages(), s.load)
 	}()
 
 	err := s.load.Run()
@@ -229,7 +229,7 @@ func (s *Server) Run() error {
 	return nil
 }
 
-func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.Loader) (err error) {
+func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld *loader.Loader) (err error) {
 	dest := ld.Input()
 	defer ld.Close()
 	for msg := range source {
