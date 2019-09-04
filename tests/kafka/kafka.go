@@ -80,7 +80,11 @@ func main() {
 				}
 				log.Debug("recv: ", str)
 				binlog := msg.Binlog
-				ld.Input() <- loader.SlaveBinlogToTxn(binlog)
+				txn, err := loader.SlaveBinlogToTxn(binlog)
+				if err != nil {
+					panic(err)
+				}
+				ld.Input() <- txn
 			case txn := <-ld.Successes():
 				log.Debug("succ: ", txn)
 			}

@@ -191,21 +191,27 @@ func (s *Server) Run() error {
 		}
 	}()
 
+	var syncErr error
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer s.load.Close()
+		dest := s.load.Input()
 
 		for msg := range s.kafkaReader.Messages() {
 			log.Debugf("recv binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-			txn := loader.SlaveBinlogToTxn(msg.Binlog)
+			txn, syncErr := loader.SlaveBinlogToTxn(msg.Binlog)
+			if syncErr != nil {
+				log.Errorf("transfer binlog failed, [err = %s]", syncErr.Error())
+				return
+			}
 			txn.Metadata = msg
-			s.load.Input() <- txn
+			dest <- txn
 
 			queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(s.kafkaReader.Messages())))
 			queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(s.load.Input())))
 		}
 
-		s.load.Close()
 	}()
 
 	err := s.load.Run()
@@ -217,6 +223,10 @@ func (s *Server) Run() error {
 
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if syncErr != nil {
+		return errors.Trace(syncErr)
 	}
 
 	err = s.checkpoint.Save(s.finishTS, StatusNormal)
