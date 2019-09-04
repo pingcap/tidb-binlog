@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 // Server is the server to load data to mysql
@@ -192,31 +193,19 @@ func (s *Server) Run() error {
 	}()
 
 	var syncErr error
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	defer syncCancel()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer s.load.Close()
-		dest := s.load.Input()
-
-		for msg := range s.kafkaReader.Messages() {
-			log.Debugf("recv binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-			var txn *loader.Txn
-			txn, syncErr = loader.SlaveBinlogToTxn(msg.Binlog)
-			if syncErr != nil {
-				log.Errorf("transfer binlog failed, [err = %s]", syncErr.Error())
-				return
-			}
-			txn.Metadata = msg
-			dest <- txn
-
-			queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(s.kafkaReader.Messages())))
-			queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(s.load.Input())))
-		}
-
+		syncErr = syncBinlogs(syncCtx, s.kafkaReader.Messages(), *s.load)
 	}()
 
 	err := s.load.Run()
 	if err != nil {
+		syncCancel()
 		s.Close()
 	}
 
@@ -237,5 +226,30 @@ func (s *Server) Run() error {
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
 
+	return nil
+}
+
+func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.Loader) (err error) {
+	dest := ld.Input()
+	defer ld.Close()
+	for msg := range source {
+		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+		if err != nil {
+			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))
+			return err
+		}
+		txn.Metadata = msg
+		dest <- txn
+		// avoid block when no process is handling ld.input
+		select {
+		case dest <- txn:
+		case <-ctx.Done():
+			return nil
+		}
+
+		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
+		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))
+	}
 	return nil
 }
