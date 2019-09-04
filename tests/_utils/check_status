@@ -16,7 +16,7 @@ STATUS_LOG="${OUT_DIR}/status.log"
 max_commit_ts_old=0
 max_commit_ts_new=0
 
-for i in {1..15}
+for i in {1..20}
 do
     binlogctl -pd-urls 127.0.0.1:2379 -cmd $NODE_KIND > $STATUS_LOG 2>&1
     cat $STATUS_LOG
