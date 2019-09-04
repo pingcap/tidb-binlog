@@ -200,7 +200,8 @@ func (s *Server) Run() error {
 
 		for msg := range s.kafkaReader.Messages() {
 			log.Debugf("recv binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-			txn, syncErr := loader.SlaveBinlogToTxn(msg.Binlog)
+			var txn *loader.Txn
+			txn, syncErr = loader.SlaveBinlogToTxn(msg.Binlog)
 			if syncErr != nil {
 				log.Errorf("transfer binlog failed, [err = %s]", syncErr.Error())
 				return
