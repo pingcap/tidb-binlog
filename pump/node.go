@@ -103,11 +103,14 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 	if err != nil && !strings.Contains(err.Error(), "in etcd not found") {
 		return nil, errors.Annotate(err, "fail to get previous node status")
 	}
-
+	state := node.Offline
+	if previousStatus != nil {
+		state = previousStatus.State
+	}
 	status := &node.Status{
 		NodeID:  nodeID,
 		Addr:    advURL.Host,
-		State:   previousStatus.State,
+		State:   state,
 		IsAlive: true,
 	}
 
