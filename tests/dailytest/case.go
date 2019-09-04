@@ -219,6 +219,11 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
 	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
 
+	tr.run(caseRenameTable)
+	tr.execSQLs([]string{"DROP TABLE name_c;"})
+
+	tr.run(caseCreateDropSchema)
+
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
 		start := time.Now()
@@ -315,6 +320,23 @@ CREATE TABLE gen_contacts (
 	for i := 0; i < 10; i++ {
 		mustExec(db, delSQL, fmt.Sprintf("John%d Dow%d", i, i))
 	}
+}
+
+func caseCreateDropSchema(db *sql.DB) {
+	mustExec(db, `CREATE DATABASE new_db;`)
+	mustExec(db, `CREATE TABLE new_db.test_tbl_1 (id INT PRIMARY KEY);`)
+	mustExec(db, `CREATE TABLE new_db.test_tbl_2 (id INT PRIMARY KEY);`)
+	mustExec(db, `CREATE TABLE new_db.test_tbl_3 (id INT PRIMARY KEY);`)
+	mustExec(db, `DROP DATABASE new_db;`)
+}
+
+func caseRenameTable(db *sql.DB) {
+	mustExec(db, `CREATE TABLE name_a (id INT PRIMARY KEY);`)
+	mustExec(db, "INSERT INTO name_a(id) VALUES(?);", 1)
+	mustExec(db, `RENAME TABLE name_a TO name_b;`)
+	mustExec(db, "INSERT INTO name_b(id) VALUES(?);", 2)
+	mustExec(db, `RENAME TABLE name_b TO name_c;`)
+	mustExec(db, "INSERT INTO name_c(id) VALUES(?);", 3)
 }
 
 func caseCreateView(db *sql.DB) {
