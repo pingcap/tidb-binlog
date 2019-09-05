@@ -224,6 +224,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.run(caseCreateDropSchema)
 
+	tr.run(caseMoveTable)
+
 	// random op on have both pk and uk table
 	tr.run(func(src *sql.DB) {
 		start := time.Now()
@@ -337,6 +339,21 @@ func caseRenameTable(db *sql.DB) {
 	mustExec(db, "INSERT INTO name_b(id) VALUES(?);", 2)
 	mustExec(db, `RENAME TABLE name_b TO name_c;`)
 	mustExec(db, "INSERT INTO name_c(id) VALUES(?);", 3)
+}
+
+func caseMoveTable(db *sql.DB) {
+	mustExec(db, `CREATE DATABASE test_db1;`)
+	mustExec(db, `CREATE DATABASE test_db2;`)
+	mustExec(db, `CREATE DATABASE test_db3;`)
+	mustExec(db, `CREATE TABLE test_db1.to_move (id INT PRIMARY KEY);`)
+	mustExec(db, "INSERT INTO test_db1.to_move(id) VALUES(?);", 1)
+	mustExec(db, `ALTER TABLE test_db1.to_move RENAME test_db2.to_move;`)
+	mustExec(db, "INSERT INTO test_db2.to_move(id) VALUES(?);", 2)
+	mustExec(db, `ALTER TABLE test_db2.to_move RENAME test_db3.to_move;`)
+	mustExec(db, "INSERT INTO test_db3.to_move(id) VALUES(?);", 3)
+	mustExec(db, `DROP DATABASE test_db1;`)
+	mustExec(db, `DROP DATABASE test_db2;`)
+	mustExec(db, `DROP DATABASE test_db3;`)
 }
 
 func caseCreateView(db *sql.DB) {
