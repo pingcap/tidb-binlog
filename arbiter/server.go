@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.uber.org/zap"
 )
 
 // Server is the server to load data to mysql
@@ -233,10 +232,10 @@ func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld *loader.
 	dest := ld.Input()
 	defer ld.Close()
 	for msg := range source {
-		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+		log.Debug("recv msg from kafka reader, ts: %v, offset: %v", msg.Binlog.CommitTs, msg.Offset)
 		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 		if err != nil {
-			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))
+			log.Error("transfer binlog failed, program will stop handling data from loader, err: %s", err.Error())
 			return err
 		}
 		txn.Metadata = msg
