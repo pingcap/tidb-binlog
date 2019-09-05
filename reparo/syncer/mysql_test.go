@@ -22,11 +22,6 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 	var (
 		mock sqlmock.Sqlmock
 	)
-	originWorkerCount := defaultWorkerCount
-	defaultWorkerCount = 1
-	defer func() {
-		defaultWorkerCount = originWorkerCount
-	}()
 
 	oldCreateDB := createDB
 	createDB = func(string, string, string, int) (db *sql.DB, err error) {
@@ -37,7 +32,7 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 		createDB = oldCreateDB
 	}()
 
-	syncer, err := newMysqlSyncer(&DBConfig{}, safemode)
+	syncer, err := newMysqlSyncer(&DBConfig{}, 1, 20, safemode)
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()

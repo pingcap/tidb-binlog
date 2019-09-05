@@ -19,6 +19,14 @@ log-level = "info"
 # for print, it just prints decoded value.
 dest-type = "mysql"
 
+# number of binlog events in a transaction batch
+txn-batch = 20
+
+# work count to execute binlogs
+# if the latency between reparo and downstream(mysql or tidb) are too high, you might want to increase this
+# to get higher throughput by higher concurrent write to the downstream
+worker-count = 16
+
 # Enable safe mode to make reparo reentrant, which value can be "true", "false". If the value is "true", reparo will change the "update" command into "delete+replace".   
 # The default value of safe-mode is false. 
 # safe-mode = false
