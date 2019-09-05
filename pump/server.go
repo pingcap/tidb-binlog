@@ -404,7 +404,7 @@ func (s *Server) Start() error {
 		ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 		if err := s.node.Notify(ctx); err != nil {
 			// if fail, refresh this node's state to paused
-			if err := s.registerNode(context.Background(), node.Paused, 0); err != nil {
+			if err := s.registerNode(context.Background(), node.Offline, 0); err != nil {
 				log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
 			}
 			return errors.Annotate(err, "fail to notify all living drainer")
