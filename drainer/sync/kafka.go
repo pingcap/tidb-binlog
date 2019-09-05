@@ -259,19 +259,34 @@ func (ks *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([
 			}
 			msgs = append(msgs, m)
 		}
+		log.Info(
+			"Created DDL msgs",
+			zap.Int64("commit ts", binlog.CommitTs),
+			zap.Int("num of partitions", len(partitions)),
+		)
 		return msgs, nil
 	}
 
-	msgs := make([]*sarama.ProducerMessage, 0, len(binlog.DmlData.Tables))
-	for _, table := range binlog.DmlData.Tables {
-		l := obinlog.Binlog{
+	tables := make(map[string]*obinlog.Table)
+	for _, t := range binlog.DmlData.Tables {
+		name := *t.SchemaName + "." + *t.TableName
+		if exist, ok := tables[name]; !ok {
+			tables[name] = t
+		} else {
+			exist.Mutations = append(exist.Mutations, t.Mutations...)
+		}
+	}
+
+	msgs := make([]*sarama.ProducerMessage, 0, len(tables))
+	for n, t := range tables {
+		l := &obinlog.Binlog{
 			Type:     binlog.Type,
 			CommitTs: binlog.CommitTs,
 			DmlData: &obinlog.DMLData{
-				Tables: []*obinlog.Table{table},
+				Tables: []*obinlog.Table{t},
 			},
 		}
-		m, err := ks.newBinlogMsg(&l, item, sarama.StringEncoder(*table.SchemaName+"."+*table.TableName), -1)
+		m, err := ks.newBinlogMsg(l, item, sarama.StringEncoder(n), -1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
