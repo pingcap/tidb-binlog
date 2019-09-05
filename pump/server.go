@@ -72,11 +72,10 @@ type Server struct {
 	gs         *grpc.Server
 	ctx        context.Context
 	cancel     context.CancelFunc
-	pullCtx    context.Context
-	pullCancel context.CancelFunc
 	wg         sync.WaitGroup
 	gcDuration time.Duration
 	triggerGC  chan time.Time
+	pullClose  chan struct{}
 	metrics    *metricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
@@ -114,8 +113,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pullCtx, pullCancel := context.WithCancel(context.Background())
-	ctx, cancel := context.WithCancel(pullCtx)
+	ctx, cancel := context.WithCancel(context.Background())
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
@@ -166,13 +164,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:         grpc.NewServer(grpcOpts...),
 		ctx:        ctx,
 		cancel:     cancel,
-		pullCtx:    pullCtx,
-		pullCancel: pullCancel,
 		metrics:    metrics,
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time),
+		pullClose:  make(chan struct{}),
 	}, nil
 }
 
@@ -294,12 +291,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		log.Errorf("drainer request a purged binlog (gc ts = %d), request %+v, some binlog events may be loss", gcTS, in)
 	}
 
-	ctx, cancel := context.WithCancel(s.pullCtx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
 		select {
+		case <-s.pullClose:
+			return nil
 		case data, ok := <-binlogs:
 			if !ok {
 				return nil
@@ -871,7 +870,7 @@ func (s *Server) Close() {
 	log.Info("commit status done")
 
 	// PullBinlogs should be stopped after commitStatus
-	s.pullCancel()
+	close(s.pullClose)
 	// stop the gRPC server
 	s.gs.GracefulStop()
 	log.Info("grpc is stopped")
