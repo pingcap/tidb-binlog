@@ -114,3 +114,36 @@ func (hs *hashPartitionerSuite) TestCanSpecifyPartitionDirectly(c *check.C) {
 	_, err = partitioner.Partition(msg, numPartitions)
 	c.Assert(err, check.NotNil)
 }
+
+type findSelectedPartitionsSuite struct{}
+
+var _ = check.Suite(&findSelectedPartitionsSuite{})
+
+func (fs *findSelectedPartitionsSuite) TestFindCorrectPartitions(c *check.C) {
+	ks := KafkaSyncer{topic: "Hello"}
+	partitioner := newHashPartitioner(ks.topic).(*hashPartitioner)
+	var nPartitions int32 = 5
+	msgs := []*sarama.ProducerMessage{
+		{Key: sarama.StringEncoder("a"), Partition: -1},
+		{Key: sarama.StringEncoder("b"), Partition: -1},
+		{Key: sarama.StringEncoder("c"), Partition: -1},
+		{Key: sarama.StringEncoder("d"), Partition: -1},
+		{Key: sarama.StringEncoder("e"), Partition: -1},
+	}
+	result := make(map[int32]struct{})
+	for _, m := range msgs {
+		p, err := partitioner.Partition(m, nPartitions)
+		c.Assert(err, check.IsNil)
+		result[p] = struct{}{}
+	}
+
+	selected, err := ks.findSelectedPartitions(nPartitions, msgs)
+	c.Assert(err, check.IsNil)
+
+	c.Logf("Result: %v", selected)
+	c.Assert(len(selected), check.Equals, len(result))
+	for _, s := range selected {
+		_, ok := result[s]
+		c.Assert(ok, check.IsTrue)
+	}
+}
