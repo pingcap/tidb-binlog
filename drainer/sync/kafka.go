@@ -56,8 +56,6 @@ type KafkaSyncer struct {
 
 	msgTracker *msgTracker
 
-	lastSuccessTime time.Time
-
 	shutdown chan struct{}
 	*baseSyncer
 
