@@ -33,3 +33,4 @@ db-type = "kafka"
 
 [syncer.to]
 topic-name = "binlog_test_topic"
+kafka-partition-mode = "table"

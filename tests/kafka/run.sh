@@ -16,6 +16,6 @@ run_drainer "$args" &
 
 GO111MODULE=on go build -o out
 
-./out -offset=-1 -topic=binlog_test_topic -kafkaAddr=$kafka_addr -> ${OUT_DIR-/tmp}/$TEST_NAME.out 2>&1
+./out -topic=binlog_test_topic -kafkaAddr=$kafka_addr -> ${OUT_DIR-/tmp}/$TEST_NAME.out 2>&1
 
 killall drainer
