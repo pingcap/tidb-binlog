@@ -214,12 +214,7 @@ func (ks *KafkaSyncer) findSelectedPartitions(msgs []*sarama.ProducerMessage) ([
 
 func (ks *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
 	if binlog.Type == obinlog.BinlogType_DDL {
-		partitionKey := sarama.StringEncoder(*binlog.DdlData.SchemaName)
-		m, err := ks.newBinlogMsg(binlog, item, partitionKey, -1)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return []*sarama.ProducerMessage{m}, nil
+		return ks.genBroadcastMsgs(binlog, item)
 	}
 
 	tablesBySchema := make(map[string][]*obinlog.Table)
@@ -245,26 +240,30 @@ func (ks *KafkaSyncer) splitBinlogBySchema(binlog *obinlog.Binlog, item *Item) (
 	return msgs, nil
 }
 
-func (ks *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
-	if binlog.Type == obinlog.BinlogType_DDL {
-		partitions, err := ks.getPartitions()
+func (ks *KafkaSyncer) genBroadcastMsgs(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+	partitions, err := ks.getPartitions()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
+	for _, pa := range partitions {
+		m, err := ks.newBinlogMsg(binlog, item, nil, pa)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		msgs := make([]*sarama.ProducerMessage, 0, len(partitions))
-		for _, pa := range partitions {
-			m, err := ks.newBinlogMsg(binlog, item, nil, pa)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			msgs = append(msgs, m)
-		}
-		log.Info(
-			"Created DDL msgs",
-			zap.Int64("commit ts", binlog.CommitTs),
-			zap.Int("num of partitions", len(partitions)),
-		)
-		return msgs, nil
+		msgs = append(msgs, m)
+	}
+	log.Info(
+		"Created DDL msgs",
+		zap.Int64("commit ts", binlog.CommitTs),
+		zap.Int("num of partitions", len(partitions)),
+	)
+	return msgs, nil
+}
+
+func (ks *KafkaSyncer) splitBinlogByTable(binlog *obinlog.Binlog, item *Item) ([]*sarama.ProducerMessage, error) {
+	if binlog.Type == obinlog.BinlogType_DDL {
+		return ks.genBroadcastMsgs(binlog, item)
 	}
 
 	tables := make(map[string]*obinlog.Table)
