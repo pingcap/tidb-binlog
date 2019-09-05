@@ -351,34 +351,40 @@ func updatePKUK(db *sql.DB, opNum int) error {
 	maxKey := 20
 	mustExec(db, "create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
 
-	var pks []int
+	pks := make(map[int]struct{})
+	freePks := make([]int, maxKey)
+	for i := 0; i < maxKey; i++ {
+		freePks[i] = i
+	}
+
+	nextPk := func() int {
+		return freePks[0]
+	}
 	addPK := func(pk int) {
-		pks = append(pks, pk)
+		pks[pk] = struct{}{}
+		freePks = freePks[1:]
 	}
 	removePK := func(pk int) {
-		var tmp []int
-		for _, v := range pks {
-			if v != pk {
-				tmp = append(tmp, v)
-			}
-		}
-		pks = tmp
+		delete(pks, pk)
+		freePks = append(freePks, pk)
 	}
-	hasPK := func(pk int) bool {
-		for _, v := range pks {
-			if v == pk {
-				return true
+	genOldPk := func() int {
+		n := rand.Intn(len(pks))
+		var i, pk int
+		for pk = range pks {
+			if i == n {
+				break
 			}
+			i++
 		}
-		return false
+		return pk
 	}
 
 	for i := 0; i < opNum; {
-		var sql string
-		pk := rand.Intn(maxKey)
-		uk := rand.Intn(maxKey)
-		v := rand.Intn(10000)
-		oldPK := rand.Intn(maxKey)
+		var (
+			sql       string
+			pk, oldPK int
+		)
 
 		// try randomly insert&update&delete
 		op := rand.Intn(3)
@@ -387,29 +393,25 @@ func updatePKUK(db *sql.DB, opNum int) error {
 			if len(pks) == maxKey {
 				continue
 			}
-			for hasPK(pk) {
-				log.S().Info(pks)
-				pk = rand.Intn(maxKey)
-			}
+			pk = nextPk()
+			uk := rand.Intn(maxKey)
+			v := rand.Intn(10000)
 			sql = fmt.Sprintf("insert into pkuk(pk, uk, v) values(%d,%d,%d)", pk, uk, v)
 		case 1:
-			if len(pks) == 0 {
+			if len(pks) == 0 || len(pks) == maxKey {
 				continue
 			}
-			for !hasPK(oldPK) {
-				log.S().Info(pks)
-				oldPK = rand.Intn(maxKey)
-			}
+			pk = nextPk()
+			oldPK = genOldPk()
+			uk := rand.Intn(maxKey)
+			v := rand.Intn(10000)
 			sql = fmt.Sprintf("update pkuk set pk = %d, uk = %d, v = %d where pk = %d", pk, uk, v, oldPK)
 		case 2:
 			if len(pks) == 0 {
 				continue
 			}
-			for !hasPK(pk) {
-				log.S().Info(pks)
-				pk = rand.Intn(maxKey)
-			}
-			sql = fmt.Sprintf("delete from pkuk where pk = %d", pk)
+			oldPK = genOldPk()
+			sql = fmt.Sprintf("delete from pkuk where pk = %d", oldPK)
 		}
 
 		_, err := db.Exec(sql)
@@ -428,7 +430,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 			removePK(oldPK)
 			addPK(pk)
 		case 2:
-			removePK(pk)
+			removePK(oldPK)
 		}
 		i++
 	}
