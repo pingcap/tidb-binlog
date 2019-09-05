@@ -72,6 +72,8 @@ type Server struct {
 	gs         *grpc.Server
 	ctx        context.Context
 	cancel     context.CancelFunc
+	pullCtx    context.Context
+	pullCancel context.CancelFunc
 	wg         sync.WaitGroup
 	gcDuration time.Duration
 	triggerGC  chan time.Time
@@ -112,7 +114,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	pullCtx, pullCancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(pullCtx)
 	clusterID := pdCli.GetClusterID(ctx)
 	log.Infof("clusterID of pump server is %v", clusterID)
 
@@ -163,6 +166,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		gs:         grpc.NewServer(grpcOpts...),
 		ctx:        ctx,
 		cancel:     cancel,
+		pullCtx:    pullCtx,
+		pullCancel: pullCancel,
 		metrics:    metrics,
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      pdCli,
@@ -289,7 +294,7 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		log.Errorf("drainer request a purged binlog (gc ts = %d), request %+v, some binlog events may be loss", gcTS, in)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.pullCtx)
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
@@ -865,6 +870,8 @@ func (s *Server) Close() {
 	s.commitStatus()
 	log.Info("commit status done")
 
+	// PullBinlogs should be stopped after commitStatus
+	s.pullCancel()
 	// stop the gRPC server
 	s.gs.GracefulStop()
 	log.Info("grpc is stopped")
