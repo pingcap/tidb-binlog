@@ -154,7 +154,7 @@ func (ks *KafkaSyncer) Sync(item *Item) error {
 		return errors.Trace(err)
 	}
 	if ks.partitionMode == PartitionFixed {
-		return errors.Trace(ks.saveBinlog(slaveBinlog, item, nil))
+		return errors.Trace(ks.saveBinlog(slaveBinlog, item))
 	}
 
 	var msgs []*sarama.ProducerMessage
@@ -329,8 +329,8 @@ func (ks *KafkaSyncer) newResolvedMsg(ts int64, partition int32, item *Item) (*s
 	return msg, nil
 }
 
-func (ks *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item, key sarama.Encoder) error {
-	msg, err := ks.newBinlogMsg(binlog, item, key, 0)
+func (ks *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
+	msg, err := ks.newBinlogMsg(binlog, item, nil, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}
