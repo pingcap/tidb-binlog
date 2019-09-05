@@ -161,7 +161,7 @@ run_case() {
 }
 
 # List the case names to run, eg. ("binlog" "kafka")
-do_cases=("binlog")
+do_cases=()
 
 if [ ${#do_cases[@]} -eq 0 ]; then
     for script in ./*/run.sh; do
