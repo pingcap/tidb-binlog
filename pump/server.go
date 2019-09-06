@@ -83,6 +83,7 @@ type Server struct {
 	wg         sync.WaitGroup
 	gcDuration time.Duration
 	triggerGC  chan time.Time
+	pullClose  chan struct{}
 	metrics    *util.MetricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
@@ -181,6 +182,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time),
+		pullClose:  make(chan struct{}),
 	}, nil
 }
 
@@ -278,12 +280,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
 	}
 
-	ctx, cancel := context.WithCancel(s.ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
 		select {
+		case <-s.pullClose:
+			return nil
 		case data, ok := <-binlogs:
 			if !ok {
 				return nil
@@ -859,6 +863,7 @@ func (s *Server) Close() {
 	s.commitStatus()
 	log.Info("commit status done")
 
+	close(s.pullClose)
 	// stop the gRPC server
 	s.gs.GracefulStop()
 	log.Info("grpc is stopped")

@@ -736,7 +736,8 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
 		pdCli:      nil,
 		cfg:        cfg,
-		triggerGC:  make(chan time.Time)}
+		triggerGC:  make(chan time.Time),
+		pullClose:  make(chan struct{})}
 	defer func() {
 		close(sig)
 		p.Close()
