@@ -352,10 +352,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 	mustExec(db, "create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
 
 	pks := make(map[int]struct{})
-	freePks := make([]int, maxKey)
-	for i := 0; i < maxKey; i++ {
-		freePks[i] = i
-	}
+	freePks := rand.Perm(maxKey)
 
 	nextPk := func() int {
 		return freePks[0]
