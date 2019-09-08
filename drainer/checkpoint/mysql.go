@@ -92,7 +92,7 @@ func (sp *MysqlCheckPoint) Load() error {
 	switch {
 	case err == sql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
-		log.Info("no checkpoint in downstream table, use %d", sp.initialCommitTS)
+		log.Infof("no checkpoint in downstream table, use initialCommitTS: %d", sp.initialCommitTS)
 		return nil
 	case err != nil:
 		return errors.Annotatef(err, "QueryRow failed, sql: %s", selectSQL)
@@ -102,7 +102,7 @@ func (sp *MysqlCheckPoint) Load() error {
 		return errors.Trace(err)
 	}
 
-	log.Info("read checkpoint from downstream table: %s", sp.CommitTS)
+	log.Infof("read checkpoint from downstream table: %d", sp.CommitTS)
 
 	return nil
 }

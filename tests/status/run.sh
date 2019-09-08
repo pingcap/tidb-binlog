@@ -8,6 +8,14 @@ cd "$(dirname "$0")"
 OUT_DIR=/tmp/tidb_binlog_test
 STATUS_LOG="${OUT_DIR}/status.log"
 
+# use latest ts as initial-commit-ts, so we can skip binlog by previous test case
+ms=$(date +'%s')
+ts=$(($ms*1000<<18))
+args="-initial-commit-ts=$ts"
+down_run_sql "DROP DATABASE IF EXISTS tidb_binlog"
+rm -rf /tmp/tidb_binlog_test/data.drainer
+
+
 # run drainer, and drainer's status should be online
 run_drainer &
 sleep 2
