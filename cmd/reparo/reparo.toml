@@ -19,6 +19,14 @@ log-level = "info"
 # for print, it just prints decoded value.
 dest-type = "mysql"
 
+# number of binlog events in a transaction batch
+txn-batch = 20
+
+# work count to execute binlogs
+# if the latency between reparo and downstream(mysql or tidb) are too high, you might want to increase this
+# to get higher throughput by higher concurrent write to the downstream
+worker-count = 16
+
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regular expression , start with '~' declare use regular expression.
 #
