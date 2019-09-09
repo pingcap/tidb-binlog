@@ -17,7 +17,8 @@ rm -rf /tmp/tidb_binlog_test/data.drainer
 
 
 # run drainer, and drainer's status should be online
-run_drainer &
+run_drainer "$args" &
+
 sleep 2
 echo "check drainer's status, should be online"
 check_status drainers online
