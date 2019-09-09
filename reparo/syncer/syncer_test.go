@@ -34,7 +34,7 @@ func (s *testSyncerSuite) TestNewSyncer(c *check.C) {
 	}
 
 	for _, testCase := range testCases {
-		syncer, err := New(testCase.typeStr, cfg, false)
+		syncer, err := New(testCase.typeStr, cfg, 16, 20, false)
 		c.Assert(err, check.IsNil)
 		c.Assert(reflect.TypeOf(syncer), testCase.checker, testCase.tp)
 	}
