@@ -191,25 +191,20 @@ func (s *Server) Run() error {
 		}
 	}()
 
+	var syncErr error
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	defer syncCancel()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		for msg := range s.kafkaReader.Messages() {
-			log.Debugf("recv binlog ts: %d at offset: %d", msg.Binlog.CommitTs, msg.Offset)
-			txn := loader.SlaveBinlogToTxn(msg.Binlog)
-			txn.Metadata = msg
-			s.load.Input() <- txn
-
-			queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(s.kafkaReader.Messages())))
-			queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(s.load.Input())))
-		}
-
-		s.load.Close()
+		defer s.load.Close()
+		syncErr = syncBinlogs(syncCtx, s.kafkaReader.Messages(), s.load)
 	}()
 
 	err := s.load.Run()
 	if err != nil {
+		syncCancel()
 		s.Close()
 	}
 
@@ -219,6 +214,10 @@ func (s *Server) Run() error {
 		return errors.Trace(err)
 	}
 
+	if syncErr != nil {
+		return errors.Trace(syncErr)
+	}
+
 	err = s.checkpoint.Save(s.finishTS, StatusNormal)
 	if err != nil {
 		return errors.Trace(err)
@@ -226,5 +225,30 @@ func (s *Server) Run() error {
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(s.finishTS))))
 
+	return nil
+}
+
+func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld *loader.Loader) (err error) {
+	dest := ld.Input()
+	defer ld.Close()
+	for msg := range source {
+		log.Debug("recv msg from kafka reader, ts: %v, offset: %v", msg.Binlog.CommitTs, msg.Offset)
+		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+		if err != nil {
+			log.Error("transfer binlog failed, program will stop handling data from loader, err: %s", err.Error())
+			return err
+		}
+		txn.Metadata = msg
+		dest <- txn
+		// avoid block when no process is handling ld.input
+		select {
+		case dest <- txn:
+		case <-ctx.Done():
+			return nil
+		}
+
+		queueSizeGauge.WithLabelValues("kafka_reader").Set(float64(len(source)))
+		queueSizeGauge.WithLabelValues("loader_input").Set(float64(len(dest)))
+	}
 	return nil
 }
