@@ -178,7 +178,7 @@ func NewMerger(ts int64, strategy string, sources ...MergeSource) *Merger {
 	m := &Merger{
 		latestTS: ts,
 		sources:  make(map[string]MergeSource),
-		output:   make(chan MergeItem, 10),
+		output:   make(chan MergeItem),
 		strategy: mergeStrategy,
 	}
 
