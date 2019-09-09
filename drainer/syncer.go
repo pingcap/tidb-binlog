@@ -65,7 +65,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.cfg = cfg
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
-	syncer.jobCh = newJobChans(cfg.WorkerCount)
+	syncer.jobCh = newJobChans(cfg.WorkerCount, 10*cfg.TxnBatch)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
@@ -75,11 +75,10 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	return syncer, nil
 }
 
-func newJobChans(count int) []chan *job {
+func newJobChans(count int, buffSize int) []chan *job {
 	jobCh := make([]chan *job, 0, count)
-	size := maxBinlogItemCount / count
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, size))
+		jobCh = append(jobCh, make(chan *job, buffSize))
 	}
 
 	return jobCh
