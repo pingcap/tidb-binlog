@@ -355,11 +355,20 @@ func updatePKUK(db *sql.DB, opNum int) error {
 	freePks := rand.Perm(maxKey)
 
 	nextPk := func() int {
+		rand.Shuffle(len(freePks), func(i, j int) {
+			freePks[i], freePks[j] = freePks[j], freePks[i]
+		})
 		return freePks[0]
 	}
 	addPK := func(pk int) {
 		pks[pk] = struct{}{}
-		freePks = freePks[1:]
+		var i, v int
+		for i, v = range freePks {
+			if v == pk {
+				break
+			}
+		}
+		freePks = append(freePks[:i], freePks[i+1:]...)
 	}
 	removePK := func(pk int) {
 		delete(pks, pk)
