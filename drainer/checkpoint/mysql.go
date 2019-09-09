@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -98,6 +100,7 @@ func (sp *MysqlCheckPoint) Load() error {
 	switch {
 	case err == sql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
+		log.Infof("no checkpoint in downstream table, use initialCommitTS: %d", sp.initialCommitTS)
 		return nil
 	case err != nil:
 		return errors.Annotatef(err, "QueryRow failed, sql: %s", selectSQL)
@@ -106,6 +109,8 @@ func (sp *MysqlCheckPoint) Load() error {
 	if err := json.Unmarshal([]byte(str), sp); err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Infof("read checkpoint from downstream table: %d", sp.CommitTS)
 
 	return nil
 }
