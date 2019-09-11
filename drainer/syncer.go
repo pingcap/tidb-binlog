@@ -377,14 +377,16 @@ ForLoop:
 
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				break ForLoop
 			}
 
 			sql := b.job.Query
 			var schema, table string
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
-				return errors.Trace(err)
+				err = errors.Trace(err)
+				break ForLoop
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
