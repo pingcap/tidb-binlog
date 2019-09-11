@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	ctl "github.com/pingcap/tidb-binlog/binlogctl"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"go.uber.org/zap"
 )
 
 const (
@@ -37,7 +36,7 @@ func main() {
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		log.Error("parse cmd flags", zap.Error(err))
+		log.Errorf("parse cmd flags, error: %s\n", err)
 		os.Exit(2)
 	}
 
@@ -65,6 +64,6 @@ func main() {
 	}
 
 	if err != nil {
-		log.Fatal("fail to execute command", zap.String("command", cfg.Command), zap.Error(err))
+		log.Fatalf("fail to execute command %s, error: %v", cfg.Command, err)
 	}
 }

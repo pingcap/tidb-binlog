@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/siddontang/go/ioutil2"
-	"go.uber.org/zap"
 )
 
 var newPDClientFunc = pd.NewClient
@@ -41,7 +40,7 @@ func GenerateMetaInfo(cfg *Config) error {
 	// get newest ts from pd
 	commitTS, err := GetTSO(cfg)
 	if err != nil {
-		log.Error("get tso failed", zap.Error(err))
+		log.Errorf("get tso failed, error: %v", err)
 		return errors.Trace(err)
 	}
 
@@ -95,7 +94,7 @@ func saveMeta(metaFileName string, ts int64, timeZone string) error {
 		t := util.TSOToRoughTime(ts)
 		location, err1 := time.LoadLocation(timeZone)
 		if err1 != nil {
-			log.Warn("fail to load location", zap.String("time zone", timeZone), zap.Error(err1))
+			log.Warnf("fail to load location, time zone: %s, error: %v", timeZone, err1)
 		} else {
 			buf.WriteString(t.UTC().String())
 			buf.WriteByte('\n')
@@ -108,6 +107,6 @@ func saveMeta(metaFileName string, ts int64, timeZone string) error {
 		return errors.Annotatef(err, "save meta %+v into %s", meta, metaFileName)
 	}
 
-	log.Info("save meta", zap.Stringer("meta", meta))
+	log.Infof("save meta %v", meta)
 	return nil
 }

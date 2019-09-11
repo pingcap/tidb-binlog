@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"go.uber.org/zap"
 )
 
 var (
@@ -105,14 +104,14 @@ func ApplyAction(urls, kind, nodeID string, action string) error {
 
 	var client http.Client
 	url := fmt.Sprintf("http://%s/state/%s/%s", n.Addr, n.NodeID, action)
-	log.Debug("send put http request", zap.String("url", url))
+	log.Debugf("send put http request, url: %s", url)
 	req, err := http.NewRequest("PUT", url, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	_, err = client.Do(req)
 	if err == nil {
-		log.Info("Apply action on node success", zap.String("action", action), zap.String("NodeID", n.NodeID))
+		log.Infof("Apply action on node success, action: %s, NodeID: %s", action, n.NodeID)
 		return nil
 	}
 
