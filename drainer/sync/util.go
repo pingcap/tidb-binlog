@@ -45,21 +45,26 @@ type CheckpointConfig struct {
 
 type baseError struct {
 	err   error
-	errCh chan error
+	errCh chan struct{}
 }
 
 func newBaseError() *baseError {
 	return &baseError{
-		errCh: make(chan error, 1),
+		errCh: make(chan struct{}),
 	}
 }
 
 func (b *baseError) error() <-chan error {
-	return b.errCh
+	ret := make(chan error, 1)
+	go func() {
+		<-b.errCh
+		ret <- b.err
+	}()
+
+	return ret
 }
 
 func (b *baseError) setErr(err error) {
 	b.err = err
-	b.errCh <- err
 	close(b.errCh)
 }
