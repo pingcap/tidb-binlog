@@ -433,6 +433,19 @@ func (s *loaderImpl) Run() error {
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
+		// start a thread to consume input txn to avoid block
+		go func() {
+			for {
+				select {
+				case _, ok := <-s.input:
+					if !ok {
+						return
+					}
+				case <-s.ctx.Done():
+					return
+				}
+			}
+		}()
 	}()
 
 	batch := fNewBatchManager(s)
