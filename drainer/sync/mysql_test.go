@@ -38,7 +38,6 @@ func (l *fakeMySQLLoader) Input() chan<- *loader.Txn {
 }
 
 func (l *fakeMySQLLoader) Run() error {
-	<-l.input
 	close(l.successes)
 	return errors.New("MySQLSyncerMockTest")
 }
@@ -55,12 +54,12 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 		input:     make(chan *loader.Txn),
 	}
 	db, _, _ := sqlmock.New()
-	mysql := &MysqlSyncer{
+	syncer := &MysqlSyncer{
 		db:         db,
 		loader:     fakeMySQLLoaderImpl,
 		baseSyncer: newBaseSyncer(infoGetter),
 	}
-	go mysql.run()
+	go syncer.run()
 	gen := translator.BinlogGenrator{}
 	gen.SetDDL()
 	item := &Item{
@@ -69,9 +68,8 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 		Schema:        gen.Schema,
 		Table:         gen.Table,
 	}
-	_ = mysql.Sync(item)
 	select {
-	case err := <-mysql.Error():
+	case err := <-syncer.Error():
 		c.Assert(err, check.ErrorMatches, ".*MySQLSyncerMockTest.*")
 	case <-time.After(time.Second):
 		c.Fatal("mysql syncer hasn't quit in 1s after some error occurs in loader")
@@ -79,13 +77,13 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 
 	finishSync := make(chan struct{})
 	go func() {
-		err := mysql.Sync(item)
+		err := syncer.Sync(item)
 		c.Assert(err, check.ErrorMatches, ".*MySQLSyncerMockTest.*")
 		close(finishSync)
 	}()
 	select {
 	case <-finishSync:
 	case <-time.After(time.Second):
-		c.Fatal("syncer hasn't synced item in 1s after some error occurs in loader")
+		c.Fatal("mysql syncer hasn't synced item in 1s after some error occurs in loader")
 	}
 }
