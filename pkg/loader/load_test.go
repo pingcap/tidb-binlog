@@ -403,7 +403,6 @@ func (s *runSuite) TestShouldExecuteAllPendingDMLsOnClose(c *check.C) {
 	loader := &loaderImpl{
 		input:      make(chan *Txn, 10),
 		successTxn: make(chan *Txn, 10),
-		ctx:        context.Background(),
 	}
 	go func() {
 		for i := 0; i < 7; i++ {
@@ -451,7 +450,6 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 	loader := &loaderImpl{
 		input:      make(chan *Txn, 10),
 		successTxn: make(chan *Txn, 10),
-		ctx:        context.Background(),
 	}
 
 	go func() {

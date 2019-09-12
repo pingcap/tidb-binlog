@@ -20,7 +20,9 @@ import (
 	"testing"
 	"time"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/errors"
+
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Shopify/sarama"
 	"github.com/Shopify/sarama/mocks"
 	"github.com/pingcap/check"
@@ -168,6 +170,71 @@ func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
 		}
 
 		c.Logf("success to get from  %v", reflect.TypeOf(syncer))
+	}
+}
+
+func (s *syncerSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
+	gen := translator.BinlogGenrator{}
+	gen.SetDDL()
+	item := &Item{
+		Binlog:        gen.TiBinlog,
+		PrewriteValue: gen.PV,
+		Schema:        gen.Schema,
+		Table:         gen.Table,
+	}
+
+	// set up mysql db mock expect
+	s.mysqlMock.ExpectBegin()
+	s.mysqlMock.ExpectExec("use .*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.mysqlMock.ExpectExec("create table test*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.mysqlMock.ExpectCommit()
+
+	itemFail := item
+	itemFail.Binlog.DdlQuery = []byte("create table fail(id int)")
+	itemFail.Binlog.DdlJobId = 2
+	// set up mysql db mock fail expect
+	s.mysqlMock.ExpectBegin()
+	s.mysqlMock.ExpectExec("use .*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.mysqlMock.ExpectExec("create table fail*").WillReturnResult(sqlmock.NewErrorResult(errors.New("mockMySQLError")))
+	s.mysqlMock.ExpectCommit()
+
+	mysql := s.syncers[1].(*MysqlSyncer)
+
+	finishRun := make(chan struct{})
+	go func() {
+		mysql.run()
+		close(finishRun)
+	}()
+	go func() {
+		for range mysql.Successes() {
+		}
+	}()
+
+	for i := 0; i < 1024; i++ {
+		err := mysql.Sync(item)
+		c.Assert(err, check.IsNil)
+	}
+
+	err := mysql.Sync(itemFail)
+	c.Assert(err, check.ErrorMatches, "mockMySQLError")
+
+	select {
+	case <-finishRun:
+	case <-time.After(time.Second):
+		c.Fatal("mysql dsyncer haven't finished running in 1s")
+	}
+
+	finishCh := make(chan struct{})
+	go func() {
+		for i := 0; i < 1024; i++ {
+			_ = mysql.Sync(item)
+		}
+		close(finishCh)
+	}()
+	select {
+	case <-finishCh:
+	case <-time.After(time.Second):
+		c.Fatal("mysql dsyncer haven't sync 1024 item in 1s, may get blocked")
 	}
 }
 
