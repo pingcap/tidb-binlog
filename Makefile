@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter
+.PHONY: build test check update clean pump drainer binlogctl fmt reparo integration_test arbiter
 
 PROJECT=tidb-binlog
 
@@ -40,7 +40,7 @@ all: dev install
 
 dev: check test
 
-build: pump drainer reparo
+build: pump drainer reparo binlogctl
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
@@ -53,6 +53,9 @@ arbiter:
 
 reparo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go
+
+binlogctl:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlogctl cmd/binlogctl/main.go
 
 install:
 	go install ./...
