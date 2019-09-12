@@ -50,7 +50,7 @@ type baseSyncer struct {
 func newBaseSyncer(tableInfoGetter translator.TableInfoGetter) *baseSyncer {
 	return &baseSyncer{
 		baseError:       newBaseError(),
-		success:         make(chan *Item, 1024),
+		success:         make(chan *Item),
 		tableInfoGetter: tableInfoGetter,
 	}
 }

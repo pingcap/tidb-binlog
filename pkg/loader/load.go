@@ -159,8 +159,8 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		workerCount:   opts.workerCount,
 		batchSize:     opts.batchSize,
 		metrics:       opts.metrics,
-		input:         make(chan *Txn, 1024),
-		successTxn:    make(chan *Txn, 1024),
+		input:         make(chan *Txn),
+		successTxn:    make(chan *Txn),
 		merge:         true,
 		saveAppliedTS: opts.saveAppliedTS,
 
