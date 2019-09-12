@@ -15,6 +15,7 @@ package sync
 import (
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
@@ -32,18 +33,33 @@ type fakeMySQLLoader struct {
 	input     chan *loader.Txn
 }
 
+func (l *fakeMySQLLoader) Input() chan<- *loader.Txn {
+	return l.input
+}
+
 func (l *fakeMySQLLoader) Run() error {
-	<-l.successes
+	<-l.input
+	close(l.successes)
 	return errors.New("MySQLSyncerMockTest")
 }
 
+func (l *fakeMySQLLoader) Successes() <-chan *loader.Txn {
+	return l.successes
+}
+
 func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
+	var infoGetter translator.TableInfoGetter
 	// create mysql syncer
-	fakeMySQLLoaderImpl := fakeMySQLLoader{
+	fakeMySQLLoaderImpl := &fakeMySQLLoader{
 		successes: make(chan *loader.Txn),
 		input:     make(chan *loader.Txn),
 	}
-	mysql := &MysqlSyncer{loader: fakeMySQLLoaderImpl}
+	db, _, _ := sqlmock.New()
+	mysql := &MysqlSyncer{
+		db:         db,
+		loader:     fakeMySQLLoaderImpl,
+		baseSyncer: newBaseSyncer(infoGetter),
+	}
 	go mysql.run()
 	gen := translator.BinlogGenrator{}
 	gen.SetDDL()
