@@ -431,16 +431,19 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
+	txnManager := newTxnManager(1024)
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
+		txnManager.Close()
 	}()
 
 	batch := fNewBatchManager(s)
+	input := txnManager.put(s.input)
 
 	for {
 		select {
-		case txn, ok := <-s.input:
+		case txn, ok := <-input:
 			if !ok {
 				log.Info("Loader closed, quit running")
 				if err := batch.execAccumulatedDMLs(); err != nil {
@@ -450,6 +453,7 @@ func (s *loaderImpl) Run() error {
 			}
 
 			s.metricsInputTxn(txn)
+			txnManager.pop(txn)
 			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
@@ -465,12 +469,13 @@ func (s *loaderImpl) Run() error {
 			}
 
 			// get first
-			txn, ok := <-s.input
+			txn, ok := <-input
 			if !ok {
 				return nil
 			}
 
 			s.metricsInputTxn(txn)
+			txnManager.pop(txn)
 			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
@@ -623,6 +628,82 @@ func (b *batchManager) put(txn *Txn) error {
 		}
 	}
 	return nil
+}
+
+type txnManager struct {
+	cacheChan    chan *Txn
+	shutdown     chan struct{}
+	cachedSize   int
+	maxCacheSize int
+	cond         *sync.Cond
+	closed       bool
+}
+
+func newTxnManager(maxCacheSize int) *txnManager {
+	return &txnManager{
+		cacheChan:    make(chan *Txn, 1024),
+		maxCacheSize: maxCacheSize,
+		cond:         sync.NewCond(new(sync.Mutex)),
+		shutdown:     make(chan struct{}),
+	}
+}
+
+func (t *txnManager) put(input chan *Txn) chan *Txn {
+	ret := t.cacheChan
+	go func() {
+		for !t.closed {
+			var txn *Txn
+			var ok bool
+			select {
+			case txn, ok = <-input:
+				if !ok {
+					close(ret)
+					return
+				}
+			case <-t.shutdown:
+				return
+			}
+			txnSize := len(txn.DMLs)
+
+			t.cond.L.Lock()
+			if txnSize < t.maxCacheSize {
+				for !t.closed && txnSize+t.cachedSize > t.maxCacheSize {
+					t.cond.Wait()
+				}
+			} else {
+				for !t.closed && t.cachedSize != 0 {
+					t.cond.Wait()
+				}
+			}
+			t.cond.L.Unlock()
+
+			select {
+			case ret <- txn:
+				t.cond.L.Lock()
+				t.cachedSize += txnSize
+				t.cond.L.Unlock()
+			case <-t.shutdown:
+				return
+			}
+		}
+	}()
+	return ret
+}
+
+func (t *txnManager) pop(txn *Txn) {
+	t.cond.L.Lock()
+	t.cachedSize -= len(txn.DMLs)
+	t.cond.Signal()
+	t.cond.L.Unlock()
+}
+
+func (t *txnManager) Close() {
+	if t.closed {
+		return
+	}
+	close(t.shutdown)
+	t.closed = true
+	t.cond.Signal()
 }
 
 func getAppliedTS(db *gosql.DB) int64 {
