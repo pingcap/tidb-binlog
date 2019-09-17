@@ -83,9 +83,12 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 
 	txn.Metadata = item
 
-	m.loader.Input() <- txn
-
-	return nil
+	select {
+	case <-m.errCh:
+		return m.err
+	case m.loader.Input() <- txn:
+		return nil
+	}
 }
 
 // Close implements Syncer interface
