@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -709,7 +710,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 	cfg := &Config{
 		ListenAddr:        "http://127.0.0.1:8250",
 		AdvertiseAddr:     "http://127.0.0.1:8260",
-		Socket:            "unix://127.0.0.1:" + string(time.Now().UnixNano()) + "/hello/world",
+		Socket:            "unix://127.0.0.1:" + strconv.FormatInt(time.Now().UnixNano(), 10) + "/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		DataDir:           path.Join(c.MkDir(), "pump"),
 		HeartbeatInterval: 1500,
