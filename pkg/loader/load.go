@@ -213,7 +213,6 @@ func (s *loaderImpl) markSuccess(txns ...*Txn) {
 		s.lastUpdateAppliedTSTime = time.Now()
 	}
 	for _, txn := range txns {
-		txn.DMLs = nil
 		s.successTxn <- txn
 	}
 	log.Debug("markSuccess txns", zap.Int("txns len", len(txns)))

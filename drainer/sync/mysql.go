@@ -107,15 +107,7 @@ func (m *MysqlSyncer) run() {
 
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*Item)
-
-			// clean useless item value to reduce memory usage
-			item.Binlog.PrewriteValue = nil
-			item.Binlog.XXX_unrecognized = nil
-			item.Binlog.PrewriteKey = nil
-			item.Binlog.DdlQuery = nil
-			item.PrewriteValue = nil
 			item.AppliedTS = txn.AppliedTS
-
 			m.success <- item
 		}
 		close(m.success)
