@@ -18,9 +18,9 @@ require (
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20190703131923-d9830856b531
 	github.com/pingcap/log v0.0.0-20190307075452-bd41d9273596
-	github.com/pingcap/parser v0.0.0-20190709031113-f5e853fce911
-	github.com/pingcap/pd v0.0.0-20190709024450-2053c20f74ee
-	github.com/pingcap/tidb v0.0.0-20190709063432-a4b9350605da
+	github.com/pingcap/parser v0.0.0-20190910041007-2a177b291004
+	github.com/pingcap/pd v0.0.0-20190711034019-ee98bf9063e9
+	github.com/pingcap/tidb v0.0.0-20190917133016-45d7da02f66e
 	github.com/pingcap/tidb-tools v2.1.12+incompatible
 	github.com/pingcap/tipb v0.0.0-20190428032612-535e1abaa330
 	github.com/prometheus/client_golang v0.9.0
@@ -39,6 +39,7 @@ require (
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
+	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 	google.golang.org/grpc v1.17.0
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
