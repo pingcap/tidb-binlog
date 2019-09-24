@@ -707,11 +707,10 @@ func (t *txnManager) pop(txn *Txn) {
 }
 
 func (t *txnManager) Close() {
-	if atomic.LoadInt32(&t.isClosed) == 1 {
+	if !atomic.CompareAndSwapInt32(&t.isClosed, 0, 1) {
 		return
 	}
 	close(t.shutdown)
-	atomic.StoreInt32(&t.isClosed, 1)
 	t.cond.Signal()
 	log.Info("txnManager has been closed")
 }
