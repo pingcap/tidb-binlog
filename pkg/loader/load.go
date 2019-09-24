@@ -430,7 +430,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
-	txnManager := newTxnManager(1024)
+	txnManager := newTxnManager(1024, s.input)
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
@@ -438,7 +438,7 @@ func (s *loaderImpl) Run() error {
 	}()
 
 	batch := fNewBatchManager(s)
-	input := txnManager.put(s.input)
+	input := txnManager.run()
 
 	for {
 		select {
@@ -629,17 +629,20 @@ func (b *batchManager) put(txn *Txn) error {
 	return nil
 }
 
+// txnManager can only match one input channel
 type txnManager struct {
+	input        chan *Txn
 	cacheChan    chan *Txn
 	shutdown     chan struct{}
 	cachedSize   int
 	maxCacheSize int
 	cond         *sync.Cond
-	closed       bool
+	isClosed     int32
 }
 
-func newTxnManager(maxCacheSize int) *txnManager {
+func newTxnManager(maxCacheSize int, input chan *Txn) *txnManager {
 	return &txnManager{
+		input:        input,
 		cacheChan:    make(chan *Txn, 1024),
 		maxCacheSize: maxCacheSize,
 		cond:         sync.NewCond(new(sync.Mutex)),
@@ -647,16 +650,23 @@ func newTxnManager(maxCacheSize int) *txnManager {
 	}
 }
 
-func (t *txnManager) put(input chan *Txn) chan *Txn {
+// run can only be used once for a txnManager instance
+func (t *txnManager) run() chan *Txn {
 	ret := t.cacheChan
+	input := t.input
 	go func() {
-		for !t.closed {
+		defer func() {
+			log.Info("run()... in txnManager quit")
+			close(ret)
+		}()
+
+		for atomic.LoadInt32(&t.isClosed) == 0 {
 			var txn *Txn
 			var ok bool
 			select {
 			case txn, ok = <-input:
 				if !ok {
-					close(ret)
+					log.Info("Loader has been closed. Start quitting txnManager")
 					return
 				}
 			case <-t.shutdown:
@@ -666,11 +676,11 @@ func (t *txnManager) put(input chan *Txn) chan *Txn {
 
 			t.cond.L.Lock()
 			if txnSize < t.maxCacheSize {
-				for !t.closed && txnSize+t.cachedSize > t.maxCacheSize {
+				for atomic.LoadInt32(&t.isClosed) == 0 && txnSize+t.cachedSize > t.maxCacheSize {
 					t.cond.Wait()
 				}
 			} else {
-				for !t.closed && t.cachedSize != 0 {
+				for atomic.LoadInt32(&t.isClosed) == 0 && t.cachedSize != 0 {
 					t.cond.Wait()
 				}
 			}
@@ -697,12 +707,13 @@ func (t *txnManager) pop(txn *Txn) {
 }
 
 func (t *txnManager) Close() {
-	if t.closed {
+	if atomic.LoadInt32(&t.isClosed) == 1 {
 		return
 	}
 	close(t.shutdown)
-	t.closed = true
+	atomic.StoreInt32(&t.isClosed, 1)
 	t.cond.Signal()
+	log.Info("txnManager has been closed")
 }
 
 func getAppliedTS(db *gosql.DB) int64 {
