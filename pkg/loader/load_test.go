@@ -382,15 +382,15 @@ type txnManagerSuite struct{}
 
 var _ = check.Suite(&txnManagerSuite{})
 
-func inputTxnInTime(c *check.C, input chan *Txn, txn *Txn, timeLimit time.Duration, failMsg string) {
+func inputTxnInTime(c *check.C, input chan *Txn, txn *Txn, timeLimit time.Duration) {
 	select {
 	case input <- txn:
 	case <-time.After(timeLimit):
-		c.Fatal(failMsg)
+		c.Fatal("txnManager gets blocked while receiving txns")
 	}
 }
 
-func outputTxnIntime(c *check.C, output chan *Txn, timeLimit time.Duration, failMsg string) *Txn {
+func outputTxnInTime(c *check.C, output chan *Txn, timeLimit time.Duration) *Txn {
 	if timeLimit != 0 {
 		select {
 		case t := <-output:
@@ -421,7 +421,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	output := txnManager.run()
 	// send 5 txns (size 3) to txnManager, the 5th txn should get blocked at cond.Wait()
 	for i := 0; i < 5; i++ {
-		inputTxnInTime(c, input, txn, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
+		inputTxnInTime(c, input, txn, 10*time.Microsecond)
 	}
 	c.Assert(output, check.HasLen, 4)
 	// Next txn should be blocked
@@ -432,11 +432,11 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	}
 	c.Assert(output, check.HasLen, 4)
 	// pick one txn from output channel
-	t := outputTxnIntime(c, output, 0, "Fail to pick txn from txnManager")
+	t := outputTxnInTime(c, output, 0)
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txn)
 	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
-	inputTxnInTime(c, input, txn, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
+	inputTxnInTime(c, input, txn, 10*time.Microsecond)
 	// close txnManager and output should be closed when txnManager is closed
 	txnManager.Close()
 	outputClose := make(chan struct{})
@@ -463,14 +463,14 @@ func (s *txnManagerSuite) TestAddBigTxn(c *check.C) {
 	}}
 	txnManager := newTxnManager(1, input)
 	output := txnManager.run()
-	inputTxnInTime(c, input, txnSmall, 50*time.Microsecond, "txnManager gets blocked while receiving txns")
-	inputTxnInTime(c, input, txnBig, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
+	inputTxnInTime(c, input, txnSmall, 50*time.Microsecond)
+	inputTxnInTime(c, input, txnBig, 10*time.Microsecond)
 
-	t := outputTxnIntime(c, output, 0, "Fail to pick txn from txnManager")
+	t := outputTxnInTime(c, output, 0)
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txnSmall)
 
-	t = outputTxnIntime(c, output, 10*time.Microsecond, "Fail to pick txn from txnManager")
+	t = outputTxnInTime(c, output, 10*time.Microsecond)
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txnBig)
 
@@ -494,10 +494,10 @@ func (s *txnManagerSuite) TestCloseLoaderInput(c *check.C) {
 	txnManager := newTxnManager(1, input)
 	output := txnManager.run()
 
-	inputTxnInTime(c, input, txn, 50*time.Microsecond, "txnManager gets blocked while receiving txns")
+	inputTxnInTime(c, input, txn, 50*time.Microsecond)
 	close(input)
 
-	t := outputTxnIntime(c, output, 10*time.Microsecond, "Fail to pick txn from txnManager")
+	t := outputTxnInTime(c, output, 10*time.Microsecond)
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txn)
 
