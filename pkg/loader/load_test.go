@@ -396,7 +396,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	for i := 0; i < 5; i++ {
 		select {
 		case input <- txn:
-		case <-time.After(50 * time.Microsecond):
+		case <-time.After(10 * time.Microsecond):
 			c.Fatal("txnManager gets blocked while receiving txns")
 		}
 	}
@@ -413,13 +413,13 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	case t := <-output:
 		txnManager.pop(t)
 		c.Assert(t, check.DeepEquals, txn)
-	case <-time.After(50 * time.Microsecond):
+	default:
 		c.Fatal("Fail to pick txn from txnManager")
 	}
 	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
 	select {
 	case input <- txn:
-	case <-time.After(50 * time.Microsecond):
+	case <-time.After(10 * time.Microsecond):
 		c.Fatal("txnManager gets blocked while receiving txns")
 	}
 	// close txnManager and output should be closed when txnManager is closed
@@ -455,21 +455,21 @@ func (s *txnManagerSuite) TestAddBigTxn(c *check.C) {
 	}
 	select {
 	case input <- txnBig:
-	case <-time.After(50 * time.Microsecond):
+	case <-time.After(10 * time.Microsecond):
 		c.Fatal("txnManager gets blocked while receiving txns")
 	}
 	select {
 	case t := <-output:
 		txnManager.pop(t)
 		c.Assert(t, check.DeepEquals, txnSmall)
-	case <-time.After(50 * time.Microsecond):
+	default:
 		c.Fatal("Fail to pick txn from txnManager")
 	}
 	select {
 	case t := <-output:
 		txnManager.pop(t)
 		c.Assert(t, check.DeepEquals, txnBig)
-	case <-time.After(50 * time.Microsecond):
+	case <-time.After(10 * time.Microsecond):
 		c.Fatal("Fail to pick txn from txnManager")
 	}
 	txnManager.Close()
@@ -501,7 +501,7 @@ func (s *txnManagerSuite) TestCloseLoaderInput(c *check.C) {
 	case t := <-output:
 		txnManager.pop(t)
 		c.Assert(t, check.DeepEquals, txn)
-	case <-time.After(50 * time.Microsecond):
+	case <-time.After(10 * time.Microsecond):
 		c.Fatal("Fail to pick txn from txnManager")
 	}
 	// output should be closed when input is closed
