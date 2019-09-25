@@ -428,7 +428,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	select {
 	case input <- txn:
 		c.Fatal("txnManager doesn't block the txn when room is not enough")
-	case <-time.After(50 * time.Microsecond):
+	default:
 	}
 	c.Assert(output, check.HasLen, 4)
 	// pick one txn from output channel
