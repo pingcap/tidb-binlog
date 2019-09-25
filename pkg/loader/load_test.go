@@ -382,6 +382,33 @@ type txnManagerSuite struct{}
 
 var _ = check.Suite(&txnManagerSuite{})
 
+func inputTxnInTime(c *check.C, input chan *Txn, txn *Txn, timeLimit time.Duration, failMsg string) {
+	select {
+	case input <- txn:
+	case <-time.After(timeLimit):
+		c.Fatal(failMsg)
+	}
+}
+
+func outputTxnIntime(c *check.C, output chan *Txn, timeLimit time.Duration, failMsg string) *Txn {
+	if timeLimit != 0 {
+		select {
+		case t := <-output:
+			return t
+		case <-time.After(timeLimit):
+			c.Fatal("Fail to pick txn from txnManager")
+		}
+	} else {
+		select {
+		case t := <-output:
+			return t
+		default:
+			c.Fatal("Fail to pick txn from txnManager")
+		}
+	}
+	return nil
+}
+
 func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	input := make(chan *Txn)
 	dmls := []*DML{
@@ -394,11 +421,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	output := txnManager.run()
 	// send 5 txns (size 3) to txnManager, the 5th txn should get blocked at cond.Wait()
 	for i := 0; i < 5; i++ {
-		select {
-		case input <- txn:
-		case <-time.After(10 * time.Microsecond):
-			c.Fatal("txnManager gets blocked while receiving txns")
-		}
+		inputTxnInTime(c, input, txn, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
 	}
 	c.Assert(output, check.HasLen, 4)
 	// Next txn should be blocked
@@ -409,19 +432,11 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	}
 	c.Assert(output, check.HasLen, 4)
 	// pick one txn from output channel
-	select {
-	case t := <-output:
-		txnManager.pop(t)
-		c.Assert(t, check.DeepEquals, txn)
-	default:
-		c.Fatal("Fail to pick txn from txnManager")
-	}
+	t := outputTxnIntime(c, output, 0, "Fail to pick txn from txnManager")
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txn)
 	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
-	select {
-	case input <- txn:
-	case <-time.After(10 * time.Microsecond):
-		c.Fatal("txnManager gets blocked while receiving txns")
-	}
+	inputTxnInTime(c, input, txn, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
 	// close txnManager and output should be closed when txnManager is closed
 	txnManager.Close()
 	outputClose := make(chan struct{})
@@ -448,30 +463,17 @@ func (s *txnManagerSuite) TestAddBigTxn(c *check.C) {
 	}}
 	txnManager := newTxnManager(1, input)
 	output := txnManager.run()
-	select {
-	case input <- txnSmall:
-	case <-time.After(50 * time.Microsecond):
-		c.Fatal("txnManager gets blocked while receiving txns")
-	}
-	select {
-	case input <- txnBig:
-	case <-time.After(10 * time.Microsecond):
-		c.Fatal("txnManager gets blocked while receiving txns")
-	}
-	select {
-	case t := <-output:
-		txnManager.pop(t)
-		c.Assert(t, check.DeepEquals, txnSmall)
-	default:
-		c.Fatal("Fail to pick txn from txnManager")
-	}
-	select {
-	case t := <-output:
-		txnManager.pop(t)
-		c.Assert(t, check.DeepEquals, txnBig)
-	case <-time.After(10 * time.Microsecond):
-		c.Fatal("Fail to pick txn from txnManager")
-	}
+	inputTxnInTime(c, input, txnSmall, 50*time.Microsecond, "txnManager gets blocked while receiving txns")
+	inputTxnInTime(c, input, txnBig, 10*time.Microsecond, "txnManager gets blocked while receiving txns")
+
+	t := outputTxnIntime(c, output, 0, "Fail to pick txn from txnManager")
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txnSmall)
+
+	t = outputTxnIntime(c, output, 10*time.Microsecond, "Fail to pick txn from txnManager")
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txnBig)
+
 	txnManager.Close()
 	select {
 	case _, ok := <-output:
@@ -491,19 +493,14 @@ func (s *txnManagerSuite) TestCloseLoaderInput(c *check.C) {
 	txn := &Txn{DMLs: dmls}
 	txnManager := newTxnManager(1, input)
 	output := txnManager.run()
-	select {
-	case input <- txn:
-	case <-time.After(50 * time.Microsecond):
-		c.Fatal("txnManager gets blocked while receiving txns")
-	}
+
+	inputTxnInTime(c, input, txn, 50*time.Microsecond, "txnManager gets blocked while receiving txns")
 	close(input)
-	select {
-	case t := <-output:
-		txnManager.pop(t)
-		c.Assert(t, check.DeepEquals, txn)
-	case <-time.After(10 * time.Microsecond):
-		c.Fatal("Fail to pick txn from txnManager")
-	}
+
+	t := outputTxnIntime(c, output, 10*time.Microsecond, "Fail to pick txn from txnManager")
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txn)
+
 	// output should be closed when input is closed
 	select {
 	case _, ok := <-output:
