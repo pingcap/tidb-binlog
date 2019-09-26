@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"path"
@@ -708,10 +709,12 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		return 0, nil
 	}
 	etcdClient := testEtcdCluster.RandClient()
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	randPort := int64(r.Intn(5536) + 60000)
 	cfg := &Config{
 		ListenAddr:        "http://127.0.0.1:8250",
 		AdvertiseAddr:     "http://127.0.0.1:8260",
-		Socket:            "unix://127.0.0.1:" + strconv.FormatInt(time.Now().UnixNano(), 10) + "/hello/world",
+		Socket:            "unix://127.0.0.1:" + strconv.FormatInt(randPort, 10) + "/hello/world",
 		EtcdURLs:          strings.Join(etcdClient.Endpoints(), ","),
 		EtcdDialTimeout:   defaultEtcdDialTimeout,
 		DataDir:           path.Join(c.MkDir(), "pump"),
