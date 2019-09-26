@@ -120,13 +120,6 @@ func (s *syncerSuite) TestOpenAndClose(c *check.C) {
 
 func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
 	gen := translator.BinlogGenrator{}
-	gen.SetDDL()
-	item := &Item{
-		Binlog:        gen.TiBinlog,
-		PrewriteValue: gen.PV,
-		Schema:        gen.Schema,
-		Table:         gen.Table,
-	}
 
 	// set up mysql db mock expect
 	s.mysqlMock.ExpectBegin()
@@ -144,6 +137,14 @@ func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
 
 	var successCount = make([]int64, len(s.syncers))
 	for idx, syncer := range s.syncers {
+		gen.SetDDL()
+		item := &Item{
+			Binlog:        gen.TiBinlog,
+			PrewriteValue: gen.PV,
+			Schema:        gen.Schema,
+			Table:         gen.Table,
+		}
+
 		go func(idx int) {
 			for range syncer.Successes() {
 				atomic.AddInt64(&successCount[idx], 1)
