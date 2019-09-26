@@ -84,19 +84,20 @@ func main() {
 
 	go func() {
 		defer ld.Close()
-		for {
-			select {
-			case msg := <-breader.Messages():
-				str := msg.Binlog.String()
-				log.S().Debugf("recv: %.2000s", str)
-				txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
-				if err != nil {
-					log.S().Fatal(err)
-				}
-				ld.Input() <- txn
-			case txn := <-ld.Successes():
-				log.S().Debug("succ: ", txn)
+		for msg := range breader.Messages() {
+			str := msg.Binlog.String()
+			log.S().Debugf("recv: %.2000s", str)
+			txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+			if err != nil {
+				log.S().Fatal(err)
 			}
+			ld.Input() <- txn
+		}
+	}()
+
+	go func() {
+		for txn := range ld.Successes() {
+			log.S().Debug("succ: ", txn)
 		}
 	}()
 
