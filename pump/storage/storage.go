@@ -486,33 +486,51 @@ func (a *Append) resolve(startTS int64) bool {
 
 	log.Warn("unknown commit stats", zap.Int64("start ts", startTS))
 
-	if pbinlog.GetDdlJobId() == 0 {
-		tikvQueryCount.Add(1.0)
-		primaryKey := pbinlog.GetPrewriteKey()
-		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
-		if err != nil {
-			log.Error("GetTxnStatus failed", zap.Error(err))
+	tikvQueryCount.Add(1.0)
+	primaryKey := pbinlog.GetPrewriteKey()
+	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
+	if err != nil {
+		log.Error("GetTxnStatus failed", zap.Error(err))
+		return false
+	}
+
+	// Write a commit binlog myself if the status is committed,
+	// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+	if status.IsCommitted() {
+		// write the commit binlog myself
+		cbinlog := new(pb.Binlog)
+		cbinlog.Tp = pb.BinlogType_Commit
+		cbinlog.StartTs = pbinlog.StartTs
+		cbinlog.CommitTs = int64(status.CommitTS())
+
+		req := a.writeBinlog(cbinlog)
+		if req.err != nil {
+			log.Error("writeBinlog failed", zap.Error(req.err))
 			return false
 		}
 
-		// Write a commit binlog myself if the status is committed,
-		// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
-		if status.IsCommitted() {
-			err := a.writeCBinlog(pbinlog, int64(status.CommitTS()))
-			if err != nil {
-				log.Error("writeCBinlog failed", zap.Error(err))
-				return false
-			}
+		// when writeBinlog return success, the pointer will be write to kv async,
+		// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
+		// we update maxCommitTS
+		// write the ts -> pointer to KV here to make sure it.
+		pointer, err := req.valuePointer.MarshalBinary()
+		if err != nil {
+			panic(err)
 		}
 
-		log.Info("known txn is committed or rollback from tikv",
-			zap.Int64("start ts", startTS),
-			zap.Uint64("commit ts", status.CommitTS()))
-		return true
+		err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
+		if err != nil {
+			log.Error("put into metadata failed", zap.Error(req.err))
+			return false
+		}
 	}
 
-	log.Error("some prewrite DDL items remain single after waiting for a long time", zap.Int64("startTS", startTS))
-	return false
+	log.Info("known txn is committed from tikv",
+		zap.Int64("start ts", startTS),
+		zap.Uint64("commit ts", status.CommitTS()),
+		zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0))
+	return true
+
 }
 
 // GetBinlog gets binlog by ts
