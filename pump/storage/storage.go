@@ -505,7 +505,7 @@ func (a *Append) resolve(startTS int64) bool {
 
 		req := a.writeBinlog(cbinlog)
 		if req.err != nil {
-			log.Error("writeBinlog failed", zap.Error(req.err))
+			log.Error("write missing commit binlog failed", zap.Error(req.err))
 			return false
 		}
 
