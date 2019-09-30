@@ -1114,9 +1114,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 		for {
 			startTS := last + 1
+			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
+			if startTS > limitTS {
+				log.Warn("last ts is greater than pump's max commit ts", zap.Int64("last ts", startTS-1), zap.Int64("max commit ts", limitTS-1))
+				time.Sleep(time.Second * 10)
+				continue
+			}
 
 			irange.Start = encodeTSKey(startTS)
-			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
+			irange.Limit = encodeTSKey(limitTS)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
