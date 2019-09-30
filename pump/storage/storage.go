@@ -505,10 +505,11 @@ func (a *Append) resolve(startTS int64) bool {
 
 		req := a.writeBinlog(cbinlog)
 		if req.err != nil {
-			log.Error("write missing committed binlog failed", 
-				  zap.Int64("start ts", startTS),
-				  zap.Uint64("commit ts", status.CommitTS()),
-				  zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0)), zap.Error(req.err))
+			log.Error("write missing committed binlog failed",
+				zap.Int64("start ts", startTS),
+				zap.Uint64("commit ts", status.CommitTS()),
+				zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0),
+				zap.Error(req.err))
 			return false
 		}
 
@@ -524,9 +525,10 @@ func (a *Append) resolve(startTS int64) bool {
 		err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
 		if err != nil {
 			log.Error("put missing committed binlog into metadata failed",
-				  zap.Int64("start ts", startTS),
-				  zap.Uint64("commit ts", status.CommitTS()),
-				  zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0)), zap.Error(err)))
+				zap.Int64("start ts", startTS),
+				zap.Uint64("commit ts", status.CommitTS()),
+				zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0),
+				zap.Error(err))
 			return false
 		}
 	}
