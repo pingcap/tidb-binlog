@@ -95,7 +95,7 @@ type sortItem struct {
 
 // String implements fmt.Stringer
 func (s *sortItem) String() string {
-	return fmt.Sprintf("{start: %d, commit: %d, tp: %v}", s.start, s.commit, s.tp)
+	return fmt.Sprintf("{start: %d, commit: %d, tp: %s}", s.start, s.commit, s.tp)
 }
 
 type sorter struct {
