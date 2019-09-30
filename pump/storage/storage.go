@@ -1014,14 +1014,28 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		Limit: encodeTSKey(math.MaxInt64),
 	}
 
+	pLog := pkgutil.NewLog()
+	labelWrongRange := "wrong range"
+	pLog.Add(labelWrongRange, 10*time.Second)
+
 	go func() {
 		defer close(values)
 
 		for {
 			startTS := last + 1
 
+			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
+			if startTS > limitTS {
+				// if range's start is greater than limit, may cause panic, see https://github.com/syndtr/goleveldb/issues/224 for detail.
+				pLog.Print(labelWrongRange, func() {
+					log.Warnf("last ts %d is greater than pump's max commit ts %d", startTS-1, limitTS-1)
+				})
+				time.Sleep(time.Second)
+				continue
+			}
+
 			irange.Start = encodeTSKey(startTS)
-			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
+			irange.Limit = encodeTSKey(limitTS)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
