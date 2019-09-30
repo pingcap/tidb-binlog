@@ -128,6 +128,7 @@ func (b *batchRequest) String() string {
 	s.WriteString("{")
 	for _, r := range []*request(*b) {
 		s.WriteString(r.String())
+		s.WriteByte(',')
 	}
 	s.WriteString("}")
 
