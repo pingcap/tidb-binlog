@@ -65,8 +65,7 @@ func newVlogWithOptions(c *check.C, options *Options) *valueLog {
 	err = os.Mkdir(dir, 0777)
 	c.Assert(err, check.IsNil)
 
-	vlog := new(valueLog)
-	err = vlog.open(dir, options)
+	vlog, err := newValueLog(dir, options)
 	c.Assert(err, check.IsNil)
 
 	return vlog
@@ -144,8 +143,7 @@ func (vs *VlogSuit) TestCloseAndOpen(c *check.C) {
 		var err = vlog.close()
 		c.Assert(err, check.IsNil)
 
-		vlog = new(valueLog)
-		err = vlog.open(dirPath, opt)
+		vlog, err = newValueLog(dirPath, opt)
 		c.Assert(err, check.IsNil)
 
 		batch = batch[:0]
@@ -193,10 +191,24 @@ func (vs *VlogSuit) TestGCTS(c *check.C) {
 
 	before := len(vlog.filesMap)
 	c.Logf("before log file num: %d", before)
-	vlog.gcTS(90)
+
+	vlog.gcLock.Lock()
+
+	gcDone := make(chan struct{})
+	go func() {
+		// The following call should block waiting for the gcLock
+		vlog.gcTS(90)
+		close(gcDone)
+	}()
+
 	after := len(vlog.filesMap)
 	c.Logf("after log file num: %d", after)
+	c.Assert(after, check.Equals, before, check.Commentf("gc is not prevented"))
 
+	vlog.gcLock.Unlock()
+	<-gcDone
+	after = len(vlog.filesMap)
+	c.Logf("after log file num: %d", after)
 	c.Assert(after, check.Less, before, check.Commentf("no file is deleted"))
 
 	// ts 0 has been gc
@@ -247,8 +259,7 @@ func (vs *VlogSuit) TestNoSpace(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}()
 
-	vlog := new(valueLog)
-	err = vlog.open(dir, DefaultOptions())
+	vlog, err := newValueLog(dir, DefaultOptions())
 	c.Assert(err, check.IsNil)
 
 	// Size of the encoded record should be 1024 + headerLength = 1040
