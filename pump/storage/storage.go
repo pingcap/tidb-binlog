@@ -682,6 +682,7 @@ func (a *Append) doGCTS(ts int64) {
 	wg.Add(1)
 	go func() {
 		a.vlog.gcTS(ts)
+		log.Info("Finish VLog GC", zap.Int64("ts", ts))
 		wg.Done()
 	}()
 
@@ -763,6 +764,7 @@ func (a *Append) doGCTS(ts int64) {
 				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
+			log.Info("Finish KV GC", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 			break
 		}
 
@@ -774,7 +776,6 @@ func (a *Append) doGCTS(ts int64) {
 	}
 	wg.Wait()
 	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
-	log.Info("Finish GC", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
