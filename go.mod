@@ -37,9 +37,9 @@ require (
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.uber.org/zap v1.9.1
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	google.golang.org/grpc v1.17.0
+	google.golang.org/grpc v1.23.0
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )

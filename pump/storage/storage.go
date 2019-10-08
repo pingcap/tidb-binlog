@@ -189,7 +189,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 
 	append.handleSortItemQuit = append.handleSortItem(append.sortItems)
 	sorter := newSorter(func(item sortItem) {
-		log.Debug("sorter get item", zap.Reflect("item:", item))
+		log.Debug("sorter get item", zap.Stringer("item", &item))
 		append.sortItems <- item
 	})
 
@@ -245,7 +245,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 }
 
 func (a *Append) persistHandlePointer(item sortItem) error {
-	log.Debug("persist item", zap.Reflect("item", item))
+	log.Debug("persist item", zap.Stringer("item", &item))
 	tsKey := encodeTSKey(item.commit)
 	pointerData, err := a.metadata.Get(tsKey, nil)
 	if err != nil {
@@ -306,7 +306,7 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 				if toSave == nil {
 					toSave = time.After(handlePtrSaveInterval)
 				}
-				log.Debug("get sort item", zap.Reflect("item", item))
+				log.Debug("get sort item", zap.Stringer("item", &item))
 			case <-toSave:
 				err := a.persistHandlePointer(toSaveItem)
 				if err != nil {
@@ -485,33 +485,59 @@ func (a *Append) resolve(startTS int64) bool {
 
 	log.Warn("unknown commit stats", zap.Int64("start ts", startTS))
 
-	if pbinlog.GetDdlJobId() == 0 {
-		tikvQueryCount.Add(1.0)
-		primaryKey := pbinlog.GetPrewriteKey()
-		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
-		if err != nil {
-			log.Error("GetTxnStatus failed", zap.Error(err))
+	tikvQueryCount.Add(1.0)
+	primaryKey := pbinlog.GetPrewriteKey()
+	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
+	if err != nil {
+		log.Error("GetTxnStatus failed", zap.Error(err))
+		return false
+	}
+
+	// Write a commit binlog myself if the status is committed,
+	// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+	if status.IsCommitted() {
+		// write the commit binlog myself
+		cbinlog := new(pb.Binlog)
+		cbinlog.Tp = pb.BinlogType_Commit
+		cbinlog.StartTs = pbinlog.StartTs
+		cbinlog.CommitTs = int64(status.CommitTS())
+
+		req := a.writeBinlog(cbinlog)
+		if req.err != nil {
+			log.Error("write missing committed binlog failed",
+				zap.Int64("start ts", startTS),
+				zap.Uint64("commit ts", status.CommitTS()),
+				zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0),
+				zap.Error(req.err))
 			return false
 		}
 
-		// Write a commit binlog myself if the status is committed,
-		// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
-		if status.IsCommitted() {
-			err := a.writeCBinlog(pbinlog, int64(status.CommitTS()))
-			if err != nil {
-				log.Error("writeCBinlog failed", zap.Error(err))
-				return false
-			}
+		// when writeBinlog return success, the pointer will be write to kv async,
+		// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
+		// we update maxCommitTS
+		// write the ts -> pointer to KV here to make sure it.
+		pointer, err := req.valuePointer.MarshalBinary()
+		if err != nil {
+			panic(err)
 		}
 
-		log.Info("known txn is committed or rollback from tikv",
-			zap.Int64("start ts", startTS),
-			zap.Uint64("commit ts", status.CommitTS()))
-		return true
+		err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
+		if err != nil {
+			log.Error("put missing committed binlog into metadata failed",
+				zap.Int64("start ts", startTS),
+				zap.Uint64("commit ts", status.CommitTS()),
+				zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0),
+				zap.Error(err))
+			return false
+		}
 	}
 
-	log.Error("some prewrite DDL items remain single after waiting for a long time", zap.Int64("startTS", startTS))
-	return false
+	log.Info("known txn is committed from tikv",
+		zap.Int64("start ts", startTS),
+		zap.Uint64("commit ts", status.CommitTS()),
+		zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0))
+	return true
+
 }
 
 // GetBinlog gets binlog by ts
@@ -819,7 +845,7 @@ func (a *Append) writeToSorter(reqs chan *request) {
 	defer a.wg.Done()
 
 	for req := range reqs {
-		log.Debug("write request to sorter", zap.Reflect("request", req))
+		log.Debug("write request to sorter", zap.Stringer("request", req))
 		var item sortItem
 		item.start = req.startTS
 		item.commit = req.commitTS
@@ -917,7 +943,8 @@ func (a *Append) writeToValueLog(reqs chan *request) chan *request {
 			if len(batch) == 0 {
 				return
 			}
-			log.Debug("write requests to value log", zap.Reflect("requests", batch))
+			br := batchRequest(batch)
+			log.Debug("write requests to value log", zap.Stringer("requests", &br))
 			beginTime := time.Now()
 			writeBinlogSizeHistogram.WithLabelValues("batch").Observe(float64(size))
 
@@ -1087,14 +1114,27 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		Limit: encodeTSKey(math.MaxInt64),
 	}
 
+	pLog := pkgutil.NewLog()
+	labelWrongRange := "wrong range"
+	pLog.Add(labelWrongRange, 10*time.Second)
+
 	go func() {
 		defer close(values)
 
 		for {
 			startTS := last + 1
+			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
+			if startTS > limitTS {
+				// if range's start is greater than limit, may cause panic, see https://github.com/syndtr/goleveldb/issues/224 for detail.
+				pLog.Print(labelWrongRange, func() {
+					log.Warn("last ts is greater than pump's max commit ts", zap.Int64("last ts", startTS-1), zap.Int64("max commit ts", limitTS-1))
+				})
+				time.Sleep(time.Second)
+				continue
+			}
 
 			irange.Start = encodeTSKey(startTS)
-			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
+			irange.Limit = encodeTSKey(limitTS)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
@@ -1355,7 +1395,7 @@ func (a *Append) writeBatchToKV(bufReqs []*request) error {
 	var batch leveldb.Batch
 	var lastPointer []byte
 	for _, req := range bufReqs {
-		log.Debug("write request to kv", zap.Reflect("request", req))
+		log.Debug("write request to kv", zap.Stringer("request", req))
 
 		pointer, err := req.valuePointer.MarshalBinary()
 		if err != nil {

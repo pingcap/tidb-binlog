@@ -120,6 +120,21 @@ func (r *request) String() string {
 	return fmt.Sprintf("{ts: %d, payload len: %d, valuePointer: %+v}", r.ts(), len(r.payload), r.valuePointer)
 }
 
+type batchRequest []*request
+
+// String implements fmt.Stringer
+func (b *batchRequest) String() string {
+	s := new(strings.Builder)
+	s.WriteString("{")
+	for _, r := range []*request(*b) {
+		s.WriteString(r.String())
+		s.WriteByte(',')
+	}
+	s.WriteString("}")
+
+	return s.String()
+}
+
 type valuePointer struct {
 	Fid    uint32
 	Offset int64
