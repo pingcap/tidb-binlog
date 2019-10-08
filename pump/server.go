@@ -410,10 +410,10 @@ func (s *Server) Start() error {
 	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
 
 	// notify all drainers when this pump node is a newly registered one
-	if previousState != node.Paused {
+	if previousState == node.Offline {
 		ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 		if err := s.node.Notify(ctx); err != nil {
-			// if fail, refresh this node's state to paused
+			// if fail, refresh this node's state to offline
 			if err := s.registerNode(context.Background(), node.Offline, 0); err != nil {
 				log.Error("unregister pump while pump fails to notify drainer", zap.Error(err))
 			}
