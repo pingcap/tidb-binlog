@@ -404,7 +404,7 @@ func (s *Server) Start() error {
 
 	log.Info("register success", zap.String("NodeID", s.node.NodeStatus().NodeID))
 
-	// notify all cisterns when this pump node is a newly registered one
+	// notify all drainers when this pump node is a newly registered one
 	if previousState != node.Paused {
 		ctx, _ := context.WithTimeout(s.ctx, notifyDrainerTimeout)
 		if err := s.node.Notify(ctx); err != nil {
