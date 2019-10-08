@@ -41,7 +41,7 @@ import (
 
 const (
 	defaultDataDir        = "data.drainer"
-	defaultDetectInterval = 10
+	defaultDetectInterval = 5
 	defaultEtcdURLs       = "http://127.0.0.1:2379"
 	// defaultEtcdTimeout defines the timeout of dialing or sending request to etcd.
 	defaultEtcdTimeout     = 5 * time.Second
