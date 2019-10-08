@@ -40,8 +40,7 @@ require (
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	golang.org/x/tools v0.0.0-20190524140312-2c0ae7006135 // indirect
-	google.golang.org/grpc v1.17.0
+	google.golang.org/grpc v1.23.0
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
 
