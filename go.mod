@@ -35,19 +35,13 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
-	go.etcd.io/etcd v0.5.0-alpha.5.0.20190320044326-77d4b742cdbf
-	go.uber.org/atomic v1.5.1 // indirect
-	go.uber.org/multierr v1.4.0 // indirect
-	go.uber.org/zap v1.13.0
-	golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf // indirect
+	go.etcd.io/etcd v0.0.0-20190320044326-77d4b742cdbf
+	go.uber.org/zap v1.9.1
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c
+	golang.org/x/sys v0.0.0-20190909082730-f460065e899a
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	golang.org/x/tools v0.0.0-20191122080028-f774e2e2e5be // indirect
-	google.golang.org/appengine v1.4.0 // indirect
-	google.golang.org/grpc v1.17.0
-	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	google.golang.org/grpc v1.23.0
 )
 
 go 1.13
