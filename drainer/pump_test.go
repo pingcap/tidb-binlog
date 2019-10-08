@@ -80,10 +80,12 @@ func (s *pumpSuite) TestPullBinlog(c *C) {
 
 	// ascending commitTs order
 	pullBinlogCommitTSChecker(commitTsArray, ret, binlogBytesChan, c)
+	time.Sleep(10 * time.Microsecond)
 	c.Assert(p.latestTS, Equals, commitTsArray[len(commitTsArray)-1])
 
 	// should omit disorder binlog item, latestTs should be 29
 	pullBinlogCommitTSChecker(wrongCommitTsArray, ret, binlogBytesChan, c)
+	time.Sleep(10 * time.Microsecond)
 	c.Assert(p.latestTS, Equals, wrongCommitTsArray[len(wrongCommitTsArray)-2])
 }
 

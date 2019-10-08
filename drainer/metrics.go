@@ -109,7 +109,7 @@ var (
 			Subsystem: "drainer",
 			Name:      "read_binlog_size",
 			Help:      "Bucketed histogram of size of a binlog.",
-			Buckets:   prometheus.ExponentialBuckets(16, 2, 20),
+			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"nodeID"})
 
 	queueSizeGauge = prometheus.NewGaugeVec(

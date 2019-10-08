@@ -378,6 +378,138 @@ func (s *batchManagerSuite) TestShouldExecAccumulatedDMLs(c *check.C) {
 	c.Assert(bm.txns, check.HasLen, 1)
 }
 
+type txnManagerSuite struct{}
+
+var _ = check.Suite(&txnManagerSuite{})
+
+func inputTxnInTime(c *check.C, input chan *Txn, txn *Txn, timeLimit time.Duration) {
+	select {
+	case input <- txn:
+	case <-time.After(timeLimit):
+		c.Fatal("txnManager gets blocked while receiving txns")
+	}
+}
+
+func outputTxnInTime(c *check.C, output chan *Txn, timeLimit time.Duration) *Txn {
+	if timeLimit != 0 {
+		select {
+		case t := <-output:
+			return t
+		case <-time.After(timeLimit):
+			c.Fatal("Fail to pick txn from txnManager")
+		}
+	} else {
+		select {
+		case t := <-output:
+			return t
+		default:
+			c.Fatal("Fail to pick txn from txnManager")
+		}
+	}
+	return nil
+}
+
+func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
+	input := make(chan *Txn)
+	dmls := []*DML{
+		{Tp: UpdateDMLType},
+		{Tp: InsertDMLType},
+		{Tp: UpdateDMLType},
+	}
+	txn := &Txn{DMLs: dmls}
+	txnManager := newTxnManager(14, input)
+	output := txnManager.run()
+	// send 5 txns (size 3) to txnManager, the 5th txn should get blocked at cond.Wait()
+	for i := 0; i < 5; i++ {
+		inputTxnInTime(c, input, txn, 10*time.Microsecond)
+	}
+	c.Assert(output, check.HasLen, 4)
+	// Next txn should be blocked
+	select {
+	case input <- txn:
+		c.Fatal("txnManager doesn't block the txn when room is not enough")
+	default:
+	}
+	c.Assert(output, check.HasLen, 4)
+	// pick one txn from output channel
+	t := outputTxnInTime(c, output, 0)
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txn)
+	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
+	inputTxnInTime(c, input, txn, 10*time.Microsecond)
+	// close txnManager and output should be closed when txnManager is closed
+	txnManager.Close()
+	outputClose := make(chan struct{})
+	go func() {
+		for t := range output {
+			c.Assert(t, check.DeepEquals, txn)
+		}
+		close(outputClose)
+	}()
+	select {
+	case <-outputClose:
+	case <-time.After(time.Second):
+		c.Fatal("txnManager fails to end run()... and close output channel in 1s, may get blocked")
+	}
+}
+
+func (s *txnManagerSuite) TestAddBigTxn(c *check.C) {
+	input := make(chan *Txn)
+	txnSmall := &Txn{DMLs: []*DML{{Tp: UpdateDMLType}}}
+	txnBig := &Txn{DMLs: []*DML{
+		{Tp: UpdateDMLType},
+		{Tp: InsertDMLType},
+		{Tp: UpdateDMLType},
+	}}
+	txnManager := newTxnManager(1, input)
+	output := txnManager.run()
+	inputTxnInTime(c, input, txnSmall, 50*time.Microsecond)
+	inputTxnInTime(c, input, txnBig, 10*time.Microsecond)
+
+	t := outputTxnInTime(c, output, 0)
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txnSmall)
+
+	t = outputTxnInTime(c, output, 10*time.Microsecond)
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txnBig)
+
+	txnManager.Close()
+	select {
+	case _, ok := <-output:
+		c.Assert(ok, check.Equals, false)
+	case <-time.After(time.Second):
+		c.Fatal("txnManager fails to end run()... and close output channel in 1s, may get blocked")
+	}
+}
+
+func (s *txnManagerSuite) TestCloseLoaderInput(c *check.C) {
+	input := make(chan *Txn)
+	dmls := []*DML{
+		{Tp: UpdateDMLType},
+		{Tp: InsertDMLType},
+		{Tp: UpdateDMLType},
+	}
+	txn := &Txn{DMLs: dmls}
+	txnManager := newTxnManager(1, input)
+	output := txnManager.run()
+
+	inputTxnInTime(c, input, txn, 50*time.Microsecond)
+	close(input)
+
+	t := outputTxnInTime(c, output, 10*time.Microsecond)
+	txnManager.pop(t)
+	c.Assert(t, check.DeepEquals, txn)
+
+	// output should be closed when input is closed
+	select {
+	case _, ok := <-output:
+		c.Assert(ok, check.Equals, false)
+	case <-time.After(time.Second):
+		c.Fatal("txnManager fails to end run()... when input channel is closed")
+	}
+}
+
 type runSuite struct{}
 
 var _ = check.Suite(&runSuite{})

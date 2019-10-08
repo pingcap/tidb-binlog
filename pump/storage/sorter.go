@@ -15,6 +15,7 @@ package storage
 
 import (
 	"container/list"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -90,6 +91,11 @@ type sortItem struct {
 	start  int64
 	commit int64
 	tp     pb.BinlogType
+}
+
+// String implements fmt.Stringer
+func (s *sortItem) String() string {
+	return fmt.Sprintf("{start: %d, commit: %d, tp: %s}", s.start, s.commit, s.tp)
 }
 
 type sorter struct {
