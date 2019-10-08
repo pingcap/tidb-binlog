@@ -140,8 +140,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		return nil, errors.Trace(err)
 	}
 
-	vlog := new(valueLog)
-	err = vlog.open(valueDir, options)
+	vlog, err := newValueLog(valueDir, options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -677,7 +676,15 @@ func (a *Append) GC(ts int64) {
 }
 
 func (a *Append) doGCTS(ts int64) {
-	log.Info("start gc", zap.Int64("ts", ts))
+	log.Info("Starting GC", zap.Int64("ts", ts))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		a.vlog.gcTS(ts)
+		log.Info("Finish VLog GC", zap.Int64("ts", ts))
+		wg.Done()
+	}()
 
 	batch := new(leveldb.Batch)
 	l0Trigger := defaultStorageKVConfig.CompactionL0Trigger
@@ -703,13 +710,13 @@ func (a *Append) doGCTS(ts int64) {
 		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
 		if err != nil {
 			log.Error("get `leveldb.num-files-at-level0` property failed", zap.Error(err))
-			return
+			break
 		}
 
 		l0Num, err := strconv.Atoi(nStr)
 		if err != nil {
 			log.Error("parse `leveldb.num-files-at-level0` result to int failed", zap.String("str", nStr), zap.Error(err))
-			return
+			break
 		}
 
 		if l0Num >= l0Trigger {
@@ -757,20 +764,18 @@ func (a *Append) doGCTS(ts int64) {
 				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
+			log.Info("Finish KV GC", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 			break
 		}
 
 		if len(lastKey) > 0 {
 			irange.Start = lastKey
-			a.vlog.gcTS(decodeTSKey(lastKey))
 			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
 		}
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
-
-	a.vlog.gcTS(ts)
+	wg.Wait()
 	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
-	log.Info("finish gc", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
