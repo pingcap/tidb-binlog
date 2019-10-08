@@ -790,7 +790,6 @@ func (a *Append) batchGC(startTs int64, endTs int64, batchSize int, l0Trigger in
 		}
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
-	return
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
