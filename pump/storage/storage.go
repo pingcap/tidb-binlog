@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"go.uber.org/zap"
@@ -686,19 +685,52 @@ func (a *Append) doGCTS(ts int64) {
 		wg.Done()
 	}()
 
-	batch := new(leveldb.Batch)
 	l0Trigger := defaultStorageKVConfig.CompactionL0Trigger
 	if a.options.KVConfig != nil && a.options.KVConfig.CompactionL0Trigger > 0 {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
+	var alreadyGcTS int64
+	for {
+		alreadyGcTS = a.batchGC(alreadyGcTS, ts, 100, l0Trigger, func() (int, error) {
+			nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
+			if err != nil {
+				return 0, errors.Annotate(err, "get `leveldb.num-files-at-level0` property failed")
+			}
 
+			l0Num, err := strconv.Atoi(nStr)
+			if err != nil {
+				return 0, errors.Annotatef(err, "parse `leveldb.num-files-at-level0` result to int failed, str: %s", nStr)
+			}
+			return l0Num, nil
+		})
+
+		if alreadyGcTS >= ts {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	wg.Wait()
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
+}
+
+func (a *Append) batchGC(startTs int64, endTs int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64) {
+
+	batch := new(leveldb.Batch)
 	deleteNum := 0
+	alreadyGcTS = startTs
 
 	irange := &util.Range{
-		Start: encodeTSKey(0),
-		Limit: encodeTSKey(ts + 1),
+		Start: encodeTSKey(startTs),
+		Limit: encodeTSKey(endTs + 1),
 	}
-	var iter iterator.Iterator
+
+	log.Info("New LevelDB iterator created for GC",
+		zap.Int64("startTs", startTs),
+		zap.Int64("endTs", endTs),
+		zap.Int64("start", decodeTSKey(irange.Start)),
+		zap.Int64("limit", decodeTSKey(irange.Limit)))
+	iter := a.metadata.NewIterator(irange, nil)
 	defer func() {
 		if iter != nil {
 			iter.Release()
@@ -707,39 +739,21 @@ func (a *Append) doGCTS(ts int64) {
 	}()
 
 	for {
-		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
+		l0Num, err := getL0Num()
 		if err != nil {
-			log.Error("get `leveldb.num-files-at-level0` property failed", zap.Error(err))
-			break
-		}
-
-		l0Num, err := strconv.Atoi(nStr)
-		if err != nil {
-			log.Error("parse `leveldb.num-files-at-level0` result to int failed", zap.String("str", nStr), zap.Error(err))
-			break
+			log.Error("get `l0Num` property of leveldb failed", zap.Error(err))
+			return
 		}
 
 		if l0Num >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
-			if iter != nil {
-				iter.Release()
-				iter = nil
-			}
-			time.Sleep(5 * time.Second)
-			continue
+			return
 		}
 
 		deleteBatch := 0
 		var lastKey []byte
 
-		if iter == nil {
-			log.Info("New LevelDB iterator created for GC", zap.Int64("ts", ts),
-				zap.Int64("start", decodeTSKey(irange.Start)),
-				zap.Int64("limit", decodeTSKey(irange.Limit)))
-			iter = a.metadata.NewIterator(irange, nil)
-		}
-
-		for deleteBatch < 100 && iter.Next() {
+		for deleteBatch < batchSize && iter.Next() {
 			batch.Delete(iter.Key())
 			deleteNum++
 			lastKey = iter.Key()
@@ -755,7 +769,7 @@ func (a *Append) doGCTS(ts int64) {
 			}
 		}
 
-		if deleteBatch < 100 {
+		if deleteBatch < batchSize {
 			if batch.Len() > 0 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
@@ -764,18 +778,19 @@ func (a *Append) doGCTS(ts int64) {
 				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
-			log.Info("Finish KV GC", zap.Int64("ts", ts), zap.Int("delete num", deleteNum))
-			break
+			alreadyGcTS = endTs
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
+			log.Info("Finish KV GC", zap.Int64("ts", endTs), zap.Int("delete num", deleteNum))
+			return
 		}
 
 		if len(lastKey) > 0 {
-			irange.Start = lastKey
-			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
+			alreadyGcTS = decodeTSKey(lastKey)
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
 		}
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
-	wg.Wait()
-	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
+	return
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS

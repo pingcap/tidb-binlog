@@ -277,7 +277,7 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	defer cleanAppend(append)
 
 	var i int64
-	var n int64 = 1025 * 500
+	var n int64 = 1023 * 543
 	var batch leveldb.Batch
 	for i = 1; i < n; i++ {
 		batch.Put(encodeTSKey(i), value)
@@ -285,8 +285,52 @@ func (as *AppendSuit) TestDoGCTS(c *check.C) {
 	err := append.metadata.Write(&batch, nil)
 	c.Assert(err, check.IsNil)
 
-	var gcTS int64 = 1024 * 300
+	var gcTS int64 = 1026 * 321
 	append.doGCTS(gcTS)
+
+	for i = 1; i < n; i++ {
+		_, err := append.metadata.Get(encodeTSKey(i), nil)
+		if i <= gcTS {
+			c.Assert(err, check.Equals, leveldb.ErrNotFound, check.Commentf("after gc still found ts: %v", i))
+		} else {
+			c.Assert(err, check.IsNil, check.Commentf("can't found ts: %v", i))
+		}
+	}
+}
+
+func (as *AppendSuit) TestBatchGC(c *check.C) {
+	var value = make([]byte, 10)
+	append := newAppend(c)
+	defer cleanAppend(append)
+
+	var i int64
+	var n int64 = 50*1024 + 28
+	var batch leveldb.Batch
+	for i = 1; i < n; i++ {
+		batch.Put(encodeTSKey(i), value)
+	}
+	err := append.metadata.Write(&batch, nil)
+	c.Assert(err, check.IsNil)
+
+	var gcTS int64 = 11 * 1025
+	alreadyGcTS := append.batchGC(0, gcTS, 10, 8, func() (int, error) {
+		return 0, nil
+	})
+	c.Assert(alreadyGcTS, check.Equals, gcTS)
+	// mock when l0 file is too much
+	// Under such conditions, GC process will remove 2 batches (2 * 10 * 1024 kvs)
+	l0Num := 5
+	alreadyGcTS = append.batchGC(gcTS, gcTS+29*1023, 10, 8, func() (int, error) {
+		l0Num++
+		return l0Num, nil
+	})
+	gcTS += 20 * 1024
+	c.Assert(alreadyGcTS, check.Equals, gcTS)
+	alreadyGcTS = append.batchGC(gcTS, gcTS+9*1023, 10, 8, func() (int, error) {
+		return 0, nil
+	})
+	gcTS += 9 * 1023
+	c.Assert(alreadyGcTS, check.Equals, gcTS)
 
 	for i = 1; i < n; i++ {
 		_, err := append.metadata.Get(encodeTSKey(i), nil)
