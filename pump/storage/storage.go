@@ -689,21 +689,27 @@ func (a *Append) doGCTS(ts int64) {
 	if a.options.KVConfig != nil && a.options.KVConfig.CompactionL0Trigger > 0 {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
+
+	getL0Num := func() (int, error) {
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
+		if err != nil {
+			return 0, errors.Annotate(err, "get `leveldb.num-files-at-level0` property failed")
+		}
+
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			return 0, errors.Annotatef(err, "parse `leveldb.num-files-at-level0` result to int failed, str: %s", nStr)
+		}
+		return l0Num, nil
+	}
+
 	var alreadyGcTS int64
 	for {
-		alreadyGcTS = a.batchGC(alreadyGcTS, ts, 100, l0Trigger, func() (int, error) {
-			nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
-			if err != nil {
-				return 0, errors.Annotate(err, "get `leveldb.num-files-at-level0` property failed")
-			}
-
-			l0Num, err := strconv.Atoi(nStr)
-			if err != nil {
-				return 0, errors.Annotatef(err, "parse `leveldb.num-files-at-level0` result to int failed, str: %s", nStr)
-			}
-			return l0Num, nil
-		})
-
+		alreadyGcTS, err := a.batchGC(alreadyGcTS, ts, 100, l0Trigger, getL0Num)
+		if err != nil {
+			log.Error("batch GC failed", zap.Error(err))
+			break
+		}
 		if alreadyGcTS >= ts {
 			break
 		}
@@ -711,10 +717,9 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	wg.Wait()
-	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 }
 
-func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64) {
+func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64, err error) {
 
 	batch := new(leveldb.Batch)
 	deleteNum := 0
@@ -727,9 +732,7 @@ func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger in
 
 	log.Info("New LevelDB iterator created for GC",
 		zap.Int64("startTS", startTS),
-		zap.Int64("endTS", endTS),
-		zap.Int64("start", decodeTSKey(irange.Start)),
-		zap.Int64("limit", decodeTSKey(irange.Limit)))
+		zap.Int64("endTS", endTS))
 	iter := a.metadata.NewIterator(irange, nil)
 	defer func() {
 		if iter != nil {
@@ -738,58 +741,37 @@ func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger in
 		}
 	}()
 
-	for {
+	for hasNext := true; hasNext; {
 		l0Num, err := getL0Num()
 		if err != nil {
-			log.Error("", zap.Error(err))
-			return
+			return 0, errors.Trace(err)
 		}
-
 		if l0Num >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
-			return
+			return alreadyGcTS, nil
 		}
 
-		deleteBatch := 0
-		var lastKey []byte
-
-		for deleteBatch < batchSize && iter.Next() {
-			batch.Delete(iter.Key())
-			deleteNum++
-			lastKey = iter.Key()
-
-			if batch.Len() == 1024 {
-				err := a.metadata.Write(batch, nil)
-				if err != nil {
-					log.Error("write batch failed", zap.Error(err))
-				}
-				deletedKv.Add(float64(batch.Len()))
-				batch.Reset()
-				deleteBatch++
+		for deleteBatch := 0; deleteBatch < batchSize && hasNext; deleteBatch++ {
+			var lastKey []byte
+			for batch.Reset(); batch.Len() < 1024 && iter.Next(); deleteNum++ {
+				batch.Delete(iter.Key())
+				lastKey = iter.Key()
 			}
-		}
-
-		if deleteBatch < batchSize {
+			hasNext = len(iter.Key()) != 0
 			if batch.Len() > 0 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
 					log.Error("write batch failed", zap.Error(err))
 				}
+				alreadyGcTS = decodeTSKey(lastKey)
 				deletedKv.Add(float64(batch.Len()))
-				batch.Reset()
+				doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
 			}
-			alreadyGcTS = endTS
-			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
-			log.Info("Finish KV GC", zap.Int64("ts", endTS), zap.Int("delete num", deleteNum))
-			return
-		}
-
-		if len(lastKey) > 0 {
-			alreadyGcTS = decodeTSKey(lastKey)
-			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
 		}
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
+	log.Info("Finish KV GC", zap.Int64("ts", endTS), zap.Int("delete num", deleteNum))
+	return endTS, nil
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
