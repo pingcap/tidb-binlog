@@ -714,20 +714,20 @@ func (a *Append) doGCTS(ts int64) {
 	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 }
 
-func (a *Append) batchGC(startTs int64, endTs int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64) {
+func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64) {
 
 	batch := new(leveldb.Batch)
 	deleteNum := 0
-	alreadyGcTS = startTs
+	alreadyGcTS = startTS
 
 	irange := &util.Range{
-		Start: encodeTSKey(startTs),
-		Limit: encodeTSKey(endTs + 1),
+		Start: encodeTSKey(startTS),
+		Limit: encodeTSKey(endTS + 1),
 	}
 
 	log.Info("New LevelDB iterator created for GC",
-		zap.Int64("startTs", startTs),
-		zap.Int64("endTs", endTs),
+		zap.Int64("startTS", startTS),
+		zap.Int64("endTS", endTS),
 		zap.Int64("start", decodeTSKey(irange.Start)),
 		zap.Int64("limit", decodeTSKey(irange.Limit)))
 	iter := a.metadata.NewIterator(irange, nil)
@@ -741,7 +741,7 @@ func (a *Append) batchGC(startTs int64, endTs int64, batchSize int, l0Trigger in
 	for {
 		l0Num, err := getL0Num()
 		if err != nil {
-			log.Error("get `l0Num` property of leveldb failed", zap.Error(err))
+			log.Error("", zap.Error(err))
 			return
 		}
 
@@ -778,9 +778,9 @@ func (a *Append) batchGC(startTs int64, endTs int64, batchSize int, l0Trigger in
 				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
-			alreadyGcTS = endTs
+			alreadyGcTS = endTS
 			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(alreadyGcTS))))
-			log.Info("Finish KV GC", zap.Int64("ts", endTs), zap.Int("delete num", deleteNum))
+			log.Info("Finish KV GC", zap.Int64("ts", endTS), zap.Int("delete num", deleteNum))
 			return
 		}
 
