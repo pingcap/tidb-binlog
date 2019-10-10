@@ -315,14 +315,17 @@ func (m *Merger) run() {
 			continue
 		}
 
-		if minBinlog.GetCommitTs() <= latestTS {
+		minBinlogTS := minBinlog.GetCommitTs()
+		if minBinlogTS < latestTS {
 			disorderBinlogCount.Add(1)
 			log.Error("binlog's commit ts less than the last ts",
-				zap.Int64("commit ts", minBinlog.GetCommitTs()),
+				zap.Int64("commit ts", minBinlogTS),
 				zap.Int64("last ts", latestTS))
+		} else if minBinlogTS == latestTS {
+			log.Warn("duplicate binlog", zap.Int64("commit ts", minBinlogTS))
 		} else {
 			m.output <- minBinlog
-			latestTS = minBinlog.GetCommitTs()
+			latestTS = minBinlogTS
 		}
 
 		m.Lock()
