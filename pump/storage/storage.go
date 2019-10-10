@@ -704,13 +704,15 @@ func (a *Append) doGCTS(ts int64) {
 	}
 
 	var alreadyGcTS int64
+	var finished bool
+	var err error
 	for {
-		alreadyGcTS, err := a.batchGC(alreadyGcTS, ts, 100, l0Trigger, getL0Num)
+		alreadyGcTS, finished, err = a.batchGC(alreadyGcTS, ts, 100, l0Trigger, getL0Num)
 		if err != nil {
 			log.Error("batch GC failed", zap.Error(err))
 			break
 		}
-		if alreadyGcTS >= ts {
+		if finished {
 			break
 		}
 		time.Sleep(5 * time.Second)
@@ -719,11 +721,11 @@ func (a *Append) doGCTS(ts int64) {
 	wg.Wait()
 }
 
-func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (alreadyGcTS int64, err error) {
+func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger int, getL0Num func() (int, error)) (int64, bool, error) {
 
 	batch := new(leveldb.Batch)
 	deleteNum := 0
-	alreadyGcTS = startTS
+	alreadyGcTS := startTS
 
 	irange := &util.Range{
 		Start: encodeTSKey(startTS),
@@ -744,11 +746,11 @@ func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger in
 	for hasNext := true; hasNext; {
 		l0Num, err := getL0Num()
 		if err != nil {
-			return 0, errors.Trace(err)
+			return 0, false, errors.Trace(err)
 		}
 		if l0Num >= l0Trigger {
 			log.Info("wait some time to gc cause too many L0 file", zap.Int("files", l0Num))
-			return alreadyGcTS, nil
+			return alreadyGcTS, false, nil
 		}
 
 		for deleteBatch := 0; deleteBatch < batchSize && hasNext; deleteBatch++ {
@@ -771,7 +773,7 @@ func (a *Append) batchGC(startTS int64, endTS int64, batchSize int, l0Trigger in
 		log.Info("has delete", zap.Int("delete num", deleteNum))
 	}
 	log.Info("Finish KV GC", zap.Int64("ts", endTS), zap.Int("delete num", deleteNum))
-	return endTS, nil
+	return alreadyGcTS, true, nil
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
