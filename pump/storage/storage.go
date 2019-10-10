@@ -441,7 +441,7 @@ func (a *Append) resolve(startTS int64) bool {
 		err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
 		if err != nil {
 			log.Errorf("put missing committed binlog into metadata failed: %+v, start ts: %d commit ts: %d isDDL: %v",
-				req.err, startTS, status.CommitTS(), pbinlog.GetDdlJobId() > 0)
+				err, startTS, status.CommitTS(), pbinlog.GetDdlJobId() > 0)
 			return false
 		}
 	}
