@@ -319,7 +319,7 @@ func (as *AppendSuit) TestBatchGC(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(alreadyGcTS, check.Equals, gcTS)
-	c.Assert(finished,check.Equals,true)
+	c.Assert(finished, check.Equals, true)
 
 	// mock when l0 file is too much
 	// Under such conditions, GC process will remove 2 batches (2 * 10 * 1024 kvs)
@@ -331,14 +331,14 @@ func (as *AppendSuit) TestBatchGC(c *check.C) {
 	gcTS += 2 * 10 * 1024
 	c.Assert(err, check.IsNil)
 	c.Assert(alreadyGcTS, check.Equals, gcTS)
-	c.Assert(finished,check.Equals,false)
+	c.Assert(finished, check.Equals, false)
 
-	alreadyGcTS,  finished,err = append.batchGC(gcTS, gcTS+29*1023, 10, 8, func() (int, error) {
+	alreadyGcTS, finished, err = append.batchGC(gcTS, gcTS+29*1023, 10, 8, func() (int, error) {
 		return 0, errors.New("fake error for test")
 	})
 	c.Assert(err, check.NotNil)
 	c.Assert(alreadyGcTS, check.Equals, int64(0))
-	c.Assert(finished,check.Equals,false)
+	c.Assert(finished, check.Equals, false)
 
 	alreadyGcTS, finished, err = append.batchGC(gcTS, gcTS+9*1023, 10, 8, func() (int, error) {
 		return 0, nil
@@ -346,7 +346,7 @@ func (as *AppendSuit) TestBatchGC(c *check.C) {
 	gcTS += 9 * 1023
 	c.Assert(err, check.IsNil)
 	c.Assert(alreadyGcTS, check.Equals, gcTS)
-	c.Assert(finished,check.Equals,true)
+	c.Assert(finished, check.Equals, true)
 
 	for i = 1; i < n; i++ {
 		_, err := append.metadata.Get(encodeTSKey(i), nil)
