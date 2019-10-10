@@ -43,3 +43,5 @@ require (
 	google.golang.org/grpc v1.23.0
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
+
+go 1.13
