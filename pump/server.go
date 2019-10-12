@@ -206,7 +206,16 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 			label = "succ"
 		}
 
-		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
+		takeSecond := time.Since(beginTime).Seconds()
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(takeSecond)
+
+		if takeSecond >= 1 {
+			log.Warn("slow write binlog RPC response",
+				zap.Int("payload size", len(in.Payload)),
+				zap.Float64("take second", takeSecond),
+				zap.String("label", label),
+			)
+		}
 	}()
 
 	if in.ClusterID != s.clusterID {
