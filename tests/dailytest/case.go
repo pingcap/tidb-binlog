@@ -136,6 +136,16 @@ var caseSplitRegionClean = []string{`
 	drop table binlog_split_region;`,
 }
 
+var (
+	caseAlterDatabase = []string{
+		`CREATE DATABASE to_be_altered CHARACTER SET utf8;`,
+		`ALTER DATABASE to_be_altered CHARACTER SET utf8mb4;`,
+	}
+	caseAlterDatabaseClean = []string{
+		`DROP DATABASE to_be_altered;`,
+	}
+)
+
 type testRunner struct {
 	src    *sql.DB
 	dst    *sql.DB
@@ -165,6 +175,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.execSQLs(caseUKWithNoPK)
 	tr.execSQLs(caseUKWithNoPKClean)
+
+	tr.execSQLs(caseAlterDatabase)
+	tr.execSQLs(caseAlterDatabaseClean)
 
 	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
