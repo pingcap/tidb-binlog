@@ -281,10 +281,7 @@ func (s *Server) Start() error {
 		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
 	}
 	m := cmux.New(tcpLis)
-	grpcL := m.MatchWithWriters(
-		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),
-		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc+proto"),
-	)
+	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	httpL := m.Match(cmux.HTTP1Fast())
 
 	// register drainer server with gRPC server and start to serve listener

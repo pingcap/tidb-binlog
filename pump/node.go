@@ -164,9 +164,8 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 	}
 
 	dialerOpts := []grpc.DialOption{
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			dialer := net.Dialer{}
-			return dialer.DialContext(ctx, "tcp", addr)
+		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+			return net.DialTimeout("tcp", addr, timeout)
 		}),
 		grpc.WithInsecure(),
 		grpc.WithBlock(),
