@@ -10,6 +10,7 @@ require (
 	github.com/gogo/protobuf v1.2.0
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.1
+	github.com/google/go-cmp v0.2.0 // indirect
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
 	github.com/gorilla/mux v1.6.2
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
@@ -36,12 +37,15 @@ require (
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.uber.org/zap v1.9.1
+	golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3 // indirect
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	google.golang.org/grpc v1.23.0
+	golang.org/x/tools v0.0.0-20190524140312-2c0ae7006135 // indirect
+	google.golang.org/grpc v1.17.0
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
+	honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc // indirect
 )
 
 go 1.13
