@@ -33,7 +33,7 @@ var (
 )
 
 // QueryNodesByKind returns specified nodes, like pumps/drainers
-func QueryNodesByKind(urls string, kind string) error {
+func QueryNodesByKind(urls string, kind string, showOffline bool) error {
 	registry, err := createRegistryFuc(urls)
 	if err != nil {
 		return errors.Trace(err)
@@ -45,6 +45,9 @@ func QueryNodesByKind(urls string, kind string) error {
 	}
 
 	for _, n := range nodes {
+		if n.State == node.Offline && !showOffline {
+			continue
+		}
 		log.Infof("query node, type: %s, node: %v", kind, n)
 	}
 
