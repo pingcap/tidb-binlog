@@ -45,9 +45,9 @@ func main() {
 	case ctl.GenerateMeta:
 		err = ctl.GenerateMetaInfo(cfg)
 	case ctl.QueryPumps:
-		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.PumpNode)
+		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.PumpNode, cfg.ShowOfflineNodes)
 	case ctl.QueryDrainers:
-		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.DrainerNode)
+		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.DrainerNode, cfg.ShowOfflineNodes)
 	case ctl.UpdatePump:
 		err = ctl.UpdateNodeState(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, cfg.State)
 	case ctl.UpdateDrainer:

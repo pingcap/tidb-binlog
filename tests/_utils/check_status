@@ -18,7 +18,7 @@ max_commit_ts_new=0
 
 for i in {1..15}
 do
-    binlogctl -pd-urls 127.0.0.1:2379 -cmd $NODE_KIND > $STATUS_LOG 2>&1
+    binlogctl -pd-urls 127.0.0.1:2379 -cmd $NODE_KIND -show-offline-nodes > $STATUS_LOG 2>&1
     cat $STATUS_LOG
 
     if [ $NODE_KIND == "pumps" ]; then 
