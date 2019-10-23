@@ -487,7 +487,7 @@ func (a *Append) resolve(startTS int64) bool {
 
 	tikvQueryCount.Add(1.0)
 	primaryKey := pbinlog.GetPrewriteKey()
-	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
+	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), uint64(pbinlog.StartTs), primaryKey)
 	if err != nil {
 		log.Error("GetTxnStatus failed", zap.Error(err))
 		return false
