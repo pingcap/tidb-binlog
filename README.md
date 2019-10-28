@@ -25,8 +25,8 @@ TiDB-Binlog is a tool used to collect [TiDB's](https://github.com/pingcap/tidb) 
     Replay from any history point.
 
 ## Documentation
-+ [Detailed documentation](https://pingcap.com/docs/tools/tidb-binlog-cluster/)
-+ [简体中文](https://pingcap.com/docs-cn/tools/tidb-binlog-cluster/)
++ [Detailed documentation](https://pingcap.com/docs/dev/reference/tidb-binlog-overview/)
++ [简体中文](https://pingcap.com/docs-cn/v3.0/reference/tools/tidb-binlog/overview/#tidb-binlog-%E7%AE%80%E4%BB%8B)
 
 ## Architecture
 
