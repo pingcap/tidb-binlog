@@ -18,6 +18,7 @@ TEST_DIR := /tmp/tidb_binlog_test
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
+GOVERSION := "`go version`"
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -77,6 +78,7 @@ integration_test: build
 	tests/run.sh
 
 fmt:
+	@echo "${GOVERSION}"
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
