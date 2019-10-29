@@ -184,7 +184,7 @@ func (p *kafkaExecutor) run() {
 			}
 			p.toBeAckCommitTSMu.Unlock()
 		case err := <-p.producer.Errors():
-			panic(err)
+			log.Fatal("fail to produce message to kafka, please check the state of kafka server", err)
 		case <-checkTick.C:
 			p.toBeAckCommitTSMu.Lock()
 			if len(p.toBeAckCommitTS) > 0 && time.Since(p.lastSuccessTime) > maxWaitTimeToSendMSG {
