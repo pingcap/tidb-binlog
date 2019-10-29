@@ -185,7 +185,7 @@ func (p *KafkaSyncer) run() {
 		defer wg.Done()
 
 		for err := range p.producer.Errors() {
-			panic(err)
+			log.Fatal("fail to produce message to kafka, please check the state of kafka server", zap.Error(err))
 		}
 	}()
 

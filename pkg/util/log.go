@@ -65,8 +65,7 @@ func InitLogger(level string, file string) error {
 	cfg := &log.Config{
 		Level: level,
 		File: log.FileLogConfig{
-			Filename:  file,
-			LogRotate: true,
+			Filename: file,
 			// default rotate by size 300M in pingcap/log never delete old files
 			// MaxSize:
 			// MaxDays:
