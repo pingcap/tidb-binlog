@@ -119,7 +119,7 @@ func (as *AppendSuit) TestBlockedWriteKVShouldNotStopWritingVlogs(c *check.C) {
 			store.options.KVChanCapacity,
 			check.Commentf("No consumer of the written channel is set up, it should be full at this point"),
 		)
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		c.Fatal("Takes too long to finish writing binlogs, writing may have been blocked.")
 	}
 }

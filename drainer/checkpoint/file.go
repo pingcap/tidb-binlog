@@ -23,8 +23,8 @@ import (
 	"github.com/siddontang/go/ioutil2"
 )
 
-// PbCheckPoint is local CheckPoint struct.
-type PbCheckPoint struct {
+// FileCheckPoint is local CheckPoint struct.
+type FileCheckPoint struct {
 	sync.RWMutex
 	closed          bool
 	initialCommitTS int64
@@ -34,9 +34,9 @@ type PbCheckPoint struct {
 	CommitTS int64 `toml:"commitTS" json:"commitTS"`
 }
 
-// NewPb creates a new Pb.
-func NewPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{
+// NewFile creates a new FileCheckpoint.
+func NewFile(cfg *Config) (CheckPoint, error) {
+	pb := &FileCheckPoint{
 		initialCommitTS: cfg.InitialCommitTS,
 		name:            cfg.CheckPointFile,
 	}
@@ -49,7 +49,7 @@ func NewPb(cfg *Config) (CheckPoint, error) {
 }
 
 // Load implements CheckPointor.Load interface.
-func (sp *PbCheckPoint) Load() error {
+func (sp *FileCheckPoint) Load() error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -81,7 +81,7 @@ func (sp *PbCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *PbCheckPoint) Save(ts, slaveTS int64) error {
+func (sp *FileCheckPoint) Save(ts, slaveTS int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -107,7 +107,7 @@ func (sp *PbCheckPoint) Save(ts, slaveTS int64) error {
 }
 
 // TS implements CheckPoint.TS interface
-func (sp *PbCheckPoint) TS() int64 {
+func (sp *FileCheckPoint) TS() int64 {
 	sp.RLock()
 	defer sp.RUnlock()
 
@@ -115,7 +115,7 @@ func (sp *PbCheckPoint) TS() int64 {
 }
 
 // Close implements CheckPoint.Close interface
-func (sp *PbCheckPoint) Close() error {
+func (sp *FileCheckPoint) Close() error {
 	sp.Lock()
 	defer sp.Unlock()
 
