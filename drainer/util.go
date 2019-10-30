@@ -75,25 +75,53 @@ func (g *taskGroup) Wait() {
 }
 
 // GenCheckPointCfg returns an CheckPoint config instance
-func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
-	dbCfg := checkpoint.DBConfig{
-		Host:     cfg.SyncerCfg.To.Host,
-		User:     cfg.SyncerCfg.To.User,
-		Password: cfg.SyncerCfg.To.Password,
-		Port:     cfg.SyncerCfg.To.Port,
-	}
+func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
+
 	checkpointCfg := &checkpoint.Config{
-		Db:              &dbCfg,
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
 		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),
 	}
 
-	if cfg.SyncerCfg.To.Checkpoint.Schema != "" {
-		checkpointCfg.Schema = cfg.SyncerCfg.To.Checkpoint.Schema
+	toCheckpoint := cfg.SyncerCfg.To.Checkpoint
+
+	if toCheckpoint.Schema != "" {
+		checkpointCfg.Schema = toCheckpoint.Schema
 	}
 
-	return checkpointCfg
+	switch toCheckpoint.Type {
+	case "mysql", "tidb":
+		checkpointCfg.CheckpointType = toCheckpoint.Type
+		checkpointCfg.Db = &checkpoint.DBConfig{
+			Host:     toCheckpoint.Host,
+			User:     toCheckpoint.User,
+			Password: toCheckpoint.Password,
+			Port:     toCheckpoint.Port,
+		}
+	case "":
+		switch cfg.SyncerCfg.DestDBType {
+		case "mysql", "tidb":
+			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
+			checkpointCfg.Db = &checkpoint.DBConfig{
+				Host:     cfg.SyncerCfg.To.Host,
+				User:     cfg.SyncerCfg.To.User,
+				Password: cfg.SyncerCfg.To.Password,
+				Port:     cfg.SyncerCfg.To.Port,
+			}
+		case "pb", "file":
+			checkpointCfg.CheckpointType = "file"
+		case "kafka":
+			checkpointCfg.CheckpointType = "file"
+		case "flash":
+			checkpointCfg.CheckpointType = "flash"
+		default:
+			return nil, errors.Errorf("unknown DestDBType: %s", cfg.SyncerCfg.DestDBType)
+		}
+	default:
+		return nil, errors.Errorf("unknown checkpoint type: %s", toCheckpoint.Type)
+	}
+
+	return checkpointCfg, nil
 }
 
 func initializeSaramaGlobalConfig() {
