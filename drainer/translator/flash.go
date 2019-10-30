@@ -448,7 +448,7 @@ func analyzeColumnDef(colDef *ast.ColumnDef, pkColumn string) (string, error) {
 	cName := colDef.Name.Name.L
 
 	tp := colDef.Tp
-	var typeStr = ""
+	var typeStr string
 	var typeStrFormat = "%s"
 	unsigned := mysql.HasUnsignedFlag(tp.Flag)
 	nullable := cName != pkColumn && isNullable(colDef)
