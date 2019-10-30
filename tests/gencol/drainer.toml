@@ -6,7 +6,6 @@ pd-urls = 'http://127.0.0.1:2379'
 ignore-schemas = 'INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql'
 txn-batch = 1
 worker-count = 1
-disable-dispatch = false
 safe-mode = false
 db-type = 'mysql'
 replicate-do-db = ['gencol']
