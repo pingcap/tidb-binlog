@@ -34,8 +34,6 @@ type MysqlCheckPoint struct {
 	db     *sql.DB
 	schema string
 	table  string
-	// type, tidb or mysql
-	tp string
 
 	CommitTS int64            `toml:"commitTS" json:"commitTS"`
 	TsMap    map[string]int64 `toml:"ts-map" json:"ts-map"`
@@ -43,10 +41,8 @@ type MysqlCheckPoint struct {
 
 var sqlOpenDB = pkgsql.OpenDB
 
-func newMysql(tp string, cfg *Config) (CheckPoint, error) {
-	if err := checkConfig(cfg); err != nil {
-		return nil, errors.Annotate(err, "check config failed")
-	}
+func newMysql(cfg *Config) (CheckPoint, error) {
+	setDefaultConfig(cfg)
 
 	db, err := sqlOpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
 	if err != nil {
@@ -59,7 +55,6 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		initialCommitTS: cfg.InitialCommitTS,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
-		tp:              tp,
 		TsMap:           make(map[string]int64),
 	}
 
