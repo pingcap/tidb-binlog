@@ -2,13 +2,9 @@
 
 set -e
 
-# use latest ts as initial-commit-ts, so we can skip binlog by previous test case
-ms=$(date +'%s')
-ts=$(($ms*1000<<18))
-
 cd "$(dirname "$0")"
 
-args="-initial-commit-ts=$ts"
+args="-initial-commit-ts=-1"
 
 kafka_addr=${KAFKA_ADDRS-127.0.0.1:9092}
 
