@@ -91,7 +91,9 @@ func NewConfig() *Config {
 }
 
 func (c *Config) String() string {
-	cfgBytes, err := json.Marshal(c)
+	// reparo/config.go:94:31: SA1026: trying to marshal chan or func value, field *github.com/pingcap/tidb-binlog/reparo.Config.FlagSet.Usage (staticcheck)
+	// but we omit the field `*flag.FlagSet`, it should be ok.
+	cfgBytes, err := json.Marshal(c) //nolint:staticcheck
 	if err != nil {
 		log.Error("marshal config failed", zap.Error(err))
 	}
