@@ -33,8 +33,6 @@ txn-batch = 200
 # work count to execute binlogs
 worker-count = 20
 
-disable-dispatch = false
-
 # safe mode will split update to delete and insert
 safe-mode = false
 
