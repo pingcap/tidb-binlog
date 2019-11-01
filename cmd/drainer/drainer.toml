@@ -43,7 +43,7 @@ txn-batch = 20
 # to get higher throughput by higher concurrent write to the downstream
 worker-count = 16
 
-disable-dispatch = false
+enable-dispatch = true
 
 # safe mode will split update to delete and insert
 safe-mode = false

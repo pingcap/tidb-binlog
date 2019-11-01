@@ -70,9 +70,9 @@ type SyncerConfig struct {
 	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType        string             `toml:"db-type" json:"db-type"`
-	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	EnableDispatch    bool               `toml:"enable-dispatch" json:"enable-dispatch"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
-	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
 }
 
 // Config holds the configuration of drainer
@@ -129,9 +129,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
-	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
+	fs.BoolVar(&cfg.SyncerCfg.EnableDispatch, "enable-dispatch", true, "enable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
-	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
+	fs.BoolVar(&cfg.SyncerCfg.EnableCausality, "enable-detect", false, "enable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
@@ -205,9 +205,9 @@ func (cfg *Config) Parse(args []string) error {
 
 func (c *SyncerConfig) adjustWorkCount() {
 	if c.DestDBType == "file" || c.DestDBType == "kafka" {
-		c.DisableDispatch = true
+		c.EnableDispatch = false
 		c.WorkerCount = 1
-	} else if c.DisableDispatch {
+	} else if !c.EnableDispatch {
 		c.WorkerCount = 1
 	}
 }
