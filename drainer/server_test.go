@@ -348,6 +348,6 @@ func (s *newServerSuite) TestInvalidDestDBType(c *C) {
 	cfg.SyncerCfg.DestDBType = "nothing"
 	cfg.adjustConfig()
 	_, err := NewServer(cfg)
-	c.Assert(err, ErrorMatches, ".*unsupported checkpoint type.*")
+	c.Assert(err, ErrorMatches, ".*unknown DestDBType.*")
 	c.Assert(cfg.SyncerCfg.To.ClusterID, Equals, uint64(8012))
 }

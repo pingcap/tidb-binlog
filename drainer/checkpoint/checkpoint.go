@@ -41,28 +41,26 @@ type CheckPoint interface {
 }
 
 // NewCheckPoint returns a CheckPoint instance by giving name
-func NewCheckPoint(name string, cfg *Config) (CheckPoint, error) {
+func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 	var (
 		cp  CheckPoint
 		err error
 	)
-	switch name {
+	switch cfg.CheckpointType {
 	case "mysql", "tidb":
-		cp, err = newMysql(name, cfg)
+		cp, err = newMysql(cfg)
 	case "file":
-		cp, err = NewPb(cfg)
-	case "kafka":
-		cp, err = newKafka(cfg)
+		cp, err = NewFile(cfg)
 	case "flash":
 		cp, err = newFlash(cfg)
 	default:
-		err = errors.Errorf("unsupported checkpoint type %s", name)
+		err = errors.Errorf("unsupported checkpoint type %s", cfg.CheckpointType)
 	}
 	if err != nil {
-		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", name, cfg)
+		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", cfg.CheckpointType, cfg)
 	}
 
-	log.Info("initialize checkpoint", zap.String("name", name), zap.Int64("checkpoint", cp.TS()), zap.Reflect("cfg", cfg))
+	log.Info("initialize checkpoint", zap.String("type", cfg.CheckpointType), zap.Int64("checkpoint", cp.TS()), zap.Reflect("cfg", cfg))
 
 	return cp, nil
 }
