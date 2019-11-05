@@ -30,6 +30,11 @@ db-type = "kafka"
 # size-limit = "100000"
 [syncer.to.checkpoint]
 #schema = "tidb_binlog"
+type = "mysql"
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 4000
 
 [syncer.to]
 topic-name = "binlog_test_topic"
