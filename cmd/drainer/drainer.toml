@@ -84,8 +84,17 @@ password = ""
 port = 3306
 
 [syncer.to.checkpoint]
-# you can uncomment this to change the database to save checkpoint when the downstream is mysql or tidb
-#schema = "tidb_binlog"
+# only support mysql or tidb now, you can uncomment this to control where the checkpoint is saved.
+# the default way how checkpoint is saved according to db-type is:
+# mysql/tidb -> the according downstream mysql/tidb
+# file/kafka -> file in `data-dir`
+# type = "mysql"
+# you can uncomment this to change the database to save checkpoint when the checkpoint type is mysql or tidb
+# schema = "tidb_binlog"
+# host = "127.0.0.1"
+# user = "root"
+# password = ""
+# port = 3306
 
 # Uncomment this if you want to use file as db-type.
 #[syncer.to]
