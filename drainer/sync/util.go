@@ -40,7 +40,12 @@ type DBConfig struct {
 
 // CheckpointConfig is the Checkpoint configuration.
 type CheckpointConfig struct {
-	Schema string `toml:"schema" json:"schema"`
+	Type     string `toml:"type" json:"type"`
+	Schema   string `toml:"schema" json:"schema"`
+	Host     string `toml:"host" json:"host"`
+	User     string `toml:"user" json:"user"`
+	Password string `toml:"password" json:"password"`
+	Port     int    `toml:"port" json:"port"`
 }
 
 type baseError struct {
