@@ -124,8 +124,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	pdCli.Close()
 
-	cpCfg := GenCheckPointCfg(cfg, clusterID)
-	cp, err := checkpoint.NewCheckPoint(cfg.SyncerCfg.DestDBType, cpCfg)
+	cpCfg, err := GenCheckPointCfg(cfg, clusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cp, err := checkpoint.NewCheckPoint(cpCfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
