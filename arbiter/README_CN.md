@@ -34,7 +34,7 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 
 ## 监控告警
 
-Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。本节不要介绍 Arbiter 的监控配置与监控指标。
+Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。本节介绍 Arbiter 的监控配置与监控指标。
 
 ### 监控配置
 
@@ -108,9 +108,9 @@ scrape_configs:
 
 1. 下载 Arbiter 报警规则文件 [Arbiter 配置文件](./arbiter.rules.yml) 放到 Prometheus 的配置文件目录下。
 
-2. Prometheus 配置文件 `prometheus.yml` 在 rule_files 添加对应文件:
+2. 修改 Prometheus 配置文件 `prometheus.yml`，在 rule_files 添加对应文件:
 
-```
+```yml
 # Load and evaluate rules in this file every 'evaluation_interval' seconds.
 rule_files:
   - 'arbiter.rules.yml'
