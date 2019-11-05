@@ -116,6 +116,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	latestTime := time.Now()
 
+	if cfg.InitialCommitTS == -1 {
+		log.Info("set InitialCommitTS", zap.Int64("ts", latestTS))
+		cfg.InitialCommitTS = latestTS
+	}
+
 	cfg.SyncerCfg.To.ClusterID = clusterID
 	pdCli.Close()
 
