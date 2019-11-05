@@ -75,7 +75,7 @@ integration_test: build
 	@which bin/pump
 	@which bin/binlogctl
 	@which bin/reparo
-	tests/run.sh
+	tests/run.sh reparo
 
 fmt:
 	@echo "${GOVERSION}"
