@@ -30,6 +30,8 @@ type DBConfig struct {
 
 // Config is the savepoint configuration
 type Config struct {
+	CheckpointType string
+
 	Db     *DBConfig
 	Schema string
 	Table  string
@@ -39,10 +41,7 @@ type Config struct {
 	CheckPointFile  string `toml:"dir" json:"dir"`
 }
 
-func checkConfig(cfg *Config) error {
-	if cfg == nil {
-		cfg = new(Config)
-	}
+func setDefaultConfig(cfg *Config) {
 	if cfg.Db == nil {
 		cfg.Db = new(DBConfig)
 	}
@@ -61,8 +60,6 @@ func checkConfig(cfg *Config) error {
 	if cfg.Table == "" {
 		cfg.Table = "checkpoint"
 	}
-
-	return nil
 }
 
 func genCreateSchema(sp *MysqlCheckPoint) string {

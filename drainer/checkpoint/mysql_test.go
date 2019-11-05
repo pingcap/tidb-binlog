@@ -48,7 +48,7 @@ func (s *saveSuite) TestShouldSaveCheckpoint(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	mock.ExpectExec("replace into db.tbl.*").WillReturnResult(sqlmock.NewResult(0, 0))
-	cp := MysqlCheckPoint{db: db, schema: "db", table: "tbl", tp: "other"}
+	cp := MysqlCheckPoint{db: db, schema: "db", table: "tbl"}
 	err = cp.Save(1111, 0)
 	c.Assert(err, IsNil)
 }
@@ -61,7 +61,6 @@ func (s *saveSuite) TestShouldUpdateTsMap(c *C) {
 		db:     db,
 		schema: "db",
 		table:  "tbl",
-		tp:     "tidb",
 		TsMap:  make(map[string]int64),
 	}
 	err = cp.Save(65536, 3333)
@@ -122,7 +121,7 @@ func (s *newMysqlSuite) TestCannotOpenDB(c *C) {
 		return nil, errors.New("no db")
 	}
 
-	_, err := newMysql("tidb", &Config{})
+	_, err := newMysql(&Config{})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*no db.*")
 }
@@ -138,14 +137,14 @@ func (s *newMysqlSuite) TestCreationErrors(c *C) {
 	}
 
 	mock.ExpectExec("create schema.*").WillReturnError(errors.New("fail schema"))
-	_, err = newMysql("tidb", &Config{})
+	_, err = newMysql(&Config{})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*fail schema.*")
 
 	mock.ExpectExec("create schema.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("create table.*").WillReturnError(errors.New("fail table"))
 
-	_, err = newMysql("tidb", &Config{})
+	_, err = newMysql(&Config{})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*fail table.*")
 }

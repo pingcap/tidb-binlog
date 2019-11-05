@@ -20,12 +20,12 @@ import (
 	"github.com/pingcap/errors"
 )
 
-func (t *testCheckPointSuite) TestPb(c *C) {
+func (t *testCheckPointSuite) TestFile(c *C) {
 	fileName := "/tmp/test"
 	notExistFileName := "test_not_exist"
 	cfg := new(Config)
 	cfg.CheckPointFile = fileName
-	meta, err := NewPb(cfg)
+	meta, err := NewFile(cfg)
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(fileName)
 
@@ -48,7 +48,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 
 	// check not exist meta file
 	cfg.CheckPointFile = notExistFileName
-	meta, err = NewPb(cfg)
+	meta, err = NewFile(cfg)
 	c.Assert(err, IsNil)
 	err = meta.Load()
 	c.Assert(err, IsNil)
@@ -56,7 +56,7 @@ func (t *testCheckPointSuite) TestPb(c *C) {
 
 	// check not exist meta file, but with initialCommitTs
 	cfg.InitialCommitTS = 123
-	meta, err = NewPb(cfg)
+	meta, err = NewFile(cfg)
 	c.Assert(err, IsNil)
 	c.Assert(meta.TS(), Equals, cfg.InitialCommitTS)
 
