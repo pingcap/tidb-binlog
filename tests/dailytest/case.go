@@ -211,7 +211,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
 		err := execSQLs(src, casePKAddDuplicateUK)
-		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
+		// the add unique index will failed by duplicate entry
+		if err != nil && !strings.Contains(err.Error(), "Duplicate") {
 			log.S().Fatal(err)
 		}
 	})
