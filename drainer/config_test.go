@@ -80,8 +80,8 @@ func (t *testDrainerSuite) TestValidateFilter(c *C) {
 	cfg.SyncerCfg.IgnoreSchemas = "a,,c"
 	c.Assert(cfg.validateFilter(), NotNil)
 
-	emptyScheme := []filter.TableName{filter.TableName{Schema: "", Table: "t"}}
-	emptyTable := []filter.TableName{filter.TableName{Schema: "s", Table: ""}}
+	emptyScheme := []filter.TableName{{Schema: "", Table: "t"}}
+	emptyTable := []filter.TableName{{Schema: "s", Table: ""}}
 
 	cfg = NewConfig()
 	cfg.SyncerCfg.DoTables = emptyScheme
