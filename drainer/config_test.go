@@ -25,6 +25,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
 	"github.com/samuel/go-zookeeper/zk"
@@ -65,6 +66,38 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	var strSQLMode *string
 	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, strSQLMode)
 	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
+}
+
+func (t *testDrainerSuite) TestValidateFilter(c *C) {
+	cfg := NewConfig()
+	c.Assert(cfg.validateFilter(), IsNil)
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.DoDBs = []string{""}
+	c.Assert(cfg.validateFilter(), NotNil)
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.IgnoreSchemas = "a,,c"
+	c.Assert(cfg.validateFilter(), NotNil)
+
+	emptyScheme := []filter.TableName{filter.TableName{Schema: "", Table: "t"}}
+	emptyTable := []filter.TableName{filter.TableName{Schema: "s", Table: ""}}
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.DoTables = emptyScheme
+	c.Assert(cfg.validateFilter(), NotNil)
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.DoTables = emptyTable
+	c.Assert(cfg.validateFilter(), NotNil)
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.IgnoreTables = emptyScheme
+	c.Assert(cfg.validateFilter(), NotNil)
+
+	cfg = NewConfig()
+	cfg.SyncerCfg.IgnoreTables = emptyTable
+	c.Assert(cfg.validateFilter(), NotNil)
 }
 
 func (t *testDrainerSuite) TestValidate(c *C) {
