@@ -291,11 +291,7 @@ func (cfg *Config) validate() error {
 		}
 	}
 
-	if err := cfg.validateFilter(); err != nil {
-		return err
-	}
-
-	return nil
+	return cfg.validateFilter()
 }
 
 func (cfg *Config) adjustConfig() error {
