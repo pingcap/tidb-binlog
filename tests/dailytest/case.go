@@ -19,6 +19,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -229,6 +230,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
 
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+
 	tr.run(caseCreateView)
 	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
 	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
@@ -302,6 +306,41 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+func caseUpdateWhileDroppingCol(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE many_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0,
+	col VARCHAR(50) NOT NULL
+);`)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		insertSQL := `INSERT INTO many_cols(id, col) VALUES (?, ?);`
+		mustExec(db, insertSQL, 1, "")
+
+		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 100; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < 30; i++ {
+			mustExec(db, "ALTER TABLE many_cols DROP COLUMN col;")
+			mustExec(db, "ALTER TABLE many_cols ADD COLUMN col VARCHAR(50) NOT NULL;")
+		}
+	}()
+
+	wg.Wait()
 }
 
 // caseTblWithGeneratedCol creates a table with generated column,
