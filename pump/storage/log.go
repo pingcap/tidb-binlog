@@ -22,6 +22,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -211,7 +212,9 @@ func (lf *logFile) Write(data []byte, sync bool) error {
 		return errors.Annotatef(err, "unable to write to log file: %s", lf.path)
 	}
 	if sync {
+		fsyncT0 := time.Now()
 		err = lf.fdatasync()
+		writeBinlogTimeHistogram.WithLabelValues("fsync").Observe(time.Since(fsyncT0).Seconds())
 		if err != nil {
 			return errors.Annotatef(err, "fdatasync file %s failed", lf.path)
 		}
