@@ -155,7 +155,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 				case tipb.MutationType_Update:
 					names, args, oldArgs, err := genMysqlUpdate(schema, info, row)
 					if err != nil {
-						return nil, errors.Annotate(err, "gen delete fail")
+						return nil, errors.Annotate(err, "gen update fail")
 					}
 
 					dml := &loader.DML{
