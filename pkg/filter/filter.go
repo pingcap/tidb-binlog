@@ -48,10 +48,10 @@ func NewFilter(ignoreDBs []string, ignoreTables []TableName, doDBs []string, doT
 func (s *Filter) addOneRegex(originStr string) {
 	if _, ok := s.reMap[originStr]; !ok {
 		var re *regexp.Regexp
-		if originStr[0] != '~' {
-			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
-		} else {
+		if len(originStr) > 0 && originStr[0] == '~' {
 			re = regexp.MustCompile(fmt.Sprintf("(?i)%s", originStr[1:]))
+		} else { // must match completely
+			re = regexp.MustCompile(fmt.Sprintf("(?i)^%s$", originStr))
 		}
 		s.reMap[originStr] = re
 	}
