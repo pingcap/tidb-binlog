@@ -200,6 +200,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	runPKcases(tr)
 
+	tr.run(caseUpdateWhileAddingCol)
+	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+
 	tr.execSQLs(caseMultiDataType)
 	tr.execSQLs(caseMultiDataTypeClean)
 
@@ -219,19 +222,17 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
 
-	// run caseInsertBit
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
 
-	// run caseRecoverAndInsert
 	tr.execSQLs(caseRecoverAndInsert)
 	tr.execSQLs(caseRecoverAndInsertClean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
-
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
 	tr.run(caseCreateView)
 	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
@@ -306,6 +307,40 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+func caseUpdateWhileAddingCol(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE growing_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0
+);`)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		insertSQL := `INSERT INTO growing_cols(id, val) VALUES (?, ?);`
+		mustExec(db, insertSQL, 1, 0)
+
+		// Keep updating to generate DMLs while the other goroutine's adding columns
+		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 300; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 300; i++ {
+			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
+			mustExec(db, updateSQL)
+		}
+	}()
+
+	wg.Wait()
 }
 
 func caseUpdateWhileDroppingCol(db *sql.DB) {
