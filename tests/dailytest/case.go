@@ -309,21 +309,50 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 }
 
 func caseUpdateWhileDroppingCol(db *sql.DB) {
-	mustExec(db, `
+	const nCols = 50
+	var builder strings.Builder
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d VARCHAR(50) NOT NULL", i))
+	}
+	createSQL := fmt.Sprintf(`
 CREATE TABLE many_cols (
 	id INT AUTO_INCREMENT PRIMARY KEY,
 	val INT DEFAULT 0,
-	col VARCHAR(50) NOT NULL
-);`)
+	%s
+);`, builder.String())
+	mustExec(db, createSQL)
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d", i))
+	}
+	cols := builder.String()
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(`""`)
+	}
+	placeholders := builder.String()
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		insertSQL := `INSERT INTO many_cols(id, col) VALUES (?, ?);`
-		mustExec(db, insertSQL, 1, "")
+		// Insert a row with all columns set to empty string
+		insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
+		mustExec(db, insertSQL, 1)
 
+		// Keep updating to generate DMLs while the other goroutine's dropping columns
 		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
 		for i := 0; i < 100; i++ {
 			mustExec(db, updateSQL, i, 1)
@@ -334,9 +363,8 @@ CREATE TABLE many_cols (
 	go func() {
 		defer wg.Done()
 
-		for i := 0; i < 30; i++ {
-			mustExec(db, "ALTER TABLE many_cols DROP COLUMN col;")
-			mustExec(db, "ALTER TABLE many_cols ADD COLUMN col VARCHAR(50) NOT NULL;")
+		for i := 0; i < nCols; i++ {
+			mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
 		}
 	}()
 
