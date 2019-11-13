@@ -32,11 +32,49 @@ mysql> select * from tidb_binlog.arbiter_checkpoint;
 
 
 
-## 监控
+## 监控告警
 
-Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。
+Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。本节介绍 Arbiter 的监控配置与监控指标。
 
-### 度量
+### 监控配置
+
+只要 Prometheus 能发现 **Arbiter** 的监控地址，就能收集监控指标。
+
+监控的端口可在 arbiter.toml 中配置：
+
+```toml
+# addr (i.e. 'host:port') to listen on for Arbiter connections
+addr = "0.0.0.0:8251"
+```
+
+要让 Prometheus 发现 Arbiter，可以将地址直接写入其配置文件，例如：
+```yml
+scrape_configs:
+  - job_name: 'arbiter'
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+      - targets: ['192.168.20.10:8251']
+```
+
+#### 导入 Grafana 面板
+
+执行以下步骤，为 Arbiter 导入 Grafana 面板：
+
+1. 点击侧边栏的 Grafana 图标。
+
+2. 在侧边栏菜单中，依次点击 **Dashboards** > **Import** 打开 **Import Dashboard** 窗口。
+
+3. 点击 **Upload .json File** 上传对应的 JSON 文件（下载 [Arbiter 配置文件](./arbiter.json))。
+
+4. 点击 **Load**。
+
+5. 选择一个 Prometheus 数据源。
+
+6. 点击 **Import**，Prometheus 面板即导入成功。
+
+### 监控指标
+
+本节将详细介绍 **arbiter** 的监控指标.
 
 * **`binlog_arbiter_checkpoint_tso`** (测量仪)
 
@@ -64,4 +102,49 @@ Arbiter 支持给 [Prometheus](https://prometheus.io/) 采集度量 (metrics)。
 
 	上游事务提交(commitTS物理时间) 到对应事务写入下游的花时。
 
+### 报警配置
+
+执行以下步骤，为 Arbiter 导入 Prometheus 告警规则：
+
+1. 下载 Arbiter 报警规则文件 [Arbiter 配置文件](./arbiter.rules.yml) 放到 Prometheus 的配置文件目录下。
+
+2. 修改 Prometheus 配置文件 `prometheus.yml`，在 rule_files 添加对应文件:
+
+```yml
+# Load and evaluate rules in this file every 'evaluation_interval' seconds.
+rule_files:
+  - 'arbiter.rules.yml'
+```
+
+### 报警规则
+
+本节介绍 Arbiter 的告警规则。
+
+#### `binlog_arbiter_checkpoint_high_delay`
+
+* 报警规则:
+
+    `(time() - binlog_arbiter_checkpoint_tso / 1000) > 3600`
+
+* 规则描述:
+
+    Arbiter 同步落后超过一个小时则报警。
+
+* 处理方法:
+
+    同步慢或者同步历史数据造成的，需要查看监控定位问题。
+
+#### `binlog_arbiter_checkpoint_tso_no_change_for_1m`
+
+* 报警规则:
+
+    `changes(binlog_arbiter_checkpoint_tso[1m]) < 1`
+
+* 规则描述:
+
+    Arbiter checkpoint 一分钟没更新则报警。
+
+* 处理方法:
+
+    没有数据源或者同步异常阻塞造成的, 需要查看监控定位问题。
 
