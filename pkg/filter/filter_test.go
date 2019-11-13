@@ -36,4 +36,9 @@ func (t *testFilterSuite) TestFilter(c *C) {
 	filter = NewFilter(nil, ignoreTables, nil, nil)
 	c.Assert(filter.SkipSchemaAndTable("ignore", "ignore"), IsTrue)
 	c.Assert(filter.SkipSchemaAndTable("not_ignore", "not_ignore"), IsFalse)
+
+	// with empty string
+	filter = NewFilter(nil, nil, []string{""} /*doDBs*/, nil)
+	c.Assert(filter.SkipSchemaAndTable("", "any"), IsFalse)
+	c.Assert(filter.SkipSchemaAndTable("any", ""), IsTrue)
 }
