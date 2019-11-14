@@ -153,9 +153,9 @@ func genInsert(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 
 func genUpdate(schema string, table *model.TableInfo, row []byte) (event *pb.Event, err error) {
 	columns := writableColumns(table)
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	colsMap := util.ToColumnMap(columns)
 
-	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
+	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
