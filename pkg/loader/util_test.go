@@ -19,6 +19,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	check "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -41,7 +42,7 @@ func (cs *UtilSuite) TestGetTableInfoTableNotExist(c *check.C) {
 	mock.ExpectQuery(regexp.QuoteMeta(colsSQL)).WithArgs("test", "test1").WillReturnRows(columnRows)
 
 	_, err = getTableInfo(db, "test", "test1")
-	c.Assert(err, check.Equals, ErrTableNotExist)
+	c.Assert(errors.Cause(err), check.Equals, ErrTableNotExist)
 
 }
 
