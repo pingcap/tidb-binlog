@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 var (
@@ -58,6 +60,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 
 	if info.columns, err = getColsOfTbl(db, schema, table); err != nil {
 		if err == ErrTableNotExist {
+			log.Warn("table not exist", zap.String("schema", schema), zap.String("table", table))
 			return nil, err
 		}
 		return nil, errors.Trace(err)
