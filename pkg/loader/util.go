@@ -21,8 +21,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 var (
@@ -59,11 +57,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	info = new(tableInfo)
 
 	if info.columns, err = getColsOfTbl(db, schema, table); err != nil {
-		if err == ErrTableNotExist {
-			log.Warn("table not exist", zap.String("schema", schema), zap.String("table", table))
-			return nil, err
-		}
-		return nil, errors.Trace(err)
+		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table)
 	}
 
 	if info.uniqueKeys, err = getUniqKeys(db, schema, table); err != nil {
