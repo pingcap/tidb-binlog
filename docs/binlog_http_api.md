@@ -57,7 +57,7 @@
 1. Get all metrics of Pump
 
     ```shell
-    curl http://{TiDBIP}:8250/metrics
+    curl http://{PumpIP}:8250/metrics
     ```
 
 1. Get the status of all drainers
@@ -67,7 +67,7 @@
     ```
 
     ```shell
-    $curl http://127.0.0.1:10080/drainers
+    $curl http://127.0.0.1:8250/drainers
 
    [
        {
@@ -147,7 +147,7 @@
 1. Get all metrics of Drainer
 
     ```shell
-    curl http://{TiDBIP}:8249/metrics
+    curl http://{DrainerIP}:8249/metrics
     ```
 
 1. Get the lastest commit ts of Drainer
