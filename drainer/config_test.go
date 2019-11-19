@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
 	"github.com/samuel/go-zookeeper/zk"
+	"go.etcd.io/etcd/integration"
 )
 
 var testEtcdCluster *integration.ClusterV3
