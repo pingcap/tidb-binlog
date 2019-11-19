@@ -90,6 +90,8 @@ func InitLogger(level string, file string) error {
 	return nil
 }
 
+var logHookMu sync.Mutex
+
 // LogHook to get the save entrys for test
 type LogHook struct {
 	// save the log entrys
@@ -99,6 +101,8 @@ type LogHook struct {
 
 // SetUp LogHook
 func (h *LogHook) SetUp() {
+	logHookMu.Lock()
+
 	h.originLogger = log.L()
 	lg := log.L().WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
 		h.Entrys = append(h.Entrys, entry)
@@ -111,4 +115,5 @@ func (h *LogHook) SetUp() {
 // TearDown set back the origin logger
 func (h *LogHook) TearDown() {
 	log.ReplaceGlobals(h.originLogger, _globalP)
+	logHookMu.Unlock()
 }
