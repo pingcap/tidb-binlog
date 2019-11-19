@@ -4,27 +4,28 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.3.0
 	github.com/Shopify/sarama v1.23.1
-	github.com/beorn7/perks v1.0.0 // indirect
+	github.com/coreos/bbolt v1.3.3 // indirect
+	github.com/coreos/etcd v3.3.13+incompatible // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-sql-driver/mysql v1.4.1
-	github.com/gogo/protobuf v1.2.0
+	github.com/gogo/protobuf v1.2.1
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.2
-	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf
+	github.com/google/gofuzz v1.0.0
 	github.com/gorilla/mux v1.6.2
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
+	github.com/pingcap/check v0.0.0-20191107115940-caf2b9e6ccf4
 	github.com/pingcap/errors v0.11.4
-	github.com/pingcap/kvproto v0.0.0-20190910074005-0e61b6f435c1
+	github.com/pingcap/kvproto v0.0.0-20191118050206-47672e7eabc0
 	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
-	github.com/pingcap/parser v0.0.0-20191021083151-7c64f78a5100
-	github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0
-	github.com/pingcap/tidb v1.1.0-beta.0.20191023070859-58fc7d44f73b
-	github.com/pingcap/tidb-tools v2.1.12+incompatible
-	github.com/pingcap/tipb v0.0.0-20191015023537-709b39e7f8bb
-	github.com/prometheus/client_golang v0.9.0
-	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910
+	github.com/pingcap/parser v0.0.0-20191112053614-3b43b46331d5
+	github.com/pingcap/pd v1.1.0-beta.0.20191119124645-4c0c1027f412
+	github.com/pingcap/tidb v1.1.0-beta.0.20191119111543-77faf6466821
+	github.com/pingcap/tidb-tools v3.0.6-0.20191119150227-ff0a3c6e5763+incompatible
+	github.com/pingcap/tipb v0.0.0-20191112054303-0b0ad0d4a92e
+	github.com/prometheus/client_golang v1.0.0
+	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
@@ -35,15 +36,13 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
-	go.etcd.io/etcd v0.0.0-20190320044326-77d4b742cdbf
-	go.uber.org/zap v1.10.0
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20191023171146-3cf2f69b5738
+	go.uber.org/zap v1.12.0
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20190910064555-bbd175535a8b
-	google.golang.org/grpc v1.23.0
+	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c
+	google.golang.org/grpc v1.23.1
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
 
 go 1.13
-
-replace github.com/pingcap/tidb-tools => github.com/3pointer/tidb-tools v3.0.0-beta.1.0.20191119134828-f7eaefd23fad+incompatible
