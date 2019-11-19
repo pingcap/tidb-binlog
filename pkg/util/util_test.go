@@ -332,10 +332,6 @@ type goAndAbortGoroutineSuit struct{}
 var _ = Suite(&goAndAbortGoroutineSuit{})
 
 func (s *goAndAbortGoroutineSuit) TestGoAndAbortGoroutine(c *C) {
-	var logHook LogHook
-	logHook.SetUp()
-	defer logHook.TearDown()
-
 	var called bool
 	GoAndAbortGoroutine("test", func() {
 		c := make(chan struct{})
