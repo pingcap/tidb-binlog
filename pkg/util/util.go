@@ -280,3 +280,22 @@ func AdjustDuration(v *time.Duration, defValue time.Duration) {
 		*v = defValue
 	}
 }
+
+// GoAndAbortGoroutine creates a goroutine to run fn, and then gives up waiting for the goroutine to exit When it timeouts
+func GoAndAbortGoroutine(name string, fn func(), timeout time.Duration) {
+	fName := zap.String("name", name)
+	exited := make(chan struct{})
+	go func() {
+		defer func() {
+			log.Info("goroutine exit bt itself (with GoAndAbortGoroutine help)", fName)
+			close(exited)
+		}()
+		fn()
+	}()
+
+	select {
+	case <-time.After((timeout)):
+		log.Info("abort goroutine (with GoAndAbortGoroutine help)", fName)
+	case <-exited:
+	}
+}

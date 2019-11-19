@@ -326,3 +326,21 @@ func (s *retryCtxSuite) TestSuccessAfterRetry(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(callCount, Equals, 2)
 }
+
+type goAndAbortGoroutineSuit struct{}
+
+var _ = Suite(&goAndAbortGoroutineSuit{})
+
+func (s *goAndAbortGoroutineSuit) TestGoAndAbortGoroutine(c *C) {
+	var logHook LogHook
+	logHook.SetUp()
+	defer logHook.TearDown()
+
+	var called bool
+	GoAndAbortGoroutine("test", func() {
+		c := make(chan struct{})
+		called = true
+		<-c
+	}, time.Second)
+	c.Assert(called, IsTrue)
+}
