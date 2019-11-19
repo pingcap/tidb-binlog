@@ -26,8 +26,6 @@ type DBConfig struct {
 	Port          int              `toml:"port" json:"port"`
 	Checkpoint    CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir string           `toml:"dir" json:"dir"`
-	TimeLimit     string           `toml:"time-limit" json:"time-limit"`
-	SizeLimit     string           `toml:"size-limit" json:"size-limit"`
 
 	ZKAddrs          string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
