@@ -103,7 +103,7 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 
 // DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, isTblDroppingCol bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}
@@ -161,6 +161,9 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 		return nil, nil, errors.Errorf("row data is corrupted %v", b)
 	}
 	if parsedCols == len(cols)-1 {
+		if !isTblDroppingCol {
+			return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		}
 		var missingCol *model.ColumnInfo
 		for colID, col := range cols {
 			_, inOld := oldRow[colID]
@@ -188,20 +191,22 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 }
 
 type updateDecoder struct {
-	columns map[int64]*model.ColumnInfo
+	columns          map[int64]*model.ColumnInfo
+	isTblDroppingCol bool
 }
 
-func newUpdateDecoder(table *model.TableInfo) updateDecoder {
+func newUpdateDecoder(table *model.TableInfo, isTblDroppingCol bool) updateDecoder {
 	columns := writableColumns(table)
 	return updateDecoder{
-		columns: util.ToColumnMap(columns),
+		columns:          util.ToColumnMap(columns),
+		isTblDroppingCol: isTblDroppingCol,
 	}
 }
 
 // decode decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	return DecodeOldAndNewRow(b, ud.columns, loc)
+	return DecodeOldAndNewRow(b, ud.columns, loc, ud.isTblDroppingCol)
 }
 
 func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {
