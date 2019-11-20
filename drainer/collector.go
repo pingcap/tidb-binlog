@@ -344,11 +344,24 @@ func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context
 		case <-ctx.Done():
 			return
 		case nr := <-c.notifyChan:
-			nr.err = fUpdate(ctx)
+			// stop merge and return directly
+			// temporal logic:
+			// * merge is paused -> new pump write binlog
+			// * fetch all sources in merge -> find smallest commit ts binlog -> check merge whether paused -> publish binlog
+			// so it's safe
+			// TODO: maybe we can remove merge.SourceChanged
+			c.merger.Stop()
 			nr.wg.Done()
+			if err := fUpdate(ctx); err != nil {
+				log.Error("Failed to update collector status (notifying drainer progress)", zap.Error(err))
+			} else {
+				c.merger.Continue()
+			}
 		case <-time.After(c.interval):
 			if err := fUpdate(ctx); err != nil {
 				log.Error("Failed to update collector status", zap.Error(err))
+			} else {
+				c.merger.Continue()
 			}
 		case err := <-c.errCh:
 			log.Error("collector meets error", zap.Error(err))

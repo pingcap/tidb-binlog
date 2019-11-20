@@ -307,7 +307,7 @@ func (m *Merger) run() {
 		}
 
 		// may add new source, or remove source, need choose a new min binlog
-		if m.isSourceChanged() {
+		if m.isSourceChanged() || m.isPaused() {
 			// push the min binlog back
 			m.Lock()
 			m.strategy.Push(minBinlog)
