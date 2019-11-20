@@ -21,3 +21,4 @@ password = ""
 # worker-count = 16
 # max DML operation in a transaction when write to downstream
 # batch-size = 64
+# safe-mode = false

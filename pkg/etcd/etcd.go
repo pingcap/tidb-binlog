@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
+	"go.etcd.io/etcd/clientv3"
 	"golang.org/x/net/context"
 )
 
