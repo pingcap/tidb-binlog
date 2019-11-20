@@ -327,13 +327,13 @@ func (s *retryCtxSuite) TestSuccessAfterRetry(c *C) {
 	c.Assert(callCount, Equals, 2)
 }
 
-type goAndAbortGoroutineSuit struct{}
+type waitUntilTimeoutSuit struct{}
 
-var _ = Suite(&goAndAbortGoroutineSuit{})
+var _ = Suite(&waitUntilTimeoutSuit{})
 
-func (s *goAndAbortGoroutineSuit) TestGoAndAbortGoroutine(c *C) {
+func (s *waitUntilTimeoutSuit) TestGoAndAbortGoroutine(c *C) {
 	var called bool
-	GoAndAbortGoroutine("test", func() {
+	WaitUntilTimeout("test", func() {
 		c := make(chan struct{})
 		called = true
 		<-c

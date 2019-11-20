@@ -875,7 +875,7 @@ func (s *Server) Close() {
 
 	close(s.pullClose)
 	// stop the gRPC server
-	util.GoAndAbortGoroutine("grpc_server.GracefulStop", func() {
+	util.WaitUntilTimeout("grpc_server.GracefulStop", func() {
 		s.gs.GracefulStop()
 		log.Info("grpc is stopped")
 	}, 10*time.Second)
