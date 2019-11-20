@@ -58,12 +58,12 @@ func (g *taskGroup) start(name string, f func(), noPanic bool) {
 				if err := recover(); err != nil {
 					log.Error("Recovered from panic",
 						zap.Reflect("err", err),
-						zap.Stack("stack"),
+						zap.Stack("real stack"),
 						fName,
 					)
 				}
 			}
-			log.Info("Exit", fName)
+			log.Error("Exit", fName)
 			g.wg.Done()
 		}()
 		f()
