@@ -85,7 +85,8 @@
 1. Change the Pump status
 
     `NodeID` is the node id of the Pump server. `Action` is the action to execute[possible values: `pause`, `close`].
-
+    `pause` is equivalent to `pause-pump` in [binlogctl](https://github.com/pingcap/tidb-binlog/tree/master/binlogctl), `close` is equivalent to `offline-pump` in [binlogctl](https://github.com/pingcap/tidb-binlog/tree/master/binlogctl).
+    
     ```shell
     curl -X PUT http://{PumpIP}:8250/state/{NodeID}/{Action}
     ```
@@ -170,7 +171,8 @@
 
 1. Change the Drainer status
 
-    `NodeID` is the node id of the Pump server. `Action` is the action to execute[possible values: `pause`, `close`].
+    `NodeID` is the node id of the Drainer server. `Action` is the action to execute[possible values: `pause`, `close`].
+    `pause` is equivalent to `pause-drainer` in [binlogctl](https://github.com/pingcap/tidb-binlog/tree/master/binlogctl), `close` is equivalent to `offline-drainer` in [binlogctl](https://github.com/pingcap/tidb-binlog/tree/master/binlogctl).
 
     ```shell
     curl -X PUT http://{DrainerIP}:8249/state/{NodeID}/{Action}
