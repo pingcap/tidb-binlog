@@ -63,7 +63,7 @@ func (g *taskGroup) start(name string, f func(), noPanic bool) {
 					)
 				}
 			}
-			log.Error("Exit", fName)
+			log.Info("Exit", fName)
 			g.wg.Done()
 		}()
 		f()
