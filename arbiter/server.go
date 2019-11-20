@@ -110,6 +110,8 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 		return nil, errors.Trace(err)
 	}
 
+	log.Info("new kafka reader success")
+
 	// set loader
 	srv.load, err = newLoader(srv.downDB,
 		loader.WorkerCount(cfg.Down.WorkerCount),
@@ -122,15 +124,19 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 		return nil, errors.Trace(err)
 	}
 
-	// set safe mode in first 5 min if abnormal quit last time
-	if status == StatusRunning {
-		log.Info("set safe mode to be true")
+	if down.SafeMode {
 		srv.load.SetSafeMode(true)
-		go func() {
-			time.Sleep(initSafeModeDuration)
-			srv.load.SetSafeMode(false)
-			log.Info("set safe mode to be false")
-		}()
+	} else {
+		// set safe mode in first 5 min if abnormal quit last time
+		if status == StatusRunning {
+			log.Info("set safe mode to be true")
+			srv.load.SetSafeMode(true)
+			go func() {
+				time.Sleep(initSafeModeDuration)
+				srv.load.SetSafeMode(false)
+				log.Info("set safe mode to be false")
+			}()
+		}
 	}
 
 	// set metrics
@@ -267,8 +273,10 @@ func (s *Server) loadStatus() (int, error) {
 		if !errors.IsNotFound(err) {
 			return 0, errors.Trace(err)
 		}
+		log.Info("no checkpoint found")
 		err = nil
 	} else {
+		log.Info("load checkpoint", zap.Int64("ts", ts), zap.Int("status", status))
 		s.finishTS = ts
 	}
 	return status, errors.Trace(err)
