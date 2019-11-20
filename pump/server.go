@@ -879,8 +879,10 @@ func (s *Server) Close() {
 
 	close(s.pullClose)
 	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
+	util.WaitUntilTimeout("grpc_server.GracefulStop", func() {
+		s.gs.GracefulStop()
+		log.Info("grpc is stopped")
+	}, 10*time.Second)
 
 	if err := s.storage.Close(); err != nil {
 		log.Error("close storage failed", zap.Error(err))
