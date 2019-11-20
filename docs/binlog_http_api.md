@@ -4,7 +4,7 @@
 
 `PumpIP` is the ip of the Pump server. `8250` is the default port of Pump.
 
-1. Get the current status of Pump
+1. Get the current status of Pump instances
 
     ```shell
     curl http://{PumpIP}:8250/status
