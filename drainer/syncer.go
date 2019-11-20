@@ -258,6 +258,8 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 }
 
 func (s *Syncer) run() error {
+	defer close(s.closed)
+
 	wait := make(chan struct{})
 
 	fakeBinlogCh := make(chan *pb.Binlog, 1024)
@@ -421,8 +423,6 @@ ForLoop:
 	case <-time.After(runWaitThreshold):
 		panic("Waiting too long for `Syncer.run` to quit.")
 	}
-
-	close(s.closed)
 
 	// return the origin error if has, or the close error
 	if err != nil {

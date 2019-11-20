@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/integration"
 	. "github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -39,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
+	"go.etcd.io/etcd/integration"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )

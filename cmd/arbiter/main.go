@@ -40,8 +40,12 @@ func main() {
 	if err := util.InitLogger(cfg.LogLevel, cfg.LogFile); err != nil {
 		log.Fatal("Failed to initialize log", zap.Error(err))
 	}
-	// may too many noise, discard sarama log now
-	sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
+
+	// We have set sarama.Logger in util.InitLogger.
+	if !cfg.OpenSaramaLog {
+		// may too many noise, discard sarama log now
+		sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
+	}
 
 	log.Info("start arbiter...", zap.Reflect("config", cfg))
 	version.PrintVersionInfo("Arbiter")
