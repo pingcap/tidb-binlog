@@ -96,7 +96,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Metrics.Addr, "metrics.addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.Metrics.Interval, "metrics.interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.BoolVar(&cfg.OpenSaramaLog, "open-sarama-log", true, "log the logs from sarama (https://github.com/Shopify/sarama), the client of Kafka")
+	fs.BoolVar(&cfg.OpenSaramaLog, "open-sarama-log", true, "save the logs from sarama (https://github.com/Shopify/sarama), a client of Kafka")
 
 	fs.Int64Var(&cfg.Up.InitialCommitTS, "up.initial-commit-ts", 0, "if arbiter doesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.StringVar(&cfg.Up.Topic, "up.topic", "", "topic name of kafka")
