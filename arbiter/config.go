@@ -42,6 +42,7 @@ type Config struct {
 	LogLevel      string `toml:"log-level" json:"log-level"`
 	ListenAddr    string `toml:"addr" json:"addr"`
 	LogFile       string `toml:"log-file" json:"log-file"`
+	OpenSaramaLog bool   `toml:"open-sarama-log" json:"open-sarama-log"`
 
 	Up   UpConfig   `toml:"up" json:"up"`
 	Down DownConfig `toml:"down" json:"down"`
@@ -73,8 +74,9 @@ type DownConfig struct {
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
 
-	WorkerCount int `toml:"worker-count" json:"worker-count"`
-	BatchSize   int `toml:"batch-size" json:"batch-size"`
+	WorkerCount int  `toml:"worker-count" json:"worker-count"`
+	BatchSize   int  `toml:"batch-size" json:"batch-size"`
+	SafeMode    bool `toml:"safe-mode" json:"safe-mode"`
 }
 
 // NewConfig return an instance of configuration
@@ -94,12 +96,14 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Metrics.Addr, "metrics.addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.Metrics.Interval, "metrics.interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
+	fs.BoolVar(&cfg.OpenSaramaLog, "open-sarama-log", true, "save the logs from sarama (https://github.com/Shopify/sarama), a client of Kafka")
 
 	fs.Int64Var(&cfg.Up.InitialCommitTS, "up.initial-commit-ts", 0, "if arbiter doesn't have checkpoint, use initial commitTS to initial checkpoint")
 	fs.StringVar(&cfg.Up.Topic, "up.topic", "", "topic name of kafka")
 
 	fs.IntVar(&cfg.Down.WorkerCount, "down.worker-count", 16, "concurrency write to downstream")
 	fs.IntVar(&cfg.Down.BatchSize, "down.batch-size", 64, "batch size write to downstream")
+	fs.BoolVar(&cfg.Down.SafeMode, "safe-mode", false, "enable safe mode to make reentrant")
 
 	return cfg
 }
