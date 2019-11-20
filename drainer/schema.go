@@ -437,6 +437,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 	return
 }
 
+// IsDroppingColumn returns true if the table is in the middle of dropping a column
 func (s *Schema) IsDroppingColumn(id int64) bool {
 	return s.tblsDroppingCol[id]
 }
