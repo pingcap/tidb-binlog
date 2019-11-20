@@ -195,7 +195,9 @@ func (c *Collector) updateStatus(ctx context.Context) error {
 }
 
 func (c *Collector) updatePumpStatus(ctx context.Context) error {
-	nodes, err := c.reg.Nodes(ctx, "pumps")
+	cctx, cancel := context.WithTimeout(ctx, c.interval)
+	defer cancel()
+	nodes, err := c.reg.Nodes(cctx, "pumps")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -344,24 +346,29 @@ func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context
 		case <-ctx.Done():
 			return
 		case nr := <-c.notifyChan:
-			// stop merge and return directly
-			// temporal logic:
-			// * merge is paused -> new pump write binlog
-			// * fetch all sources in merge -> find smallest commit ts binlog -> check merge whether paused -> publish binlog
-			// so it's safe
-			// TODO: maybe we can remove merge.SourceChanged
-			c.merger.Stop()
+			/*
+				tell merger to prepare to add new source and return directly
+				temporal logic:
+				* collector: set source changing -> set source changed -> set !source changing
+				* merger: set !source changed -> find smallest binlog from all sources -> read !source changing -> read !source changed -> publish binlog
+
+				the only wrong temporal logic: set source changing -> find smallest binlog (without new source) -> read !source changing -> read !source changed -> publish smallest binlog
+				but it implies:
+				* set !source changed(merger) -> set source changed(collector) -> set !source changing(collector) -> read !source changing(merger) -> read !source changed(merger)
+				  or
+				  set source changed(collector) -> set !source changed(merger) -> find smallest binlog from all sources (merger) -> read !source changed (merger)
+				but they are impossible, so it's safe!!
+
+				TODO: maybe we can remove merge.SourceChanged
+			*/
+			c.merger.prepareChangingSource()
 			nr.wg.Done()
 			if err := fUpdate(ctx); err != nil {
 				log.Error("Failed to update collector status (notifying drainer progress)", zap.Error(err))
-			} else {
-				c.merger.Continue()
 			}
 		case <-time.After(c.interval):
 			if err := fUpdate(ctx); err != nil {
 				log.Error("Failed to update collector status", zap.Error(err))
-			} else {
-				c.merger.Continue()
 			}
 		case err := <-c.errCh:
 			log.Error("collector meets error", zap.Error(err))

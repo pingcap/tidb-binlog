@@ -437,35 +437,29 @@ func (s *keepUpdatingSuite) TestShouldUpdateWhenNotified(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	col := Collector{
-		merger:     &Merger{},
+		merger:     NewMerger(1, heapStrategy),
 		notifyChan: make(chan *notifyResult),
 		interval:   10 * time.Second,
 	}
 	go col.keepUpdatingStatus(ctx, func(ctx context.Context) error {
-		defer func() {
-			callCount++
-		}()
-		if callCount%2 == 0 {
-			return errors.New("testing")
-		}
+		c.Assert(col.merger.isPaused(), IsTrue)
+		col.merger.AddSource(MergeSource{ID: "test"})
+		callCount++
 		return nil
 	})
 	signal := make(chan struct{})
 	go func() {
 		// Start from 1 since the first call is outside the loop
 		for i := 1; i < 10; i++ {
-			err := col.Notify()
-			if i%2 == 0 {
-				c.Assert(err, ErrorMatches, "testing")
-			} else {
-				c.Assert(err, IsNil)
-			}
+			col.Notify()
 		}
 		close(signal)
 	}()
 	// Wait until all notifies finish or timeout
 	s.waitForSignal(c, signal, "Notifies don't finish in time")
 	c.Assert(callCount, Equals, 10)
+	time.Sleep(10 * time.Millisecond)
+	c.Assert(col.merger.isPaused(), IsFalse)
 }
 
 type updateStatusSuite struct{}

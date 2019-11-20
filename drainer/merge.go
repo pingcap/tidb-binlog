@@ -167,7 +167,8 @@ type Merger struct {
 
 	pause int32
 
-	sourceChanged int32
+	sourceChanged  int32
+	sourceChanging int32
 }
 
 // MergeSource contains a source info about binlog
@@ -307,7 +308,7 @@ func (m *Merger) run() {
 		}
 
 		// may add new source, or remove source, need choose a new min binlog
-		if m.isSourceChanged() || m.isPaused() {
+		if m.isPaused() || m.isSourceChanged() {
 			// push the min binlog back
 			m.Lock()
 			m.strategy.Push(minBinlog)
@@ -357,11 +358,16 @@ func (m *Merger) Continue() {
 }
 
 func (m *Merger) isPaused() bool {
-	return atomic.LoadInt32(&m.pause) == 1
+	return atomic.LoadInt32(&m.pause) == 1 || atomic.LoadInt32(&m.sourceChanging) == 1
+}
+
+func (m *Merger) prepareChangingSource() {
+	atomic.StoreInt32(&m.sourceChanging, 1)
 }
 
 func (m *Merger) setSourceChanged() {
 	atomic.StoreInt32(&m.sourceChanged, 1)
+	atomic.StoreInt32(&m.sourceChanging, 0)
 }
 
 func (m *Merger) resetSourceChanged() {
