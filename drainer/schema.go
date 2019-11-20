@@ -248,6 +248,8 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 
 		if job.SchemaState == model.StateDeleteOnly && job.Type == model.ActionDropColumn {
 			s.tblsDroppingCol[job.TableID] = true
+			log.Info("Got DeleteOnly Binlog", zap.Int64("table id", job.TableID))
+			continue
 		}
 		_, _, _, err := s.handleDDL(job)
 		if err != nil {
