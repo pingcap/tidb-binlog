@@ -286,6 +286,7 @@ func (c *Collector) syncBinlog(item *binlogItem) error {
 		if skipJob(job) {
 			return nil
 		}
+		job.SchemaState = model.SchemaState(binlog.DdlSchemaState)
 		item.SetJob(job)
 		ddlJobsCounter.Add(float64(1))
 	}
