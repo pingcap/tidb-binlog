@@ -95,6 +95,11 @@ func (g *BinlogGenrator) SchemaAndTableName(id int64) (schema string, table stri
 	return
 }
 
+// IsDroppingColumn implements TableInfoGetter interface
+func (g *BinlogGenrator) IsDroppingColumn(id int64) bool {
+	return false
+}
+
 // SetDDL set up a ddl binlog.
 func (g *BinlogGenrator) SetDDL() {
 	g.reset()
