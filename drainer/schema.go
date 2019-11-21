@@ -248,7 +248,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 
 		if job.SchemaState == model.StateDeleteOnly && job.Type == model.ActionDropColumn {
 			s.tblsDroppingCol[job.TableID] = true
-			log.Info("Got DeleteOnly Binlog", zap.Int64("table id", job.TableID))
+			log.Info("Got DeleteOnly Job", zap.Stringer("job", job))
 			continue
 		}
 		_, _, _, err := s.handleDDL(job)
@@ -256,6 +256,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
 		if (job.IsFinished() || job.IsSynced()) && job.Type == model.ActionDropColumn {
+			log.Info("Finished dropping column", zap.Stringer("job", job))
 			delete(s.tblsDroppingCol, job.TableID)
 		}
 	}
