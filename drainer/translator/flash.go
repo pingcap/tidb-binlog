@@ -42,7 +42,6 @@ func GenFlashSQLs(infoGetter TableInfoGetter, pv *tipb.PrewriteValue, commitTS i
 		if !ok {
 			return nil, nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 		}
-		isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
 
 		var schema string
 		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
@@ -69,7 +68,7 @@ func GenFlashSQLs(infoGetter TableInfoGetter, pv *tipb.PrewriteValue, commitTS i
 					return nil, nil, errors.Annotate(err, "gen insert sql fail")
 				}
 			case tipb.MutationType_Update:
-				sql, args, err = GenFlashUpdateSQL(schema, info, row, commitTS, isTblDroppingCol)
+				sql, args, err = GenFlashUpdateSQL(schema, info, row, commitTS)
 				if err != nil {
 					return nil, nil, errors.Annotate(err, "gen update sql fail")
 				}
@@ -141,7 +140,7 @@ func GenFlashInsertSQL(schema string, table *model.TableInfo, row []byte, commit
 }
 
 // GenFlashUpdateSQL generate the SQL need to execute syncing this update row to Flash
-func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commitTS int64, isTblDroppingCol bool) (sql string, args []interface{}, err error) {
+func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commitTS int64) (sql string, args []interface{}, err error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
@@ -149,7 +148,7 @@ func GenFlashUpdateSQL(schema string, table *model.TableInfo, row []byte, commit
 	}
 	pkID := pkColumn.ID
 
-	updtDecoder := newUpdateDecoder(table, isTblDroppingCol)
+	updtDecoder := newUpdateDecoder(table)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 

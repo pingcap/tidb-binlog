@@ -63,7 +63,6 @@ func TiBinlogToSlaveBinlog(
 		if !ok {
 			return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 		}
-		isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
 
 		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 		if !ok {
@@ -72,7 +71,7 @@ func TiBinlogToSlaveBinlog(
 
 		iter := newSequenceIterator(&mut)
 		for {
-			table, err := nextRow(schema, info, isTblDroppingCol, iter)
+			table, err := nextRow(schema, info, iter)
 			if err != nil {
 				if errors.Cause(err) == io.EOF {
 					break
@@ -148,8 +147,8 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	return
 }
 
-func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	updtDecoder := newUpdateDecoder(tableInfo, isTblDroppingCol)
+func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
+	updtDecoder := newUpdateDecoder(tableInfo)
 	oldDatums, newDatums, err := updtDecoder.decode(raw, time.Local)
 	if err != nil {
 		return
@@ -246,7 +245,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 	return
 }
 
-func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppingCol bool, row []byte) (*obinlog.TableMutation, error) {
+func createTableMutation(tp pb.MutationType, info *model.TableInfo, row []byte) (*obinlog.TableMutation, error) {
 	var err error
 	mut := new(obinlog.TableMutation)
 	switch tp {
@@ -258,7 +257,7 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 		}
 	case pb.MutationType_Update:
 		mut.Type = obinlog.MutationType_Update.Enum()
-		mut.Row, mut.ChangeRow, err = updateRowToRow(info, row, isTblDroppingCol)
+		mut.Row, mut.ChangeRow, err = updateRowToRow(info, row)
 		if err != nil {
 			return nil, err
 		}
@@ -274,13 +273,13 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 	return mut, nil
 }
 
-func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *sequenceIterator) (*obinlog.Table, error) {
+func nextRow(schema string, info *model.TableInfo, iter *sequenceIterator) (*obinlog.Table, error) {
 	mutType, row, err := iter.next()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	tableMutation, err := createTableMutation(mutType, info, isTblDroppingCol, row)
+	tableMutation, err := createTableMutation(mutType, info, row)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

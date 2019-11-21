@@ -283,12 +283,8 @@ func (c *Collector) syncBinlog(item *binlogItem) error {
 
 		log.Info("get ddl job", zap.Stringer("job", job))
 
-		isDelOnlyEvent := model.SchemaState(binlog.DdlSchemaState) == model.StateDeleteOnly
-		if skipJob(job) && !isDelOnlyEvent {
+		if skipJob(job) {
 			return nil
-		}
-		if isDelOnlyEvent {
-			job.SchemaState = model.StateDeleteOnly
 		}
 		item.SetJob(job)
 		ddlJobsCounter.Add(float64(1))
