@@ -347,19 +347,48 @@ func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context
 			return
 		case nr := <-c.notifyChan:
 			/*
-				tell merger to prepare to add new source and return directly
-				temporal logic:
-				* collector: set source changing -> set source changed -> set !source changing
-				* merger: set !source changed -> find smallest binlog from all sources -> read !source changing -> read !source changed -> publish binlog
+				tell merger source changing and return directly
 
-				the only wrong temporal logic: set source changing -> find smallest binlog (without new source) -> read !source changing -> read !source changed -> publish smallest binlog
-				but it implies:
-				* set !source changed(merger) -> set source changed(collector) -> set !source changing(collector) -> read !source changing(merger) -> read !source changed(merger)
-				  or
-				  set source changed(collector) -> set !source changed(merger) -> find smallest binlog from all sources (merger) -> read !source changed (merger)
-				but they are impossible, so it's safe!!
+				behavior of functions:
+				* merger.prepareChangingSource: set source changing
+				* merger.AddSource: add source -> merger.SetSourceChanged
+				* merger.RemoveSource； remove source -> merger.SetSourceChanged
+				* merger.SetSourceChanged: set source changed -> set !source changing
 
-				TODO: maybe we can remove merge.SourceChanged
+				temporal logic of binlog:
+				pump:
+				* set source changing(collctor) -> new pump writes binlog
+
+				collector:
+				* set source changing -> add source -> set source changed -> set !source changing
+
+				merger:
+				* set !source changed -> find binlog from all sources -> read !source changing -> read !source changed -> publish binlog
+
+				the only wrong temporal logics meets two conditions at the same time
+				* find binlog(merger) -> add source(collector) -> read !source changing(merger) -> read !source changed(merger) -> read !source changed(merger) -> publish binlog(merger)
+				* new pump writes binlog -> find binlog(merger)
+
+				Let's analyze the possible situations:
+
+				if set source changed(collector) -> read !source changed(merger), it means
+					* set source changed(collector) -> set !source changed(merger)
+					* add source(collector) -> set source changed(collector) &&
+					* set !source changed(merger) -> find binlog from all sources(merger)
+				=> add source(client) -> find binlog(merger), it's safe!!!
+
+				and
+
+				if read !source changed(merger) -> set source changed(collector), there are two conditions:
+				1. if read !source changing(merger) -> set source changing(collector), it means
+						 * find binlog(merger) -> read !source changing(merger) &&
+						 * set source changing(collector) -> write new binlog
+					=> find binlog(merger) -> write new binlog, it's safe!!!
+
+				2. if set source changing(collector) -> read !source changing(merger), it means
+						* set source changed(collector) -> set source changing(collector) -> read !source changing(merger) &&
+						* read !source changing(merger) -> read !source changed(merger)
+					=> set source changed(collector) -> read !source changed(merger), Contradictory with assumption
 			*/
 			c.merger.prepareChangingSource()
 			nr.wg.Done()
