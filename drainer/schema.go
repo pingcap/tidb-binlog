@@ -255,7 +255,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
-		if (job.IsFinished() || job.IsSynced()) && job.Type == model.ActionDropColumn {
+		if job.SchemaState == model.StateNone && job.Type == model.ActionDropColumn {
 			log.Info("Finished dropping column", zap.Stringer("job", job))
 			delete(s.tblsDroppingCol, job.TableID)
 		}
