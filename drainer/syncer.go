@@ -98,11 +98,6 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "flash":
-		dsyncer, err = dsync.NewFlashSyncer(cfg.To, schema)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to create flash dsyncer")
-		}
 	case "mysql", "tidb":
 		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType)
 		if err != nil {
