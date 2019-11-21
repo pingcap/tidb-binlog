@@ -255,10 +255,6 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
-		if job.SchemaState == model.StateNone && job.Type == model.ActionDropColumn {
-			log.Info("Finished dropping column", zap.Stringer("job", job))
-			delete(s.tblsDroppingCol, job.TableID)
-		}
 	}
 
 	s.jobs = s.jobs[i:]
@@ -435,6 +431,11 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = tbInfo.Name.O
+
+		if job.Type == model.ActionDropColumn {
+			log.Info("Finished dropping column", zap.Stringer("job", job))
+			delete(s.tblsDroppingCol, job.TableID)
+		}
 	}
 
 	return
