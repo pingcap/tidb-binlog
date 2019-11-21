@@ -383,6 +383,11 @@ ForLoop:
 				break ForLoop
 			}
 
+			if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
+				log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
+				continue
+			}
+
 			sql := b.job.Query
 			var schema, table string
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
