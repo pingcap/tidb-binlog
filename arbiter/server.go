@@ -98,9 +98,11 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	// set reader to read binlog from kafka
 	readerCfg := &reader.Config{
-		KafkaAddr: strings.Split(up.KafkaAddrs, ","),
-		CommitTS:  srv.finishTS,
-		Topic:     up.Topic,
+		KafkaAddr:         strings.Split(up.KafkaAddrs, ","),
+		CommitTS:          srv.finishTS,
+		Topic:             up.Topic,
+		SaramaBufferSize:  up.SaramaBufferSize,
+		MessageBufferSize: up.MessageBufferSize,
 	}
 
 	log.Info("use kafka binlog reader", zap.Reflect("cfg", readerCfg))

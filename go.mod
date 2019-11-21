@@ -52,3 +52,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/pingcap/tidb-tools => github.com/july2993/tidb-tools v3.0.0-rc.2.0.20191121075825-6d404239f52d+incompatible

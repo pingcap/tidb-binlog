@@ -74,6 +74,9 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	}
 
 	config.Producer.Flush.MaxMessages = cfg.KafkaMaxMessages
+	if cfg.SaramaBufferSize > 0 {
+		config.ChannelBufferSize = cfg.SaramaBufferSize
+	}
 
 	// maintain minimal set that has been necessary so far
 	// this also avoid take too much time in NewAsyncProducer if kafka is down
