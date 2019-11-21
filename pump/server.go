@@ -385,7 +385,10 @@ func (s *Server) Start() error {
 	// sets a timeout for the read of matchers
 	m.SetReadTimeout(time.Second * 10)
 
-	grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
+	grpcL := m.MatchWithWriters(
+		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),
+		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc+proto"),
+	)
 
 	httpL := m.Match(cmux.HTTP1Fast())
 	go s.gs.Serve(grpcL)
