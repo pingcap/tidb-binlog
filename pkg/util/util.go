@@ -143,6 +143,15 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	return colTypeMap
 }
 
+// ToColumnMap return a map index by column id
+func ToColumnMap(columns []*model.ColumnInfo) map[int64]*model.ColumnInfo {
+	colMap := make(map[int64]*model.ColumnInfo, len(columns))
+	for _, col := range columns {
+		colMap[col.ID] = col
+	}
+	return colMap
+}
+
 // RetryOnError defines a action with retry when fn returns error
 func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
 	var err error
@@ -278,5 +287,24 @@ func AdjustInt(v *int, defValue int) {
 func AdjustDuration(v *time.Duration, defValue time.Duration) {
 	if *v == 0 {
 		*v = defValue
+	}
+}
+
+// WaitUntilTimeout creates a goroutine to run fn, and then gives up waiting for the goroutine to exit When it timeouts
+func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
+	fName := zap.String("name", name)
+	exited := make(chan struct{})
+	go func() {
+		defer func() {
+			log.Info("goroutine exit by itself (with GoAndAbortGoroutine help)", fName)
+			close(exited)
+		}()
+		fn()
+	}()
+
+	select {
+	case <-time.After(timeout):
+		log.Info("abort goroutine (with GoAndAbortGoroutine help)", fName)
+	case <-exited:
 	}
 }

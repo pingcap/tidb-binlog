@@ -20,8 +20,8 @@ require (
 	github.com/pingcap/parser v0.0.0-20191112053614-3b43b46331d5
 	github.com/pingcap/pd v1.1.0-beta.0.20191119124645-4c0c1027f412
 	github.com/pingcap/tidb v1.1.0-beta.0.20191119111543-77faf6466821
-	github.com/pingcap/tidb-tools v3.0.6-0.20191119150227-ff0a3c6e5763+incompatible
-	github.com/pingcap/tipb v0.0.0-20191112054303-0b0ad0d4a92e
+	github.com/pingcap/tidb-tools v3.0.6-0.20191120102444-63de173cc344+incompatible
+	github.com/pingcap/tipb v0.0.0-20191120020146-6161b015e21e
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
@@ -33,7 +33,6 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
-	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20191023171146-3cf2f69b5738
 	go.uber.org/zap v1.12.0
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b

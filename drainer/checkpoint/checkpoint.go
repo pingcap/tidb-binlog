@@ -51,8 +51,6 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 		cp, err = newMysql(cfg)
 	case "file":
 		cp, err = NewFile(cfg)
-	case "flash":
-		cp, err = newFlash(cfg)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", cfg.CheckpointType)
 	}
