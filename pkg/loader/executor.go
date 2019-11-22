@@ -82,8 +82,10 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
 	res, err = tx.exec(query, args...)
 	if err != nil {
-		log.Error("exec fail", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
-		tx.Rollback()
+		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Auto rollback", zap.Error(rbErr))
+		}
 		err = errors.Trace(err)
 	}
 	return

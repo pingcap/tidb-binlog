@@ -142,7 +142,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kvstore.Register("tikv", tikv.Driver{})
+	err = kvstore.Register("tikv", tikv.Driver{})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := newKVStoreFn(tiPath)
 	if err != nil {
@@ -377,7 +380,12 @@ func (s *Server) Start() error {
 	binlog.RegisterPumpServer(s.gs, s)
 
 	if s.unixAddr != "" {
-		go s.gs.Serve(unixLis)
+		go func() {
+			err := s.gs.Serve(unixLis)
+			if err != nil {
+				log.Error("grpc server stopped", zap.Error(err))
+			}
+		}()
 	}
 
 	// grpc and http will use the same tcp connection
@@ -404,7 +412,12 @@ func (s *Server) Start() error {
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", promhttp.Handler())
 
-	go http.Serve(httpL, nil)
+	go func() {
+		err := http.Serve(httpL, nil)
+		if err != nil {
+			log.Info("HTTP server stopped", zap.Error(err))
+		}
+	}()
 
 	previousState := s.node.NodeStatus().State
 	// register this node
@@ -846,7 +859,10 @@ func (s *Server) commitStatus() {
 	case node.Pausing, node.Online:
 		state = node.Paused
 	case node.Closing:
-		s.waitSafeToOffline(context.Background())
+		err := s.waitSafeToOffline(context.Background())
+		if err != nil {
+			log.Error("Waiting to offline", zap.Error(err))
+		}
 		log.Info("safe to offline now")
 		state = node.Offline
 	default:

@@ -660,7 +660,9 @@ func (a *Append) GC(ts int64) {
 	}
 
 	atomic.StoreInt64(&a.gcTS, ts)
-	a.saveGCTSToDB(ts)
+	if err := a.saveGCTSToDB(ts); err != nil {
+		log.Error("saveGCTSToDB", zap.Error(err))
+	}
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 
 	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
