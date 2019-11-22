@@ -160,6 +160,7 @@ func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
 	case <-exited:
 	}
 }
+
 // StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
 func StrictDecodeFile(path, component string, cfg interface{}) error {
