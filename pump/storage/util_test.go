@@ -5,6 +5,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/check"
 )
 
@@ -38,4 +39,23 @@ func (e *EncodeTSKeySuite) TestEncodeTSKey(c *check.C) {
 	})
 
 	c.Assert(sorted, check.IsTrue)
+}
+
+type UtilSuite struct{}
+
+var _ = check.Suite(&UtilSuite{})
+
+func (u *UtilSuite) TestHumanizeBytes(c *check.C) {
+	var s = struct {
+		DiskSize HumanizeBytes `toml:"disk_size" json:"disk_size"`
+	}{}
+
+	tomlData := `
+disk_size = "42 MB"
+
+	`
+
+	_, err := toml.Decode(tomlData, &s)
+	c.Assert(err, check.IsNil)
+	c.Assert(s.DiskSize.Uint64(), check.Equals, uint64(42*1000*1000))
 }

@@ -65,7 +65,7 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	syncer.cfg = cfg
 	syncer.cp = cp
 	syncer.input = make(chan *binlogItem, maxBinlogItemCount)
-	syncer.jobCh = newJobChans(cfg.WorkerCount)
+	syncer.jobCh = newJobChans(cfg.WorkerCount, 10*cfg.TxnBatch)
 	syncer.ctx, syncer.cancel = context.WithCancel(ctx)
 	syncer.positions = make(map[string]int64)
 	syncer.causality = loader.NewCausality()
@@ -75,11 +75,10 @@ func NewSyncer(ctx context.Context, cp checkpoint.CheckPoint, cfg *SyncerConfig)
 	return syncer, nil
 }
 
-func newJobChans(count int) []chan *job {
+func newJobChans(count int, buffSize int) []chan *job {
 	jobCh := make([]chan *job, 0, count)
-	size := maxBinlogItemCount / count
 	for i := 0; i < count; i++ {
-		jobCh = append(jobCh, make(chan *job, size))
+		jobCh = append(jobCh, make(chan *job, buffSize))
 	}
 
 	return jobCh
@@ -452,6 +451,11 @@ func (s *Syncer) run(jobs []*model.Job) error {
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
+		if isIgnoreTxnCommitTS(s.cfg.IgnoreTxnCommitTS, commitTS) {
+			log.Warnf("skip txn, binlog: %s", b.binlog.String())
+			continue
+		}
+
 		if startTS == commitTS {
 			// generate fake binlog job
 			s.addJob(newFakeJob(commitTS, b.nodeID))
@@ -513,11 +517,11 @@ func (s *Syncer) run(jobs []*model.Job) error {
 					return errors.Trace(err)
 				}
 
-				log.Infof("[ddl][start]%s[commit ts]%v", sql, commitTS)
+				log.Infof("[ddl][start]%s[commit ts]%v, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed", sql, commitTS)
 				var args []interface{}
-				// for kafka, we want to know the relate schema and table, get it while args now
+				// for kafka, mysql and tidb, we want to know the relate schema and table, get it while args now
 				// in executor
-				if s.cfg.DestDBType == "kafka" {
+				if s.cfg.DestDBType == "kafka" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "tidb" {
 					args = []interface{}{schema, table}
 				}
 				job := newDDLJob(sql, args, "", commitTS, b.nodeID)
@@ -628,6 +632,15 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 	s.addJob(job)
 
 	return nil
+}
+
+func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
+	for _, ignoreTS := range ignoreTxnCommitTS {
+		if ignoreTS == ts {
+			return true
+		}
+	}
+	return false
 }
 
 // Add adds binlogItem to the syncer's input channel

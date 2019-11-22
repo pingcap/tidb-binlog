@@ -1,17 +1,18 @@
 package reparo
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/ngaut/log"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -23,12 +24,14 @@ const (
 
 // Config is the main configuration for the retore tool.
 type Config struct {
-	*flag.FlagSet
+	*flag.FlagSet `toml:"-" json:"-"`
 	Dir           string `toml:"data-dir" json:"data-dir"`
 	StartDatetime string `toml:"start-datetime" json:"start-datetime"`
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
 	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
 	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
+	TxnBatch      int    `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount   int    `toml:"worker-count" json:"worker-count"`
 
 	DestType string           `toml:"dest-type" json:"dest-type"`
 	DestDB   *syncer.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -42,6 +45,8 @@ type Config struct {
 	LogFile   string `toml:"log-file" json:"log-file"`
 	LogRotate string `toml:"log-rotate" json:"log-rotate"`
 	LogLevel  string `toml:"log-level" json:"log-level"`
+
+	SafeMode bool `toml:"safe-mode" json:"safe-mode"`
 
 	configFile   string
 	printVersion bool
@@ -61,13 +66,27 @@ func NewConfig() *Config {
 	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "recovery end in stop-datetime, empty string means never end.")
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
+	fs.IntVar(&c.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
+	fs.IntVar(&c.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
 	fs.StringVar(&c.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&c.configFile, "config", "", "[REQUIRED] path to configuration file")
 	fs.BoolVar(&c.printVersion, "V", false, "print reparo version info")
+	fs.BoolVar(&c.SafeMode, "safe-mode", false, "enable safe mode to support reentrant")
 	return c
+}
+
+func (c *Config) String() string {
+	// reparo/config.go:94:31: SA1026: trying to marshal chan or func value, field *github.com/pingcap/tidb-binlog/reparo.Config.FlagSet.Usage (staticcheck)
+	// but we omit the field `*flag.FlagSet`, it should be ok.
+	cfgBytes, err := json.Marshal(c) //nolint:staticcheck
+	if err != nil {
+		log.Errorf("marshal config failed %v", err)
+	}
+
+	return string(cfgBytes)
 }
 
 // Parse parses keys/values from command line flags and toml configuration file.
@@ -141,8 +160,7 @@ func (c *Config) adjustDoDBAndTable() {
 }
 
 func (c *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, c)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "reparo", c)
 }
 
 func (c *Config) validate() error {

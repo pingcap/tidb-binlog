@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -50,12 +49,13 @@ type Config struct {
 	Socket            string `toml:"socket" json:"socket"`
 	EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
 	EtcdDialTimeout   time.Duration
-	DataDir           string          `toml:"data-dir" json:"data-dir"`
-	HeartbeatInterval int             `toml:"heartbeat-interval" json:"heartbeat-interval"`
-	GC                int             `toml:"gc" json:"gc"`
-	LogFile           string          `toml:"log-file" json:"log-file"`
-	LogRotate         string          `toml:"log-rotate" json:"log-rotate"`
-	Security          security.Config `toml:"security" json:"security"`
+	DataDir           string `toml:"data-dir" json:"data-dir"`
+	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	// pump only stores binlog events whose ts >= current time - GC(day)
+	GC        int             `toml:"gc" json:"gc"`
+	LogFile   string          `toml:"log-file" json:"log-file"`
+	LogRotate string          `toml:"log-rotate" json:"log-rotate"`
+	Security  security.Config `toml:"security" json:"security"`
 
 	GenFakeBinlogInterval int `toml:"gen-binlog-interval" json:"gen-binlog-interval"`
 
@@ -80,7 +80,7 @@ func NewConfig() *Config {
 		fs.PrintDefaults()
 	}
 
-	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of pump node; if not specify, we will generate one from hostname and the listening port")
+	fs.StringVar(&cfg.NodeID, "node-id", "", "the ID of pump node; if not specified, we will generate one from hostname and the listening port")
 	fs.StringVar(&cfg.ListenAddr, "addr", util.DefaultListenAddr(8250), "addr(i.e. 'host:port') to listen on for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", "addr(i.e. 'host:port') to advertise to the public")
 	fs.StringVar(&cfg.Socket, "socket", "", "unix socket addr to listen on for client traffic")
@@ -160,8 +160,7 @@ func (cfg *Config) Parse(arguments []string) error {
 }
 
 func (cfg *Config) configFromFile(path string) error {
-	_, err := toml.DecodeFile(path, cfg)
-	return errors.Trace(err)
+	return util.StrictDecodeFile(path, "pump", cfg)
 }
 
 func adjustString(v *string, defValue string) {

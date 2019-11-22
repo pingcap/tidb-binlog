@@ -154,7 +154,7 @@ func testGenDDLSQL(c *C, s SQLTranslator) {
 
 	sql, err = s.GenDDLSQL("drop table t", "t", 0)
 	c.Assert(err, IsNil)
-	c.Assert(sql, Equals, "use `t`; drop table t;")
+	c.Assert(sql, Equals, "drop table t;")
 }
 
 func testGenInsertBinlog(c *C, t *model.TableInfo, r []types.Datum) []byte {

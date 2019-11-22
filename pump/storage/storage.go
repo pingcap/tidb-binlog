@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package storage
 
 import (
@@ -7,6 +20,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,14 +33,16 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"golang.org/x/sys/unix"
 )
 
 const (
-	maxTxnTimeoutSecond int64 = 600
-	chanSize                  = 1 << 20
+	maxTxnTimeoutSecond              int64 = 600
+	chanSize                               = 1 << 20
+	defaultStopWriteAtAvailableSpace       = 10 * (1 << 30)
 )
 
 var (
@@ -46,7 +62,12 @@ type Storage interface {
 	WriteBinlog(binlog *pb.Binlog) error
 
 	// delete <= ts
-	GCTS(ts int64)
+	GC(ts int64)
+
+	GetGCTS() int64
+
+	// AllMatched return if all the P-binlog have the matching C-binlog
+	AllMatched() bool
 
 	MaxCommitTS() int64
 
@@ -63,8 +84,9 @@ var _ Storage = &Append{}
 
 // Append implement the Storage interface
 type Append struct {
-	dir  string
-	vlog *valueLog
+	dir         string
+	vlog        *valueLog
+	storageSize storageSize
 
 	metadata       *leveldb.DB
 	sorter         *sorter
@@ -210,6 +232,11 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 	}
 
 	append.wg.Add(1)
+	err = append.updateSize()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	go append.updateStatus()
 	return
 }
@@ -291,6 +318,20 @@ func (a *Append) handleSortItem(items <-chan sortItem) (quit chan struct{}) {
 	return quit
 }
 
+func (a *Append) updateSize() error {
+	size, err := getStorageSize(a.dir)
+	if err != nil {
+		return errors.Annotatef(err, "update storage size failed, dir: %s", a.dir)
+	}
+
+	storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
+	storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+
+	atomic.StoreUint64(&a.storageSize.available, size.available)
+	atomic.StoreUint64(&a.storageSize.capacity, size.capacity)
+	return nil
+}
+
 func (a *Append) updateStatus() {
 	defer a.wg.Done()
 
@@ -320,12 +361,9 @@ func (a *Append) updateStatus() {
 				atomic.StoreInt64(&a.latestTS, ts)
 			}
 		case <-updateSize:
-			size, err := getStorageSize(a.dir)
+			err := a.updateSize()
 			if err != nil {
-				log.Error("update sotrage size err: ", err)
-			} else {
-				storageSizeGauge.WithLabelValues("capacity").Set(float64(size.capacity))
-				storageSizeGauge.WithLabelValues("available").Set(float64(size.available))
+				log.Errorf("update size failed: %+v", err)
 			}
 		case <-logStatsTicker.C:
 			var stats leveldb.DBStats
@@ -340,6 +378,10 @@ func (a *Append) updateStatus() {
 			}
 		}
 	}
+}
+
+func (a *Append) writableOfSpace() bool {
+	return atomic.LoadUint64(&a.storageSize.available) > a.options.StopWriteAtAvailableSpace
 }
 
 func (a *Append) resolve(startTS int64) bool {
@@ -363,52 +405,49 @@ func (a *Append) resolve(startTS int64) bool {
 
 	log.Warnf("unknown commit stats start ts: %d", startTS)
 
-	if pbinlog.GetDdlJobId() == 0 {
-		tikvQueryCount.Add(1.0)
-		primaryKey := pbinlog.GetPrewriteKey()
-		status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
-		if err != nil {
-			log.Error(err)
+	tikvQueryCount.Add(1.0)
+	primaryKey := pbinlog.GetPrewriteKey()
+	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), primaryKey)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	// Write a commit binlog myself if the status is committed,
+	// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
+	if status.IsCommitted() {
+		// write the commit binlog myself
+		cbinlog := new(pb.Binlog)
+		cbinlog.Tp = pb.BinlogType_Commit
+		cbinlog.StartTs = pbinlog.StartTs
+		cbinlog.CommitTs = int64(status.CommitTS())
+
+		req := a.writeBinlog(cbinlog)
+		if req.err != nil {
+			log.Errorf("write missing committed binlog failed: %+v, start ts: %d commit ts: %d isDDL: %v",
+				req.err, startTS, status.CommitTS(), pbinlog.GetDdlJobId() > 0)
 			return false
 		}
 
-		// Write a commit binlog myself if the status is committed,
-		// otherwise we can just ignore it, we will not get the commit binlog while iterator the kv by ts
-		if status.IsCommitted() {
-			// write the commit binlog myself
-			cbinlog := new(pb.Binlog)
-			cbinlog.Tp = pb.BinlogType_Commit
-			cbinlog.StartTs = pbinlog.StartTs
-			cbinlog.CommitTs = int64(status.CommitTS())
-
-			req := a.writeBinlog(cbinlog)
-			if req.err != nil {
-				log.Error(req.err)
-				return false
-			}
-
-			// when writeBinlog return success, the pointer will be write to kv async,
-			// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
-			// we update maxCommitTS
-			// write the ts -> pointer to KV here to make sure it.
-			pointer, err := req.valuePointer.MarshalBinary()
-			if err != nil {
-				panic(err)
-			}
-
-			err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
-			if err != nil {
-				log.Error(err)
-				return false
-			}
+		// when writeBinlog return success, the pointer will be write to kv async,
+		// but we need to make sure it has been write to kv when we return true in the func, then we can get this commit binlog when
+		// we update maxCommitTS
+		// write the ts -> pointer to KV here to make sure it.
+		pointer, err := req.valuePointer.MarshalBinary()
+		if err != nil {
+			panic(err)
 		}
 
-		log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d", startTS, status.CommitTS())
-		return true
+		err = a.metadata.Put(encodeTSKey(req.ts()), pointer, nil)
+		if err != nil {
+			log.Errorf("put missing committed binlog into metadata failed: %+v, start ts: %d commit ts: %d isDDL: %v",
+				err, startTS, status.CommitTS(), pbinlog.GetDdlJobId() > 0)
+			return false
+		}
 	}
 
-	log.Errorf("some prewrite DDL items remain single after waiting for a long time, startTs: %d", startTS)
-	return false
+	log.Infof("known txn is committed from tikv, start ts: %d, commit ts: %d, isDDL: %v", startTS, status.CommitTS(), pbinlog.GetDdlJobId() > 0)
+	return true
 }
 
 // GetBinlog gets binlog by ts
@@ -509,8 +548,13 @@ func (a *Append) Close() error {
 	return err
 }
 
-// GCTS implement Storage.GCTS
-func (a *Append) GCTS(ts int64) {
+// GetGCTS implement Storage.GetGCTS
+func (a *Append) GetGCTS() int64 {
+	return atomic.LoadInt64(&a.gcTS)
+}
+
+// GC implement Storage.GC
+func (a *Append) GC(ts int64) {
 	lastTS := atomic.LoadInt64(&a.gcTS)
 	if ts <= lastTS {
 		log.Infof("ignore gc ts: %d, last gc ts: %d", ts, lastTS)
@@ -531,7 +575,6 @@ func (a *Append) GCTS(ts int64) {
 		// so we forward a little bit to make sure we can get the according P binlog
 		a.doGCTS(ts - int64(oracle.EncodeTSO(maxTxnTimeoutSecond*1000)))
 	}()
-
 }
 
 func (a *Append) doGCTS(ts int64) {
@@ -543,40 +586,68 @@ func (a *Append) doGCTS(ts int64) {
 		l0Trigger = a.options.KVConfig.CompactionL0Trigger
 	}
 
-	for {
-		var stats leveldb.DBStats
-		err := a.metadata.Stats(&stats)
-		if err != nil {
-			log.Error(err)
-			time.Sleep(5 * time.Second)
-			continue
+	deleteNum := 0
+
+	irange := &util.Range{
+		Start: encodeTSKey(0),
+		Limit: encodeTSKey(ts + 1),
+	}
+	var iter iterator.Iterator
+	defer func() {
+		if iter != nil {
+			iter.Release()
+			iter = nil
 		}
-		if len(stats.LevelTablesCounts) > 0 && stats.LevelTablesCounts[0] >= l0Trigger {
-			log.Info("wait some time to gc cause too many L0 file", stats.LevelTablesCounts[0])
-			time.Sleep(5 * time.Second)
-			continue
+	}()
+
+	for {
+		nStr, err := a.metadata.GetProperty("leveldb.num-files-at-level0")
+		if err != nil {
+			log.Errorf("get `leveldb.num-files-at-level0` property failed: %+v", err)
+			return
 		}
 
-		irange := &util.Range{
-			Start: encodeTSKey(0),
-			Limit: encodeTSKey(ts + 1),
+		l0Num, err := strconv.Atoi(nStr)
+		if err != nil {
+			log.Errorf("parse `leveldb.num-files-at-level0` result to int failed, str: %s err: %+v", nStr, err)
+			return
 		}
-		iter := a.metadata.NewIterator(irange, nil)
+
+		if l0Num >= l0Trigger {
+			log.Infof("wait some time to gc cause too many L0 file, files: %d", l0Num)
+			if iter != nil {
+				iter.Release()
+				iter = nil
+			}
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
 		deleteBatch := 0
-		for iter.Next() && deleteBatch < 100 {
+		var lastKey []byte
+
+		if iter == nil {
+			log.Infof("New LevelDB iterator created for GC, start: %d, limit: %d",
+				decodeTSKey(irange.Start),
+				decodeTSKey(irange.Limit))
+			iter = a.metadata.NewIterator(irange, nil)
+		}
+
+		for deleteBatch < 100 && iter.Next() {
 			batch.Delete(iter.Key())
+			deleteNum++
+			lastKey = iter.Key()
+
 			if batch.Len() == 1024 {
 				err := a.metadata.Write(batch, nil)
 				if err != nil {
 					log.Error(err)
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 				deleteBatch++
 			}
 		}
-
-		iter.Release()
 
 		if deleteBatch < 100 {
 			if batch.Len() > 0 {
@@ -584,14 +655,24 @@ func (a *Append) doGCTS(ts int64) {
 				if err != nil {
 					log.Error(err)
 				}
+				deletedKv.Add(float64(batch.Len()))
 				batch.Reset()
 			}
 			break
 		}
+
+		if len(lastKey) > 0 {
+			irange.Start = lastKey
+			a.vlog.gcTS(decodeTSKey(lastKey))
+			doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(decodeTSKey(lastKey)))))
+		}
+
+		log.Infof("has delete %d number", deleteNum)
 	}
 
 	a.vlog.gcTS(ts)
-	log.Info("finish gc ts: ", ts)
+	doneGcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
+	log.Infof("finish gc, ts: %d delete num: %d", ts, deleteNum)
 }
 
 // MaxCommitTS implement Storage.MaxCommitTS
@@ -599,8 +680,25 @@ func (a *Append) MaxCommitTS() int64 {
 	return atomic.LoadInt64(&a.maxCommitTS)
 }
 
+func isFakeBinlog(binlog *pb.Binlog) bool {
+	return binlog.StartTs > 0 && binlog.StartTs == binlog.CommitTs
+}
+
 // WriteBinlog implement Storage.WriteBinlog
 func (a *Append) WriteBinlog(binlog *pb.Binlog) error {
+	if !a.writableOfSpace() {
+		// still accept fake binlog, so will not block drainer if fake binlog writes success
+		if !isFakeBinlog(binlog) {
+			return ErrNoAvailableSpace
+		}
+	}
+
+	// pump client will write some empty Payload to detect whether pump is working, should avoid this
+	// Unmarshal(nil) will success...
+	if binlog.StartTs == 0 && binlog.CommitTs == 0 {
+		return nil
+	}
+
 	return errors.Trace(a.writeBinlog(binlog).err)
 }
 
@@ -913,14 +1011,28 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		Limit: encodeTSKey(math.MaxInt64),
 	}
 
+	pLog := pkgutil.NewLog()
+	labelWrongRange := "wrong range"
+	pLog.Add(labelWrongRange, 10*time.Second)
+
 	go func() {
 		defer close(values)
 
 		for {
 			startTS := last + 1
 
+			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
+			if startTS > limitTS {
+				// if range's start is greater than limit, may cause panic, see https://github.com/syndtr/goleveldb/issues/224 for detail.
+				pLog.Print(labelWrongRange, func() {
+					log.Warnf("last ts %d is greater than pump's max commit ts %d", startTS-1, limitTS-1)
+				})
+				time.Sleep(time.Second)
+				continue
+			}
+
 			irange.Start = encodeTSKey(startTS)
-			irange.Limit = encodeTSKey(atomic.LoadInt64(&a.maxCommitTS) + 1)
+			irange.Limit = encodeTSKey(limitTS)
 			iter := a.metadata.NewIterator(irange, nil)
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
@@ -1009,8 +1121,8 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 }
 
 type storageSize struct {
-	capacity  int
-	available int
+	capacity  uint64
+	available uint64
 }
 
 func getStorageSize(dir string) (size storageSize, err error) {
@@ -1037,16 +1149,26 @@ func getStorageSize(dir string) (size storageSize, err error) {
 	}
 
 	// Available blocks * size per block = available space in bytes
-	size.available = int(stat.Bavail) * int(bSize)
-	size.capacity = int(stat.Blocks) * int(bSize)
+	size.available = stat.Bavail * bSize
+	size.capacity = stat.Blocks * bSize
 
 	return
 }
 
 // Config holds the configuration of storage
 type Config struct {
-	SyncLog *bool     `toml:"sync-log" json:"sync-log"`
-	KV      *KVConfig `toml:"kv" json:"kv"`
+	SyncLog                   *bool          `toml:"sync-log" json:"sync-log"`
+	KV                        *KVConfig      `toml:"kv" json:"kv"`
+	StopWriteAtAvailableSpace *HumanizeBytes `toml:"stop-write-at-available-space" json:"stop-write-at-available-space"`
+}
+
+// GetStopWriteAtAvailableSpace return stop write available space
+func (c *Config) GetStopWriteAtAvailableSpace() uint64 {
+	if c.StopWriteAtAvailableSpace == nil {
+		return defaultStopWriteAtAvailableSpace
+	}
+
+	return c.StopWriteAtAvailableSpace.Uint64()
 }
 
 // GetSyncLog return sync-log config option
@@ -1140,4 +1262,9 @@ func openMetadataDB(kvDir string, cf *KVConfig) (*leveldb.DB, error) {
 	opt.WriteL0SlowdownTrigger = cf.WriteL0SlowdownTrigger
 
 	return leveldb.OpenFile(kvDir, &opt)
+}
+
+// AllMatched implement Storage.AllMatched
+func (a *Append) AllMatched() bool {
+	return a.sorter.allMatched()
 }
