@@ -56,9 +56,9 @@ func genMysqlInsert(schema string, table *model.TableInfo, row []byte) (names []
 	return names, args, nil
 }
 
-func genMysqlUpdate(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genMysqlUpdate(schema string, table *model.TableInfo, row []byte, isTblDroppingCol bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
-	updtDecoder := newUpdateDecoder(table)
+	updtDecoder := newUpdateDecoder(table, isTblDroppingCol)
 
 	var updateColumns []*model.ColumnInfo
 
@@ -120,6 +120,8 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}
 
+			isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
+
 			schema, table, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 			if !ok {
 				return nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
@@ -153,9 +155,9 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						dml.Values[name] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genMysqlUpdate(schema, info, row)
+					names, args, oldArgs, err := genMysqlUpdate(schema, info, row, isTblDroppingCol)
 					if err != nil {
-						return nil, errors.Annotate(err, "gen delete fail")
+						return nil, errors.Annotate(err, "gen update fail")
 					}
 
 					dml := &loader.DML{
