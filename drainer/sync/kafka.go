@@ -29,6 +29,7 @@ import (
 )
 
 var maxWaitTimeToSendMSG = time.Second * 30
+var stallWriteSize = 90 * 1024 * 1024
 
 var _ Syncer = &KafkaSyncer{}
 
@@ -38,8 +39,11 @@ type KafkaSyncer struct {
 	producer sarama.AsyncProducer
 	topic    string
 
-	toBeAckCommitTSMu sync.Mutex
-	toBeAckCommitTS   map[int64]struct{}
+	toBeAckCommitTSMu      sync.Mutex
+	toBeAckCommitTS        map[int64]int
+	toBeAckTotalSize       int
+	resumeProduce          chan struct{}
+	resumeProduceCloseOnce sync.Once
 
 	lastSuccessTime time.Time
 
@@ -63,7 +67,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	executor := &KafkaSyncer{
 		addr:            strings.Split(cfg.KafkaAddrs, ","),
 		topic:           topic,
-		toBeAckCommitTS: make(map[int64]struct{}),
+		toBeAckCommitTS: make(map[int64]int),
 		shutdown:        make(chan struct{}),
 		baseSyncer:      newBaseSyncer(tableInfoGetter),
 	}
@@ -74,9 +78,6 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	}
 
 	config.Producer.Flush.MaxMessages = cfg.KafkaMaxMessages
-	if cfg.SaramaBufferSize > 0 {
-		config.ChannelBufferSize = cfg.SaramaBufferSize
-	}
 
 	// maintain minimal set that has been necessary so far
 	// this also avoid take too much time in NewAsyncProducer if kafka is down
@@ -143,12 +144,28 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 	msg := &sarama.ProducerMessage{Topic: p.topic, Key: nil, Value: sarama.ByteEncoder(data), Partition: 0}
 	msg.Metadata = item
 
+	waitResume := false
+
 	p.toBeAckCommitTSMu.Lock()
 	if len(p.toBeAckCommitTS) == 0 {
 		p.lastSuccessTime = time.Now()
 	}
-	p.toBeAckCommitTS[binlog.CommitTs] = struct{}{}
+	p.toBeAckCommitTS[binlog.CommitTs] = len(data)
+	p.toBeAckTotalSize += len(data)
+	if p.toBeAckTotalSize >= stallWriteSize && len(p.toBeAckCommitTS) > 1 {
+		p.resumeProduce = make(chan struct{})
+		p.resumeProduceCloseOnce = sync.Once{}
+		waitResume = true
+	}
 	p.toBeAckCommitTSMu.Unlock()
+
+	if waitResume {
+		select {
+		case <-p.resumeProduce:
+		case <-p.errCh:
+			return errors.Trace(p.err)
+		}
+	}
 
 	select {
 	case p.producer.Input() <- msg:
@@ -156,7 +173,6 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 	case <-p.errCh:
 		return errors.Trace(p.err)
 	}
-
 }
 
 func (p *KafkaSyncer) run() {
@@ -174,6 +190,13 @@ func (p *KafkaSyncer) run() {
 
 			p.toBeAckCommitTSMu.Lock()
 			p.lastSuccessTime = time.Now()
+			size := p.toBeAckCommitTS[commitTs]
+			p.toBeAckTotalSize -= size
+			if p.toBeAckTotalSize < stallWriteSize && p.resumeProduce != nil {
+				p.resumeProduceCloseOnce.Do(func() {
+					close(p.resumeProduce)
+				})
+			}
 			delete(p.toBeAckCommitTS, commitTs)
 			p.toBeAckCommitTSMu.Unlock()
 
