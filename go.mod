@@ -3,7 +3,7 @@ module github.com/pingcap/tidb-binlog
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.3.0
-	github.com/Shopify/sarama v1.23.1
+	github.com/Shopify/sarama v1.24.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gogo/protobuf v1.2.1
@@ -12,7 +12,6 @@ require (
 	github.com/google/gofuzz v1.0.0
 	github.com/gorilla/mux v1.6.2
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20191107115940-caf2b9e6ccf4
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20191118050206-47672e7eabc0
@@ -20,7 +19,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20191112053614-3b43b46331d5
 	github.com/pingcap/pd v1.1.0-beta.0.20191119124645-4c0c1027f412
 	github.com/pingcap/tidb v1.1.0-beta.0.20191119111543-77faf6466821
-	github.com/pingcap/tidb-tools v3.0.6-0.20191122032654-ea50b93da000+incompatible
+	github.com/pingcap/tidb-tools v3.0.6-0.20191125061035-b087739b71f1+incompatible
 	github.com/pingcap/tipb v0.0.0-20191120020146-6161b015e21e
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
@@ -39,7 +38,6 @@ require (
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c
 	google.golang.org/grpc v1.23.1
-	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
 )
 
 go 1.13
