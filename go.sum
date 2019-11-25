@@ -141,8 +141,6 @@ github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCV
 github.com/juju/ratelimit v1.0.1 h1:+7AIFJVQ0EQgq/K9+0Krm7m530Du7tIz0METWzN0RgY=
 github.com/juju/ratelimit v1.0.1/go.mod h1:qapgC/Gy+xNh9UxzV13HGGl/6UXNN+ct+vwSgWNm/qk=
 github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
-github.com/july2993/tidb-tools v3.0.0-rc.2.0.20191124144813-e6fc7cd1a2fc+incompatible h1:lsqq557Tn1rXZB1TgFvsn0mjcUt2K2u6ccWGAlz8rj4=
-github.com/july2993/tidb-tools v3.0.0-rc.2.0.20191124144813-e6fc7cd1a2fc+incompatible/go.mod h1:/VJDCsqqByeZB/EhLehWn0ikTlnf2kmxwd5TGH1UeDg=
 github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d h1:cVtBfNW5XTHiKQe7jDaDBSh/EVM4XLPutLAGboIXuM0=
 github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d/go.mod h1:P2viExyCEfeWGU259JnaQ34Inuec4R38JCyBx2edgD0=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
@@ -218,6 +216,9 @@ github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0 h1:GIEq+wZfrl2bc
 github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0/go.mod h1:G/6rJpnYwM0LKMec2rI82/5Kg6GaZMvlfB+e6/tvYmI=
 github.com/pingcap/tidb v1.1.0-beta.0.20191120070053-5a7ecfeb94fd h1:A7ZhUliNg9NA2+S9pMu7vC1R2ZmRZkpZocX50Mk/YjQ=
 github.com/pingcap/tidb v1.1.0-beta.0.20191120070053-5a7ecfeb94fd/go.mod h1:+SjmTI6LG3FvK4lIVDsOSyW2lWA4qtCSLKgwnN6FKxI=
+github.com/pingcap/tidb-tools v3.0.6-0.20191119150227-ff0a3c6e5763+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
+github.com/pingcap/tidb-tools v3.0.6-0.20191125061035-b087739b71f1+incompatible h1:nndliEgwxjmupxW5ZOXHe4b7xQPXCaCm61Bi0dlQPpM=
+github.com/pingcap/tidb-tools v3.0.6-0.20191125061035-b087739b71f1+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
 github.com/pingcap/tipb v0.0.0-20190428032612-535e1abaa330/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
 github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6 h1:HPgqtaqIFIZXTvQNiZoJ9Y79AXz3pmDpYFL28KraTKE=
 github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
