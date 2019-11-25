@@ -95,7 +95,7 @@ catchError {
         tests["Integration Test"] = {
             podTemplate(label: label, 
             containers: [
-                containerTemplate(name: 'golang',alwaysPullImage: false, image: 'hub.pingcap.net/jenkins/centos7_golang-1.13:cached', 
+                containerTemplate(name: 'golang',alwaysPullImage: false, image: "${GO_DOCKER_IMAGE}", 
                 resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
                 ttyEnabled: true, command: 'cat'),
                 containerTemplate(name: 'zookeeper',alwaysPullImage: false, image: 'wurstmeister/zookeeper', 
@@ -150,7 +150,7 @@ catchError {
                                 throw e;
                             } finally {
                                 sh """
-                                echo done
+                                echo success
                                 """
                             }
                         }
