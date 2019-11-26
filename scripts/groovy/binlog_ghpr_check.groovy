@@ -1,6 +1,6 @@
 
 catchError {
-    node("build_go1120_binlog") {
+    node("build_go1130_binlog") {
         deleteDir()
         def ws = pwd()
         container("golang") {

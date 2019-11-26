@@ -2,7 +2,7 @@ def BUILD_NUMBER = "${env.BUILD_NUMBER}"
 catchError {
 
     stage("unit test") {    
-        node("build_go1120_binlog") {
+        node("build_go1130_binlog") {
             container("golang") {
                 def ws = pwd()
                 dir("/home/jenkins/agent/git/tidb-binlog") { 
