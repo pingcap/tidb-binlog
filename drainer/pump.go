@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -154,7 +155,12 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				// TODO: add metric here
 				continue
 			}
-			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(len(resp.Entity.Payload)))
+
+			payloadSize := len(resp.Entity.Payload)
+			readBinlogSizeHistogram.WithLabelValues(p.nodeID).Observe(float64(payloadSize))
+			if len(resp.Entity.Payload) >= 10*1024*1024 {
+				log.Info("receive big size binlog", zap.String("size", humanize.Bytes(uint64(payloadSize))))
+			}
 
 			binlog := new(pb.Binlog)
 			err = binlog.Unmarshal(resp.Entity.Payload)
