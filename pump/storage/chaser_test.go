@@ -110,7 +110,9 @@ func (rs *runSuite) TestShouldRetryIfFailedToCatchUp(c *C) {
 					Offset: start.Offset + int64(i*10),
 				},
 			}
-			f(&next)
+			if err := f(&next); err != nil {
+				return err
+			}
 		}
 		if len(offsetRecords) == 3 {
 			close(finished)

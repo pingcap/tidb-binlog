@@ -339,7 +339,10 @@ func (c *Collector) handlePumpStatusUpdate(ctx context.Context, n *node.Status) 
 func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context.Context) error) {
 	// add all the pump to merger
 	c.merger.Stop()
-	fUpdate(ctx)
+	err := fUpdate(ctx)
+	if err != nil {
+		log.Error("Update collector status", zap.Error(err))
+	}
 	c.merger.Continue()
 
 	// update status when had pump notify or reach wait time
@@ -352,7 +355,7 @@ func (c *Collector) keepUpdatingStatus(ctx context.Context, fUpdate func(context
 			nr.wg.Done()
 		case <-time.After(c.interval):
 			if err := fUpdate(ctx); err != nil {
-				log.Error("Failed to update collector status", zap.Error(err))
+				log.Error("Update collector status", zap.Error(err))
 			}
 		case err := <-c.errCh:
 			log.Error("collector meets error", zap.Error(err))

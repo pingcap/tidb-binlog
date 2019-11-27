@@ -98,7 +98,9 @@ func benchmarkDelete(b *testing.B, merge bool) {
 	}
 
 	b.ResetTimer()
-	deleteTable(r.db, r.loader, b.N)
+	if err := deleteTable(r.db, r.loader, b.N); err != nil {
+		b.Fatal(err)
+	}
 
 	r.close()
 }
@@ -109,11 +111,17 @@ func benchmarkWrite(b *testing.B, merge bool) {
 		b.Fatal(err)
 	}
 
-	dropTable(r.db, r.loader)
-	createTable(r.db, r.loader)
+	if err := dropTable(r.db, r.loader); err != nil {
+		b.Fatal(err)
+	}
+	if err := createTable(r.db, r.loader); err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
-	loadTable(r.db, r.loader, b.N)
+	if err := loadTable(r.db, r.loader, b.N); err != nil {
+		b.Fatal(err)
+	}
 
 	r.close()
 }
