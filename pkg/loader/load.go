@@ -317,7 +317,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Error("Rollback", zap.Error(rbErr))
+					log.Error("Rollback failed", zap.Error(rbErr))
 				}
 				return err
 			}
@@ -325,7 +325,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 
 		if _, err = tx.Exec(ddl.SQL); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Rollback", zap.Error(rbErr))
+				log.Error("Rollback failed", zap.String("sql", ddl.SQL), zap.Error(rbErr))
 			}
 			return err
 		}
@@ -386,7 +386,7 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 		}
 
 		if err := causality.Add(keys); err != nil {
-			log.Error("Add keys to causality", zap.Error(err), zap.Strings("keys", keys))
+			log.Error("Add keys to causality failed", zap.Error(err), zap.Strings("keys", keys))
 		}
 		key := causality.Get(keys[0])
 		idx := int(genHashKey(key)) % len(byHash)

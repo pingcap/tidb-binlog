@@ -701,10 +701,14 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, binlog.String())
 	if len(binlog.PrewriteValue) > 0 {
 		prewriteValue := new(pb.PrewriteValue)
-		prewriteValue.Unmarshal(binlog.PrewriteValue)
-
-		fmt.Fprint(w, "\n\n PrewriteValue: \n")
-		fmt.Fprint(w, prewriteValue.String())
+		err := prewriteValue.Unmarshal(binlog.PrewriteValue)
+		if err != nil {
+			log.Error("Failed to unmarshal prewriteValue", zap.Error(err))
+			fmt.Fprint(w, "\n\n PrewriteValue: <Unmarshallable>\n")
+		} else {
+			fmt.Fprint(w, "\n\n PrewriteValue: \n")
+			fmt.Fprint(w, prewriteValue.String())
+		}
 	}
 
 	if len(binlog.PrewriteKey) > 0 {
@@ -861,7 +865,7 @@ func (s *Server) commitStatus() {
 	case node.Closing:
 		err := s.waitSafeToOffline(context.Background())
 		if err != nil {
-			log.Error("Waiting to offline", zap.Error(err))
+			log.Error("Waiting to offline failed", zap.Error(err))
 		}
 		log.Info("safe to offline now")
 		state = node.Offline

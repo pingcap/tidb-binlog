@@ -36,6 +36,6 @@ type HTTPStatus struct {
 func (s *HTTPStatus) Status(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(s)
 	if err != nil {
-		log.Error("Encode JSON status", zap.Error(err))
+		log.Error("Encode JSON status", zap.Any("status", s), zap.Error(err))
 	}
 }
