@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -31,5 +34,8 @@ type HTTPStatus struct {
 
 // Status implements http.ServeHTTP interface
 func (s *HTTPStatus) Status(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(s)
+	err := json.NewEncoder(w).Encode(s)
+	if err != nil {
+		log.Error("Encode JSON status", zap.Any("status", s), zap.Error(err))
+	}
 }

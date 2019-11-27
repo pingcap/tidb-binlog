@@ -298,12 +298,23 @@ func (s *Server) Start() error {
 
 	// register drainer server with gRPC server and start to serve listener
 	binlog.RegisterCisternServer(s.gs, s)
-	go s.gs.Serve(grpcL)
+	go func() {
+		err := s.gs.Serve(grpcL)
+		if err != nil {
+			log.Error("grpc server stopped", zap.Error(err))
+		}
+	}()
 
 	router := s.initAPIRouter()
 	http.Handle("/", router)
 
-	go http.Serve(httpL, nil)
+	go func() {
+		err := http.Serve(httpL, nil)
+		if err != nil {
+			// http.Server always return non-nil error, so we don't have to use Error level here
+			log.Info("drainer http server stopped", zap.Error(err))
+		}
+	}()
 
 	log.Info("start to server request", zap.String("addr", s.tcpAddr))
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
