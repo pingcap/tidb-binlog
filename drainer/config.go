@@ -38,7 +38,7 @@ const (
 
 var (
 	maxBinlogItemCount     int
-	defaultBinlogItemCount = 16 << 12
+	defaultBinlogItemCount = 8
 	supportedCompressors   = [...]string{"gzip"}
 )
 
@@ -223,6 +223,43 @@ func adjustInt(v *int, defValue int) {
 	}
 }
 
+func (cfg *Config) validateFilter() error {
+	for _, db := range cfg.SyncerCfg.DoDBs {
+		if len(db) == 0 {
+			return errors.New("empty schema name in `replicate-do-db` config")
+		}
+	}
+
+	dbs := strings.Split(cfg.SyncerCfg.IgnoreSchemas, ",")
+	for _, db := range dbs {
+		if len(db) == 0 {
+			return errors.New("empty schema name in `ignore-schemas` config")
+		}
+	}
+
+	for _, tb := range cfg.SyncerCfg.DoTables {
+		if len(tb.Schema) == 0 {
+			return errors.New("empty schema name in `replicate-do-table` config")
+		}
+
+		if len(tb.Table) == 0 {
+			return errors.New("empty table name in `replicate-do-table` config")
+		}
+	}
+
+	for _, tb := range cfg.SyncerCfg.IgnoreTables {
+		if len(tb.Schema) == 0 {
+			return errors.New("empty schema name in `ignore-table` config")
+		}
+
+		if len(tb.Table) == 0 {
+			return errors.New("empty table name in `ignore-table` config")
+		}
+	}
+
+	return nil
+}
+
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	if err := validateAddr(cfg.ListenAddr); err != nil {
@@ -257,7 +294,7 @@ func (cfg *Config) validate() error {
 		}
 	}
 
-	return nil
+	return cfg.validateFilter()
 }
 
 func (cfg *Config) adjustConfig() error {

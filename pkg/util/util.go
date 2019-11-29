@@ -143,6 +143,24 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	return int64(version.Ver), nil
 }
 
+// WaitUntilTimeout creates a goroutine to run fn, and then gives up waiting for the goroutine to exit When it timeouts
+func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
+	exited := make(chan struct{})
+	go func() {
+		defer func() {
+			log.Info("goroutine %s exit by itself (with GoAndAbortGoroutine help)", name)
+			close(exited)
+		}()
+		fn()
+	}()
+
+	select {
+	case <-time.After(timeout):
+		log.Info("abort goroutine %s (with GoAndAbortGoroutine help)", name)
+	case <-exited:
+	}
+}
+
 // StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
 func StrictDecodeFile(path, component string, cfg interface{}) error {

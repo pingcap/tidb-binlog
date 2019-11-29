@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter
+.PHONY: build test check update clean pump drainer binlogctl fmt reparo integration_test arbiter
 
 PROJECT=tidb-binlog
 
@@ -18,6 +18,7 @@ TEST_DIR := /tmp/tidb_binlog_test
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
+GOVERSION := "`go version`"
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -40,7 +41,7 @@ all: dev install
 
 dev: check test
 
-build: pump drainer reparo
+build: pump drainer reparo binlogctl
 
 pump:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/pump cmd/pump/main.go
@@ -53,6 +54,9 @@ arbiter:
 
 reparo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/reparo cmd/reparo/main.go
+
+binlogctl:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlogctl cmd/binlogctl/main.go
 
 install:
 	go install ./...
@@ -74,6 +78,7 @@ integration_test: build
 	tests/run.sh
 
 fmt:
+	@echo "${GOVERSION}"
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 

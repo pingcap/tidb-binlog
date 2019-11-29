@@ -30,6 +30,8 @@ type Config struct {
 	StopDatetime  string `toml:"stop-datetime" json:"stop-datetime"`
 	StartTSO      int64  `toml:"start-tso" json:"start-tso"`
 	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
+	TxnBatch      int    `toml:"txn-batch" json:"txn-batch"`
+	WorkerCount   int    `toml:"worker-count" json:"worker-count"`
 
 	DestType string           `toml:"dest-type" json:"dest-type"`
 	DestDB   *syncer.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -64,6 +66,8 @@ func NewConfig() *Config {
 	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "recovery end in stop-datetime, empty string means never end.")
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
+	fs.IntVar(&c.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
+	fs.IntVar(&c.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&c.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&c.LogRotate, "log-rotate", "", "log file rotate type, hour/day")
 	fs.StringVar(&c.DestType, "dest-type", "print", "dest type, values can be [print,mysql]")
@@ -75,7 +79,9 @@ func NewConfig() *Config {
 }
 
 func (c *Config) String() string {
-	cfgBytes, err := json.Marshal(c)
+	// reparo/config.go:94:31: SA1026: trying to marshal chan or func value, field *github.com/pingcap/tidb-binlog/reparo.Config.FlagSet.Usage (staticcheck)
+	// but we omit the field `*flag.FlagSet`, it should be ok.
+	cfgBytes, err := json.Marshal(c) //nolint:staticcheck
 	if err != nil {
 		log.Errorf("marshal config failed %v", err)
 	}

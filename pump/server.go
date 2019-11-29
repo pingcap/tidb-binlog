@@ -75,6 +75,7 @@ type Server struct {
 	wg         sync.WaitGroup
 	gcDuration time.Duration
 	triggerGC  chan time.Time
+	pullClose  chan struct{}
 	metrics    *metricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
@@ -168,6 +169,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		pdCli:      pdCli,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time),
+		pullClose:  make(chan struct{}),
 	}, nil
 }
 
@@ -215,7 +217,16 @@ func (s *Server) writeBinlog(ctx context.Context, in *binlog.WriteBinlogReq, isF
 			label = "succ"
 		}
 
-		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(time.Since(beginTime).Seconds())
+		takeSecond := time.Since(beginTime).Seconds()
+		rpcHistogram.WithLabelValues("WriteBinlog", label).Observe(takeSecond)
+
+		if takeSecond >= 1 {
+			log.Warn("slow write binlog RPC response, payload size: %d, take second: %f, label: %s",
+				len(in.Payload),
+				takeSecond,
+				label,
+			)
+		}
 	}()
 
 	if in.ClusterID != s.clusterID {
@@ -289,12 +300,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 		log.Errorf("drainer request a purged binlog (gc ts = %d), request %+v, some binlog events may be loss", gcTS, in)
 	}
 
-	ctx, cancel := context.WithCancel(s.ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	binlogs := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
 		select {
+		case <-s.pullClose:
+			return nil
 		case data, ok := <-binlogs:
 			if !ok {
 				return nil
@@ -865,9 +878,13 @@ func (s *Server) Close() {
 	s.commitStatus()
 	log.Info("commit status done")
 
+	// PullBinlogs should be stopped after commitStatus
+	close(s.pullClose)
 	// stop the gRPC server
-	s.gs.GracefulStop()
-	log.Info("grpc is stopped")
+	util.WaitUntilTimeout("grpc_server.GracefulStop", func() {
+		s.gs.GracefulStop()
+		log.Info("grpc is stopped")
+	}, 10*time.Second)
 
 	if err := s.storage.Close(); err != nil {
 		log.Errorf("close storage error %v", errors.ErrorStack(err))

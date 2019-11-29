@@ -103,6 +103,23 @@ alter table binlog_pk_add_duplicate_uk add unique index aidx(a1);
 `,
 }
 
+// Test issue: TOOL-1346
+var caseInsertBit = []string{`
+CREATE TABLE binlog_insert_bit(a BIT(1) NOT NULL);
+`,
+	`
+INSERT INTO binlog_insert_bit VALUES (0x01);
+`,
+	`
+UPDATE binlog_insert_bit SET a = 0x00;
+`,
+}
+
+var caseInsertBitClean = []string{`
+	DROP TABLE binlog_insert_bit;
+`,
+}
+
 var casePKAddDuplicateUKClean = []string{`
 	drop table binlog_pk_add_duplicate_uk;`,
 }
@@ -118,6 +135,16 @@ insert into binlog_split_region(a, b) values(1, 1), (2, 3);
 var caseSplitRegionClean = []string{`
 	drop table binlog_split_region;`,
 }
+
+var (
+	caseAlterDatabase = []string{
+		`CREATE DATABASE to_be_altered CHARACTER SET utf8;`,
+		`ALTER DATABASE to_be_altered CHARACTER SET utf8mb4;`,
+	}
+	caseAlterDatabaseClean = []string{
+		`DROP DATABASE to_be_altered;`,
+	}
+)
 
 type testRunner struct {
 	src    *sql.DB
@@ -149,6 +176,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.execSQLs(caseUKWithNoPK)
 	tr.execSQLs(caseUKWithNoPKClean)
 
+	tr.execSQLs(caseAlterDatabase)
+	tr.execSQLs(caseAlterDatabaseClean)
+
 	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
 		err := execSQLs(src, casePKAddDuplicateUK)
@@ -157,6 +187,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
+
+	tr.execSQLs(caseInsertBit)
+	tr.execSQLs(caseInsertBitClean)
 
 	tr.execSQLs(caseSplitRegion)
 	tr.execSQLs(caseSplitRegionClean)
