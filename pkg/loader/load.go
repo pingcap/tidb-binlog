@@ -218,6 +218,27 @@ func (s *Loader) getTableInfo(schema string, table string) (info *tableInfo, err
 	return s.refreshTableInfo(schema, table)
 }
 
+func needRefreshTableInfo(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Errorf("parse sql failed, sql: %s, err: %v", sql, err)
+		return true
+	}
+
+	switch stmt.(type) {
+	case *ast.DropTableStmt:
+		return false
+	case *ast.DropDatabaseStmt:
+		return false
+	case *ast.TruncateTableStmt:
+		return false
+	case *ast.CreateDatabaseStmt:
+		return false
+	}
+
+	return true
+}
+
 func isCreateDatabaseDDL(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -419,6 +440,9 @@ func (s *Loader) Run() error {
 		}
 
 		s.markSuccess(txn)
+		if !needRefreshTableInfo(txn.DDL.SQL) {
+			return nil
+		}
 		if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
 			log.Errorf("refresh table info failed, database: %s, table: %s, error: %v", txn.DDL.Database, txn.DDL.Table, err)
 		}
