@@ -292,6 +292,7 @@ func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.L
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
 
 		if msg.Binlog.CommitTs <= receivedTs {
+			log.Info("skip repeated binlog", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
 			continue
 		}
 		receivedTs = msg.Binlog.CommitTs
