@@ -287,8 +287,16 @@ func (s *Server) loadStatus() (int, error) {
 func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.Loader) (err error) {
 	dest := ld.Input()
 	defer ld.Close()
+	var receivedTs int64
 	for msg := range source {
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+
+		if msg.Binlog.CommitTs <= receivedTs {
+			log.Info("skip repeated binlog", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+			continue
+		}
+		receivedTs = msg.Binlog.CommitTs
+
 		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 		if err != nil {
 			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))
