@@ -16,6 +16,9 @@ package drainer
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // HTTPStatus exposes current status of the collector via HTTP
@@ -28,5 +31,7 @@ type HTTPStatus struct {
 
 // Status implements http.ServeHTTP interface
 func (s *HTTPStatus) Status(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(s)
+	if err := json.NewEncoder(w).Encode(s); err != nil {
+		log.Error("Failed to encode status", zap.Error(err), zap.Any("status", *s))
+	}
 }

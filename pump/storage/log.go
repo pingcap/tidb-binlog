@@ -369,7 +369,7 @@ func seekToNextRecord(reader *bufio.Reader) (bytes int, err error) {
 			return
 		}
 
-		reader.Discard(1)
+		reader.Discard(1) //nolint: errcheck
 		bytes++
 	}
 }

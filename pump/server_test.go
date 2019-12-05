@@ -475,10 +475,10 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	outAlertGCMS := millisecond + (earlyAlertGC+10*time.Minute).Nanoseconds()/1000/1000
 	outAlertGCTS := int64(oracle.EncodeTSO(outAlertGCMS))
 
-	registry.UpdateNode(ctx, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
-	registry.UpdateNode(ctx, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
+	mustUpdateNode(ctx, registry, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
+	mustUpdateNode(ctx, registry, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
 	// drainers/3 is set to be offline, so its MaxCommitTS is expected to be ignored
-	registry.UpdateNode(ctx, "drainers/3", &node.Status{MaxCommitTS: outAlertGCTS, State: node.Offline})
+	mustUpdateNode(ctx, registry, "drainers/3", &node.Status{MaxCommitTS: outAlertGCTS, State: node.Offline})
 
 	// Set a shorter interval because we don't really want to wait 1 hour
 	origInterval := gcInterval
@@ -497,6 +497,12 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 
 	c.Assert(storage.gcTS, GreaterEqual, gcTS)
 	// todo: add in and out of alert test while binlog has failpoint
+}
+
+func mustUpdateNode(pctx context.Context, r *node.EtcdRegistry, prefix string, status *node.Status) {
+	if err := r.UpdateNode(pctx, prefix, status); err != nil {
+		panic(err)
+	}
 }
 
 type waitCommitTSSuite struct{}
@@ -745,7 +751,11 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		close(sig)
 		p.Close()
 	}()
-	go p.Start()
+	go func() {
+		if err := p.Start(); err != nil {
+			c.Logf("Pump server stopped in error: %v", err)
+		}
+	}()
 
 	// wait until the server is online
 	timeEnd := time.After(5 * time.Second)
