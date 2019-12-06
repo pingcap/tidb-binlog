@@ -22,6 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
@@ -195,7 +198,11 @@ func (s *mockDrainerServer) Start() (*grpc.Server, error) {
 	}
 	gs := grpc.NewServer()
 	binlog.RegisterCisternServer(gs, s)
-	go gs.Serve(lis)
+	go func() {
+		if err := gs.Serve(lis); err != nil {
+			log.Error("Unexpected exit of gRPC server", zap.Error(err))
+		}
+	}()
 	return gs, nil
 }
 

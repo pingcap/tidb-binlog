@@ -346,8 +346,9 @@ func (s *newServerSuite) TestInvalidDestDBType(c *C) {
 	cfg.DataDir = path.Join(c.MkDir(), "drainer")
 	cfg.ListenAddr = "http://" + cfg.ListenAddr
 	cfg.SyncerCfg.DestDBType = "nothing"
-	cfg.adjustConfig()
-	_, err := NewServer(cfg)
+	err := cfg.adjustConfig()
+	c.Assert(err, IsNil)
+	_, err = NewServer(cfg)
 	c.Assert(err, ErrorMatches, ".*unknown DestDBType.*")
 	c.Assert(cfg.SyncerCfg.To.ClusterID, Equals, uint64(8012))
 }

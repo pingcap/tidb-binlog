@@ -335,13 +335,19 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	log.Info("receive apply action request", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.ID {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid nodeID %s, this pump's nodeID is %s", nodeID, s.ID))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		return
 	}
 
 	s.statusMu.RLock()
 	if s.status.State != node.Online {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.status.State, action))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.status.State, action))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		s.statusMu.RUnlock()
 		return
 	}
@@ -355,13 +361,19 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		s.status.State = node.Closing
 	default:
 		s.statusMu.Unlock()
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid action %s", action))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("invalid action %s", action))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		return
 	}
 	s.statusMu.Unlock()
 
 	go s.Close()
-	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+	err := rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+	if err != nil {
+		log.Error("Failed to render JSON response", zap.Error(err))
+	}
 }
 
 // GetLatestTS returns the last binlog's commit ts which synced to downstream.
@@ -370,7 +382,10 @@ func (s *Server) GetLatestTS(w http.ResponseWriter, r *http.Request) {
 		IndentJSON: true,
 	})
 	ts := s.syncer.GetLatestCommitTS()
-	rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
+	err := rd.JSON(w, http.StatusOK, util.SuccessResponse("get drainer's latest ts success!", map[string]int64{"ts": ts}))
+	if err != nil {
+		log.Error("Failed to render JSON response", zap.Error(err))
+	}
 }
 
 // commitStatus commit the node's last status to pd when close the server.
