@@ -369,7 +369,11 @@ func seekToNextRecord(reader *bufio.Reader) (bytes int, err error) {
 			return
 		}
 
-		reader.Discard(1) //nolint: errcheck
+		if _, err = reader.Discard(1); err != nil {
+			// If we reach here, we've already successfully called `Peek(4)`
+			// and `Discard(1)` should not fail.
+			panic(err)
+		}
 		bytes++
 	}
 }
