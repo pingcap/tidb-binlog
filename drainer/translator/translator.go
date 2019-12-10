@@ -42,7 +42,7 @@ type SQLTranslator interface {
 	GenInsertSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error)
 
 	// GenUpdateSQLs generates the update sqls
-	GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error)
+	GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, bool, error)
 
 	// GenDeleteSQLs generates the delete sqls by cols values
 	GenDeleteSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error)

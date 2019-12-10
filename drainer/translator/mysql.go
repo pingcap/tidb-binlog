@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ngaut/log"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	parsermysql "github.com/pingcap/parser/mysql"
@@ -94,10 +96,10 @@ func (m *mysqlTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, bool, error) {
 	safeMode := atomic.LoadInt32(&m.safeMode) == 1
 	if safeMode {
-		sqls, keys, values, err := m.genUpdateSQLsSafeMode(schema, table, rows, commitTS)
+		sqls, keys, values, err := m.genUpdateSQLsSafeMode(schema, table, rows, commitTS, isTblDroppingCol)
 		return sqls, keys, values, safeMode, err
 	}
 
@@ -105,14 +107,14 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	cols := util.ToColumnMap(columns)
 
 	for _, row := range rows {
 		var updateColumns []*model.ColumnInfo
 		var oldValues []interface{}
 		var newValues []interface{}
 
-		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, cols, time.Local, isTblDroppingCol)
 		if err != nil {
 			return nil, nil, nil, safeMode, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
@@ -164,17 +166,18 @@ func (m *mysqlTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, safeMode, nil
 }
 
-func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, error) {
+func (m *mysqlTranslator) genUpdateSQLsSafeMode(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, error) {
 	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	cols := util.ToColumnMap(columns)
 	columnList := m.genColumnList(columns)
 	columnPlaceholders := dml.GenColumnPlaceholders(len(columns))
 
 	for _, row := range rows {
-		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, cols, time.Local, isTblDroppingCol)
+
 		if err != nil {
 			return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}
@@ -592,7 +595,7 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 
 // DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, isTblDroppingCol bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}
@@ -600,8 +603,8 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 		return nil, nil, nil
 	}
 
-	cnt := 0
 	var (
+		cnt    int
 		data   []byte
 		err    error
 		oldRow = make(map[int64]types.Datum, len(cols))
@@ -623,9 +626,9 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 			return nil, nil, errors.Trace(err)
 		}
 		id := cid.GetInt64()
-		ft, ok := cols[id]
+		col, ok := cols[id]
 		if ok {
-			v, err := tablecodec.DecodeColumnValue(data, ft, loc)
+			v, err := tablecodec.DecodeColumnValue(data, &col.FieldType, loc)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
@@ -644,8 +647,36 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*types.FieldType, loc *time.Loc
 		}
 	}
 
-	if cnt != len(cols)*2 || len(newRow) != len(oldRow) {
+	parsedCols := cnt / 2
+	isInvalid := len(newRow) != len(oldRow) || (len(cols) != parsedCols && len(cols)-1 != parsedCols)
+	if isInvalid {
 		return nil, nil, errors.Errorf(" row data is corruption %v", b)
+	}
+	if parsedCols == len(cols)-1 {
+		if !isTblDroppingCol {
+			return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		}
+		var missingCol *model.ColumnInfo
+		for colID, col := range cols {
+			_, inOld := oldRow[colID]
+			_, inNew := newRow[colID]
+			if !inOld && !inNew {
+				missingCol = col
+				break
+			}
+		}
+		// We can't find a column that's missing in both old and new
+		if missingCol == nil {
+			return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		}
+		log.Infof(
+			"Fill missing col with default val [name: %s] [id: %d] [Tp: %d]",
+			missingCol.Name.O,
+			missingCol.ID,
+			int(missingCol.FieldType.Tp),
+		)
+		oldRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
+		newRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
 	}
 
 	return oldRow, newRow, nil

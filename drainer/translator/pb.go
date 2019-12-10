@@ -78,15 +78,15 @@ func (p *pbTranslator) GenInsertSQLs(schema string, table *model.TableInfo, rows
 	return sqls, keys, values, nil
 }
 
-func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+func (p *pbTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, bool, error) {
 	columns := writableColumns(table)
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(columns)
+	cols := util.ToColumnMap(columns)
 
 	for _, row := range rows {
-		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsTypeMap, time.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, cols, time.Local, isTblDroppingCol)
 		if err != nil {
 			return nil, nil, nil, false, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 		}

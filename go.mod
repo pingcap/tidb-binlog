@@ -29,7 +29,7 @@ require (
 	github.com/pingcap/pd v2.1.3+incompatible
 	github.com/pingcap/tidb v2.1.3+incompatible
 	github.com/pingcap/tidb-tools v2.1.5+incompatible
-	github.com/pingcap/tipb v0.0.0-20190107072121-abbec73437b7
+	github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v0.8.0
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
@@ -45,7 +45,7 @@ require (
 	github.com/zanmato1984/clickhouse v1.3.4-0.20181106115746-3e9a6b9beb12
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
-	go.uber.org/zap v1.9.1 // indirect
+	go.uber.org/zap v1.9.1
 	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f // indirect
 	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58

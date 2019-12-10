@@ -116,6 +116,15 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	return colTypeMap
 }
 
+// ToColumnMap return a map index by column id
+func ToColumnMap(columns []*model.ColumnInfo) map[int64]*model.ColumnInfo {
+	colMap := make(map[int64]*model.ColumnInfo, len(columns))
+	for _, col := range columns {
+		colMap[col.ID] = col
+	}
+	return colMap
+}
+
 // RetryOnError defines a action with retry when fn returns error
 func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
 	var err error

@@ -96,7 +96,7 @@ func (f *flashTranslator) GenInsertSQLs(schema string, table *model.TableInfo, r
 	return sqls, keys, values, nil
 }
 
-func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, bool, error) {
 	schema = strings.ToLower(schema)
 	pkColumn := pkHandleColumn(table)
 	if pkColumn == nil {
@@ -106,7 +106,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	totalValues := make([][]interface{}, 0, len(rows))
-	colsTypeMap := util.ToColumnTypeMap(table.Columns)
+	cols := util.ToColumnMap(table.Columns)
 	version := makeInternalVersionValue(uint64(commitTS))
 	delFlag := makeInternalDelmarkValue(false)
 
@@ -115,7 +115,7 @@ func (f *flashTranslator) GenUpdateSQLs(schema string, table *model.TableInfo, r
 		var newValues []interface{}
 
 		// TODO: Make updating pk working
-		oldColumnValues, newColumnValues, err := decodeFlashOldAndNewRow(row, colsTypeMap, gotime.Local)
+		oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, cols, gotime.Local, isTblDroppingCol)
 		newPkValue := newColumnValues[pkID]
 
 		if err != nil {
