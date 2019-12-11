@@ -99,7 +99,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
 	case "mysql", "tidb":
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType)
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, cfg.RelayLogDir, cfg.RelayLogSize)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
