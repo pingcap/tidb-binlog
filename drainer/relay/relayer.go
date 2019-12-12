@@ -15,7 +15,6 @@ package relay
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	tb "github.com/pingcap/tipb/go-binlog"
@@ -24,9 +23,8 @@ import (
 var _ Relayer = &relayer{}
 
 type Relayer interface {
-	WriteBinlog(item *sync.Item) error
-	GCBinlog(item *sync.Item)
-	Recover() error
+	WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, pv *tb.PrewriteValue) (tb.Pos, error)
+	GCBinlog(pos tb.Pos)
 	Close() error
 }
 
@@ -37,6 +35,11 @@ type relayer struct {
 }
 
 func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableInfoGetter) (Relayer, error) {
+	// If `dir` is empty, it means relay log is disabled.
+	if len(dir) == 0 {
+		return nil, nil
+	}
+
 	binlogger, err := binlogfile.OpenBinlogger(dir, maxFileSize)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -44,39 +47,35 @@ func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableI
 
 	return &relayer{
 		tableInfoGetter: tableInfoGetter,
-		binlogger: binlogger}, nil
+		binlogger: binlogger,
+	}, nil
 }
 
-func (r *relayer) WriteBinlog(item *sync.Item) error {
-	binlog, err := translator.TiBinlogToSlaveBinlog(r.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, pv *tb.PrewriteValue) (tb.Pos, error) {
+	pos := tb.Pos{}
+	binlog, err := translator.TiBinlogToSlaveBinlog(r.tableInfoGetter, schema, table, tiBinlog, pv)
 	if err != nil {
-		return errors.Trace(err)
+		return pos, errors.Trace(err)
 	}
 
 	data, err := binlog.Marshal()
 	if err != nil {
-		return errors.Trace(err)
+		return pos, errors.Trace(err)
 	}
 
-	pos, err := r.binlogger.WriteTail(&tb.Entity{Payload: data})
+	pos, err = r.binlogger.WriteTail(&tb.Entity{Payload: data})
 	if err != nil {
-		return errors.Trace(err)
+		return pos, errors.Trace(err)
 	}
 
-	item.RelayLogPos = pos
-	return nil
+	return pos, nil
 }
 
-func (r *relayer) GCBinlog(item *sync.Item) {
-	pos := item.RelayLogPos
+func (r *relayer) GCBinlog(pos tb.Pos) {
 	if pos.Suffix > r.lastFileSuffix {
 		r.binlogger.GC(0, pos)
 		r.lastFileSuffix = pos.Suffix
 	}
-}
-
-func (r *relayer) Recover() error {
-	return nil
 }
 
 func (r *relayer) Close() error {

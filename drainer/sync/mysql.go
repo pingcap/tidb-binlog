@@ -84,8 +84,14 @@ func (m *MysqlSyncer) SetSafeMode(mode bool) {
 
 // Sync implements Syncer interface
 func (m *MysqlSyncer) Sync(item *Item) error {
-	if err := m.relayer.WriteBinlog(item); err != nil {
-		return err
+	// `relayer` is nil if relay log is disabled.
+	if m.relayer != nil {
+		pos, err := m.relayer.WriteBinlog(item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+		if err != nil {
+			return err
+		} else {
+			item.RelayLogPos = pos
+		}
 	}
 
 	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
@@ -109,9 +115,11 @@ func (m *MysqlSyncer) Close() error {
 
 	err := <-m.Error()
 
-	closeRelayerErr := m.relayer.Close()
-	if err != nil {
-		err = closeRelayerErr
+	if m.relayer != nil {
+		closeRelayerErr := m.relayer.Close()
+		if err != nil {
+			err = closeRelayerErr
+		}
 	}
 
 	return err
@@ -128,8 +136,10 @@ func (m *MysqlSyncer) run() {
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*Item)
 			item.AppliedTS = txn.AppliedTS
-			m.relayer.GCBinlog(item)
 			m.success <- item
+			if m.relayer != nil {
+				m.relayer.GCBinlog(item.RelayLogPos)
+			}
 		}
 		close(m.success)
 		log.Info("Successes chan quit")
