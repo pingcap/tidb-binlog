@@ -22,18 +22,26 @@ import (
 
 var _ Relayer = &relayer{}
 
+// Relayer is the interface for writing relay log.
 type Relayer interface {
+	// WriteBinlog writes binlog to relay log file.
 	WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, pv *tb.PrewriteValue) (tb.Pos, error)
+
+	// GCBinlog removes unused relay log files.
 	GCBinlog(pos tb.Pos)
+
+	// Close releases resources.
 	Close() error
 }
 
 type relayer struct {
 	tableInfoGetter translator.TableInfoGetter
 	binlogger binlogfile.Binlogger
+	// lastFileSuffix is the file suffix of last written relay log file.
 	lastFileSuffix uint64
 }
 
+// NewRelayer creates a relayer.
 func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableInfoGetter) (Relayer, error) {
 	// If `dir` is empty, it means relay log is disabled.
 	if len(dir) == 0 {
@@ -51,6 +59,7 @@ func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableI
 	}, nil
 }
 
+// WriteBinlog writes binlog to relay log.
 func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, pv *tb.PrewriteValue) (tb.Pos, error) {
 	pos := tb.Pos{}
 	binlog, err := translator.TiBinlogToSlaveBinlog(r.tableInfoGetter, schema, table, tiBinlog, pv)
@@ -71,13 +80,16 @@ func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, 
 	return pos, nil
 }
 
+// GCBinlog removes unused relay log file.
 func (r *relayer) GCBinlog(pos tb.Pos) {
+	// If the file suffix increases, it means previous files are useless.
 	if pos.Suffix > r.lastFileSuffix {
 		r.binlogger.GC(0, pos)
 		r.lastFileSuffix = pos.Suffix
 	}
 }
 
+// Close closes binlogger.
 func (r *relayer) Close() error {
 	err := r.binlogger.Close()
 	if err != nil {
