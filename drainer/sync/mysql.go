@@ -29,8 +29,8 @@ var _ Syncer = &MysqlSyncer{}
 
 // MysqlSyncer sync binlog to Mysql
 type MysqlSyncer struct {
-	db     *sql.DB
-	loader loader.Loader
+	db      *sql.DB
+	loader  loader.Loader
 	relayer relay.Relayer
 
 	*baseSyncer
@@ -136,10 +136,10 @@ func (m *MysqlSyncer) run() {
 		for txn := range m.loader.Successes() {
 			item := txn.Metadata.(*Item)
 			item.AppliedTS = txn.AppliedTS
-			m.success <- item
 			if m.relayer != nil {
 				m.relayer.GCBinlog(item.RelayLogPos)
 			}
+			m.success <- item
 		}
 		close(m.success)
 		log.Info("Successes chan quit")

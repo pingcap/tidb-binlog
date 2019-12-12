@@ -36,7 +36,7 @@ type Relayer interface {
 
 type relayer struct {
 	tableInfoGetter translator.TableInfoGetter
-	binlogger binlogfile.Binlogger
+	binlogger       binlogfile.Binlogger
 	// lastFileSuffix is the file suffix of last written relay log file.
 	lastFileSuffix uint64
 }
@@ -55,7 +55,7 @@ func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableI
 
 	return &relayer{
 		tableInfoGetter: tableInfoGetter,
-		binlogger: binlogger,
+		binlogger:       binlogger,
 	}, nil
 }
 

@@ -14,29 +14,21 @@
 package relay
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	tb "github.com/pingcap/tipb/go-binlog"
 )
+
+func TestRelayer(t *testing.T) {
+	TestingT(t)
+}
 
 var _ = Suite(&testRelayerSuite{})
 
-type testRelayerSuite struct{
+type testRelayerSuite struct {
 	translator.BinlogGenrator
-}
-
-func newRelayer(c *C) Relayer {
-	dir := c.MkDir()
-	relayer, err := NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
-	c.Assert(relayer, NotNil)
-	c.Assert(err, IsNil)
-	return relayer
-}
-
-func clearRelayLogs(c *C, relayer Relayer) {
-	pos := tb.Pos{999999, 0}
-	relayer.GCBinlog(pos)
 }
 
 func (r *testRelayerSuite) TestCreate(c *C) {
@@ -48,17 +40,56 @@ func (r *testRelayerSuite) TestCreate(c *C) {
 	relayer, err = NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
 	c.Assert(relayer, NotNil)
 	c.Assert(err, IsNil)
+	relayer.Close()
 
 	relayer, err = NewRelayer("/", binlogfile.SegmentSizeBytes, nil)
 	c.Assert(err, NotNil)
 }
 
 func (r *testRelayerSuite) TestWriteBinlog(c *C) {
-	relayer := newRelayer(c)
-	clearRelayLogs(c, relayer)
+	dir := c.MkDir()
+	relayer, err := NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
+	c.Assert(relayer, NotNil)
+	c.Assert(err, IsNil)
+	defer relayer.Close()
 
 	r.SetDDL()
-	pos, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
 	c.Assert(err, IsNil)
-	c.Assert(pos.Suffix, Equals, 0)
+	c.Assert(pos1.Suffix, Equals, uint64(0))
+	c.Assert(pos1.Offset, Greater, int64(0))
+
+	r.SetInsert(c)
+	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	c.Assert(err, IsNil)
+	c.Assert(pos2.Suffix, Equals, uint64(0))
+	c.Assert(pos2.Offset, Greater, pos1.Offset)
+}
+
+func (r *testRelayerSuite) TestGCBinlog(c *C) {
+	dir := c.MkDir()
+	relayer, err := NewRelayer(dir, 10, nil)
+	c.Assert(relayer, NotNil)
+	c.Assert(err, IsNil)
+	defer relayer.Close()
+
+	r.SetDDL()
+	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	c.Assert(err, IsNil)
+	checkRelayLogNumber(c, dir, 2)
+	relayer.GCBinlog(pos1)
+	checkRelayLogNumber(c, dir, 2)
+
+	r.SetDDL()
+	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	c.Assert(err, IsNil)
+	checkRelayLogNumber(c, dir, 3)
+	relayer.GCBinlog(pos2)
+	checkRelayLogNumber(c, dir, 2)
+}
+
+func checkRelayLogNumber(c *C, dir string, expectedNumber int) {
+	names, err := binlogfile.ReadBinlogNames(dir)
+	c.Assert(err, IsNil)
+	c.Assert(len(names), Equals, expectedNumber)
 }
