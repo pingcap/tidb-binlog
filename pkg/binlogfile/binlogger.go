@@ -67,7 +67,7 @@ type Binlogger interface {
 // binlogger is a logical representation of the log storage
 // it is either in read mode or append mode.
 type binlogger struct {
-	dir string
+	dir         string
 	maxFileSize int64
 
 	// encoder encodes binlog payload into bytes, and write to file
@@ -143,13 +143,13 @@ func OpenBinlogger(dirpath string, maxFileSize int64) (Binlogger, error) {
 	}
 
 	binlog := &binlogger{
-		dir:        dirpath,
-		maxFileSize:maxFileSize,
-		file:       fileLock,
-		encoder:    NewEncoder(fileLock, offset),
-		dirLock:    dirLock,
-		lastSuffix: lastFileSuffix,
-		lastOffset: offset,
+		dir:         dirpath,
+		maxFileSize: maxFileSize,
+		file:        fileLock,
+		encoder:     NewEncoder(fileLock, offset),
+		dirLock:     dirLock,
+		lastSuffix:  lastFileSuffix,
+		lastOffset:  offset,
 	}
 
 	return binlog, nil
