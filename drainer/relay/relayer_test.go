@@ -43,6 +43,7 @@ func (r *testRelayerSuite) TestCreate(c *C) {
 	relayer.Close()
 
 	relayer, err = NewRelayer("/", binlogfile.SegmentSizeBytes, nil)
+	c.Assert(relayer, IsNil)
 	c.Assert(err, NotNil)
 }
 

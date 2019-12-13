@@ -102,14 +102,8 @@ func (l *fakeMySQLLoaderForRelayer) Input() chan<- *loader.Txn {
 
 func (l *fakeMySQLLoaderForRelayer) Run() error {
 	go func() {
-		for {
-			select {
-			case txn, ok := <-l.input:
-				if !ok {
-					return
-				}
-				l.successes <- txn
-			}
+		for txn := range l.input {
+			l.successes <- txn
 		}
 	}()
 	return nil
@@ -155,7 +149,8 @@ func (s *mysqlSuite) TestMySQLSyncerWithRelayer(c *check.C) {
 			Schema:        gen.Schema,
 			Table:         gen.Table,
 		}
-		syncer.Sync(item)
+		err = syncer.Sync(item)
+		c.Assert(err, check.IsNil)
 	}
 
 	// wait for all binlogs processed

@@ -369,7 +369,7 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (binlog.Pos, error) {
 	}
 
 	b.lastOffset = curOffset
-	pos := binlog.Pos{b.lastSuffix, curOffset}
+	pos := binlog.Pos{Suffix: b.lastSuffix, Offset: curOffset}
 
 	if curOffset < b.maxFileSize {
 		return pos, nil
