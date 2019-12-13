@@ -18,7 +18,9 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
@@ -112,4 +114,83 @@ func (s *mysqlSuite) TestRelaxSQLMode(c *check.C) {
 		c.Assert(getOld, check.Equals, test.oldMode)
 		c.Assert(getNew, check.Equals, test.newMode)
 	}
+}
+
+type fakeMySQLLoaderForRelayer struct {
+	loader.Loader
+	successes chan *loader.Txn
+	input     chan *loader.Txn
+}
+
+func (l *fakeMySQLLoaderForRelayer) Input() chan<- *loader.Txn {
+	return l.input
+}
+
+func (l *fakeMySQLLoaderForRelayer) Run() error {
+	go func() {
+		for txn := range l.input {
+			l.successes <- txn
+		}
+	}()
+	return nil
+}
+
+func (l *fakeMySQLLoaderForRelayer) Successes() <-chan *loader.Txn {
+	return l.successes
+}
+
+func (l *fakeMySQLLoaderForRelayer) Close() {
+	close(l.successes)
+}
+
+func (s *mysqlSuite) TestMySQLSyncerWithRelayer(c *check.C) {
+	var infoGetter translator.TableInfoGetter
+	// create mysql syncer
+	fakeMySQLLoaderImpl := &fakeMySQLLoaderForRelayer{
+		successes: make(chan *loader.Txn, 8),
+		input:     make(chan *loader.Txn),
+	}
+	db, _, _ := sqlmock.New()
+
+	dir := c.MkDir()
+	relayer, err := relay.NewRelayer(dir, 10, nil)
+	c.Assert(relayer, check.NotNil)
+	c.Assert(err, check.IsNil)
+	syncer := &MysqlSyncer{
+		db:         db,
+		loader:     fakeMySQLLoaderImpl,
+		relayer:    relayer,
+		baseSyncer: newBaseSyncer(infoGetter),
+	}
+	defer syncer.Close()
+
+	go syncer.run()
+	gen := translator.BinlogGenrator{}
+	gen.SetDDL()
+
+	for i := 0; i < 5; i++ {
+		item := &Item{
+			Binlog:        gen.TiBinlog,
+			PrewriteValue: gen.PV,
+			Schema:        gen.Schema,
+			Table:         gen.Table,
+		}
+		err = syncer.Sync(item)
+		c.Assert(err, check.IsNil)
+	}
+
+	// wait for all binlogs processed
+	for i := 0; i < 5; i++ {
+		select {
+		case <-syncer.Successes():
+		case <-time.After(time.Second):
+			c.Fatal("mysql syncer hasn't synced item in 1s after some error occurs in loader")
+		}
+	}
+
+	names, err := binlogfile.ReadBinlogNames(dir)
+	c.Assert(err, check.IsNil)
+	// There would be 2 files: the last written file, the new created empty file.
+	// The previous files should be removed.
+	c.Assert(len(names), check.Equals, 2)
 }

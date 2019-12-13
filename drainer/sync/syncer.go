@@ -24,6 +24,7 @@ type Item struct {
 	PrewriteValue *pb.PrewriteValue // only for DML
 	Schema        string
 	Table         string
+	RelayLogPos   pb.Pos
 
 	// the applied TS executed in downstream, only for tidb
 	AppliedTS int64
