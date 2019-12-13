@@ -41,7 +41,7 @@ func (s *testBinloggerSuite) TestCreate(c *C) {
 }
 
 func checkTest(c *C, dir string) {
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 	defer func() {
 		err := CloseBinlogger(bl)
@@ -56,7 +56,7 @@ func checkTest(c *C, dir string) {
 
 func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 
 	b, ok := bl.(*binlogger)
@@ -68,7 +68,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 	c.Assert(err, IsNil)
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir)
+	bl, err = OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 
 	b, ok = bl.(*binlogger)
@@ -93,7 +93,7 @@ func (s *testBinloggerSuite) TestOpenForWrite(c *C) {
 
 func (s *testBinloggerSuite) TestRotateFile(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 
 	payload := []byte("binlogtest")
@@ -113,7 +113,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 	bl.Close()
 
-	bl, err = OpenBinlogger(dir)
+	bl, err = OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 
 	binlogs, err := bl.ReadFrom(binlog.Pos{}, 1)
@@ -132,7 +132,7 @@ func (s *testBinloggerSuite) TestRotateFile(c *C) {
 
 func (s *testBinloggerSuite) TestRead(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -171,7 +171,7 @@ func (s *testBinloggerSuite) TestRead(c *C) {
 
 func (s *testBinloggerSuite) TestCourruption(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
@@ -204,7 +204,7 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 
 func (s *testBinloggerSuite) TestGC(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 	// 1. A binlog file with index 0 is created at this point
 	defer func() {
@@ -293,7 +293,7 @@ func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
 
 func (s *testBinloggerSuite) TestSkipCRCRead(c *C) {
 	dir := c.MkDir()
-	bl, err := OpenBinlogger(dir)
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
 	defer bl.Close()
 
