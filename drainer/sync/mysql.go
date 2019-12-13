@@ -89,9 +89,8 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 		pos, err := m.relayer.WriteBinlog(item.Schema, item.Table, item.Binlog, item.PrewriteValue)
 		if err != nil {
 			return err
-		} else {
-			item.RelayLogPos = pos
 		}
+		item.RelayLogPos = pos
 	}
 
 	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
