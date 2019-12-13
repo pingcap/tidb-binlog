@@ -60,9 +60,13 @@ func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, w
 		return nil, errors.Trace(err)
 	}
 
-	relayer, err := relay.NewRelayer(relayLogDir, relayLogSize, tableInfoGetter)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var relayer relay.Relayer
+	// If the dir is empty, it means relayer is disabled.
+	if len(relayLogDir) > 0 {
+		relayer, err = relay.NewRelayer(relayLogDir, relayLogSize, tableInfoGetter)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	s := &MysqlSyncer{

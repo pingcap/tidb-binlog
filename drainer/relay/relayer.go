@@ -43,11 +43,6 @@ type relayer struct {
 
 // NewRelayer creates a relayer.
 func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableInfoGetter) (Relayer, error) {
-	// If `dir` is empty, it means relay log is disabled.
-	if len(dir) == 0 {
-		return nil, nil
-	}
-
 	binlogger, err := binlogfile.OpenBinlogger(dir, maxFileSize)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -32,18 +32,16 @@ type testRelayerSuite struct {
 }
 
 func (r *testRelayerSuite) TestCreate(c *C) {
-	relayer, err := NewRelayer("", binlogfile.SegmentSizeBytes, nil)
-	c.Assert(relayer, IsNil)
-	c.Assert(err, IsNil)
+	_, err := NewRelayer("", binlogfile.SegmentSizeBytes, nil)
+	c.Assert(err, NotNil)
 
 	dir := c.MkDir()
-	relayer, err = NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
+	relayer, err := NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
 	c.Assert(relayer, NotNil)
 	c.Assert(err, IsNil)
 	relayer.Close()
 
-	relayer, err = NewRelayer("/", binlogfile.SegmentSizeBytes, nil)
-	c.Assert(relayer, IsNil)
+	_, err = NewRelayer("/", binlogfile.SegmentSizeBytes, nil)
 	c.Assert(err, NotNil)
 }
 
