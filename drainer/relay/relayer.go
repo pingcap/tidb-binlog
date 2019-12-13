@@ -37,8 +37,8 @@ type Relayer interface {
 type relayer struct {
 	tableInfoGetter translator.TableInfoGetter
 	binlogger       binlogfile.Binlogger
-	// lastFileSuffix is the file suffix of last written relay log file.
-	lastFileSuffix uint64
+	// nextGCFileSuffix is file suffix of the relay log file to be removed.
+	nextGCFileSuffix uint64
 }
 
 // NewRelayer creates a relayer.
@@ -78,18 +78,13 @@ func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, 
 // GCBinlog removes unused relay log file.
 func (r *relayer) GCBinlog(pos tb.Pos) {
 	// If the file suffix increases, it means previous files are useless.
-	if pos.Suffix > r.lastFileSuffix {
+	if pos.Suffix > r.nextGCFileSuffix {
 		r.binlogger.GC(0, pos)
-		r.lastFileSuffix = pos.Suffix
+		r.nextGCFileSuffix = pos.Suffix
 	}
 }
 
 // Close closes binlogger.
 func (r *relayer) Close() error {
-	err := r.binlogger.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return errors.Trace(r.binlogger.Close())
 }

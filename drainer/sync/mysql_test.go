@@ -164,5 +164,7 @@ func (s *mysqlSuite) TestMySQLSyncerWithRelayer(c *check.C) {
 
 	names, err := binlogfile.ReadBinlogNames(dir)
 	c.Assert(err, check.IsNil)
+	// There would be 2 files: the last written file, the new created empty file.
+	// The previous files should be removed.
 	c.Assert(len(names), check.Equals, 2)
 }

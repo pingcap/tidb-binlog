@@ -75,6 +75,8 @@ func (r *testRelayerSuite) TestGCBinlog(c *C) {
 	r.SetDDL()
 	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
 	c.Assert(err, IsNil)
+	// There should be 2 files: the written file, the new created file.
+	// GC won't remove the first file now.
 	checkRelayLogNumber(c, dir, 2)
 	relayer.GCBinlog(pos1)
 	checkRelayLogNumber(c, dir, 2)
@@ -82,8 +84,10 @@ func (r *testRelayerSuite) TestGCBinlog(c *C) {
 	r.SetDDL()
 	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
 	c.Assert(err, IsNil)
+	// Rotate twice, so there would be 3 files.
 	checkRelayLogNumber(c, dir, 3)
 	relayer.GCBinlog(pos2)
+	// GC should remove the first file.
 	checkRelayLogNumber(c, dir, 2)
 }
 
