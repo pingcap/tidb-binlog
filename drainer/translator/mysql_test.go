@@ -24,7 +24,7 @@ import (
 )
 
 type testMysqlSuite struct {
-	BinlogGenrator
+	BinlogGenerator
 }
 
 var _ = check.Suite(&testMysqlSuite{})

@@ -24,7 +24,7 @@ import (
 )
 
 type testPbSuite struct {
-	BinlogGenrator
+	BinlogGenerator
 }
 
 var _ = check.Suite(&testPbSuite{})
