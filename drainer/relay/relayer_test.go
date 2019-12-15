@@ -47,19 +47,19 @@ func (r *testRelayerSuite) TestCreate(c *C) {
 
 func (r *testRelayerSuite) TestWriteBinlog(c *C) {
 	dir := c.MkDir()
-	relayer, err := NewRelayer(dir, binlogfile.SegmentSizeBytes, nil)
+	relayer, err := NewRelayer(dir, binlogfile.SegmentSizeBytes, r)
 	c.Assert(relayer, NotNil)
 	c.Assert(err, IsNil)
 	defer relayer.Close()
 
 	r.SetDDL()
-	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, r.PV)
 	c.Assert(err, IsNil)
 	c.Assert(pos1.Suffix, Equals, uint64(0))
 	c.Assert(pos1.Offset, Greater, int64(0))
 
 	r.SetInsert(c)
-	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, r.PV)
 	c.Assert(err, IsNil)
 	c.Assert(pos2.Suffix, Equals, uint64(0))
 	c.Assert(pos2.Offset, Greater, pos1.Offset)
@@ -67,13 +67,13 @@ func (r *testRelayerSuite) TestWriteBinlog(c *C) {
 
 func (r *testRelayerSuite) TestGCBinlog(c *C) {
 	dir := c.MkDir()
-	relayer, err := NewRelayer(dir, 10, nil)
+	relayer, err := NewRelayer(dir, 10, r)
 	c.Assert(relayer, NotNil)
 	c.Assert(err, IsNil)
 	defer relayer.Close()
 
 	r.SetDDL()
-	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	pos1, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, r.PV)
 	c.Assert(err, IsNil)
 	// There should be 2 files: the written file, the new created file.
 	// GC won't remove the first file now.
@@ -82,7 +82,7 @@ func (r *testRelayerSuite) TestGCBinlog(c *C) {
 	checkRelayLogNumber(c, dir, 2)
 
 	r.SetDDL()
-	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, nil)
+	pos2, err := relayer.WriteBinlog(r.Schema, r.Table, r.TiBinlog, r.PV)
 	c.Assert(err, IsNil)
 	// Rotate twice, so there would be 3 files.
 	checkRelayLogNumber(c, dir, 3)

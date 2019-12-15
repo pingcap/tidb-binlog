@@ -17,6 +17,7 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"math"
 	"os"
 	"path"
 	"sync"
@@ -50,6 +51,9 @@ var (
 type Binlogger interface {
 	// read nums binlog events from the "from" position
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
+
+	// ReadAll reads all binlog in the directory.
+	ReadAll(stop chan struct{}) (chan *binlog.Entity, chan error)
 
 	// batch write binlog event, and returns current offset(if have).
 	WriteTail(entity *binlog.Entity) (binlog.Pos, error)
@@ -185,6 +189,53 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	})
 
 	return ents, err
+}
+
+// ReadAll reads all binlog in the directory.
+func (b *binlogger) ReadAll(stop chan struct{}) (result chan *binlog.Entity, errChan chan error) {
+	errChan = make(chan error, 1)
+	result = make(chan *binlog.Entity, 1)
+
+	minSuffix := uint64(math.MaxUint64)
+	names, err := ReadBinlogNames(b.dir)
+	if err != nil {
+		log.Error("read binlog files failed", zap.Error(err))
+	} else {
+		// Find the minimal suffix so we can construct start pos.
+		for _, name := range names {
+			suffix, _, err := ParseBinlogName(name)
+			if err != nil {
+				break
+			}
+			if suffix < minSuffix {
+				minSuffix = suffix
+			}
+		}
+	}
+	if err != nil || len(names) == 0 {
+		errChan <- err
+		close(errChan)
+		close(result)
+		return
+	}
+
+	from := binlog.Pos{Suffix: minSuffix, Offset: 0}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		err := b.Walk(ctx, from, func(entity *binlog.Entity) error {
+			select {
+			case <-stop:
+				cancel()
+			default:
+			}
+			result <- entity
+			return nil
+		})
+		errChan <- err
+		close(errChan)
+		close(result)
+	}()
+	return
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
