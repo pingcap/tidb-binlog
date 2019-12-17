@@ -23,7 +23,7 @@ import (
 )
 
 type testKafkaSuite struct {
-	BinlogGenrator
+	BinlogGenerator
 }
 
 var _ = check.Suite(&testKafkaSuite{})

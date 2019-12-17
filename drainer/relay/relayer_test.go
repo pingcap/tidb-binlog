@@ -28,7 +28,7 @@ func TestRelayer(t *testing.T) {
 var _ = Suite(&testRelayerSuite{})
 
 type testRelayerSuite struct {
-	translator.BinlogGenrator
+	translator.BinlogGenerator
 }
 
 func (r *testRelayerSuite) TestCreate(c *C) {

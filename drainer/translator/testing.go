@@ -27,10 +27,10 @@ import (
 	ti "github.com/pingcap/tipb/go-binlog"
 )
 
-var _ TableInfoGetter = &BinlogGenrator{}
+var _ TableInfoGetter = &BinlogGenerator{}
 
-// BinlogGenrator is a test helper for generating some binlog.
-type BinlogGenrator struct {
+// BinlogGenerator is a test helper for generating some binlog.
+type BinlogGenerator struct {
 	TiBinlog *ti.Binlog
 	PV       *ti.PrewriteValue
 	Schema   string
@@ -43,7 +43,7 @@ type BinlogGenrator struct {
 	oldDatums []types.Datum
 }
 
-func (g *BinlogGenrator) reset() {
+func (g *BinlogGenerator) reset() {
 	g.TiBinlog = nil
 	g.PV = nil
 	g.Schema = ""
@@ -53,7 +53,7 @@ func (g *BinlogGenrator) reset() {
 }
 
 // SetDelete set the info to be a delete event
-func (g *BinlogGenrator) SetDelete(c *check.C) {
+func (g *BinlogGenerator) SetDelete(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 
@@ -66,24 +66,24 @@ func (g *BinlogGenrator) SetDelete(c *check.C) {
 	})
 }
 
-func (g *BinlogGenrator) getDatums() (datums []types.Datum) {
+func (g *BinlogGenerator) getDatums() (datums []types.Datum) {
 	datums = g.datums
 	return
 }
 
-func (g *BinlogGenrator) getOldDatums() (datums []types.Datum) {
+func (g *BinlogGenerator) getOldDatums() (datums []types.Datum) {
 	datums = g.oldDatums
 	return
 }
 
 // TableByID implements TableInfoGetter interface
-func (g *BinlogGenrator) TableByID(id int64) (info *model.TableInfo, ok bool) {
+func (g *BinlogGenerator) TableByID(id int64) (info *model.TableInfo, ok bool) {
 	info, ok = g.id2info[id]
 	return
 }
 
 // SchemaAndTableName implements TableInfoGetter interface
-func (g *BinlogGenrator) SchemaAndTableName(id int64) (schema string, table string, ok bool) {
+func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table string, ok bool) {
 	names, ok := g.id2name[id]
 	if !ok {
 		return "", "", false
@@ -96,12 +96,12 @@ func (g *BinlogGenrator) SchemaAndTableName(id int64) (schema string, table stri
 }
 
 // IsDroppingColumn implements TableInfoGetter interface
-func (g *BinlogGenrator) IsDroppingColumn(id int64) bool {
+func (g *BinlogGenerator) IsDroppingColumn(id int64) bool {
 	return false
 }
 
 // SetDDL set up a ddl binlog.
-func (g *BinlogGenrator) SetDDL() {
+func (g *BinlogGenerator) SetDDL() {
 	g.reset()
 	g.TiBinlog = &ti.Binlog{
 		Tp:       ti.BinlogType_Commit,
@@ -115,7 +115,7 @@ func (g *BinlogGenrator) SetDDL() {
 	g.Table = "test"
 }
 
-func (g *BinlogGenrator) setEvent(c *check.C) *model.TableInfo {
+func (g *BinlogGenerator) setEvent(c *check.C) *model.TableInfo {
 	g.TiBinlog = &ti.Binlog{
 		Tp:       ti.BinlogType_Commit,
 		StartTs:  100,
@@ -136,7 +136,7 @@ func (g *BinlogGenrator) setEvent(c *check.C) *model.TableInfo {
 }
 
 // SetInsert set up a insert event binlog.
-func (g *BinlogGenrator) SetInsert(c *check.C) {
+func (g *BinlogGenerator) SetInsert(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 
@@ -149,7 +149,7 @@ func (g *BinlogGenrator) SetInsert(c *check.C) {
 }
 
 // SetUpdate set up a update event binlog.
-func (g *BinlogGenrator) SetUpdate(c *check.C) {
+func (g *BinlogGenerator) SetUpdate(c *check.C) {
 	g.reset()
 	info := g.setEvent(c)
 

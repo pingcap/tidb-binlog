@@ -98,7 +98,7 @@ func (s *syncerSuite) TestOpenAndClose(c *check.C) {
 }
 
 func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
-	gen := translator.BinlogGenrator{}
+	gen := translator.BinlogGenerator{}
 
 	// set up mysql db mock expect
 	s.mysqlMock.ExpectBegin()
