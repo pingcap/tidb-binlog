@@ -450,6 +450,44 @@ func (as *AppendSuit) TestWriteCBinlog(c *check.C) {
 	c.Assert(cBinlog.Tp, check.Equals, pb.BinlogType_Commit)
 }
 
+func (as *AppendSuit) TestFeedPreWriteValue(c *check.C) {
+	a := newAppend(c)
+	defer cleanAppend(a)
+
+	expectPBinlog := &pb.Binlog{
+		Tp:             pb.BinlogType_Prewrite,
+		StartTs:        42,
+		PrewriteKey:    []byte("PrewriteKey"),
+		PrewriteValue:  []byte("PrewriteValue"),
+		DdlQuery:       []byte("create table t(a int);"),
+		DdlJobId:       6,
+		DdlSchemaState: 5,
+	}
+
+	req := a.writeBinlog(expectPBinlog)
+	c.Assert(req.err, check.IsNil)
+
+	cBinlog := &pb.Binlog{
+		Tp:       pb.BinlogType_Commit,
+		StartTs:  42,
+		CommitTs: 50,
+	}
+	req = a.writeBinlog(cBinlog)
+	c.Assert(req.err, check.IsNil)
+
+	err := a.feedPreWriteValue(cBinlog)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cBinlog.StartTs, check.Equals, expectPBinlog.StartTs)
+	c.Assert(cBinlog.CommitTs, check.Equals, int64(50))
+	c.Assert(cBinlog.Tp, check.Equals, pb.BinlogType_Commit)
+	c.Assert(cBinlog.PrewriteKey, check.IsNil)
+	c.Assert(cBinlog.PrewriteValue, check.BytesEquals, expectPBinlog.PrewriteValue)
+	c.Assert(cBinlog.DdlQuery, check.BytesEquals, expectPBinlog.DdlQuery)
+	c.Assert(cBinlog.DdlJobId, check.Equals, expectPBinlog.DdlJobId)
+	c.Assert(cBinlog.DdlSchemaState, check.Equals, expectPBinlog.DdlSchemaState)
+}
+
 type OpenDBSuit struct {
 	dir string
 }
