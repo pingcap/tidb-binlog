@@ -981,6 +981,8 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	cbinlog.StartTs = pbinlog.StartTs
 	cbinlog.PrewriteValue = pbinlog.PrewriteValue
+	cbinlog.DdlQuery = pbinlog.DdlQuery
+	cbinlog.DdlJobId = pbinlog.DdlJobId
 
 	return nil
 }
