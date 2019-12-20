@@ -326,13 +326,12 @@ func (as *AppendSuit) TestFeedPreWriteValue(c *check.C) {
 	defer cleanAppend(a)
 
 	expectPBinlog := &pb.Binlog{
-		Tp:             pb.BinlogType_Prewrite,
-		StartTs:        42,
-		PrewriteKey:    []byte("PrewriteKey"),
-		PrewriteValue:  []byte("PrewriteValue"),
-		DdlQuery:       []byte("create table t(a int);"),
-		DdlJobId:       6,
-		DdlSchemaState: 5,
+		Tp:            pb.BinlogType_Prewrite,
+		StartTs:       42,
+		PrewriteKey:   []byte("PrewriteKey"),
+		PrewriteValue: []byte("PrewriteValue"),
+		DdlQuery:      []byte("create table t(a int);"),
+		DdlJobId:      6,
 	}
 
 	req := a.writeBinlog(expectPBinlog)
@@ -356,7 +355,6 @@ func (as *AppendSuit) TestFeedPreWriteValue(c *check.C) {
 	c.Assert(cBinlog.PrewriteValue, check.BytesEquals, expectPBinlog.PrewriteValue)
 	c.Assert(cBinlog.DdlQuery, check.BytesEquals, expectPBinlog.DdlQuery)
 	c.Assert(cBinlog.DdlJobId, check.Equals, expectPBinlog.DdlJobId)
-	c.Assert(cBinlog.DdlSchemaState, check.Equals, expectPBinlog.DdlSchemaState)
 }
 
 type OpenDBSuit struct {
