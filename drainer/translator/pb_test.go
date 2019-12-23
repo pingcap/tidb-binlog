@@ -35,12 +35,14 @@ func (t *testPbSuite) TestDDL(c *check.C) {
 	pbBinog, err := TiBinlogToPbBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
 	c.Assert(err, check.IsNil)
 
+	utcTz := true
 	c.Log("get ddl: ", string(pbBinog.GetDdlQuery()))
 	expected := fmt.Sprintf("use %s; %s;", t.Schema, string(t.TiBinlog.GetDdlQuery()))
 	c.Assert(pbBinog, check.DeepEquals, &pb.Binlog{
-		Tp:       pb.BinlogType_DDL,
-		CommitTs: t.TiBinlog.GetCommitTs(),
-		DdlQuery: []byte(expected),
+		Tp:          pb.BinlogType_DDL,
+		CommitTs:    t.TiBinlog.GetCommitTs(),
+		DdlQuery:    []byte(expected),
+		UtcTimeZone: &utcTz,
 	})
 
 	// test create database should not contains `use db`
@@ -51,9 +53,10 @@ func (t *testPbSuite) TestDDL(c *check.C) {
 	c.Log("get ddl: ", string(pbBinog.GetDdlQuery()))
 	expected = fmt.Sprintf("%s;", string(t.TiBinlog.GetDdlQuery()))
 	c.Assert(pbBinog, check.DeepEquals, &pb.Binlog{
-		Tp:       pb.BinlogType_DDL,
-		CommitTs: t.TiBinlog.GetCommitTs(),
-		DdlQuery: []byte(expected),
+		Tp:          pb.BinlogType_DDL,
+		CommitTs:    t.TiBinlog.GetCommitTs(),
+		DdlQuery:    []byte(expected),
+		UtcTimeZone: &utcTz,
 	})
 }
 

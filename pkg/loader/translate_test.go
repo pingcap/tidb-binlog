@@ -14,6 +14,8 @@
 package loader
 
 import (
+	"time"
+
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 
 	. "github.com/pingcap/check"
@@ -117,45 +119,65 @@ var _ = Suite(&columnToArgSuite{})
 
 func (s *columnToArgSuite) TestHandleMySQLJSON(c *C) {
 	colVal := `{"key": "value"}`
-	arg, err := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)})
+	arg, err := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)}, true)
 	c.Assert(err, IsNil)
 	c.Assert(arg, Equals, colVal)
+}
+
+const TimeLayout = "2006-01-02 15:04:05"
+
+func (s *columnToArgSuite) TestHandleTimestamp(c *C) {
+
+	localToUtc := func(timeStr string) string {
+		t, err := time.ParseInLocation(TimeLayout, timeStr, time.Local)
+		c.Assert(err, IsNil)
+		return t.In(time.UTC).Format(TimeLayout)
+	}
+
+	colVal := `1996-11-20 01:23:45`
+	arg, err := columnToArg("timestamp", &pb.Column{StringValue: &colVal}, true)
+	c.Assert(err, IsNil)
+	c.Assert(arg, Equals, colVal)
+	colVal = `1996-11-20 01:23:45`
+	arg, err = columnToArg("timestamp", &pb.Column{StringValue: &colVal}, false)
+	c.Assert(err, IsNil)
+	c.Assert(arg, Equals, localToUtc(colVal))
 }
 
 func (s *columnToArgSuite) TestGetCorrectArgs(c *C) {
 	isNull := true
 	col := &pb.Column{IsNull: &isNull}
-	val, err := columnToArg("", col)
+	val, err := columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, IsNil)
 
 	var i64 int64 = 666
 	col = &pb.Column{Int64Value: &i64}
-	val, err = columnToArg("", col)
+	val, err = columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, i64)
 
 	var u64 uint64 = 777
 	col = &pb.Column{Uint64Value: &u64}
-	val, err = columnToArg("", col)
+	val, err = columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, u64)
 
 	var d float64 = 3.14
 	col = &pb.Column{DoubleValue: &d}
-	val, err = columnToArg("", col)
+	val, err = columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, d)
 
 	var b []byte = []byte{1, 2, 3}
 	col = &pb.Column{BytesValue: b}
-	val, err = columnToArg("", col)
+	val, err = columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, DeepEquals, b)
 
 	var ss string = "hello world"
 	col = &pb.Column{StringValue: &ss}
-	val, err = columnToArg("", col)
+	val, err = columnToArg("", col, true)
 	c.Assert(err, IsNil)
 	c.Assert(val, DeepEquals, ss)
 }

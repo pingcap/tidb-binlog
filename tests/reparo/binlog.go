@@ -51,7 +51,8 @@ func main() {
 		a int primary key,
 		b double NOT NULL DEFAULT 2.0,
 		c varchar(10) NOT NULL,
-		d time unique
+		d time unique,
+		e timestamp
 	);
 	`,
 		`
@@ -60,6 +61,7 @@ func main() {
 		b double NOT NULL DEFAULT 2.0,
 		c varchar(10) NOT NULL,
 		d time unique,
+		e timestamp,
 		PRIMARY KEY(a, b)
 	);
 	`,
@@ -68,7 +70,8 @@ func main() {
 		a int,
 		b double NOT NULL DEFAULT 2.0,
 		c varchar(10) NOT NULL,
-		d time unique
+		d time unique,
+		e timestamp
 	);
 	`}
 

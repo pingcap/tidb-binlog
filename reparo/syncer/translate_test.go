@@ -182,10 +182,10 @@ func (s *testTranslateSuite) TestTrimUse(c *check.C) {
 }
 
 func (s *testTranslateSuite) TestGenColsAndArgs(c *check.C) {
-	cols, args, err := genColsAndArgs(generateColumns(c))
+	cols, args, err := genColsAndArgs(generateColumns(c), true)
 	c.Assert(err, check.IsNil)
-	c.Assert(cols, check.DeepEquals, []string{"a", "b", "c"})
-	c.Assert(args, check.DeepEquals, []interface{}{int64(1), "test", "test"})
+	c.Assert(cols, check.DeepEquals, []string{"a", "b", "c", "d"})
+	c.Assert(args, check.DeepEquals, []interface{}{int64(1), "test", "test", "1996-11-19 17:23:45"})
 }
 
 // generateDMLEvents generates three DML Events for test.
@@ -235,6 +235,12 @@ func generateColumns(c *check.C) [][]byte {
 			MysqlType:    "varchar",
 			Value:        encodeBytesValue([]byte("test")),
 			ChangedValue: encodeBytesValue([]byte("abc")),
+		}, {
+			Name:         "d",
+			Tp:           []byte{mysql.TypeTimestamp},
+			MysqlType:    "timestamp",
+			Value:        encodeBytesValue([]byte("1996-11-19 17:23:45")),
+			ChangedValue: encodeBytesValue([]byte("1996-11-20 17:23:45")),
 		},
 	}
 

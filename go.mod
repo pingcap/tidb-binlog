@@ -26,7 +26,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
-	github.com/siddontang/go-mysql v0.0.0-20190618002340-dbe0224ac097 // indirect
+	github.com/sirupsen/logrus v1.4.1 // indirect
 	github.com/soheilhy/cmux v0.1.4
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
@@ -39,5 +39,8 @@ require (
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c
 	google.golang.org/grpc v1.23.1
 )
+
+// this line will be deleted after pingcap/tidb-tools#307 merged.
+replace github.com/pingcap/tidb-tools => github.com/leoppro/tidb-tools v0.0.0-20191223113830-3b510c1431ef
 
 go 1.13

@@ -53,7 +53,7 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 		return types.Datum{}, nil, errors.Trace(err)
 	}
 
-	datums, err = tablecodec.DecodeRow(remain, colsTypeMap, time.Local)
+	datums, err = tablecodec.DecodeRow(remain, colsTypeMap, time.UTC)
 	if err != nil {
 		return types.Datum{}, nil, errors.Trace(err)
 	}

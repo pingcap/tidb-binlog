@@ -79,7 +79,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 
 // CreateDBWithSQLMode return sql.DB
 func CreateDBWithSQLMode(user string, password string, host string, port int, sqlMode *string) (db *gosql.DB, err error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true&time_zone=UTC", user, password, host, port)
 	if sqlMode != nil {
 		// same as "set sql_mode = '<sqlMode>'"
 		dsn += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"

@@ -54,6 +54,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
+		utcTz := binlog.GetUtcTimeZone()
 		for _, event := range data.GetEvents() {
 			dml := new(loader.DML)
 			dml.Database = event.GetSchemaName()
@@ -64,7 +65,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 			case pb.EventType_Insert:
 				dml.Tp = loader.InsertDMLType
 
-				cols, args, err := genColsAndArgs(event.Row)
+				cols, args, err := genColsAndArgs(event.Row, utcTz)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -95,9 +96,15 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 					}
 
 					tp := col.Tp[0]
-					newDatum = formatValue(newDatum, tp)
+					newDatum, err = formatValue(newDatum, tp, utcTz)
+					if err != nil {
+						return nil, errors.Trace(err)
+					}
 					newValue := newDatum.GetValue()
-					oldDatum = formatValue(oldDatum, tp)
+					oldDatum, err = formatValue(oldDatum, tp, utcTz)
+					if err != nil {
+						return nil, errors.Trace(err)
+					}
 					oldValue := oldDatum.GetValue()
 
 					log.Debug("translate update event",
@@ -113,7 +120,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 			case pb.EventType_Delete:
 				dml.Tp = loader.DeleteDMLType
 
-				cols, args, err := genColsAndArgs(event.Row)
+				cols, args, err := genColsAndArgs(event.Row, utcTz)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -133,7 +140,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 	return
 }
 
-func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error) {
+func genColsAndArgs(row [][]byte, utcTz bool) (cols []string, args []interface{}, err error) {
 	cols = make([]string, 0, len(row))
 	args = make([]interface{}, 0, len(row))
 	for _, c := range row {
@@ -150,7 +157,10 @@ func genColsAndArgs(row [][]byte) (cols []string, args []interface{}, err error)
 		}
 
 		tp := col.Tp[0]
-		val = formatValue(val, tp)
+		val, err = formatValue(val, tp, utcTz)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
 		log.Debug("format value",
 			zap.String("col name", col.Name),
 			zap.String("mysql type", col.MysqlType),

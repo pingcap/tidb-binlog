@@ -26,7 +26,7 @@ import (
 )
 
 func getTestDB() (db *sql.DB, err error) {
-	dsn := "root:@tcp(127.0.0.1:3306)/?charset=utf8&interpolateParams=true&readTimeout=1m&multiStatements=true"
+	dsn := "root:@tcp(127.0.0.1:3306)/?charset=utf8&interpolateParams=true&readTimeout=1m&multiStatements=true&time_zone=UTC"
 	db, err = sql.Open("mysql", dsn)
 	return
 }

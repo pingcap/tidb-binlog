@@ -15,8 +15,11 @@ package syncer
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -33,14 +36,26 @@ func formatValueToString(data types.Datum, tp byte) string {
 	}
 }
 
-func formatValue(value types.Datum, tp byte) types.Datum {
+func formatValue(value types.Datum, tp byte, utcTz bool) (types.Datum, error) {
 	if value.GetValue() == nil {
-		return value
+		return value, nil
 	}
 
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
 		value = types.NewDatum(fmt.Sprintf("%s", value.GetValue()))
+	case mysql.TypeTimestamp:
+		tsStr := fmt.Sprintf("%s", value.GetValue())
+		if !utcTz {
+			sc := &stmtctx.StatementContext{TimeZone: time.Local}
+			t, err := types.ParseTimestamp(sc, tsStr)
+			if err != nil {
+				return types.Datum{}, errors.Trace(err)
+			}
+			t.ConvertTimeZone(time.Local, time.UTC)
+			tsStr = t.String()
+		}
+		value = types.NewDatum(tsStr)
 	case mysql.TypeEnum:
 		value = types.NewDatum(value.GetMysqlEnum().Value)
 	case mysql.TypeSet:
@@ -49,5 +64,5 @@ func formatValue(value types.Datum, tp byte) types.Datum {
 		value = types.NewDatum(value.GetMysqlBit())
 	}
 
-	return value
+	return value, nil
 }

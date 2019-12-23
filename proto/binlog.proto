@@ -57,4 +57,7 @@ message Binlog {
 
     // ddl_query is the original ddl statement query.
     optional bytes         ddl_query      = 4;
+
+    // utc_time_zone marks if the time zone is UTC
+    optional bool          utc_time_zone  = 5;
 }
