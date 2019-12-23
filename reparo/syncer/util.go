@@ -52,7 +52,10 @@ func formatValue(value types.Datum, tp byte, utcTz bool) (types.Datum, error) {
 			if err != nil {
 				return types.Datum{}, errors.Trace(err)
 			}
-			t.ConvertTimeZone(time.Local, time.UTC)
+			err = t.ConvertTimeZone(time.Local, time.UTC)
+			if err != nil {
+				return types.Datum{}, errors.Trace(err)
+			}
 			tsStr = t.String()
 		}
 		value = types.NewDatum(tsStr)

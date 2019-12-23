@@ -115,7 +115,10 @@ func columnToArg(mysqlType string, c *pb.Column, utcTz bool) (arg interface{}, e
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		t.ConvertTimeZone(time.Local, time.UTC)
+		err = t.ConvertTimeZone(time.Local, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		return t.String(), nil
 	}
 
