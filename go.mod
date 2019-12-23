@@ -29,7 +29,7 @@ require (
 	github.com/pingcap/pd v2.1.3+incompatible
 	github.com/pingcap/tidb v2.1.3+incompatible
 	github.com/pingcap/tidb-tools v2.1.5+incompatible
-	github.com/pingcap/tipb v0.0.0-20190107072121-abbec73437b7
+	github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/prometheus/client_golang v0.8.0
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a

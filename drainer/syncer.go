@@ -502,6 +502,11 @@ func (s *Syncer) run(jobs []*model.Job) error {
 				return errors.Trace(err)
 			}
 
+			if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
+				log.Infof("Syncer skips DeleteOnly DDL [job: %+v] [ts: %d]", b.job, b.GetCommitTs())
+				continue
+			}
+
 			log.Debug("ddl query: ", b.job.Query)
 			sql := b.job.Query
 			schema, table, err := s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
@@ -552,6 +557,8 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 			continue
 		}
 
+		isTblDroppingCol := s.schema.IsDroppingColumn(mutation.GetTableId())
+
 		var (
 			safeMode bool
 
@@ -580,7 +587,7 @@ func (s *Syncer) translateSqls(mutations []pb.TableMutation, commitTS int64, nod
 		}
 
 		if len(mutation.GetUpdatedRows()) > 0 {
-			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS)
+			sqls[pb.MutationType_Update], keys[pb.MutationType_Update], args[pb.MutationType_Update], safeMode, err = s.translator.GenUpdateSQLs(schemaName, table, mutation.GetUpdatedRows(), commitTS, isTblDroppingCol)
 			if err != nil {
 				return errors.Errorf("gen update sqls failed: %v, schema: %s, table: %s", err, schemaName, tableName)
 			}

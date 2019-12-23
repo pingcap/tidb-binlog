@@ -54,7 +54,7 @@ func (p *kafkaTranslator) GenInsertSQLs(schema string, tableInfo *model.TableInf
 	return sqls, keys, values, nil
 }
 
-func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64) ([]string, [][]string, [][]interface{}, bool, error) {
+func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInfo, rows [][]byte, commitTS int64, isTblDroppingCol bool) ([]string, [][]string, [][]interface{}, bool, error) {
 	sqls := make([]string, 0, len(rows))
 	keys := make([][]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -66,7 +66,7 @@ func (p *kafkaTranslator) GenUpdateSQLs(schema string, tableInfo *model.TableInf
 		tableMutation.Type = obinlog.MutationType_Update.Enum()
 
 		var err error
-		tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(tableInfo, row)
+		tableMutation.Row, tableMutation.ChangeRow, err = updateRowToRow(tableInfo, row, isTblDroppingCol)
 		if err != nil {
 			return nil, nil, nil, false, errors.Trace(err)
 		}
@@ -175,9 +175,9 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	return
 }
 
-func updateRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	oldDatums, newDatums, err := DecodeOldAndNewRow(raw, colsTypeMap, time.Local)
+func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
+	cols := util.ToColumnMap(tableInfo.Columns)
+	oldDatums, newDatums, err := DecodeOldAndNewRow(raw, cols, time.Local, isTblDroppingCol)
 	if err != nil {
 		return
 	}

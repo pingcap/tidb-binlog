@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ngaut/log"
@@ -146,6 +147,104 @@ var (
 	}
 )
 
+func caseUpdateWhileAddingCol(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE growing_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0
+);`)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		insertSQL := `INSERT INTO growing_cols(id, val) VALUES (?, ?);`
+		mustExec(db, insertSQL, 1, 0)
+
+		// Keep updating to generate DMLs while the other goroutine's adding columns
+		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 300; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 300; i++ {
+			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
+			mustExec(db, updateSQL)
+		}
+	}()
+
+	wg.Wait()
+}
+
+func caseUpdateWhileDroppingCol(db *sql.DB) {
+	const nCols = 50
+	var builder strings.Builder
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d VARCHAR(50) NOT NULL", i))
+	}
+	createSQL := fmt.Sprintf(`
+CREATE TABLE many_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0,
+	%s
+);`, builder.String())
+	mustExec(db, createSQL)
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d", i))
+	}
+	cols := builder.String()
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(`""`)
+	}
+	placeholders := builder.String()
+
+	var wg sync.WaitGroup
+
+	// Insert a row with all columns set to empty string
+	insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
+	mustExec(db, insertSQL, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// Keep updating to generate DMLs while the other goroutine's dropping columns
+		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 100; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < nCols; i++ {
+			mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
+		}
+	}()
+
+	wg.Wait()
+}
+
 type testRunner struct {
 	src    *sql.DB
 	dst    *sql.DB
@@ -170,6 +269,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
 	runPKcases(tr)
 
+	tr.run(caseUpdateWhileAddingCol)
+	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+
 	tr.execSQLs(caseMultiDataType)
 	tr.execSQLs(caseMultiDataTypeClean)
 
@@ -187,6 +289,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
+
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
