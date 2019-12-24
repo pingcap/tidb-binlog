@@ -159,7 +159,7 @@ func genUpdate(schema string, table *model.TableInfo, row []byte, isTblDroppingC
 	columns := writableColumns(table)
 	colsMap := util.ToColumnMap(columns)
 
-	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.UTC, isTblDroppingCol)
+	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local, isTblDroppingCol)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
@@ -204,7 +204,7 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.UTC)
+	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
@@ -241,7 +241,7 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 
 func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
 	cols := make([][]byte, 0, len(row))
-	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range row {
 		val, err := codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {
@@ -266,7 +266,7 @@ func encodeRow(row []types.Datum, colName []string, tp []byte, mysqlType []strin
 
 func encodeUpdateRow(oldRow []types.Datum, newRow []types.Datum, colName []string, tp []byte, mysqlType []string) ([][]byte, error) {
 	cols := make([][]byte, 0, len(oldRow))
-	sc := &stmtctx.StatementContext{TimeZone: time.UTC}
+	sc := &stmtctx.StatementContext{TimeZone: time.Local}
 	for i, c := range oldRow {
 		val, err := codec.EncodeValue(sc, nil, []types.Datum{c}...)
 		if err != nil {

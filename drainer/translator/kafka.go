@@ -43,8 +43,8 @@ func TiBinlogToSlaveBinlog(
 	timeZone := time.Local.String()
 	if tiBinlog.DdlJobId > 0 { // DDL
 		slaveBinlog := &obinlog.Binlog{
-			Type:        obinlog.BinlogType_DDL,
-			CommitTs:    tiBinlog.GetCommitTs(),
+			Type:     obinlog.BinlogType_DDL,
+			CommitTs: tiBinlog.GetCommitTs(),
 			TimeZone: &timeZone,
 			DdlData: &obinlog.DDLData{
 				SchemaName: proto.String(schema),
@@ -55,9 +55,9 @@ func TiBinlogToSlaveBinlog(
 		return slaveBinlog, nil
 	}
 	slaveBinlog := &obinlog.Binlog{
-		Type:        obinlog.BinlogType_DML,
-		CommitTs:    tiBinlog.GetCommitTs(),
-		DmlData:     new(obinlog.DMLData),
+		Type:     obinlog.BinlogType_DML,
+		CommitTs: tiBinlog.GetCommitTs(),
+		DmlData:  new(obinlog.DMLData),
 		TimeZone: &timeZone,
 	}
 
@@ -129,7 +129,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	columns := tableInfo.Columns
 
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	columnValues, err := tablecodec.DecodeRow(raw, colsTypeMap, time.UTC)
+	columnValues, err := tablecodec.DecodeRow(raw, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotate(err, "DecodeRow failed")
 	}
@@ -153,7 +153,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 
 func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
 	updtDecoder := newUpdateDecoder(tableInfo, isTblDroppingCol)
-	oldDatums, newDatums, err := updtDecoder.decode(raw, time.UTC)
+	oldDatums, newDatums, err := updtDecoder.decode(raw, time.Local)
 	if err != nil {
 		return
 	}
