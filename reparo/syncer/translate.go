@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -54,7 +55,10 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 		}
 	case pb.BinlogType_DML:
 		data := binlog.DmlData
-		utcTz := binlog.GetUtcTimeZone()
+		timeZone := binlog.GetTimeZone()
+		if timeZone == "" {
+			timeZone = time.Local.String()
+		}
 		for _, event := range data.GetEvents() {
 			dml := new(loader.DML)
 			dml.Database = event.GetSchemaName()
@@ -65,7 +69,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 			case pb.EventType_Insert:
 				dml.Tp = loader.InsertDMLType
 
-				cols, args, err := genColsAndArgs(event.Row, utcTz)
+				cols, args, err := genColsAndArgs(event.Row, timeZone)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -96,12 +100,12 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 					}
 
 					tp := col.Tp[0]
-					newDatum, err = formatValue(newDatum, tp, utcTz)
+					newDatum, err = formatValue(newDatum, tp, timeZone)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
 					newValue := newDatum.GetValue()
-					oldDatum, err = formatValue(oldDatum, tp, utcTz)
+					oldDatum, err = formatValue(oldDatum, tp, timeZone)
 					if err != nil {
 						return nil, errors.Trace(err)
 					}
@@ -120,7 +124,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 			case pb.EventType_Delete:
 				dml.Tp = loader.DeleteDMLType
 
-				cols, args, err := genColsAndArgs(event.Row, utcTz)
+				cols, args, err := genColsAndArgs(event.Row, timeZone)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -140,7 +144,7 @@ func pbBinlogToTxn(binlog *pb.Binlog) (txn *loader.Txn, err error) {
 	return
 }
 
-func genColsAndArgs(row [][]byte, utcTz bool) (cols []string, args []interface{}, err error) {
+func genColsAndArgs(row [][]byte, timeZone string) (cols []string, args []interface{}, err error) {
 	cols = make([]string, 0, len(row))
 	args = make([]interface{}, 0, len(row))
 	for _, c := range row {
@@ -157,7 +161,7 @@ func genColsAndArgs(row [][]byte, utcTz bool) (cols []string, args []interface{}
 		}
 
 		tp := col.Tp[0]
-		val, err = formatValue(val, tp, utcTz)
+		val, err = formatValue(val, tp, timeZone)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}

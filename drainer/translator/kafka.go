@@ -40,12 +40,12 @@ func TiBinlogToSlaveBinlog(
 	tiBinlog *pb.Binlog,
 	pv *pb.PrewriteValue,
 ) (*obinlog.Binlog, error) {
-	utcTz := true
+	timeZone := time.Local.String()
 	if tiBinlog.DdlJobId > 0 { // DDL
 		slaveBinlog := &obinlog.Binlog{
 			Type:        obinlog.BinlogType_DDL,
 			CommitTs:    tiBinlog.GetCommitTs(),
-			UtcTimeZone: &utcTz,
+			TimeZone: &timeZone,
 			DdlData: &obinlog.DDLData{
 				SchemaName: proto.String(schema),
 				TableName:  proto.String(table),
@@ -58,7 +58,7 @@ func TiBinlogToSlaveBinlog(
 		Type:        obinlog.BinlogType_DML,
 		CommitTs:    tiBinlog.GetCommitTs(),
 		DmlData:     new(obinlog.DMLData),
-		UtcTimeZone: &utcTz,
+		TimeZone: &timeZone,
 	}
 
 	for _, mut := range pv.GetMutations() {

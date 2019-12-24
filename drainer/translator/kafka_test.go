@@ -15,6 +15,7 @@ package translator
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
@@ -33,7 +34,7 @@ func (t *testKafkaSuite) TestDDL(c *check.C) {
 
 	slaveBinog, err := TiBinlogToSlaveBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
 	c.Assert(err, check.IsNil)
-	utcTz := true
+	timeZone := time.Local.String()
 	c.Assert(slaveBinog, check.DeepEquals, &obinlog.Binlog{
 		Type:     obinlog.BinlogType_DDL,
 		CommitTs: t.TiBinlog.GetCommitTs(),
@@ -42,7 +43,7 @@ func (t *testKafkaSuite) TestDDL(c *check.C) {
 			TableName:  proto.String(t.Table),
 			DdlQuery:   t.TiBinlog.GetDdlQuery(),
 		},
-		UtcTimeZone: &utcTz,
+		TimeZone: &timeZone,
 	})
 }
 

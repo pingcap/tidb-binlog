@@ -182,7 +182,7 @@ func (s *testTranslateSuite) TestTrimUse(c *check.C) {
 }
 
 func (s *testTranslateSuite) TestGenColsAndArgs(c *check.C) {
-	cols, args, err := genColsAndArgs(generateColumns(c), true)
+	cols, args, err := genColsAndArgs(generateColumns(c), "UTC")
 	c.Assert(err, check.IsNil)
 	c.Assert(cols, check.DeepEquals, []string{"a", "b", "c", "d"})
 	c.Assert(args, check.DeepEquals, []interface{}{int64(1), "test", "test", "1996-11-19 17:23:45"})

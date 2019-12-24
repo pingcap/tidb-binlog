@@ -119,7 +119,7 @@ var _ = Suite(&columnToArgSuite{})
 
 func (s *columnToArgSuite) TestHandleMySQLJSON(c *C) {
 	colVal := `{"key": "value"}`
-	arg, err := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)}, true)
+	arg, err := columnToArg("json", &pb.Column{BytesValue: []byte(colVal)}, time.Local.String())
 	c.Assert(err, IsNil)
 	c.Assert(arg, Equals, colVal)
 }
@@ -135,11 +135,11 @@ func (s *columnToArgSuite) TestHandleTimestamp(c *C) {
 	}
 
 	colVal := `1996-11-20 01:23:45`
-	arg, err := columnToArg("timestamp", &pb.Column{StringValue: &colVal}, true)
+	arg, err := columnToArg("timestamp", &pb.Column{StringValue: &colVal}, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(arg, Equals, colVal)
 	colVal = `1996-11-20 01:23:45`
-	arg, err = columnToArg("timestamp", &pb.Column{StringValue: &colVal}, false)
+	arg, err = columnToArg("timestamp", &pb.Column{StringValue: &colVal}, time.Local.String())
 	c.Assert(err, IsNil)
 	c.Assert(arg, Equals, localToUtc(colVal))
 }
@@ -147,37 +147,37 @@ func (s *columnToArgSuite) TestHandleTimestamp(c *C) {
 func (s *columnToArgSuite) TestGetCorrectArgs(c *C) {
 	isNull := true
 	col := &pb.Column{IsNull: &isNull}
-	val, err := columnToArg("", col, true)
+	val, err := columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, IsNil)
 
 	var i64 int64 = 666
 	col = &pb.Column{Int64Value: &i64}
-	val, err = columnToArg("", col, true)
+	val, err = columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, i64)
 
 	var u64 uint64 = 777
 	col = &pb.Column{Uint64Value: &u64}
-	val, err = columnToArg("", col, true)
+	val, err = columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, u64)
 
 	var d float64 = 3.14
 	col = &pb.Column{DoubleValue: &d}
-	val, err = columnToArg("", col, true)
+	val, err = columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, Equals, d)
 
 	var b []byte = []byte{1, 2, 3}
 	col = &pb.Column{BytesValue: b}
-	val, err = columnToArg("", col, true)
+	val, err = columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, DeepEquals, b)
 
 	var ss string = "hello world"
 	col = &pb.Column{StringValue: &ss}
-	val, err = columnToArg("", col, true)
+	val, err = columnToArg("", col, "UTC")
 	c.Assert(err, IsNil)
 	c.Assert(val, DeepEquals, ss)
 }

@@ -36,8 +36,8 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 	pbBinlog = new(pb.Binlog)
 
 	pbBinlog.CommitTs = tiBinlog.CommitTs
-	utcTimeZone := true
-	pbBinlog.UtcTimeZone = &utcTimeZone
+	timeZone := time.Local.String()
+	pbBinlog.TimeZone = &timeZone
 
 	if tiBinlog.DdlJobId > 0 { // DDL
 		sql := string(tiBinlog.GetDdlQuery())

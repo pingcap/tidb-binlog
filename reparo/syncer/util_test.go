@@ -92,7 +92,7 @@ func (s *testUtilSuite) TestFormatValue(c *check.C) {
 		str := formatValueToString(datum, testCase.tp)
 		c.Assert(str, check.Equals, testCase.expectStr)
 
-		fv, err := formatValue(datum, testCase.tp, true)
+		fv, err := formatValue(datum, testCase.tp, time.Local.String())
 		c.Assert(err, check.IsNil)
 		c.Assert(fv.GetValue(), check.DeepEquals, testCase.expectVal)
 	}
@@ -121,35 +121,35 @@ func (s *testUtilSuite) TestUtcZone(c *check.C) {
 		tp        byte
 		expectStr string
 		expectVal interface{}
-		utcTz     bool
+		timeZone  string
 	}{
 		{
 			value:     datetime,
 			tp:        mysql.TypeDatetime,
 			expectStr: "2019-04-15 12:12:12 +0000 UTC",
 			expectVal: "2019-04-15 12:12:12 +0000 UTC",
-			utcTz:     false,
+			timeZone:  time.Local.String(),
 		},
 		{
 			value:     datetime,
 			tp:        mysql.TypeDatetime,
 			expectStr: "2019-04-15 12:12:12 +0000 UTC",
 			expectVal: "2019-04-15 12:12:12 +0000 UTC",
-			utcTz:     true,
+			timeZone:  time.Local.String(),
 		},
 		{
 			value:     loaclTime,
 			tp:        mysql.TypeTimestamp,
 			expectStr: "1996-11-20 01:23:45",
 			expectVal: localToUtc("1996-11-20 01:23:45"),
-			utcTz:     false,
+			timeZone:  time.Local.String(),
 		},
 		{
 			value:     utcTime,
 			tp:        mysql.TypeTimestamp,
 			expectStr: "1996-11-20 01:23:45",
 			expectVal: "1996-11-20 01:23:45",
-			utcTz:     true,
+			timeZone:  "UTC",
 		},
 	}
 
@@ -158,7 +158,7 @@ func (s *testUtilSuite) TestUtcZone(c *check.C) {
 		str := formatValueToString(datum, testCase.tp)
 		c.Assert(str, check.Equals, testCase.expectStr)
 
-		fv, err := formatValue(datum, testCase.tp, testCase.utcTz)
+		fv, err := formatValue(datum, testCase.tp, testCase.timeZone)
 		c.Assert(err, check.IsNil)
 		c.Assert(fv.GetValue(), check.DeepEquals, testCase.expectVal)
 	}

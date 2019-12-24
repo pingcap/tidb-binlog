@@ -36,7 +36,7 @@ func formatValueToString(data types.Datum, tp byte) string {
 	}
 }
 
-func formatValue(value types.Datum, tp byte, utcTz bool) (types.Datum, error) {
+func formatValue(value types.Datum, tp byte, timeZone string) (types.Datum, error) {
 	if value.GetValue() == nil {
 		return value, nil
 	}
@@ -46,13 +46,17 @@ func formatValue(value types.Datum, tp byte, utcTz bool) (types.Datum, error) {
 		value = types.NewDatum(fmt.Sprintf("%s", value.GetValue()))
 	case mysql.TypeTimestamp:
 		tsStr := fmt.Sprintf("%s", value.GetValue())
-		if !utcTz {
-			sc := &stmtctx.StatementContext{TimeZone: time.Local}
+		if timeZone != "UTC" {
+			tz, err := time.LoadLocation(timeZone)
+			if err != nil {
+				return types.Datum{}, errors.Trace(err)
+			}
+			sc := &stmtctx.StatementContext{TimeZone: tz}
 			t, err := types.ParseTimestamp(sc, tsStr)
 			if err != nil {
 				return types.Datum{}, errors.Trace(err)
 			}
-			err = t.ConvertTimeZone(time.Local, time.UTC)
+			err = t.ConvertTimeZone(tz, time.UTC)
 			if err != nil {
 				return types.Datum{}, errors.Trace(err)
 			}

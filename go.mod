@@ -41,6 +41,6 @@ require (
 )
 
 // this line will be deleted after pingcap/tidb-tools#307 merged.
-replace github.com/pingcap/tidb-tools => github.com/leoppro/tidb-tools v0.0.0-20191223113830-3b510c1431ef
+replace github.com/pingcap/tidb-tools => github.com/leoppro/tidb-tools v0.0.0-20191224084100-04a350393649
 
 go 1.13

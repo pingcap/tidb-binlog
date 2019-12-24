@@ -26,7 +26,10 @@ import (
 func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	txn := new(Txn)
 	var err error
-	utcTz := binlog.GetUtcTimeZone()
+	timeZone := binlog.GetTimeZone()
+	if timeZone == "" {
+		timeZone = time.Local.String()
+	}
 	switch binlog.Type {
 	case pb.BinlogType_DDL:
 		data := binlog.DdlData
@@ -43,14 +46,14 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 				dml.Tp = getDMLType(mut)
 
 				// setup values
-				dml.Values, err = getColVals(table, mut.Row.GetColumns(), utcTz)
+				dml.Values, err = getColVals(table, mut.Row.GetColumns(), timeZone)
 				if err != nil {
 					return nil, err
 				}
 
 				// setup old values
 				if dml.Tp == UpdateDMLType {
-					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns(), utcTz)
+					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns(), timeZone)
 					if err != nil {
 						return nil, err
 					}
@@ -62,11 +65,11 @@ func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	return txn, nil
 }
 
-func getColVals(table *pb.Table, cols []*pb.Column, utcTz bool) (map[string]interface{}, error) {
+func getColVals(table *pb.Table, cols []*pb.Column, timeZone string) (map[string]interface{}, error) {
 	vals := make(map[string]interface{}, len(cols))
 	for i, col := range cols {
 		name := table.ColumnInfo[i].Name
-		arg, err := columnToArg(table.ColumnInfo[i].GetMysqlType(), col, utcTz)
+		arg, err := columnToArg(table.ColumnInfo[i].GetMysqlType(), col, timeZone)
 		if err != nil {
 			return vals, err
 		}
@@ -75,7 +78,7 @@ func getColVals(table *pb.Table, cols []*pb.Column, utcTz bool) (map[string]inte
 	return vals, nil
 }
 
-func columnToArg(mysqlType string, c *pb.Column, utcTz bool) (arg interface{}, err error) {
+func columnToArg(mysqlType string, c *pb.Column, timeZone string) (arg interface{}, err error) {
 	if c.GetIsNull() {
 		return nil, nil
 	}
@@ -109,13 +112,17 @@ func columnToArg(mysqlType string, c *pb.Column, utcTz bool) (arg interface{}, e
 		return c.GetBytesValue(), nil
 	}
 
-	if !utcTz && mysqlType == "timestamp" {
-		sc := &stmtctx.StatementContext{TimeZone: time.Local}
+	if mysqlType == "timestamp" && timeZone != "UTC" {
+		tz, err := time.LoadLocation(timeZone)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		sc := &stmtctx.StatementContext{TimeZone: tz}
 		t, err := types.ParseTimestamp(sc, c.GetStringValue())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		err = t.ConvertTimeZone(time.Local, time.UTC)
+		err = t.ConvertTimeZone(tz, time.UTC)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
