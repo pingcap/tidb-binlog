@@ -100,6 +100,42 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 	}
 	table.ColumnInfo = columnInfos
 
+	// If PKIsHandle, tableInfo.Indices *will not* contains the primary key
+	// so we add it here.
+	// If !PKIsHandle tableInfo.Indices *will* contains the primary key
+	if tableInfo.PKIsHandle {
+		pkName := tableInfo.GetPkName()
+		key := &obinlog.Key{
+			Name:        proto.String("PRIMARY"),
+			ColumnNames: []string{pkName.O},
+		}
+		table.UniqueKeys = append(table.UniqueKeys, key)
+	}
+
+	for _, index := range tableInfo.Indices {
+		if !index.Unique && !index.Primary {
+			continue
+		}
+
+		// just a protective check
+		if tableInfo.PKIsHandle && index.Name.O == "PRIMARY" {
+			log.Warn("PKIsHandle and also contains PRIMARY index TableInfo.Indices")
+			continue
+		}
+
+		key := new(obinlog.Key)
+		table.UniqueKeys = append(table.UniqueKeys, key)
+
+		key.Name = proto.String(index.Name.O)
+
+		names := make([]string, len(index.Columns))
+		for i, col := range index.Columns {
+			names[i] = col.Name.O
+		}
+
+		key.ColumnNames = names
+	}
+
 	return
 }
 
