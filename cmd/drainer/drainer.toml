@@ -87,6 +87,8 @@ relay-log-size = 10485760
 host = "127.0.0.1"
 user = "root"
 password = ""
+# if encrypted_password is not empty, password will be ignored.
+encrypted_password = ""
 port = 3306
 
 [syncer.to.checkpoint]
@@ -99,6 +101,8 @@ port = 3306
 # schema = "tidb_binlog"
 # host = "127.0.0.1"
 # user = "root"
+# if encrypted_password is not empty, password will be ignored.
+# encrypted_password = ""
 # password = ""
 # port = 3306
 

@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/pingcap/check"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
+	"github.com/pingcap/tidb-binlog/pkg/encrypt"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
@@ -151,6 +153,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.ListenAddr, Equals, "http://"+util.DefaultListenAddr(8249))
 	c.Assert(cfg.AdvertiseAddr, Equals, cfg.ListenAddr)
 
+	// test EncryptedPassword
 	cfg = NewConfig()
 	cfg.ListenAddr = "0.0.0.0:8257"
 	cfg.AdvertiseAddr = "192.168.15.12:8257"
@@ -158,6 +161,33 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
+
+	cfg = NewConfig()
+	encrypted, err := encrypt.Encrypt([]byte("origin"))
+	c.Assert(err, IsNil)
+
+	cfg.SyncerCfg.To = &dsync.DBConfig{
+		EncryptedPassword: string(encrypted),
+		Checkpoint: dsync.CheckpointConfig{
+			EncryptedPassword: string(encrypted),
+		},
+	}
+	err = cfg.adjustConfig()
+	c.Assert(err, IsNil)
+	c.Assert(cfg.SyncerCfg.To.Password, check.Equals, "origin")
+	c.Assert(cfg.SyncerCfg.To.Checkpoint.Password, check.Equals, "origin")
+
+	// test false positive
+	cfg.SyncerCfg.To = &dsync.DBConfig{
+		EncryptedPassword: "what ever" + string(encrypted),
+		Checkpoint: dsync.CheckpointConfig{
+			EncryptedPassword: "what ever" + string(encrypted),
+		},
+	}
+
+	c.Logf("to.password: %v", cfg.SyncerCfg.To.Password)
+	err = cfg.adjustConfig()
+	c.Assert(err, NotNil)
 }
 
 func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
