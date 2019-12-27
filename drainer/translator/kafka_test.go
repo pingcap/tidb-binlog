@@ -169,11 +169,11 @@ func (t *testKafkaSuite) TestGenTable(c *check.C) {
 				Columns: []*model.IndexColumn{
 					{
 						Offset: 1,
-						Name:   model.NewCIStr("c3"),
+						Name:   model.NewCIStr("c2"),
 					},
 					{
-						Offset: 0,
-						Name:   model.NewCIStr("c2"),
+						Offset: 2,
+						Name:   model.NewCIStr("c3"),
 					},
 				},
 			},
