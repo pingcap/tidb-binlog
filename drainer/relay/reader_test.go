@@ -92,7 +92,7 @@ func (r *testReaderSuite) readBinlogAndCheck(c *C, dir string, expectedNumber in
 		number++
 		lastTxn = txn
 	}
-	c.Assert(<- relayReader.Error(), IsNil)
+	c.Assert(<-relayReader.Error(), IsNil)
 	c.Assert(number, Equals, expectedNumber)
 	return lastTxn
 }
