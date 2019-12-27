@@ -14,10 +14,14 @@
 package relay
 
 import (
+	"context"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 )
 
 var _ Reader = &reader{}
@@ -25,7 +29,7 @@ var _ Reader = &reader{}
 // Reader is the interface for reading relay log.
 type Reader interface {
 	// Run reads relay log.
-	Run()
+	Run() context.CancelFunc
 
 	// Txns returns parsed transactions.
 	Txns() chan *loader.Txn
@@ -44,7 +48,7 @@ type reader struct {
 }
 
 // NewReader creates a relay reader.
-func NewReader(dir string) (Reader, error) {
+func NewReader(dir string, readBufferSize int) (Reader, error) {
 	binlogger, err := binlogfile.OpenBinlogger(dir, binlogfile.SegmentSizeBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -52,19 +56,30 @@ func NewReader(dir string) (Reader, error) {
 
 	return &reader{
 		binlogger: binlogger,
-		txns:      make(chan *loader.Txn, 8),
+		txns:      make(chan *loader.Txn, readBufferSize),
 	}, nil
 }
 
 // Run implements Reader interface.
-func (r *reader) Run() {
-	stop := make(chan struct{})
+func (r *reader) Run() context.CancelFunc {
 	r.err = make(chan error, 1)
-	binlogChan, binlogErr := r.binlogger.ReadAll(stop)
+	ctx, cancel := context.WithCancel(context.Background())
+	binlogChan, binlogErr := r.binlogger.ReadAll(ctx)
 
-	go func() {
+	go func(ctx context.Context) {
 		var err error
-		for binlog := range binlogChan {
+		for {
+			var binlog *binlog.Entity
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				log.Warn("Reading relay log is interrupted")
+			case binlog = <-binlogChan:
+			}
+			if binlog == nil {
+				break
+			}
+
 			slaveBinlog := new(obinlog.Binlog)
 			if err = slaveBinlog.Unmarshal(binlog.Payload); err != nil {
 				break
@@ -77,7 +92,7 @@ func (r *reader) Run() {
 			r.txns <- txn
 		}
 		// If binlogger is not done, notify it to stop.
-		close(stop)
+		cancel()
 		close(r.txns)
 
 		if err == nil {
@@ -87,7 +102,9 @@ func (r *reader) Run() {
 			r.err <- err
 		}
 		close(r.err)
-	}()
+	}(ctx)
+
+	return cancel
 }
 
 // Txns implements Reader interface.
@@ -107,7 +124,7 @@ func (r *reader) Close() error {
 	if r.err != nil {
 		err = <-r.err
 	}
-	if closeBinloggerErr := r.binlogger.Close(); err != nil {
+	if closeBinloggerErr := r.binlogger.Close(); err == nil {
 		err = closeBinloggerErr
 	}
 	return errors.Trace(err)

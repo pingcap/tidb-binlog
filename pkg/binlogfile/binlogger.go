@@ -17,7 +17,6 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
-	"math"
 	"os"
 	"path"
 	"sync"
@@ -53,7 +52,7 @@ type Binlogger interface {
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// ReadAll reads all binlog in the directory.
-	ReadAll(stop chan struct{}) (chan *binlog.Entity, chan error)
+	ReadAll(ctx context.Context) (chan *binlog.Entity, chan error)
 
 	// batch write binlog event, and returns current offset(if have).
 	WriteTail(entity *binlog.Entity) (binlog.Pos, error)
@@ -192,46 +191,40 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 }
 
 // ReadAll reads all binlog in the directory.
-func (b *binlogger) ReadAll(stop chan struct{}) (result chan *binlog.Entity, errChan chan error) {
+// `result` contains the returned binlogs, errChan contains any error that occurs in reading.
+func (b *binlogger) ReadAll(ctx context.Context) (result chan *binlog.Entity, errChan chan error) {
 	errChan = make(chan error, 1)
-	result = make(chan *binlog.Entity, 1)
+	result = make(chan *binlog.Entity)
 
-	minSuffix := uint64(math.MaxUint64)
+	var minFileIndex uint64
 	names, err := ReadBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files failed", zap.Error(err))
-	} else {
-		// Find the minimal suffix so we can construct start pos.
-		for _, name := range names {
-			suffix, _, err := ParseBinlogName(name)
-			if err != nil {
-				break
-			}
-			if suffix < minSuffix {
-				minSuffix = suffix
-			}
-		}
+	} else if len(names) > 0 {
+		minFileIndex, _, err = ParseBinlogName(names[0])
+	}
+	if err != nil {
+		errChan <- err
 	}
 	if err != nil || len(names) == 0 {
-		errChan <- err
 		close(errChan)
 		close(result)
 		return
 	}
 
-	from := binlog.Pos{Suffix: minSuffix, Offset: 0}
-	ctx, cancel := context.WithCancel(context.Background())
+	from := binlog.Pos{Suffix: minFileIndex, Offset: 0}
 	go func() {
 		err := b.Walk(ctx, from, func(entity *binlog.Entity) error {
 			select {
-			case <-stop:
-				cancel()
-			default:
+			case <-ctx.Done():
+				return ctx.Err()
+			case result <- entity:
+				return nil
 			}
-			result <- entity
-			return nil
 		})
-		errChan <- err
+		if err != nil {
+			errChan <- err
+		}
 		close(errChan)
 		close(result)
 	}()

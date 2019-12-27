@@ -31,14 +31,14 @@ type testReaderSuite struct {
 }
 
 func (r *testReaderSuite) TestCreate(c *C) {
-	_, err := NewReader("")
+	_, err := NewReader("", 8)
 	c.Assert(err, NotNil)
 
-	_, err = NewReader("/")
+	_, err = NewReader("/", 8)
 	c.Assert(err, NotNil)
 
 	dir := c.MkDir()
-	relayReader, err := NewReader(dir)
+	relayReader, err := NewReader(dir, 8)
 	c.Assert(err, IsNil)
 	err = relayReader.Close()
 	c.Assert(err, IsNil)
@@ -79,7 +79,7 @@ func (r *testReaderSuite) writeBinlog(c *C, dir string) {
 }
 
 func (r *testReaderSuite) readBinlogAndCheck(c *C, dir string, expectedNumber int) *loader.Txn {
-	relayReader, err := NewReader(dir)
+	relayReader, err := NewReader(dir, 8)
 	c.Assert(relayReader, NotNil)
 	c.Assert(err, IsNil)
 	defer func() { c.Assert(relayReader.Close(), IsNil) }()
@@ -92,6 +92,7 @@ func (r *testReaderSuite) readBinlogAndCheck(c *C, dir string, expectedNumber in
 		number++
 		lastTxn = txn
 	}
+	c.Assert(<- relayReader.Error(), IsNil)
 	c.Assert(number, Equals, expectedNumber)
 	return lastTxn
 }
@@ -111,7 +112,7 @@ func (r *testReaderSuite) TestReadBinlogError(c *C) {
 	c.Assert(f.Chmod(0222), IsNil)
 	c.Assert(f.Close(), IsNil)
 
-	relayReader, err := NewReader(dir)
+	relayReader, err := NewReader(dir, 8)
 	c.Assert(err, IsNil)
 	relayReader.Run()
 	c.Assert(<-relayReader.Error(), ErrorMatches, "*permission denied*")
@@ -125,10 +126,26 @@ func (r *testReaderSuite) TestReadBinlogError(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(f.Close(), IsNil)
 
-	relayReader, err = NewReader(dir)
+	relayReader, err = NewReader(dir, 8)
 	c.Assert(err, IsNil)
 	relayReader.Run()
 	// It's recovered by binlogger.
 	c.Assert(<-relayReader.Error(), IsNil)
 	c.Assert(relayReader.Close(), IsNil)
+}
+
+func (r *testReaderSuite) TestCancelRead(c *C) {
+	dir := c.MkDir()
+
+	r.SetInsert(c)
+	for i := 0; i < 1000; i++ {
+		r.writeBinlog(c, dir)
+	}
+
+	relayReader, err := NewReader(dir, 8)
+	defer func() { c.Assert(relayReader.Close(), IsNil) }()
+	c.Assert(err, IsNil)
+	cancelFunc := relayReader.Run()
+	cancelFunc()
+	c.Assert(<-relayReader.Error(), ErrorMatches, "context canceled")
 }
