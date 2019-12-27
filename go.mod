@@ -25,7 +25,7 @@ require (
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.0
-	github.com/pingcap/parser v0.0.0-20190718031118-20e37a65d718
+	github.com/pingcap/parser v0.0.0-20191220111854-63cc130be9fa
 	github.com/pingcap/pd v2.1.3+incompatible
 	github.com/pingcap/tidb v2.1.3+incompatible
 	github.com/pingcap/tidb-tools v2.1.5+incompatible
