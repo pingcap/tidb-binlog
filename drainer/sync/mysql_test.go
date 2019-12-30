@@ -62,7 +62,7 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 		baseSyncer: newBaseSyncer(infoGetter),
 	}
 	go syncer.run()
-	gen := translator.BinlogGenrator{}
+	gen := translator.BinlogGenerator{}
 	gen.SetDDL()
 	item := &Item{
 		Binlog:        gen.TiBinlog,
@@ -165,7 +165,7 @@ func (s *mysqlSuite) TestMySQLSyncerWithRelayer(c *check.C) {
 	defer syncer.Close()
 
 	go syncer.run()
-	gen := translator.BinlogGenrator{}
+	gen := translator.BinlogGenerator{}
 	gen.SetDDL()
 
 	for i := 0; i < 5; i++ {

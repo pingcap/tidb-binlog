@@ -27,11 +27,11 @@ type flashSuite struct {
 	flash *FlashSyncer
 
 	flashMock sqlmock.Sqlmock
-	gen       *translator.BinlogGenrator
+	gen       *translator.BinlogGenerator
 }
 
 func (s *flashSuite) setUpTest(c *check.C, timeLimit string, sizeLimit string) {
-	s.gen = &translator.BinlogGenrator{}
+	s.gen = &translator.BinlogGenerator{}
 
 	// create flash syncer and mock
 	oldOpenCH := openCH

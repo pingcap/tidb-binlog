@@ -77,6 +77,7 @@ type SyncerConfig struct {
 	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
 	RelayLogDir       string             `toml:"relay-log-dir" json:"relay-log-dir"`
 	RelayLogSize      int64              `toml:"relay-log-size" json:"relay-log-size"`
+	RelayReadBufSize  int                `toml:"relay-read-buf-size" json:"relay-read-buf-size"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
 }
@@ -141,6 +142,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.StringVar(&cfg.SyncerCfg.RelayLogDir, "relay-log-dir", "", "path to relay log of syncer")
 	fs.Int64Var(&cfg.SyncerCfg.RelayLogSize, "relay-log-size", 10*1024*1024, "max file size of each relay log")
+	fs.IntVar(&cfg.SyncerCfg.RelayReadBufSize, "relay-read-buf-size", 8, "read buffer size of relay log")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")

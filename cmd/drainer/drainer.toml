@@ -81,6 +81,8 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 relay-log-dir = ""
 # max file size of each relay log
 relay-log-size = 10485760
+# read buffer size of relay log
+relay-read-buf-size = 8
 
 #[[syncer.replicate-do-table]]
 #db-name ="test"
