@@ -72,6 +72,7 @@ type SyncerConfig struct {
 	DestDBType        string             `toml:"db-type" json:"db-type"`
 	RelayLogDir       string             `toml:"relay-log-dir" json:"relay-log-dir"`
 	RelayLogSize      int64              `toml:"relay-log-size" json:"relay-log-size"`
+	RelayReadBufSize  int                `toml:"relay-read-buf-size" json:"relay-read-buf-size"`
 	EnableDispatch    bool               `toml:"enable-dispatch" json:"enable-dispatch"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
@@ -133,6 +134,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.StringVar(&cfg.SyncerCfg.RelayLogDir, "relay-log-dir", "", "path to relay log of syncer")
 	fs.Int64Var(&cfg.SyncerCfg.RelayLogSize, "relay-log-size", 10*1024*1024, "max file size of each relay log")
+	fs.IntVar(&cfg.SyncerCfg.RelayReadBufSize, "relay-read-buf-size", 8, "read buffer size of relay log")
 	fs.BoolVar(&cfg.SyncerCfg.EnableDispatch, "enable-dispatch", true, "enable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.EnableCausality, "enable-detect", false, "enable detect causality")
