@@ -13,6 +13,6 @@ func EncryptHandler(text string) error {
 		return err
 	}
 
-	log.Info("encrypt text", zap.String("encrypted", string(enc)), zap.String("origin", text))
+	log.Info("encrypt text", zap.String("encrypted", string(enc)))
 	return nil
 }
