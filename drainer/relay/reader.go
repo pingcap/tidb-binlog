@@ -68,20 +68,20 @@ func (r *reader) Run() context.CancelFunc {
 
 	go func(ctx context.Context) {
 		var err error
-		for {
-			var binlog *binlog.Entity
+		for err == nil {
+			var blg *binlog.Entity
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()
 				log.Warn("Reading relay log is interrupted")
-			case binlog = <-binlogChan:
+			case blg = <-binlogChan:
 			}
-			if binlog == nil {
+			if blg == nil {
 				break
 			}
 
 			slaveBinlog := new(obinlog.Binlog)
-			if err = slaveBinlog.Unmarshal(binlog.Payload); err != nil {
+			if err = slaveBinlog.Unmarshal(blg.Payload); err != nil {
 				break
 			}
 
@@ -90,7 +90,12 @@ func (r *reader) Run() context.CancelFunc {
 			if err != nil {
 				break
 			}
-			r.txns <- txn
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				log.Warn("Producing transaction is interrupted")
+			case r.txns <- txn:
+			}
 		}
 		// If binlogger is not done, notify it to stop.
 		cancel()
