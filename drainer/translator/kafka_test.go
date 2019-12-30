@@ -18,6 +18,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 )
@@ -116,4 +118,108 @@ func checkColumn(c *check.C, info *obinlog.ColumnInfo, col *obinlog.Column, datu
 	}
 
 	c.Assert(colV, check.Equals, datumV)
+}
+
+func (t *testKafkaSuite) TestGenTable(c *check.C) {
+	schema := "test"
+	table := "test"
+
+	// a table test.test(c1, c2, c3) with:
+	// primary key: (c1)
+	// unique key: (c2, c3)
+	// non-unique key: (c3)
+	info := &model.TableInfo{
+		Name: model.NewCIStr(table),
+		Columns: []*model.ColumnInfo{
+			{
+				Name: model.NewCIStr("c1"),
+				FieldType: types.FieldType{
+					Flag: mysql.PriKeyFlag,
+					Tp:   mysql.TypeLong,
+				},
+			},
+			{
+				Name: model.NewCIStr("c2"),
+				FieldType: types.FieldType{
+					Tp: mysql.TypeLong,
+				},
+			},
+			{
+				Name: model.NewCIStr("c3"),
+				FieldType: types.FieldType{
+					Tp: mysql.TypeLong,
+				},
+			},
+		},
+		Indices: []*model.IndexInfo{
+			{
+				Name:    model.NewCIStr("PRIMARY"),
+				Primary: true,
+				Unique:  true,
+				Columns: []*model.IndexColumn{
+					{
+						Offset: 0,
+						Name:   model.NewCIStr("c1"),
+					},
+				},
+			},
+			{
+				Name:   model.NewCIStr("idx1"),
+				Unique: true,
+				Columns: []*model.IndexColumn{
+					{
+						Offset: 1,
+						Name:   model.NewCIStr("c2"),
+					},
+					{
+						Offset: 2,
+						Name:   model.NewCIStr("c3"),
+					},
+				},
+			},
+			{
+				Name:   model.NewCIStr("idx2"),
+				Unique: false,
+				Columns: []*model.IndexColumn{
+					{
+						Offset: 1,
+						Name:   model.NewCIStr("c3"),
+					},
+				},
+			},
+		},
+	}
+
+	expectTable := &obinlog.Table{
+		SchemaName: proto.String(schema),
+		TableName:  proto.String(table),
+		ColumnInfo: []*obinlog.ColumnInfo{
+			{
+				Name:         "c1",
+				IsPrimaryKey: true,
+				MysqlType:    "int",
+			},
+			{
+				Name:      "c2",
+				MysqlType: "int",
+			},
+			{
+				Name:      "c3",
+				MysqlType: "int",
+			},
+		},
+		UniqueKeys: []*obinlog.Key{
+			{
+				Name:        proto.String("PRIMARY"),
+				ColumnNames: []string{"c1"},
+			},
+			{
+				Name:        proto.String("idx1"),
+				ColumnNames: []string{"c2", "c3"},
+			},
+		},
+	}
+
+	getTable := genTable(schema, info)
+	c.Assert(expectTable, check.DeepEquals, getTable)
 }
