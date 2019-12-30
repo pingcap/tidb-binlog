@@ -52,7 +52,7 @@ type Binlogger interface {
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
 	// ReadAll reads all binlog in the directory.
-	ReadAll(ctx context.Context) (chan *binlog.Entity, chan error)
+	ReadAll(ctx context.Context) (<-chan *binlog.Entity, <-chan error)
 
 	// batch write binlog event, and returns current offset(if have).
 	WriteTail(entity *binlog.Entity) (binlog.Pos, error)
@@ -192,9 +192,9 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 
 // ReadAll reads all binlog in the directory.
 // `result` contains the returned binlogs, errChan contains any error that occurs in reading.
-func (b *binlogger) ReadAll(ctx context.Context) (result chan *binlog.Entity, errChan chan error) {
-	errChan = make(chan error, 1)
-	result = make(chan *binlog.Entity)
+func (b *binlogger) ReadAll(ctx context.Context) (<-chan *binlog.Entity, <-chan error) {
+	errChan := make(chan error, 1)
+	result := make(chan *binlog.Entity)
 
 	var minFileIndex uint64
 	names, err := ReadBinlogNames(b.dir)
@@ -209,7 +209,7 @@ func (b *binlogger) ReadAll(ctx context.Context) (result chan *binlog.Entity, er
 	if err != nil || len(names) == 0 {
 		close(errChan)
 		close(result)
-		return
+		return result, errChan
 	}
 
 	from := binlog.Pos{Suffix: minFileIndex, Offset: 0}
@@ -228,7 +228,7 @@ func (b *binlogger) ReadAll(ctx context.Context) (result chan *binlog.Entity, er
 		close(errChan)
 		close(result)
 	}()
-	return
+	return result, errChan
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way

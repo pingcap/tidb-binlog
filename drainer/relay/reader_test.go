@@ -27,7 +27,7 @@ import (
 var _ = Suite(&testReaderSuite{})
 
 type testReaderSuite struct {
-	translator.BinlogGenrator
+	translator.BinlogGenerator
 }
 
 func (r *testReaderSuite) TestCreate(c *C) {

@@ -32,7 +32,7 @@ type Reader interface {
 	Run() context.CancelFunc
 
 	// Txns returns parsed transactions.
-	Txns() chan *loader.Txn
+	Txns() <-chan *loader.Txn
 
 	// Close releases resources.
 	Close() error
@@ -85,7 +85,8 @@ func (r *reader) Run() context.CancelFunc {
 				break
 			}
 
-			txn, err := loader.SlaveBinlogToTxn(slaveBinlog)
+			var txn *loader.Txn
+			txn, err = loader.SlaveBinlogToTxn(slaveBinlog)
 			if err != nil {
 				break
 			}
@@ -108,7 +109,7 @@ func (r *reader) Run() context.CancelFunc {
 }
 
 // Txns implements Reader interface.
-func (r *reader) Txns() chan *loader.Txn {
+func (r *reader) Txns() <-chan *loader.Txn {
 	return r.txns
 }
 
