@@ -23,6 +23,7 @@ type Schema struct {
 	tables  map[int64]*model.TableInfo
 
 	truncateTableID map[int64]struct{}
+	tblsDroppingCol map[int64]bool
 
 	schemaMetaVersion int64
 
@@ -42,6 +43,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
+		tblsDroppingCol:     make(map[int64]bool),
 		jobs:                jobs,
 	}
 
@@ -217,30 +219,32 @@ func (s *Schema) addJob(job *model.Job) {
 func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
-		if skipJob(s.jobs[i]) {
-			log.Debugf("skip ddl job %v", s.jobs[i])
+		job := s.jobs[i]
+
+		if job.BinlogInfo.SchemaVersion > version {
+			break
+		}
+
+		if s.jobs[i].BinlogInfo.SchemaVersion <= s.currentVersion {
+			log.Warnf("ddl job %v schema version is less than current version %d, skip this ddl job", s.jobs[i], s.currentVersion)
 			continue
 		}
 
-		if s.jobs[i].BinlogInfo.SchemaVersion <= version {
-			if s.jobs[i].BinlogInfo.SchemaVersion <= s.currentVersion {
-				log.Warnf("ddl job %v schema version is less than current version %d, skip this ddl job", s.jobs[i], s.currentVersion)
-				continue
-			}
-
-			data, err := json.Marshal(s.jobs[i])
-			if err != nil {
-				log.Error(err)
-			} else {
-				log.Debugf("handle ddl job id(%d): %s", s.jobs[i].ID, string(data))
-			}
-
-			_, _, _, err = s.handleDDL(s.jobs[i])
-			if err != nil {
-				return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
-			}
+		data, err := json.Marshal(s.jobs[i])
+		if err != nil {
+			log.Error(err)
 		} else {
-			break
+			log.Debugf("handle ddl job id(%d): %s", s.jobs[i].ID, string(data))
+		}
+
+		if job.SchemaState == model.StateDeleteOnly && job.Type == model.ActionDropColumn {
+			s.tblsDroppingCol[job.TableID] = true
+			log.Infof("Got DeleteOnly Job [job: %+v]", job)
+			continue
+		}
+		_, _, _, err = s.handleDDL(s.jobs[i])
+		if err != nil {
+			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
 	}
 
@@ -256,8 +260,11 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 // the fourth value[error]: the handleDDL execution's err
 func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
 	if skipJob(job) {
+		log.Infof("Skip job: %+v", job)
 		return "", "", "", nil
 	}
+
+	log.Debugf("Handle job: %+v", job)
 
 	sql = job.Query
 	if sql == "" {
@@ -415,9 +422,19 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 		tableName = tbInfo.Name.O
+
+		if job.Type == model.ActionDropColumn {
+			log.Infof("Finished dropping column [job: %+v]", job)
+			delete(s.tblsDroppingCol, job.TableID)
+		}
 	}
 
 	return
+}
+
+// IsDroppingColumn returns true if the table is in the middle of dropping a column
+func (s *Schema) IsDroppingColumn(id int64) bool {
+	return s.tblsDroppingCol[id]
 }
 
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL

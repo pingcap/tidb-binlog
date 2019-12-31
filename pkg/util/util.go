@@ -116,6 +116,15 @@ func ToColumnTypeMap(columns []*model.ColumnInfo) map[int64]*types.FieldType {
 	return colTypeMap
 }
 
+// ToColumnMap return a map index by column id
+func ToColumnMap(columns []*model.ColumnInfo) map[int64]*model.ColumnInfo {
+	colMap := make(map[int64]*model.ColumnInfo, len(columns))
+	for _, col := range columns {
+		colMap[col.ID] = col
+	}
+	return colMap
+}
+
 // RetryOnError defines a action with retry when fn returns error
 func RetryOnError(retryCount int, sleepTime time.Duration, errStr string, fn func() error) error {
 	var err error
@@ -141,6 +150,24 @@ func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
 	}
 
 	return int64(version.Ver), nil
+}
+
+// WaitUntilTimeout creates a goroutine to run fn, and then gives up waiting for the goroutine to exit When it timeouts
+func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
+	exited := make(chan struct{})
+	go func() {
+		defer func() {
+			log.Info("goroutine %s exit by itself (with GoAndAbortGoroutine help)", name)
+			close(exited)
+		}()
+		fn()
+	}()
+
+	select {
+	case <-time.After(timeout):
+		log.Info("abort goroutine %s (with GoAndAbortGoroutine help)", name)
+	case <-exited:
+	}
 }
 
 // StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
