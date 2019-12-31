@@ -24,7 +24,6 @@ import (
 )
 
 var (
-	executionWaitTime    = 10 * time.Millisecond
 	maxExecutionWaitTime = 3 * time.Second
 
 	workerMetricsLimit = 10
@@ -312,7 +311,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 	args := make([][]interface{}, 0, count)
 	commitTSs := make([]int64, 0, count)
 	tpCnt := make(map[pb.MutationType]int)
-	lastSyncTime := time.Now()
+	maxExecutionWaitTimer := time.NewTimer(maxExecutionWaitTime)
 
 	clearF := func() {
 		for i := 0; i < idx; i++ {
@@ -323,8 +322,13 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 		sqls = sqls[0:0]
 		args = args[0:0]
 		commitTSs = commitTSs[0:0]
-		s.lastSyncTime = time.Now()
-		lastSyncTime = time.Now()
+		now := time.Now()
+		s.lastSyncTime = now
+		if !maxExecutionWaitTimer.Stop() {
+			<-maxExecutionWaitTimer.C
+		}
+		maxExecutionWaitTimer.Reset(maxExecutionWaitTime)
+
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
 			tpCnt[tpName] = 0
@@ -335,6 +339,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 	executeErr := executor.Error()
 
 	var err error
+
 	for {
 		select {
 		case err := <-executeErr:
@@ -380,9 +385,8 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				}
 				clearF()
 			}
-		default:
-			now := time.Now()
-			if now.Sub(lastSyncTime) >= maxExecutionWaitTime && !s.cfg.DisableDispatch {
+		case <-maxExecutionWaitTimer.C:
+			if !s.cfg.DisableDispatch {
 				err = execute(executor, sqls, args, commitTSs, false)
 				if err != nil {
 					// FIXME more friendly quit, like update the state in pd before quit
@@ -390,8 +394,6 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 				}
 				clearF()
 			}
-
-			time.Sleep(executionWaitTime)
 		}
 	}
 }
