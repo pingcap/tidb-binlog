@@ -313,7 +313,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 	tpCnt := make(map[pb.MutationType]int)
 	maxExecutionWaitTimer := time.NewTimer(maxExecutionWaitTime)
 
-	clearF := func() {
+	clearF := func(draineTimer bool) {
 		for i := 0; i < idx; i++ {
 			s.jobWg.Done()
 		}
@@ -325,7 +325,9 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 		now := time.Now()
 		s.lastSyncTime = now
 		if !maxExecutionWaitTimer.Stop() {
-			<-maxExecutionWaitTimer.C
+			if !draineTimer {
+				<-maxExecutionWaitTimer.C
+			}
 		}
 		maxExecutionWaitTimer.Reset(maxExecutionWaitTime)
 
@@ -367,7 +369,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 					log.Warnf("[ignore ddl error][sql]%s[args]%v[error]%v", job.sql, job.args, err)
 				}
 				s.addDDLCount()
-				clearF()
+				clearF(false)
 			} else if job.binlogTp == translator.DML {
 				sqls = append(sqls, job.sql)
 				args = append(args, job.args)
@@ -383,7 +385,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
-				clearF()
+				clearF(false)
 			}
 		case <-maxExecutionWaitTimer.C:
 			if !s.cfg.DisableDispatch {
@@ -392,7 +394,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 					// FIXME more friendly quit, like update the state in pd before quit
 					log.Fatalf(errors.ErrorStack(err))
 				}
-				clearF()
+				clearF(true)
 			}
 		}
 	}
