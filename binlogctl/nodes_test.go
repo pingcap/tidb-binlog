@@ -75,7 +75,7 @@ func (s *testNodesSuite) TestQueryNodesByKind(c *C) {
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
 	// TODO: handle log information and add check
-	err := QueryNodesByKind("127.0.0.1:2379", "pumps")
+	err := QueryNodesByKind("127.0.0.1:2379", "pumps", false)
 	c.Assert(err, IsNil)
 }
 

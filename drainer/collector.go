@@ -135,7 +135,11 @@ func (c *Collector) publishBinlogs(ctx context.Context) {
 						log.Warnf("unexpected job, job id %d state: %v", job.ID, job.State)
 					}
 
-					if !skipJob(job) {
+					isDelOnlyEvent := model.SchemaState(binlog.DdlSchemaState) == model.StateDeleteOnly
+					if !skipJob(job) || isDelOnlyEvent {
+						if isDelOnlyEvent {
+							job.SchemaState = model.StateDeleteOnly
+						}
 						item.SetJob(job)
 						c.syncer.Add(item)
 						ddlJobsCounter.Add(float64(1))

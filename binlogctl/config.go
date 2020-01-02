@@ -62,17 +62,18 @@ const (
 type Config struct {
 	*flag.FlagSet
 
-	Command      string `toml:"cmd" json:"cmd"`
-	NodeID       string `toml:"node-id" json:"node-id"`
-	DataDir      string `toml:"data-dir" json:"data-dir"`
-	TimeZone     string `toml:"time-zone" json:"time-zone"`
-	EtcdURLs     string `toml:"pd-urls" json:"pd-urls"`
-	SSLCA        string `toml:"ssl-ca" json:"ssl-ca"`
-	SSLCert      string `toml:"ssl-cert" json:"ssl-cert"`
-	SSLKey       string `toml:"ssl-key" json:"ssl-key"`
-	State        string `toml:"state" json:"state"`
-	tls          *tls.Config
-	printVersion bool
+	Command          string `toml:"cmd" json:"cmd"`
+	NodeID           string `toml:"node-id" json:"node-id"`
+	DataDir          string `toml:"data-dir" json:"data-dir"`
+	TimeZone         string `toml:"time-zone" json:"time-zone"`
+	EtcdURLs         string `toml:"pd-urls" json:"pd-urls"`
+	SSLCA            string `toml:"ssl-ca" json:"ssl-ca"`
+	SSLCert          string `toml:"ssl-cert" json:"ssl-cert"`
+	SSLKey           string `toml:"ssl-key" json:"ssl-key"`
+	State            string `toml:"state" json:"state"`
+	ShowOfflineNodes bool   `toml:"state" json:"show-offline-nodes"`
+	tls              *tls.Config
+	printVersion     bool
 }
 
 // NewConfig returns an instance of configuration
@@ -89,6 +90,7 @@ func NewConfig() *Config {
 	cfg.FlagSet.StringVar(&cfg.SSLKey, "ssl-key", "", "Path of file that contains X509 key in PEM format for connection with cluster components.")
 	cfg.FlagSet.StringVar(&cfg.TimeZone, "time-zone", "", "set time zone if you want save time info in savepoint file, for example `Asia/Shanghai` for CST time, `Local` for local time")
 	cfg.FlagSet.StringVar(&cfg.State, "state", "", "set node's state, can set to online, pausing, paused, closing or offline.")
+	cfg.FlagSet.BoolVar(&cfg.ShowOfflineNodes, "show-offline-nodes", false, "include offline nodes when querying pumps/drainers")
 	cfg.FlagSet.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
 
 	return cfg
