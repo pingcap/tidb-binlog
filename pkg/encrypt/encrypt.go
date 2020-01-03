@@ -20,14 +20,37 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"os"
+	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 )
 
 var (
-	secretKey, _ = hex.DecodeString("a529b7665997f043a30ac8fadcb51d6aa032c226ab5b7750530b12b8c1a16a48")
-	ivSep        = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
+	defaultSecretKey, _ = hex.DecodeString("a529b7665997f043a30ac8fadcb51d6aa032c226ab5b7750530b12b8c1a16a48")
+	secretKey           []byte
+	ivSep               = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
 )
+
+var initSecretKeyOnce sync.Once
+var initSecretKeyErr error
+
+func initSecretKey() error {
+	hexKey := os.Getenv("BINLOG_SECRET_KEY")
+	if len(hexKey) == 0 {
+		log.Warn("use the default secret key to encrypt")
+		secretKey = defaultSecretKey
+		return nil
+	}
+
+	key, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return SetSecretKey(key)
+}
 
 // SetSecretKey sets the secret key which used to encrypt
 func SetSecretKey(key []byte) error {
@@ -67,6 +90,13 @@ func Decrypt(ciphertextB64 string) (string, error) {
 
 // encrypt encrypts plaintext to ciphertext
 func encrypt(plaintext []byte) ([]byte, error) {
+	initSecretKeyOnce.Do(func() {
+		initSecretKeyErr = initSecretKey()
+	})
+	if initSecretKeyErr != nil {
+		return nil, initSecretKeyErr
+	}
+
 	block, err := aes.NewCipher(secretKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -90,6 +120,13 @@ func encrypt(plaintext []byte) ([]byte, error) {
 
 // decrypt decrypts ciphertext to plaintext
 func decrypt(ciphertext []byte) ([]byte, error) {
+	initSecretKeyOnce.Do(func() {
+		initSecretKeyErr = initSecretKey()
+	})
+	if initSecretKeyErr != nil {
+		return nil, initSecretKeyErr
+	}
+
 	block, err := aes.NewCipher(secretKey)
 	if err != nil {
 		return nil, err

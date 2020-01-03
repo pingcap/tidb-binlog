@@ -24,7 +24,7 @@ type DBConfig struct {
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
 	// if EncryptedPassword is not empty, Password will be ignore.
-	EncryptedPassword string           `toml:"encrypted_password" json:"password"`
+	EncryptedPassword string           `toml:"encrypted_password" json:"encrypted_password"`
 	Port              int              `toml:"port" json:"port"`
 	Checkpoint        CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir     string           `toml:"dir" json:"dir"`
@@ -46,7 +46,7 @@ type CheckpointConfig struct {
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
 	// if EncryptedPassword is not empty, Password will be ignore.
-	EncryptedPassword string `toml:"encrypted_password" json:"password"`
+	EncryptedPassword string `toml:"encrypted_password" json:"encrypted_password"`
 	Port              int    `toml:"port" json:"port"`
 }
 

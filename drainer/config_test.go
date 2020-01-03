@@ -163,7 +163,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
 
 	cfg = NewConfig()
-	encrypted, err := encrypt.Encrypt([]byte("origin"))
+	encrypted, err := encrypt.Encrypt("origin")
 	c.Assert(err, IsNil)
 
 	cfg.SyncerCfg.To = &dsync.DBConfig{
