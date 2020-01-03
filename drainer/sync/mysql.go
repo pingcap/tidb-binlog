@@ -40,14 +40,14 @@ type MysqlSyncer struct {
 var createDB = loader.CreateDBWithSQLMode
 
 // NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer) (*MysqlSyncer, error) {
+func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer, markStatus bool, Ddlsync bool, channelId int64) (*MysqlSyncer, error) {
 	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetMark(markStatus), loader.SetDdlSync(Ddlsync), loader.SetChannelId(channelId))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,

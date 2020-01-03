@@ -107,7 +107,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer)
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.MarkStatus, cfg.DdlSync, cfg.ChannelId)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}

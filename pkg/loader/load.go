@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +40,13 @@ const (
 	maxDDLRetryCount = 5
 
 	execLimitMultiple = 3
+)
+
+const (
+	MarkTableName = "retl.retl_mark"
+	ChannelId     = "channel_id"
+	Status        = "status"
+	ChannelInfo   = "channel_info"
 )
 
 var (
@@ -69,6 +77,10 @@ type loaderImpl struct {
 
 	batchSize   int
 	workerCount int
+
+	markStatus bool
+	ddlSync    bool
+	channelId  int64
 
 	input      chan *Txn
 	successTxn chan *Txn
@@ -102,6 +114,9 @@ type MetricsGroup struct {
 type options struct {
 	workerCount   int
 	batchSize     int
+	markStatus    bool
+	ddlSync       bool
+	channelId     int64
 	metrics       *MetricsGroup
 	saveAppliedTS bool
 }
@@ -109,6 +124,9 @@ type options struct {
 var defaultLoaderOptions = options{
 	workerCount:   16,
 	batchSize:     20,
+	markStatus:    false,
+	ddlSync:       false,
+	channelId:     0,
 	metrics:       nil,
 	saveAppliedTS: false,
 }
@@ -127,6 +145,24 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+func SetMark(mark bool) Option {
+	return func(o *options) {
+		o.markStatus = mark
+	}
+}
+
+func SetDdlSync(ddlSync bool) Option {
+	return func(o *options) {
+		o.ddlSync = ddlSync
+	}
+}
+
+func SetChannelId(channelId int64) Option {
+	return func(o *options) {
+		o.channelId = channelId
 	}
 }
 
@@ -159,6 +195,9 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		workerCount:   opts.workerCount,
 		batchSize:     opts.batchSize,
 		metrics:       opts.metrics,
+		markStatus:    opts.markStatus,
+		ddlSync:       opts.ddlSync,
+		channelId:     opts.channelId,
 		input:         make(chan *Txn),
 		successTxn:    make(chan *Txn),
 		merge:         true,
@@ -306,7 +345,9 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
-
+	if !s.ddlSync {
+		return nil
+	}
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -398,7 +439,20 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func (s *loaderImpl) filterMarkDatas(dmls []*DML) []*DML {
+	for _, dml := range dmls {
+		tableName := dml.Database + "." + dml.Table
+		if strings.EqualFold(tableName, MarkTableName) {
+			channelId, _ := (dml.Values[ChannelId]).(int64)
+			if channelId == s.channelId {
+				return nil
+			}
+		}
+	}
+	return dmls
+}
 func (s *loaderImpl) execDMLs(dmls []*DML) error {
+	dmls = s.filterMarkDatas(dmls)
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -544,6 +598,8 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	sync := newSyncInfo(s.ddlSync, s.markStatus, s.channelId)
+	e.setsyncInfo(sync)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
@@ -559,7 +615,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
 			if needRefreshTableInfo(txn.DDL.SQL) {
-				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
+				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil && s.ddlSync {
 					log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
 				}
 			}

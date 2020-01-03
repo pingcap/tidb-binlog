@@ -184,6 +184,18 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	return
 }
 
+func updateMarkSQL(columns []string, Values map[string]interface{}) (string, []interface{}) {
+
+	//sql := fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)",MarkTableName, buildColumnList(columns),holderString(len(columns)))
+	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s) on duplicate key update status=status+1;", MarkTableName, buildColumnList(columns), holderString(len(columns)))
+	var args []interface{}
+	for _, name := range columns {
+		v := Values[name]
+		args = append(args, v)
+	}
+	return sql, args
+}
+
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
 	for i := 0; i < len(wnames); i++ {

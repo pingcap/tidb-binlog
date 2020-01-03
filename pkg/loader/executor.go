@@ -33,7 +33,14 @@ var defaultBatchSize = 128
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
+	sync              *syncInfo
 	queryHistogramVec *prometheus.HistogramVec
+}
+
+type syncInfo struct {
+	markStatus bool
+	ddlSync    bool
+	channelId  int64
 }
 
 func newExecutor(db *gosql.DB) *executor {
@@ -47,6 +54,20 @@ func newExecutor(db *gosql.DB) *executor {
 
 func (e *executor) withBatchSize(batchSize int) *executor {
 	e.batchSize = batchSize
+	return e
+}
+
+func newSyncInfo(ddlSync bool, markStatus bool, channelId int64) *syncInfo {
+	sync := &syncInfo{
+		markStatus: markStatus,
+		ddlSync:    ddlSync,
+		channelId:  channelId,
+	}
+	return sync
+}
+
+func (e *executor) setsyncInfo(sync *syncInfo) *executor {
+	e.sync = sync
 	return e
 }
 
@@ -102,6 +123,17 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
+func (e *executor) updateMark(status int, channelInfo string, tx *tx) error {
+	values := map[string]interface{}{ChannelId: e.sync.channelId, Status: status, ChannelInfo: channelInfo}
+	columns := []string{ChannelId, Status, ChannelInfo}
+	sql, args := updateMarkSQL(columns, values)
+	_, err := tx.autoRollbackExec(sql, args...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // return a wrap of sql.Tx
 func (e *executor) begin() (*tx, error) {
 	sqlTx, err := e.db.Begin()
@@ -109,10 +141,19 @@ func (e *executor) begin() (*tx, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &tx{
+	var tx = &tx{
 		Tx:                sqlTx,
 		queryHistogramVec: e.queryHistogramVec,
-	}, nil
+	}
+
+	if e.sync.markStatus {
+		err1 := e.updateMark(1, "", tx)
+		if err1 != nil {
+			return nil, errors.Trace(err1)
+		}
+	}
+
+	return tx, nil
 }
 
 func (e *executor) bulkDelete(deletes []*DML) error {
