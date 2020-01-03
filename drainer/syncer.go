@@ -331,6 +331,7 @@ func (s *Syncer) sync(executor executor.Executor, jobChan chan *job, executorIdx
 			}
 		}
 		maxExecutionWaitTimer.Reset(maxExecutionWaitTime)
+		draineTimer = false
 
 		for tpName, v := range tpCnt {
 			s.addDMLCount(tpName, v)
