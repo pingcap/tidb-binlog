@@ -123,9 +123,9 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(status int, channelInfo string, tx *tx) error {
-	values := map[string]interface{}{ChannelId: e.sync.channelId, Status: status, ChannelInfo: channelInfo}
-	columns := []string{ChannelId, Status, ChannelInfo}
+func (e *executor) updateMark(status int, channel string, tx *tx) error {
+	values := map[string]interface{}{channelId: e.sync.channelId, val: status, channelInfo: channel}
+	columns := []string{channelId, val, channelInfo}
 	sql, args := updateMarkSQL(columns, values)
 	_, err := tx.autoRollbackExec(sql, args...)
 	if err != nil {

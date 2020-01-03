@@ -187,13 +187,18 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 func updateMarkSQL(columns []string, Values map[string]interface{}) (string, []interface{}) {
 
 	//sql := fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)",MarkTableName, buildColumnList(columns),holderString(len(columns)))
-	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s) on duplicate key update status=status+1;", MarkTableName, buildColumnList(columns), holderString(len(columns)))
+	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s) on duplicate key update %s=%s+1;", markTableName, buildColumnList(columns), holderString(len(columns)), val, val)
 	var args []interface{}
 	for _, name := range columns {
 		v := Values[name]
 		args = append(args, v)
 	}
 	return sql, args
+}
+
+func createMarkTable() string {
+	sql := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", markTableName, channelId, val, channelInfo)
+	return sql
 }
 
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {

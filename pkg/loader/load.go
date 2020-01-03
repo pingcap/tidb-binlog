@@ -43,10 +43,10 @@ const (
 )
 
 const (
-	MarkTableName = "retl._drainer_repl_mark"
-	ChannelId     = "channel_id"
-	Status        = "val"
-	ChannelInfo   = "channel_info"
+	markTableName = "retl._drainer_repl_mark"
+	channelId     = "channel_id"
+	val           = "val"
+	channelInfo   = "channel_info"
 )
 
 var (
@@ -345,9 +345,6 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
-	if !s.ddlSync {
-		return nil
-	}
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -442,8 +439,8 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 func (s *loaderImpl) filterMarkDatas(dmls []*DML) []*DML {
 	for _, dml := range dmls {
 		tableName := dml.Database + "." + dml.Table
-		if strings.EqualFold(tableName, MarkTableName) {
-			channelId, _ := (dml.Values[ChannelId]).(int64)
+		if strings.EqualFold(tableName, markTableName) {
+			channelId, _ := (dml.Values[channelId]).(int64)
 			if channelId == s.channelId {
 				return nil
 			}
@@ -488,8 +485,26 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func (s *loaderImpl) createMarkTableDDL() error {
+	markTableDataBase := markTableName[:strings.Index(markTableName, ".")]
+	sql := createMarkTable()
+	createMarkTable := DDL{Database: markTableDataBase, Table: markTableName, SQL: sql}
+	if err := s.execDDL(&createMarkTable); err != nil {
+		if !pkgsql.IgnoreDDLError(err) {
+			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
+			return errors.Trace(err)
+		}
+		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
+	}
+	return nil
+}
+
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
+
+	if err := s.createMarkTableDDL(); err != nil {
+		return errors.Trace(err)
+	}
 	txnManager := newTxnManager(1024, s.input)
 	defer func() {
 		log.Info("Run()... in Loader quit")
@@ -612,6 +627,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDMLs:            s.execDMLs,
 		fDMLsSuccessCallback: s.markSuccess,
 		fExecDDL:             s.execDDL,
+		ddlSync:              s.ddlSync,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
 			if needRefreshTableInfo(txn.DDL.SQL) {
@@ -627,6 +643,7 @@ type batchManager struct {
 	txns                 []*Txn
 	dmls                 []*DML
 	limit                int
+	ddlSync              bool
 	fExecDMLs            func([]*DML) error
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
@@ -651,6 +668,11 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 }
 
 func (b *batchManager) execDDL(txn *Txn) error {
+
+	if !b.ddlSync {
+		return nil
+	}
+
 	if err := b.fExecDDL(txn.DDL); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
 			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
