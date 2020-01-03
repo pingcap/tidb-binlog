@@ -491,10 +491,10 @@ func (s *loaderImpl) createMarkTableDDL() error {
 	createMarkTable := DDL{Database: markTableDataBase, Table: markTableName, SQL: sql}
 	if err := s.execDDL(&createMarkTable); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
-			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
+			log.Error("exec failed", zap.String("sql", createMarkTable.SQL), zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
+		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", createMarkTable.SQL))
 	}
 	return nil
 }
