@@ -43,9 +43,9 @@ const (
 )
 
 const (
-	MarkTableName = "retl.retl_mark"
+	MarkTableName = "retl._drainer_repl_mark"
 	ChannelId     = "channel_id"
-	Status        = "status"
+	Status        = "val"
 	ChannelInfo   = "channel_info"
 )
 
