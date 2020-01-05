@@ -19,17 +19,17 @@ require (
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20191118050206-47672e7eabc0
 	github.com/pingcap/log v0.0.0-20190715063458-479153f07ebd
-	github.com/pingcap/parser v0.0.0-20191224043251-93f4d5ec2623
+	github.com/pingcap/parser v0.0.0-20200103153514-95649ba8a872
 	github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0
 	github.com/pingcap/tidb v1.1.0-beta.0.20191120070053-5a7ecfeb94fd
-	github.com/pingcap/tidb-tools v3.0.6-0.20191125061035-b087739b71f1+incompatible
+	github.com/pingcap/tidb-tools v3.1.0-beta.0.20191227034743-57985f125c52+incompatible
 	github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
-	github.com/siddontang/go-mysql v0.0.0-20190618002340-dbe0224ac097 // indirect
+	github.com/sirupsen/logrus v1.4.1 // indirect
 	github.com/soheilhy/cmux v0.1.4
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
