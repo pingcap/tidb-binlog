@@ -3,11 +3,7 @@
 
 PROJECT=tidb-binlog
 
-# Ensure GOPATH is set before running build process.
-ifeq "$(GOPATH)" ""
-  $(error Please set the environment variable GOPATH before running `make`)
-endif
-FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
+FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -109,7 +105,7 @@ endif
 
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
-	tools/bin/golangci-lint --disable errcheck run $$($(PACKAGE_DIRECTORIES))
+	tools/bin/golangci-lint run $$($(PACKAGE_DIRECTORIES))
 
 clean:
 	go clean -i ./...

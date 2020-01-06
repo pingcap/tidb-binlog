@@ -49,7 +49,7 @@ enable-dispatch = true
 safe-mode = false
 
 # downstream storage, equal to --dest-db-type
-# valid values are "mysql", "file", "tidb", "flash", "kafka"
+# valid values are "mysql", "file", "tidb", "kafka"
 db-type = "mysql"
 
 # ignore syncing the txn with specified commit ts to downstream
@@ -62,6 +62,14 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 ##and we support regex expression , start with '~' declare use regex expression.
 #
 #replicate-do-db = ["~^b.*","s1"]
+
+# directory of relay logs. Empty string indicates disabling relay log.
+# relay log works only if the downstream is TiDB/MySQL.
+relay-log-dir = ""
+# max file size of each relay log
+relay-log-size = 10485760
+# read buffer size of relay log
+relay-read-buf-size = 8
 
 #[[syncer.replicate-do-table]]
 #db-name ="test"

@@ -142,7 +142,10 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	kvstore.Register("tikv", tikv.Driver{})
+	err = kvstore.Register("tikv", tikv.Driver{})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := newKVStoreFn(tiPath)
 	if err != nil {
@@ -377,7 +380,12 @@ func (s *Server) Start() error {
 	binlog.RegisterPumpServer(s.gs, s)
 
 	if s.unixAddr != "" {
-		go s.gs.Serve(unixLis)
+		go func() {
+			err := s.gs.Serve(unixLis)
+			if err != nil {
+				log.Error("grpc server stopped", zap.Error(err))
+			}
+		}()
 	}
 
 	// grpc and http will use the same tcp connection
@@ -392,7 +400,11 @@ func (s *Server) Start() error {
 	)
 
 	httpL := m.Match(cmux.HTTP1Fast())
-	go s.gs.Serve(grpcL)
+	go func() {
+		if err := s.gs.Serve(grpcL); err != nil {
+			log.Error("Unexpected exit of gRPC server", zap.Error(err))
+		}
+	}()
 
 	router := mux.NewRouter()
 	router.HandleFunc("/status", s.Status).Methods("GET")
@@ -404,7 +416,12 @@ func (s *Server) Start() error {
 	prometheus.DefaultGatherer = registry
 	http.Handle("/metrics", promhttp.Handler())
 
-	go http.Serve(httpL, nil)
+	go func() {
+		err := http.Serve(httpL, nil)
+		if err != nil {
+			log.Info("HTTP server stopped", zap.Error(err))
+		}
+	}()
 
 	previousState := s.node.NodeStatus().State
 	// register this node
@@ -643,7 +660,9 @@ func (s *Server) startMetrics() {
 func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 	node, ok := s.node.(*pumpNode)
 	if !ok {
-		json.NewEncoder(w).Encode("can't provide service")
+		if err := json.NewEncoder(w).Encode("can't provide service"); err != nil {
+			log.Error("Failed to encode msg", zap.Error(err))
+		}
 		return
 	}
 
@@ -652,7 +671,9 @@ func (s *Server) AllDrainers(w http.ResponseWriter, r *http.Request) {
 		log.Error("get pumps failed", zap.Error(err))
 	}
 
-	json.NewEncoder(w).Encode(pumps)
+	if err := json.NewEncoder(w).Encode(pumps); err != nil {
+		log.Error("Failed to encode pumps", zap.Error(err), zap.Any("pumps", pumps))
+	}
 }
 
 // Status exposes pumps' status to HTTP handler.
@@ -688,10 +709,14 @@ func (s *Server) BinlogByTS(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, binlog.String())
 	if len(binlog.PrewriteValue) > 0 {
 		prewriteValue := new(pb.PrewriteValue)
-		prewriteValue.Unmarshal(binlog.PrewriteValue)
-
-		fmt.Fprint(w, "\n\n PrewriteValue: \n")
-		fmt.Fprint(w, prewriteValue.String())
+		err := prewriteValue.Unmarshal(binlog.PrewriteValue)
+		if err != nil {
+			log.Error("Failed to unmarshal prewriteValue", zap.Error(err))
+			fmt.Fprint(w, "\n\n PrewriteValue: <Unmarshallable>\n")
+		} else {
+			fmt.Fprint(w, "\n\n PrewriteValue: \n")
+			fmt.Fprint(w, prewriteValue.String())
+		}
 	}
 
 	if len(binlog.PrewriteKey) > 0 {
@@ -759,12 +784,18 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 	log.Info("receive action", zap.String("nodeID", nodeID), zap.String("action", action))
 
 	if nodeID != s.node.NodeStatus().NodeID {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide nodeID %s, this pump's nodeID is %s", nodeID, s.node.NodeStatus().NodeID))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		return
 	}
 
 	if s.node.NodeStatus().State != node.Online {
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("this pump's state is %s, apply %s failed!", s.node.NodeStatus().State, action))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		return
 	}
 
@@ -776,12 +807,18 @@ func (s *Server) ApplyAction(w http.ResponseWriter, r *http.Request) {
 		log.Info("pump's state change to closing", zap.String("nodeID", nodeID))
 		s.node.NodeStatus().State = node.Closing
 	default:
-		rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		err := rd.JSON(w, http.StatusOK, util.ErrResponsef("invalide action %s", action))
+		if err != nil {
+			log.Error("Failed to render JSON response", zap.Error(err))
+		}
 		return
 	}
 
 	go s.Close()
-	rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+	err := rd.JSON(w, http.StatusOK, util.SuccessResponse(fmt.Sprintf("apply action %s success!", action), nil))
+	if err != nil {
+		log.Error("Failed to render JSON response", zap.Error(err))
+	}
 }
 
 var utilGetTSO = util.GetTSO
@@ -846,7 +883,10 @@ func (s *Server) commitStatus() {
 	case node.Pausing, node.Online:
 		state = node.Paused
 	case node.Closing:
-		s.waitSafeToOffline(context.Background())
+		err := s.waitSafeToOffline(context.Background())
+		if err != nil {
+			log.Error("Waiting to offline failed", zap.Error(err))
+		}
 		log.Info("safe to offline now")
 		state = node.Offline
 	default:

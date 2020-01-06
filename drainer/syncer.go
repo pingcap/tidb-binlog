@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/relay"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
@@ -98,13 +99,15 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "flash":
-		dsyncer, err = dsync.NewFlashSyncer(cfg.To, schema)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to create flash dsyncer")
-		}
 	case "mysql", "tidb":
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType)
+		var relayer relay.Relayer
+		// If the dir is empty, it means relayer is disabled.
+		if len(cfg.RelayLogDir) > 0 {
+			if relayer, err = relay.NewRelayer(cfg.RelayLogDir, cfg.RelayLogSize, schema); err != nil {
+				return nil, errors.Annotate(err, "fail to create relayer")
+			}
+		}
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -362,7 +365,7 @@ ForLoop:
 				lastAddComitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
-					err = errors.Annotate(err, "add to dsyncer failed")
+					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
@@ -381,6 +384,11 @@ ForLoop:
 			if err != nil {
 				err = errors.Trace(err)
 				break ForLoop
+			}
+
+			if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
+				log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
+				continue
 			}
 
 			sql := b.job.Query
@@ -404,7 +412,7 @@ ForLoop:
 
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
-					err = errors.Annotate(err, "add to dsyncer failed")
+					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())

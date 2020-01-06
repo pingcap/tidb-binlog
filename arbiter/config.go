@@ -63,8 +63,10 @@ type UpConfig struct {
 	KafkaAddrs   string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion string `toml:"kafka-version" json:"kafka-version"`
 
-	InitialCommitTS int64  `toml:"initial-commit-ts" json:"initial-commit-ts"`
-	Topic           string `toml:"topic" json:"topic"`
+	InitialCommitTS   int64  `toml:"initial-commit-ts" json:"initial-commit-ts"`
+	Topic             string `toml:"topic" json:"topic"`
+	MessageBufferSize int    `toml:"message-buffer-size" json:"message-buffer-size"`
+	SaramaBufferSize  int    `toml:"sarama-buffer-size" json:"sarama-buffer-size"`
 }
 
 // DownConfig is configuration of downstream

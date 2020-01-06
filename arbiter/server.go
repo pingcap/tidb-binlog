@@ -98,9 +98,11 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 
 	// set reader to read binlog from kafka
 	readerCfg := &reader.Config{
-		KafkaAddr: strings.Split(up.KafkaAddrs, ","),
-		CommitTS:  srv.finishTS,
-		Topic:     up.Topic,
+		KafkaAddr:         strings.Split(up.KafkaAddrs, ","),
+		CommitTS:          srv.finishTS,
+		Topic:             up.Topic,
+		SaramaBufferSize:  up.SaramaBufferSize,
+		MessageBufferSize: up.MessageBufferSize,
 	}
 
 	log.Info("use kafka binlog reader", zap.Reflect("cfg", readerCfg))
@@ -285,8 +287,16 @@ func (s *Server) loadStatus() (int, error) {
 func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.Loader) (err error) {
 	dest := ld.Input()
 	defer ld.Close()
+	var receivedTs int64
 	for msg := range source {
 		log.Debug("recv msg from kafka reader", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+
+		if msg.Binlog.CommitTs <= receivedTs {
+			log.Info("skip repeated binlog", zap.Int64("ts", msg.Binlog.CommitTs), zap.Int64("offset", msg.Offset))
+			continue
+		}
+		receivedTs = msg.Binlog.CommitTs
+
 		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
 		if err != nil {
 			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))

@@ -439,11 +439,11 @@ func (a *Append) resolve(startTS int64) bool {
 
 	resp, err := a.helper.GetMvccByEncodedKey(pbinlog.PrewriteKey)
 	if err != nil {
-		log.Error("GetMvccByEncodedKey failed", zap.Error(err))
+		log.Error("GetMvccByEncodedKey failed", zap.Int64("start ts", startTS), zap.Error(err))
 	} else if resp.RegionError != nil {
-		log.Error("GetMvccByEncodedKey failed", zap.Stringer("RegionError", resp.RegionError))
+		log.Error("GetMvccByEncodedKey failed", zap.Int64("start ts", startTS), zap.Stringer("RegionError", resp.RegionError))
 	} else if len(resp.Error) > 0 {
-		log.Error("GetMvccByEncodedKey failed", zap.String("Error", resp.Error))
+		log.Error("GetMvccByEncodedKey failed", zap.Int64("start ts", startTS), zap.String("Error", resp.Error))
 	} else {
 		for _, w := range resp.Info.Writes {
 			if int64(w.StartTs) != startTS {
@@ -461,7 +461,7 @@ func (a *Append) resolve(startTS int64) bool {
 
 				err := a.writeCBinlog(pbinlog, int64(w.CommitTs))
 				if err != nil {
-					log.Error("writeCBinlog failed", zap.Error(err))
+					log.Error("writeCBinlog failed", zap.Int64("start ts", startTS), zap.Error(err))
 					return false
 				}
 			} else {
@@ -478,8 +478,14 @@ func (a *Append) resolve(startTS int64) bool {
 
 	startSecond := oracle.ExtractPhysical(uint64(startTS)) / int64(time.Second/time.Millisecond)
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
+	elapseSecond := maxSecond - startSecond
 
-	if maxSecond-startSecond <= maxTxnTimeoutSecond {
+	if elapseSecond <= maxTxnTimeoutSecond {
+		log.Info(
+			"Find no MVCC record for a young txn",
+			zap.Int64("start ts", startTS),
+			zap.Int64("elapse sec", elapseSecond),
+		)
 		return false
 	}
 
@@ -489,7 +495,7 @@ func (a *Append) resolve(startTS int64) bool {
 	primaryKey := pbinlog.GetPrewriteKey()
 	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), uint64(pbinlog.StartTs), primaryKey)
 	if err != nil {
-		log.Error("GetTxnStatus failed", zap.Error(err))
+		log.Error("GetTxnStatus failed", zap.Int64("start ts", startTS), zap.Error(err))
 		return false
 	}
 
@@ -660,7 +666,9 @@ func (a *Append) GC(ts int64) {
 	}
 
 	atomic.StoreInt64(&a.gcTS, ts)
-	a.saveGCTSToDB(ts)
+	if err := a.saveGCTSToDB(ts); err != nil {
+		log.Error("Failed to save GCTS", zap.Int64("ts", ts), zap.Error(err))
+	}
 	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
 
 	if !atomic.CompareAndSwapInt32(&a.gcWorking, 0, 1) {
@@ -1085,6 +1093,9 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 
 	cbinlog.StartTs = pbinlog.StartTs
 	cbinlog.PrewriteValue = pbinlog.PrewriteValue
+	cbinlog.DdlQuery = pbinlog.DdlQuery
+	cbinlog.DdlJobId = pbinlog.DdlJobId
+	cbinlog.DdlSchemaState = pbinlog.DdlSchemaState
 
 	return nil
 }
