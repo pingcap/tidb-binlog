@@ -94,6 +94,7 @@ catchError {
 
         tests["Integration Test"] = {
             podTemplate(label: label, 
+            idleMinutes: 60,
             containers: [
                 containerTemplate(name: 'golang',alwaysPullImage: false, image: "${GO_DOCKER_IMAGE}", 
                 resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
@@ -122,6 +123,8 @@ catchError {
                 emptyDirVolume(mountPath: '/home/jenkins', memory: true)
                 ]) {
                 node(label) {
+                    println "debug node:\n ssh root@172.16.5.15"
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     container("golang") {
                         def ws = pwd()
                         deleteDir()
