@@ -24,7 +24,7 @@ if (m3) {
 m3 = null
 println "TIDB_BRANCH=${TIDB_BRANCH}"
 
-catchError {
+try {
     def buildSlave = "${GO_BUILD_SLAVE}"
     stage('Prepare') {
         node (buildSlave) {
@@ -166,6 +166,10 @@ catchError {
     }
 
     currentBuild.result = "SUCCESS"
+}catch (Exception e) {
+    currentBuild.result = "FAILURE"
+    slackcolor = 'danger'
+    echo "${e}"
 }
 
 stage('Summary') {
