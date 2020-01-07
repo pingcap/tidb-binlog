@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap"
 
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
+	"github.com/pingcap/tidb-binlog/pkg/encrypt"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -374,9 +375,26 @@ func (cfg *Config) adjustConfig() error {
 			}
 			cfg.SyncerCfg.To.User = user
 		}
-		if len(cfg.SyncerCfg.To.Password) == 0 {
+
+		if len(cfg.SyncerCfg.To.EncryptedPassword) > 0 {
+			decrypt, err := encrypt.Decrypt(cfg.SyncerCfg.To.EncryptedPassword)
+			if err != nil {
+				return errors.Annotate(err, "failed to decrypt password in `to.encrypted_password`")
+			}
+
+			cfg.SyncerCfg.To.Password = decrypt
+		} else if len(cfg.SyncerCfg.To.Password) == 0 {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
+	}
+
+	if len(cfg.SyncerCfg.To.Checkpoint.EncryptedPassword) > 0 {
+		decrypt, err := encrypt.Decrypt(cfg.SyncerCfg.To.EncryptedPassword)
+		if err != nil {
+			return errors.Annotate(err, "failed to decrypt password in `checkpoint.encrypted_password`")
+		}
+
+		cfg.SyncerCfg.To.Checkpoint.Password = decrypt
 	}
 
 	cfg.SyncerCfg.adjustWorkCount()
