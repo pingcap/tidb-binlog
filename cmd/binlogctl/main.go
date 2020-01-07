@@ -60,6 +60,12 @@ func main() {
 		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, close)
 	case ctl.OfflineDrainer:
 		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, close)
+	case ctl.Encrypt:
+		if len(cfg.Text) == 0 {
+			err = errors.New("need to specify the text to be encrypt")
+		} else {
+			err = ctl.EncryptHandler(cfg.Text)
+		}
 	default:
 		err = errors.NotSupportedf("cmd %s", cfg.Command)
 	}
