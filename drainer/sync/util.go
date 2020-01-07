@@ -23,6 +23,7 @@ type DBConfig struct {
 	Host          string           `toml:"host" json:"host"`
 	User          string           `toml:"user" json:"user"`
 	Password      string           `toml:"password" json:"password"`
+	SyncMode      int              `toml:"sync-mode" json:"sync-mode"`
 	Port          int              `toml:"port" json:"port"`
 	Checkpoint    CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir string           `toml:"dir" json:"dir"`
