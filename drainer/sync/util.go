@@ -20,12 +20,14 @@ import (
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
-	Host          string           `toml:"host" json:"host"`
-	User          string           `toml:"user" json:"user"`
-	Password      string           `toml:"password" json:"password"`
-	Port          int              `toml:"port" json:"port"`
-	Checkpoint    CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
-	BinlogFileDir string           `toml:"dir" json:"dir"`
+	Host     string `toml:"host" json:"host"`
+	User     string `toml:"user" json:"user"`
+	Password string `toml:"password" json:"password"`
+	// if EncryptedPassword is not empty, Password will be ignore.
+	EncryptedPassword string           `toml:"encrypted_password" json:"encrypted_password"`
+	Port              int              `toml:"port" json:"port"`
+	Checkpoint        CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
+	BinlogFileDir     string           `toml:"dir" json:"dir"`
 
 	ZKAddrs          string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
@@ -43,7 +45,9 @@ type CheckpointConfig struct {
 	Host     string `toml:"host" json:"host"`
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
-	Port     int    `toml:"port" json:"port"`
+	// if EncryptedPassword is not empty, Password will be ignore.
+	EncryptedPassword string `toml:"encrypted_password" json:"encrypted_password"`
+	Port              int    `toml:"port" json:"port"`
 }
 
 type baseError struct {
