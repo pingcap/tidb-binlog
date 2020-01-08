@@ -13,8 +13,6 @@
 
 package loopbacksync
 
-import ()
-
 const (
 	//MarkTableName mark table name
 	MarkTableName = "retl._drainer_repl_mark"
