@@ -449,6 +449,15 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 
 func (s *loaderImpl) createMarkTableDDL() error {
 	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
+	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
+	createDatabase := DDL{SQL: createDatabaseSQL}
+	if err := s.execDDL(&createDatabase); err != nil {
+		if !pkgsql.IgnoreDDLError(err) {
+			log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err))
+			return errors.Trace(err)
+		}
+		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", createDatabase.SQL))
+	}
 	sql := createMarkTable()
 	createMarkTable := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
 	if err := s.execDDL(&createMarkTable); err != nil {
