@@ -89,6 +89,8 @@ relay-read-buf-size = 8
 host = "127.0.0.1"
 user = "root"
 password = ""
+# if encrypted_password is not empty, password will be ignored.
+encrypted_password = ""
 port = 3306
 # 1: SyncFullColumn, 2: SyncPartialColumn
 # when setting SyncPartialColumn drainer will allow the downstream schema
@@ -105,6 +107,8 @@ port = 3306
 # schema = "tidb_binlog"
 # host = "127.0.0.1"
 # user = "root"
+# if encrypted_password is not empty, password will be ignored.
+# encrypted_password = ""
 # password = ""
 # port = 3306
 
