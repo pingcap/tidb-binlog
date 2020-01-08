@@ -6,9 +6,7 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
+// Unless required by applicable law or agreed to in writing, software // distributed under the License is distributed on an "AS IS" BASIS, // See the License for the specific language governing permissions and
 // limitations under the License.
 
 package checkpoint
@@ -35,8 +33,9 @@ type MysqlCheckPoint struct {
 	schema string
 	table  string
 
-	CommitTS int64            `toml:"commitTS" json:"commitTS"`
-	TsMap    map[string]int64 `toml:"ts-map" json:"ts-map"`
+	StatusSaved int              `toml:"status" json:"status"`
+	CommitTS    int64            `toml:"commitTS" json:"commitTS"`
+	TsMap       map[string]int64 `toml:"ts-map" json:"ts-map"`
 }
 
 var sqlOpenDB = pkgsql.OpenDB
@@ -106,7 +105,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
+func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, status int) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -115,6 +114,7 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	sp.CommitTS = ts
+	sp.StatusSaved = status
 
 	if slaveTS > 0 {
 		sp.TsMap["master-ts"] = ts
@@ -133,6 +133,14 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	return nil
+}
+
+// Status implements CheckPoint.Status interface
+func (sp *MysqlCheckPoint) Status() int {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.StatusSaved
 }
 
 // TS implements CheckPoint.TS interface

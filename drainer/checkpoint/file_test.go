@@ -31,14 +31,16 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 
 	// zero (initial) CommitTs
 	c.Assert(meta.TS(), Equals, int64(0))
+	c.Assert(meta.Status(), Equals, StatusNormal)
 
 	testTs := int64(1)
 	// save ts
-	err = meta.Save(testTs, 0)
+	err = meta.Save(testTs, 0, StatusRunning)
 	c.Assert(err, IsNil)
 	// check ts
 	ts := meta.TS()
 	c.Assert(ts, Equals, testTs)
+	c.Assert(meta.Status(), Equals, StatusRunning)
 
 	// check load ts
 	err = meta.Load()
@@ -64,6 +66,6 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 	err = meta.Close()
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(meta.Load()), Equals, ErrCheckPointClosed)
-	c.Assert(errors.Cause(meta.Save(0, 0)), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(meta.Save(0, 0, StatusNormal)), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(meta.Close()), Equals, ErrCheckPointClosed)
 }

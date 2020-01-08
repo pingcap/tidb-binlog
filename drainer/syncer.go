@@ -252,7 +252,7 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, slaveTS)
+	err := s.cp.Save(ts, slaveTS, checkpoint.StatusRunning)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -435,6 +435,10 @@ ForLoop:
 	// return the origin error if has, or the close error
 	if err != nil {
 		return err
+	}
+
+	if cerr == nil {
+		s.cp.Save(s.cp.TS(), 0, checkpoint.StatusNormal)
 	}
 	return cerr
 }
