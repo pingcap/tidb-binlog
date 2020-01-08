@@ -14,6 +14,8 @@
 package drainer
 
 import (
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"time"
 
 	"github.com/pingcap/check"
@@ -56,6 +58,34 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(ignore, check.IsFalse)
 	c.Assert(len(pv.Mutations), check.Equals, 1)
+}
+
+func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
+	var dmls []*loader.DML
+	dml := loader.DML{
+		Database: "retl",
+		Table:    "retl_mark1",
+		Tp:       1,
+		Values:   make(map[string]interface{}),
+	}
+	dml.Values["channel_id"] = 100
+	dmls = append(dmls, &dml)
+	dml1 := loader.DML{
+		Database: "retl",
+		Table:    "retl_mark9",
+		Tp:       1,
+		Values:   make(map[string]interface{}),
+	}
+	dml.Values["status"] = 100
+	dmls = append(dmls, &dml1)
+	loopBackSyncInfo := loopbacksync.LoopBackSync{
+		ChannelID:  100,
+		DdlSync:    true,
+		MarkStatus: true,
+	}
+	status, err := filterMarkDatas(dmls, &loopBackSyncInfo)
+	c.Assert(status, check.IsTrue)
+	c.Assert(err, check.IsNil)
 }
 
 func (s *syncerSuite) TestNewSyncer(c *check.C) {

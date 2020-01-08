@@ -67,7 +67,7 @@ type SyncerConfig struct {
 	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
 	MarkStatus        bool               `toml:"mark-status" json:"mark-status"`
 	DdlSync           bool               `toml:"ddl-sync" json:"ddl-sync"`
-	ChannelId         int64              `toml:"channel-id" json:"channel-id"`
+	ChannelID         int64              `toml:"channel-id" json:"channel-id"`
 	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
 	To                *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
@@ -134,7 +134,7 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
 	fs.BoolVar(&cfg.SyncerCfg.MarkStatus, "mark-status", false, "set mark or not ")
 	fs.BoolVar(&cfg.SyncerCfg.DdlSync, "ddl-sync", false, "sync ddl or not")
-	fs.Int64Var(&cfg.SyncerCfg.ChannelId, "channel-id", 0, "sync channel id ")
+	fs.Int64Var(&cfg.SyncerCfg.ChannelID, "channel-id", 0, "sync channel id ")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")

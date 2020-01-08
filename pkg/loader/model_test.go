@@ -14,6 +14,8 @@
 package loader
 
 import (
+	"fmt"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
 
 	check "github.com/pingcap/check"
@@ -227,4 +229,24 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 	c.Assert(args, check.HasLen, 2)
 	c.Assert(args[0], check.Equals, "pc")
 	c.Assert(args[1], check.Equals, "pingcap")
+}
+
+func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
+	columns := []string{"channel_id", "val"}
+	Values := make(map[string]interface{})
+	Values["channel_id"] = 100
+	Values["val"] = 1
+	sql, args := updateMarkSQL(columns, Values)
+	sql1 := fmt.Sprintf("INSERT INTO %s(channel_id,val) VALUES(?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
+	c.Assert(
+		sql, check.Equals,
+		sql1)
+	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, 100)
+	c.Assert(args[1], check.Equals, 1)
+}
+func (s *SQLSuite) TestCreateMarkTable(c *check.C) {
+	sql := createMarkTable()
+	sql1 := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	c.Assert(sql, check.Equals, sql1)
 }

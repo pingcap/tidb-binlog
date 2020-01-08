@@ -14,6 +14,8 @@
 package drainer
 
 import (
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -47,6 +49,8 @@ type Syncer struct {
 
 	filter *filter.Filter
 
+	loopbackSync *loopbacksync.LoopBackSync
+
 	// last time we successfully sync binlog item to downstream
 	lastSyncTime time.Time
 
@@ -71,6 +75,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
+	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.MarkStatus, cfg.DdlSync)
 
 	var err error
 	// create schema
@@ -79,7 +84,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -87,7 +92,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
@@ -107,7 +112,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.MarkStatus, cfg.DdlSync, cfg.ChannelId)
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -351,6 +356,11 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
+			isSyncTransaction, err1 := loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
+			if err1 != nil {
+				err = errors.Annotate(err1, "filter sync transaction failed")
+				break ForLoop
+			}
 
 			var ignore bool
 			ignore, err = filterTable(preWrite, s.filter, s.schema)
@@ -359,7 +369,7 @@ ForLoop:
 				break ForLoop
 			}
 
-			if !ignore {
+			if !ignore && !isSyncTransaction {
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
 				lastAddComitTS = binlog.GetCommitTs()
@@ -376,6 +386,11 @@ ForLoop:
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
+
+			if !s.cfg.DdlSync {
+				log.Info("Syncer skips DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()), zap.Bool("DDLSync", s.cfg.DdlSync))
+				continue
+			}
 
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
@@ -437,6 +452,29 @@ ForLoop:
 		return err
 	}
 	return cerr
+}
+
+func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {
+	for _, dml := range dmls {
+		tableName := dml.Database + "." + dml.Table
+		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
+			channelID, _ := (dml.Values[loopbacksync.ChannelID]).(int64)
+			if channelID == info.ChannelID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGetter translator.TableInfoGetter, info *loopbacksync.LoopBackSync) (bool, error) {
+	var tableName string
+	var schemaName string
+	tnx, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return filterMarkDatas(tnx.DMLs, info)
 }
 
 // filterTable may drop some table mutation in `PrewriteValue`

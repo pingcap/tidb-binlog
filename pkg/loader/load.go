@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,13 +41,6 @@ const (
 	maxDDLRetryCount = 5
 
 	execLimitMultiple = 3
-)
-
-const (
-	markTableName = "retl._drainer_repl_mark"
-	channelId     = "channel_id"
-	val           = "val"
-	channelInfo   = "channel_info"
 )
 
 var (
@@ -78,9 +72,7 @@ type loaderImpl struct {
 	batchSize   int
 	workerCount int
 
-	markStatus bool
-	ddlSync    bool
-	channelId  int64
+	loopBackSyncInfo *loopbacksync.LoopBackSync
 
 	input      chan *Txn
 	successTxn chan *Txn
@@ -112,23 +104,19 @@ type MetricsGroup struct {
 }
 
 type options struct {
-	workerCount   int
-	batchSize     int
-	markStatus    bool
-	ddlSync       bool
-	channelId     int64
-	metrics       *MetricsGroup
-	saveAppliedTS bool
+	workerCount      int
+	batchSize        int
+	loopBackSyncInfo *loopbacksync.LoopBackSync
+	metrics          *MetricsGroup
+	saveAppliedTS    bool
 }
 
 var defaultLoaderOptions = options{
-	workerCount:   16,
-	batchSize:     20,
-	markStatus:    false,
-	ddlSync:       false,
-	channelId:     0,
-	metrics:       nil,
-	saveAppliedTS: false,
+	workerCount:      16,
+	batchSize:        20,
+	loopBackSyncInfo: nil,
+	metrics:          nil,
+	saveAppliedTS:    false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -148,21 +136,10 @@ func BatchSize(n int) Option {
 	}
 }
 
-func SetMark(mark bool) Option {
+//SetloopBackSyncInfo set loop back sync info of loader
+func SetloopBackSyncInfo(loopBackSyncInfo *loopbacksync.LoopBackSync) Option {
 	return func(o *options) {
-		o.markStatus = mark
-	}
-}
-
-func SetDdlSync(ddlSync bool) Option {
-	return func(o *options) {
-		o.ddlSync = ddlSync
-	}
-}
-
-func SetChannelId(channelId int64) Option {
-	return func(o *options) {
-		o.channelId = channelId
+		o.loopBackSyncInfo = loopBackSyncInfo
 	}
 }
 
@@ -191,17 +168,15 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &loaderImpl{
-		db:            db,
-		workerCount:   opts.workerCount,
-		batchSize:     opts.batchSize,
-		metrics:       opts.metrics,
-		markStatus:    opts.markStatus,
-		ddlSync:       opts.ddlSync,
-		channelId:     opts.channelId,
-		input:         make(chan *Txn),
-		successTxn:    make(chan *Txn),
-		merge:         true,
-		saveAppliedTS: opts.saveAppliedTS,
+		db:               db,
+		workerCount:      opts.workerCount,
+		batchSize:        opts.batchSize,
+		metrics:          opts.metrics,
+		loopBackSyncInfo: opts.loopBackSyncInfo,
+		input:            make(chan *Txn),
+		successTxn:       make(chan *Txn),
+		merge:            true,
+		saveAppliedTS:    opts.saveAppliedTS,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -436,20 +411,7 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *loaderImpl) filterMarkDatas(dmls []*DML) []*DML {
-	for _, dml := range dmls {
-		tableName := dml.Database + "." + dml.Table
-		if strings.EqualFold(tableName, markTableName) {
-			channelId, _ := (dml.Values[channelId]).(int64)
-			if channelId == s.channelId {
-				return nil
-			}
-		}
-	}
-	return dmls
-}
 func (s *loaderImpl) execDMLs(dmls []*DML) error {
-	dmls = s.filterMarkDatas(dmls)
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -486,9 +448,9 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 }
 
 func (s *loaderImpl) createMarkTableDDL() error {
-	markTableDataBase := markTableName[:strings.Index(markTableName, ".")]
+	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
 	sql := createMarkTable()
-	createMarkTable := DDL{Database: markTableDataBase, Table: markTableName, SQL: sql}
+	createMarkTable := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
 	if err := s.execDDL(&createMarkTable); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
 			log.Error("exec failed", zap.String("sql", createMarkTable.SQL), zap.Error(err))
@@ -613,8 +575,7 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
-	sync := newSyncInfo(s.ddlSync, s.markStatus, s.channelId)
-	e.setsyncInfo(sync)
+	e.setsyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
@@ -627,11 +588,10 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDMLs:            s.execDMLs,
 		fDMLsSuccessCallback: s.markSuccess,
 		fExecDDL:             s.execDDL,
-		ddlSync:              s.ddlSync,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
 			if needRefreshTableInfo(txn.DDL.SQL) {
-				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil && s.ddlSync {
+				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
 					log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
 				}
 			}
@@ -643,7 +603,6 @@ type batchManager struct {
 	txns                 []*Txn
 	dmls                 []*DML
 	limit                int
-	ddlSync              bool
 	fExecDMLs            func([]*DML) error
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
@@ -668,11 +627,6 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 }
 
 func (b *batchManager) execDDL(txn *Txn) error {
-
-	if !b.ddlSync {
-		return nil
-	}
-
 	if err := b.fExecDDL(txn.DDL); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
 			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))

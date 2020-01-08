@@ -15,6 +15,7 @@ package sync
 
 import (
 	"database/sql"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -32,7 +33,6 @@ type MysqlSyncer struct {
 	db      *sql.DB
 	loader  loader.Loader
 	relayer relay.Relayer
-
 	*baseSyncer
 }
 
@@ -40,14 +40,14 @@ type MysqlSyncer struct {
 var createDB = loader.CreateDBWithSQLMode
 
 // NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer, markStatus bool, Ddlsync bool, channelId int64) (*MysqlSyncer, error) {
+func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer, info *loopbacksync.LoopBackSync) (*MysqlSyncer, error) {
 	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetMark(markStatus), loader.SetDdlSync(Ddlsync), loader.SetChannelId(channelId))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetloopBackSyncInfo(info))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,
@@ -92,7 +92,6 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	txn.Metadata = item
 
 	select {

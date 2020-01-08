@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
 	"time"
 
@@ -33,14 +34,8 @@ var defaultBatchSize = 128
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
-	sync              *syncInfo
+	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
-}
-
-type syncInfo struct {
-	markStatus bool
-	ddlSync    bool
-	channelId  int64
 }
 
 func newExecutor(db *gosql.DB) *executor {
@@ -57,18 +52,8 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 	return e
 }
 
-func newSyncInfo(ddlSync bool, markStatus bool, channelId int64) *syncInfo {
-	sync := &syncInfo{
-		markStatus: markStatus,
-		ddlSync:    ddlSync,
-		channelId:  channelId,
-	}
-	return sync
-}
-
-func (e *executor) setsyncInfo(sync *syncInfo) *executor {
-	e.sync = sync
-	return e
+func (e *executor) setsyncInfo(info *loopbacksync.LoopBackSync) {
+	e.info = info
 }
 
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
@@ -124,8 +109,8 @@ func (tx *tx) commit() error {
 }
 
 func (e *executor) updateMark(status int, channel string, tx *tx) error {
-	values := map[string]interface{}{channelId: e.sync.channelId, val: status, channelInfo: channel}
-	columns := []string{channelId, val, channelInfo}
+	values := map[string]interface{}{loopbacksync.ChannelID: e.info.ChannelID, loopbacksync.Val: status, loopbacksync.ChannelInfo: channel}
+	columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
 	sql, args := updateMarkSQL(columns, values)
 	_, err := tx.autoRollbackExec(sql, args...)
 	if err != nil {
@@ -146,7 +131,7 @@ func (e *executor) begin() (*tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	if e.sync.markStatus {
+	if e.info.MarkStatus {
 		err1 := e.updateMark(1, "", tx)
 		if err1 != nil {
 			return nil, errors.Trace(err1)

@@ -48,6 +48,9 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	args := []string{
 		"-metrics-addr", "192.168.15.10:9091",
 		"-txn-batch", "1",
+		"-mark-status", "true",
+		"-ddl-sync", "true",
+		"-channel-id", "100",
 		"-data-dir", "data.drainer",
 		"-dest-db-type", "mysql",
 		"-config", "../cmd/drainer/drainer.toml",
@@ -61,6 +64,9 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.MetricsAddr, Equals, "192.168.15.10:9091")
 	c.Assert(cfg.DataDir, Equals, "data.drainer")
 	c.Assert(cfg.SyncerCfg.TxnBatch, Equals, 1)
+	c.Assert(cfg.SyncerCfg.MarkStatus, IsTrue)
+	c.Assert(cfg.SyncerCfg.DdlSync, IsTrue)
+	c.Assert(cfg.SyncerCfg.ChannelID, Equals, 100)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "mysql")
 	c.Assert(cfg.SyncerCfg.To.Host, Equals, "127.0.0.1")
 	var strSQLMode *string
