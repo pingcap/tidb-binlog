@@ -94,7 +94,7 @@ try {
 
         tests["Integration Test"] = {
             podTemplate(label: label, 
-            idleMinutes: 60,
+            idleMinutes: 0,
             containers: [
                 containerTemplate(name: 'golang',alwaysPullImage: false, image: "${GO_DOCKER_IMAGE}", 
                 resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
