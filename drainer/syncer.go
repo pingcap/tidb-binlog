@@ -361,7 +361,7 @@ ForLoop:
 			if s.loopbackSync != nil {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
-					err = errors.Annotate(err1, "analyze transaction failed")
+					log.Warn("analyze transaction failed")
 				}
 			}
 
