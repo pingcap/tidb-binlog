@@ -22,6 +22,6 @@ func TestNewLoopBackSyncInfo(t *testing.T) {
 	var ddlSync = false
 	l := NewLoopBackSyncInfo(channelID, markStatus, ddlSync)
 	if l == nil {
-		t.Error("alloc loopBackSyncInfo objec failed")
+		t.Error("alloc loopBackSyncInfo objec failed ")
 	}
 }
