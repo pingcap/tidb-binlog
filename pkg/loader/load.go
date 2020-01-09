@@ -456,7 +456,7 @@ func (s *loaderImpl) createMarkTableDDL() error {
 	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
 	createDatabase := DDL{SQL: createDatabaseSQL}
 	if s.db == nil {
-		log.Error("loaderImpl db point object is nil")
+		log.Error("loaderImpl db point object is nil,maybe not create mark table and database")
 		return nil
 	}
 	if err1 := s.execDDL(&createDatabase); err1 != nil {
