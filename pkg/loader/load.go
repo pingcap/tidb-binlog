@@ -455,12 +455,16 @@ func (s *loaderImpl) createMarkTableDDL() error {
 	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
 	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
 	createDatabase := DDL{SQL: createDatabaseSQL}
-	if err := s.execDDL(&createDatabase); err != nil {
-		if !pkgsql.IgnoreDDLError(err) {
-			log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err))
-			return errors.Trace(err)
+	if s.db == nil {
+		log.Error("loaderImpl db point object is nil")
+		return nil
+	}
+	if err1 := s.execDDL(&createDatabase); err1 != nil {
+		if !pkgsql.IgnoreDDLError(err1) {
+			log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
+			return errors.Trace(err1)
 		}
-		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", createDatabase.SQL))
+		log.Warn("ignore ddl", zap.Error(err1), zap.String("ddl", createDatabase.SQL))
 	}
 	sql := createMarkTable()
 	createMarkTable := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}

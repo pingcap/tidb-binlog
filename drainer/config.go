@@ -134,7 +134,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Compressor, "compressor", "", "use the specified compressor to compress payload between pump and drainer, only 'gzip' is supported now (default \"\", ie. compression disabled.)")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
 	fs.BoolVar(&cfg.SyncerCfg.MarkStatus, "mark-status", false, "set mark or not ")
-	fs.BoolVar(&cfg.SyncerCfg.DdlSync, "ddl-sync", false, "sync ddl or not")
+	fs.BoolVar(&cfg.SyncerCfg.DdlSync, "ddl-sync", true, "sync ddl or not")
 	fs.Int64Var(&cfg.SyncerCfg.ChannelID, "channel-id", 0, "sync channel id ")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")

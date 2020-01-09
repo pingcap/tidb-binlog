@@ -109,12 +109,15 @@ func (tx *tx) commit() error {
 }
 
 func (e *executor) updateMark(status int, channel string, tx *tx) error {
-	values := map[string]interface{}{loopbacksync.ChannelID: e.info.ChannelID, loopbacksync.Val: status, loopbacksync.ChannelInfo: channel}
-	columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
-	sql, args := updateMarkSQL(columns, values)
-	_, err := tx.autoRollbackExec(sql, args...)
-	if err != nil {
-		return errors.Trace(err)
+	if e.info != nil {
+		values := map[string]interface{}{loopbacksync.ChannelID: e.info.ChannelID, loopbacksync.Val: status, loopbacksync.ChannelInfo: channel}
+		columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
+		sql, args := updateMarkSQL(columns, values)
+		_, err := tx.autoRollbackExec(sql, args...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
 	}
 	return nil
 }
@@ -131,7 +134,7 @@ func (e *executor) begin() (*tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	if e.info.MarkStatus {
+	if e.info != nil && e.info.MarkStatus {
 		err1 := e.updateMark(1, "", tx)
 		if err1 != nil {
 			return nil, errors.Trace(err1)

@@ -64,11 +64,11 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 	var dmls []*loader.DML
 	dml := loader.DML{
 		Database: "retl",
-		Table:    "retl_mark1",
+		Table:    "_drainer_repl_mark",
 		Tp:       1,
 		Values:   make(map[string]interface{}),
 	}
-	dml.Values["channel_id"] = 100
+	dml.Values["channel_id"] = int64(100)
 	dmls = append(dmls, &dml)
 	dml1 := loader.DML{
 		Database: "retl",
@@ -76,7 +76,7 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 		Tp:       1,
 		Values:   make(map[string]interface{}),
 	}
-	dml.Values["status"] = 100
+	dml1.Values["status"] = 100
 	dmls = append(dmls, &dml1)
 	loopBackSyncInfo := loopbacksync.LoopBackSync{
 		ChannelID:  100,
@@ -91,6 +91,7 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cfg := &SyncerConfig{
 		DestDBType: "_intercept",
+		DdlSync:    true,
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"

@@ -356,10 +356,13 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
-			isSyncTransaction, err1 := loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
-			if err1 != nil {
-				err = errors.Annotate(err1, "filter sync transaction failed")
-				break ForLoop
+			var isFilterTransaction = false
+			var err1 error
+			if s.loopbackSync != nil {
+				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
+				if err1 != nil {
+					err = errors.Annotate(err1, "analyze transaction failed")
+				}
 			}
 
 			var ignore bool
@@ -369,7 +372,7 @@ ForLoop:
 				break ForLoop
 			}
 
-			if !ignore && !isSyncTransaction {
+			if !ignore && !isFilterTransaction {
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
 				lastAddComitTS = binlog.GetCommitTs()
@@ -458,9 +461,11 @@ func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool,
 	for _, dml := range dmls {
 		tableName := dml.Database + "." + dml.Table
 		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
-			channelID, _ := (dml.Values[loopbacksync.ChannelID]).(int64)
-			if channelID == info.ChannelID {
-				return true, nil
+			if dml.Values[loopbacksync.ChannelID] != nil {
+				channelID, _ := (dml.Values[loopbacksync.ChannelID]).(int64)
+				if channelID == info.ChannelID {
+					return true, nil
+				}
 			}
 		}
 	}

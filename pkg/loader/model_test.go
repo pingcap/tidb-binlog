@@ -237,7 +237,7 @@ func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 	Values["channel_id"] = 100
 	Values["val"] = 1
 	sql, args := updateMarkSQL(columns, Values)
-	sql1 := fmt.Sprintf("INSERT INTO %s(channel_id,val) VALUES(?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
+	sql1 := fmt.Sprintf("INSERT INTO %s(`channel_id`,`val`) VALUES(?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
 	c.Assert(
 		sql, check.Equals,
 		sql1)
