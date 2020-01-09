@@ -38,6 +38,15 @@ compressor = ""
 # number of binlog events in a transaction batch
 txn-batch = 20
 
+# syn ddl to downstream db
+ddl-sync = true
+
+# set mark identification to downstream db mark table
+mark-status = false
+
+# in AA environment, the unique identification of back and forth synchronization prevents loop synchronization
+channel-id = 1
+
 # work count to execute binlogs
 # if the latency between drainer and downstream(mysql or tidb) are too high, you might want to increase this
 # to get higher throughput by higher concurrent write to the downstream
