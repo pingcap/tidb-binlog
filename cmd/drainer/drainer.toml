@@ -68,7 +68,7 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 # relay log works only if the downstream is TiDB/MySQL.
 # log-dir = ""
 # max file size of each relay log
-# log-size = 10485760
+# max-file-size = 10485760
 
 #[[syncer.replicate-do-table]]
 #db-name ="test"

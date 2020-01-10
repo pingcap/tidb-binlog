@@ -79,8 +79,8 @@ type SyncerConfig struct {
 
 // RelayConfig is the Relay log's configuration.
 type RelayConfig struct {
-	LogDir  string `toml:"log-dir" json:"log-dir"`
-	LogSize int64  `toml:"log-size" json:"log-size"`
+	LogDir      string `toml:"log-dir" json:"log-dir"`
+	MaxFileSize int64  `toml:"max-file-size" json:"max-file-size"`
 }
 
 // SwitchOn return true if we need to handle relay log.
