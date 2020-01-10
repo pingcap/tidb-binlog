@@ -81,7 +81,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 	readerTxns = r.Txns()
 
 	loaderClosed := false
-loop:
+
 	for {
 		if readerTxns == nil && loaderInput == nil && !loaderClosed {
 			ld.Close()
@@ -118,7 +118,7 @@ loop:
 			if !ok {
 				successTxnC = nil
 				log.Info("success closed")
-				break loop
+				continue
 			}
 			lastSuccessTS = success.Metadata.(int64)
 		case <-loaderQuit:

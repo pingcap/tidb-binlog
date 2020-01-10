@@ -60,7 +60,6 @@ func (ld *noOpLoader) Successes() <-chan *loader.Txn {
 }
 
 func (ld *noOpLoader) SetSafeMode(bool) {
-	return
 }
 
 func (ld *noOpLoader) GetSafeMode() bool {
@@ -72,7 +71,8 @@ var _ loader.Loader = &noOpLoader{}
 func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	cp, err := checkpoint.NewFile(0 /* initialCommitTS */, c.MkDir()+"/cp")
 	c.Assert(err, check.IsNil)
-	cp.Save(0, 0, checkpoint.StatusRunning)
+	err = cp.Save(0, 0, checkpoint.StatusRunning)
+	c.Assert(err, check.IsNil)
 
 	ld := newNoOpLoader()
 
@@ -86,7 +86,8 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 		gen.SetInsert(c)
 		gen.TiBinlog.StartTs = int64(i)
 		gen.TiBinlog.CommitTs = int64(i) * 10
-		relayer.WriteBinlog(gen.Schema, gen.Table, gen.TiBinlog, gen.PV)
+		_, err = relayer.WriteBinlog(gen.Schema, gen.Table, gen.TiBinlog, gen.PV)
+		c.Assert(err, check.IsNil)
 	}
 
 	relayer.Close()

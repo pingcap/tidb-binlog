@@ -436,10 +436,11 @@ ForLoop:
 		return err
 	}
 
-	if cerr == nil {
-		s.cp.Save(s.cp.TS(), 0, checkpoint.StatusNormal)
+	if cerr != nil {
+		return cerr
 	}
-	return cerr
+
+	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusNormal)
 }
 
 // filterTable may drop some table mutation in `PrewriteValue`
