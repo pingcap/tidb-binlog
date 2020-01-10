@@ -69,6 +69,7 @@ type loaderImpl struct {
 
 	batchSize   int
 	workerCount int
+	syncMode    SyncMode
 
 	input      chan *Txn
 	successTxn chan *Txn
@@ -99,11 +100,21 @@ type MetricsGroup struct {
 	QueryHistogramVec *prometheus.HistogramVec
 }
 
+// SyncMode represents the sync mode of DML.
+type SyncMode int
+
+// SyncMode values.
+const (
+	SyncFullColumn SyncMode = 1 + iota
+	SyncPartialColumn
+)
+
 type options struct {
 	workerCount   int
 	batchSize     int
 	metrics       *MetricsGroup
 	saveAppliedTS bool
+	syncMode      SyncMode
 }
 
 var defaultLoaderOptions = options{
@@ -111,10 +122,18 @@ var defaultLoaderOptions = options{
 	batchSize:     20,
 	metrics:       nil,
 	saveAppliedTS: false,
+	syncMode:      SyncFullColumn,
 }
 
 // A Option sets options such batch size, worker count etc.
 type Option func(*options)
+
+// SyncModeOption set sync mode of loader.
+func SyncModeOption(n SyncMode) Option {
+	return func(o *options) {
+		o.syncMode = n
+	}
+}
 
 // WorkerCount set worker count of loader
 func WorkerCount(n int) Option {
@@ -402,6 +421,20 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func removeOrphanCols(info *tableInfo, dml *DML) {
+	mp := make(map[string]struct{}, len(info.columns))
+	for _, name := range info.columns {
+		mp[name] = struct{}{}
+	}
+
+	for name := range dml.Values {
+		if _, ok := mp[name]; !ok {
+			delete(dml.Values, name)
+			delete(dml.OldValues, name)
+		}
+	}
+}
+
 func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
@@ -412,6 +445,9 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 			return errors.Trace(err)
 		}
 		filterGeneratedCols(dml)
+		if s.syncMode == SyncPartialColumn {
+			removeOrphanCols(dml.info, dml)
+		}
 	}
 
 	batchTables, singleDMLs := s.groupDMLs(dmls)
