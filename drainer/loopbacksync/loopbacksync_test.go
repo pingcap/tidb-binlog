@@ -17,7 +17,7 @@ import "testing"
 
 //TestNewLoopBackSyncInfo test loopBackSyncInfo alloc
 func TestNewLoopBackSyncInfo(t *testing.T) {
-	var channelID int64 = 1
+	var channelID Channel = 1
 	var markStatus = true
 	var ddlSync = false
 	l := NewLoopBackSyncInfo(channelID, markStatus, ddlSync)

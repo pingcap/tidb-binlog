@@ -17,9 +17,10 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -109,15 +110,18 @@ func (tx *tx) commit() error {
 }
 
 func (e *executor) updateMark(status int, channel string, tx *tx) error {
-	if e.info != nil {
-		values := map[string]interface{}{loopbacksync.ChannelID: e.info.ChannelID, loopbacksync.Val: status, loopbacksync.ChannelInfo: channel}
-		columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
-		sql, args := updateMarkSQL(columns, values)
-		_, err := tx.autoRollbackExec(sql, args...)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	if e.info == nil {
 		return nil
+	}
+	values := map[string]interface{}{
+		loopbacksync.ChannelID:   e.info.ChannelID,
+		loopbacksync.Val:         status,
+		loopbacksync.ChannelInfo: channel}
+	columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
+	sql, args := updateMarkSQL(columns, values)
+	_, err := tx.autoRollbackExec(sql, args...)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }

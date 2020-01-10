@@ -15,8 +15,9 @@ package sync
 
 import (
 	"database/sql"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"sync"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"

@@ -15,9 +15,10 @@ package loader
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strconv"
 	"strings"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"

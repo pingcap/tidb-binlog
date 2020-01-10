@@ -17,11 +17,12 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -455,34 +456,25 @@ func (s *loaderImpl) createMarkTableDDL() error {
 	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
 	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
 	createDatabase := DDL{SQL: createDatabaseSQL}
-	if s.db == nil || s.loopBackSyncInfo == nil {
-		log.Error("loaderImpl db point object is nil,maybe not create mark table and database or not need creat")
-		return nil
-	}
 	if err1 := s.execDDL(&createDatabase); err1 != nil {
-		if !pkgsql.IgnoreDDLError(err1) {
-			log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
-			return errors.Trace(err1)
-		}
-		log.Warn("ignore ddl", zap.Error(err1), zap.String("ddl", createDatabase.SQL))
+		log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
+		return errors.Trace(err1)
 	}
 	sql := createMarkTable()
 	createMarkTable := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
 	if err := s.execDDL(&createMarkTable); err != nil {
-		if !pkgsql.IgnoreDDLError(err) {
-			log.Error("exec failed", zap.String("sql", createMarkTable.SQL), zap.Error(err))
-			return errors.Trace(err)
-		}
-		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", createMarkTable.SQL))
+		log.Error("exec failed", zap.String("sql", createMarkTable.SQL), zap.Error(err))
+		return errors.Trace(err)
 	}
 	return nil
 }
 
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
-
-	if err := s.createMarkTableDDL(); err != nil {
-		return errors.Trace(err)
+	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.MarkStatus {
+		if err := s.createMarkTableDDL(); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	txnManager := newTxnManager(1024, s.input)
 	defer func() {

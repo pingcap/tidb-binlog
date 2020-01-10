@@ -14,9 +14,10 @@
 package drainer
 
 import (
+	"time"
+
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -68,7 +69,7 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 		Tp:       1,
 		Values:   make(map[string]interface{}),
 	}
-	dml.Values["channel_id"] = int64(100)
+	dml.Values["channel_id"] = loopbacksync.Channel(100)
 	dmls = append(dmls, &dml)
 	dml1 := loader.DML{
 		Database: "retl",

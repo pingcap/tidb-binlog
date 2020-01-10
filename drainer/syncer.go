@@ -14,11 +14,12 @@
 package drainer
 
 import (
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -75,7 +76,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
-	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.MarkStatus, cfg.DdlSync)
+	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(loopbacksync.Channel(cfg.ChannelID), cfg.MarkStatus, cfg.DdlSync)
 
 	var err error
 	// create schema
@@ -361,7 +362,8 @@ ForLoop:
 			if s.loopbackSync != nil {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
-					log.Warn("analyze transaction failed")
+					err = errors.Annotate(err1, "analyze transaction failed")
+					break ForLoop
 				}
 			}
 
@@ -391,7 +393,7 @@ ForLoop:
 			s.schema.addJob(b.job)
 
 			if !s.cfg.DdlSync {
-				log.Info("Syncer skips DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()), zap.Bool("DDLSync", s.cfg.DdlSync))
+				log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("DDLSync", s.cfg.DdlSync))
 				continue
 			}
 
@@ -461,9 +463,9 @@ func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool,
 	for _, dml := range dmls {
 		tableName := dml.Database + "." + dml.Table
 		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
-			if dml.Values[loopbacksync.ChannelID] != nil {
-				channelID, _ := (dml.Values[loopbacksync.ChannelID]).(int64)
-				if channelID == info.ChannelID {
+			channelID, ok := dml.Values[loopbacksync.ChannelID]
+			if ok {
+				if channelID.(loopbacksync.Channel) == info.ChannelID {
 					return true, nil
 				}
 			}
