@@ -83,6 +83,11 @@ type RelayConfig struct {
 	LogSize int64  `toml:"log-size" json:"log-size"`
 }
 
+// SwitchOn return true if we need to handle relay log.
+func (rc RelayConfig) SwitchOn() bool {
+	return len(rc.LogDir) > 0
+}
+
 // Config holds the configuration of drainer
 type Config struct {
 	*flag.FlagSet   `json:"-"`

@@ -61,7 +61,7 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 	case "mysql", "tidb":
 		cp, err = newMysql(cfg)
 	case "file":
-		cp, err = NewFile(cfg)
+		cp, err = NewFile(cfg.InitialCommitTS, cfg.CheckPointFile)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", cfg.CheckpointType)
 	}

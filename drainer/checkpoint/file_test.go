@@ -23,9 +23,7 @@ import (
 func (t *testCheckPointSuite) TestFile(c *C) {
 	fileName := "/tmp/test"
 	notExistFileName := "test_not_exist"
-	cfg := new(Config)
-	cfg.CheckPointFile = fileName
-	meta, err := NewFile(cfg)
+	meta, err := NewFile(0, fileName)
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(fileName)
 
@@ -49,18 +47,17 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 	c.Assert(ts, Equals, testTs)
 
 	// check not exist meta file
-	cfg.CheckPointFile = notExistFileName
-	meta, err = NewFile(cfg)
+	meta, err = NewFile(0, notExistFileName)
 	c.Assert(err, IsNil)
 	err = meta.Load()
 	c.Assert(err, IsNil)
 	c.Assert(meta.TS(), Equals, int64(0))
 
 	// check not exist meta file, but with initialCommitTs
-	cfg.InitialCommitTS = 123
-	meta, err = NewFile(cfg)
+	var initialCommitTS int64 = 123
+	meta, err = NewFile(initialCommitTS, notExistFileName)
 	c.Assert(err, IsNil)
-	c.Assert(meta.TS(), Equals, cfg.InitialCommitTS)
+	c.Assert(meta.TS(), Equals, initialCommitTS)
 
 	// close the checkpoint
 	err = meta.Close()

@@ -6,7 +6,9 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software // distributed under the License is distributed on an "AS IS" BASIS, // See the License for the specific language governing permissions and
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
 // limitations under the License.
 
 package checkpoint
@@ -17,6 +19,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -37,6 +42,8 @@ type MysqlCheckPoint struct {
 	CommitTS    int64            `toml:"commitTS" json:"commitTS"`
 	TsMap       map[string]int64 `toml:"ts-map" json:"ts-map"`
 }
+
+var _ CheckPoint = &MysqlCheckPoint{}
 
 var sqlOpenDB = pkgsql.OpenDB
 
@@ -65,6 +72,16 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	sql = genCreateTable(sp)
 	if _, err = db.Exec(sql); err != nil {
 		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
+	}
+
+	if sp.clusterID == 0 {
+		id, err := getClusterID(db, sp.schema, sp.table)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		log.Info("set cluster id", zap.Uint64("id", id))
+		sp.clusterID = id
 	}
 
 	err = sp.Load()

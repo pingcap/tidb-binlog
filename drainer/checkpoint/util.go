@@ -14,10 +14,12 @@
 package checkpoint
 
 import (
+	"database/sql"
 	"fmt"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 )
 
 // DBConfig is the DB configuration.
@@ -72,6 +74,36 @@ func genCreateTable(sp *MysqlCheckPoint) string {
 
 func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
+}
+
+func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error) {
+	sqlQuery := fmt.Sprintf("select clusterID from %s.%s", schema, table)
+	rows, err := db.Query(sqlQuery)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	for rows.Next() {
+		// multi row
+		if id > 0 {
+			return 0, errors.New("there are multi row int checkpoint table")
+		}
+
+		err = rows.Scan(&id)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
+
+	if rows.Err() != nil {
+		return 0, errors.Trace(rows.Err())
+	}
+
+	if id == 0 {
+		return 0, errors.New("no any item at checkpoint table")
+	}
+
+	return
 }
 
 func genSelectSQL(sp *MysqlCheckPoint) string {

@@ -63,7 +63,7 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 #
 #replicate-do-db = ["~^b.*","s1"]
 
-[relay]
+[syncer.relay]
 # directory of relay logs. Empty string indicates disabling relay log.
 # relay log works only if the downstream is TiDB/MySQL.
 # log-dir = ""

@@ -64,7 +64,7 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
-	cp, err := checkpoint.NewFile(&checkpoint.Config{CheckPointFile: cpFile})
+	cp, err := checkpoint.NewFile(0, cpFile)
 	c.Assert(err, check.IsNil)
 
 	syncer, err := NewSyncer(cp, cfg, nil)

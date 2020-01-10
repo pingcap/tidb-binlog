@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tipb/go-binlog"
 )
@@ -32,7 +31,7 @@ type Reader interface {
 	Run() context.CancelFunc
 
 	// Txns returns parsed transactions.
-	Txns() <-chan *loader.Txn
+	Txns() <-chan *obinlog.Binlog
 
 	// Close releases resources.
 	Close() error
@@ -43,7 +42,7 @@ type Reader interface {
 
 type reader struct {
 	binlogger binlogfile.Binlogger
-	txns      chan *loader.Txn
+	txns      chan *obinlog.Binlog
 	err       chan error
 }
 
@@ -56,7 +55,7 @@ func NewReader(dir string, readBufferSize int) (Reader, error) {
 
 	return &reader{
 		binlogger: binlogger,
-		txns:      make(chan *loader.Txn, readBufferSize),
+		txns:      make(chan *obinlog.Binlog, readBufferSize),
 	}, nil
 }
 
@@ -85,16 +84,11 @@ func (r *reader) Run() context.CancelFunc {
 				break
 			}
 
-			var txn *loader.Txn
-			txn, err = loader.SlaveBinlogToTxn(slaveBinlog)
-			if err != nil {
-				break
-			}
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()
 				log.Warn("Producing transaction is interrupted")
-			case r.txns <- txn:
+			case r.txns <- slaveBinlog:
 			}
 		}
 		// If binlogger is not done, notify it to stop.
@@ -114,7 +108,7 @@ func (r *reader) Run() context.CancelFunc {
 }
 
 // Txns implements Reader interface.
-func (r *reader) Txns() <-chan *loader.Txn {
+func (r *reader) Txns() <-chan *obinlog.Binlog {
 	return r.txns
 }
 

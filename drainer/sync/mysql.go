@@ -39,11 +39,18 @@ type MysqlSyncer struct {
 // should only be used for unit test to create mock db
 var createDB = loader.CreateDBWithSQLMode
 
-// NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer) (*MysqlSyncer, error) {
-	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
+// CreateLoader create the Loader instance.
+func CreateLoader(
+	cfg *DBConfig,
+	worker int,
+	batchSize int,
+	queryHistogramVec *prometheus.HistogramVec,
+	sqlMode *string,
+	destDBType string,
+) (db *sql.DB, ld loader.Loader, err error) {
+	db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	var opts []loader.Option
@@ -55,7 +62,27 @@ func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, w
 		}))
 	}
 
-	loader, err := loader.NewLoader(db, opts...)
+	ld, err = loader.NewLoader(db, opts...)
+	if err != nil {
+		db.Close()
+		return nil, nil, errors.Trace(err)
+	}
+
+	return
+}
+
+// NewMysqlSyncer returns a instance of MysqlSyncer
+func NewMysqlSyncer(
+	cfg *DBConfig,
+	tableInfoGetter translator.TableInfoGetter,
+	worker int,
+	batchSize int,
+	queryHistogramVec *prometheus.HistogramVec,
+	sqlMode *string,
+	destDBType string,
+	relayer relay.Relayer,
+) (*MysqlSyncer, error) {
+	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

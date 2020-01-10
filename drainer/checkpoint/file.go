@@ -36,10 +36,10 @@ type FileCheckPoint struct {
 }
 
 // NewFile creates a new FileCheckpoint.
-func NewFile(cfg *Config) (CheckPoint, error) {
+func NewFile(initialCommitTS int64, filePath string) (CheckPoint, error) {
 	pb := &FileCheckPoint{
-		initialCommitTS: cfg.InitialCommitTS,
-		name:            cfg.CheckPointFile,
+		initialCommitTS: initialCommitTS,
+		name:            filePath,
 	}
 	err := pb.Load()
 	if err != nil {

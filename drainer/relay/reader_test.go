@@ -90,7 +90,9 @@ func (r *testReaderSuite) readBinlogAndCheck(c *C, dir string, expectedNumber in
 	number := 0
 	for txn := range relayReader.Txns() {
 		number++
-		lastTxn = txn
+		loaderTxn, err := loader.SlaveBinlogToTxn(txn)
+		c.Assert(err, IsNil)
+		lastTxn = loaderTxn
 	}
 	c.Assert(<-relayReader.Error(), IsNil)
 	c.Assert(number, Equals, expectedNumber)
