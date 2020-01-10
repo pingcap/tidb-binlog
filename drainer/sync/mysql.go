@@ -15,6 +15,7 @@ package sync
 
 import (
 	"database/sql"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -47,6 +48,7 @@ func CreateLoader(
 	queryHistogramVec *prometheus.HistogramVec,
 	sqlMode *string,
 	destDBType string,
+	syncMode int,
 ) (db *sql.DB, ld loader.Loader, err error) {
 	db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
@@ -60,6 +62,27 @@ func CreateLoader(
 			QueryHistogramVec: queryHistogramVec,
 			EventCounterVec:   nil,
 		}))
+	}
+
+	if syncMode != 0 {
+		mode := loader.SyncMode(cfg.SyncMode)
+		opts = append(opts, loader.SyncModeOption(mode))
+
+		if mode == loader.SyncPartialColumn {
+			var oldMode, newMode string
+			oldMode, newMode, err = relaxSQLMode(db)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+
+			if newMode != oldMode {
+				db.Close()
+				db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+			}
+		}
 	}
 
 	ld, err = loader.NewLoader(db, opts...)
@@ -82,7 +105,7 @@ func NewMysqlSyncer(
 	destDBType string,
 	relayer relay.Relayer,
 ) (*MysqlSyncer, error) {
-	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType)
+	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, cfg.SyncMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -97,6 +120,29 @@ func NewMysqlSyncer(
 	go s.run()
 
 	return s, nil
+}
+
+// set newMode as the oldMode query from db by removing "STRICT_TRANS_TABLES".
+func relaxSQLMode(db *sql.DB) (oldMode string, newMode string, err error) {
+	row := db.QueryRow("SELECT @@SESSION.sql_mode;")
+	err = row.Scan(&oldMode)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+
+	toRemove := "STRICT_TRANS_TABLES"
+	newMode = oldMode
+
+	if !strings.Contains(oldMode, toRemove) {
+		return
+	}
+
+	// concatenated by "," like: mode1,mode2
+	newMode = strings.Replace(newMode, toRemove+",", "", -1)
+	newMode = strings.Replace(newMode, ","+toRemove, "", -1)
+	newMode = strings.Replace(newMode, toRemove, "", -1)
+
+	return
 }
 
 // SetSafeMode make the MysqlSyncer to use safe mode or not

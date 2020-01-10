@@ -91,6 +91,10 @@ password = ""
 # if encrypted_password is not empty, password will be ignored.
 encrypted_password = ""
 port = 3306
+# 1: SyncFullColumn, 2: SyncPartialColumn
+# when setting SyncPartialColumn drainer will allow the downstream schema
+# having more or less column numbers and relax sql mode by removing STRICT_TRANS_TABLES.
+# sync-mode = 1
 
 [syncer.to.checkpoint]
 # only support mysql or tidb now, you can uncomment this to control where the checkpoint is saved.
