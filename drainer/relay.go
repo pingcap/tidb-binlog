@@ -43,7 +43,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 		return errors.Annotate(err, "failed to create reader")
 	}
 
-	db, ld, err := sync.CreateLoader(scfg.To, scfg.WorkerCount, scfg.TxnBatch, nil, scfg.StrSQLMode, scfg.DestDBType)
+	db, ld, err := sync.CreateLoader(scfg.To, scfg.WorkerCount, scfg.TxnBatch, nil, scfg.StrSQLMode, scfg.DestDBType, scfg.To.SyncMode)
 	if err != nil {
 		return errors.Annotate(err, "faild to create loader")
 	}

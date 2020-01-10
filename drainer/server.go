@@ -101,9 +101,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	// get pd client and cluster ID
 	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
-		err := feedByRelayLogIfNeed(cfg)
-		if err != nil {
-			return nil, errors.Trace(err)
+		ferr := feedByRelayLogIfNeed(cfg)
+		if ferr != nil {
+			return nil, errors.Trace(ferr)
 		}
 		return nil, errors.Trace(err)
 	}
