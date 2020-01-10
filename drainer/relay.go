@@ -61,7 +61,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 // feedByRelayLog will take over the `ld loader.Loader`.
 func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) error {
 	checkpointTS := cp.TS()
-	var lastSuccessTS int64
+	lastSuccessTS := checkpointTS
 	r.Run()
 
 	loaderQuit := make(chan struct{})
@@ -142,14 +142,12 @@ loop:
 		return errors.Trace(loaderErr)
 	}
 
-	if lastSuccessTS > checkpointTS {
-		err := cp.Save(lastSuccessTS, 0 /* slaveTS */, checkpoint.StatusNormal)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		log.Info("update status as normal", zap.Int64("ts", lastSuccessTS))
+	err := cp.Save(lastSuccessTS, 0 /* slaveTS */, checkpoint.StatusNormal)
+	if err != nil {
+		return errors.Trace(err)
 	}
+
+	log.Info("update status as normal", zap.Int64("ts", lastSuccessTS))
 
 	return nil
 }
