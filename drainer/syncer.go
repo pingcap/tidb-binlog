@@ -101,8 +101,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 		}
 	case "mysql", "tidb":
 		var relayer relay.Relayer
-		// If the dir is empty, it means relayer is disabled.
-		if len(cfg.Relay.LogDir) > 0 {
+		if cfg.Relay.SwitchOn() {
 			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.LogSize, schema); err != nil {
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
