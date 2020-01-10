@@ -87,3 +87,29 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 		c.Fatal("mysql syncer hasn't synced item in 1s after some error occurs in loader")
 	}
 }
+
+func (s *mysqlSuite) TestRelaxSQLMode(c *check.C) {
+	tests := []struct {
+		oldMode string
+		newMode string
+	}{
+		{"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE", "ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE"},
+		{"ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,STRICT_TRANS_TABLES", "ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE"},
+		{"STRICT_TRANS_TABLES", ""},
+		{"ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE", "ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE"},
+	}
+
+	for _, test := range tests {
+		db, dbMock, err := sqlmock.New()
+		c.Assert(err, check.IsNil)
+
+		rows := sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
+			AddRow(test.oldMode)
+		dbMock.ExpectQuery("SELECT @@SESSION.sql_mode;").WillReturnRows(rows)
+
+		getOld, getNew, err := relaxSQLMode(db)
+		c.Assert(err, check.IsNil)
+		c.Assert(getOld, check.Equals, test.oldMode)
+		c.Assert(getNew, check.Equals, test.newMode)
+	}
+}
