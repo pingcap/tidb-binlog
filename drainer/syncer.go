@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -464,8 +465,9 @@ func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool,
 		tableName := dml.Database + "." + dml.Table
 		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
 			channelID, ok := dml.Values[loopbacksync.ChannelID]
+			log.Info("tp", zap.Stringer("tp", reflect.TypeOf(channelID)))
 			if ok {
-				if channelID.(loopbacksync.Channel) == info.ChannelID {
+				if channelID.(int64) == int64(info.ChannelID) {
 					return true, nil
 				}
 			}
