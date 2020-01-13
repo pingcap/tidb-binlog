@@ -21,7 +21,7 @@ const (
 	//Val val
 	Val = "val"
 	//ChannelInfo channel info
-	ChannelInfo = "stream_info"
+	ChannelInfo = "channel_info"
 )
 
 //LoopBackSync loopback sync info

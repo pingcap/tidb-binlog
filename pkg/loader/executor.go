@@ -109,11 +109,12 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(status int, channel string, tx *tx) error {
+func (e *executor) updateMark(channel string, tx *tx) error {
 	if e.info == nil {
 		return nil
 	}
-	columns := "(`channel_id`,`val`,`channel_info`) VALUES(?,?,?)"
+	status := 1
+	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
 	var args []interface{}
 	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
 	args = append(args, e.info.ChannelID, status, channel)
@@ -137,7 +138,7 @@ func (e *executor) begin() (*tx, error) {
 	}
 
 	if e.info != nil && e.info.LoopbackControl {
-		err1 := e.updateMark(1, "", tx)
+		err1 := e.updateMark("", tx)
 		if err1 != nil {
 			return nil, errors.Trace(err1)
 		}

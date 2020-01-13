@@ -38,13 +38,17 @@ compressor = ""
 # number of binlog events in a transaction batch
 txn-batch = 20
 
-# syn ddl to downstream db
+# sync ddl to downstream db or not
 sync-ddl = true
 
-# set mark identification to downstream db mark table
+# This variable works in dual-a. if it is false, the upstream data will all be synchronized to the downstream, except for the filtered table.
+# If it is true, the channel value is set at the same time, and the upstream starts with the mark table ID updated, and the channel ID is the same as its channel ID.
+# this part of data will not be synchronized to the downstream. Therefore, in dual-a scenario,both sides Channel id also needs to be set to the same value
 loopback-control = false
 
-# in AA environment, the unique identification of back and forth synchronization prevents loop synchronization
+# When loopback control is turned on, the channel ID will work.
+# In the dual-a scenario, the channel ID synchronized from the downstream to the upstream and the channel ID synchronized from
+# the upstream to the downstream need to be set to the same value to avoid loopback synchronization
 channel-id = 1
 
 # work count to execute binlogs

@@ -233,11 +233,11 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 }
 
 func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
-	columns := "(`channel_id`,`val`,`channel_info`) VALUES(?,?,?)"
+	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
 	var args []interface{}
 	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
 	args = append(args, 100, 1, "")
-	sql1 := fmt.Sprintf("INSERT INTO %s(`channel_id`,`val`,`channel_info`) VALUES(?,?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
+	sql1 := fmt.Sprintf("INSERT INTO %s(channel_id,val,channel_info) VALUES(?,?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
 	c.Assert(
 		sql, check.Equals,
 		sql1)
