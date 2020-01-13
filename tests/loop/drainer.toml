@@ -1,0 +1,28 @@
+# drainer meta data directory path
+data-dir = "/tmp/tidb_binlog_test/data.drainer"
+
+# a comma separated list of PD endpoints
+pd-urls = "http://127.0.0.1:2379"
+
+# syncer Configuration.
+[syncer]
+
+txn-batch = 1
+worker-count = 1
+
+db-type = "mysql"
+
+# disable sync these schema
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
+mark-status = true
+channel-id = 1
+
+# the downstream mysql protocol database
+[syncer.to]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 3306
+[syncer.to.checkpoint]
+#schema = "tidb_binlog"
