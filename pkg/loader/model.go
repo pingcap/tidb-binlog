@@ -186,18 +186,7 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	return
 }
 
-func updateMarkSQL(columns []string, Values map[string]interface{}) (string, []interface{}) {
-
-	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s) on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, buildColumnList(columns), holderString(len(columns)), loopbacksync.Val, loopbacksync.Val)
-	var args []interface{}
-	for _, name := range columns {
-		v := Values[name]
-		args = append(args, v)
-	}
-	return sql, args
-}
-
-func createMarkTable() string {
+func createMarkTableDDL() string {
 	sql := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
 	return sql
 }

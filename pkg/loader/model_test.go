@@ -15,8 +15,9 @@ package loader
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"strings"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	check "github.com/pingcap/check"
 )
@@ -232,21 +233,20 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 }
 
 func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
-	columns := []string{"channel_id", "val"}
-	Values := make(map[string]interface{})
-	Values["channel_id"] = 100
-	Values["val"] = 1
-	sql, args := updateMarkSQL(columns, Values)
-	sql1 := fmt.Sprintf("INSERT INTO %s(`channel_id`,`val`) VALUES(?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
+	columns := "(`channel_id`,`val`,`channel_info`) VALUES(?,?,?)"
+	var args []interface{}
+	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
+	args = append(args, 100, 1, "")
+	sql1 := fmt.Sprintf("INSERT INTO %s(`channel_id`,`val`,`channel_info`) VALUES(?,?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
 	c.Assert(
 		sql, check.Equals,
 		sql1)
-	c.Assert(args, check.HasLen, 2)
+	c.Assert(args, check.HasLen, 3)
 	c.Assert(args[0], check.Equals, 100)
 	c.Assert(args[1], check.Equals, 1)
 }
 func (s *SQLSuite) TestCreateMarkTable(c *check.C) {
-	sql := createMarkTable()
+	sql := createMarkTableDDL()
 	sql1 := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
 	c.Assert(sql, check.Equals, sql1)
 }

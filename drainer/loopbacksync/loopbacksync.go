@@ -21,25 +21,22 @@ const (
 	//Val val
 	Val = "val"
 	//ChannelInfo channel info
-	ChannelInfo = "channel_info"
+	ChannelInfo = "stream_info"
 )
-
-// Channel channel id type
-type Channel int64
 
 //LoopBackSync loopback sync info
 type LoopBackSync struct {
-	ChannelID  Channel
-	MarkStatus bool
-	DdlSync    bool
+	ChannelID       int64
+	LoopbackControl bool
+	SyncDDL         bool
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
-func NewLoopBackSyncInfo(channelID Channel, markStatus, ddlSync bool) *LoopBackSync {
+func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool) *LoopBackSync {
 	l := &LoopBackSync{
-		ChannelID:  channelID,
-		MarkStatus: markStatus,
-		DdlSync:    ddlSync,
+		ChannelID:       ChannelID,
+		LoopbackControl: LoopbackControl,
+		SyncDDL:         SyncDDL,
 	}
 	return l
 }

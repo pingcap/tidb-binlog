@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -76,7 +77,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
-	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(loopbacksync.Channel(cfg.ChannelID), cfg.MarkStatus, cfg.DdlSync)
+	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL)
 
 	var err error
 	// create schema
@@ -359,7 +360,7 @@ ForLoop:
 			}
 			var isFilterTransaction = false
 			var err1 error
-			if s.loopbackSync != nil {
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")
@@ -392,8 +393,8 @@ ForLoop:
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
 
-			if !s.cfg.DdlSync {
-				log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("DDLSync", s.cfg.DdlSync))
+			if !s.cfg.SyncDDL {
+				log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("SyncDDL", s.cfg.SyncDDL))
 				continue
 			}
 
@@ -459,13 +460,17 @@ ForLoop:
 	return cerr
 }
 
-func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {
+func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {
 	for _, dml := range dmls {
 		tableName := dml.Database + "." + dml.Table
 		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
 			channelID, ok := dml.Values[loopbacksync.ChannelID]
 			if ok {
-				if channelID.(loopbacksync.Channel) == info.ChannelID {
+				channelIDInt64, ok := channelID.(int64)
+				if !ok {
+					return false, errors.Errorf("wrong type of channelID: %s", reflect.TypeOf(channelID))
+				}
+				if channelIDInt64 == info.ChannelID {
 					return true, nil
 				}
 			}
@@ -477,11 +482,11 @@ func filterMarkDatas(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool,
 func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGetter translator.TableInfoGetter, info *loopbacksync.LoopBackSync) (bool, error) {
 	var tableName string
 	var schemaName string
-	tnx, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue)
+	txn, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	return filterMarkDatas(tnx.DMLs, info)
+	return findLoopBackMark(txn.DMLs, info)
 }
 
 // filterTable may drop some table mutation in `PrewriteValue`

@@ -66,8 +66,8 @@ type SyncerConfig struct {
 	IgnoreSchemas     string             `toml:"ignore-schemas" json:"ignore-schemas"`
 	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
-	MarkStatus        bool               `toml:"mark-status" json:"mark-status"`
-	DdlSync           bool               `toml:"ddl-sync" json:"ddl-sync"`
+	LoopbackControl   bool               `toml:"loopback-control" json:"loopback-control"`
+	SyncDDL           bool               `toml:"sync-ddl" json:"sync-ddl"`
 	ChannelID         int64              `toml:"channel-id" json:"channel-id"`
 	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
 	To                *dsync.DBConfig    `toml:"to" json:"to"`
@@ -133,8 +133,8 @@ func NewConfig() *Config {
 	fs.Int64Var(&cfg.InitialCommitTS, "initial-commit-ts", -1, "if drainer donesn't have checkpoint, use initial commitTS to initial checkpoint, will get a latest timestamp from pd if setting to be -1")
 	fs.StringVar(&cfg.Compressor, "compressor", "", "use the specified compressor to compress payload between pump and drainer, only 'gzip' is supported now (default \"\", ie. compression disabled.)")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
-	fs.BoolVar(&cfg.SyncerCfg.MarkStatus, "mark-status", false, "set mark or not ")
-	fs.BoolVar(&cfg.SyncerCfg.DdlSync, "ddl-sync", true, "sync ddl or not")
+	fs.BoolVar(&cfg.SyncerCfg.LoopbackControl, "loopback-control", false, "set mark or not ")
+	fs.BoolVar(&cfg.SyncerCfg.SyncDDL, "sync-ddl", true, "sync ddl or not")
 	fs.Int64Var(&cfg.SyncerCfg.ChannelID, "channel-id", 0, "sync channel id ")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")

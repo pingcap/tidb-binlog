@@ -17,10 +17,10 @@ import "testing"
 
 //TestNewLoopBackSyncInfo test loopBackSyncInfo alloc
 func TestNewLoopBackSyncInfo(t *testing.T) {
-	var channelID Channel = 1
-	var markStatus = true
-	var ddlSync = false
-	l := NewLoopBackSyncInfo(channelID, markStatus, ddlSync)
+	var ChannelID int64 = 1
+	var LoopbackControl = true
+	var SyncDDL = false
+	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL)
 	if l == nil {
 		t.Error("alloc loopBackSyncInfo objec failed ")
 	}

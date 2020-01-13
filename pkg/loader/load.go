@@ -452,7 +452,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *loaderImpl) createMarkTableDDL() error {
+func (s *loaderImpl) createMarkTable() error {
 	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
 	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
 	createDatabase := DDL{SQL: createDatabaseSQL}
@@ -460,10 +460,10 @@ func (s *loaderImpl) createMarkTableDDL() error {
 		log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
 		return errors.Trace(err1)
 	}
-	sql := createMarkTable()
-	createMarkTable := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
-	if err := s.execDDL(&createMarkTable); err != nil {
-		log.Error("exec failed", zap.String("sql", createMarkTable.SQL), zap.Error(err))
+	sql := createMarkTableDDL()
+	createMarkTableInfo := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
+	if err := s.execDDL(&createMarkTableInfo); err != nil {
+		log.Error("exec failed", zap.String("sql", createMarkTableInfo.SQL), zap.Error(err))
 		return errors.Trace(err)
 	}
 	return nil
@@ -471,8 +471,8 @@ func (s *loaderImpl) createMarkTableDDL() error {
 
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
-	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.MarkStatus {
-		if err := s.createMarkTableDDL(); err != nil {
+	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
+		if err := s.createMarkTable(); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -584,7 +584,7 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
-	e.setsyncInfo(s.loopBackSyncInfo)
+	e.setSyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}

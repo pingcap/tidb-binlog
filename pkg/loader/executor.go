@@ -53,7 +53,7 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 	return e
 }
 
-func (e *executor) setsyncInfo(info *loopbacksync.LoopBackSync) {
+func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
 	e.info = info
 }
 
@@ -113,12 +113,10 @@ func (e *executor) updateMark(status int, channel string, tx *tx) error {
 	if e.info == nil {
 		return nil
 	}
-	values := map[string]interface{}{
-		loopbacksync.ChannelID:   e.info.ChannelID,
-		loopbacksync.Val:         status,
-		loopbacksync.ChannelInfo: channel}
-	columns := []string{loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo}
-	sql, args := updateMarkSQL(columns, values)
+	columns := "(`channel_id`,`val`,`channel_info`) VALUES(?,?,?)"
+	var args []interface{}
+	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
+	args = append(args, e.info.ChannelID, status, channel)
 	_, err := tx.autoRollbackExec(sql, args...)
 	if err != nil {
 		return errors.Trace(err)
@@ -138,7 +136,7 @@ func (e *executor) begin() (*tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	if e.info != nil && e.info.MarkStatus {
+	if e.info != nil && e.info.LoopbackControl {
 		err1 := e.updateMark(1, "", tx)
 		if err1 != nil {
 			return nil, errors.Trace(err1)

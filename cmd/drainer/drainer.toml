@@ -39,10 +39,10 @@ compressor = ""
 txn-batch = 20
 
 # syn ddl to downstream db
-ddl-sync = true
+sync-ddl = true
 
 # set mark identification to downstream db mark table
-mark-status = false
+loopback-control = false
 
 # in AA environment, the unique identification of back and forth synchronization prevents loop synchronization
 channel-id = 1
