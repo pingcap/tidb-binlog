@@ -234,7 +234,6 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 	c.Assert(args[1], check.Equals, "pingcap")
 }
 
-//func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
