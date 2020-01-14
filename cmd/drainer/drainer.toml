@@ -139,6 +139,7 @@ port = 3306
 # kafka-version = "0.8.2.0"
 # kafka-max-messages = 1024
 #
+# retention-time = 7
 #
 # the topic name drainer will push msg, the default name is <cluster-id>_obinlog
 # be careful don't use the same name if run multi drainer instances

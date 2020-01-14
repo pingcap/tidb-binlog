@@ -63,8 +63,11 @@ type Binlogger interface {
 	// close the binlogger
 	Close() error
 
-	// GC recycles the old binlog file
-	GC(days time.Duration, pos binlog.Pos)
+	// GGCByTime delete all files that's older than the specified duration, the latest file is always kept
+	GCByTime(retentionTime time.Duration)
+
+	// GCByPos delete all files that's before the specified position, the latest file is always kept
+	GCByPos(pos binlog.Pos)
 }
 
 // binlogger is a logical representation of the log storage
@@ -348,8 +351,37 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 	return nil
 }
 
-// GC recycles the old binlog file
-func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
+// GCByPos delete all files that's before the specified position, the latest file is always kept
+func (b *binlogger) GCByPos(pos binlog.Pos) {
+	names, err := ReadBinlogNames(b.dir)
+	if err != nil {
+		log.Error("read binlog files failed", zap.Error(err))
+		return
+	}
+
+	if len(names) == 0 {
+		return
+	}
+
+	// skip the latest binlog file
+	for _, name := range names[:len(names)-1] {
+		curSuffix, _, err := ParseBinlogName(name)
+		if err != nil {
+			log.Error("parse binlog failed", zap.Error(err))
+		}
+		if curSuffix < pos.Suffix {
+			fileName := path.Join(b.dir, name)
+			if err := os.Remove(fileName); err != nil {
+				log.Error("remove old binlog file err", zap.Error(err), zap.String("file name", fileName))
+				continue
+			}
+			log.Info("GC binlog file", zap.String("file name", fileName))
+		}
+	}
+}
+
+// GGCByTime delete all files that's older than the specified duration, the latest file is always kept
+func (b *binlogger) GCByTime(retentionTime time.Duration) {
 	names, err := ReadBinlogNames(b.dir)
 	if err != nil {
 		log.Error("read binlog files failed", zap.Error(err))
@@ -369,22 +401,12 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 			continue
 		}
 
-		curSuffix, _, err := ParseBinlogName(name)
-		if err != nil {
-			log.Error("parse binlog failed", zap.Error(err))
-		}
-
-		if curSuffix < pos.Suffix {
-			err := os.Remove(fileName)
-			if err != nil {
-				log.Error("remove old binlog file err")
+		if time.Since(fi.ModTime()) > retentionTime {
+			if err := os.Remove(fileName); err != nil {
+				log.Error("remove old binlog file err", zap.Error(err), zap.String("file name", fileName))
 				continue
 			}
 			log.Info("GC binlog file", zap.String("file name", fileName))
-		} else if time.Since(fi.ModTime()) > days {
-			log.Warn(
-				"binlog file is old enough to be garbage collected, but the position is behind the safe point",
-				zap.String("name", fileName), zap.Stringer("position", &pos))
 		}
 	}
 }

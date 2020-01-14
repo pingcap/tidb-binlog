@@ -42,15 +42,16 @@ type syncerSuite struct {
 func (s *syncerSuite) SetUpTest(c *check.C) {
 	var infoGetter translator.TableInfoGetter
 	cfg := &DBConfig{
-		Host:         "localhost",
-		User:         "root",
-		Password:     "",
-		Port:         3306,
-		KafkaVersion: "0.8.2.0",
+		Host:          "localhost",
+		User:          "root",
+		Password:      "",
+		Port:          3306,
+		KafkaVersion:  "0.8.2.0",
+		BinlogFileDir: c.MkDir(),
 	}
 
 	// create pb syncer
-	pb, err := NewPBSyncer(c.MkDir(), infoGetter)
+	pb, err := NewPBSyncer(cfg, infoGetter)
 	c.Assert(err, check.IsNil)
 
 	s.syncers = append(s.syncers, pb)
