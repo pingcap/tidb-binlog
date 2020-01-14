@@ -102,7 +102,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	pdCli, err := getPdClient(cfg.EtcdURLs, cfg.Security)
 	if err != nil {
 		ferr := feedByRelayLogIfNeed(cfg)
-		if ferr != nil {
+		if ferr != nil && errors.Cause(ferr) != checkpoint.ErrNoCheckpointItem {
 			return nil, errors.Trace(ferr)
 		}
 		return nil, errors.Trace(err)

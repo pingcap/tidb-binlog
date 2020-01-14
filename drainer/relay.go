@@ -43,9 +43,10 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 		return errors.Annotate(err, "failed to create reader")
 	}
 
-	db, ld, err := sync.CreateLoader(scfg.To, scfg.WorkerCount, scfg.TxnBatch, nil, scfg.StrSQLMode, scfg.DestDBType, scfg.To.SyncMode)
+	db, ld, err := sync.CreateLoader(scfg.To, scfg.WorkerCount, scfg.TxnBatch,
+		queryHistogramVec, scfg.StrSQLMode, scfg.DestDBType)
 	if err != nil {
-		return errors.Annotate(err, "faild to create loader")
+		return errors.Annotate(err, "failed to create loader")
 	}
 
 	defer db.Close()
@@ -72,31 +73,33 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 		close(loaderQuit)
 	}()
 
-	var readerTxns <-chan *obinlog.Binlog
-	// var readerInputClosed bool
+	var readerTxnsC <-chan *obinlog.Binlog
 	var toPushLoaderTxn *loader.Txn
-	var loaderInput chan<- *loader.Txn
+	var loaderInputC chan<- *loader.Txn
 	successTxnC := ld.Successes()
 
-	readerTxns = r.Txns()
+	readerTxnsC = r.Txns()
 
 	loaderClosed := false
 
 	for {
-		if readerTxns == nil && loaderInput == nil && !loaderClosed {
+		// when reader is drained and all txn has been push into loader
+		// we close cloader.
+		if readerTxnsC == nil && loaderInputC == nil && !loaderClosed {
 			ld.Close()
 			loaderClosed = true
 		}
 
+		// break once we drainer the success items return by loader.
 		if loaderClosed && successTxnC == nil {
 			break
 		}
 
 		select {
-		case sbinlog, ok := <-readerTxns:
+		case sbinlog, ok := <-readerTxnsC:
 			if !ok {
-				log.Info("readerTxns closed")
-				readerTxns = nil
+				log.Info("readerTxnsC closed")
+				readerTxnsC = nil
 				continue
 			}
 			txn, err := loader.SlaveBinlogToTxn(sbinlog)
@@ -110,9 +113,9 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 
 			txn.Metadata = sbinlog.CommitTs
 			toPushLoaderTxn = txn
-			loaderInput = ld.Input()
-		case loaderInput <- toPushLoaderTxn:
-			loaderInput = nil
+			loaderInputC = ld.Input()
+		case loaderInputC <- toPushLoaderTxn:
+			loaderInputC = nil
 			toPushLoaderTxn = nil
 		case success, ok := <-successTxnC:
 			if !ok {
@@ -125,21 +128,15 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 			if loaderErr != nil {
 				return errors.Trace(loaderErr)
 			}
-			loaderQuit = nil
 		}
 	}
 
 	log.Info("finish feed by relay log")
 
 	readerErr := <-r.Error()
-	<-loaderQuit
 
 	if readerErr != nil {
 		return errors.Trace(readerErr)
-	}
-
-	if loaderErr != nil {
-		return errors.Trace(loaderErr)
 	}
 
 	err := cp.Save(lastSuccessTS, 0 /* slaveTS */, checkpoint.StatusNormal)

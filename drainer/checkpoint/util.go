@@ -22,6 +22,10 @@ import (
 	"github.com/pingcap/errors"
 )
 
+// ErrNoCheckpointItem represents there's no any checkpoint item and the cluster id must be specified
+// for the mysql checkpoint type.
+var ErrNoCheckpointItem = errors.New("no any checkpoint item")
+
 // DBConfig is the DB configuration.
 type DBConfig struct {
 	Host     string `toml:"host" json:"host"`
@@ -76,6 +80,7 @@ func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
 }
 
+// getClusterID return the cluster id iff the checkpoint table exist only one row.
 func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error) {
 	sqlQuery := fmt.Sprintf("select clusterID from %s.%s", schema, table)
 	rows, err := db.Query(sqlQuery)
@@ -84,9 +89,8 @@ func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error
 	}
 
 	for rows.Next() {
-		// multi row
 		if id > 0 {
-			return 0, errors.New("there are multi row int checkpoint table")
+			return 0, errors.New("there are multi row in checkpoint table")
 		}
 
 		err = rows.Scan(&id)
@@ -100,7 +104,7 @@ func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error
 	}
 
 	if id == 0 {
-		return 0, errors.New("no any item at checkpoint table")
+		return 0, ErrNoCheckpointItem
 	}
 
 	return

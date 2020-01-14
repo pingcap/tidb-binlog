@@ -48,7 +48,6 @@ func CreateLoader(
 	queryHistogramVec *prometheus.HistogramVec,
 	sqlMode *string,
 	destDBType string,
-	syncMode int,
 ) (db *sql.DB, ld loader.Loader, err error) {
 	db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
@@ -64,7 +63,7 @@ func CreateLoader(
 		}))
 	}
 
-	if syncMode != 0 {
+	if cfg.SyncMode != 0 {
 		mode := loader.SyncMode(cfg.SyncMode)
 		opts = append(opts, loader.SyncModeOption(mode))
 
@@ -105,7 +104,7 @@ func NewMysqlSyncer(
 	destDBType string,
 	relayer relay.Relayer,
 ) (*MysqlSyncer, error) {
-	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, cfg.SyncMode)
+	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -31,6 +31,9 @@ type noOpLoader struct {
 	success chan *loader.Txn
 }
 
+// noOpLoader just return success for every input txn.
+var _ loader.Loader = &noOpLoader{}
+
 func newNoOpLoader() *noOpLoader {
 	return &noOpLoader{
 		input:   make(chan *loader.Txn, 1),
@@ -69,10 +72,11 @@ func (ld *noOpLoader) GetSafeMode() bool {
 var _ loader.Loader = &noOpLoader{}
 
 func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
-	cp, err := checkpoint.NewFile(0 /* initialCommitTS */, c.MkDir()+"/cp")
+	cp, err := checkpoint.NewFile(0 /* initialCommitTS */, c.MkDir()+"/checkpoint")
 	c.Assert(err, check.IsNil)
 	err = cp.Save(0, 0, checkpoint.StatusRunning)
 	c.Assert(err, check.IsNil)
+	c.Assert(cp.Status(), check.Equals, checkpoint.StatusRunning)
 
 	ld := newNoOpLoader()
 

@@ -16,6 +16,7 @@ package checkpoint
 import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
 )
 
 var _ = Suite(&testUtil{})
@@ -24,14 +25,15 @@ type testUtil struct{}
 
 func (t *testUtil) TestG(c *C) {
 	tests := []struct {
-		name string
-		rows []uint64
-		id   uint64
-		err  bool
+		name              string
+		rows              []uint64
+		id                uint64
+		err               bool
+		checkSpecifiedErr error
 	}{
-		{"no row", nil, 0, true},
-		{"on row", []uint64{1}, 1, false},
-		{"multi row", []uint64{1, 2}, 0, true},
+		{"no row", nil, 0, true, ErrNoCheckpointItem},
+		{"on row", []uint64{1}, 1, false, nil},
+		{"multi row", []uint64{1, 2}, 0, true, nil},
 	}
 
 	for _, test := range tests {
@@ -50,6 +52,9 @@ func (t *testUtil) TestG(c *C) {
 		if test.err {
 			c.Assert(err, NotNil)
 			c.Assert(id, Equals, test.id)
+			if test.checkSpecifiedErr != nil {
+				c.Assert(errors.Cause(err), Equals, test.checkSpecifiedErr)
+			}
 		} else {
 			c.Assert(err, IsNil)
 			c.Assert(id, Equals, test.id)
