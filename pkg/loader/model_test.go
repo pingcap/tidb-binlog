@@ -15,11 +15,13 @@ package loader
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
-	check "github.com/pingcap/check"
+	"github.com/pingcap/check"
 )
 
 type dmlSuite struct {
@@ -232,18 +234,27 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 	c.Assert(args[1], check.Equals, "pingcap")
 }
 
+//func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	defer db.Close()
 	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	var args []interface{}
 	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
-	args = append(args, 100, 1, "")
-	sql1 := fmt.Sprintf("INSERT INTO %s(channel_id,val,channel_info) VALUES(?,?,?) on duplicate key update val=val+1;", loopbacksync.MarkTableName)
-	c.Assert(
-		sql, check.Equals,
-		sql1)
-	c.Assert(args, check.HasLen, 3)
-	c.Assert(args[0], check.Equals, 100)
-	c.Assert(args[1], check.Equals, 1)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(sql)).
+		WithArgs(100, 1, "").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	e := newExecutor(db)
+	tx, err := e.begin()
+	c.Assert(err, check.IsNil)
+	info := &loopbacksync.LoopBackSync{ChannelID: 100, LoopbackControl: true, SyncDDL: true}
+	e.info = info
+	err1 := e.updateMark("", tx)
+	c.Assert(err1, check.IsNil)
+	err2 := tx.commit()
+	c.Assert(err2, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 func (s *SQLSuite) TestCreateMarkTable(c *check.C) {
 	sql := createMarkTableDDL()
