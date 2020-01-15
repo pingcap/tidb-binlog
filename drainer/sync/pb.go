@@ -35,7 +35,7 @@ type pbSyncer struct {
 }
 
 // NewPBSyncer sync binlog to files
-func NewPBSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
+func NewPBSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (Syncer, error) {
 	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, binlogfile.SegmentSizeBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
