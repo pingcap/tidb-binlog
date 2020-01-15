@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -33,6 +35,7 @@ var defaultBatchSize = 128
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
+	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
 }
 
@@ -48,6 +51,10 @@ func newExecutor(db *gosql.DB) *executor {
 func (e *executor) withBatchSize(batchSize int) *executor {
 	e.batchSize = batchSize
 	return e
+}
+
+func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
+	e.info = info
 }
 
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
@@ -100,6 +107,22 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
+func (e *executor) updateMark(channel string, tx *tx) error {
+	if e.info == nil {
+		return nil
+	}
+	status := 1
+	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	var args []interface{}
+	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
+	args = append(args, e.info.ChannelID, status, channel)
+	_, err := tx.autoRollbackExec(sql, args...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // return a wrap of sql.Tx
 func (e *executor) begin() (*tx, error) {
 	sqlTx, err := e.db.Begin()
@@ -107,10 +130,19 @@ func (e *executor) begin() (*tx, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &tx{
+	var tx = &tx{
 		Tx:                sqlTx,
 		queryHistogramVec: e.queryHistogramVec,
-	}, nil
+	}
+
+	if e.info != nil && e.info.LoopbackControl {
+		err1 := e.updateMark("", tx)
+		if err1 != nil {
+			return nil, errors.Trace(err1)
+		}
+	}
+
+	return tx, nil
 }
 
 func (e *executor) bulkDelete(deletes []*DML) error {

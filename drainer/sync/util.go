@@ -25,6 +25,7 @@ type DBConfig struct {
 	Password string `toml:"password" json:"password"`
 	// if EncryptedPassword is not empty, Password will be ignore.
 	EncryptedPassword string           `toml:"encrypted_password" json:"encrypted_password"`
+	SyncMode          int              `toml:"sync-mode" json:"sync-mode"`
 	Port              int              `toml:"port" json:"port"`
 	Checkpoint        CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir     string           `toml:"dir" json:"dir"`

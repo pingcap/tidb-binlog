@@ -15,7 +15,10 @@ package sync
 
 import (
 	"database/sql"
+	"strings"
 	"sync"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -38,19 +41,40 @@ type MysqlSyncer struct {
 var createDB = loader.CreateDBWithSQLMode
 
 // NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string) (*MysqlSyncer, error) {
+func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, info *loopbacksync.LoopBackSync) (*MysqlSyncer, error) {
 	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetloopBackSyncInfo(info))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,
 			EventCounterVec:   nil,
 		}))
+	}
+
+	if cfg.SyncMode != 0 {
+		mode := loader.SyncMode(cfg.SyncMode)
+		opts = append(opts, loader.SyncModeOption(mode))
+
+		if mode == loader.SyncPartialColumn {
+			var oldMode, newMode string
+			oldMode, newMode, err = relaxSQLMode(db)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			if newMode != oldMode {
+				db.Close()
+				db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
+		}
 	}
 
 	loader, err := loader.NewLoader(db, opts...)
@@ -69,6 +93,29 @@ func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, w
 	return s, nil
 }
 
+// set newMode as the oldMode query from db by removing "STRICT_TRANS_TABLES".
+func relaxSQLMode(db *sql.DB) (oldMode string, newMode string, err error) {
+	row := db.QueryRow("SELECT @@SESSION.sql_mode;")
+	err = row.Scan(&oldMode)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+
+	toRemove := "STRICT_TRANS_TABLES"
+	newMode = oldMode
+
+	if !strings.Contains(oldMode, toRemove) {
+		return
+	}
+
+	// concatenated by "," like: mode1,mode2
+	newMode = strings.Replace(newMode, toRemove+",", "", -1)
+	newMode = strings.Replace(newMode, ","+toRemove, "", -1)
+	newMode = strings.Replace(newMode, toRemove, "", -1)
+
+	return
+}
+
 // SetSafeMode make the MysqlSyncer to use safe mode or not
 func (m *MysqlSyncer) SetSafeMode(mode bool) {
 	m.loader.SetSafeMode(mode)
@@ -80,7 +127,6 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	txn.Metadata = item
 
 	select {
