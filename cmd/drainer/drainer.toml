@@ -129,6 +129,8 @@ port = 3306
 #[syncer.to]
 # directory to save binlog file, default same as data-dir(save checkpoint file) if this is not configured.
 # dir = "data.drainer"
+#
+# retention-time = 7
 
 
 # when db-type is kafka, you can uncomment this to config the down stream kafka, it will be the globle config kafka default
@@ -138,8 +140,6 @@ port = 3306
 # kafka-addrs = "127.0.0.1:9092"
 # kafka-version = "0.8.2.0"
 # kafka-max-messages = 1024
-#
-# retention-time = 7
 #
 # the topic name drainer will push msg, the default name is <cluster-id>_obinlog
 # be careful don't use the same name if run multi drainer instances
