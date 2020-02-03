@@ -51,7 +51,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 	}
 
 	// create pb syncer
-	pb, err := NewPBSyncer(cfg, infoGetter)
+	pb, err := NewPBSyncer(cfg.BinlogFileDir, cfg.BinlogFileRetentionTime, infoGetter)
 	c.Assert(err, check.IsNil)
 
 	s.syncers = append(s.syncers, pb)

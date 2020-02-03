@@ -35,8 +35,8 @@ type pbSyncer struct {
 }
 
 // NewPBSyncer sync binlog to files
-func NewPBSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (Syncer, error) {
-	binlogger, err := binlogfile.OpenBinlogger(cfg.BinlogFileDir, binlogfile.SegmentSizeBytes)
+func NewPBSyncer(dir string, retentionDays int, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
+	binlogger, err := binlogfile.OpenBinlogger(dir, binlogfile.SegmentSizeBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -49,9 +49,9 @@ func NewPBSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (Syn
 		cancel:     cancel,
 	}
 
-	if cfg.BinlogFileRetentionTime > 0 {
+	if retentionDays > 0 {
 		// TODO: Add support for human readable format input of times like "7d", "12h"
-		retentionTime := time.Duration(cfg.BinlogFileRetentionTime) * 24 * time.Hour
+		retentionTime := time.Duration(retentionDays) * 24 * time.Hour
 		ticker := time.NewTicker(time.Hour)
 		go func() {
 			defer ticker.Stop()

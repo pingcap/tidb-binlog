@@ -102,7 +102,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 			return nil, errors.Annotate(err, "fail to create kafka dsyncer")
 		}
 	case "file":
-		dsyncer, err = dsync.NewPBSyncer(cfg.To, schema)
+		dsyncer, err = dsync.NewPBSyncer(cfg.To.BinlogFileDir, cfg.To.BinlogFileRetentionTime, schema)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
