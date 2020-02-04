@@ -372,7 +372,7 @@ func (b *binlogger) GCByPos(pos binlog.Pos) {
 		if curSuffix < pos.Suffix {
 			fileName := path.Join(b.dir, name)
 			if err := os.Remove(fileName); err != nil {
-				log.Error("remove old binlog file err", zap.Error(err), zap.String("file name", fileName))
+				log.Error("fail to remove old binlog file ", zap.Error(err), zap.String("file name", fileName))
 				continue
 			}
 			log.Info("GC binlog file", zap.String("file name", fileName))
