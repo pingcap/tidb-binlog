@@ -15,6 +15,7 @@ package loader
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,7 @@ type DML struct {
 }
 
 // DDL holds the ddl info
+// A empty SQL will force loader to evict table info and return success directly.
 type DDL struct {
 	Database string
 	Table    string
@@ -237,7 +239,8 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 	}
 
 	// Fallback to use all columns
-	return dml.info.columns, dml.whereValues(dml.info.columns)
+	names := dml.columnNames()
+	return names, dml.whereValues(names)
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
@@ -251,10 +254,21 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) columnNames() []string {
+	names := make([]string, 0, len(dml.Values))
+
+	for name := range dml.Values {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
-	info := dml.info
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(info.columns), holderString(len(info.columns)))
-	for _, name := range info.columns {
+	names := dml.columnNames()
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names), holderString(len(names)))
+	for _, name := range names {
 		v := dml.Values[name]
 		args = append(args, v)
 	}

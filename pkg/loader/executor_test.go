@@ -114,12 +114,12 @@ func (s *singleExecSuite) TestInsert(c *C) {
 			columns: []string{"name", "age"},
 		},
 	}
-	insertSQL := "INSERT INTO `unicorn`.`users`(`name`,`age`) VALUES(?,?)"
-	replaceSQL := "REPLACE INTO `unicorn`.`users`(`name`,`age`) VALUES(?,?)"
+	insertSQL := "INSERT INTO `unicorn`.`users`(`age`,`name`) VALUES(?,?)"
+	replaceSQL := "REPLACE INTO `unicorn`.`users`(`age`,`name`) VALUES(?,?)"
 
 	s.dbMock.ExpectBegin()
 	s.dbMock.ExpectExec(regexp.QuoteMeta(insertSQL)).
-		WithArgs("tester", 2019).WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(2019, "tester").WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 
 	e := newExecutor(s.db)
@@ -131,7 +131,7 @@ func (s *singleExecSuite) TestInsert(c *C) {
 
 	s.dbMock.ExpectBegin()
 	s.dbMock.ExpectExec(regexp.QuoteMeta(replaceSQL)).
-		WithArgs("tester", 2019).WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(2019, "tester").WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 
 	e = newExecutor(s.db)
@@ -180,7 +180,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(delSQL).
 		WithArgs("tester").WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectExec(replaceSQL).
-		WithArgs("tester", 2019).WillReturnError(errors.New("replace"))
+		WithArgs(2019, "tester").WillReturnError(errors.New("replace"))
 
 	e = newExecutor(s.db)
 	err = e.singleExec([]*DML{&dml}, true)
@@ -193,7 +193,7 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(delSQL).
 		WithArgs("tester").WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectExec(replaceSQL).
-		WithArgs("tester", 2019).WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(2019, "tester").WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 
 	e = newExecutor(s.db)

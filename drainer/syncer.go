@@ -390,11 +390,6 @@ ForLoop:
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
 
-			if !s.cfg.SyncDDL {
-				log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("SyncDDL", s.cfg.SyncDDL))
-				continue
-			}
-
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
 
@@ -418,23 +413,36 @@ ForLoop:
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
-				log.Info("skip ddl", zap.String("schema", schema), zap.String("table", table),
+				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
-			} else if sql != "" {
-				s.addDDLCount()
-				beginTime := time.Now()
-				lastAddComitTS = binlog.GetCommitTs()
-
-				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
-					zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
-
-				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
-				if err != nil {
-					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
-					break ForLoop
-				}
-				executeHistogram.Observe(time.Since(beginTime).Seconds())
+				continue
 			}
+
+			if !s.cfg.SyncDDL {
+				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				// A empty sql force it to evict the downstream table info.
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+					binlog.DdlQuery = []byte("")
+				} else {
+					continue
+				}
+			}
+
+			// Add ddl item to downstream.
+			s.addDDLCount()
+			beginTime := time.Now()
+			lastAddComitTS = binlog.GetCommitTs()
+
+			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
+				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+
+			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
+			if err != nil {
+				err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
+				break ForLoop
+			}
+			executeHistogram.Observe(time.Since(beginTime).Seconds())
 		}
 	}
 

@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb/infoschema"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -37,9 +39,13 @@ type executor struct {
 	batchSize         int
 	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
+	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
 }
 
-func newExecutor(db *gosql.DB) *executor {
+func newExecutor(
+	db *gosql.DB,
+	refreshTableInfo func(schema string, table string) (info *tableInfo, err error),
+) *executor {
 	exe := &executor{
 		db:        db,
 		batchSize: defaultBatchSize,
@@ -269,10 +275,42 @@ func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(dmls
 	return errors.Trace(errg.Wait())
 }
 
+func tryRefreshTableErr(err error) bool {
+	errCode, ok := pkgsql.GetSQLErrCode(err)
+	if !ok {
+		return false
+	}
+
+	switch errCode {
+	case infoschema.ErrColumnNotExists.Code():
+		return true
+	}
+
+	return false
+}
+
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			return e.singleExec(dmls, safeMode)
+			err := e.singleExec(dmls, safeMode)
+			if tryRefreshTableErr(err) {
+				name2info := make(map[string]*tableInfo)
+				for _, dml := range dmls {
+					name := dml.TableName()
+					if info, ok := name2info[name]; ok {
+						dml.info = info
+					} else {
+						info, err := e.refreshTableInfo(dml.Database, dml.Table)
+						if err != nil {
+							log.Error("fail to refresh table info", zap.Error(err))
+						} else {
+							name2info[name] = info
+							dml.info = info
+						}
+					}
+				}
+			}
+			return err
 		})
 		if err != nil {
 			return errors.Trace(err)

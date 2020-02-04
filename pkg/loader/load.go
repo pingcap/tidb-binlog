@@ -296,6 +296,10 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 	return
 }
 
+func (s *loaderImpl) evitTableInfo(schema string, table string) {
+	s.tableInfos.Delete(quoteSchema(schema, table))
+}
+
 func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo, err error) {
 	v, ok := s.tableInfos.Load(quoteSchema(schema, table))
 	if ok {
@@ -340,6 +344,10 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
+	if ddl.SQL == "" {
+		return nil
+	}
+
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -609,7 +617,7 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e := newExecutor(s.db, s.refreshTableInfo).withBatchSize(s.batchSize)
 	e.setSyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
@@ -625,6 +633,11 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
+			if txn.DDL.SQL == "" {
+				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
+				return
+			}
+
 			if needRefreshTableInfo(txn.DDL.SQL) {
 				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
 					log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
