@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
@@ -33,7 +35,6 @@ type MysqlSyncer struct {
 	db      *sql.DB
 	loader  loader.Loader
 	relayer relay.Relayer
-
 	*baseSyncer
 }
 
@@ -48,6 +49,7 @@ func CreateLoader(
 	queryHistogramVec *prometheus.HistogramVec,
 	sqlMode *string,
 	destDBType string,
+	info *loopbacksync.LoopBackSync,
 ) (db *sql.DB, ld loader.Loader, err error) {
 	db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
 	if err != nil {
@@ -55,7 +57,7 @@ func CreateLoader(
 	}
 
 	var opts []loader.Option
-	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"))
+	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetloopBackSyncInfo(info))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,
@@ -103,8 +105,9 @@ func NewMysqlSyncer(
 	sqlMode *string,
 	destDBType string,
 	relayer relay.Relayer,
+	info *loopbacksync.LoopBackSync,
 ) (*MysqlSyncer, error) {
-	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType)
+	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -164,7 +167,6 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	txn.Metadata = item
 
 	select {

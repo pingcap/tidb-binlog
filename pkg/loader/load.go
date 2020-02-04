@@ -17,9 +17,12 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -71,6 +74,8 @@ type loaderImpl struct {
 	workerCount int
 	syncMode    SyncMode
 
+	loopBackSyncInfo *loopbacksync.LoopBackSync
+
 	input      chan *Txn
 	successTxn chan *Txn
 
@@ -110,19 +115,21 @@ const (
 )
 
 type options struct {
-	workerCount   int
-	batchSize     int
-	metrics       *MetricsGroup
-	saveAppliedTS bool
-	syncMode      SyncMode
+	workerCount      int
+	batchSize        int
+	loopBackSyncInfo *loopbacksync.LoopBackSync
+	metrics          *MetricsGroup
+	saveAppliedTS    bool
+	syncMode         SyncMode
 }
 
 var defaultLoaderOptions = options{
-	workerCount:   16,
-	batchSize:     20,
-	metrics:       nil,
-	saveAppliedTS: false,
-	syncMode:      SyncFullColumn,
+	workerCount:      16,
+	batchSize:        20,
+	loopBackSyncInfo: nil,
+	metrics:          nil,
+	saveAppliedTS:    false,
+	syncMode:         SyncFullColumn,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -146,6 +153,13 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+//SetloopBackSyncInfo set loop back sync info of loader
+func SetloopBackSyncInfo(loopBackSyncInfo *loopbacksync.LoopBackSync) Option {
+	return func(o *options) {
+		o.loopBackSyncInfo = loopBackSyncInfo
 	}
 }
 
@@ -174,14 +188,15 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &loaderImpl{
-		db:            db,
-		workerCount:   opts.workerCount,
-		batchSize:     opts.batchSize,
-		metrics:       opts.metrics,
-		input:         make(chan *Txn),
-		successTxn:    make(chan *Txn),
-		merge:         true,
-		saveAppliedTS: opts.saveAppliedTS,
+		db:               db,
+		workerCount:      opts.workerCount,
+		batchSize:        opts.batchSize,
+		metrics:          opts.metrics,
+		loopBackSyncInfo: opts.loopBackSyncInfo,
+		input:            make(chan *Txn),
+		successTxn:       make(chan *Txn),
+		merge:            true,
+		saveAppliedTS:    opts.saveAppliedTS,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -329,7 +344,6 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
-
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -474,8 +488,30 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func (s *loaderImpl) createMarkTable() error {
+	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
+	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
+	createDatabase := DDL{SQL: createDatabaseSQL}
+	if err1 := s.execDDL(&createDatabase); err1 != nil {
+		log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
+		return errors.Trace(err1)
+	}
+	sql := createMarkTableDDL()
+	createMarkTableInfo := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
+	if err := s.execDDL(&createMarkTableInfo); err != nil {
+		log.Error("exec failed", zap.String("sql", createMarkTableInfo.SQL), zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
+	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
+		if err := s.createMarkTable(); err != nil {
+			return errors.Trace(err)
+		}
+	}
 	txnManager := newTxnManager(1024, s.input)
 	defer func() {
 		log.Info("Run()... in Loader quit")
@@ -584,6 +620,7 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e.setSyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
