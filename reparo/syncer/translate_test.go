@@ -134,6 +134,7 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 					Values: map[string]interface{}{
 						"a": int64(1),
 						"b": "test",
+						"c": "test",
 					},
 				}, {
 					Database: "test",
@@ -142,15 +143,20 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 					Values: map[string]interface{}{
 						"a": int64(1),
 						"b": "test",
+						"c": "test",
 					},
 				}, {
 					Database: "test",
 					Table:    "t1",
 					Tp:       loader.UpdateDMLType,
 					Values: map[string]interface{}{
+						"a": int64(1),
+						"b": "test",
 						"c": "abc",
 					},
 					OldValues: map[string]interface{}{
+						"a": int64(1),
+						"b": "test",
 						"c": "test",
 					},
 				},
@@ -159,10 +165,20 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	}
 
 	for binlog, txn := range tests {
+		c.Log("test: ", txn)
 		getTxn, err := pbBinlogToTxn(binlog)
 		c.Assert(err, check.IsNil)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
-		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs)
+
+		// for _, dml := range getTxn.DMLs {
+		// 	c.Logf("get dml: %+v", dml)
+		// }
+		// for _, dml := range txn.DMLs {
+		// 	c.Logf("expect dml: %+v", dml)
+		// }
+
+		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs, check.Commentf("get: %+v, expect: %+v", getTxn.DMLs, txn.DMLs))
+
 	}
 }
 
@@ -199,17 +215,17 @@ func generateDMLEvents(c *check.C) []pb.Event {
 			Tp:         pb.EventType_Insert,
 			SchemaName: &schema,
 			TableName:  &table,
-			Row:        [][]byte{cols[0], cols[1]},
+			Row:        [][]byte{cols[0], cols[1], cols[2]},
 		}, {
 			Tp:         pb.EventType_Delete,
 			SchemaName: &schema,
 			TableName:  &table,
-			Row:        [][]byte{cols[0], cols[1]},
+			Row:        [][]byte{cols[0], cols[1], cols[2]},
 		}, {
 			Tp:         pb.EventType_Update,
 			SchemaName: &schema,
 			TableName:  &table,
-			Row:        [][]byte{cols[2]},
+			Row:        [][]byte{cols[0], cols[1], cols[2]},
 		},
 	}
 }
@@ -220,15 +236,17 @@ func generateColumns(c *check.C) [][]byte {
 
 	cols := []*pb.Column{
 		{
-			Name:      "a",
-			Tp:        []byte{mysql.TypeInt24},
-			MysqlType: "int",
-			Value:     encodeIntValue(1),
+			Name:         "a",
+			Tp:           []byte{mysql.TypeInt24},
+			MysqlType:    "int",
+			Value:        encodeIntValue(1),
+			ChangedValue: encodeIntValue(1),
 		}, {
-			Name:      "b",
-			Tp:        []byte{mysql.TypeVarchar},
-			MysqlType: "varchar",
-			Value:     encodeBytesValue([]byte("test")),
+			Name:         "b",
+			Tp:           []byte{mysql.TypeVarchar},
+			MysqlType:    "varchar",
+			Value:        encodeBytesValue([]byte("test")),
+			ChangedValue: encodeBytesValue([]byte("test")),
 		}, {
 			Name:         "c",
 			Tp:           []byte{mysql.TypeVarchar},

@@ -617,7 +617,7 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db, s.refreshTableInfo).withBatchSize(s.batchSize)
+	e := newExecutor(s.db).withBatchSize(s.batchSize).withRefreshTableInfo(s.refreshTableInfo)
 	e.setSyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)

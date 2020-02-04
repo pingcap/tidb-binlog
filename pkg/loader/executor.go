@@ -44,7 +44,6 @@ type executor struct {
 
 func newExecutor(
 	db *gosql.DB,
-	refreshTableInfo func(schema string, table string) (info *tableInfo, err error),
 ) *executor {
 	exe := &executor{
 		db:        db,
@@ -52,6 +51,11 @@ func newExecutor(
 	}
 
 	return exe
+}
+
+func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (info *tableInfo, err error)) *executor {
+	e.refreshTableInfo = fn
+	return e
 }
 
 func (e *executor) withBatchSize(batchSize int) *executor {
@@ -293,7 +297,7 @@ func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
 			err := e.singleExec(dmls, safeMode)
-			if tryRefreshTableErr(err) {
+			if tryRefreshTableErr(err) && e.refreshTableInfo != nil {
 				name2info := make(map[string]*tableInfo)
 				for _, dml := range dmls {
 					name := dml.TableName()
