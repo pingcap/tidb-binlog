@@ -29,14 +29,18 @@ type LoopBackSync struct {
 	ChannelID       int64
 	LoopbackControl bool
 	SyncDDL         bool
+	PluginPath      string
+	PluginNames     []string
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
-func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool) *LoopBackSync {
+func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path string, names []string) *LoopBackSync {
 	l := &LoopBackSync{
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,
 		SyncDDL:         SyncDDL,
+		PluginPath:      path,
+		PluginNames:     names,
 	}
 	return l
 }

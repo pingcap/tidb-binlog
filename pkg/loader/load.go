@@ -22,10 +22,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -80,6 +79,8 @@ type loaderImpl struct {
 	successTxn chan *Txn
 
 	metrics *MetricsGroup
+
+	handleList HandlerList
 
 	// change update -> delete + replace
 	// insert -> replace
@@ -197,6 +198,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:       make(chan *Txn),
 		merge:            true,
 		saveAppliedTS:    opts.saveAppliedTS,
+		handleList:       HandlerList{},
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -205,6 +207,10 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
+	err := s.handleList.LoadHandlerByNames(s.loopBackSyncInfo.PluginPath, s.loopBackSyncInfo.PluginNames)
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -523,6 +529,7 @@ func (s *loaderImpl) Run() error {
 	input := txnManager.run()
 
 	for {
+		pl := s.handleList.mp
 		select {
 		case txn, ok := <-input:
 			if !ok {
@@ -532,7 +539,14 @@ func (s *loaderImpl) Run() error {
 				}
 				return nil
 			}
-
+			(&pl).Range(func(k, v interface{}) bool {
+				p, ok := v.(Plugin)
+				if !ok {
+					return true
+				}
+				txn = p.DoFilter(txn)
+				return true
+			})
 			s.metricsInputTxn(txn)
 			txnManager.pop(txn)
 			if err := batch.put(txn); err != nil {
@@ -554,6 +568,15 @@ func (s *loaderImpl) Run() error {
 			if !ok {
 				return nil
 			}
+
+			(&pl).Range(func(k, v interface{}) bool {
+				p, ok := v.(Plugin)
+				if !ok {
+					return true
+				}
+				txn = p.DoFilter(txn)
+				return true
+			})
 
 			s.metricsInputTxn(txn)
 			txnManager.pop(txn)
