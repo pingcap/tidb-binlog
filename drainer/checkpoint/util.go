@@ -15,6 +15,7 @@ package checkpoint
 
 import (
 	"database/sql"
+	stderrors "errors"
 	"fmt"
 
 	// mysql driver
@@ -24,7 +25,7 @@ import (
 
 // ErrNoCheckpointItem represents there's no any checkpoint item and the cluster id must be specified
 // for the mysql checkpoint type.
-var ErrNoCheckpointItem = errors.New("no any checkpoint item")
+var ErrNoCheckpointItem = stderrors.New("no any checkpoint item")
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
