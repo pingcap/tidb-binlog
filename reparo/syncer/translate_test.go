@@ -165,20 +165,10 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 	}
 
 	for binlog, txn := range tests {
-		c.Log("test: ", txn)
 		getTxn, err := pbBinlogToTxn(binlog)
 		c.Assert(err, check.IsNil)
 		c.Assert(getTxn.DDL, check.DeepEquals, txn.DDL)
-
-		// for _, dml := range getTxn.DMLs {
-		// 	c.Logf("get dml: %+v", dml)
-		// }
-		// for _, dml := range txn.DMLs {
-		// 	c.Logf("expect dml: %+v", dml)
-		// }
-
-		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs, check.Commentf("get: %+v, expect: %+v", getTxn.DMLs, txn.DMLs))
-
+		c.Assert(getTxn.DMLs, check.DeepEquals, txn.DMLs)
 	}
 }
 

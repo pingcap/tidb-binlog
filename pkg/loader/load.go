@@ -192,6 +192,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		workerCount:      opts.workerCount,
 		batchSize:        opts.batchSize,
 		metrics:          opts.metrics,
+		syncMode:         opts.syncMode,
 		loopBackSyncInfo: opts.loopBackSyncInfo,
 		input:            make(chan *Txn),
 		successTxn:       make(chan *Txn),
@@ -617,7 +618,10 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize).withRefreshTableInfo(s.refreshTableInfo)
+	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	if s.syncMode == SyncPartialColumn {
+		e = e.withRefreshTableInfo(s.refreshTableInfo)
+	}
 	e.setSyncInfo(s.loopBackSyncInfo)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)

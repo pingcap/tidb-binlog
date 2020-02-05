@@ -140,8 +140,8 @@ func (dml *DML) updateKey() bool {
 }
 
 func (dml *DML) String() string {
-	return fmt.Sprintf("{db: %s, table: %s,tp: %v values: %v old_values: %v}",
-		dml.Database, dml.Table, dml.Tp, dml.Values, dml.OldValues)
+	return fmt.Sprintf("{db: %s, table: %s,tp: %v values: %d old_values: %d}",
+		dml.Database, dml.Table, dml.Tp, len(dml.Values), len(dml.OldValues))
 }
 
 func (dml *DML) oldPrimaryKeyValues() []interface{} {

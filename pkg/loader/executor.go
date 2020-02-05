@@ -42,9 +42,7 @@ type executor struct {
 	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
 }
 
-func newExecutor(
-	db *gosql.DB,
-) *executor {
+func newExecutor(db *gosql.DB) *executor {
 	exe := &executor{
 		db:        db,
 		batchSize: defaultBatchSize,
@@ -296,25 +294,37 @@ func tryRefreshTableErr(err error) bool {
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			err := e.singleExec(dmls, safeMode)
-			if tryRefreshTableErr(err) && e.refreshTableInfo != nil {
+			execErr := e.singleExec(dmls, safeMode)
+			if execErr == nil {
+				return nil
+			}
+
+			if tryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
+				log.Info("try refresh table info")
 				name2info := make(map[string]*tableInfo)
 				for _, dml := range dmls {
 					name := dml.TableName()
-					if info, ok := name2info[name]; ok {
-						dml.info = info
-					} else {
-						info, err := e.refreshTableInfo(dml.Database, dml.Table)
+					info, ok := name2info[name]
+					if !ok {
+						var err error
+						info, err = e.refreshTableInfo(dml.Database, dml.Table)
 						if err != nil {
 							log.Error("fail to refresh table info", zap.Error(err))
-						} else {
-							name2info[name] = info
-							dml.info = info
+							continue
 						}
+
+						name2info[name] = info
 					}
+
+					if len(dml.info.columns) != len(info.columns) {
+						log.Info("columns change", zap.Strings("old", dml.info.columns),
+							zap.Strings("new", info.columns))
+						removeOrphanCols(info, dml)
+					}
+					dml.info = info
 				}
 			}
-			return err
+			return execErr
 		})
 		if err != nil {
 			return errors.Trace(err)
