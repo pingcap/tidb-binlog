@@ -12,7 +12,7 @@ import (
 )
 
 func feedByRelayLogIfNeed(cfg *Config) error {
-	if !cfg.SyncerCfg.Relay.SwitchOn() {
+	if !cfg.SyncerCfg.Relay.IsEnabled() {
 		return nil
 	}
 
@@ -78,7 +78,8 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 	var loaderInputC chan<- *loader.Txn
 	successTxnC := ld.Successes()
 
-	readerTxnsC = r.Txns()
+	readerTxnsC = r.Binlogs()
+	readerTxnsCClosed := false
 
 	loaderClosed := false
 
@@ -100,23 +101,28 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 			if !ok {
 				log.Info("readerTxnsC closed")
 				readerTxnsC = nil
+				readerTxnsCClosed = true
 				continue
 			}
+			if sbinlog.CommitTs <= checkpointTS {
+				continue
+			}
+
 			txn, err := loader.SlaveBinlogToTxn(sbinlog)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
-			if sbinlog.CommitTs <= checkpointTS {
-				continue
-			}
-
+			readerTxnsC = nil
 			txn.Metadata = sbinlog.CommitTs
 			toPushLoaderTxn = txn
 			loaderInputC = ld.Input()
 		case loaderInputC <- toPushLoaderTxn:
 			loaderInputC = nil
 			toPushLoaderTxn = nil
+			if !readerTxnsCClosed {
+				readerTxnsC = r.Binlogs()
+			}
 		case success, ok := <-successTxnC:
 			if !ok {
 				successTxnC = nil

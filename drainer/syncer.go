@@ -108,7 +108,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		}
 	case "mysql", "tidb":
 		var relayer relay.Relayer
-		if cfg.Relay.SwitchOn() {
+		if cfg.Relay.IsEnabled() {
 			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}

@@ -30,8 +30,8 @@ type Reader interface {
 	// Run reads relay log.
 	Run() context.CancelFunc
 
-	// Txns returns parsed transactions.
-	Txns() <-chan *obinlog.Binlog
+	//  Binlogs returns the channel for reading parsed binlogs.
+	Binlogs() <-chan *obinlog.Binlog
 
 	// Close releases resources.
 	Close() error
@@ -42,7 +42,7 @@ type Reader interface {
 
 type reader struct {
 	binlogger binlogfile.Binlogger
-	txns      chan *obinlog.Binlog
+	binlogs   chan *obinlog.Binlog
 	err       chan error
 }
 
@@ -55,7 +55,7 @@ func NewReader(dir string, readBufferSize int) (Reader, error) {
 
 	return &reader{
 		binlogger: binlogger,
-		txns:      make(chan *obinlog.Binlog, readBufferSize),
+		binlogs:   make(chan *obinlog.Binlog, readBufferSize),
 	}, nil
 }
 
@@ -88,12 +88,12 @@ func (r *reader) Run() context.CancelFunc {
 			case <-ctx.Done():
 				err = ctx.Err()
 				log.Warn("Producing transaction is interrupted")
-			case r.txns <- slaveBinlog:
+			case r.binlogs <- slaveBinlog:
 			}
 		}
 		// If binlogger is not done, notify it to stop.
 		cancel()
-		close(r.txns)
+		close(r.binlogs)
 
 		if err == nil {
 			err = <-binlogErr
@@ -108,8 +108,8 @@ func (r *reader) Run() context.CancelFunc {
 }
 
 // Txns implements Reader interface.
-func (r *reader) Txns() <-chan *obinlog.Binlog {
-	return r.txns
+func (r *reader) Binlogs() <-chan *obinlog.Binlog {
+	return r.binlogs
 }
 
 // Error implements Reader interface.
