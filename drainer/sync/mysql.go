@@ -43,6 +43,7 @@ var createDB = loader.CreateDBWithSQLMode
 
 // CreateLoader create the Loader instance.
 func CreateLoader(
+	db *sql.DB,
 	cfg *DBConfig,
 	worker int,
 	batchSize int,
@@ -50,11 +51,7 @@ func CreateLoader(
 	sqlMode *string,
 	destDBType string,
 	info *loopbacksync.LoopBackSync,
-) (db *sql.DB, ld loader.Loader, err error) {
-	db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
+) (ld loader.Loader, err error) {
 
 	var opts []loader.Option
 	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetloopBackSyncInfo(info))
@@ -68,28 +65,11 @@ func CreateLoader(
 	if cfg.SyncMode != 0 {
 		mode := loader.SyncMode(cfg.SyncMode)
 		opts = append(opts, loader.SyncModeOption(mode))
-
-		if mode == loader.SyncPartialColumn {
-			var oldMode, newMode string
-			oldMode, newMode, err = relaxSQLMode(db)
-			if err != nil {
-				return nil, nil, errors.Trace(err)
-			}
-
-			if newMode != oldMode {
-				db.Close()
-				db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
-				if err != nil {
-					return nil, nil, errors.Trace(err)
-				}
-			}
-		}
 	}
 
 	ld, err = loader.NewLoader(db, opts...)
 	if err != nil {
-		db.Close()
-		return nil, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	return
@@ -107,7 +87,30 @@ func NewMysqlSyncer(
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
 ) (*MysqlSyncer, error) {
-	db, loader, err := CreateLoader(cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	syncMode := loader.SyncMode(cfg.SyncMode)
+	if syncMode == loader.SyncPartialColumn {
+		var oldMode, newMode string
+		oldMode, newMode, err = relaxSQLMode(db)
+		if err != nil {
+			db.Close()
+			return nil, errors.Trace(err)
+		}
+
+		if newMode != oldMode {
+			db.Close()
+			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+	}
+
+	loader, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
