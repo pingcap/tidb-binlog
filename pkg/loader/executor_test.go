@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/check"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,6 +75,21 @@ func (s *executorSuite) TestSplitExecDML(c *C) {
 	})
 	c.Assert(err, ErrorMatches, "fake")
 	c.Assert(counter, Equals, int32(3))
+}
+
+func (s *executorSuite) TestTryRefreshTableErr(c *C) {
+	tests := []struct {
+		err error
+		res bool
+	}{
+		{&mysql.MySQLError{Number: 1054} /*Unknown column*/, true},
+		{errors.New("what ever"), false},
+	}
+
+	for _, test := range tests {
+		get := tryRefreshTableErr(test.err)
+		c.Assert(get, check.Equals, test.res)
+	}
 }
 
 type singleExecSuite struct {

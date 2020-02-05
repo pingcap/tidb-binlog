@@ -187,6 +187,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// TODO just save opts in loaderImpl instead of copy every field.
 	s := &loaderImpl{
 		db:               db,
 		workerCount:      opts.workerCount,
