@@ -80,6 +80,8 @@ type SyncerConfig struct {
 	EnableDispatch    bool               `toml:"enable-dispatch" json:"enable-dispatch"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
+	PluginPath        string             `toml:"plugin-path" json:"plugin-path"`
+	PluginNames       []string           `toml:"plugin-names" json:"plugin-names"`
 }
 
 // Config holds the configuration of drainer
@@ -105,6 +107,22 @@ type Config struct {
 	printVersion    bool
 	tls             *tls.Config
 }
+
+type sliceNames []string
+
+func newSliceNames(vals []string, p *[]string) *sliceNames {
+	*p = vals
+	return (*sliceNames)(p)
+}
+
+func (s *sliceNames) Set(val string) error {
+	*s = sliceNames(strings.Split(val, ","))
+	return nil
+}
+
+func (s *sliceNames) Get() interface{} { return []string(*s) }
+
+func (s *sliceNames) String() string { return strings.Join([]string(*s), ",") }
 
 // NewConfig return an instance of configuration
 func NewConfig() *Config {
@@ -148,6 +166,8 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
+	fs.StringVar(&cfg.SyncerCfg.PluginPath, "plugin-path", "", "The path of the plugins")
+	fs.Var(newSliceNames([]string{}, &cfg.SyncerCfg.PluginNames), "plugin-names", "The names of the plugins")
 
 	return cfg
 }
