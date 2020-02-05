@@ -461,7 +461,7 @@ ForLoop:
 		return cerr
 	}
 
-	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusNormal)
+	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusConsistent)
 }
 
 func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {

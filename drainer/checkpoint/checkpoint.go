@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	// StatusNormal means server quit normally, data <= ts is synced to downstream
-	StatusNormal int = 0
+	// StatusConsistent means server quit normally, data <= ts is synced to downstream
+	StatusConsistent int = 0
 
 	// StatusRunning means server running or quit abnormally, part of data may or may not been synced to downstream
 	StatusRunning int = 1
