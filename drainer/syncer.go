@@ -418,12 +418,14 @@ ForLoop:
 				continue
 			}
 
+			shouldSkip := false
+
 			if !s.cfg.SyncDDL {
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
 				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
-					binlog.DdlQuery = []byte("")
+					shouldSkip = true
 				} else {
 					continue
 				}
@@ -437,7 +439,7 @@ ForLoop:
 			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
 				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
 
-			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
+			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip})
 			if err != nil {
 				err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 				break ForLoop
@@ -487,7 +489,7 @@ func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool
 func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGetter translator.TableInfoGetter, info *loopbacksync.LoopBackSync) (bool, error) {
 	var tableName string
 	var schemaName string
-	txn, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue)
+	txn, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue, false)
 	if err != nil {
 		return false, errors.Trace(err)
 	}

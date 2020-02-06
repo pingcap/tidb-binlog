@@ -27,6 +27,10 @@ type Item struct {
 
 	// the applied TS executed in downstream, only for tidb
 	AppliedTS int64
+	// should skip to replicate this item at downstream
+	// currently only used for signal the syncer to learn that the downstream schema is changed
+	// when we don't replicate DDL.
+	ShouldSkip bool
 }
 
 // Syncer sync binlog item to downstream

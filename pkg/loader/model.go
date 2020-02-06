@@ -50,11 +50,13 @@ type DML struct {
 }
 
 // DDL holds the ddl info
-// A empty SQL will force loader to evict table info and return success directly.
 type DDL struct {
 	Database string
 	Table    string
 	SQL      string
+	// should skip to execute this DDL at downstream and just refresh the downstream table info.
+	// one case for this usage is for bidirectional replication and only execute DDL at one side.
+	ShouldSkip bool
 }
 
 // Txn holds transaction info, an DDL or DML sequences

@@ -123,7 +123,7 @@ func (m *MysqlSyncer) SetSafeMode(mode bool) {
 
 // Sync implements Syncer interface
 func (m *MysqlSyncer) Sync(item *Item) error {
-	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip)
 	if err != nil {
 		return errors.Trace(err)
 	}

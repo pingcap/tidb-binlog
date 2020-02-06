@@ -346,7 +346,7 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
-	if ddl.SQL == "" {
+	if ddl.ShouldSkip {
 		return nil
 	}
 
@@ -638,7 +638,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
-			if txn.DDL.SQL == "" {
+			if txn.DDL.ShouldSkip {
 				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
 				return
 			}
