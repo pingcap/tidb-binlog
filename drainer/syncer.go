@@ -113,9 +113,8 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		}
 	case "mysql", "tidb":
 		var relayer relay.Relayer
-		// If the dir is empty, it means relayer is disabled.
-		if len(cfg.RelayLogDir) > 0 {
-			if relayer, err = relay.NewRelayer(cfg.RelayLogDir, cfg.RelayLogSize, schema); err != nil {
+		if cfg.Relay.IsEnabled() {
+			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
@@ -264,7 +263,7 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, slaveTS)
+	err := s.cp.Save(ts, slaveTS, checkpoint.StatusRunning)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -472,7 +471,12 @@ ForLoop:
 	if err != nil {
 		return err
 	}
-	return cerr
+
+	if cerr != nil {
+		return cerr
+	}
+
+	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusConsistent)
 }
 
 func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {

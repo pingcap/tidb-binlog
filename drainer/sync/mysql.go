@@ -42,12 +42,17 @@ type MysqlSyncer struct {
 // should only be used for unit test to create mock db
 var createDB = loader.CreateDBWithSQLMode
 
-// NewMysqlSyncer returns a instance of MysqlSyncer
-func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, worker int, batchSize int, queryHistogramVec *prometheus.HistogramVec, sqlMode *string, destDBType string, relayer relay.Relayer, info *loopbacksync.LoopBackSync) (*MysqlSyncer, error) {
-	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+// CreateLoader create the Loader instance.
+func CreateLoader(
+	db *sql.DB,
+	cfg *DBConfig,
+	worker int,
+	batchSize int,
+	queryHistogramVec *prometheus.HistogramVec,
+	sqlMode *string,
+	destDBType string,
+	info *loopbacksync.LoopBackSync,
+) (ld loader.Loader, err error) {
 
 	var opts []loader.Option
 	opts = append(opts, loader.WorkerCount(worker), loader.BatchSize(batchSize), loader.SaveAppliedTS(destDBType == "tidb"), loader.SetloopBackSyncInfo(info))
@@ -61,25 +66,52 @@ func NewMysqlSyncer(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter, w
 	if cfg.SyncMode != 0 {
 		mode := loader.SyncMode(cfg.SyncMode)
 		opts = append(opts, loader.SyncModeOption(mode))
+	}
 
-		if mode == loader.SyncPartialColumn {
-			var oldMode, newMode string
-			oldMode, newMode, err = relaxSQLMode(db)
+	ld, err = loader.NewLoader(db, opts...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
+}
+
+// NewMysqlSyncer returns a instance of MysqlSyncer
+func NewMysqlSyncer(
+	cfg *DBConfig,
+	tableInfoGetter translator.TableInfoGetter,
+	worker int,
+	batchSize int,
+	queryHistogramVec *prometheus.HistogramVec,
+	sqlMode *string,
+	destDBType string,
+	relayer relay.Relayer,
+	info *loopbacksync.LoopBackSync,
+) (*MysqlSyncer, error) {
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	syncMode := loader.SyncMode(cfg.SyncMode)
+	if syncMode == loader.SyncPartialColumn {
+		var oldMode, newMode string
+		oldMode, newMode, err = relaxSQLMode(db)
+		if err != nil {
+			db.Close()
+			return nil, errors.Trace(err)
+		}
+
+		if newMode != oldMode {
+			db.Close()
+			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
 			if err != nil {
 				return nil, errors.Trace(err)
-			}
-
-			if newMode != oldMode {
-				db.Close()
-				db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
 			}
 		}
 	}
 
-	loader, err := loader.NewLoader(db, opts...)
+	loader, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

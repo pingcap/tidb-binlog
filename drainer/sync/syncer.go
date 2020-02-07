@@ -43,6 +43,7 @@ type Syncer interface {
 	// Return not nil if fail to sync data to downstream or nil if closed normally
 	Error() <-chan error
 	// Close the Syncer, no more item can be added by `Sync`
+	// will drain all items and return nil if all successfully sync into downstream
 	Close() error
 }
 
