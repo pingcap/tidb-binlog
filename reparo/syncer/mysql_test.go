@@ -51,17 +51,17 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 	if safemode {
 		insertPattern = "REPLACE INTO"
 	}
-	mock.ExpectExec(insertPattern).WithArgs(1, "test", nil).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("DELETE FROM").WithArgs(1, "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(insertPattern).WithArgs(1, "test", "test").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("DELETE FROM").WithArgs(1, "test", "test").WillReturnResult(sqlmock.NewResult(0, 1))
 	if safemode {
 		mock.ExpectExec("DELETE FROM").WithArgs().WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectExec(insertPattern).WithArgs(nil, nil, "abc").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(insertPattern).WithArgs(1, "test", "abc").WillReturnResult(sqlmock.NewResult(0, 1))
 	} else {
-		mock.ExpectExec("UPDATE").WithArgs("abc", "test").WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec("UPDATE").WithArgs(1, "test", "abc", 1, "test", "test").WillReturnResult(sqlmock.NewResult(0, 1))
 	}
 	mock.ExpectCommit()
 
-	syncTest(c, Syncer(syncer))
+	syncTest(c, syncer)
 
 	err = syncer.Close()
 	c.Assert(err, check.IsNil)

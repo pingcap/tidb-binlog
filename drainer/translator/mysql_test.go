@@ -37,20 +37,21 @@ func (t *testMysqlSuite) TestGenColumnList(c *check.C) {
 func (t *testMysqlSuite) TestDDL(c *check.C) {
 	t.SetDDL()
 
-	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, nil)
+	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, nil, true)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(txn, check.DeepEquals, &loader.Txn{
 		DDL: &loader.DDL{
-			Database: t.Schema,
-			Table:    t.Table,
-			SQL:      string(t.TiBinlog.GetDdlQuery()),
+			Database:   t.Schema,
+			Table:      t.Table,
+			SQL:        string(t.TiBinlog.GetDdlQuery()),
+			ShouldSkip: true,
 		},
 	})
 }
 
 func (t *testMysqlSuite) testDML(c *check.C, tp loader.DMLType) {
-	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV)
+	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV, false)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(txn.DMLs, check.HasLen, 1)
