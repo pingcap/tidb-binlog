@@ -80,7 +80,7 @@ type loaderImpl struct {
 
 	metrics *MetricsGroup
 
-	handleList HandlerList
+	pluginList PluginList
 
 	// change update -> delete + replace
 	// insert -> replace
@@ -198,7 +198,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:       make(chan *Txn),
 		merge:            true,
 		saveAppliedTS:    opts.saveAppliedTS,
-		handleList:       HandlerList{},
+		pluginList:       PluginList{},
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -207,7 +207,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
-	err := s.handleList.LoadHandlerByNames(s.loopBackSyncInfo.PluginPath, s.loopBackSyncInfo.PluginNames)
+	err := s.pluginList.LoadPluginByNames(s.loopBackSyncInfo.PluginPath, s.loopBackSyncInfo.PluginNames)
 	if err != nil {
 		return nil, err
 	}
@@ -528,8 +528,10 @@ func (s *loaderImpl) Run() error {
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
 
+	pl := s.pluginList.GetPluginList()
+
 	for {
-		pl := s.handleList.GetAllPlugins().mp
+
 		select {
 		case txn, ok := <-input:
 			if !ok {
