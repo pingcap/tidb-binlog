@@ -14,7 +14,11 @@
 package sync
 
 import (
+	"context"
+	"time"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
@@ -24,21 +28,44 @@ import (
 var _ Syncer = &pbSyncer{}
 
 type pbSyncer struct {
-	binlogger binlogfile.Binlogger
-
 	*baseSyncer
+
+	binlogger binlogfile.Binlogger
+	cancel    func()
 }
 
 // NewPBSyncer sync binlog to files
-func NewPBSyncer(dir string, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
+func NewPBSyncer(dir string, retentionDays int, tableInfoGetter translator.TableInfoGetter) (*pbSyncer, error) {
 	binlogger, err := binlogfile.OpenBinlogger(dir, binlogfile.SegmentSizeBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	ctx, cancel := context.WithCancel(context.TODO())
+
 	s := &pbSyncer{
 		binlogger:  binlogger,
 		baseSyncer: newBaseSyncer(tableInfoGetter),
+		cancel:     cancel,
+	}
+
+	if retentionDays > 0 {
+		// TODO: Add support for human readable format input of times like "7d", "12h"
+		retentionTime := time.Duration(retentionDays) * 24 * time.Hour
+		ticker := time.NewTicker(time.Hour)
+		go func() {
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					log.Info("Binlog GC loop stopped")
+					return
+				case <-ticker.C:
+					log.Info("Trying to GC binlog files")
+					binlogger.GCByTime(retentionTime)
+				}
+			}
+		}()
 	}
 
 	return s, nil
@@ -71,6 +98,8 @@ func (p *pbSyncer) saveBinlog(binlog *pb.Binlog) error {
 }
 
 func (p *pbSyncer) Close() error {
+	p.cancel()
+
 	err := p.binlogger.Close()
 	p.setErr(err)
 	close(p.success)
