@@ -85,7 +85,7 @@ func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, 
 func (r *relayer) GCBinlog(pos tb.Pos) {
 	// If the file suffix increases, it means previous files are useless.
 	if pos.Suffix > r.nextGCFileSuffix {
-		r.binlogger.GC(0, pos)
+		r.binlogger.GCByPos(pos)
 		r.nextGCFileSuffix = pos.Suffix
 	}
 }

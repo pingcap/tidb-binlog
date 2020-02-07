@@ -202,7 +202,43 @@ func (s *testBinloggerSuite) TestCourruption(c *C) {
 	c.Assert(errors.Cause(err), Equals, io.ErrUnexpectedEOF)
 }
 
-func (s *testBinloggerSuite) TestGC(c *C) {
+func assertBinlogsCount(c *C, dir string, expected int) {
+	names, err := ReadBinlogNames(dir)
+	c.Assert(err, IsNil)
+	c.Assert(names, HasLen, expected)
+}
+
+func (s *testBinloggerSuite) TestGCByPos(c *C) {
+	dir := c.MkDir()
+	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
+	c.Assert(err, IsNil)
+	// A binlog file with index 0 is created at this point
+	defer func() {
+		err := CloseBinlogger(bl)
+		c.Assert(err, IsNil)
+	}()
+
+	b, ok := bl.(*binlogger)
+	c.Assert(ok, IsTrue)
+	// Call rotate multiple times to create new binlog files
+	for i := 0; i < 4; i++ {
+		err = b.rotate()
+		c.Assert(err, IsNil)
+	}
+
+	// We should have 1 + 4 files by now
+	assertBinlogsCount(c, b.dir, 5)
+
+	b.GCByPos(binlog.Pos{Suffix: 2})
+
+	assertBinlogsCount(c, b.dir, 3)
+
+	b.GCByPos(binlog.Pos{Suffix: 10})
+
+	assertBinlogsCount(c, b.dir, 1)
+}
+
+func (s *testBinloggerSuite) TestGCByTime(c *C) {
 	dir := c.MkDir()
 	bl, err := OpenBinlogger(dir, SegmentSizeBytes)
 	c.Assert(err, IsNil)
@@ -218,22 +254,15 @@ func (s *testBinloggerSuite) TestGC(c *C) {
 	// 2. rotate creates a new binlog file with index 1
 	c.Assert(err, IsNil)
 
-	// No binlog files should be collected,
-	// because both of the files has an index that's >= 0
-	time.Sleep(10 * time.Millisecond)
-	b.GC(time.Millisecond, binlog.Pos{Suffix: 0})
-
 	names, err := ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 2)
-	for i, name := range names {
-		suffix, _, err := ParseBinlogName(name)
-		c.Assert(err, IsNil)
-		c.Assert(suffix, Equals, uint64(i))
-	}
 
-	// The one with index 0 should be garbage collected
-	b.GC(time.Millisecond, binlog.Pos{Suffix: 1})
+	// Should collect the first file because it's more than 1ms old after
+	// the following sleep
+	time.Sleep(10 * time.Millisecond)
+	b.GCByTime(time.Millisecond)
+
 	names, err = ReadBinlogNames(b.dir)
 	c.Assert(err, IsNil)
 	c.Assert(names, HasLen, 1)
