@@ -22,6 +22,8 @@ import (
 
 var _ Relayer = &relayer{}
 
+const defaultMaxFileSize = 10 * 1024 * 1024
+
 // Relayer is the interface for writing relay log.
 type Relayer interface {
 	// WriteBinlog writes binlog to relay log file.
@@ -43,6 +45,10 @@ type relayer struct {
 
 // NewRelayer creates a relayer.
 func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableInfoGetter) (Relayer, error) {
+	if maxFileSize <= 0 {
+		maxFileSize = defaultMaxFileSize
+	}
+
 	binlogger, err := binlogfile.OpenBinlogger(dir, maxFileSize)
 	if err != nil {
 		return nil, errors.Trace(err)

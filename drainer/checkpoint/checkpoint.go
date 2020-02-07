@@ -19,6 +19,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// StatusConsistent means server quit normally, data <= ts is synced to downstream
+	StatusConsistent int = 0
+
+	// StatusRunning means server running or quit abnormally, part of data may or may not been synced to downstream
+	StatusRunning int = 1
+)
+
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
@@ -31,10 +39,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(int64, int64) error
+	Save(commitTS int64, slaveTS int64, status int) error
 
-	// Pos gets position information.
+	// TS gets checkpoint commit timestamp.
 	TS() int64
+
+	// Status return the status saved.
+	Status() int
 
 	// Close closes the CheckPoint and release resources, after closed other methods should not be called again.
 	Close() error
@@ -50,7 +61,7 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 	case "mysql", "tidb":
 		cp, err = newMysql(cfg)
 	case "file":
-		cp, err = NewFile(cfg)
+		cp, err = NewFile(cfg.InitialCommitTS, cfg.CheckPointFile)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", cfg.CheckpointType)
 	}

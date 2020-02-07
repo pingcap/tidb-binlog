@@ -31,14 +31,15 @@ type FileCheckPoint struct {
 
 	name string
 
-	CommitTS int64 `toml:"commitTS" json:"commitTS"`
+	StatusSaved int   `toml:"status" json:"status"`
+	CommitTS    int64 `toml:"commitTS" json:"commitTS"`
 }
 
 // NewFile creates a new FileCheckpoint.
-func NewFile(cfg *Config) (CheckPoint, error) {
+func NewFile(initialCommitTS int64, filePath string) (CheckPoint, error) {
 	pb := &FileCheckPoint{
-		initialCommitTS: cfg.InitialCommitTS,
-		name:            cfg.CheckPointFile,
+		initialCommitTS: initialCommitTS,
+		name:            filePath,
 	}
 	err := pb.Load()
 	if err != nil {
@@ -81,7 +82,7 @@ func (sp *FileCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *FileCheckPoint) Save(ts, slaveTS int64) error {
+func (sp *FileCheckPoint) Save(ts, slaveTS int64, status int) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -90,6 +91,7 @@ func (sp *FileCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	sp.CommitTS = ts
+	sp.StatusSaved = status
 
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
@@ -112,6 +114,14 @@ func (sp *FileCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// Status implements CheckPoint.Status interface
+func (sp *FileCheckPoint) Status() int {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.StatusSaved
 }
 
 // Close implements CheckPoint.Close interface
