@@ -166,7 +166,7 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 		item.RelayLogPos = pos
 	}
 
-	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip)
 	if err != nil {
 		return errors.Trace(err)
 	}

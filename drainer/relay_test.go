@@ -105,5 +105,5 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 
 	ts := cp.TS()
 	c.Assert(ts, check.Equals, int64(90) /* latest commit ts */)
-	c.Assert(cp.Status(), check.Equals, checkpoint.StatusNormal)
+	c.Assert(cp.Status(), check.Equals, checkpoint.StatusConsistent)
 }
