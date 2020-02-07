@@ -529,7 +529,7 @@ func (s *loaderImpl) Run() error {
 	input := txnManager.run()
 
 	for {
-		pl := s.handleList.mp
+		pl := s.handleList.GetAllPlugins().mp
 		select {
 		case txn, ok := <-input:
 			if !ok {
@@ -542,6 +542,7 @@ func (s *loaderImpl) Run() error {
 			(&pl).Range(func(k, v interface{}) bool {
 				p, ok := v.(Plugin)
 				if !ok {
+					//todo log
 					return true
 				}
 				txn = p.DoFilter(txn)
