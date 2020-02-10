@@ -273,10 +273,6 @@ func (s *loaderImpl) Close() {
 
 var utilGetTableInfo = getTableInfo
 
-func (s *loaderImpl) invalidateTableInfo(schema string, table string) {
-	s.tableInfos.Delete(quoteSchema(schema, table))
-}
-
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
 	log.Info("refresh table info", zap.String("schema", schema), zap.String("table", table))
 
@@ -654,7 +650,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 			}
 
 			if needRefreshTableInfo(txn.DDL.SQL) {
-				s.invalidateTableInfo(txn.DDL.Database, txn.DDL.Table)
+				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
 	}
