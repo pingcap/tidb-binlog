@@ -298,7 +298,7 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 	return
 }
 
-func (s *loaderImpl) evitTableInfo(schema string, table string) {
+func (s *loaderImpl) evictTableInfo(schema string, table string) {
 	s.tableInfos.Delete(quoteSchema(schema, table))
 }
 
@@ -645,12 +645,12 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
 			if txn.DDL.ShouldSkip {
-				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
+				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 				return
 			}
 
 			if needRefreshTableInfo(txn.DDL.SQL) {
-				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
+				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
 	}
