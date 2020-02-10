@@ -555,18 +555,18 @@ type listenSuite struct{}
 var _ = Suite(&listenSuite{})
 
 func (s *listenSuite) TestWrongAddr(c *C) {
-	_, err := listen("unix", "://asdf:1231:123:12")
+	_, err := listen("unix", "://asdf:1231:123:12", nil)
 	c.Assert(err, ErrorMatches, ".*invalid .* socket addr.*")
 }
 
 func (s *listenSuite) TestUnbindableAddr(c *C) {
-	_, err := listen("tcp", "http://asdf;klj:7979/12")
+	_, err := listen("tcp", "http://asdf;klj:7979/12", nil)
 	c.Assert(err, ErrorMatches, ".*fail to start.*")
 }
 
 func (s *listenSuite) TestReturnListener(c *C) {
 	var l net.Listener
-	l, err := listen("tcp", "http://localhost:17979")
+	l, err := listen("tcp", "http://localhost:17979", nil)
 	c.Assert(err, IsNil)
 	defer l.Close()
 	c.Assert(l, NotNil)
