@@ -258,7 +258,7 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, slaveTS, checkpoint.StatusRunning)
+	err := s.cp.Save(ts, slaveTS, false)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -471,7 +471,7 @@ ForLoop:
 		return cerr
 	}
 
-	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusConsistent)
+	return s.cp.Save(s.cp.TS(), 0, true /*consistent*/)
 }
 
 func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {

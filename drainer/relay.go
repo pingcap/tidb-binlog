@@ -34,7 +34,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 
 	defer cp.Close()
 
-	if cp.Status() == checkpoint.StatusConsistent {
+	if cp.Consistent() {
 		return nil
 	}
 
@@ -149,7 +149,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 		return errors.Trace(readerErr)
 	}
 
-	err := cp.Save(lastSuccessTS, 0 /* slaveTS */, checkpoint.StatusConsistent)
+	err := cp.Save(lastSuccessTS, 0 /* slaveTS */, true /*consistent*/)
 	if err != nil {
 		return errors.Trace(err)
 	}

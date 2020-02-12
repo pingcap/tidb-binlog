@@ -19,14 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// StatusConsistent means server quit normally, data <= ts is synced to downstream
-	StatusConsistent int = 0
-
-	// StatusRunning means server running or quit abnormally, part of data may or may not been synced to downstream
-	StatusRunning int = 1
-)
-
 var (
 	// ErrCheckPointClosed indicates the CheckPoint already closed.
 	ErrCheckPointClosed = errors.New("CheckPoint already closed")
@@ -39,13 +31,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(commitTS int64, slaveTS int64, status int) error
+	Save(commitTS int64, slaveTS int64, consistent bool) error
 
 	// TS gets checkpoint commit timestamp.
 	TS() int64
 
-	// Status return the status saved.
-	Status() int
+	// Consistent return the Consistent status saved.
+	Consistent() bool
 
 	// Close closes the CheckPoint and release resources, after closed other methods should not be called again.
 	Close() error
