@@ -87,7 +87,11 @@ func NewMysqlSyncer(
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
 ) (*MysqlSyncer, error) {
-	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, sqlMode)
+	if cfg.TLS != nil {
+		log.Info("enable TLS to connect downstream MySQL/TiDB")
+	}
+
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, sqlMode)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -103,7 +107,7 @@ func NewMysqlSyncer(
 
 		if newMode != oldMode {
 			db.Close()
-			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, &newMode)
+			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, &newMode)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}

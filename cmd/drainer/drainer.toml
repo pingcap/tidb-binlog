@@ -108,6 +108,16 @@ port = 3306
 # when setting SyncPartialColumn drainer will allow the downstream schema
 # having more or less column numbers and relax sql mode by removing STRICT_TRANS_TABLES.
 # sync-mode = 1
+#
+# Uncomment this part if you need TLS to connecting downstream MySQL/TiDB.
+# You can only specified only `ssl-ca` if there is no client certificate and don't need server to authenticate client.
+# [syncer.to.security]
+# Path of file that contains list of trusted SSL CAs.
+# ssl-ca = "/path/to/ca.pem"
+# Path of file that contains X509 certificate in PEM format.
+# ssl-cert = "/path/to/drainer.pem"
+# Path of file that contains X509 key in PEM format.
+# ssl-key = "/path/to/drainer-key.pem"
 
 [syncer.to.checkpoint]
 # only support mysql or tidb now, you can uncomment this to control where the checkpoint is saved.
