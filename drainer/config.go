@@ -217,6 +217,13 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
 	}
 
+	if cfg.SyncerCfg != nil && cfg.SyncerCfg.To != nil {
+		cfg.SyncerCfg.To.TLS, err = cfg.SyncerCfg.To.Security.ToTLSConfig()
+		if err != nil {
+			return errors.Errorf("tls config %+v error %v", cfg.SyncerCfg.To.Security, err)
+		}
+	}
+
 	if err = cfg.adjustConfig(); err != nil {
 		return errors.Trace(err)
 	}
