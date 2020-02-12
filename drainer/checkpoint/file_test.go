@@ -29,16 +29,23 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 
 	// zero (initial) CommitTs
 	c.Assert(meta.TS(), Equals, int64(0))
-	c.Assert(meta.Status(), Equals, StatusConsistent)
+	c.Assert(meta.IsConsistent(), Equals, false)
 
 	testTs := int64(1)
 	// save ts
-	err = meta.Save(testTs, 0, StatusRunning)
+	err = meta.Save(testTs, 0, false)
 	c.Assert(err, IsNil)
 	// check ts
 	ts := meta.TS()
 	c.Assert(ts, Equals, testTs)
-	c.Assert(meta.Status(), Equals, StatusRunning)
+	c.Assert(meta.IsConsistent(), Equals, false)
+
+	// check consistent true case.
+	err = meta.Save(testTs, 0, true)
+	c.Assert(err, IsNil)
+	ts = meta.TS()
+	c.Assert(ts, Equals, testTs)
+	c.Assert(meta.IsConsistent(), Equals, true)
 
 	// check load ts
 	err = meta.Load()
@@ -63,6 +70,6 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 	err = meta.Close()
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(meta.Load()), Equals, ErrCheckPointClosed)
-	c.Assert(errors.Cause(meta.Save(0, 0, StatusConsistent)), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(meta.Save(0, 0, true)), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(meta.Close()), Equals, ErrCheckPointClosed)
 }
