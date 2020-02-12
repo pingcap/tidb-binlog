@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"time"
 
@@ -24,7 +25,7 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 	)
 
 	oldCreateDB := createDB
-	createDB = func(string, string, string, int) (db *sql.DB, err error) {
+	createDB = func(string, string, string, int, *tls.Config) (db *sql.DB, err error) {
 		db, mock, err = sqlmock.New()
 		return
 	}

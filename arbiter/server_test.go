@@ -15,6 +15,7 @@ package arbiter
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"sync"
@@ -55,7 +56,7 @@ func (l *dummyLoader) Close() {
 type testNewServerSuite struct {
 	db            *sql.DB
 	dbMock        sqlmock.Sqlmock
-	origCreateDB  func(string, string, string, int) (*sql.DB, error)
+	origCreateDB  func(string, string, string, int, *tls.Config) (*sql.DB, error)
 	origNewReader func(*reader.Config) (*reader.Reader, error)
 	origNewLoader func(*sql.DB, ...loader.Option) (loader.Loader, error)
 }
@@ -71,7 +72,7 @@ func (s *testNewServerSuite) SetUpTest(c *C) {
 	s.dbMock = mock
 
 	s.origCreateDB = createDB
-	createDB = func(user string, password string, host string, port int) (*sql.DB, error) {
+	createDB = func(user string, password string, host string, port int, _ *tls.Config) (*sql.DB, error) {
 		return s.db, nil
 	}
 
@@ -105,7 +106,7 @@ func (s *testNewServerSuite) TestRejectInvalidAddr(c *C) {
 }
 
 func (s *testNewServerSuite) TestStopIfFailedtoConnectDownStream(c *C) {
-	createDB = func(user string, password string, host string, port int) (*sql.DB, error) {
+	createDB = func(user string, password string, host string, port int, _ *tls.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("Can't create db")
 	}
 
