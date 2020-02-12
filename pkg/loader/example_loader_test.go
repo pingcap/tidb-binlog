@@ -17,7 +17,7 @@ import "log"
 
 func Example() {
 	// create sql.DB
-	db, err := CreateDB("root", "", "localhost", 4000)
+	db, err := CreateDB("root", "", "localhost", 4000, nil /* *tls.Config */)
 	if err != nil {
 		log.Fatal(err)
 	}

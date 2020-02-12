@@ -78,7 +78,7 @@ func NewServer(cfg *Config) (srv *Server, err error) {
 	up := cfg.Up
 	down := cfg.Down
 
-	srv.downDB, err = createDB(down.User, down.Password, down.Host, down.Port)
+	srv.downDB, err = createDB(down.User, down.Password, down.Host, down.Port, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
