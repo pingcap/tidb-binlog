@@ -75,8 +75,20 @@ type SyncerConfig struct {
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType        string             `toml:"db-type" json:"db-type"`
 	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+}
+
+// RelayConfig is the Relay log's configuration.
+type RelayConfig struct {
+	LogDir      string `toml:"log-dir" json:"log-dir"`
+	MaxFileSize int64  `toml:"max-file-size" json:"max-file-size"`
+}
+
+// IsEnabled return true if we need to handle relay log.
+func (rc RelayConfig) IsEnabled() bool {
+	return len(rc.LogDir) > 0
 }
 
 // Config holds the configuration of drainer
@@ -137,6 +149,8 @@ func NewConfig() *Config {
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
+	fs.StringVar(&cfg.SyncerCfg.Relay.LogDir, "relay-log-dir", "", "path to relay log of syncer")
+	fs.Int64Var(&cfg.SyncerCfg.Relay.MaxFileSize, "relay-max-file-size", 10485760, "max file size of each relay log")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")

@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/relay"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
@@ -111,7 +112,13 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 			return nil, errors.Annotate(err, "fail to create flash dsyncer")
 		}
 	case "mysql", "tidb":
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, info)
+		var relayer relay.Relayer
+		if cfg.Relay.IsEnabled() {
+			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
+				return nil, errors.Annotate(err, "fail to create relayer")
+			}
+		}
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -256,7 +263,7 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, slaveTS)
+	err := s.cp.Save(ts, slaveTS, checkpoint.StatusRunning)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -464,7 +471,12 @@ ForLoop:
 	if err != nil {
 		return err
 	}
-	return cerr
+
+	if cerr != nil {
+		return cerr
+	}
+
+	return s.cp.Save(s.cp.TS(), 0, checkpoint.StatusConsistent)
 }
 
 func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {

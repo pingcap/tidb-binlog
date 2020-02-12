@@ -76,6 +76,13 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 #
 #replicate-do-db = ["~^b.*","s1"]
 
+[syncer.relay]
+# directory of relay logs. Empty string indicates disabling relay log.
+# relay log works only if the downstream is TiDB/MySQL.
+# log-dir = ""
+# max file size of each relay log
+# max-file-size = 10485760
+
 #[[syncer.replicate-do-table]]
 #db-name ="test"
 #tbl-name = "log"

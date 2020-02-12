@@ -69,7 +69,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 		createDB = oldCreateDB
 	}()
 
-	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil)
+	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil)
 	c.Assert(err, check.IsNil)
 	s.syncers = append(s.syncers, mysql)
 
@@ -119,7 +119,7 @@ func (s *syncerSuite) TestOpenAndClose(c *check.C) {
 }
 
 func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
-	gen := translator.BinlogGenrator{}
+	gen := translator.BinlogGenerator{}
 
 	// set up mysql db mock expect
 	s.mysqlMock.ExpectBegin()

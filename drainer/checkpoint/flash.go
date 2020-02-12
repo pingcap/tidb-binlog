@@ -36,7 +36,8 @@ type FlashCheckPoint struct {
 	schema string
 	table  string
 
-	CommitTS int64 `toml:"commitTS" json:"commitTS"`
+	StatusSaved int   `toml:"status" json:"status"`
+	CommitTS    int64 `toml:"commitTS" json:"commitTS"`
 }
 
 func checkFlashConfig(cfg *Config) {
@@ -142,7 +143,7 @@ func (sp *FlashCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *FlashCheckPoint) Save(ts, slaveTS int64) error {
+func (sp *FlashCheckPoint) Save(ts, slaveTS int64, status int) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -151,6 +152,7 @@ func (sp *FlashCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	sp.CommitTS = ts
+	sp.StatusSaved = status
 
 	b, err := json.Marshal(sp)
 	if err != nil {
@@ -171,6 +173,14 @@ func (sp *FlashCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// Status implements CheckPoint.Status interface
+func (sp *FlashCheckPoint) Status() int {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.StatusSaved
 }
 
 // Close implements CheckPoint.Close interface.
