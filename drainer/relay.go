@@ -34,7 +34,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 
 	defer cp.Close()
 
-	if cp.Consistent() {
+	if cp.IsConsistent() {
 		return nil
 	}
 

@@ -152,8 +152,8 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
 	return nil
 }
 
-// Consistent implements CheckPoint interface
-func (sp *MysqlCheckPoint) Consistent() bool {
+// IsConsistent implements CheckPoint interface
+func (sp *MysqlCheckPoint) IsConsistent() bool {
 	sp.RLock()
 	defer sp.RUnlock()
 

@@ -76,7 +76,7 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = cp.Save(0, 0, false)
 	c.Assert(err, check.IsNil)
-	c.Assert(cp.Consistent(), check.Equals, false)
+	c.Assert(cp.IsConsistent(), check.Equals, false)
 
 	ld := newNoOpLoader()
 
@@ -105,5 +105,5 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 
 	ts := cp.TS()
 	c.Assert(ts, check.Equals, int64(90) /* latest commit ts */)
-	c.Assert(cp.Consistent(), check.Equals, true)
+	c.Assert(cp.IsConsistent(), check.Equals, true)
 }
