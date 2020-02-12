@@ -116,8 +116,8 @@ func (sp *FileCheckPoint) TS() int64 {
 	return sp.CommitTS
 }
 
-// Consistent implements CheckPoint interface
-func (sp *FileCheckPoint) Consistent() bool {
+// IsConsistent implements CheckPoint interface
+func (sp *FileCheckPoint) IsConsistent() bool {
 	sp.RLock()
 	defer sp.RUnlock()
 

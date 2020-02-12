@@ -36,8 +36,8 @@ type CheckPoint interface {
 	// TS gets checkpoint commit timestamp.
 	TS() int64
 
-	// Consistent return the Consistent status saved.
-	Consistent() bool
+	// IsConsistent return the Consistent status saved.
+	IsConsistent() bool
 
 	// Close closes the CheckPoint and release resources, after closed other methods should not be called again.
 	Close() error
