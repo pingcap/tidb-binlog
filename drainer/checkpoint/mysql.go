@@ -38,9 +38,9 @@ type MysqlCheckPoint struct {
 	schema string
 	table  string
 
-	StatusSaved int              `toml:"status" json:"status"`
-	CommitTS    int64            `toml:"commitTS" json:"commitTS"`
-	TsMap       map[string]int64 `toml:"ts-map" json:"ts-map"`
+	ConsistentSaved bool             `toml:"consistent" json:"consistent"`
+	CommitTS        int64            `toml:"commitTS" json:"commitTS"`
+	TsMap           map[string]int64 `toml:"ts-map" json:"ts-map"`
 }
 
 var _ CheckPoint = &MysqlCheckPoint{}
@@ -122,7 +122,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, status int) error {
+func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -131,7 +131,7 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, status int) error {
 	}
 
 	sp.CommitTS = ts
-	sp.StatusSaved = status
+	sp.ConsistentSaved = consistent
 
 	if slaveTS > 0 {
 		sp.TsMap["master-ts"] = ts
@@ -152,12 +152,12 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, status int) error {
 	return nil
 }
 
-// Status implements CheckPoint.Status interface
-func (sp *MysqlCheckPoint) Status() int {
+// Consistent implements CheckPoint interface
+func (sp *MysqlCheckPoint) Consistent() bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	return sp.StatusSaved
+	return sp.ConsistentSaved
 }
 
 // TS implements CheckPoint.TS interface

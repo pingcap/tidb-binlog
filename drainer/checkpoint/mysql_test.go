@@ -49,7 +49,7 @@ func (s *saveSuite) TestShouldSaveCheckpoint(c *C) {
 	c.Assert(err, IsNil)
 	mock.ExpectExec("replace into db.tbl.*").WillReturnResult(sqlmock.NewResult(0, 0))
 	cp := MysqlCheckPoint{db: db, schema: "db", table: "tbl"}
-	err = cp.Save(1111, 0, StatusRunning)
+	err = cp.Save(1111, 0, false)
 	c.Assert(err, IsNil)
 }
 
@@ -63,7 +63,7 @@ func (s *saveSuite) TestShouldUpdateTsMap(c *C) {
 		table:  "tbl",
 		TsMap:  make(map[string]int64),
 	}
-	err = cp.Save(65536, 3333, StatusRunning)
+	err = cp.Save(65536, 3333, false)
 	c.Assert(err, IsNil)
 	c.Assert(cp.TsMap["master-ts"], Equals, int64(65536))
 	c.Assert(cp.TsMap["slave-ts"], Equals, int64(3333))
@@ -83,13 +83,13 @@ func (s *loadSuite) TestShouldLoadFromDB(c *C) {
 		TsMap:  make(map[string]int64),
 	}
 	rows := sqlmock.NewRows([]string{"checkPoint"}).
-		AddRow(`{"commitTS": 1024, "status": 1, "ts-map": {"master-ts": 2000, "slave-ts": 1999}}`)
+		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"master-ts": 2000, "slave-ts": 1999}}`)
 	mock.ExpectQuery("select checkPoint from db.tbl.*").WillReturnRows(rows)
 
 	err = cp.Load()
 	c.Assert(err, IsNil)
 	c.Assert(cp.CommitTS, Equals, int64(1024))
-	c.Assert(cp.StatusSaved, Equals, 1)
+	c.Assert(cp.ConsistentSaved, Equals, true)
 	c.Assert(cp.TsMap["master-ts"], Equals, int64(2000))
 	c.Assert(cp.TsMap["slave-ts"], Equals, int64(1999))
 }
