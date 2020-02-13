@@ -20,10 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -31,18 +32,22 @@ import (
 )
 
 var defaultBatchSize = 128
+var defaultWorkerCount = 16
+var index int64
 
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
+	workerCount       int
 	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
 }
 
 func newExecutor(db *gosql.DB) *executor {
 	exe := &executor{
-		db:        db,
-		batchSize: defaultBatchSize,
+		db:          db,
+		batchSize:   defaultBatchSize,
+		workerCount: defaultWorkerCount,
 	}
 
 	return exe
@@ -55,6 +60,10 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 
 func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
 	e.info = info
+}
+
+func (e *executor) setWorkerCount(workerCount int) {
+	e.workerCount = workerCount
 }
 
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
@@ -113,16 +122,69 @@ func (e *executor) updateMark(channel string, tx *tx) error {
 	if e.info == nil {
 		return nil
 	}
-	status := 1
-	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	index = e.getIndex(index)
 	var args []interface{}
-	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
-	args = append(args, e.info.ChannelID, status, channel)
-	_, err := tx.autoRollbackExec(sql, args...)
+	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
+	args = append(args, index, e.info.ChannelID)
+	_, err1 := tx.autoRollbackExec(sql, args...)
+	if err1 != nil {
+		return errors.Trace(err1)
+	}
+	return nil
+}
+
+func (e *executor) initMarkTable() error {
+	if e.info == nil {
+		return nil
+	}
+	status := 1
+	channel := ""
+	var builder strings.Builder
+	holder := "(?,?,?,?)"
+	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	builder.WriteString("REPLACE INTO " + loopbacksync.MarkTableName + columns + " VALUES ")
+	for i := 0; i < e.workerCount; i++ {
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(holder)
+	}
+	var args []interface{}
+	for id := 0; id < e.workerCount; id++ {
+		args = append(args, id, e.info.ChannelID, status, channel)
+	}
+	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return nil
+	_, err1 := tx.autoRollbackExec(builder.String(), args...)
+	if err1 != nil {
+		return errors.Trace(err1)
+	}
+	err2 := tx.commit()
+	return errors.Trace(err2)
+}
+
+func (e *executor) cleanChannelInfo() error {
+	if e.info == nil {
+		return nil
+	}
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var args []interface{}
+	sql := fmt.Sprintf("delete from %s where %s=? ", loopbacksync.MarkTableName, loopbacksync.ChannelID)
+	args = append(args, e.info.ChannelID)
+	_, err1 := tx.autoRollbackExec(sql, args...)
+	if err1 != nil {
+		return errors.Trace(err1)
+	}
+	err2 := tx.commit()
+	return errors.Trace(err2)
+}
+func (e *executor) getIndex(index int64) int64 {
+	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }
 
 // return a wrap of sql.Tx
