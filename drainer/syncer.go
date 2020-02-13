@@ -106,11 +106,6 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "flash":
-		dsyncer, err = dsync.NewFlashSyncer(cfg.To, schema)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to create flash dsyncer")
-		}
 	case "mysql", "tidb":
 		var relayer relay.Relayer
 		if cfg.Relay.IsEnabled() {
