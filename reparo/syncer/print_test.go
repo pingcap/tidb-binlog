@@ -25,10 +25,14 @@ func (s *testPrintSuite) TestPrintSyncer(c *check.C) {
 			"schema: test; table: t1; type: Insert\n"+
 			"a(int): 1\n"+
 			"b(varchar): test\n"+
+			"c(varchar): test\n"+
 			"schema: test; table: t1; type: Delete\n"+
 			"a(int): 1\n"+
 			"b(varchar): test\n"+
+			"c(varchar): test\n"+
 			"schema: test; table: t1; type: Update\n"+
+			"a(int): 1 => 1\n"+
+			"b(varchar): test => test\n"+
 			"c(varchar): test => abc\n")
 
 	err = syncer.Close()

@@ -187,11 +187,13 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// TODO just save opts in loaderImpl instead of copy every field.
 	s := &loaderImpl{
 		db:               db,
 		workerCount:      opts.workerCount,
 		batchSize:        opts.batchSize,
 		metrics:          opts.metrics,
+		syncMode:         opts.syncMode,
 		loopBackSyncInfo: opts.loopBackSyncInfo,
 		input:            make(chan *Txn),
 		successTxn:       make(chan *Txn),
@@ -271,10 +273,6 @@ func (s *loaderImpl) Close() {
 
 var utilGetTableInfo = getTableInfo
 
-func (s *loaderImpl) invalidateTableInfo(schema string, table string) {
-	s.tableInfos.Delete(quoteSchema(schema, table))
-}
-
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
 	log.Info("refresh table info", zap.String("schema", schema), zap.String("table", table))
 
@@ -298,6 +296,10 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 	s.tableInfos.Store(quoteSchema(schema, table), info)
 
 	return
+}
+
+func (s *loaderImpl) evictTableInfo(schema string, table string) {
+	s.tableInfos.Delete(quoteSchema(schema, table))
 }
 
 func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo, err error) {
@@ -344,6 +346,9 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
+	if ddl.ShouldSkip {
+		return nil
+	}
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -634,6 +639,9 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	if s.syncMode == SyncPartialColumn {
+		e = e.withRefreshTableInfo(s.refreshTableInfo)
+	}
 	e.setSyncInfo(s.loopBackSyncInfo)
 	e.setWorkerCount(s.workerCount)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
@@ -650,8 +658,13 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
+			if txn.DDL.ShouldSkip {
+				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
+				return
+			}
+
 			if needRefreshTableInfo(txn.DDL.SQL) {
-				s.invalidateTableInfo(txn.DDL.Database, txn.DDL.Table)
+				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
 	}

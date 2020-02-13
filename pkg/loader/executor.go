@@ -22,9 +22,12 @@ import (
 
 	"sync/atomic"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb/infoschema"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -41,6 +44,7 @@ type executor struct {
 	workerCount       int
 	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
+	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
 }
 
 func newExecutor(db *gosql.DB) *executor {
@@ -51,6 +55,11 @@ func newExecutor(db *gosql.DB) *executor {
 	}
 
 	return exe
+}
+
+func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (info *tableInfo, err error)) *executor {
+	e.refreshTableInfo = fn
+	return e
 }
 
 func (e *executor) withBatchSize(batchSize int) *executor {
@@ -65,7 +74,6 @@ func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
 func (e *executor) setWorkerCount(workerCount int) {
 	e.workerCount = workerCount
 }
-
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
 	e.queryHistogramVec = queryHistogramVec
 	return e
@@ -333,10 +341,54 @@ func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(dmls
 	return errors.Trace(errg.Wait())
 }
 
+func tryRefreshTableErr(err error) bool {
+	errCode, ok := pkgsql.GetSQLErrCode(err)
+	if !ok {
+		return false
+	}
+
+	switch errCode {
+	case infoschema.ErrColumnNotExists.Code():
+		return true
+	}
+
+	return false
+}
+
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			return e.singleExec(dmls, safeMode)
+			execErr := e.singleExec(dmls, safeMode)
+			if execErr == nil {
+				return nil
+			}
+
+			if tryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
+				log.Info("try refresh table info")
+				name2info := make(map[string]*tableInfo)
+				for _, dml := range dmls {
+					name := dml.TableName()
+					info, ok := name2info[name]
+					if !ok {
+						var err error
+						info, err = e.refreshTableInfo(dml.Database, dml.Table)
+						if err != nil {
+							log.Error("fail to refresh table info", zap.Error(err))
+							continue
+						}
+
+						name2info[name] = info
+					}
+
+					if len(dml.info.columns) != len(info.columns) {
+						log.Info("columns change", zap.Strings("old", dml.info.columns),
+							zap.Strings("new", info.columns))
+						removeOrphanCols(info, dml)
+					}
+					dml.info = info
+				}
+			}
+			return execErr
 		})
 		if err != nil {
 			return errors.Trace(err)
