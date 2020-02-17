@@ -511,16 +511,30 @@ func (s *loaderImpl) createMarkTable() error {
 	return nil
 }
 
+func (s *loaderImpl) initMarkTable() error {
+	if err := s.createMarkTable(); err != nil {
+		return errors.Trace(err)
+	}
+	executor := s.getExecutor()
+	return executor.initMarkTable()
+}
+
+func (s *loaderImpl) cleanChannelInfo() {
+	executor := s.getExecutor()
+	_ = executor.cleanChannelInfo()
+}
+
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
 	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
-		if err := s.createMarkTable(); err != nil {
+		if err := s.initMarkTable(); err != nil {
 			return errors.Trace(err)
 		}
 	}
 	txnManager := newTxnManager(1024, s.input)
 	defer func() {
 		log.Info("Run()... in Loader quit")
+		s.cleanChannelInfo()
 		close(s.successTxn)
 		txnManager.Close()
 	}()
@@ -630,6 +644,7 @@ func (s *loaderImpl) getExecutor() *executor {
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
 	e.setSyncInfo(s.loopBackSyncInfo)
+	e.setWorkerCount(s.workerCount)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
