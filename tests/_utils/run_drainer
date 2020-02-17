@@ -24,5 +24,11 @@ if [ -f "$config" ]
 then
 	drainer -log-file $OUT_DIR/drainer.log -config $config $* >> $OUT_DIR/drainer.log 2>&1
 else
-	drainer -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
+	cat - > "$OUT_DIR/drainer-config.toml" <<EOF
+[security]
+ssl-ca = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
+ssl-cert = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
+ssl-key = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+EOF
+	drainer -log-file $OUT_DIR/drainer.log -config "$OUT_DIR/drainer-config.toml" -addr 0.0.0.0:8249 -advertise-addr MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:8249 $* >> $OUT_DIR/drainer.log 2>&1
 fi

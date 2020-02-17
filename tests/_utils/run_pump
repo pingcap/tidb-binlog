@@ -11,6 +11,7 @@ while :
 do
         pump_num=`ps aux > temp && grep "pump -log-file ${OUT_DIR}/pump_${PORT}.log" temp | wc -l && rm temp`
         if [ $pump_num -ne 0 ]; then
+                echo "try pause pump"
                 binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id pump:$PORT || true
                 sleep 1
         else
@@ -20,8 +21,16 @@ done
 
 echo "[$(date)] <<<<<< RUNNING pump  >>>>>>" >> "$OUT_DIR/pump_$PORT.log"
 
+cat - > "$OUT_DIR/pump-config.toml" <<EOF
+[security]
+ssl-ca = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
+ssl-cert = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
+ssl-key = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+EOF
+
 BINLOG_TEST=1 pump -log-file $OUT_DIR/pump_$PORT.log --addr=0.0.0.0:$PORT \
-        --advertise-addr=127.0.0.1:$PORT \
-        --pd-urls=http://127.0.0.1:2379 \
+        --advertise-addr=MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:$PORT \
+		-config "$OUT_DIR/pump-config.toml" \
+        --pd-urls=https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
         --data-dir=$OUT_DIR/pump_$PORT \
         --node-id=pump:$PORT >> $OUT_DIR/pump_$PORT.log 2>&1

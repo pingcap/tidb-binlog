@@ -35,6 +35,12 @@ start_upstream_tidb() {
     cat - > "$OUT_DIR/tidb-config.toml" <<EOF
 [performance]
 txn-total-size-limit = 104857599
+
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+cluster-ssl-ca = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
+cluster-ssl-cert = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
+cluster-ssl-key = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
 EOF
 
     port=${1-4000}
@@ -43,7 +49,7 @@ EOF
         -P $port \
         -config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
-        --path 127.0.0.1:2379 \
+        --path MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
         --enable-binlog=true \
         --log-file "$OUT_DIR/tidb.log" &
 
@@ -64,16 +70,29 @@ start_services() {
     stop_services
     clean_data
 
+    cat - > "$OUT_DIR/pd-config.toml" <<EOF
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+cacert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
+cert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
+key-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+EOF
+
     echo "Starting PD..."
     pd-server \
-        --client-urls http://127.0.0.1:2379 \
+        --client-urls https://127.0.0.1:2379 \
+		--peer-urls https://127.0.0.1:2380 \
+        --advertise-client-urls https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
+        --advertise-peer-urls https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2380 \
+        -config "$OUT_DIR/pd-config.toml" \
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
     # wait until PD is online...
-    while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
-        sleep 1
-    done
+    # while ! curl -o /dev/null -sf https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379/pd/api/v1/version; do
+    #     sleep 1
+    # done
+	sleep 10
 
     echo "Starting downstream PD..."
     pd-server \
@@ -96,23 +115,41 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
+
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+ca-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
+cert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
+key-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
 EOF
 
     echo "Starting TiKV..."
     tikv-server \
-        --pd 127.0.0.1:2379 \
+        --pd MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
+		--advertise-addr MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:20160 \
         -A 127.0.0.1:20160 \
         --log-file "$OUT_DIR/tikv.log" \
         -C "$OUT_DIR/tikv-config.toml" \
         -s "$OUT_DIR/tikv" &
     sleep 1
 
+    # Tries to limit the max number of open files under the system limit
+    cat - > "$OUT_DIR/down-tikv-config.toml" <<EOF
+[rocksdb]
+max-open-files = 4096
+[raftdb]
+max-open-files = 4096
+[raftstore]
+# true (default value) for high reliability, this can prevent data loss when power failure.
+sync-log = false
+EOF
+
     echo "Starting downstream TiKV..."
     tikv-server \
         --pd 127.0.0.1:2381 \
         -A 127.0.0.1:20161 \
         --log-file "$OUT_DIR/down_tikv.log" \
-        -C "$OUT_DIR/tikv-config.toml" \
+        -C "$OUT_DIR/down-tikv-config.toml" \
         -s "$OUT_DIR/down_tikv" &
     sleep 1
 
@@ -145,7 +182,7 @@ EOF
     done
 
     echo "Starting Drainer..."
-    run_drainer -L debug &
+    run_drainer -L debug -pd-urls "https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379" &
 }
 
 trap stop_services EXIT
