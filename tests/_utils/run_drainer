@@ -22,13 +22,16 @@ echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT
 
 if [ -f "$config" ]
 then
-	drainer -log-file $OUT_DIR/drainer.log -config $config $* >> $OUT_DIR/drainer.log 2>&1
-else
-	cat - > "$OUT_DIR/drainer-config.toml" <<EOF
-[security]
-ssl-ca = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
-ssl-cert = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
-ssl-key = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
-EOF
-	drainer -log-file $OUT_DIR/drainer.log -config "$OUT_DIR/drainer-config.toml" -addr 0.0.0.0:8249 -advertise-addr MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:8249 $* >> $OUT_DIR/drainer.log 2>&1
+    rm -f $OUT_DIR/drainer-config-tmp.toml
+    cp $config $OUT_DIR/drainer-config-tmp.toml
 fi
+
+    # Append the TLS config
+    cat - >> "$OUT_DIR/drainer-config-tmp.toml" <<EOF
+[security]
+ssl-ca = "$OUT_DIR/cert/ca.pem"
+ssl-cert = "$OUT_DIR/cert/drainer.pem"
+ssl-key = "$OUT_DIR/cert/drainer.key"
+EOF
+
+    drainer -log-file $OUT_DIR/drainer.log -config "$OUT_DIR/drainer-config-tmp.toml" -pd-urls https://127.0.0.1:2379 -addr 0.0.0.0:8249 -advertise-addr 127.0.0.1:8249 -node-id drainer-id $* >> $OUT_DIR/drainer.log 2>&1

@@ -13,13 +13,40 @@ pwd=$(pwd)
 export PATH=$PATH:$pwd/_utils
 export PATH=$PATH:$(dirname $pwd)/bin
 
+generate_tls_keys() {
+    # Ref: https://docs.microsoft.com/en-us/azure/application-gateway/self-signed-certificates
+    # gRPC only supports P-256 curves, see https://github.com/grpc/grpc/issues/6722
+    echo "Generate TLS keys..."
+    TT="$OUT_DIR/cert"
+    mkdir -p $TT || true
+
+    cat - > "$TT/ipsan.cnf" <<EOF
+[dn]
+CN = localhost
+[req]
+distinguished_name = dn
+[EXT]
+subjectAltName = @alt_names
+keyUsage = digitalSignature,keyEncipherment
+extendedKeyUsage = clientAuth,serverAuth
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+EOF
+    openssl ecparam -out "$TT/ca.key" -name prime256v1 -genkey
+    openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/ca.key" -out "$TT/ca.csr"
+    openssl x509 -req -sha256 -days 2 -in "$TT/ca.csr" -signkey "$TT/ca.key" -out "$TT/ca.pem" 2> /dev/null
+
+    for name in tidb pd tikv pump drainer client; do
+        openssl ecparam -out "$TT/$name.key" -name prime256v1 -genkey
+        openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/$name.key" -out "$TT/$name.csr"
+        openssl x509 -req -sha256 -days 1 -extensions EXT -extfile "$TT/ipsan.cnf" -in "$TT/$name.csr" -CA "$TT/ca.pem" -CAkey "$TT/ca.key" -CAcreateserial -out "$TT/$name.pem" 2> /dev/null
+    done
+}
+
 
 clean_data() {
-    rm -rf $OUT_DIR/pd || true
-    rm -rf $OUT_DIR/tidb || true
-    rm -rf $OUT_DIR/tikv || true
-    rm -rf $OUT_DIR/pump || true
-    rm -rf $OUT_DIR/data.drainer || true
+    rm -rf $OUT_DIR/* || true
 }
 
 stop_services() {
@@ -38,9 +65,9 @@ txn-total-size-limit = 104857599
 
 [security]
 # set the path for certificates. Empty string means disabling secure connectoins.
-cluster-ssl-ca = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
-cluster-ssl-cert = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
-cluster-ssl-key = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+cluster-ssl-ca = "$OUT_DIR/cert/ca.pem"
+cluster-ssl-cert = "$OUT_DIR/cert/tidb.pem"
+cluster-ssl-key = "$OUT_DIR/cert/tidb.key"
 EOF
 
     port=${1-4000}
@@ -49,7 +76,7 @@ EOF
         -P $port \
         -config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
-        --path MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
+        --path 127.0.0.1:2379 \
         --enable-binlog=true \
         --log-file "$OUT_DIR/tidb.log" &
 
@@ -69,30 +96,30 @@ EOF
 start_services() {
     stop_services
     clean_data
+    generate_tls_keys
 
     cat - > "$OUT_DIR/pd-config.toml" <<EOF
 [security]
 # set the path for certificates. Empty string means disabling secure connectoins.
-cacert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
-cert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
-key-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+cacert-path = "$OUT_DIR/cert/ca.pem"
+cert-path = "$OUT_DIR/cert/pd.pem"
+key-path = "$OUT_DIR/cert/pd.key"
 EOF
 
     echo "Starting PD..."
     pd-server \
         --client-urls https://127.0.0.1:2379 \
-		--peer-urls https://127.0.0.1:2380 \
-        --advertise-client-urls https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
-        --advertise-peer-urls https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2380 \
+        --peer-urls https://127.0.0.1:2380 \
+        --advertise-client-urls https://127.0.0.1:2379 \
+        --advertise-peer-urls https://127.0.0.1:2380 \
         -config "$OUT_DIR/pd-config.toml" \
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
     # wait until PD is online...
-    # while ! curl -o /dev/null -sf https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379/pd/api/v1/version; do
-    #     sleep 1
-    # done
-	sleep 10
+    while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:2379/pd/api/v1/version; do
+        sleep 1
+    done
 
     echo "Starting downstream PD..."
     pd-server \
@@ -118,15 +145,15 @@ sync-log = false
 
 [security]
 # set the path for certificates. Empty string means disabling secure connectoins.
-ca-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/ca.pem"
-cert-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-cert.pem"
-key-path = "/Users/huangjiahao/go/src/github.com/pingcap/tidb-binlog/certs/server-key.pem"
+ca-path = "$OUT_DIR/cert/ca.pem"
+cert-path = "$OUT_DIR/cert/tikv.pem"
+key-path = "$OUT_DIR/cert/tikv.key"
 EOF
 
     echo "Starting TiKV..."
     tikv-server \
-        --pd MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379 \
-		--advertise-addr MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:20160 \
+        --pd 127.0.0.1:2379 \
+        --advertise-addr 127.0.0.1:20160 \
         -A 127.0.0.1:20160 \
         --log-file "$OUT_DIR/tikv.log" \
         -C "$OUT_DIR/tikv-config.toml" \
@@ -182,8 +209,13 @@ EOF
     done
 
     echo "Starting Drainer..."
-    run_drainer -L debug -pd-urls "https://MySQL_Server_5.7.21_Auto_Generated_Server_Certificate:2379" &
+    run_drainer -L debug &
+    echo "Verifying drainer is started..."
+    while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:8249/status; do
+        sleep 1
+    done
 }
+
 
 trap stop_services EXIT
 start_services
