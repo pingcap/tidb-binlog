@@ -16,8 +16,8 @@ package loopbacksync
 const (
 	//MarkTableName mark table name
 	MarkTableName = "retl._drainer_repl_mark"
-	//ID syncer worker thread id
-	ID = "id"
+	//ID syncer worker coroutine id
+	ID = "coroutineID"
 	//ChannelID channel id
 	ChannelID = "channel_id"
 	//Val val

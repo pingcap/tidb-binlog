@@ -33,9 +33,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var defaultBatchSize = 128
-var defaultWorkerCount = 16
-var index int64
+var (
+	defaultBatchSize   = 128
+	defaultWorkerCount = 16
+	index              int64
+)
 
 type executor struct {
 	db                *gosql.DB
@@ -130,10 +132,10 @@ func (e *executor) updateMark(channel string, tx *tx) error {
 	if e.info == nil {
 		return nil
 	}
-	index = e.getIndex(index)
+	v := e.addIndex()
 	var args []interface{}
 	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
-	args = append(args, index, e.info.ChannelID)
+	args = append(args, v, e.info.ChannelID)
 	_, err1 := tx.autoRollbackExec(sql, args...)
 	if err1 != nil {
 		return errors.Trace(err1)
@@ -191,8 +193,9 @@ func (e *executor) cleanChannelInfo() error {
 	err2 := tx.commit()
 	return errors.Trace(err2)
 }
-func (e *executor) getIndex(index int64) int64 {
-	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
+func (e *executor) addIndex() int64 {
+	atomic.StoreInt64(&index, atomic.AddInt64(&index, 1)%((int64)(e.workerCount)))
+	return atomic.LoadInt64(&index)
 }
 
 // return a wrap of sql.Tx
