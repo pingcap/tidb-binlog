@@ -17,7 +17,7 @@ const (
 	//MarkTableName mark table name
 	MarkTableName = "retl._drainer_repl_mark"
 	//ID syncer worker coroutine id
-	ID = "coroutineID"
+	CoroutineID = "coroutine_id"
 	//ChannelID channel id
 	ChannelID = "channel_id"
 	//Val val

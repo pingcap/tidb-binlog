@@ -242,7 +242,7 @@ func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 	defer db.Close()
-	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
+	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.CoroutineID, loopbacksync.ChannelID)
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(sql)).
 		WithArgs(1, 100).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -260,6 +260,6 @@ func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 }
 func (s *SQLSuite) TestCreateMarkTable(c *check.C) {
 	sql := createMarkTableDDL()
-	sql1 := fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", loopbacksync.MarkTableName, loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo, loopbacksync.ID, loopbacksync.ChannelID)
+	sql1 := fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", loopbacksync.MarkTableName, loopbacksync.CoroutineID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo, loopbacksync.CoroutineID, loopbacksync.ChannelID)
 	c.Assert(sql, check.Equals, sql1)
 }
