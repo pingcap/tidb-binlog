@@ -117,7 +117,14 @@ EOF
         --data-dir "$OUT_DIR/pd" &
 
     # wait until PD is online...
+    num=0
     while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:2379/pd/api/v1/version; do
+        num=$(( $num + 1  ))
+        if (( num > 60   )); then
+            echo "Fail to check PD is started"
+            exit -1
+        fi
+
         sleep 1
     done
 
