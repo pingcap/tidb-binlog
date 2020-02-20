@@ -230,9 +230,16 @@ EOF
     echo "Starting Drainer..."
     run_drainer -L debug &
     echo "Verifying drainer is started..."
-    while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:8249/status; do
+    while ! wget -q -O - \
+    --ca-certificate="$OUT_DIR/cert/ca.pem" \
+    --certificate="$OUT_DIR/cert/client.pem" \
+    --private-key="$OUT_DIR/cert/client.key" \
+    https://127.0.0.1:8249/status; do
         sleep 1
     done
+    # while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:8249/status; do
+    #     sleep 1
+    # done
 }
 
 
