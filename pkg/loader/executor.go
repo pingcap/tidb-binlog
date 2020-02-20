@@ -132,10 +132,9 @@ func (e *executor) updateMark(channel string, tx *tx) error {
 	if e.info == nil {
 		return nil
 	}
-	v := e.addIndex()
 	var args []interface{}
-	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.CoroutineID, loopbacksync.ChannelID)
-	args = append(args, v, e.info.ChannelID)
+	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
+	args = append(args, e.addIndex(), e.info.ChannelID)
 	_, err1 := tx.autoRollbackExec(sql, args...)
 	if err1 != nil {
 		return errors.Trace(err1)
@@ -151,7 +150,7 @@ func (e *executor) initMarkTable() error {
 	channel := ""
 	var builder strings.Builder
 	holder := "(?,?,?,?)"
-	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.CoroutineID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
 	builder.WriteString("REPLACE INTO " + loopbacksync.MarkTableName + columns + " VALUES ")
 	for i := 0; i < e.workerCount; i++ {
 		if i > 0 {
@@ -194,8 +193,7 @@ func (e *executor) cleanChannelInfo() error {
 	return errors.Trace(err2)
 }
 func (e *executor) addIndex() int64 {
-	atomic.StoreInt64(&index, atomic.AddInt64(&index, 1)%((int64)(e.workerCount)))
-	return atomic.LoadInt64(&index)
+	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }
 
 // return a wrap of sql.Tx
