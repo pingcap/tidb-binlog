@@ -117,11 +117,16 @@ EOF
         --data-dir "$OUT_DIR/pd" &
 
     # wait until PD is online...
-	while ! nc -vz 127.0.0.1 2379; do
-		sleep 1
-	done
+    while ! wget -q -O - \
+    --ca-certificate="$OUT_DIR/cert/ca.pem" \
+    --certificate="$OUT_DIR/cert/client.pem" \
+    --private-key="$OUT_DIR/cert/client.key" \
+    https://127.0.0.1:2379/pd/api/v1/version; do
+        sleep 1
+    done
 
-	# on CI curl's version is too old: curl: (58) unable to load client key: -8178 (SEC_ERROR_BAD_KEY)))
+
+    # on CI curl's version is too old: curl: (58) unable to load client key: -8178 (SEC_ERROR_BAD_KEY)))
     # num=0
     # while ! curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" -o /dev/null -sf https://127.0.0.1:2379/pd/api/v1/version; do
     #     num=$(( $num + 1  ))
