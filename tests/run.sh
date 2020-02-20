@@ -122,6 +122,8 @@ EOF
         num=$(( $num + 1  ))
         if (( num > 60   )); then
             echo "Fail to check PD is started"
+            # try again for why error
+            curl --cacert "$OUT_DIR/cert/ca.pem" --cert "$OUT_DIR/cert/client.pem" --key "$OUT_DIR/cert/client.key" https://127.0.0.1:2379/pd/api/v1/version
             exit -1
         fi
 
