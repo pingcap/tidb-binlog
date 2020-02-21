@@ -13,13 +13,40 @@ pwd=$(pwd)
 export PATH=$PATH:$pwd/_utils
 export PATH=$PATH:$(dirname $pwd)/bin
 
+generate_tls_keys() {
+    # Ref: https://docs.microsoft.com/en-us/azure/application-gateway/self-signed-certificates
+    # gRPC only supports P-256 curves, see https://github.com/grpc/grpc/issues/6722
+    echo "Generate TLS keys..."
+    TT="$OUT_DIR/cert"
+    mkdir -p $TT || true
+
+    cat - > "$TT/ipsan.cnf" <<EOF
+[dn]
+CN = localhost
+[req]
+distinguished_name = dn
+[EXT]
+subjectAltName = @alt_names
+keyUsage = digitalSignature,keyEncipherment
+extendedKeyUsage = clientAuth,serverAuth
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+EOF
+    openssl ecparam -out "$TT/ca.key" -name prime256v1 -genkey
+    openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/ca.key" -out "$TT/ca.csr"
+    openssl x509 -req -sha256 -days 2 -in "$TT/ca.csr" -signkey "$TT/ca.key" -out "$TT/ca.pem" 2> /dev/null
+
+    for name in tidb pd tikv pump drainer client; do
+        openssl ecparam -out "$TT/$name.key" -name prime256v1 -genkey
+        openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/$name.key" -out "$TT/$name.csr"
+        openssl x509 -req -sha256 -days 1 -extensions EXT -extfile "$TT/ipsan.cnf" -in "$TT/$name.csr" -CA "$TT/ca.pem" -CAkey "$TT/ca.key" -CAcreateserial -out "$TT/$name.pem" 2> /dev/null
+    done
+}
+
 
 clean_data() {
-    rm -rf $OUT_DIR/pd || true
-    rm -rf $OUT_DIR/tidb || true
-    rm -rf $OUT_DIR/tikv || true
-    rm -rf $OUT_DIR/pump || true
-    rm -rf $OUT_DIR/data.drainer || true
+    rm -rf $OUT_DIR/* || true
 }
 
 stop_services() {
@@ -35,6 +62,12 @@ start_upstream_tidb() {
     cat - > "$OUT_DIR/tidb-config.toml" <<EOF
 [performance]
 txn-total-size-limit = 104857599
+
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+cluster-ssl-ca = "$OUT_DIR/cert/ca.pem"
+cluster-ssl-cert = "$OUT_DIR/cert/tidb.pem"
+cluster-ssl-key = "$OUT_DIR/cert/tidb.key"
 EOF
 
     port=${1-4000}
@@ -63,15 +96,33 @@ EOF
 start_services() {
     stop_services
     clean_data
+    generate_tls_keys
+
+    cat - > "$OUT_DIR/pd-config.toml" <<EOF
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+cacert-path = "$OUT_DIR/cert/ca.pem"
+cert-path = "$OUT_DIR/cert/pd.pem"
+key-path = "$OUT_DIR/cert/pd.key"
+EOF
 
     echo "Starting PD..."
     pd-server \
-        --client-urls http://127.0.0.1:2379 \
+        --client-urls https://127.0.0.1:2379 \
+        --peer-urls https://127.0.0.1:2380 \
+        --advertise-client-urls https://127.0.0.1:2379 \
+        --advertise-peer-urls https://127.0.0.1:2380 \
+        -config "$OUT_DIR/pd-config.toml" \
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
     # wait until PD is online...
-    while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
+	# use wget, on CI curl's version is too old: curl: (58) unable to load client key: -8178 (SEC_ERROR_BAD_KEY)))))
+    while ! wget -q -O - \
+    --ca-certificate="$OUT_DIR/cert/ca.pem" \
+    --certificate="$OUT_DIR/cert/client.pem" \
+    --private-key="$OUT_DIR/cert/client.key" \
+    https://127.0.0.1:2379/pd/api/v1/version; do
         sleep 1
     done
 
@@ -96,23 +147,41 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
+
+[security]
+# set the path for certificates. Empty string means disabling secure connectoins.
+ca-path = "$OUT_DIR/cert/ca.pem"
+cert-path = "$OUT_DIR/cert/tikv.pem"
+key-path = "$OUT_DIR/cert/tikv.key"
 EOF
 
     echo "Starting TiKV..."
     tikv-server \
         --pd 127.0.0.1:2379 \
+        --advertise-addr 127.0.0.1:20160 \
         -A 127.0.0.1:20160 \
         --log-file "$OUT_DIR/tikv.log" \
         -C "$OUT_DIR/tikv-config.toml" \
         -s "$OUT_DIR/tikv" &
     sleep 1
 
+    # Tries to limit the max number of open files under the system limit
+    cat - > "$OUT_DIR/down-tikv-config.toml" <<EOF
+[rocksdb]
+max-open-files = 4096
+[raftdb]
+max-open-files = 4096
+[raftstore]
+# true (default value) for high reliability, this can prevent data loss when power failure.
+sync-log = false
+EOF
+
     echo "Starting downstream TiKV..."
     tikv-server \
         --pd 127.0.0.1:2381 \
         -A 127.0.0.1:20161 \
         --log-file "$OUT_DIR/down_tikv.log" \
-        -C "$OUT_DIR/tikv-config.toml" \
+        -C "$OUT_DIR/down-tikv-config.toml" \
         -s "$OUT_DIR/down_tikv" &
     sleep 1
 
@@ -146,7 +215,16 @@ EOF
 
     echo "Starting Drainer..."
     run_drainer -L debug &
+    echo "Verifying drainer is started..."
+    while ! wget -q -O - \
+    --ca-certificate="$OUT_DIR/cert/ca.pem" \
+    --certificate="$OUT_DIR/cert/client.pem" \
+    --private-key="$OUT_DIR/cert/client.key" \
+    https://127.0.0.1:8249/status; do
+        sleep 1
+    done
 }
+
 
 trap stop_services EXIT
 start_services
