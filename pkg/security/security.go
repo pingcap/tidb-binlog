@@ -73,7 +73,7 @@ func (c *Config) ToTiDBSecurityConfig() config.Security {
 	}
 
 	// The TiKV client(kvstore.New) we use will use this global var as the TLS config.
-	// TODO avoid such magic implicit change wile call this func.
+	// TODO avoid such magic implicit change when call this func.
 	config.GetGlobalConfig().Security = security
 	return security
 }
