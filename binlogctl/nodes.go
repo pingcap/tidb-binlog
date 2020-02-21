@@ -118,11 +118,23 @@ func ApplyAction(urls, kind, nodeID string, action string, tlsConfig *tls.Config
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = dialClient.Do(req)
+	_, err = getClient(tlsConfig).Do(req)
 	if err == nil {
 		log.Info("Apply action on node success", zap.String("action", action), zap.String("NodeID", n.NodeID))
 		return nil
 	}
 
 	return errors.Trace(err)
+}
+
+func getClient(tlsConfig *tls.Config) *http.Client {
+	if tlsConfig == nil {
+		return &http.Client{}
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
 }

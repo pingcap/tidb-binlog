@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/binlogctl"
 	ctl "github.com/pingcap/tidb-binlog/binlogctl"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"go.uber.org/zap"
@@ -40,13 +39,6 @@ func main() {
 	default:
 		log.Error("parse cmd flags", zap.Error(err))
 		os.Exit(2)
-	}
-
-	if cfg.SSLCA != "" {
-		err = binlogctl.InitHTTPSClient(cfg.SSLCA, cfg.SSLCert, cfg.SSLKey)
-		if err != nil {
-			log.Fatal("failed to init https client", zap.Error(err))
-		}
 	}
 
 	switch cfg.Command {
