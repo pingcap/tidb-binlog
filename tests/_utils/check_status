@@ -4,11 +4,11 @@ set -eu
 
 NODE_KIND=$1
 if [ $NODE_KIND == "pumps" ]; then
-	NODE_ID=$2
-	STATE=$3
+    NODE_ID=$2
+    STATE=$3
 else
-	NODE_ID="drainer"
-	STATE=$2
+    NODE_ID="drainer"
+    STATE=$2
 fi
 
 OUT_DIR=/tmp/tidb_binlog_test
@@ -18,7 +18,10 @@ max_commit_ts_new=0
 
 for i in {1..15}
 do
-    binlogctl -pd-urls 127.0.0.1:2379 -cmd $NODE_KIND -show-offline-nodes > $STATUS_LOG 2>&1
+    binlogctl -ssl-ca $OUT_DIR/cert/ca.pem \
+        -ssl-cert $OUT_DIR/cert/client.pem \
+        -ssl-key $OUT_DIR/cert/client.key \
+        -pd-urls https://127.0.0.1:2379 -cmd $NODE_KIND -show-offline-nodes > $STATUS_LOG 2>&1
     cat $STATUS_LOG
 
     if [ $NODE_KIND == "pumps" ]; then 

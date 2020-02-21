@@ -61,7 +61,7 @@ func (x *mockPumpPullBinlogsClient) Recv() (*binlog.PullBinlogResp, error) {
 
 func (s *pumpSuite) TestPullBinlog(c *C) {
 	errChan := make(chan error, 10)
-	p := NewPump("pump_test", "", 0, 5, errChan)
+	p := NewPump("pump_test", "", nil, 0, 5, errChan)
 	p.grpcConn = &grpc.ClientConn{}
 	binlogBytesChan := make(chan []byte, 10)
 	p.pullCli = &mockPumpPullBinlogsClient{binlogBytesChan: binlogBytesChan}
