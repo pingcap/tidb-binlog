@@ -35,3 +35,7 @@ db-type = "file"
 #[syncer.to]
 #dir = "/data/data.drainer"
 #compression = "gzip"
+
+
+[syncer.to.checkpoint]
+schema = "status_checkpoint"

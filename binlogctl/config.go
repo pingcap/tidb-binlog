@@ -65,20 +65,20 @@ const (
 
 // Config holds the configuration of drainer
 type Config struct {
-	*flag.FlagSet
+	*flag.FlagSet `toml:"-" json:"-"`
 
-	Command          string `toml:"cmd" json:"cmd"`
-	NodeID           string `toml:"node-id" json:"node-id"`
-	DataDir          string `toml:"data-dir" json:"data-dir"`
-	TimeZone         string `toml:"time-zone" json:"time-zone"`
-	EtcdURLs         string `toml:"pd-urls" json:"pd-urls"`
-	SSLCA            string `toml:"ssl-ca" json:"ssl-ca"`
-	SSLCert          string `toml:"ssl-cert" json:"ssl-cert"`
-	SSLKey           string `toml:"ssl-key" json:"ssl-key"`
-	State            string `toml:"state" json:"state"`
-	ShowOfflineNodes bool   `toml:"state" json:"show-offline-nodes"`
-	Text             string `toml:"text" json:"text"`
-	tls              *tls.Config
+	Command          string      `toml:"cmd" json:"cmd"`
+	NodeID           string      `toml:"node-id" json:"node-id"`
+	DataDir          string      `toml:"data-dir" json:"data-dir"`
+	TimeZone         string      `toml:"time-zone" json:"time-zone"`
+	EtcdURLs         string      `toml:"pd-urls" json:"pd-urls"`
+	SSLCA            string      `toml:"ssl-ca" json:"ssl-ca"`
+	SSLCert          string      `toml:"ssl-cert" json:"ssl-cert"`
+	SSLKey           string      `toml:"ssl-key" json:"ssl-key"`
+	State            string      `toml:"state" json:"state"`
+	ShowOfflineNodes bool        `toml:"state" json:"show-offline-nodes"`
+	Text             string      `toml:"text" json:"text"`
+	TLS              *tls.Config `toml:"-" json:"-"`
 	printVersion     bool
 }
 
@@ -134,7 +134,7 @@ func (cfg *Config) Parse(args []string) error {
 		SSLCert: cfg.SSLCert,
 		SSLKey:  cfg.SSLKey,
 	}
-	cfg.tls, err = sCfg.ToTLSConfig()
+	cfg.TLS, err = sCfg.ToTLSConfig()
 	if err != nil {
 		return errors.Errorf("tls config error %v", err)
 	}

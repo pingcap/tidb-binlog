@@ -48,7 +48,7 @@ type testNodesSuite struct{}
 func (s *testNodesSuite) SetUpTest(c *C) {
 	newEtcdClientFromCfgFunc = newFakeEtcdClientFromCfg
 	createRegistryFuc = createMockRegistry
-	_, err := createMockRegistry("127.0.0.1:2379")
+	_, err := createMockRegistry("127.0.0.1:2379", nil)
 	c.Assert(err, IsNil)
 }
 
@@ -63,11 +63,11 @@ func (s *testNodesSuite) TestApplyAction(c *C) {
 
 	registerPumpForTest(c, "test", url)
 
-	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump)
+	err := ApplyAction("127.0.0.1:2379", "pumps", "test2", PausePump, nil)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 
 	// TODO: handle log information and add check
-	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump)
+	err = ApplyAction("127.0.0.1:2379", "pumps", "test", PausePump, nil)
 	c.Assert(err, IsNil)
 }
 
@@ -75,17 +75,17 @@ func (s *testNodesSuite) TestQueryNodesByKind(c *C) {
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
 	// TODO: handle log information and add check
-	err := QueryNodesByKind("127.0.0.1:2379", "pumps", false)
+	err := QueryNodesByKind("127.0.0.1:2379", "pumps", false, nil)
 	c.Assert(err, IsNil)
 }
 
 func (s *testNodesSuite) TestUpdateNodeState(c *C) {
 	registerPumpForTest(c, "test", "127.0.0.1:8255")
 
-	err := UpdateNodeState("127.0.0.1:2379", "pumps", "test2", node.Paused)
+	err := UpdateNodeState("127.0.0.1:2379", "pumps", "test2", node.Paused, nil)
 	c.Assert(err, ErrorMatches, ".*not found.*")
 
-	err = UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused)
+	err = UpdateNodeState("127.0.0.1:2379", "pumps", "test", node.Paused, nil)
 	c.Assert(err, IsNil)
 
 	// check node's state is changed to paused
@@ -104,7 +104,7 @@ func (s *testNodesSuite) TestUpdateNodeState(c *C) {
 
 func (s *testNodesSuite) TestCreateRegistry(c *C) {
 	urls := "127.0.0.1:2379"
-	registry, err := createRegistry(urls)
+	registry, err := createRegistry(urls, nil)
 	c.Assert(err, IsNil)
 	c.Assert(registry, NotNil)
 
@@ -131,7 +131,7 @@ func (s *testNodesSuite) TestCreateRegistry(c *C) {
 
 }
 
-func createMockRegistry(urls string) (*node.EtcdRegistry, error) {
+func createMockRegistry(urls string, _ *tls.Config) (*node.EtcdRegistry, error) {
 	if fakeRegistry != nil {
 		return fakeRegistry, nil
 	}
