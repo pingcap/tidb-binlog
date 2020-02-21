@@ -14,13 +14,11 @@
 package pump
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -340,7 +338,7 @@ func (s *Server) Start() error {
 	var unixLis net.Listener
 	var err error
 	if s.unixAddr != "" {
-		unixLis, err = listen("unix", s.unixAddr, s.cfg.tls)
+		unixLis, err = util.Listen("unix", s.unixAddr, s.cfg.tls)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -350,7 +348,7 @@ func (s *Server) Start() error {
 
 	// start a TCP listener
 	// we need to manage TLS here for cmux to distinguish between HTTP and gRPC.
-	tcpLis, err := listen("tcp", s.tcpAddr, s.cfg.tls)
+	tcpLis, err := util.Listen("tcp", s.tcpAddr, s.cfg.tls)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -964,23 +962,4 @@ func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInte
 			return errors.Trace(ctx.Err())
 		}
 	}
-}
-
-func listen(network, addr string, tlsConfig *tls.Config) (listener net.Listener, err error) {
-	URL, err := url.Parse(addr)
-	if err != nil {
-		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", addr)
-	}
-	if tlsConfig != nil {
-		listener, err = tls.Listen(network, URL.Host, tlsConfig)
-		if err != nil {
-			return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Host)
-		}
-	} else {
-		listener, err = net.Listen(network, URL.Host)
-		if err != nil {
-			return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Host)
-		}
-	}
-	return listener, nil
 }

@@ -14,9 +14,7 @@
 package drainer
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -290,25 +288,10 @@ func (s *Server) Start() error {
 		}
 	})
 
-	// start a TCP listener
-	tcpURL, err := url.Parse(s.tcpAddr)
-	if err != nil {
-		return errors.Annotatef(err, "invalid listening tcp addr (%s)", s.tcpAddr)
-	}
-
 	// We need to manage TLS here for cmux to distinguish between HTTP and gRPC.
-	var tcpLis net.Listener
-	if s.cfg.tls != nil {
-		tcpLis, err = tls.Listen("tcp", tcpURL.Host, s.cfg.tls)
-		if err != nil {
-			return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
-		}
-	} else {
-		tcpLis, err = net.Listen("tcp", tcpURL.Host)
-		if err != nil {
-			return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
-		}
-
+	tcpLis, err := util.Listen("tcp", s.tcpAddr, s.cfg.tls)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	m := cmux.New(tcpLis)
