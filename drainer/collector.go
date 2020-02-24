@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -49,6 +50,7 @@ type notifyResult struct {
 // Collector collects binlog from all pump, and send binlog to syncer.
 type Collector struct {
 	clusterID uint64
+	tls       *tls.Config
 	interval  time.Duration
 	reg       *node.EtcdRegistry
 	tiStore   kv.Storage
@@ -106,6 +108,7 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 
 	c := &Collector{
 		clusterID:       clusterID,
+		tls:             cfg.tls,
 		interval:        time.Duration(cfg.DetectInterval) * time.Second,
 		reg:             node.NewEtcdRegistry(cli, cfg.EtcdTimeout),
 		pumps:           make(map[string]*Pump),
@@ -308,7 +311,7 @@ func (c *Collector) handlePumpStatusUpdate(ctx context.Context, n *node.Status) 
 		}
 
 		commitTS := c.merger.GetLatestTS()
-		p := NewPump(n.NodeID, n.Addr, c.clusterID, commitTS, c.errCh)
+		p := NewPump(n.NodeID, n.Addr, c.tls, c.clusterID, commitTS, c.errCh)
 		c.pumps[n.NodeID] = p
 		c.merger.AddSource(MergeSource{
 			ID:     n.NodeID,

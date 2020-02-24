@@ -15,6 +15,7 @@ package binlogctl
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
@@ -34,8 +35,8 @@ var (
 )
 
 // QueryNodesByKind returns specified nodes, like pumps/drainers
-func QueryNodesByKind(urls string, kind string, showOffline bool) error {
-	registry, err := createRegistryFuc(urls)
+func QueryNodesByKind(urls string, kind string, showOffline bool, tlsConfig *tls.Config) error {
+	registry, err := createRegistryFuc(urls, tlsConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -56,12 +57,12 @@ func QueryNodesByKind(urls string, kind string, showOffline bool) error {
 }
 
 // UpdateNodeState update pump or drainer's state.
-func UpdateNodeState(urls, kind, nodeID, state string) error {
+func UpdateNodeState(urls, kind, nodeID, state string, tlsConfig *tls.Config) error {
 	/*
 		node's state can be online, pausing, paused, closing and offline.
 		if the state is one of them, will update the node's state saved in etcd directly.
 	*/
-	registry, err := createRegistryFuc(urls)
+	registry, err := createRegistryFuc(urls, tlsConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -81,12 +82,12 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 }
 
 // createRegistry returns an ectd registry
-func createRegistry(urls string) (*node.EtcdRegistry, error) {
+func createRegistry(urls string, tlsConfig *tls.Config) (*node.EtcdRegistry, error) {
 	ectdEndpoints, err := flags.ParseHostPortAddr(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := newEtcdClientFromCfgFunc(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
+	cli, err := newEtcdClientFromCfgFunc(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, tlsConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -95,8 +96,8 @@ func createRegistry(urls string) (*node.EtcdRegistry, error) {
 }
 
 // ApplyAction applies action on pump or drainer
-func ApplyAction(urls, kind, nodeID string, action string) error {
-	registry, err := createRegistryFuc(urls)
+func ApplyAction(urls, kind, nodeID string, action string, tlsConfig *tls.Config) error {
+	registry, err := createRegistryFuc(urls, tlsConfig)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -106,18 +107,34 @@ func ApplyAction(urls, kind, nodeID string, action string) error {
 		return errors.Trace(err)
 	}
 
-	var client http.Client
-	url := fmt.Sprintf("http://%s/state/%s/%s", n.Addr, n.NodeID, action)
+	schema := "http"
+	if tlsConfig != nil {
+		schema = "https"
+	}
+
+	url := fmt.Sprintf("%s://%s/state/%s/%s", schema, n.Addr, n.NodeID, action)
 	log.Debug("send put http request", zap.String("url", url))
 	req, err := http.NewRequest("PUT", url, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = client.Do(req)
+	_, err = getClient(tlsConfig).Do(req)
 	if err == nil {
 		log.Info("Apply action on node success", zap.String("action", action), zap.String("NodeID", n.NodeID))
 		return nil
 	}
 
 	return errors.Trace(err)
+}
+
+func getClient(tlsConfig *tls.Config) *http.Client {
+	if tlsConfig == nil {
+		return &http.Client{}
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
 }

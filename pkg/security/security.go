@@ -72,6 +72,8 @@ func (c *Config) ToTiDBSecurityConfig() config.Security {
 		ClusterSSLKey:  c.SSLKey,
 	}
 
+	// The TiKV client(kvstore.New) we use will use this global var as the TLS config.
+	// TODO avoid such magic implicit change when call this func.
 	config.GetGlobalConfig().Security = security
 	return security
 }

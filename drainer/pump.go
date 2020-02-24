@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
 
@@ -40,6 +42,7 @@ const (
 type Pump struct {
 	nodeID    string
 	addr      string
+	tlsConfig *tls.Config
 	clusterID uint64
 	// the latest binlog ts that pump had handled
 	latestTS int64
@@ -56,11 +59,12 @@ type Pump struct {
 }
 
 // NewPump returns an instance of Pump
-func NewPump(nodeID, addr string, clusterID uint64, startTs int64, errCh chan error) *Pump {
+func NewPump(nodeID, addr string, tlsConfig *tls.Config, clusterID uint64, startTs int64, errCh chan error) *Pump {
 	nodeID = pump.FormatNodeID(nodeID)
 	return &Pump{
 		nodeID:    nodeID,
 		addr:      addr,
+		tlsConfig: tlsConfig,
 		clusterID: clusterID,
 		latestTS:  startTs,
 		errCh:     errCh,
@@ -204,7 +208,14 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 		callOpts = append(callOpts, grpc.UseCompressor(compressor))
 	}
 
-	conn, err := grpc.Dial(p.addr, grpc.WithInsecure(), grpc.WithDefaultCallOptions(callOpts...))
+	dialOpts := []grpc.DialOption{grpc.WithDefaultCallOptions(callOpts...)}
+	if p.tlsConfig != nil {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(p.tlsConfig)))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.Dial(p.addr, dialOpts...)
 	if err != nil {
 		p.logger.Error("pump create grpc dial failed", zap.Error(err))
 		p.pullCli = nil
