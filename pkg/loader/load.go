@@ -520,7 +520,7 @@ func (s *loaderImpl) initMarkTable() error {
 func (s *loaderImpl) initMarkTableData() error {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	status := 1
 	channel := ""
@@ -539,16 +539,15 @@ func (s *loaderImpl) initMarkTableData() error {
 		args = append(args, id, s.loopBackSyncInfo.ChannelID, status, channel)
 	}
 	query := builder.String()
-	_, err = tx.Exec(query, args...)
-	if err != nil {
+	if _, err = tx.Exec(query, args...); err != nil {
 		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Auto rollback", zap.Error(rbErr))
 		}
-		return err
+		return errors.Trace(err)
 	}
 	if err = tx.Commit(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	return nil
 }
