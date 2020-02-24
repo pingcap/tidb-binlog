@@ -509,8 +509,42 @@ func (s *loaderImpl) initMarkTable() error {
 	if err := s.createMarkTable(); err != nil {
 		return errors.Trace(err)
 	}
-	executor := s.getExecutor()
-	return executor.initMarkTable()
+	return s.initMarkTableData()
+}
+func (s *loaderImpl) initMarkTableData() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	status := 1
+	channel := ""
+	var builder strings.Builder
+	holder := "(?,?,?,?)"
+	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
+	builder.WriteString("REPLACE INTO " + loopbacksync.MarkTableName + columns + " VALUES ")
+	for i := 0; i < s.workerCount; i++ {
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(holder)
+	}
+	var args []interface{}
+	for id := 0; id < s.workerCount; id++ {
+		args = append(args, id, s.loopBackSyncInfo.ChannelID, status, channel)
+	}
+	query := builder.String()
+	_, err = tx.Exec(query, args...)
+	if err != nil {
+		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Auto rollback", zap.Error(rbErr))
+		}
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *loaderImpl) cleanChannelInfo() {

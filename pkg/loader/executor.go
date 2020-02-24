@@ -140,38 +140,6 @@ func (e *executor) updateMark(channel string, tx *tx) error {
 	return nil
 }
 
-func (e *executor) initMarkTable() error {
-	if e.info == nil {
-		return nil
-	}
-	status := 1
-	channel := ""
-	var builder strings.Builder
-	holder := "(?,?,?,?)"
-	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	builder.WriteString("REPLACE INTO " + loopbacksync.MarkTableName + columns + " VALUES ")
-	for i := 0; i < e.workerCount; i++ {
-		if i > 0 {
-			builder.WriteByte(',')
-		}
-		builder.WriteString(holder)
-	}
-	var args []interface{}
-	for id := 0; id < e.workerCount; id++ {
-		args = append(args, id, e.info.ChannelID, status, channel)
-	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	_, err1 := tx.autoRollbackExec(builder.String(), args...)
-	if err1 != nil {
-		return errors.Trace(err1)
-	}
-	err2 := tx.commit()
-	return errors.Trace(err2)
-}
-
 func (e *executor) cleanChannelInfo() error {
 	if e.info == nil {
 		return nil
