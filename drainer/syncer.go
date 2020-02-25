@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
@@ -78,6 +78,19 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
 	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL, cfg.PluginPath, cfg.PluginNames)
+	for _, name := range syncer.loopbackSync.PluginNames {
+		sym, err := plugin.LoadPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
+			syncer.loopbackSync.PluginPath, name)
+		if err != nil {
+			return nil, err
+		}
+		newPlugin, ok := sym.(func() LoopBack)
+		if !ok {
+			continue
+		}
+		plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
+			name, newPlugin())
+	}
 
 	var err error
 	// create schema
@@ -358,8 +371,33 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
+
+			var isErr = false
 			var isFilterTransaction = false
 			var err1 error
+			var txn *loader.Txn
+			txn, err1 = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite)
+			if err1 != nil {
+				err = errors.Annotate(err1, "analyze transaction failed")
+				break ForLoop
+			}
+			hook := s.loopbackSync.Hooks[plugin.SyncerPlugin]
+			hook.Range(func(k, val interface{}) bool {
+				c, ok := val.(LoopBack)
+				if !ok {
+					isErr = true
+					return false
+				}
+				isFilterTransaction, err1 = c.FilterMarkTable(txn.DMLs, s.loopbackSync)
+				if err1 != nil || isFilterTransaction {
+					return false
+				}
+				return true
+			})
+			if err1 != nil {
+				err = errors.Annotate(err, "filterTable failed")
+				break ForLoop			}
+
 			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {

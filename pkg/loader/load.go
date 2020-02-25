@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -79,8 +80,6 @@ type loaderImpl struct {
 	successTxn chan *Txn
 
 	metrics *MetricsGroup
-
-	pluginList PluginList
 
 	// change update -> delete + replace
 	// insert -> replace
@@ -198,7 +197,6 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:       make(chan *Txn),
 		merge:            true,
 		saveAppliedTS:    opts.saveAppliedTS,
-		pluginList:       PluginList{},
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -207,10 +205,20 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
-	err := s.pluginList.LoadPluginByNames(s.loopBackSyncInfo.PluginPath, s.loopBackSyncInfo.PluginNames)
-	if err != nil {
-		return nil, err
+	for _, name := range s.loopBackSyncInfo.PluginNames {
+		sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
+			s.loopBackSyncInfo.PluginPath, name)
+		if err != nil {
+			return nil, err
+		}
+		newPlugin, ok := sym.(func() LoopBack)
+		if !ok {
+			continue
+		}
+		plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
+			name, newPlugin())
 	}
+
 	return s, nil
 }
 
@@ -528,8 +536,6 @@ func (s *loaderImpl) Run() error {
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
 
-	pl := s.pluginList.GetPluginList()
-
 	for {
 
 		select {
@@ -541,15 +547,6 @@ func (s *loaderImpl) Run() error {
 				}
 				return nil
 			}
-			(&pl).Range(func(k, v interface{}) bool {
-				p, ok := v.(Plugin)
-				if !ok {
-					//todo log
-					return true
-				}
-				txn = p.DoFilter(txn)
-				return true
-			})
 			s.metricsInputTxn(txn)
 			txnManager.pop(txn)
 			if err := batch.put(txn); err != nil {
@@ -571,15 +568,6 @@ func (s *loaderImpl) Run() error {
 			if !ok {
 				return nil
 			}
-
-			(&pl).Range(func(k, v interface{}) bool {
-				p, ok := v.(Plugin)
-				if !ok {
-					return true
-				}
-				txn = p.DoFilter(txn)
-				return true
-			})
 
 			s.metricsInputTxn(txn)
 			txnManager.pop(txn)

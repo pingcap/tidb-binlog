@@ -20,10 +20,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -44,7 +44,6 @@ func newExecutor(db *gosql.DB) *executor {
 		db:        db,
 		batchSize: defaultBatchSize,
 	}
-
 	return exe
 }
 
@@ -70,13 +69,13 @@ func (e *executor) execTableBatchRetry(ctx context.Context, dmls []*DML, retryNu
 }
 
 // a wrap of *sql.Tx with metrics
-type tx struct {
+type Tx struct {
 	*gosql.Tx
 	queryHistogramVec *prometheus.HistogramVec
 }
 
 // wrap of sql.Tx.Exec()
-func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
+func (tx *Tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	start := time.Now()
 	res, err := tx.Tx.Exec(query, args...)
 	if tx.queryHistogramVec != nil {
@@ -86,7 +85,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	return res, err
 }
 
-func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
+func (tx *Tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
 	res, err = tx.exec(query, args...)
 	if err != nil {
 		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
@@ -99,7 +98,7 @@ func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Res
 }
 
 // wrap of sql.Tx.Commit()
-func (tx *tx) commit() error {
+func (tx *Tx) commit() error {
 	start := time.Now()
 	err := tx.Tx.Commit()
 	if tx.queryHistogramVec != nil {
@@ -109,7 +108,7 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(channel string, tx *tx) error {
+func (e *executor) updateMark(channel string, tx *Tx) error {
 	if e.info == nil {
 		return nil
 	}
@@ -126,24 +125,39 @@ func (e *executor) updateMark(channel string, tx *tx) error {
 }
 
 // return a wrap of sql.Tx
-func (e *executor) begin() (*tx, error) {
+func (e *executor) begin() (*Tx, error) {
 	sqlTx, err := e.db.Begin()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var tx = &tx{
+	var tx = &Tx{
 		Tx:                sqlTx,
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
+	isErr := false
+	hook := e.info.Hooks[plugin.LoaderPlugin]
+	hook.Range(func(k, val interface{}) bool {
+		c, ok := val.(LoopBack)
+		if !ok {
+			isErr = true
+			return false
+		}
+		tx = c.UpdateMarkTable(tx, e.info)
+		return true
+	})
+	if isErr {
+		return nil, errors.New("type is incorrect")
+	}
+	/*
 	if e.info != nil && e.info.LoopbackControl {
 		err1 := e.updateMark("", tx)
 		if err1 != nil {
 			return nil, errors.Trace(err1)
 		}
 	}
-
+	 */
 	return tx, nil
 }
 

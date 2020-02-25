@@ -13,6 +13,8 @@
 
 package loopbacksync
 
+import "github.com/pingcap/tidb-binlog/pkg/plugin"
+
 const (
 	//MarkTableName mark table name
 	MarkTableName = "retl._drainer_repl_mark"
@@ -31,6 +33,7 @@ type LoopBackSync struct {
 	SyncDDL         bool
 	PluginPath      string
 	PluginNames     []string
+	Hooks           []*plugin.EventHooks
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
