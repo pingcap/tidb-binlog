@@ -82,6 +82,7 @@ type SyncerConfig struct {
 	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
 	PluginPath        string             `toml:"plugin-path" json:"plugin-path"`
 	PluginNames       []string           `toml:"plugin-names" json:"plugin-names"`
+	SupportPlugin     bool               `toml:"support-plugin" json:"support-plugin"`
 }
 
 // Config holds the configuration of drainer
@@ -168,6 +169,7 @@ func NewConfig() *Config {
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
 	fs.StringVar(&cfg.SyncerCfg.PluginPath, "plugin-path", "", "The path of the plugins")
 	fs.Var(newSliceNames([]string{}, &cfg.SyncerCfg.PluginNames), "plugin-names", "The names of the plugins")
+	fs.BoolVar(&cfg.SyncerCfg.SupportPlugin, "support-plugin", false, "Whether plugin is supported,default: false")
 
 	return cfg
 }

@@ -136,28 +136,29 @@ func (e *executor) begin() (*Tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	isErr := false
-	hook := e.info.Hooks[plugin.LoaderPlugin]
-	hook.Range(func(k, val interface{}) bool {
-		c, ok := val.(LoopBack)
-		if !ok {
-			isErr = true
-			return false
+	if e.info.SupportPlugin {
+		isErr := false
+		hook := e.info.Hooks[plugin.LoaderPlugin]
+		hook.Range(func(k, val interface{}) bool {
+			c, ok := val.(LoopBack)
+			if !ok {
+				isErr = true
+				return false
+			}
+			tx = c.ExtendTxn(tx, e.info)
+			return true
+		})
+		if isErr {
+			return nil, errors.New("type is incorrect")
 		}
-		tx = c.UpdateMarkTable(tx, e.info)
-		return true
-	})
-	if isErr {
-		return nil, errors.New("type is incorrect")
-	}
-	/*
-	if e.info != nil && e.info.LoopbackControl {
-		err1 := e.updateMark("", tx)
-		if err1 != nil {
-			return nil, errors.Trace(err1)
+	} else {
+		if e.info != nil && e.info.LoopbackControl {
+			err1 := e.updateMark("", tx)
+			if err1 != nil {
+				return nil, errors.Trace(err1)
+			}
 		}
 	}
-	 */
 	return tx, nil
 }
 

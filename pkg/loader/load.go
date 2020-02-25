@@ -205,18 +205,20 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
-	for _, name := range s.loopBackSyncInfo.PluginNames {
-		sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
-			s.loopBackSyncInfo.PluginPath, name)
-		if err != nil {
-			return nil, err
+	if s.loopBackSyncInfo.SupportPlugin {
+		for _, name := range s.loopBackSyncInfo.PluginNames {
+			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
+				s.loopBackSyncInfo.PluginPath, name)
+			if err != nil {
+				return nil, err
+			}
+			newPlugin, ok := sym.(func() LoopBack)
+			if !ok {
+				continue
+			}
+			plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
+				name, newPlugin())
 		}
-		newPlugin, ok := sym.(func() LoopBack)
-		if !ok {
-			continue
-		}
-		plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
-			name, newPlugin())
 	}
 
 	return s, nil

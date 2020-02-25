@@ -6,5 +6,5 @@ import (
 )
 
 type LoopBack interface {
-	FilterMarkTable(DMLs []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error)
+	FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) bool
 }

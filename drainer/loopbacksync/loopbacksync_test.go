@@ -20,7 +20,7 @@ func TestNewLoopBackSyncInfo(t *testing.T) {
 	var ChannelID int64 = 1
 	var LoopbackControl = true
 	var SyncDDL = false
-	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL, "", nil)
+	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL, "", nil, false)
 	if l == nil {
 		t.Error("alloc loopBackSyncInfo objec failed ")
 	}
