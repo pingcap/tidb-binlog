@@ -57,6 +57,7 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 		"-advertise-addr", "192.168.15.10:8257",
 		"-plugin-path", "/opt/drainer/plugin",
 		"-plugin-names", "p1, p2",
+		"-support-plugin",
 	}
 
 	cfg := NewConfig()
@@ -72,6 +73,7 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
 	c.Assert(cfg.SyncerCfg.PluginPath, Equals, "/opt/drainer/plugin")
 	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 2)
+	c.Assert(cfg.SyncerCfg.SupportPlugin, Equals, true)
 }
 
 func (t *testDrainerSuite) TestValidateFilter(c *C) {
