@@ -5,8 +5,9 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
-type PluginDemo struct {}
-func (pd PluginDemo) ExtendTxn(tx *loader.Tx,info *loopbacksync.LoopBackSync) *loader.Tx {
+type PluginDemo struct{}
+
+func (pd PluginDemo) ExtendTxn(tx *loader.Tx, info *loopbacksync.LoopBackSync) *loader.Tx {
 	//do sth
 	return nil
 }
@@ -19,5 +20,3 @@ func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync)
 func NewPlugin() loader.LoopBack {
 	return PluginDemo{}
 }
-
-
