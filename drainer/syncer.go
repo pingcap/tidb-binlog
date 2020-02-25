@@ -365,7 +365,6 @@ ForLoop:
 				var txn *loader.Txn
 				txn, err = translator.TiBinlogToTxn(s.schema, schema, table, binlog, preWrite)
 				var isFilterTransaction = false
-				txn, err = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite)
 				if err != nil {
 					err = errors.Annotate(err, "analyze transaction failed")
 					break ForLoop
