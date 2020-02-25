@@ -160,6 +160,7 @@ func (e *executor) cleanChannelInfo() error {
 	err2 := tx.commit()
 	return errors.Trace(err2)
 }
+
 func (e *executor) addIndex() int64 {
 	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }

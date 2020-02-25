@@ -517,6 +517,7 @@ func (s *loaderImpl) initMarkTable() error {
 	}
 	return s.initMarkTableData()
 }
+
 func (s *loaderImpl) initMarkTableData() error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -559,18 +560,20 @@ func (s *loaderImpl) cleanChannelInfo() {
 
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
+	defer func() {
+		log.Info("Run()... in Loader quit")
+		close(s.successTxn)
+	}()
+
 	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
 		if err := s.initMarkTable(); err != nil {
 			return errors.Trace(err)
 		}
+		defer s.cleanChannelInfo()
 	}
+
 	txnManager := newTxnManager(1024, s.input)
-	defer func() {
-		log.Info("Run()... in Loader quit")
-		s.cleanChannelInfo()
-		close(s.successTxn)
-		txnManager.Close()
-	}()
+	defer txnManager.Close()
 
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
