@@ -448,7 +448,7 @@ ForLoop:
 				// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 				s.schema.addJob(b.job)
 
-				if !s.cfg.SyncDDL && !s.loopbackSync.SupportPlugin {
+				if !s.cfg.SyncDDL {
 					log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("SyncDDL", s.cfg.SyncDDL))
 					continue
 				}
