@@ -9,6 +9,7 @@ import (
 
 //Plugin type we supported currently
 type Kind uint8
+
 const (
 	SyncerPlugin Kind = iota
 	LoaderPlugin

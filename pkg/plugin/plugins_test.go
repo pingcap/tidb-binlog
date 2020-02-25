@@ -12,7 +12,8 @@ type ITest1 interface {
 type STest1 struct {
 	a int
 }
-func (s *STest1) Do () int {
+
+func (s *STest1) Do() int {
 	return s.a
 }
 
