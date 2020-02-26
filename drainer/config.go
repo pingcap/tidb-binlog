@@ -145,7 +145,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.LoopbackControl, "loopback-control", false, "set mark or not ")
 	fs.BoolVar(&cfg.SyncerCfg.SyncDDL, "sync-ddl", true, "sync ddl or not")
 	fs.Int64Var(&cfg.SyncerCfg.ChannelID, "channel-id", 0, "sync channel id ")
-	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
+	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,tidb_binlog,sync_diff_inspector,dm_meta,tidb_loader,tidb_tool", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.StringVar(&cfg.SyncerCfg.Relay.LogDir, "relay-log-dir", "", "path to relay log of syncer")

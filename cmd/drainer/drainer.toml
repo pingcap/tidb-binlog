@@ -69,7 +69,7 @@ db-type = "mysql"
 ignore-txn-commit-ts = []
 
 # disable sync these schema
-ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,tidb_binlog,sync_diff_inspector,dm_meta,tidb_loader,tidb_tool"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
 ##and we support regex expression , start with '~' declare use regex expression.
