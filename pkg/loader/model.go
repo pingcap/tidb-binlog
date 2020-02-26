@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
@@ -189,11 +187,6 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder.WriteString(" LIMIT 1")
 	sql = builder.String()
 	return
-}
-
-func createMarkTableDDL() string {
-	sql := fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", loopbacksync.MarkTableName, loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo, loopbacksync.ID, loopbacksync.ChannelID)
-	return sql
 }
 
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
