@@ -136,29 +136,13 @@ func (e *executor) begin() (*Tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	if e.info.SupportPlugin {
-		isErr := false
-		hook := e.info.Hooks[plugin.LoaderPlugin]
-		hook.Range(func(k, val interface{}) bool {
-			c, ok := val.(LoopBack)
-			if !ok {
-				isErr = true
-				return false
-			}
-			tx = c.ExtendTxn(tx, e.info)
-			return true
-		})
-		if isErr {
-			return nil, errors.New("type is incorrect")
-		}
-	} else {
-		if e.info != nil && e.info.LoopbackControl {
-			err1 := e.updateMark("", tx)
-			if err1 != nil {
-				return nil, errors.Trace(err1)
-			}
+	if e.info != nil && e.info.LoopbackControl && !e.info.SupportPlugin {
+		err1 := e.updateMark("", tx)
+		if err1 != nil {
+			return nil, errors.Trace(err1)
 		}
 	}
+
 	return tx, nil
 }
 
@@ -236,6 +220,20 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 // or we can simply check if it update unique index column or not, and for update change to (delete + insert)
 // the final result should has no duplicate entry or the origin dmls is wrong.
 func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
+	hook := e.info.Hooks[plugin.LoaderPlugin]
+	hook.Range(func(k, val interface{}) bool {
+		c, ok := val.(LoopBack)
+		if !ok {
+			//ignore type incorrect error
+			return true
+		}
+		tx, dmls = c.ExtendTxn(tx, dmls, e.info)
+		if dmls == nil {
+			return false
+		}
+		return true
+	})
+
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -304,6 +302,20 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	hook := e.info.Hooks[plugin.LoaderPlugin]
+	hook.Range(func(k, val interface{}) bool {
+		c, ok := val.(LoopBack)
+		if !ok {
+			//ignore type incorrect error
+			return true
+		}
+		tx, dmls = c.ExtendTxn(tx, dmls, e.info)
+		if dmls == nil {
+			return false
+		}
+		return true
+	})
 
 	for _, dml := range dmls {
 		if safeMode && dml.Tp == UpdateDMLType {

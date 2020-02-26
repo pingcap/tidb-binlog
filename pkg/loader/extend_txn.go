@@ -1,7 +1,9 @@
 package loader
 
-import "github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+import (
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+)
 
 type LoopBack interface {
-	ExtendTxn(tx *Tx, info *loopbacksync.LoopBackSync) *Tx
+	ExtendTxn(tx *Tx, dmls []*DML, info *loopbacksync.LoopBackSync) (*Tx, []*DML)
 }
