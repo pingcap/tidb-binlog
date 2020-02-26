@@ -7,9 +7,9 @@ import (
 
 type PluginDemo struct{}
 
-func (pd PluginDemo) ExtendTxn(tx *loader.Tx, info *loopbacksync.LoopBackSync) *loader.Tx {
+func (pd PluginDemo) ExtendTxn(tx *loader.Tx, dmls []*loader.DML, info *loopbacksync.LoopBackSync) (*loader.Tx, []*loader.DML) {
 	//do sth
-	return nil
+	return nil, nil
 }
 
 func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) bool {

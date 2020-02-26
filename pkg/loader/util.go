@@ -98,7 +98,11 @@ func CreateDB(user string, password string, host string, port int) (db *gosql.DB
 }
 
 func quoteSchema(schema string, table string) string {
-	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
+	if len(schema) == 0 {
+		return fmt.Sprintf("`%s`", escapeName(table))
+	} else {
+		return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
+	}
 }
 
 func quoteName(name string) string {

@@ -146,24 +146,49 @@ func (e *executor) begin() (*Tx, error) {
 	return tx, nil
 }
 
+// return a wrap of sql.Tx
+func (e *executor) externPoint(t *Tx, dmls []*DML) (*Tx, []*DML) {
+	hook := e.info.Hooks[plugin.LoaderPlugin]
+	hook.Range(func(k, val interface{}) bool {
+		c, ok := val.(LoopBack)
+		if !ok {
+			//ignore type incorrect error
+			return true
+		}
+		t, dmls = c.ExtendTxn(t, dmls, e.info)
+		if dmls == nil {
+			return false
+		}
+		return true
+	})
+	return t, dmls
+}
+
 func (e *executor) bulkDelete(deletes []*DML) error {
 	if len(deletes) == 0 {
 		return nil
 	}
 
 	var sqls strings.Builder
-	argss := make([]interface{}, 0, len(deletes))
 
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tx, deletes = e.externPoint(tx, deletes)
+	if len(deletes) == 0 {
+		return nil
+	}
+
+	argss := make([]interface{}, 0, len(deletes))
 	for _, dml := range deletes {
 		sql, args := dml.sql()
 		sqls.WriteString(sql)
 		sqls.WriteByte(';')
 		argss = append(argss, args...)
 	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	sql := sqls.String()
 	_, err = tx.autoRollbackExec(sql, argss...)
 	if err != nil {
@@ -194,6 +219,16 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		builder.WriteString(holder)
 	}
 
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tx, inserts = e.externPoint(tx, inserts)
+	if len(inserts) == 0 {
+		return nil
+	}
+
 	args := make([]interface{}, 0, len(inserts)*len(info.columns))
 	for _, insert := range inserts {
 		for _, name := range info.columns {
@@ -201,10 +236,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 			args = append(args, v)
 		}
 	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	_, err = tx.autoRollbackExec(builder.String(), args...)
 	if err != nil {
 		return errors.Trace(err)
@@ -220,20 +252,6 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 // or we can simply check if it update unique index column or not, and for update change to (delete + insert)
 // the final result should has no duplicate entry or the origin dmls is wrong.
 func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
-	hook := e.info.Hooks[plugin.LoaderPlugin]
-	hook.Range(func(k, val interface{}) bool {
-		c, ok := val.(LoopBack)
-		if !ok {
-			//ignore type incorrect error
-			return true
-		}
-		tx, dmls = c.ExtendTxn(tx, dmls, e.info)
-		if dmls == nil {
-			return false
-		}
-		return true
-	})
-
 	if len(dmls) == 0 {
 		return nil
 	}
@@ -303,19 +321,10 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		return errors.Trace(err)
 	}
 
-	hook := e.info.Hooks[plugin.LoaderPlugin]
-	hook.Range(func(k, val interface{}) bool {
-		c, ok := val.(LoopBack)
-		if !ok {
-			//ignore type incorrect error
-			return true
-		}
-		tx, dmls = c.ExtendTxn(tx, dmls, e.info)
-		if dmls == nil {
-			return false
-		}
-		return true
-	})
+	tx, dmls = e.externPoint(tx, dmls)
+	if len(dmls) == 0 {
+		return nil
+	}
 
 	for _, dml := range dmls {
 		if safeMode && dml.Tp == UpdateDMLType {
