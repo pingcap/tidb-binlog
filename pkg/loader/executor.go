@@ -128,39 +128,6 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(channel string, tx *tx) error {
-	if e.info == nil {
-		return nil
-	}
-	var args []interface{}
-	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
-	args = append(args, e.addIndex(), e.info.ChannelID)
-	_, err1 := tx.autoRollbackExec(sql, args...)
-	if err1 != nil {
-		return errors.Trace(err1)
-	}
-	return nil
-}
-
-func (e *executor) cleanChannelInfo() error {
-	if e.info == nil {
-		return nil
-	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	var args []interface{}
-	sql := fmt.Sprintf("delete from %s where %s=? ", loopbacksync.MarkTableName, loopbacksync.ChannelID)
-	args = append(args, e.info.ChannelID)
-	_, err1 := tx.autoRollbackExec(sql, args...)
-	if err1 != nil {
-		return errors.Trace(err1)
-	}
-	err2 := tx.commit()
-	return errors.Trace(err2)
-}
-
 func (e *executor) addIndex() int64 {
 	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }
@@ -178,9 +145,19 @@ func (e *executor) begin() (*tx, error) {
 	}
 
 	if e.info != nil && e.info.LoopbackControl {
-		err1 := e.updateMark("", tx)
-		if err1 != nil {
-			return nil, errors.Trace(err1)
+		start := time.Now()
+
+		err = loopbacksync.UpdateMark(tx.Tx, e.addIndex(), e.info.ChannelID)
+		if err != nil {
+			rerr := tx.Rollback()
+			if rerr != nil {
+				log.Error("fail to rollback", zap.Error(rerr))
+			}
+			return nil, errors.Annotate(err, "failed to update mark data")
+		}
+
+		if tx.queryHistogramVec != nil {
+			tx.queryHistogramVec.WithLabelValues("update_mark_table").Observe(time.Since(start).Seconds())
 		}
 	}
 

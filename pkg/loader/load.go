@@ -17,7 +17,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -494,68 +493,11 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
-func (s *loaderImpl) createMarkTable() error {
-	markTableDataBase := loopbacksync.MarkTableName[:strings.Index(loopbacksync.MarkTableName, ".")]
-	createDatabaseSQL := fmt.Sprintf("create database IF NOT EXISTS %s;", markTableDataBase)
-	createDatabase := DDL{SQL: createDatabaseSQL}
-	if err1 := s.execDDL(&createDatabase); err1 != nil {
-		log.Error("exec failed", zap.String("sql", createDatabase.SQL), zap.Error(err1))
-		return errors.Trace(err1)
-	}
-	sql := createMarkTableDDL()
-	createMarkTableInfo := DDL{Database: markTableDataBase, Table: loopbacksync.MarkTableName, SQL: sql}
-	if err := s.execDDL(&createMarkTableInfo); err != nil {
-		log.Error("exec failed", zap.String("sql", createMarkTableInfo.SQL), zap.Error(err))
-		return errors.Trace(err)
-	}
-	return nil
-}
-
 func (s *loaderImpl) initMarkTable() error {
-	if err := s.createMarkTable(); err != nil {
+	if err := loopbacksync.CreateMarkTable(s.db); err != nil {
 		return errors.Trace(err)
 	}
-	return s.initMarkTableData()
-}
-
-func (s *loaderImpl) initMarkTableData() error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	status := 1
-	channel := ""
-	var builder strings.Builder
-	holder := "(?,?,?,?)"
-	columns := fmt.Sprintf("(%s,%s,%s,%s) ", loopbacksync.ID, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	builder.WriteString("REPLACE INTO " + loopbacksync.MarkTableName + columns + " VALUES ")
-	for i := 0; i < s.workerCount; i++ {
-		if i > 0 {
-			builder.WriteByte(',')
-		}
-		builder.WriteString(holder)
-	}
-	var args []interface{}
-	for id := 0; id < s.workerCount; id++ {
-		args = append(args, id, s.loopBackSyncInfo.ChannelID, status, channel)
-	}
-	query := builder.String()
-	if _, err = tx.Exec(query, args...); err != nil {
-		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Auto rollback", zap.Error(rbErr))
-		}
-		return errors.Trace(err)
-	}
-	if err = tx.Commit(); err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (s *loaderImpl) cleanChannelInfo() {
-	executor := s.getExecutor()
-	_ = executor.cleanChannelInfo()
+	return loopbacksync.InitMarkTableData(s.db, s.workerCount, s.loopBackSyncInfo.ChannelID)
 }
 
 // Run will quit when meet any error, or all the txn are drained
@@ -569,7 +511,12 @@ func (s *loaderImpl) Run() error {
 		if err := s.initMarkTable(); err != nil {
 			return errors.Trace(err)
 		}
-		defer s.cleanChannelInfo()
+		defer func() {
+			err := loopbacksync.CleanMarkTableData(s.db, s.loopBackSyncInfo.ChannelID)
+			if err != nil {
+				log.Error("fail to clean mark table data", zap.Error(err))
+			}
+		}()
 	}
 
 	txnManager := newTxnManager(1024, s.input)
