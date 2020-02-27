@@ -77,6 +77,10 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 		return nil, errors.Trace(err)
 	}
 
+	if len(cfg.KafkaClientID) > 0 {
+		config.ClientID = cfg.KafkaClientID
+	}
+
 	config.Producer.Flush.MaxMessages = cfg.KafkaMaxMessages
 
 	// maintain minimal set that has been necessary so far

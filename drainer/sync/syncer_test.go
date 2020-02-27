@@ -13,6 +13,7 @@
 package sync
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"reflect"
 	"sync/atomic"
@@ -42,22 +43,23 @@ type syncerSuite struct {
 func (s *syncerSuite) SetUpTest(c *check.C) {
 	var infoGetter translator.TableInfoGetter
 	cfg := &DBConfig{
-		Host:         "localhost",
-		User:         "root",
-		Password:     "",
-		Port:         3306,
-		KafkaVersion: "0.8.2.0",
+		Host:          "localhost",
+		User:          "root",
+		Password:      "",
+		Port:          3306,
+		KafkaVersion:  "0.8.2.0",
+		BinlogFileDir: c.MkDir(),
 	}
 
 	// create pb syncer
-	pb, err := NewPBSyncer(c.MkDir(), infoGetter)
+	pb, err := NewPBSyncer(cfg.BinlogFileDir, cfg.BinlogFileRetentionTime, infoGetter)
 	c.Assert(err, check.IsNil)
 
 	s.syncers = append(s.syncers, pb)
 
 	// create mysql syncer
 	oldCreateDB := createDB
-	createDB = func(string, string, string, int, *string) (db *sql.DB, err error) {
+	createDB = func(string, string, string, int, *tls.Config, *string) (db *sql.DB, err error) {
 		db, s.mysqlMock, err = sqlmock.New()
 		return
 	}

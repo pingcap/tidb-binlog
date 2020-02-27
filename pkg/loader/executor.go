@@ -18,33 +18,49 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
+	"github.com/pingcap/tidb/infoschema"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/plugin"
+	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-var defaultBatchSize = 128
+var (
+	defaultBatchSize   = 128
+	defaultWorkerCount = 16
+	index              int64
+)
 
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
+	workerCount       int
 	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
+	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
 }
 
 func newExecutor(db *gosql.DB) *executor {
 	exe := &executor{
-		db:        db,
-		batchSize: defaultBatchSize,
+		db:          db,
+		batchSize:   defaultBatchSize,
+		workerCount: defaultWorkerCount,
 	}
 	return exe
+}
+
+func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (info *tableInfo, err error)) *executor {
+	e.refreshTableInfo = fn
+	return e
 }
 
 func (e *executor) withBatchSize(batchSize int) *executor {
@@ -54,6 +70,10 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 
 func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
 	e.info = info
+}
+
+func (e *executor) setWorkerCount(workerCount int) {
+	e.workerCount = workerCount
 }
 
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
@@ -108,20 +128,8 @@ func (tx *Tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(channel string, tx *Tx) error {
-	if e.info == nil {
-		return nil
-	}
-	status := 1
-	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	var args []interface{}
-	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
-	args = append(args, e.info.ChannelID, status, channel)
-	_, err := tx.autoRollbackExec(sql, args...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+func (e *executor) addIndex() int64 {
+	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }
 
 // return a wrap of sql.Tx
@@ -137,9 +145,19 @@ func (e *executor) begin() (*Tx, error) {
 	}
 
 	if e.info != nil && e.info.LoopbackControl && !e.info.SupportPlugin {
-		err1 := e.updateMark("", tx)
-		if err1 != nil {
-			return nil, errors.Trace(err1)
+		start := time.Now()
+
+		err = loopbacksync.UpdateMark(tx.Tx, e.addIndex(), e.info.ChannelID)
+		if err != nil {
+			rerr := tx.Rollback()
+			if rerr != nil {
+				log.Error("fail to rollback", zap.Error(rerr))
+			}
+			return nil, errors.Annotate(err, "failed to update mark data")
+		}
+
+		if tx.queryHistogramVec != nil {
+			tx.queryHistogramVec.WithLabelValues("update_mark_table").Observe(time.Since(start).Seconds())
 		}
 	}
 
@@ -302,10 +320,54 @@ func (e *executor) splitExecDML(ctx context.Context, dmls []*DML, exec func(dmls
 	return errors.Trace(errg.Wait())
 }
 
+func tryRefreshTableErr(err error) bool {
+	errCode, ok := pkgsql.GetSQLErrCode(err)
+	if !ok {
+		return false
+	}
+
+	switch errCode {
+	case infoschema.ErrColumnNotExists.Code():
+		return true
+	}
+
+	return false
+}
+
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			return e.singleExec(dmls, safeMode)
+			execErr := e.singleExec(dmls, safeMode)
+			if execErr == nil {
+				return nil
+			}
+
+			if tryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
+				log.Info("try refresh table info")
+				name2info := make(map[string]*tableInfo)
+				for _, dml := range dmls {
+					name := dml.TableName()
+					info, ok := name2info[name]
+					if !ok {
+						var err error
+						info, err = e.refreshTableInfo(dml.Database, dml.Table)
+						if err != nil {
+							log.Error("fail to refresh table info", zap.Error(err))
+							continue
+						}
+
+						name2info[name] = info
+					}
+
+					if len(dml.info.columns) != len(info.columns) {
+						log.Info("columns change", zap.Strings("old", dml.info.columns),
+							zap.Strings("new", info.columns))
+						removeOrphanCols(info, dml)
+					}
+					dml.info = info
+				}
+			}
+			return execErr
 		})
 		if err != nil {
 			return errors.Trace(err)

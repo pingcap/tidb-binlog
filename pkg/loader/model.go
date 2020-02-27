@@ -15,10 +15,9 @@ package loader
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -53,6 +52,9 @@ type DDL struct {
 	Database string
 	Table    string
 	SQL      string
+	// should skip to execute this DDL at downstream and just refresh the downstream table info.
+	// one case for this usage is for bidirectional replication and only execute DDL at one side.
+	ShouldSkip bool
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -186,11 +188,6 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	return
 }
 
-func createMarkTableDDL() string {
-	sql := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	return sql
-}
-
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
 	for i := 0; i < len(wnames); i++ {
@@ -237,7 +234,8 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 	}
 
 	// Fallback to use all columns
-	return dml.info.columns, dml.whereValues(dml.info.columns)
+	names := dml.columnNames()
+	return names, dml.whereValues(names)
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
@@ -251,10 +249,21 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) columnNames() []string {
+	names := make([]string, 0, len(dml.Values))
+
+	for name := range dml.Values {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
-	info := dml.info
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(info.columns), holderString(len(info.columns)))
-	for _, name := range info.columns {
+	names := dml.columnNames()
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names), holderString(len(names)))
+	for _, name := range names {
 		v := dml.Values[name]
 		args = append(args, v)
 	}
