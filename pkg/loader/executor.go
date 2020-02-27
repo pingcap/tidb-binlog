@@ -217,6 +217,16 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		return nil
 	}
 
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tx, inserts = e.externPoint(tx, inserts)
+	if len(inserts) == 0 {
+		return nil
+	}
+
 	info := inserts[0].info
 
 	var builder strings.Builder
@@ -230,16 +240,6 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 			builder.WriteByte(',')
 		}
 		builder.WriteString(holder)
-	}
-
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	tx, inserts = e.externPoint(tx, inserts)
-	if len(inserts) == 0 {
-		return nil
 	}
 
 	args := make([]interface{}, 0, len(inserts)*len(info.columns))
