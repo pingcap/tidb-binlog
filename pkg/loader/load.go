@@ -203,6 +203,8 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		cancel: cancel,
 	}
 
+	s.loopBackSyncInfo.RecordId = s.workerCount
+
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
