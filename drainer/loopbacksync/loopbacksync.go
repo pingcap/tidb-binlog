@@ -48,6 +48,7 @@ type LoopBackSync struct {
 	ChannelID       int64
 	LoopbackControl bool
 	SyncDDL         bool
+	Index           int64
 	PluginPath      string
 	PluginNames     []string
 	Hooks           []*plugin.EventHooks
@@ -60,6 +61,7 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,
 		SyncDDL:         SyncDDL,
+		Index:           0,
 		PluginPath:      path,
 		PluginNames:     names,
 		SupportPlugin:   SupportPlug,

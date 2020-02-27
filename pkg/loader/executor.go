@@ -37,7 +37,6 @@ import (
 var (
 	defaultBatchSize   = 128
 	defaultWorkerCount = 16
-	index              int64
 )
 
 type executor struct {
@@ -128,10 +127,6 @@ func (tx *Tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) addIndex() int64 {
-	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
-}
-
 // return a wrap of sql.Tx
 func (e *executor) begin() (*Tx, error) {
 	sqlTx, err := e.db.Begin()
@@ -147,7 +142,7 @@ func (e *executor) begin() (*Tx, error) {
 	if e.info != nil && e.info.LoopbackControl && !e.info.SupportPlugin {
 		start := time.Now()
 
-		err = loopbacksync.UpdateMark(tx.Tx, e.addIndex(), e.info.ChannelID)
+		err = loopbacksync.UpdateMark(tx.Tx, atomic.AddInt64(&e.info.Index, 1)%((int64)(e.workerCount)), e.info.ChannelID)
 		if err != nil {
 			rerr := tx.Rollback()
 			if rerr != nil {
