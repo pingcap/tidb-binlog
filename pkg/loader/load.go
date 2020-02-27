@@ -66,8 +66,10 @@ var _ Loader = &loaderImpl{}
 type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
-	db   *gosql.DB
-	opts options
+	db *gosql.DB
+	// only set for test
+	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
+	opts               options
 
 	tableInfos sync.Map
 
@@ -217,17 +219,18 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &loaderImpl{
-		db:               db,
-		opts:             opts,
-		workerCount:      opts.workerCount,
-		batchSize:        opts.batchSize,
-		metrics:          opts.metrics,
-		syncMode:         opts.syncMode,
-		loopBackSyncInfo: opts.loopBackSyncInfo,
-		input:            make(chan *Txn),
-		successTxn:       make(chan *Txn),
-		merge:            false,
-		saveAppliedTS:    opts.saveAppliedTS,
+		db:                 db,
+		getTableInfoFromDB: getTableInfo,
+		opts:               opts,
+		workerCount:        opts.workerCount,
+		batchSize:          opts.batchSize,
+		metrics:            opts.metrics,
+		syncMode:           opts.syncMode,
+		loopBackSyncInfo:   opts.loopBackSyncInfo,
+		input:              make(chan *Txn),
+		successTxn:         make(chan *Txn),
+		merge:              false,
+		saveAppliedTS:      opts.saveAppliedTS,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -300,8 +303,6 @@ func (s *loaderImpl) Close() {
 	s.cancel()
 }
 
-var utilGetTableInfo = getTableInfo
-
 func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableInfo, err error) {
 	log.Info("refresh table info", zap.String("schema", schema), zap.String("table", table))
 
@@ -313,7 +314,7 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 		return nil, nil
 	}
 
-	info, err = utilGetTableInfo(s.db, schema, table)
+	info, err = s.getTableInfoFromDB(s.db, schema, table)
 	if err != nil {
 		return info, errors.Trace(err)
 	}
@@ -537,6 +538,7 @@ func (s *loaderImpl) initMarkTable() error {
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
 	defer func() {
+		log.S().Info(s.opts)
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
 	}()
