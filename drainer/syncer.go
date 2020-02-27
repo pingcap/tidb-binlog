@@ -348,26 +348,119 @@ ForLoop:
 		if startTS == commitTS {
 			fakeBinlogs = append(fakeBinlogs, binlog)
 			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddComitTS)
-		} else {
-			if s.loopbackSync.SupportPlugin {
-				schema, table, err := s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
-				if err != nil {
-					err = errors.Trace(err)
-					break ForLoop
-				}
+		} else if jobID == 0 {
+			preWriteValue := binlog.GetPrewriteValue()
+			preWrite := &pb.PrewriteValue{}
+			err = preWrite.Unmarshal(preWriteValue)
+			if err != nil {
+				err = errors.Annotatef(err, "prewrite %s Unmarshal failed", preWriteValue)
+				break ForLoop
+			}
 
-				preWrite := &pb.PrewriteValue{}
-				err = preWrite.Unmarshal(binlog.GetPrewriteValue())
-				if err != nil {
-					err = errors.Annotatef(err, "prewrite %s Unmarshal failed", binlog.GetPrewriteValue())
+			err = s.rewriteForOldVersion(preWrite)
+			if err != nil {
+				err = errors.Annotate(err, "rewrite for old version fail")
+				break ForLoop
+			}
+
+			log.Debug("get DML", zap.Int64("SchemaVersion", preWrite.SchemaVersion))
+			if preWrite.SchemaVersion < lastDDLSchemaVersion {
+				log.Debug("encounter older schema dml")
+			}
+
+			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
+			if err != nil {
+				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
+				break ForLoop
+			}
+
+			var isFilterTransaction = false
+			var err1 error
+
+			if s.loopbackSync.SupportPlugin {
+				hook := s.loopbackSync.Hooks[plugin.SyncerPlugin]
+				var txn *loader.Txn
+				txn, err1 = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite)
+				hook.Range(func(k, val interface{}) bool {
+					c, ok := val.(LoopBack)
+					if !ok {
+						return true
+					}
+					isFilterTransaction = c.FilterTxn(txn, s.loopbackSync)
+					if isFilterTransaction {
+						return false
+					}
+					return true
+				})
+			}
+
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && !s.loopbackSync.SupportPlugin {
+				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
+				if err1 != nil {
+					err = errors.Annotate(err1, "analyze transaction failed")
 					break ForLoop
 				}
-				var txn *loader.Txn
-				txn, err = translator.TiBinlogToTxn(s.schema, schema, table, binlog, preWrite)
-				var isFilterTransaction = false
+			}
+
+			var ignore bool
+			ignore, err = filterTable(preWrite, s.filter, s.schema)
+			if err != nil {
+				err = errors.Annotate(err, "filterTable failed")
+				break ForLoop
+			}
+
+			if !ignore && !isFilterTransaction {
+				s.addDMLEventMetrics(preWrite.GetMutations())
+				beginTime := time.Now()
+				lastAddComitTS = binlog.GetCommitTs()
+				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
-					err = errors.Annotate(err, "analyze transaction failed")
+					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 					break ForLoop
+				}
+				executeHistogram.Observe(time.Since(beginTime).Seconds())
+			}
+		} else if jobID > 0 {
+			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
+
+			// Notice: the version of DDL Binlog we receive are Monotonically increasing
+			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
+			s.schema.addJob(b.job)
+
+			if !s.cfg.SyncDDL && !s.loopbackSync.SupportPlugin {
+				log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("SyncDDL", s.cfg.SyncDDL))
+				continue
+			}
+
+			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
+			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
+
+			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
+			if err != nil {
+				err = errors.Trace(err)
+				break ForLoop
+			}
+
+			if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
+				log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
+				continue
+			}
+
+			sql := b.job.Query
+			var schema, table string
+			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
+			if err != nil {
+				err = errors.Trace(err)
+				break ForLoop
+			}
+
+			if s.loopbackSync.SupportPlugin {
+				var isFilterTransaction = false
+				txn := new(loader.Txn)
+				txn.DDL = &loader.DDL{
+					Database: schema,
+					Table:    table,
+					SQL:      string(binlog.GetDdlQuery()),
 				}
 				hook := s.loopbackSync.Hooks[plugin.SyncerPlugin]
 				hook.Range(func(k, val interface{}) bool {
@@ -382,116 +475,27 @@ ForLoop:
 					return true
 				})
 				if isFilterTransaction {
-					continue
+					break ForLoop
 				}
 			}
 
-			if jobID == 0 {
-				preWriteValue := binlog.GetPrewriteValue()
-				preWrite := &pb.PrewriteValue{}
-				err = preWrite.Unmarshal(preWriteValue)
+			if s.filter.SkipSchemaAndTable(schema, table) {
+				log.Info("skip ddl", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+			} else if sql != "" {
+				s.addDDLCount()
+				beginTime := time.Now()
+				lastAddComitTS = binlog.GetCommitTs()
+
+				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
+					zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+
+				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
 				if err != nil {
-					err = errors.Annotatef(err, "prewrite %s Unmarshal failed", preWriteValue)
+					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 					break ForLoop
 				}
-
-				err = s.rewriteForOldVersion(preWrite)
-				if err != nil {
-					err = errors.Annotate(err, "rewrite for old version fail")
-					break ForLoop
-				}
-
-				log.Debug("get DML", zap.Int64("SchemaVersion", preWrite.SchemaVersion))
-				if preWrite.SchemaVersion < lastDDLSchemaVersion {
-					log.Debug("encounter older schema dml")
-				}
-
-				err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
-				if err != nil {
-					err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
-					break ForLoop
-				}
-
-				var isFilterTransaction = false
-				var err1 error
-				if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && !s.loopbackSync.SupportPlugin {
-					isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
-					if err1 != nil {
-						err = errors.Annotate(err1, "analyze transaction failed")
-						break ForLoop
-					}
-				}
-
-				var ignore bool
-				ignore, err = filterTable(preWrite, s.filter, s.schema)
-				if err != nil {
-					err = errors.Annotate(err, "filterTable failed")
-					break ForLoop
-				}
-
-				if !ignore && !isFilterTransaction {
-					s.addDMLEventMetrics(preWrite.GetMutations())
-					beginTime := time.Now()
-					lastAddComitTS = binlog.GetCommitTs()
-					err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
-					if err != nil {
-						err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
-						break ForLoop
-					}
-					executeHistogram.Observe(time.Since(beginTime).Seconds())
-				}
-			} else if jobID > 0 {
-				log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
-
-				// Notice: the version of DDL Binlog we receive are Monotonically increasing
-				// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
-				s.schema.addJob(b.job)
-
-				if !s.cfg.SyncDDL {
-					log.Info("Syncer skips DDL", zap.String("sql", b.job.Query), zap.Int64("ts", b.GetCommitTs()), zap.Bool("SyncDDL", s.cfg.SyncDDL))
-					continue
-				}
-
-				log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
-				lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
-
-				err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
-				if err != nil {
-					err = errors.Trace(err)
-					break ForLoop
-				}
-
-				if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
-					log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
-					continue
-				}
-
-				sql := b.job.Query
-				var schema, table string
-				schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
-				if err != nil {
-					err = errors.Trace(err)
-					break ForLoop
-				}
-
-				if s.filter.SkipSchemaAndTable(schema, table) {
-					log.Info("skip ddl", zap.String("schema", schema), zap.String("table", table),
-						zap.String("sql", sql), zap.Int64("commit ts", commitTS))
-				} else if sql != "" {
-					s.addDDLCount()
-					beginTime := time.Now()
-					lastAddComitTS = binlog.GetCommitTs()
-
-					log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
-						zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
-
-					err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
-					if err != nil {
-						err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
-						break ForLoop
-					}
-					executeHistogram.Observe(time.Since(beginTime).Seconds())
-				}
+				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			}
 		}
 	}
