@@ -386,12 +386,15 @@ ForLoop:
 					if !ok {
 						return true
 					}
-					isFilterTransaction = c.FilterTxn(txn, s.loopbackSync)
-					if isFilterTransaction {
+					isFilterTransaction, err1 = c.FilterTxn(txn, s.loopbackSync)
+					if isFilterTransaction || err1 != nil {
 						return false
 					}
 					return true
 				})
+				if err1 != nil {
+					break ForLoop
+				}
 			}
 
 			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && !s.loopbackSync.SupportPlugin {
@@ -456,6 +459,7 @@ ForLoop:
 
 			if s.loopbackSync.SupportPlugin {
 				var isFilterTransaction = false
+				var err1 error
 				txn := new(loader.Txn)
 				txn.DDL = &loader.DDL{
 					Database: schema,
@@ -468,14 +472,17 @@ ForLoop:
 					if !ok {
 						return true
 					}
-					isFilterTransaction = c.FilterTxn(txn, s.loopbackSync)
-					if isFilterTransaction {
+					isFilterTransaction, err1 = c.FilterTxn(txn, s.loopbackSync)
+					if isFilterTransaction || err1 != nil {
 						return false
 					}
 					return true
 				})
-				if isFilterTransaction {
+				if err1 != nil {
 					break ForLoop
+				}
+				if isFilterTransaction {
+					continue
 				}
 			}
 

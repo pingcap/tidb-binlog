@@ -12,9 +12,9 @@ func (pd PluginDemo) ExtendTxn(tx *loader.Tx, dmls []*loader.DML, info *loopback
 	return nil, nil
 }
 
-func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) bool {
+func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) (bool, error) {
 	//do sth
-	return true
+	return true, nil
 }
 
 func NewPlugin() loader.LoopBack {

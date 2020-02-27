@@ -6,5 +6,5 @@ import (
 )
 
 type LoopBack interface {
-	FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) bool
+	FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) (bool, error)
 }
