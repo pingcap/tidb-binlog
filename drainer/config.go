@@ -75,9 +75,62 @@ type SyncerConfig struct {
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType        string             `toml:"db-type" json:"db-type"`
 	Relay             RelayConfig        `toml:"relay" json:"relay"`
-	EnableDispatch    bool               `toml:"enable-dispatch" json:"enable-dispatch"`
-	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
-	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
+	// disable* is keep for backward compatibility.
+	// if both setted, the disable one take affect.
+	DisableDispatchFlag *bool `toml:"disable-dispatch-flag" json:"disable-dispatch-flag"`
+	EnableDispatchFlag  *bool `toml:"enable-dispatch-flag" json:"enable-dispatch-flag"`
+	DisableDispatchFile *bool `toml:"disable-dispatch" json:"disable-dispatch"`
+	EnableDispatchFile  *bool `toml:"enable-dispatch" json:"enable-dispatch"`
+	SafeMode            bool  `toml:"safe-mode" json:"safe-mode"`
+	// for backward compatibility.
+	// disable* is keep for backward compatibility.
+	// if both setted, the disable one take affect.
+	DisableCausalityFlag *bool `toml:"disable-detect-flag" json:"disable-detect-flag"`
+	EnableCausalityFlag  *bool `toml:"enable-detect-flag" json:"enable-detect-flag"`
+	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
+	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
+}
+
+// EnableDispatch return true if enable dispatch.
+func (c *SyncerConfig) EnableDispatch() bool {
+	if c.DisableDispatchFlag != nil {
+		return !*c.DisableDispatchFlag
+	}
+
+	if c.DisableDispatchFile != nil {
+		return !*c.DisableDispatchFile
+	}
+
+	if c.EnableDispatchFlag != nil {
+		return *c.EnableDispatchFlag
+	}
+
+	if c.EnableDispatchFile != nil {
+		return *c.EnableDispatchFile
+	}
+
+	return true
+}
+
+// EnableCausality return true if enable causality.
+func (c *SyncerConfig) EnableCausality() bool {
+	if c.DisableCausalityFlag != nil {
+		return !*c.DisableCausalityFlag
+	}
+
+	if c.DisableCausalityFile != nil {
+		return !*c.DisableCausalityFile
+	}
+
+	if c.EnableCausalityFlag != nil {
+		return *c.EnableCausalityFlag
+	}
+
+	if c.EnableCausalityFile != nil {
+		return *c.EnableCausalityFile
+	}
+
+	return true
 }
 
 // RelayConfig is the Relay log's configuration.
@@ -119,7 +172,12 @@ type Config struct {
 func NewConfig() *Config {
 	cfg := &Config{
 		EtcdTimeout: defaultEtcdTimeout,
-		SyncerCfg:   &SyncerConfig{},
+		SyncerCfg: &SyncerConfig{
+			DisableDispatchFlag:  new(bool),
+			EnableDispatchFlag:   new(bool),
+			DisableCausalityFlag: new(bool),
+			EnableCausalityFlag:  new(bool),
+		},
 	}
 	cfg.FlagSet = flag.NewFlagSet("drainer", flag.ContinueOnError)
 	fs := cfg.FlagSet
@@ -150,10 +208,11 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.StringVar(&cfg.SyncerCfg.Relay.LogDir, "relay-log-dir", "", "path to relay log of syncer")
 	fs.Int64Var(&cfg.SyncerCfg.Relay.MaxFileSize, "relay-max-file-size", 10485760, "max file size of each relay log")
-
-	fs.BoolVar(&cfg.SyncerCfg.EnableDispatch, "enable-dispatch", true, "enable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
+	fs.BoolVar(cfg.SyncerCfg.DisableDispatchFlag, "disable-dispatch", false, "DEPRECATED, use enable-dispatch")
+	fs.BoolVar(cfg.SyncerCfg.EnableDispatchFlag, "enable-dispatch", true, "enable dispatching sqls that in one same binlog; if set false, work-count and txn-batch would be useless")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
-	fs.BoolVar(&cfg.SyncerCfg.EnableCausality, "enable-detect", false, "enable detect causality")
+	fs.BoolVar(cfg.SyncerCfg.DisableCausalityFlag, "disable-detect", false, "DEPRECATED, use enable-detect")
+	fs.BoolVar(cfg.SyncerCfg.EnableCausalityFlag, "enable-detect", true, "enable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
@@ -168,6 +227,17 @@ func (cfg *Config) String() string {
 	}
 
 	return string(data)
+}
+
+func isFlagSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			set = true
+		}
+	})
+
+	return set
 }
 
 // Parse parses all config from command-line flags, environment vars or the configuration file
@@ -199,6 +269,23 @@ func (cfg *Config) Parse(args []string) error {
 	if len(cfg.FlagSet.Args()) > 0 {
 		return errors.Errorf("'%s' is not a valid flag", cfg.FlagSet.Arg(0))
 	}
+
+	if !isFlagSet(cfg.FlagSet, "enable-dispatch") {
+		cfg.SyncerCfg.EnableDispatchFlag = nil
+	}
+
+	if !isFlagSet(cfg.FlagSet, "enable-detect") {
+		cfg.SyncerCfg.EnableCausalityFlag = nil
+	}
+
+	if !isFlagSet(cfg.FlagSet, "disable-dispatch") {
+		cfg.SyncerCfg.DisableDispatchFlag = nil
+	}
+
+	if !isFlagSet(cfg.FlagSet, "disable-detect") {
+		cfg.SyncerCfg.DisableCausalityFlag = nil
+	}
+
 	// replace with environment vars
 	err := flags.SetFlagsFromEnv("BINLOG_SERVER", cfg.FlagSet)
 	if err != nil {
@@ -234,9 +321,8 @@ func (cfg *Config) Parse(args []string) error {
 
 func (c *SyncerConfig) adjustWorkCount() {
 	if c.DestDBType == "file" || c.DestDBType == "kafka" {
-		c.EnableDispatch = false
 		c.WorkerCount = 1
-	} else if !c.EnableDispatch {
+	} else if !c.EnableDispatch() {
 		c.WorkerCount = 1
 	}
 }

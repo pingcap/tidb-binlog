@@ -212,7 +212,7 @@ func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
 
 func (s *groupDMLsSuite) TestGroupByTableName(c *check.C) {
 	ld := loaderImpl{merge: true}
-	canBatch := tableInfo{primaryKey: &indexInfo{}}
+	canBatch := tableInfo{primaryKey: &indexInfo{}, uniqueKeys: []indexInfo{{}}}
 	onlySingle := tableInfo{}
 	dmls := []*DML{
 		{Table: "test1", info: &canBatch},
@@ -333,7 +333,8 @@ func (s *batchManagerSuite) TestShouldExecDDLImmediately(c *check.C) {
 	var executed *DDL
 	var cbTxn *Txn
 	bm := batchManager{
-		limit: 1024,
+		limit:          1024,
+		enableDispatch: true,
 		fExecDDL: func(ddl *DDL) error {
 			executed = ddl
 			return nil
@@ -354,7 +355,8 @@ func (s *batchManagerSuite) TestShouldExecDDLImmediately(c *check.C) {
 func (s *batchManagerSuite) TestShouldHandleDDLError(c *check.C) {
 	var nCalled int
 	bm := batchManager{
-		limit: 1024,
+		limit:          1024,
+		enableDispatch: true,
 		fDDLSuccessCallback: func(t *Txn) {
 			nCalled++
 		},
@@ -382,7 +384,8 @@ func (s *batchManagerSuite) TestShouldExecAccumulatedDMLs(c *check.C) {
 	var executed []*DML
 	var calledback []*Txn
 	bm := batchManager{
-		limit: 3,
+		limit:          3,
+		enableDispatch: true,
 		fExecDMLs: func(dmls []*DML) error {
 			executed = append(executed, dmls...)
 			return nil
@@ -552,7 +555,8 @@ func (s *runSuite) TestShouldExecuteAllPendingDMLsOnClose(c *check.C) {
 	origF := fNewBatchManager
 	fNewBatchManager = func(s *loaderImpl) *batchManager {
 		return &batchManager{
-			limit: 1024,
+			limit:          1024,
+			enableDispatch: true,
 			fExecDMLs: func(dmls []*DML) error {
 				executed = dmls
 				return nil
@@ -601,7 +605,8 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 	origF := fNewBatchManager
 	fNewBatchManager = func(s *loaderImpl) *batchManager {
 		return &batchManager{
-			limit: 1024,
+			limit:          1024,
+			enableDispatch: true,
 			fExecDMLs: func(dmls []*DML) error {
 				executed <- dmls
 				return nil

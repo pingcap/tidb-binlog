@@ -50,7 +50,8 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 	defer db.Close()
 
 	ld, err := sync.CreateLoader(db, scfg.To, scfg.WorkerCount, scfg.TxnBatch,
-		queryHistogramVec, scfg.StrSQLMode, scfg.DestDBType, nil /*loopbacksync.LoopBackSync*/)
+		queryHistogramVec, scfg.StrSQLMode, scfg.DestDBType, nil, /*loopbacksync.LoopBackSync*/
+		scfg.EnableDispatch(), scfg.EnableCausality())
 	if err != nil {
 		return errors.Annotate(err, "failed to create loader")
 	}

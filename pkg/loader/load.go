@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,7 +66,8 @@ var _ Loader = &loaderImpl{}
 type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
-	db *gosql.DB
+	db   *gosql.DB
+	opts options
 
 	tableInfos sync.Map
 
@@ -120,6 +122,8 @@ type options struct {
 	metrics          *MetricsGroup
 	saveAppliedTS    bool
 	syncMode         SyncMode
+	enableDispatch   bool
+	enableCausality  bool
 }
 
 var defaultLoaderOptions = options{
@@ -129,6 +133,8 @@ var defaultLoaderOptions = options{
 	metrics:          nil,
 	saveAppliedTS:    false,
 	syncMode:         SyncFullColumn,
+	enableDispatch:   true,
+	enableCausality:  true,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -138,6 +144,23 @@ type Option func(*options)
 func SyncModeOption(n SyncMode) Option {
 	return func(o *options) {
 		o.syncMode = n
+	}
+}
+
+// EnableDispatch set EnableDispatch or not.
+// default value is True, when it's disable,
+// loader will execute the txn one and one as input to it
+// and will not split the txn for concurrently write downstream db.
+func EnableDispatch(b bool) Option {
+	return func(o *options) {
+		o.enableDispatch = b
+	}
+}
+
+// EnableCausality set EnableCausality or not.
+func EnableCausality(b bool) Option {
+	return func(o *options) {
+		o.enableCausality = b
 	}
 }
 
@@ -184,11 +207,18 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		o(&opts)
 	}
 
+	log.Info("new loader", zap.String("opts", fmt.Sprintf("%+v", opts)))
+
+	if !opts.enableDispatch {
+		opts.workerCount = 1
+		opts.batchSize = math.MaxInt64
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// TODO just save opts in loaderImpl instead of copy every field.
 	s := &loaderImpl{
 		db:               db,
+		opts:             opts,
 		workerCount:      opts.workerCount,
 		batchSize:        opts.batchSize,
 		metrics:          opts.metrics,
@@ -196,7 +226,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		loopBackSyncInfo: opts.loopBackSyncInfo,
 		input:            make(chan *Txn),
 		successTxn:       make(chan *Txn),
-		merge:            true,
+		merge:            false,
 		saveAppliedTS:    opts.saveAppliedTS,
 
 		ctx:    ctx,
@@ -412,28 +442,32 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	for _, dml := range dmls {
 		keys := getKeys(dml)
 		log.Debug("get keys", zap.Reflect("dml", dml), zap.Strings("keys", keys))
-		conflict := causality.DetectConflict(keys)
-		if conflict {
-			log.Info("meet causality.DetectConflict exec now",
-				zap.String("table name", dml.TableName()),
-				zap.Strings("keys", keys))
-			if err := s.execByHash(executor, byHash); err != nil {
-				return errors.Trace(err)
+		key := keys[0]
+
+		if s.opts.enableCausality {
+			conflict := causality.DetectConflict(keys)
+			if conflict {
+				log.Info("meet causality.DetectConflict exec now",
+					zap.String("table name", dml.TableName()),
+					zap.Strings("keys", keys))
+				if err := s.execByHash(executor, byHash); err != nil {
+					return errors.Trace(err)
+				}
+
+				causality.Reset()
+				for i := 0; i < len(byHash); i++ {
+					byHash[i] = byHash[i][:0]
+				}
 			}
 
-			causality.Reset()
-			for i := 0; i < len(byHash); i++ {
-				byHash[i] = byHash[i][:0]
+			if err := causality.Add(keys); err != nil {
+				log.Error("Add keys to causality failed", zap.Error(err), zap.Strings("keys", keys))
 			}
+			key = causality.Get(key)
 		}
 
-		if err := causality.Add(keys); err != nil {
-			log.Error("Add keys to causality failed", zap.Error(err), zap.Strings("keys", keys))
-		}
-		key := causality.Get(keys[0])
 		idx := int(genHashKey(key)) % len(byHash)
 		byHash[idx] = append(byHash[idx], dml)
-
 	}
 
 	err := s.execByHash(executor, byHash)
@@ -578,7 +612,8 @@ func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, sing
 	batchByTbls = make(map[string][]*DML)
 	for _, dml := range dmls {
 		info := dml.info
-		if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+		// info.uniqueKeys include pk.
+		if info.primaryKey != nil && len(info.uniqueKeys) == 1 {
 			tblName := dml.TableName()
 			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
 		} else {
@@ -637,6 +672,7 @@ func (s *loaderImpl) getExecutor() *executor {
 func newBatchManager(s *loaderImpl) *batchManager {
 	return &batchManager{
 		limit:                s.batchSize * s.workerCount * execLimitMultiple,
+		enableDispatch:       s.opts.enableDispatch,
 		fExecDMLs:            s.execDMLs,
 		fDMLsSuccessCallback: s.markSuccess,
 		fExecDDL:             s.execDDL,
@@ -657,6 +693,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 type batchManager struct {
 	txns                 []*Txn
 	dmls                 []*DML
+	enableDispatch       bool
 	limit                int
 	fExecDMLs            func([]*DML) error
 	fDMLsSuccessCallback func(...*Txn)
@@ -713,8 +750,8 @@ func (b *batchManager) put(txn *Txn) error {
 	b.dmls = append(b.dmls, txn.DMLs...)
 	b.txns = append(b.txns, txn)
 
-	// reach a limit size to exec
-	if len(b.dmls) >= b.limit {
+	// reach a limit size to exec or disable dispatch.
+	if len(b.dmls) >= b.limit || !b.enableDispatch {
 		if err := b.execAccumulatedDMLs(); err != nil {
 			return errors.Trace(err)
 		}
