@@ -512,7 +512,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 }
 
 func (s *loaderImpl) initMarkTable() error {
-	if err := loopbacksync.CreateMarkTable(s.db); err != nil {
+	if err := loopbacksync.CreateMarkTable(s.db, s.loopBackSyncInfo.MarkDBName, s.loopBackSyncInfo.MarkTableName); err != nil {
 		return errors.Trace(err)
 	}
 	return loopbacksync.InitMarkTableData(s.db, s.workerCount, s.loopBackSyncInfo.ChannelID)
