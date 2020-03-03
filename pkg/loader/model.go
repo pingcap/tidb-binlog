@@ -170,10 +170,11 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
 
-	for name, arg := range dml.Values {
+	for _, name := range dml.columnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
+		arg := dml.Values[name]
 		fmt.Fprintf(builder, "%s = ?", quoteName(name))
 		args = append(args, arg)
 	}
