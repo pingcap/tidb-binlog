@@ -26,6 +26,16 @@ import (
 	"github.com/pingcap/log"
 )
 
+// https://pingcap.com/docs-cn/dev/reference/sql/attributes/auto-random/
+var caseAutoRandom = []string{
+	"create table t (a int primary key auto_random, b varchar(255))",
+	"insert into t(b) values('11')",
+}
+
+var caseAutoRandomClean = []string{
+	"drop table t",
+}
+
 // test different data type of mysql
 // mysql will change boolean to tinybit(1)
 var caseMultiDataType = []string{`
@@ -202,6 +212,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.run(caseUpdateWhileAddingCol)
 	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+
+	tr.execSQLs(caseAutoRandom)
+	tr.execSQLs(caseAutoRandomClean)
 
 	tr.execSQLs(caseMultiDataType)
 	tr.execSQLs(caseMultiDataTypeClean)

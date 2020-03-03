@@ -68,6 +68,9 @@ txn-total-size-limit = 104857599
 cluster-ssl-ca = "$OUT_DIR/cert/ca.pem"
 cluster-ssl-cert = "$OUT_DIR/cert/tidb.pem"
 cluster-ssl-key = "$OUT_DIR/cert/tidb.key"
+
+[experimental]
+allow-auto-random = true
 EOF
 
     port=${1-4000}
@@ -194,9 +197,16 @@ EOF
     start_upstream_tidb 4000
     start_upstream_tidb 4001
 
+
+    cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
+[experimental]
+allow-auto-random = true
+EOF
+
     echo "Starting Downstream TiDB..."
     tidb-server \
         -P 3306 \
+        -config "$OUT_DIR/down-tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2381 \
         --status=20080 \
