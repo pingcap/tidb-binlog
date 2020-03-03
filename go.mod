@@ -19,7 +19,7 @@ require (
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20191118050206-47672e7eabc0
 	github.com/pingcap/log v0.0.0-20190715063458-479153f07ebd
-	github.com/pingcap/parser v0.0.0-20191224043251-93f4d5ec2623
+	github.com/pingcap/parser v0.0.0-20200213042211-e357ed5f237b
 	github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0
 	github.com/pingcap/tidb v1.1.0-beta.0.20191120070053-5a7ecfeb94fd
 	github.com/pingcap/tidb-tools v3.0.6-0.20191125061035-b087739b71f1+incompatible
