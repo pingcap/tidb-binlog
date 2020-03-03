@@ -260,7 +260,7 @@ func testGenDeleteBinlog(c *check.C, t *model.TableInfo, r []types.Datum) []byte
 	for i, col := range t.Columns {
 		colIDs[i] = col.ID
 	}
-	data, err = tablecodec.EncodeRow(sc, r, colIDs, nil, nil)
+	data, err = tablecodec.EncodeOldRow(sc, r, colIDs, nil, nil)
 	c.Assert(err, check.IsNil)
 	return data
 }
@@ -293,7 +293,7 @@ func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, int
 		for i := 0; i < base; i++ {
 			val = fmt.Sprintf("%s%s", val, baseVal)
 		}
-		d.SetString(val)
+		d.SetString(val, "utf8mb4_bin")
 		e = []byte(val)
 	case mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
 		baseVal := "test"
@@ -356,7 +356,7 @@ func testGenInsertBinlog(c *check.C, t *model.TableInfo, r []types.Datum) []byte
 		row = append(row, r[idx])
 	}
 
-	value, err := tablecodec.EncodeRow(sc, row, colIDs, nil, nil)
+	value, err := tablecodec.EncodeOldRow(sc, row, colIDs, nil, nil)
 	c.Assert(err, check.IsNil)
 
 	handleVal, _ := codec.EncodeValue(sc, nil, types.NewIntDatum(recordID))
@@ -372,9 +372,9 @@ func testGenUpdateBinlog(c *check.C, t *model.TableInfo, oldData []types.Datum, 
 	}
 
 	var bin []byte
-	value, err := tablecodec.EncodeRow(sc, newData, colIDs, nil, nil)
+	value, err := tablecodec.EncodeOldRow(sc, newData, colIDs, nil, nil)
 	c.Assert(err, check.IsNil)
-	oldValue, err := tablecodec.EncodeRow(sc, oldData, colIDs, nil, nil)
+	oldValue, err := tablecodec.EncodeOldRow(sc, oldData, colIDs, nil, nil)
 	c.Assert(err, check.IsNil)
 	bin = append(oldValue, value...)
 	return bin
