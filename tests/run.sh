@@ -32,10 +32,16 @@ stop_services() {
 }
 
 start_upstream_tidb() {
+    cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+[experimental]
+allow-auto-random = true
+EOF
+
     port=${1-4000}
     echo "Starting TiDB at port: $port..."
     tidb-server \
         -P $port \
+        -config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2379 \
         --enable-binlog=true \
@@ -119,9 +125,16 @@ EOF
     start_upstream_tidb 4000
     start_upstream_tidb 4001
 
+
+    cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
+[experimental]
+allow-auto-random = true
+EOF
+
     echo "Starting Downstream TiDB..."
     tidb-server \
         -P 3306 \
+        -config "$OUT_DIR/down-tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2381 \
         --status=20080 \
