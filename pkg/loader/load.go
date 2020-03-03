@@ -212,6 +212,8 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	log.Info("new loader", zap.String("opts", fmt.Sprintf("%+v", opts)))
 
 	if !opts.enableDispatch {
+		// limit the worker count and set batch size for a unlimited
+		// value making the executor execute the input txn one by one and will not split the txn.
 		opts.workerCount = 1
 		opts.batchSize = math.MaxInt64
 	}

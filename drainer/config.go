@@ -77,16 +77,16 @@ type SyncerConfig struct {
 	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	// disable* is keep for backward compatibility.
 	// if both setted, the disable one take affect.
-	DisableDispatchFlag *bool `toml:"disable-dispatch-flag" json:"disable-dispatch-flag"`
-	EnableDispatchFlag  *bool `toml:"enable-dispatch-flag" json:"enable-dispatch-flag"`
+	DisableDispatchFlag *bool `toml:"-" json:"disable-dispatch-flag"`
+	EnableDispatchFlag  *bool `toml:"-" json:"enable-dispatch-flag"`
 	DisableDispatchFile *bool `toml:"disable-dispatch" json:"disable-dispatch"`
 	EnableDispatchFile  *bool `toml:"enable-dispatch" json:"enable-dispatch"`
 	SafeMode            bool  `toml:"safe-mode" json:"safe-mode"`
 	// for backward compatibility.
 	// disable* is keep for backward compatibility.
 	// if both setted, the disable one take affect.
-	DisableCausalityFlag *bool `toml:"disable-detect-flag" json:"disable-detect-flag"`
-	EnableCausalityFlag  *bool `toml:"enable-detect-flag" json:"enable-detect-flag"`
+	DisableCausalityFlag *bool `toml:"-" json:"disable-detect-flag"`
+	EnableCausalityFlag  *bool `toml:"-" json:"enable-detect-flag"`
 	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
 }
