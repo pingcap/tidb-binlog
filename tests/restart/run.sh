@@ -55,6 +55,6 @@ done
 echo "data is equal"
 
 # offline a pump
-binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id pump:8251
+binlogctl -pd-urls http://127.0.0.1:2379 -cmd offline-pump -node-id pump:8251
 sleep 1
 check_status pumps "pump:8251" offline
