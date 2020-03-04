@@ -55,9 +55,6 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 		"-config", "../cmd/drainer/drainer.toml",
 		"-addr", "192.168.15.10:8257",
 		"-advertise-addr", "192.168.15.10:8257",
-		"-plugin-path", "/opt/drainer/plugin",
-		"-plugin-names", "p1, p2",
-		"-support-plugin",
 	}
 
 	cfg := NewConfig()
@@ -71,9 +68,6 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	var strSQLMode *string
 	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, strSQLMode)
 	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
-	c.Assert(cfg.SyncerCfg.PluginPath, Equals, "/opt/drainer/plugin")
-	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 2)
-	c.Assert(cfg.SyncerCfg.SupportPlugin, Equals, true)
 }
 
 func (t *testDrainerSuite) TestValidateFilter(c *C) {
@@ -298,4 +292,60 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, `(192\.0\.2\.1:9092,192\.0\.2\.2:9092|192\.0\.2\.2:9092,192\.0\.2\.1:9092)`)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
+}
+
+func (t *testKafkaSuite) TestConfigPlugin(c *C) {
+	args := []string{}
+
+	cfg := NewConfig()
+	err := cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	c.Assert(len(cfg.SyncerCfg.PluginPath), Equals, 0)
+	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 0)
+	c.Assert(cfg.SyncerCfg.SupportPlugin, Equals, false)
+	c.Assert(cfg.SyncerCfg.MarkDBName, Equals, "rel")
+	c.Assert(cfg.SyncerCfg.MarkTableName, Equals, "_drainer_repl_mark")
+
+	args = []string{
+		"-plugin-path", "/tmp/drainer/plugin",
+		"-plugin-names", "demo1",
+		"-support-plugin",
+		"-mark-db-name", "db1",
+		"-mark-table-name", "tb1",
+	}
+
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	c.Assert(cfg.SyncerCfg.PluginPath, Equals, "/tmp/drainer/plugin")
+	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 1)
+	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "demo1")
+	c.Assert(cfg.SyncerCfg.SupportPlugin, Equals, true)
+	c.Assert(cfg.SyncerCfg.MarkDBName, Equals, "db1")
+	c.Assert(cfg.SyncerCfg.MarkTableName, Equals, "tb1")
+
+	args = []string{
+		"-plugin-names", "demo1,demo2",
+	}
+
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 2)
+	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "demo1")
+	c.Assert(cfg.SyncerCfg.PluginNames[1], Equals, "demo2")
+
+	args = []string{
+		"-plugin-names", "",
+	}
+
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 1)
+	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "")
 }
