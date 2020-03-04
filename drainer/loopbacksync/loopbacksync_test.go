@@ -40,6 +40,11 @@ func (s *loopbackSuite) TestNewLoopBackSyncInfo(c *check.C) {
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,
 		SyncDDL:         SyncDDL,
+		PluginPath:      "",
+		PluginNames:     nil,
+		SupportPlugin:   false,
+		MarkDBName:      "rel",
+		MarkTableName:   "_drainer_repl_mark",
 	})
 }
 
@@ -48,7 +53,7 @@ func (s *loopbackSuite) TestCreateMarkTable(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	CreateMarkDBDDL := "create database IF NOT EXISTS rel;"
-	CreateMarkTableDDL := fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", "_drainer_repl_mark", ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
+	CreateMarkTableDDL := fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", "rel", "_drainer_repl_mark", ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
 
 	mk.ExpectExec(regexp.QuoteMeta(CreateMarkDBDDL)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
