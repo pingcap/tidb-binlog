@@ -217,12 +217,12 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 			}
 			newPlugin, ok := sym.(func() LoopBack)
 			if !ok {
-				log.Info("Load plugin error: type is not match.", zap.String("plugin name", name))
+				log.Info("Load plugin error: type is not match.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
 				continue
 			}
 			plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
 				name, newPlugin())
-			log.Info("Load plugin success.", zap.String("plugin name", name))
+			log.Info("Load plugin success.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
 		}
 	}
 
