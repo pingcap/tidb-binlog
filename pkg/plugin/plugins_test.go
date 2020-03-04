@@ -27,7 +27,7 @@ type STest1 struct {
 	a int
 }
 
-func (s *STest1) Do() int {
+func (s STest1) Do() int {
 	return s.a
 }
 
@@ -55,13 +55,13 @@ func (ps *PluginSuite) TestTraversePlugin(c *check.C) {
 	hook := &EventHooks{}
 
 	s1 := STest1{32}
-	RegisterPlugin(hook, "test1", &s1)
+	RegisterPlugin(hook, "test1", s1)
 
 	s2 := STest1{64}
-	RegisterPlugin(hook, "test2", &s2)
+	RegisterPlugin(hook, "test2", s2)
 
 	s3 := STest1{128}
-	RegisterPlugin(hook, "test3", &s3)
+	RegisterPlugin(hook, "test3", s3)
 
 	p := hook.GetAllPluginsName()
 	c.Assert(len(p), check.Equals, 3)
