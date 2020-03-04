@@ -328,6 +328,8 @@ func (t *testKafkaSuite) TestConfigPlugin(c *C) {
 
 	args = []string{
 		"-plugin-names", "demo1,demo2",
+		"-mark-db-name", "",
+		"-mark-table-name", "",
 	}
 
 	cfg = NewConfig()
@@ -337,6 +339,8 @@ func (t *testKafkaSuite) TestConfigPlugin(c *C) {
 	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 2)
 	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "demo1")
 	c.Assert(cfg.SyncerCfg.PluginNames[1], Equals, "demo2")
+	c.Assert(cfg.SyncerCfg.MarkDBName, Equals, "")
+	c.Assert(cfg.SyncerCfg.MarkTableName, Equals, "")
 
 	args = []string{
 		"-plugin-names", "",
