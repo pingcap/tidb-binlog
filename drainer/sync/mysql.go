@@ -51,6 +51,8 @@ func CreateLoader(
 	sqlMode *string,
 	destDBType string,
 	info *loopbacksync.LoopBackSync,
+	enableDispatch bool,
+	enableCausility bool,
 ) (ld loader.Loader, err error) {
 
 	var opts []loader.Option
@@ -61,6 +63,9 @@ func CreateLoader(
 			EventCounterVec:   nil,
 		}))
 	}
+
+	opts = append(opts, loader.EnableDispatch(enableDispatch))
+	opts = append(opts, loader.EnableCausality(enableCausility))
 
 	if cfg.SyncMode != 0 {
 		mode := loader.SyncMode(cfg.SyncMode)
@@ -86,6 +91,8 @@ func NewMysqlSyncer(
 	destDBType string,
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
+	enableDispatch bool,
+	enableCausility bool,
 ) (*MysqlSyncer, error) {
 	if cfg.TLS != nil {
 		log.Info("enable TLS to connect downstream MySQL/TiDB")
@@ -114,7 +121,7 @@ func NewMysqlSyncer(
 		}
 	}
 
-	loader, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
+	loader, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info, enableDispatch, enableCausility)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
