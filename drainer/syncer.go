@@ -88,10 +88,12 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 			}
 			newPlugin, ok := sym.(func() LoopBack)
 			if !ok {
+				log.Info("Load plugin error: type is not match.", zap.String("plugin name", name))
 				continue
 			}
 			plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
 				name, newPlugin())
+			log.Info("Load plugin success.", zap.String("plugin name", name))
 		}
 	}
 
