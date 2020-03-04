@@ -348,4 +348,16 @@ func (t *testKafkaSuite) TestConfigPlugin(c *C) {
 
 	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 1)
 	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "")
+
+	args = []string{
+		"-plugin-names", ",",
+	}
+
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+
+	c.Assert(len(cfg.SyncerCfg.PluginNames), Equals, 2)
+	c.Assert(cfg.SyncerCfg.PluginNames[0], Equals, "")
+	c.Assert(cfg.SyncerCfg.PluginNames[1], Equals, "")
 }
