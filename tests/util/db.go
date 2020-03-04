@@ -113,7 +113,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 
 		if err != nil {
 			log.Print(errors.Trace(err))
-			log.Error(errors.ErrorStack(err))
+			log.Print(errors.ErrorStack(err))
 			return false
 		}
 		if !structEqual || !dataEqual {
