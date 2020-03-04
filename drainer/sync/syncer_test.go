@@ -67,7 +67,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 		createDB = oldCreateDB
 	}()
 
-	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil)
+	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil, true, true)
 	c.Assert(err, check.IsNil)
 	s.syncers = append(s.syncers, mysql)
 
