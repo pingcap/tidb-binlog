@@ -408,7 +408,7 @@ ForLoop:
 				}
 			}
 
-			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && !s.loopbackSync.SupportPlugin {
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")
@@ -500,7 +500,7 @@ ForLoop:
 
 			shouldSkip := false
 
-			if !s.cfg.SyncDDL && !s.loopbackSync.SupportPlugin {
+			if !s.cfg.SyncDDL {
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.

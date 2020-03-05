@@ -139,7 +139,7 @@ func (e *executor) begin() (*Tx, error) {
 		queryHistogramVec: e.queryHistogramVec,
 	}
 
-	if e.info != nil && e.info.LoopbackControl && !e.info.SupportPlugin {
+	if e.info != nil && e.info.LoopbackControl {
 		start := time.Now()
 
 		err = loopbacksync.UpdateMark(tx.Tx, atomic.AddInt64(&e.info.Index, 1)%((int64)(e.workerCount)), e.info.ChannelID)
