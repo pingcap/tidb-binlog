@@ -49,7 +49,7 @@ type LoopBackSync struct {
 	PluginNames     []string
 	Hooks           []*plugin.EventHooks
 	SupportPlugin   bool
-	RecordId        int
+	RecordID        int
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
