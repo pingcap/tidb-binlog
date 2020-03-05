@@ -169,10 +169,7 @@ func (e *executor) externPoint(t *Tx, dmls []*DML) (*Tx, []*DML) {
 			return true
 		}
 		t, dmls = c.ExtendTxn(t, dmls, e.info)
-		if dmls == nil {
-			return false
-		}
-		return true
+		return dmls != nil
 	})
 	return t, dmls
 }
