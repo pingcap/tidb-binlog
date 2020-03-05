@@ -77,7 +77,7 @@ func (s *metaSuite) TestGenerateMetaInfo(c *C) {
 	dir := c.MkDir()
 	cfg := &Config{
 		DataDir:  dir,
-		EtcdURLs: "127.0.0.1:2379",
+		EtcdURLs: "http://127.0.0.1:2379",
 	}
 
 	err := GenerateMetaInfo(cfg)

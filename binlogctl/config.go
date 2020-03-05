@@ -138,10 +138,11 @@ func (cfg *Config) Parse(args []string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check EtcdEndpoints
-	_, err := flags.ParseHostPortAddr(cfg.EtcdURLs)
+	_, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return errors.Errorf("parse EtcdURLs error: %s, %v", cfg.EtcdURLs, err)
 	}
+
 	return nil
 }
 

@@ -28,13 +28,14 @@ drainerNodeID=`cat $STATUS_LOG | sed 's/.*NodeID: \(.*:[0-9]*\), Addr:.*/\1/g'`
 echo "get drainer node id: $drainerNodeID"
 
 pumpNodeID="pump:8250"
+ctlcmd="binlogctl -pd-urls http://127.0.0.1:2379"
 
 # pump's state should be online
 echo "check pump's status, should be online"
 check_status pumps $pumpNodeID online
 
 # stop pump, and pump's state should be paused
-binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-pump -node-id $pumpNodeID
+$ctlcmd -cmd pause-pump -node-id $pumpNodeID
 
 echo "check pump's status, should be paused"
 check_status pumps $pumpNodeID paused
@@ -42,13 +43,13 @@ check_status pumps $pumpNodeID paused
 # offline pump, and pump's status should be offline
 run_pump &
 sleep 3
-binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-pump -node-id $pumpNodeID
+$ctlcmd -cmd offline-pump -node-id $pumpNodeID
 
 echo "check pump's status, should be offline"
 check_status pumps $pumpNodeID offline
 
 # stop drainer, and drainer's state should be paused
-binlogctl -pd-urls 127.0.0.1:2379 -cmd pause-drainer -node-id $drainerNodeID
+$ctlcmd -cmd pause-drainer -node-id $drainerNodeID
 
 echo "check drainer's status, should be paused"
 check_status drainers paused
@@ -56,19 +57,19 @@ check_status drainers paused
 # offline drainer, and drainer's state should be offline
 run_drainer &
 sleep 3
-binlogctl -pd-urls 127.0.0.1:2379 -cmd offline-drainer -node-id $drainerNodeID
+$ctlcmd -cmd offline-drainer -node-id $drainerNodeID
 
 echo "check drainer's status, should be offline"
 check_status drainers offline
 
 # update drainer's state to online, and then run pump, pump will notify drainer failed, pump's status will be paused
-binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state online
+$ctlcmd -cmd update-drainer -node-id $drainerNodeID -state online
 run_pump &
 
 echo "check pump's status, should be paused"
 check_status pumps $pumpNodeID paused
 
 # clean up
-binlogctl -pd-urls 127.0.0.1:2379 -cmd update-drainer -node-id $drainerNodeID -state paused
+$ctlcmd -cmd update-drainer -node-id $drainerNodeID -state paused
 run_pump &
 rm $STATUS_LOG || true

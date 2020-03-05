@@ -81,11 +81,12 @@ func UpdateNodeState(urls, kind, nodeID, state string) error {
 
 // createRegistry returns an ectd registry
 func createRegistry(urls string) (*node.EtcdRegistry, error) {
-	ectdEndpoints, err := flags.ParseHostPortAddr(urls)
+	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cli, err := newEtcdClientFromCfgFunc(ectdEndpoints, etcdDialTimeout, node.DefaultRootPath, nil)
+
+	cli, err := newEtcdClientFromCfgFunc(urlv.StringSlice(), etcdDialTimeout, node.DefaultRootPath, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

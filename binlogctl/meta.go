@@ -52,12 +52,12 @@ func GenerateMetaInfo(cfg *Config) error {
 
 // GetTSO gets ts from pd
 func GetTSO(cfg *Config) (int64, error) {
-	ectdEndpoints, err := flags.ParseHostPortAddr(cfg.EtcdURLs)
+	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	pdCli, err := newPDClientFunc(ectdEndpoints, pd.SecurityOption{
+	pdCli, err := newPDClientFunc(urlv.StringSlice(), pd.SecurityOption{
 		CAPath:   cfg.SSLCA,
 		CertPath: cfg.SSLCert,
 		KeyPath:  cfg.SSLKey,

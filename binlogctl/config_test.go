@@ -23,14 +23,14 @@ var _ = Suite(&configSuite{})
 
 func (s *configSuite) TestConfig(c *C) {
 	config := NewConfig()
-	args := []string{"-pd-urls=127.0.0.1"}
+	args := []string{"-pd-urls=http://127.0.0.1"}
 	err := config.Parse(args)
 	c.Assert(err, ErrorMatches, ".*parse EtcdURLs error.*")
 
-	args = []string{"-cmd=pumps", "-node-id=nodeID", "-pd-urls=127.0.0.1:2379"}
+	args = []string{"-cmd=pumps", "-node-id=nodeID", "-pd-urls=http://127.0.0.1:2379"}
 	err = config.Parse(args)
 	c.Assert(err, IsNil)
 	c.Assert(config.Command, Equals, QueryPumps)
 	c.Assert(config.NodeID, Equals, "nodeID")
-	c.Assert(config.EtcdURLs, Equals, "127.0.0.1:2379")
+	c.Assert(config.EtcdURLs, Equals, "http://127.0.0.1:2379")
 }

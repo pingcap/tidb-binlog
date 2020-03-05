@@ -48,7 +48,7 @@ type testNodesSuite struct{}
 func (s *testNodesSuite) SetUpTest(c *C) {
 	newEtcdClientFromCfgFunc = newFakeEtcdClientFromCfg
 	createRegistryFuc = createMockRegistry
-	_, err := createMockRegistry("127.0.0.1:2379")
+	_, err := createMockRegistry("http://127.0.0.1:2379")
 	c.Assert(err, IsNil)
 }
 
@@ -103,7 +103,7 @@ func (s *testNodesSuite) TestUpdateNodeState(c *C) {
 }
 
 func (s *testNodesSuite) TestCreateRegistry(c *C) {
-	urls := "127.0.0.1:2379"
+	urls := "http://127.0.0.1:2379"
 	registry, err := createRegistry(urls)
 	c.Assert(err, IsNil)
 	c.Assert(registry, NotNil)
