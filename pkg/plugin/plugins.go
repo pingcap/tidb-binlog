@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"errors"
 	"fmt"
 	"plugin"
 	"sync"
@@ -51,7 +50,7 @@ func LoadPlugin(eh *EventHooks, path, name string) (plugin.Symbol, error) {
 	fp := path + "/" + name
 	p, err := plugin.Open(fp)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Open %s failed. err: %s", fp, err.Error()))
+		return nil, fmt.Errorf("Open %s failed. err: %s", fp, err.Error())
 	}
 
 	return p.Lookup(FactorFunc)
