@@ -46,7 +46,7 @@ func (ehs *EventHooks) GetAllPluginsName() []string {
 	return ns
 }
 
-//LoadPlugin() can load plugin by plugin's name
+//LoadPlugin can load plugin by plugin's name
 func LoadPlugin(eh *EventHooks, path, name string) (plugin.Symbol, error) {
 	fp := path + "/" + name
 	p, err := plugin.Open(fp)
@@ -57,7 +57,7 @@ func LoadPlugin(eh *EventHooks, path, name string) (plugin.Symbol, error) {
 	return p.Lookup(FactorFunc)
 }
 
-//RegisterPlugin() register plugin to EventHooks
+//RegisterPlugin register plugin to EventHooks
 func RegisterPlugin(ehs *EventHooks, name string, plg interface{}) {
 	ehs.SetPlugin(name, plg)
 }
