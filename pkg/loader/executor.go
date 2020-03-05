@@ -87,7 +87,7 @@ func (e *executor) execTableBatchRetry(ctx context.Context, dmls []*DML, retryNu
 	return errors.Trace(err)
 }
 
-// a wrap of *sql.Tx with metrics
+// Tx is a wrap of *sql.Tx with metrics
 type Tx struct {
 	*gosql.Tx
 	queryHistogramVec *prometheus.HistogramVec
