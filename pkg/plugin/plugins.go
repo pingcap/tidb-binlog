@@ -10,7 +10,9 @@ import (
 type Kind uint8
 
 const (
+	//SyncerPlugin is one kind of Plugin for syncer
 	SyncerPlugin Kind = iota
+	//LoaderPlugin is one kind of Plugin for loader
 	LoaderPlugin
 
 	FactorFunc = "NewPlugin"
