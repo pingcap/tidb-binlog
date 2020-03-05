@@ -80,23 +80,31 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL, cfg.PluginPath,
 		cfg.PluginNames, cfg.SupportPlugin, cfg.MarkDBName, cfg.MarkTableName)
 	if syncer.loopbackSync.SupportPlugin {
+		log.Info("Begin to Load syncer-plugins.")
 		for _, name := range syncer.loopbackSync.PluginNames {
 			sym, err := plugin.LoadPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
 				syncer.loopbackSync.PluginPath, name)
 			if err != nil {
-				return nil, err
-			}
-			newPlugin, ok := sym.(func() LoopBack)
-			if !ok {
-				log.Info("Load plugin error: type is not match.", zap.String("plugin name", name), zap.String("type", "syncer plugin"))
+				log.Error("Load plugin failed.", zap.String("plugin name", name),
+					zap.String("error", err.Error()))
 				continue
+			}
+
+			newPlugin, ok := sym.(func() interface{})
+			if !ok {
+				log.Error("The correct new-function is not provided.", zap.String("plugin name", name), zap.String("type", "syncer plugin"))
+				continue
+			}
+			plg := newPlugin()
+			_, ok = plg.(LoopBack)
+			if !ok {
+				log.Info("syncer plugin's interface is not implemented.", zap.String("plugin name", name), zap.String("type", "syncer plugin"))
 			}
 			plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
 				name, newPlugin())
 			log.Info("Load plugin success.", zap.String("plugin name", name), zap.String("type", "syncer plugin"))
 		}
 	}
-
 	var err error
 	// create schema
 	syncer.schema, err = NewSchema(jobs, false)

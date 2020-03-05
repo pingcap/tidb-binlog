@@ -209,15 +209,18 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	db.SetMaxIdleConns(opts.workerCount)
 
 	if s.loopBackSyncInfo.SupportPlugin {
+		log.Info("Begin to Load loader-plugins.")
 		for _, name := range s.loopBackSyncInfo.PluginNames {
 			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
 				s.loopBackSyncInfo.PluginPath, name)
 			if err != nil {
-				return nil, err
+				log.Error("Load plugin failed.", zap.String("plugin name", name),
+					zap.String("error", err.Error()))
+				continue
 			}
-			newPlugin, ok := sym.(func() LoopBack)
+			newPlugin, ok := sym.(func() interface{})
 			if !ok {
-				log.Info("Load plugin error: type is not match.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
+				log.Error("The correct new-function is not provided.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
 				continue
 			}
 			plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],

@@ -17,6 +17,6 @@ func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync)
 	return true, nil
 }
 
-func NewPlugin() loader.LoopBack {
+func NewPlugin() interface{} {
 	return PluginDemo{}
 }

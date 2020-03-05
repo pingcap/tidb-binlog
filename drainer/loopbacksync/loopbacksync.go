@@ -65,6 +65,11 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 		MarkDBName:      mdbname,
 		MarkTableName:   mtablename,
 	}
+	if l.SupportPlugin {
+		l.Hooks = make([]*plugin.EventHooks, 2)
+		l.Hooks[plugin.SyncerPlugin] = &plugin.EventHooks{}
+		l.Hooks[plugin.LoaderPlugin] = &plugin.EventHooks{}
+	}
 	return l
 }
 
