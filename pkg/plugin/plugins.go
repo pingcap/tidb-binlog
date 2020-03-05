@@ -29,6 +29,7 @@ func (ehs *EventHooks) SetPlugin(name string, plg interface{}) *EventHooks {
 	return ehs
 }
 
+//GetAllPluginsName is get all names of plugin
 func (ehs *EventHooks) GetAllPluginsName() []string {
 	if ehs == nil {
 		return nil
