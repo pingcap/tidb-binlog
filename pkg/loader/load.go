@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -211,21 +212,22 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	if s.loopBackSyncInfo.SupportPlugin {
 		log.Info("Begin to Load loader-plugins.")
 		for _, name := range s.loopBackSyncInfo.PluginNames {
+			n := strings.TrimSpace(name)
 			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
-				s.loopBackSyncInfo.PluginPath, name)
+				s.loopBackSyncInfo.PluginPath, n)
 			if err != nil {
-				log.Error("Load plugin failed.", zap.String("plugin name", name),
+				log.Error("Load plugin failed.", zap.String("plugin name", n),
 					zap.String("error", err.Error()))
 				continue
 			}
 			newPlugin, ok := sym.(func() interface{})
 			if !ok {
-				log.Error("The correct new-function is not provided.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
+				log.Error("The correct new-function is not provided.", zap.String("plugin name", n), zap.String("type", "loader plugin"))
 				continue
 			}
 			plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderPlugin],
-				name, newPlugin())
-			log.Info("Load plugin success.", zap.String("plugin name", name), zap.String("type", "loader plugin"))
+				n, newPlugin())
+			log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "loader plugin"))
 		}
 	}
 

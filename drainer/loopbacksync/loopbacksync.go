@@ -62,8 +62,8 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 		PluginPath:      path,
 		PluginNames:     names,
 		SupportPlugin:   SupportPlug,
-		MarkDBName:      mdbname,
-		MarkTableName:   mtablename,
+		MarkDBName:      strings.TrimSpace(mdbname),
+		MarkTableName:   strings.TrimSpace(mtablename),
 	}
 	if l.SupportPlugin {
 		l.Hooks = make([]*plugin.EventHooks, 2)
