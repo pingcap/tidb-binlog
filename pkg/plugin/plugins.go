@@ -21,7 +21,7 @@ type EventHooks struct {
 	sync.Map
 }
 
-func (ehs *EventHooks) SetPlugin(name string, plg interface{}) *EventHooks {
+func (ehs *EventHooks) setPlugin(name string, plg interface{}) *EventHooks {
 	if len(name) == 0 || ehs == nil {
 		return ehs
 	}
@@ -59,5 +59,5 @@ func LoadPlugin(eh *EventHooks, path, name string) (plugin.Symbol, error) {
 
 //RegisterPlugin register plugin to EventHooks
 func RegisterPlugin(ehs *EventHooks, name string, plg interface{}) {
-	ehs.SetPlugin(name, plg)
+	ehs.setPlugin(name, plg)
 }
