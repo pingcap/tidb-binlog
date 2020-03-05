@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-//Plugin type we supported currently
+//Kind is the plugin's type thant we supported currently
 type Kind uint8
 
 const (
@@ -14,7 +14,7 @@ const (
 	SyncerPlugin Kind = iota
 	//LoaderPlugin is one kind of Plugin for loader
 	LoaderPlugin
-
+	//FactorFunc is the factory of all plugins
 	FactorFunc = "NewPlugin"
 )
 
