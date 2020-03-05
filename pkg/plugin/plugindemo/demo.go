@@ -27,3 +27,6 @@ func (pd PluginDemo) FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync)
 func NewPlugin() interface{} {
 	return PluginDemo{}
 }
+
+var _ PluginDemo
+var _ = NewPlugin()
