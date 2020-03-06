@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"bytes"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
@@ -260,9 +262,25 @@ func (c *Collector) reportErr(ctx context.Context, err error) {
 	}
 }
 
+// ref https://github.com/pingcap/tidb/pull/14954
+// TiDB will write a fake ddl binlog like: select setval(`seq`.`sequence_name`, 1000)
+// when the value of sequence is changed for replicate the value of the sequence.
+// we CAN NOT query the job from the tikv according the job id.
+// just skip this kind of binlog now.
+func skipQueryJob(binlog *binlog.Binlog) bool {
+	q := binlog.GetDdlQuery()
+	return bytes.HasPrefix(q, []byte("select setval"))
+}
+
 func (c *Collector) syncBinlog(item *binlogItem) error {
 	binlog := item.binlog
+	// DO NOT replicate the value of sequence now.
+	if skipQueryJob(binlog) {
+		return nil
+	}
+
 	if binlog.DdlJobId > 0 {
+		log.Info("start query job", zap.Int64("id", binlog.DdlJobId), zap.Stringer("binlog", binlog))
 		msgPrefix := fmt.Sprintf("get ddl job by id %d error", binlog.DdlJobId)
 		var job *model.Job
 		for {
