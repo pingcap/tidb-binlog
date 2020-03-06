@@ -16,7 +16,6 @@ package security_test
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/tls"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
@@ -116,18 +115,19 @@ func (s *testSecuritySuite) TestToTLSConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(config, NotNil)
 	c.Assert(config.RootCAs.Subjects(), HasLen, 1)
-	for i := 0; i < 2; i++ {
-		var cert *tls.Certificate
-		if i == 0 {
-			cert, err = config.GetCertificate(nil)
-		} else {
-			cert, err = config.GetClientCertificate(nil)
-		}
-		c.Assert(err, IsNil)
-		sslKey, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
-		c.Assert(ok, IsTrue)
-		c.Assert(sslKey.Curve, Equals, elliptic.P224())
-	}
+
+	cert, err := config.GetCertificate(nil)
+	c.Assert(err, IsNil)
+	sslKey, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
+	c.Assert(ok, IsTrue)
+	c.Assert(sslKey.Curve, Equals, elliptic.P224())
+
+	cert, err = config.GetClientCertificate(nil)
+	c.Assert(err, IsNil)
+	sslKey, ok = cert.PrivateKey.(*ecdsa.PrivateKey)
+	c.Assert(ok, IsTrue)
+	c.Assert(sslKey.Curve, Equals, elliptic.P224())
+
 }
 
 func (s *testSecuritySuite) TestEmptyTLSConfig(c *C) {
