@@ -97,14 +97,14 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 				continue
 			}
 			plg := newPlugin()
-			_, ok = plg.(LoopBack)
+			_, ok = plg.(SyncerFilter)
 			if !ok {
-				log.Info("LoopBack interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+				log.Info("SyncerFilter interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
 			} else {
 				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
 					n, newPlugin())
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
-					zap.String("interface", "LoopBack"))
+					zap.String("interface", "SyncerFilter"))
 			}
 
 			_, ok = plg.(SyncerInit)
@@ -424,7 +424,7 @@ ForLoop:
 				var txn *loader.Txn
 				txn, err1 = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite, false)
 				hook.Range(func(k, val interface{}) bool {
-					c, ok := val.(LoopBack)
+					c, ok := val.(SyncerFilter)
 					if !ok {
 						return true
 					}
@@ -505,7 +505,7 @@ ForLoop:
 				}
 				hook := s.loopbackSync.Hooks[plugin.SyncerFilter]
 				hook.Range(func(k, val interface{}) bool {
-					c, ok := val.(LoopBack)
+					c, ok := val.(SyncerFilter)
 					if !ok {
 						return true
 					}
