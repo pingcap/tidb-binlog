@@ -13,3 +13,8 @@ type ExecutorExtend interface {
 type LoaderInit interface {
 	LoaderInit(s *loaderImpl) error
 }
+
+// LoaderInit is the interface that for syncer-plugin
+type LoaderDestroy interface {
+	LoaderDestroy(s *loaderImpl) error
+}

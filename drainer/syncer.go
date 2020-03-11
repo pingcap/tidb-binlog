@@ -105,15 +105,6 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 					n, plg)
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "SyncerFilter"))
 			}
-
-			_, ok = plg.(SyncerInit)
-			if !ok {
-				log.Info("SyncerInit interface is not implemented.", zap.String("plugin name", n))
-			} else {
-				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerInit],
-					n, plg)
-				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "SyncerInit"))
-			}
 		}
 	}
 	var err error
@@ -166,26 +157,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 
 // Start starts to sync.
 func (s *Syncer) Start() error {
-	var err error
-	if s.loopbackSync.SupportPlugin {
-		hook := s.loopbackSync.Hooks[plugin.SyncerInit]
-		hook.Range(func(k, val interface{}) bool {
-			c, ok := val.(SyncerInit)
-			if !ok {
-				return true
-			}
-			err = c.SyncerInit(s)
-			if err != nil {
-				return false
-			}
-			return true
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-
-	err = s.run()
+	err := s.run()
 
 	return errors.Trace(err)
 }

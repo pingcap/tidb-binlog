@@ -244,6 +244,15 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 					n, plg)
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderInit"))
 			}
+
+			_, ok = plg.(LoaderDestroy)
+			if !ok {
+				log.Info("LoaderDestroy interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderDestroy"))
+			}
 		}
 	}
 
@@ -550,7 +559,7 @@ func (s *loaderImpl) Run() error {
 
 	var err error
 	if s.loopBackSyncInfo.SupportPlugin {
-		hook := s.loopBackSyncInfo.Hooks[plugin.SyncerInit]
+		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderInit]
 		hook.Range(func(k, val interface{}) bool {
 			c, ok := val.(LoaderInit)
 			if !ok {
@@ -625,6 +634,25 @@ func (s *loaderImpl) Run() error {
 			}
 		}
 	}
+
+	if s.loopBackSyncInfo.SupportPlugin {
+		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy]
+		hook.Range(func(k, val interface{}) bool {
+			c, ok := val.(LoaderDestroy)
+			if !ok {
+				return true
+			}
+			err = c.LoaderDestroy(s)
+			if err != nil {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
 // groupDMLs group DMLs by table in batchByTbls and

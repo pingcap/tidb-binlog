@@ -12,12 +12,12 @@ type Kind uint8
 const (
 	//SyncerFilter is one kind of Plugin for syncer
 	SyncerFilter Kind = iota
-	//SyncerInit is one kind of Plugin for syncer
-	SyncerInit
 	//ExecutorExtend is one kind of Plugin for loader
 	ExecutorExtend
 	//LoaderInit is one kind of Plugin for loader
 	LoaderInit
+	//LoaderDestroy is one kind of Plugin for loader
+	LoaderDestroy
 	//FactorFunc is the factory of all plugins
 	FactorFunc = "NewPlugin"
 )

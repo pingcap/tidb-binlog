@@ -66,10 +66,13 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 		MarkTableName:   strings.TrimSpace(mtablename),
 	}
 	if l.SupportPlugin {
-		l.Hooks = make([]*plugin.EventHooks, 2)
+		l.Hooks = make([]*plugin.EventHooks, 4)
 		l.Hooks[plugin.SyncerFilter] = &plugin.EventHooks{}
+
 		l.Hooks[plugin.ExecutorExtend] = &plugin.EventHooks{}
-		l.Hooks[plugin.SyncerInit] = &plugin.EventHooks{}
+		l.Hooks[plugin.LoaderInit] = &plugin.EventHooks{}
+		l.Hooks[plugin.LoaderDestroy] = &plugin.EventHooks{}
+
 	}
 	return l
 }
@@ -78,26 +81,17 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 func CreateMarkTable(db *sql.DB, mdbname, mtablename string) error {
 	// CreateMarkDBDDL is DDL to create the database of mark table.
 	var err error
-	if len(mdbname) == 0 {
-		// CreateMarkTableDDL is the DDL to create the mark table.
-		var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
-		_, err = db.Exec(CreateMarkTableDDL)
-		if err != nil {
-			return errors.Annotate(err, "failed to create mark table")
-		}
-	} else {
-		var CreateMarkDBDDL = fmt.Sprintf("create database IF NOT EXISTS %s;", mdbname)
-		_, err = db.Exec(CreateMarkDBDDL)
-		if err != nil {
-			return errors.Annotate(err, "failed to create mark db")
-		}
+	var CreateMarkDBDDL = fmt.Sprintf("create database IF NOT EXISTS %s;", mdbname)
+	_, err = db.Exec(CreateMarkDBDDL)
+	if err != nil {
+		return errors.Annotate(err, "failed to create mark db")
+	}
 
-		// CreateMarkTableDDL is the DDL to create the mark table.
-		var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mdbname, mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
-		_, err = db.Exec(CreateMarkTableDDL)
-		if err != nil {
-			return errors.Annotate(err, "failed to create mark table")
-		}
+	// CreateMarkTableDDL is the DDL to create the mark table.
+	var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mdbname, mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
+	_, err = db.Exec(CreateMarkTableDDL)
+	if err != nil {
+		return errors.Annotate(err, "failed to create mark table")
 	}
 
 	return nil
