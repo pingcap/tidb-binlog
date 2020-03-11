@@ -10,6 +10,7 @@ type SyncerFilter interface {
 	FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) (bool, error)
 }
 
+// SyncerInit is the interface that for syncer-plugin
 type SyncerInit interface {
 	SyncerInit(s *Syncer) error
 }
