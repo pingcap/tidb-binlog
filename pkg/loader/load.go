@@ -236,7 +236,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "ExecutorExtend"))
 			}
 
-			_, ok = plg.(LoaderInit)
+			_, ok = plg.(Init)
 			if !ok {
 				log.Info("LoaderInit interface is not implemented.", zap.String("plugin name", n))
 			} else {
@@ -245,7 +245,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderInit"))
 			}
 
-			_, ok = plg.(LoaderDestroy)
+			_, ok = plg.(Destroy)
 			if !ok {
 				log.Info("LoaderDestroy interface is not implemented.", zap.String("plugin name", n))
 			} else {
@@ -561,7 +561,7 @@ func (s *loaderImpl) Run() error {
 	if s.loopBackSyncInfo.SupportPlugin {
 		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderInit]
 		hook.Range(func(k, val interface{}) bool {
-			c, ok := val.(LoaderInit)
+			c, ok := val.(Init)
 			if !ok {
 				return true
 			}
@@ -638,7 +638,7 @@ func (s *loaderImpl) Run() error {
 	if s.loopBackSyncInfo.SupportPlugin {
 		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy]
 		hook.Range(func(k, val interface{}) bool {
-			c, ok := val.(LoaderDestroy)
+			c, ok := val.(Destroy)
 			if !ok {
 				return true
 			}

@@ -4,17 +4,17 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 )
 
-// ExecutorExtend is the interface that for loader-plugin
+// ExecutorExtend is the interface for loader plugin
 type ExecutorExtend interface {
 	ExtendTxn(tx *Tx, dmls []*DML, info *loopbacksync.LoopBackSync) (*Tx, []*DML)
 }
 
-// LoaderInit is the interface that for syncer-plugin
-type LoaderInit interface {
+// Init is the interface for loader plugin
+type Init interface {
 	LoaderInit(s *loaderImpl) error
 }
 
-// LoaderDestroy is the interface that for syncer-plugin
-type LoaderDestroy interface {
+// Destroy is the interface that for loader-plugin
+type Destroy interface {
 	LoaderDestroy(s *loaderImpl) error
 }
