@@ -1,6 +1,7 @@
 package loader
 
 import (
+	gosql "database/sql"
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 )
 
@@ -11,10 +12,10 @@ type ExecutorExtend interface {
 
 // Init is the interface for loader plugin
 type Init interface {
-	LoaderInit(s *loaderImpl) error
+	LoaderInit(db *gosql.DB, info *loopbacksync.LoopBackSync) error
 }
 
 // Destroy is the interface that for loader-plugin
 type Destroy interface {
-	LoaderDestroy(s *loaderImpl) error
+	LoaderDestroy(db *gosql.DB, info *loopbacksync.LoopBackSync) error
 }

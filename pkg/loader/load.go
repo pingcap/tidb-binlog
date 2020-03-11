@@ -566,7 +566,7 @@ func (s *loaderImpl) Run() error {
 				if !ok {
 					return true
 				}
-				err = c.LoaderDestroy(s)
+				err = c.LoaderDestroy(s.db, s.loopBackSyncInfo)
 				return err == nil
 			})
 			if err != nil {
@@ -583,7 +583,7 @@ func (s *loaderImpl) Run() error {
 			if !ok {
 				return true
 			}
-			err = c.LoaderInit(s)
+			err = c.LoaderInit(s.db, s.loopBackSyncInfo)
 			return err == nil
 		})
 		if err != nil {
