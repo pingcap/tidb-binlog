@@ -14,8 +14,8 @@ const (
 	SyncerFilter Kind = iota
 	//SyncerInit is one kind of Plugin for syncer
 	SyncerInit
-	//LoaderPlugin is one kind of Plugin for loader
-	LoaderPlugin
+	//ExecutorExtend is one kind of Plugin for loader
+	ExecutorExtend
 	//FactorFunc is the factory of all plugins
 	FactorFunc = "NewPlugin"
 )
