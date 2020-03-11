@@ -566,10 +566,7 @@ func (s *loaderImpl) Run() error {
 				return true
 			}
 			err = c.LoaderInit(s)
-			if err != nil {
-				return false
-			}
-			return true
+			return err == nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -643,10 +640,7 @@ func (s *loaderImpl) Run() error {
 				return true
 			}
 			err = c.LoaderDestroy(s)
-			if err != nil {
-				return false
-			}
-			return true
+			return err == nil
 		})
 		if err != nil {
 			return errors.Trace(err)
