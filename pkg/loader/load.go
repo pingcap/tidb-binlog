@@ -557,6 +557,24 @@ func (s *loaderImpl) Run() error {
 		close(s.successTxn)
 	}()
 
+	defer func() {
+		if s.loopBackSyncInfo.SupportPlugin {
+			var err error
+			hook := s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy]
+			hook.Range(func(k, val interface{}) bool {
+				c, ok := val.(Destroy)
+				if !ok {
+					return true
+				}
+				err = c.LoaderDestroy(s)
+				return err == nil
+			})
+			if err != nil {
+				log.Error(errors.Trace(err).Error())
+			}
+		}
+	}()
+
 	var err error
 	if s.loopBackSyncInfo.SupportPlugin {
 		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderInit]
@@ -631,22 +649,6 @@ func (s *loaderImpl) Run() error {
 			}
 		}
 	}
-
-	if s.loopBackSyncInfo.SupportPlugin {
-		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy]
-		hook.Range(func(k, val interface{}) bool {
-			c, ok := val.(Destroy)
-			if !ok {
-				return true
-			}
-			err = c.LoaderDestroy(s)
-			return err == nil
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
 }
 
 // groupDMLs group DMLs by table in batchByTbls and
