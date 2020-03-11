@@ -163,7 +163,7 @@ func (e *executor) begin() (*Tx, error) {
 func (e *executor) externPoint(t *Tx, dmls []*DML) (*Tx, []*DML) {
 	hook := e.info.Hooks[plugin.ExecutorExtend]
 	hook.Range(func(k, val interface{}) bool {
-		c, ok := val.(LoopBack)
+		c, ok := val.(ExecutorExtend)
 		if !ok {
 			//ignore type incorrect error
 			return true

@@ -5,6 +5,6 @@ import (
 )
 
 // LoopBack is the interface that for loader-plugin
-type LoopBack interface {
+type ExecutorExtend interface {
 	ExtendTxn(tx *Tx, dmls []*DML, info *loopbacksync.LoopBackSync) (*Tx, []*DML)
 }
