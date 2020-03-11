@@ -99,11 +99,23 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 			plg := newPlugin()
 			_, ok = plg.(LoopBack)
 			if !ok {
-				log.Info("syncer plugin's interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+				log.Info("LoopBack interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+			} else {
+				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
+					n, newPlugin())
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
+					zap.String("interface", "LoopBack"))
 			}
-			plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
-				n, newPlugin())
-			log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+
+			_, ok = plg.(SyncerInit)
+			if !ok {
+				log.Info("SyncerInit interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+			} else {
+				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerInit],
+					n, newPlugin())
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
+					zap.String("interface", "SyncerInit"))
+			}
 		}
 	}
 	var err error
@@ -156,7 +168,26 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 
 // Start starts to sync.
 func (s *Syncer) Start() error {
-	err := s.run()
+	var err error
+	if s.loopbackSync.SupportPlugin {
+		hook := s.loopbackSync.Hooks[plugin.SyncerInit]
+		hook.Range(func(k, val interface{}) bool {
+			c, ok := val.(SyncerInit)
+			if !ok {
+				return true
+			}
+			err = c.SyncerInit(s)
+			if err != nil {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	err = s.run()
 
 	return errors.Trace(err)
 }

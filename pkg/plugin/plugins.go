@@ -12,6 +12,8 @@ type Kind uint8
 const (
 	//SyncerPlugin is one kind of Plugin for syncer
 	SyncerPlugin Kind = iota
+	//SyncerInit is one kind of Plugin for syncer
+	SyncerInit
 	//LoaderPlugin is one kind of Plugin for loader
 	LoaderPlugin
 	//FactorFunc is the factory of all plugins

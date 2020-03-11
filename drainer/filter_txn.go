@@ -9,3 +9,7 @@ import (
 type LoopBack interface {
 	FilterTxn(txn *loader.Txn, info *loopbacksync.LoopBackSync) (bool, error)
 }
+
+type SyncerInit interface {
+	SyncerInit(s *Syncer) error
+}
