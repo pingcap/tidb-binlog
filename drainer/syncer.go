@@ -83,7 +83,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		log.Info("Begin to Load syncer-plugins.")
 		for _, name := range syncer.loopbackSync.PluginNames {
 			n := strings.TrimSpace(name)
-			sym, err := plugin.LoadPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
+			sym, err := plugin.LoadPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
 				syncer.loopbackSync.PluginPath, n)
 			if err != nil {
 				log.Error("Load plugin failed.", zap.String("plugin name", n),
@@ -101,7 +101,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 			if !ok {
 				log.Info("LoopBack interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
 			} else {
-				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerPlugin],
+				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
 					n, newPlugin())
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
 					zap.String("interface", "LoopBack"))
@@ -420,7 +420,7 @@ ForLoop:
 			var err1 error
 
 			if s.loopbackSync.SupportPlugin {
-				hook := s.loopbackSync.Hooks[plugin.SyncerPlugin]
+				hook := s.loopbackSync.Hooks[plugin.SyncerFilter]
 				var txn *loader.Txn
 				txn, err1 = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite, false)
 				hook.Range(func(k, val interface{}) bool {
@@ -503,7 +503,7 @@ ForLoop:
 					Table:    table,
 					SQL:      string(binlog.GetDdlQuery()),
 				}
-				hook := s.loopbackSync.Hooks[plugin.SyncerPlugin]
+				hook := s.loopbackSync.Hooks[plugin.SyncerFilter]
 				hook.Range(func(k, val interface{}) bool {
 					c, ok := val.(LoopBack)
 					if !ok {
