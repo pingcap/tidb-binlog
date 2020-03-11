@@ -8,3 +8,8 @@ import (
 type ExecutorExtend interface {
 	ExtendTxn(tx *Tx, dmls []*DML, info *loopbacksync.LoopBackSync) (*Tx, []*DML)
 }
+
+// LoaderInit is the interface that for syncer-plugin
+type LoaderInit interface {
+	LoaderInit(s *loaderImpl) error
+}

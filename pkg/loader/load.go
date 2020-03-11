@@ -225,9 +225,25 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 				log.Error("The correct new-function is not provided.", zap.String("plugin name", n), zap.String("type", "loader plugin"))
 				continue
 			}
-			plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
-				n, newPlugin())
-			log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "loader plugin"))
+
+			plg := newPlugin()
+			_, ok = plg.(ExecutorExtend)
+			if !ok {
+				log.Info("ExecutorExtend interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "ExecutorExtend"))
+			}
+
+			_, ok = plg.(LoaderInit)
+			if !ok {
+				log.Info("LoaderInit interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderInit"))
+			}
 		}
 	}
 
@@ -531,6 +547,25 @@ func (s *loaderImpl) Run() error {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
 	}()
+
+	var err error
+	if s.loopBackSyncInfo.SupportPlugin {
+		hook := s.loopBackSyncInfo.Hooks[plugin.SyncerInit]
+		hook.Range(func(k, val interface{}) bool {
+			c, ok := val.(LoaderInit)
+			if !ok {
+				return true
+			}
+			err = c.LoaderInit(s)
+			if err != nil {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
 		if err := s.initMarkTable(); err != nil {

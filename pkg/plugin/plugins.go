@@ -16,6 +16,8 @@ const (
 	SyncerInit
 	//ExecutorExtend is one kind of Plugin for loader
 	ExecutorExtend
+	//LoaderInit is one kind of Plugin for loader
+	LoaderInit
 	//FactorFunc is the factory of all plugins
 	FactorFunc = "NewPlugin"
 )

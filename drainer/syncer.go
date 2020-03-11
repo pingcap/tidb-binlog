@@ -99,22 +99,20 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 			plg := newPlugin()
 			_, ok = plg.(SyncerFilter)
 			if !ok {
-				log.Info("SyncerFilter interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+				log.Info("SyncerFilter interface is not implemented.", zap.String("plugin name", n))
 			} else {
 				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
-					n, newPlugin())
-				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
-					zap.String("interface", "SyncerFilter"))
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "SyncerFilter"))
 			}
 
 			_, ok = plg.(SyncerInit)
 			if !ok {
-				log.Info("SyncerInit interface is not implemented.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+				log.Info("SyncerInit interface is not implemented.", zap.String("plugin name", n))
 			} else {
 				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerInit],
-					n, newPlugin())
-				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("type", "syncer plugin"),
-					zap.String("interface", "SyncerInit"))
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "SyncerInit"))
 			}
 		}
 	}
