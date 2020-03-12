@@ -328,13 +328,13 @@ func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, int
 		elems := []string{"a", "b", "c", "d"}
 		set, err := types.ParseSetName(elems, elems[base-1])
 		c.Assert(err, check.IsNil)
-		d.SetMysqlSet(set)
+		d.SetMysqlSet(set, "utf8mb4_bin")
 		e = set.Value
 	case mysql.TypeEnum:
 		elems := []string{"male", "female"}
 		enum, err := types.ParseEnumName(elems, elems[base-1])
 		c.Assert(err, check.IsNil)
-		d.SetMysqlEnum(enum)
+		d.SetMysqlEnum(enum, "utf8mb4_bin")
 		e = enum.Value
 	}
 	return d, e
