@@ -79,17 +79,16 @@ func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path st
 
 // CreateMarkTable create the db and table if need.
 func CreateMarkTable(db *sql.DB, mdbname, mtablename string) error {
-	// CreateMarkDBDDL is DDL to create the database of mark table.
 	var err error
-	var CreateMarkDBDDL = fmt.Sprintf("create database IF NOT EXISTS %s;", mdbname)
-	_, err = db.Exec(CreateMarkDBDDL)
+	var createMarkDBDDL = fmt.Sprintf("create database IF NOT EXISTS %s;", mdbname)
+	_, err = db.Exec(createMarkDBDDL)
 	if err != nil {
 		return errors.Annotate(err, "failed to create mark db")
 	}
 
 	// CreateMarkTableDDL is the DDL to create the mark table.
-	var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mdbname, mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
-	_, err = db.Exec(CreateMarkTableDDL)
+	var createMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mdbname, mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
+	_, err = db.Exec(createMarkTableDDL)
 	if err != nil {
 		return errors.Annotate(err, "failed to create mark table")
 	}
