@@ -405,6 +405,7 @@ ForLoop:
 					return true
 				})
 				if err1 != nil {
+					log.Warn("FilterTxn return error", zap.String("error", err1.Error()))
 					break ForLoop
 				}
 			}
@@ -486,6 +487,7 @@ ForLoop:
 					return true
 				})
 				if err1 != nil {
+					log.Warn("FilterTxn return error", zap.String("error", err1.Error()))
 					break ForLoop
 				}
 				if isFilterTransaction {
