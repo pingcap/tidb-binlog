@@ -186,9 +186,11 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 		return errors.Trace(err)
 	}
 
-	tx, deletes = e.externPoint(tx, deletes)
-	if len(deletes) == 0 {
-		return nil
+	if e.info.SupportPlugin {
+		tx, deletes = e.externPoint(tx, deletes)
+		if len(deletes) == 0 {
+			return nil
+		}
 	}
 
 	argss := make([]interface{}, 0, len(deletes))
@@ -219,9 +221,11 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 		return errors.Trace(err)
 	}
 
-	tx, inserts = e.externPoint(tx, inserts)
-	if len(inserts) == 0 {
-		return nil
+	if e.info.SupportPlugin {
+		tx, inserts = e.externPoint(tx, inserts)
+		if len(inserts) == 0 {
+			return nil
+		}
 	}
 
 	info := inserts[0].info
@@ -375,9 +379,11 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		return errors.Trace(err)
 	}
 
-	tx, dmls = e.externPoint(tx, dmls)
-	if len(dmls) == 0 {
-		return nil
+	if e.info.SupportPlugin {
+		tx, dmls = e.externPoint(tx, dmls)
+		if len(dmls) == 0 {
+			return nil
+		}
 	}
 
 	for _, dml := range dmls {
