@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"go.uber.org/zap"
 )
 
@@ -36,37 +37,58 @@ const (
 	ChannelInfo = "channel_info"
 )
 
-// CreateMarkTableDDL is the DDL to create the mark table.
-var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", MarkTableName, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
-
-// CreateMarkDBDDL is DDL to create the database of mark table.
-var CreateMarkDBDDL = "create database IF NOT EXISTS retl;"
-
 //LoopBackSync loopback sync info
 type LoopBackSync struct {
 	ChannelID       int64
 	LoopbackControl bool
+	MarkDBName      string
+	MarkTableName   string
 	SyncDDL         bool
+	Index           int64
+	PluginPath      string
+	PluginNames     []string
+	Hooks           []*plugin.EventHooks
+	SupportPlugin   bool
+	RecordID        int
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
-func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool) *LoopBackSync {
+func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool, path string, names []string, SupportPlug bool, mdbname, mtablename string) *LoopBackSync {
 	l := &LoopBackSync{
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,
 		SyncDDL:         SyncDDL,
+		Index:           0,
+		PluginPath:      path,
+		PluginNames:     names,
+		SupportPlugin:   SupportPlug,
+		MarkDBName:      strings.TrimSpace(mdbname),
+		MarkTableName:   strings.TrimSpace(mtablename),
+	}
+	if l.SupportPlugin {
+		l.Hooks = make([]*plugin.EventHooks, 4)
+		l.Hooks[plugin.SyncerFilter] = &plugin.EventHooks{}
+
+		l.Hooks[plugin.ExecutorExtend] = &plugin.EventHooks{}
+		l.Hooks[plugin.LoaderInit] = &plugin.EventHooks{}
+		l.Hooks[plugin.LoaderDestroy] = &plugin.EventHooks{}
+
 	}
 	return l
 }
 
 // CreateMarkTable create the db and table if need.
-func CreateMarkTable(db *sql.DB) error {
-	_, err := db.Exec(CreateMarkDBDDL)
+func CreateMarkTable(db *sql.DB, mdbname, mtablename string) error {
+	var err error
+	var createMarkDBDDL = fmt.Sprintf("create database IF NOT EXISTS %s;", mdbname)
+	_, err = db.Exec(createMarkDBDDL)
 	if err != nil {
 		return errors.Annotate(err, "failed to create mark db")
 	}
 
-	_, err = db.Exec(CreateMarkTableDDL)
+	// CreateMarkTableDDL is the DDL to create the mark table.
+	var createMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", mdbname, mtablename, ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
+	_, err = db.Exec(createMarkTableDDL)
 	if err != nil {
 		return errors.Annotate(err, "failed to create mark table")
 	}

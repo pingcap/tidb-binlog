@@ -15,6 +15,7 @@ package loopbacksync
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -32,12 +33,18 @@ func (s *loopbackSuite) TestNewLoopBackSyncInfo(c *check.C) {
 	var ChannelID int64 = 1
 	var LoopbackControl = true
 	var SyncDDL = false
-	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL)
+
+	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL, "", nil, false, "rel", "_drainer_repl_mark")
 
 	c.Assert(l, check.DeepEquals, &LoopBackSync{
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,
 		SyncDDL:         SyncDDL,
+		PluginPath:      "",
+		PluginNames:     nil,
+		SupportPlugin:   false,
+		MarkDBName:      "rel",
+		MarkTableName:   "_drainer_repl_mark",
 	})
 }
 
@@ -45,12 +52,15 @@ func (s *loopbackSuite) TestCreateMarkTable(c *check.C) {
 	db, mk, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 
+	CreateMarkDBDDL := "create database IF NOT EXISTS rel;"
+	CreateMarkTableDDL := fmt.Sprintf("CREATE TABLE If Not Exists %s.%s (%s bigint not null,%s bigint not null DEFAULT 0, %s bigint DEFAULT 0, %s varchar(64) ,PRIMARY KEY (%s,%s));", "rel", "_drainer_repl_mark", ID, ChannelID, Val, ChannelInfo, ID, ChannelID)
+
 	mk.ExpectExec(regexp.QuoteMeta(CreateMarkDBDDL)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mk.ExpectExec(regexp.QuoteMeta(CreateMarkTableDDL)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	err = CreateMarkTable(db)
+	err = CreateMarkTable(db, "rel", "_drainer_repl_mark")
 	c.Assert(err, check.IsNil)
 
 	err = mk.ExpectationsWereMet()

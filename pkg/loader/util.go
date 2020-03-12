@@ -113,6 +113,9 @@ func CreateDB(user string, password string, host string, port int, tls *tls.Conf
 }
 
 func quoteSchema(schema string, table string) string {
+	if len(schema) == 0 {
+		return fmt.Sprintf("`%s`", escapeName(table))
+	}
 	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
 }
 

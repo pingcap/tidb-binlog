@@ -17,14 +17,15 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -203,8 +204,56 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		cancel: cancel,
 	}
 
+	s.loopBackSyncInfo.RecordID = s.workerCount
+
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
+
+	if s.loopBackSyncInfo.SupportPlugin {
+		log.Info("Begin to Load loader-plugins.")
+		for _, name := range s.loopBackSyncInfo.PluginNames {
+			n := strings.TrimSpace(name)
+			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.PluginPath, n)
+			if err != nil {
+				log.Error("Load plugin failed.", zap.String("plugin name", n),
+					zap.String("error", err.Error()))
+				continue
+			}
+			newPlugin, ok := sym.(func() interface{})
+			if !ok {
+				log.Error("The correct new-function is not provided.", zap.String("plugin name", n), zap.String("type", "loader plugin"))
+				continue
+			}
+
+			plg := newPlugin()
+			_, ok = plg.(ExecutorExtend)
+			if !ok {
+				log.Info("ExecutorExtend interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "ExecutorExtend"))
+			}
+
+			_, ok = plg.(Init)
+			if !ok {
+				log.Info("LoaderInit interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderInit],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderInit"))
+			}
+
+			_, ok = plg.(Destroy)
+			if !ok {
+				log.Info("LoaderDestroy interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderDestroy"))
+			}
+		}
+	}
 
 	return s, nil
 }
@@ -494,7 +543,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 }
 
 func (s *loaderImpl) initMarkTable() error {
-	if err := loopbacksync.CreateMarkTable(s.db); err != nil {
+	if err := loopbacksync.CreateMarkTable(s.db, s.loopBackSyncInfo.MarkDBName, s.loopBackSyncInfo.MarkTableName); err != nil {
 		return errors.Trace(err)
 	}
 	return loopbacksync.InitMarkTableData(s.db, s.workerCount, s.loopBackSyncInfo.ChannelID)
@@ -506,6 +555,40 @@ func (s *loaderImpl) Run() error {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
 	}()
+
+	defer func() {
+		if s.loopBackSyncInfo.SupportPlugin {
+			var err error
+			hook := s.loopBackSyncInfo.Hooks[plugin.LoaderDestroy]
+			hook.Range(func(k, val interface{}) bool {
+				c, ok := val.(Destroy)
+				if !ok {
+					return true
+				}
+				err = c.LoaderDestroy(s.db, s.loopBackSyncInfo)
+				return err == nil
+			})
+			if err != nil {
+				log.Error(errors.Trace(err).Error())
+			}
+		}
+	}()
+
+	var err error
+	if s.loopBackSyncInfo.SupportPlugin {
+		hook := s.loopBackSyncInfo.Hooks[plugin.LoaderInit]
+		hook.Range(func(k, val interface{}) bool {
+			c, ok := val.(Init)
+			if !ok {
+				return true
+			}
+			err = c.LoaderInit(s.db, s.loopBackSyncInfo)
+			return err == nil
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
 		if err := s.initMarkTable(); err != nil {
@@ -526,6 +609,7 @@ func (s *loaderImpl) Run() error {
 	input := txnManager.run()
 
 	for {
+
 		select {
 		case txn, ok := <-input:
 			if !ok {
@@ -535,7 +619,6 @@ func (s *loaderImpl) Run() error {
 				}
 				return nil
 			}
-
 			s.metricsInputTxn(txn)
 			txnManager.pop(txn)
 			if err := batch.put(txn); err != nil {

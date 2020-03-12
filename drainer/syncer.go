@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
@@ -77,8 +77,35 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
-	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL)
+	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL, cfg.PluginPath,
+		cfg.PluginNames, cfg.SupportPlugin, cfg.MarkDBName, cfg.MarkTableName)
+	if syncer.loopbackSync.SupportPlugin {
+		log.Info("Begin to Load syncer-plugins.")
+		for _, name := range syncer.loopbackSync.PluginNames {
+			n := strings.TrimSpace(name)
+			sym, err := plugin.LoadPlugin(syncer.loopbackSync.PluginPath, n)
+			if err != nil {
+				log.Error("Load plugin failed.", zap.String("plugin name", n),
+					zap.String("error", err.Error()))
+				continue
+			}
 
+			newPlugin, ok := sym.(func() interface{})
+			if !ok {
+				log.Error("The correct new-function is not provided.", zap.String("plugin name", n), zap.String("type", "syncer plugin"))
+				continue
+			}
+			plg := newPlugin()
+			_, ok = plg.(SyncerFilter)
+			if !ok {
+				log.Info("SyncerFilter interface is not implemented.", zap.String("plugin name", n))
+			} else {
+				plugin.RegisterPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
+					n, plg)
+				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "SyncerFilter"))
+			}
+		}
+	}
 	var err error
 	// create schema
 	syncer.schema, err = NewSchema(jobs, false)
@@ -357,8 +384,31 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
+
 			var isFilterTransaction = false
 			var err1 error
+
+			if s.loopbackSync.SupportPlugin {
+				hook := s.loopbackSync.Hooks[plugin.SyncerFilter]
+				var txn *loader.Txn
+				txn, err1 = translator.TiBinlogToTxn(s.schema, "", "", binlog, preWrite, false)
+				hook.Range(func(k, val interface{}) bool {
+					c, ok := val.(SyncerFilter)
+					if !ok {
+						return true
+					}
+					isFilterTransaction, err1 = c.FilterTxn(txn, s.loopbackSync)
+					if isFilterTransaction || err1 != nil {
+						return false
+					}
+					return true
+				})
+				if err1 != nil {
+					log.Warn("FilterTxn return error", zap.String("error", err1.Error()))
+					break ForLoop
+				}
+			}
+
 			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
@@ -412,6 +462,36 @@ ForLoop:
 			if err != nil {
 				err = errors.Trace(err)
 				break ForLoop
+			}
+
+			if s.loopbackSync.SupportPlugin {
+				var isFilterTransaction = false
+				var err1 error
+				txn := new(loader.Txn)
+				txn.DDL = &loader.DDL{
+					Database: schema,
+					Table:    table,
+					SQL:      string(binlog.GetDdlQuery()),
+				}
+				hook := s.loopbackSync.Hooks[plugin.SyncerFilter]
+				hook.Range(func(k, val interface{}) bool {
+					c, ok := val.(SyncerFilter)
+					if !ok {
+						return true
+					}
+					isFilterTransaction, err1 = c.FilterTxn(txn, s.loopbackSync)
+					if isFilterTransaction || err1 != nil {
+						return false
+					}
+					return true
+				})
+				if err1 != nil {
+					log.Warn("FilterTxn return error", zap.String("error", err1.Error()))
+					break ForLoop
+				}
+				if isFilterTransaction {
+					continue
+				}
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {

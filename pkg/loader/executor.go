@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/plugin"
 	"github.com/pingcap/tidb/infoschema"
 
 	"github.com/pingcap/errors"
@@ -36,7 +37,6 @@ import (
 var (
 	defaultBatchSize   = 128
 	defaultWorkerCount = 16
-	index              int64
 )
 
 type executor struct {
@@ -54,7 +54,6 @@ func newExecutor(db *gosql.DB) *executor {
 		batchSize:   defaultBatchSize,
 		workerCount: defaultWorkerCount,
 	}
-
 	return exe
 }
 
@@ -88,14 +87,14 @@ func (e *executor) execTableBatchRetry(ctx context.Context, dmls []*DML, retryNu
 	return errors.Trace(err)
 }
 
-// a wrap of *sql.Tx with metrics
-type tx struct {
+// Tx is a wrap of *sql.Tx with metrics
+type Tx struct {
 	*gosql.Tx
 	queryHistogramVec *prometheus.HistogramVec
 }
 
 // wrap of sql.Tx.Exec()
-func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
+func (tx *Tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	start := time.Now()
 	res, err := tx.Tx.Exec(query, args...)
 	if tx.queryHistogramVec != nil {
@@ -105,7 +104,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	return res, err
 }
 
-func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
+func (tx *Tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
 	res, err = tx.exec(query, args...)
 	if err != nil {
 		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
@@ -118,7 +117,7 @@ func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Res
 }
 
 // wrap of sql.Tx.Commit()
-func (tx *tx) commit() error {
+func (tx *Tx) commit() error {
 	start := time.Now()
 	err := tx.Tx.Commit()
 	if tx.queryHistogramVec != nil {
@@ -128,18 +127,14 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) addIndex() int64 {
-	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
-}
-
 // return a wrap of sql.Tx
-func (e *executor) begin() (*tx, error) {
+func (e *executor) begin() (*Tx, error) {
 	sqlTx, err := e.db.Begin()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var tx = &tx{
+	var tx = &Tx{
 		Tx:                sqlTx,
 		queryHistogramVec: e.queryHistogramVec,
 	}
@@ -147,7 +142,7 @@ func (e *executor) begin() (*tx, error) {
 	if e.info != nil && e.info.LoopbackControl {
 		start := time.Now()
 
-		err = loopbacksync.UpdateMark(tx.Tx, e.addIndex(), e.info.ChannelID)
+		err = loopbacksync.UpdateMark(tx.Tx, atomic.AddInt64(&e.info.Index, 1)%((int64)(e.workerCount)), e.info.ChannelID)
 		if err != nil {
 			rerr := tx.Rollback()
 			if rerr != nil {
@@ -164,24 +159,48 @@ func (e *executor) begin() (*tx, error) {
 	return tx, nil
 }
 
+// return a wrap of sql.Tx
+func (e *executor) externPoint(t *Tx, dmls []*DML) (*Tx, []*DML) {
+	hook := e.info.Hooks[plugin.ExecutorExtend]
+	hook.Range(func(k, val interface{}) bool {
+		c, ok := val.(ExecutorExtend)
+		if !ok {
+			//ignore type incorrect error
+			return true
+		}
+		t, dmls = c.ExtendTxn(t, dmls, e.info)
+		return dmls != nil
+	})
+	return t, dmls
+}
+
 func (e *executor) bulkDelete(deletes []*DML) error {
 	if len(deletes) == 0 {
 		return nil
 	}
 
 	var sqls strings.Builder
-	argss := make([]interface{}, 0, len(deletes))
 
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if e.info.SupportPlugin {
+		tx, deletes = e.externPoint(tx, deletes)
+		if len(deletes) == 0 {
+			return nil
+		}
+	}
+
+	argss := make([]interface{}, 0, len(deletes))
 	for _, dml := range deletes {
 		sql, args := dml.sql()
 		sqls.WriteString(sql)
 		sqls.WriteByte(';')
 		argss = append(argss, args...)
 	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	sql := sqls.String()
 	_, err = tx.autoRollbackExec(sql, argss...)
 	if err != nil {
@@ -195,6 +214,18 @@ func (e *executor) bulkDelete(deletes []*DML) error {
 func (e *executor) bulkReplace(inserts []*DML) error {
 	if len(inserts) == 0 {
 		return nil
+	}
+
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if e.info.SupportPlugin {
+		tx, inserts = e.externPoint(tx, inserts)
+		if len(inserts) == 0 {
+			return nil
+		}
 	}
 
 	info := inserts[0].info
@@ -219,10 +250,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 			args = append(args, v)
 		}
 	}
-	tx, err := e.begin()
-	if err != nil {
-		return errors.Trace(err)
-	}
+
 	_, err = tx.autoRollbackExec(builder.String(), args...)
 	if err != nil {
 		return errors.Trace(err)
@@ -349,6 +377,13 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 	tx, err := e.begin()
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	if e.info.SupportPlugin {
+		tx, dmls = e.externPoint(tx, dmls)
+		if len(dmls) == 0 {
+			return nil
+		}
 	}
 
 	for _, dml := range dmls {

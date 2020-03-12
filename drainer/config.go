@@ -78,6 +78,11 @@ type SyncerConfig struct {
 	EnableDispatch    bool               `toml:"enable-dispatch" json:"enable-dispatch"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	EnableCausality   bool               `toml:"enable-detect" json:"enable-detect"`
+	PluginPath        string             `toml:"plugin-path" json:"plugin-path"`
+	PluginNames       []string           `toml:"plugin-names" json:"plugin-names"`
+	SupportPlugin     bool               `toml:"support-plugin" json:"support-plugin"`
+	MarkDBName        string             `toml:"mark-db-name" json:"mark-db-name"`
+	MarkTableName     string             `toml:"mark-table-name" json:"mark-table-name"`
 }
 
 // RelayConfig is the Relay log's configuration.
@@ -157,6 +162,12 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
+
+	fs.StringVar(&cfg.SyncerCfg.PluginPath, "plugin-path", "", "The path of the plugins")
+	fs.Var(newSliceNames([]string{}, &cfg.SyncerCfg.PluginNames), "plugin-names", "The names of the plugins")
+	fs.BoolVar(&cfg.SyncerCfg.SupportPlugin, "support-plugin", false, "Whether plugin is supported,default: false")
+	fs.StringVar(&cfg.SyncerCfg.MarkDBName, "mark-db-name", "rel", "mark database's name")
+	fs.StringVar(&cfg.SyncerCfg.MarkTableName, "mark-table-name", "_drainer_repl_mark", "mark table's name")
 
 	return cfg
 }
