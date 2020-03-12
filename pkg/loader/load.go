@@ -213,8 +213,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		log.Info("Begin to Load loader-plugins.")
 		for _, name := range s.loopBackSyncInfo.PluginNames {
 			n := strings.TrimSpace(name)
-			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
-				s.loopBackSyncInfo.PluginPath, n)
+			sym, err := plugin.LoadPlugin(s.loopBackSyncInfo.PluginPath, n)
 			if err != nil {
 				log.Error("Load plugin failed.", zap.String("plugin name", n),
 					zap.String("error", err.Error()))
@@ -240,7 +239,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 			if !ok {
 				log.Info("LoaderInit interface is not implemented.", zap.String("plugin name", n))
 			} else {
-				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.ExecutorExtend],
+				plugin.RegisterPlugin(s.loopBackSyncInfo.Hooks[plugin.LoaderInit],
 					n, plg)
 				log.Info("Load plugin success.", zap.String("plugin name", n), zap.String("interface", "LoaderInit"))
 			}

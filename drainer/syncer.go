@@ -83,8 +83,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		log.Info("Begin to Load syncer-plugins.")
 		for _, name := range syncer.loopbackSync.PluginNames {
 			n := strings.TrimSpace(name)
-			sym, err := plugin.LoadPlugin(syncer.loopbackSync.Hooks[plugin.SyncerFilter],
-				syncer.loopbackSync.PluginPath, n)
+			sym, err := plugin.LoadPlugin(syncer.loopbackSync.PluginPath, n)
 			if err != nil {
 				log.Error("Load plugin failed.", zap.String("plugin name", n),
 					zap.String("error", err.Error()))

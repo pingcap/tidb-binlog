@@ -53,7 +53,7 @@ func (ehs *EventHooks) GetAllPluginsName() []string {
 }
 
 //LoadPlugin can load plugin by plugin's name
-func LoadPlugin(eh *EventHooks, path, name string) (plugin.Symbol, error) {
+func LoadPlugin(path, name string) (plugin.Symbol, error) {
 	fp := path + "/" + name
 	p, err := plugin.Open(fp)
 	if err != nil {
