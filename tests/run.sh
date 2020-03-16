@@ -74,6 +74,7 @@ EOF
     echo "Starting TiDB at port: $port..."
     tidb-server \
         -P $port \
+        -config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2379 \
         --enable-binlog=true \
