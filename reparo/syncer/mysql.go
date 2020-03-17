@@ -50,7 +50,7 @@ var (
 var createDB = loader.CreateDB
 
 func newMysqlSyncer(cfg *DBConfig, worker int, batchSize int, safemode bool) (*mysqlSyncer, error) {
-	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port)
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

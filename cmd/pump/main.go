@@ -45,6 +45,7 @@ func main() {
 		log.Fatal("Failed to initialize log", zap.Error(err))
 	}
 	version.PrintVersionInfo("Pump")
+	log.Info("start pump...", zap.Reflect("config", cfg))
 
 	p, err := pump.NewServer(cfg)
 	if err != nil {

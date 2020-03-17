@@ -54,7 +54,7 @@ type globalConfig struct {
 
 // Config holds the configuration of pump
 type Config struct {
-	*flag.FlagSet
+	*flag.FlagSet     `json:"-"`
 	LogLevel          string `toml:"log-level" json:"log-level"`
 	NodeID            string `toml:"node-id" json:"node-id"`
 	ListenAddr        string `toml:"addr" json:"addr"`
