@@ -26,6 +26,8 @@ pd-urls = "http://127.0.0.1:2379"
 # ssl-cert = "/path/to/drainer.pem"
 # Path of file that contains X509 key in PEM format for connection with cluster components.
 # ssl-key = "/path/to/drainer-key.pem"
+# The common name which is allowed to connection with cluster components.
+# cert-allowed-cn = ["binlog"]
 #
 # [storage]
 # Set to `true` (default) for best reliability, which prevents data loss when there is a power failure.

@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/config"
@@ -24,9 +25,10 @@ import (
 
 // Config is security config
 type Config struct {
-	SSLCA   string `toml:"ssl-ca" json:"ssl-ca"`
-	SSLCert string `toml:"ssl-cert" json:"ssl-cert"`
-	SSLKey  string `toml:"ssl-key" json:"ssl-key"`
+	SSLCA         string   `toml:"ssl-ca" json:"ssl-ca"`
+	SSLCert       string   `toml:"ssl-cert" json:"ssl-cert"`
+	SSLKey        string   `toml:"ssl-key" json:"ssl-key"`
+	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
 }
 
 // ToTLSConfig generates tls's config based on security section of the config.
@@ -49,7 +51,8 @@ func (c *Config) ToTLSConfig() (tlsConfig *tls.Config, err error) {
 	}
 
 	tlsConfig = &tls.Config{
-		RootCAs: certPool,
+		RootCAs:   certPool,
+		ClientCAs: certPool,
 	}
 
 	if len(c.SSLCert) != 0 && len(c.SSLKey) != 0 {
@@ -72,6 +75,29 @@ func (c *Config) ToTLSConfig() (tlsConfig *tls.Config, err error) {
 		}
 		tlsConfig.GetCertificate = func(info *tls.ClientHelloInfo) (certificate *tls.Certificate, err error) {
 			return getCert()
+		}
+	}
+
+	if len(c.CertAllowedCN) != 0 {
+		checkCN := make(map[string]struct{})
+		for _, cn := range c.CertAllowedCN {
+			cn = strings.TrimSpace(cn)
+			checkCN[cn] = struct{}{}
+		}
+
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+
+		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			cns := make([]string, 0, len(verifiedChains))
+			for _, chains := range verifiedChains {
+				for _, chain := range chains {
+					cns = append(cns, chain.Subject.CommonName)
+					if _, match := checkCN[chain.Subject.CommonName]; match {
+						return nil
+					}
+				}
+			}
+			return errors.Errorf("client certificate authentication failed. The Common Name from the client certificate %v was not found in the configuration cluster-verify-cn with value: %s", cns, c.CertAllowedCN)
 		}
 	}
 

@@ -118,6 +118,8 @@ port = 3306
 # ssl-cert = "/path/to/drainer.pem"
 # Path of file that contains X509 key in PEM format.
 # ssl-key = "/path/to/drainer-key.pem"
+# The common name which is allowed to connection with cluster components.
+# cert-allowed-cn = ["binlog"]
 
 [syncer.to.checkpoint]
 # only support mysql or tidb now, you can uncomment this to control where the checkpoint is saved.
