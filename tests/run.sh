@@ -34,12 +34,12 @@ DNS.1 = localhost
 IP.1 = 127.0.0.1
 EOF
     openssl ecparam -out "$TT/ca.key" -name prime256v1 -genkey
-    openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/ca.key" -out "$TT/ca.csr"
+    openssl req -new -batch -sha256 -subj '/CN=binlog' -key "$TT/ca.key" -out "$TT/ca.csr"
     openssl x509 -req -sha256 -days 2 -in "$TT/ca.csr" -signkey "$TT/ca.key" -out "$TT/ca.pem" 2> /dev/null
 
     for name in tidb pd tikv pump drainer client; do
         openssl ecparam -out "$TT/$name.key" -name prime256v1 -genkey
-        openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TT/$name.key" -out "$TT/$name.csr"
+        openssl req -new -batch -sha256 -subj '/CN=binlog' -key "$TT/$name.key" -out "$TT/$name.csr"
         openssl x509 -req -sha256 -days 1 -extensions EXT -extfile "$TT/ipsan.cnf" -in "$TT/$name.csr" -CA "$TT/ca.pem" -CAkey "$TT/ca.key" -CAcreateserial -out "$TT/$name.pem" 2> /dev/null
     done
 }

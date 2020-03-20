@@ -29,6 +29,7 @@ cat - > "$OUT_DIR/pump-config.toml" <<EOF
 ssl-ca = "$OUT_DIR/cert/ca.pem"
 ssl-cert = "$OUT_DIR/cert/pump.pem"
 ssl-key = "$OUT_DIR/cert/pump.key"
+cert-allowed-cn = ["binlog"]
 EOF
 
 BINLOG_TEST=1 pump -log-file $OUT_DIR/pump_$PORT.log --addr=0.0.0.0:$PORT \
