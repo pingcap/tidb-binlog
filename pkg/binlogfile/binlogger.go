@@ -51,8 +51,11 @@ type Binlogger interface {
 	// read nums binlog events from the "from" position
 	ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, error)
 
+	// ReadAll reads all binlog in the directory.
+	ReadAll(ctx context.Context) (<-chan *binlog.Entity, <-chan error)
+
 	// batch write binlog event, and returns current offset(if have).
-	WriteTail(entity *binlog.Entity) (int64, error)
+	WriteTail(entity *binlog.Entity) (binlog.Pos, error)
 
 	// Walk reads binlog from the "from" position and sends binlogs in the streaming way
 	Walk(ctx context.Context, from binlog.Pos, sendBinlog func(entity *binlog.Entity) error) error
@@ -67,7 +70,8 @@ type Binlogger interface {
 // binlogger is a logical representation of the log storage
 // it is either in read mode or append mode.
 type binlogger struct {
-	dir string
+	dir         string
+	maxFileSize int64
 
 	// encoder encodes binlog payload into bytes, and write to file
 	encoder Encoder
@@ -82,7 +86,7 @@ type binlogger struct {
 }
 
 // OpenBinlogger returns a binlogger for write, then it can be appended
-func OpenBinlogger(dirpath string) (Binlogger, error) {
+func OpenBinlogger(dirpath string, maxFileSize int64) (Binlogger, error) {
 	log.Info("open binlogger", zap.String("directory", dirpath))
 	var (
 		err            error
@@ -142,12 +146,13 @@ func OpenBinlogger(dirpath string) (Binlogger, error) {
 	}
 
 	binlog := &binlogger{
-		dir:        dirpath,
-		file:       fileLock,
-		encoder:    NewEncoder(fileLock, offset),
-		dirLock:    dirLock,
-		lastSuffix: lastFileSuffix,
-		lastOffset: offset,
+		dir:         dirpath,
+		maxFileSize: maxFileSize,
+		file:        fileLock,
+		encoder:     NewEncoder(fileLock, offset),
+		dirLock:     dirLock,
+		lastSuffix:  lastFileSuffix,
+		lastOffset:  offset,
 	}
 
 	return binlog, nil
@@ -183,6 +188,47 @@ func (b *binlogger) ReadFrom(from binlog.Pos, nums int32) ([]binlog.Entity, erro
 	})
 
 	return ents, err
+}
+
+// ReadAll reads all binlog in the directory.
+// `result` contains the returned binlogs, errChan contains any error that occurs in reading.
+func (b *binlogger) ReadAll(ctx context.Context) (<-chan *binlog.Entity, <-chan error) {
+	errChan := make(chan error, 1)
+	result := make(chan *binlog.Entity)
+
+	var minFileIndex uint64
+	names, err := ReadBinlogNames(b.dir)
+	if err != nil {
+		log.Error("read binlog files failed", zap.Error(err))
+	} else if len(names) > 0 {
+		minFileIndex, _, err = ParseBinlogName(names[0])
+	}
+	if err != nil {
+		errChan <- err
+	}
+	if err != nil || len(names) == 0 {
+		close(errChan)
+		close(result)
+		return result, errChan
+	}
+
+	from := binlog.Pos{Suffix: minFileIndex, Offset: 0}
+	go func() {
+		err := b.Walk(ctx, from, func(entity *binlog.Entity) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case result <- entity:
+				return nil
+			}
+		})
+		if err != nil {
+			errChan <- err
+		}
+		close(errChan)
+		close(result)
+	}()
+	return result, errChan
 }
 
 // Walk reads binlog from the "from" position and sends binlogs in the streaming way
@@ -344,8 +390,8 @@ func (b *binlogger) GC(days time.Duration, pos binlog.Pos) {
 }
 
 // Writes appends the binlog
-// if size of current file is bigger than SegmentSizeBytes, then rotate a new file
-func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
+// if size of current file is bigger than `maxFileSize`, then rotate a new file
+func (b *binlogger) WriteTail(entity *binlog.Entity) (binlog.Pos, error) {
 	beginTime := time.Now()
 	payload := entity.Payload
 	defer func() {
@@ -357,23 +403,24 @@ func (b *binlogger) WriteTail(entity *binlog.Entity) (int64, error) {
 	defer b.mutex.Unlock()
 
 	if len(payload) == 0 {
-		return 0, nil
+		return binlog.Pos{}, nil
 	}
 
 	curOffset, err := b.encoder.Encode(payload)
 	if err != nil {
 		log.Error("write local binlog failed", zap.Uint64("suffix", b.lastSuffix), zap.Error(err))
-		return 0, errors.Trace(err)
+		return binlog.Pos{}, errors.Trace(err)
 	}
 
 	b.lastOffset = curOffset
+	pos := binlog.Pos{Suffix: b.lastSuffix, Offset: curOffset}
 
-	if curOffset < SegmentSizeBytes {
-		return curOffset, nil
+	if curOffset < b.maxFileSize {
+		return pos, nil
 	}
 
 	err = b.rotate()
-	return curOffset, errors.Trace(err)
+	return pos, errors.Trace(err)
 }
 
 // Close closes the binlogger

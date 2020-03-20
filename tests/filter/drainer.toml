@@ -28,7 +28,7 @@ disable-dispatch = false
 safe-mode = false
 
 # downstream storage, equal to --dest-db-type
-# valid values are "mysql", "file", "tidb", "flash", "kafka"
+# valid values are "mysql", "file", "tidb", "kafka"
 db-type = "mysql"
 
 # disable sync these schema
@@ -61,9 +61,6 @@ host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
-# Time and size limits for flash batch write
-# time-limit = "30s"
-# size-limit = "100000"
 [syncer.to.checkpoint]
 #schema = "tidb_binlog"
 

@@ -46,7 +46,7 @@ func (s *testFileSuite) TestIsAcceptableBinlogFile(c *C) {
 		binlogData, err := binlog.Marshal()
 		c.Assert(err, IsNil)
 
-		binloger, err := binlogfile.OpenBinlogger(binlogDir)
+		binloger, err := binlogfile.OpenBinlogger(binlogDir, binlogfile.SegmentSizeBytes)
 		c.Assert(err, IsNil)
 		_, err = binloger.WriteTail(&gb.Entity{Payload: binlogData})
 		c.Assert(err, IsNil)

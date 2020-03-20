@@ -14,9 +14,14 @@
 package loader
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
-	check "github.com/pingcap/check"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+
+	"github.com/pingcap/check"
 )
 
 type dmlSuite struct {
@@ -57,6 +62,7 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 
 	if tp == UpdateDMLType {
 		dml.OldValues = values
+		dml.Values = values
 	} else {
 		dml.Values = values
 	}
@@ -74,12 +80,13 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	dml = getDML(false, tp)
 	if tp == UpdateDMLType {
 		dml.OldValues = values
+		dml.Values = values
 	} else {
 		dml.Values = values
 	}
 
 	names, args = dml.whereSlice()
-	c.Assert(names, check.DeepEquals, []string{"id", "a1"})
+	c.Assert(names, check.DeepEquals, []string{"a1", "id"})
 	c.Assert(args, check.DeepEquals, []interface{}{1, 1})
 
 	builder.Reset()
@@ -179,10 +186,10 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 		},
 	}
 	sql, args := dml.sql()
-	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`name`,`age`) VALUES(?,?)")
+	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`age`,`name`) VALUES(?,?)")
 	c.Assert(args, check.HasLen, 2)
-	c.Assert(args[0], check.Equals, "pc")
-	c.Assert(args[1], check.Equals, 42)
+	c.Assert(args[0], check.Equals, 42)
+	c.Assert(args[1], check.Equals, "pc")
 }
 
 func (s *SQLSuite) TestDeleteSQL(c *check.C) {
@@ -192,6 +199,7 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 		Table:    "hello",
 		Values: map[string]interface{}{
 			"name": "pc",
+			"age":  10,
 		},
 		info: &tableInfo{
 			columns: []string{"name", "age"},
@@ -200,9 +208,10 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 	sql, args := dml.sql()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM `test`.`hello` WHERE `name` = ? AND `age` IS NULL LIMIT 1")
-	c.Assert(args, check.HasLen, 1)
-	c.Assert(args[0], check.Equals, "pc")
+		"DELETE FROM `test`.`hello` WHERE `age` = ? AND `name` = ? LIMIT 1")
+	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, 10)
+	c.Assert(args[1], check.Equals, "pc")
 }
 
 func (s *SQLSuite) TestUpdateSQL(c *check.C) {
@@ -227,4 +236,29 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 	c.Assert(args, check.HasLen, 2)
 	c.Assert(args[0], check.Equals, "pc")
 	c.Assert(args[1], check.Equals, "pingcap")
+}
+
+func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+
+	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(sql)).
+		WithArgs(1, 100).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	e := newExecutor(db)
+	info := &loopbacksync.LoopBackSync{ChannelID: 100, LoopbackControl: true, SyncDDL: true}
+	e.info = info
+
+	// begin will update the mark table if LoopbackControl is true.
+	tx, err := e.begin()
+	c.Assert(err, check.IsNil)
+
+	err = tx.commit()
+	c.Assert(err, check.IsNil)
+
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }

@@ -14,25 +14,32 @@
 package sync
 
 import (
+	"crypto/tls"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
-	Host          string           `toml:"host" json:"host"`
-	User          string           `toml:"user" json:"user"`
-	Password      string           `toml:"password" json:"password"`
-	Port          int              `toml:"port" json:"port"`
-	Checkpoint    CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
-	BinlogFileDir string           `toml:"dir" json:"dir"`
-	TimeLimit     string           `toml:"time-limit" json:"time-limit"`
-	SizeLimit     string           `toml:"size-limit" json:"size-limit"`
+	Host     string          `toml:"host" json:"host"`
+	User     string          `toml:"user" json:"user"`
+	Password string          `toml:"password" json:"password"`
+	Security security.Config `toml:"security" json:"security"`
+	TLS      *tls.Config     `toml:"-" json:"-"`
+	// if EncryptedPassword is not empty, Password will be ignore.
+	EncryptedPassword string           `toml:"encrypted_password" json:"encrypted_password"`
+	SyncMode          int              `toml:"sync-mode" json:"sync-mode"`
+	Port              int              `toml:"port" json:"port"`
+	Checkpoint        CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
+	BinlogFileDir     string           `toml:"dir" json:"dir"`
 
 	ZKAddrs          string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion     string `toml:"kafka-version" json:"kafka-version"`
 	KafkaMaxMessages int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
+	KafkaClientID    string `toml:"kafka-client-id" json:"kafka-client-id"`
 	TopicName        string `toml:"topic-name" json:"topic-name"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
@@ -45,7 +52,9 @@ type CheckpointConfig struct {
 	Host     string `toml:"host" json:"host"`
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
-	Port     int    `toml:"port" json:"port"`
+	// if EncryptedPassword is not empty, Password will be ignore.
+	EncryptedPassword string `toml:"encrypted_password" json:"encrypted_password"`
+	Port              int    `toml:"port" json:"port"`
 }
 
 type baseError struct {

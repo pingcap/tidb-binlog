@@ -31,6 +31,7 @@ import (
 	"go.uber.org/zap"
 
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
+	"github.com/pingcap/tidb-binlog/pkg/encrypt"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -65,14 +66,29 @@ type SyncerConfig struct {
 	IgnoreSchemas     string             `toml:"ignore-schemas" json:"ignore-schemas"`
 	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
+	LoopbackControl   bool               `toml:"loopback-control" json:"loopback-control"`
+	SyncDDL           bool               `toml:"sync-ddl" json:"sync-ddl"`
+	ChannelID         int64              `toml:"channel-id" json:"channel-id"`
 	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
 	To                *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
 	DestDBType        string             `toml:"db-type" json:"db-type"`
 	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
+	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+}
+
+// RelayConfig is the Relay log's configuration.
+type RelayConfig struct {
+	LogDir      string `toml:"log-dir" json:"log-dir"`
+	MaxFileSize int64  `toml:"max-file-size" json:"max-file-size"`
+}
+
+// IsEnabled return true if we need to handle relay log.
+func (rc RelayConfig) IsEnabled() bool {
+	return len(rc.LogDir) > 0
 }
 
 // Config holds the configuration of drainer
@@ -126,10 +142,15 @@ func NewConfig() *Config {
 	fs.Int64Var(&cfg.InitialCommitTS, "initial-commit-ts", -1, "if drainer donesn't have checkpoint, use initial commitTS to initial checkpoint, will get a latest timestamp from pd if setting to be -1")
 	fs.StringVar(&cfg.Compressor, "compressor", "", "use the specified compressor to compress payload between pump and drainer, only 'gzip' is supported now (default \"\", ie. compression disabled.)")
 	fs.IntVar(&cfg.SyncerCfg.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")
+	fs.BoolVar(&cfg.SyncerCfg.LoopbackControl, "loopback-control", false, "set mark or not ")
+	fs.BoolVar(&cfg.SyncerCfg.SyncDDL, "sync-ddl", true, "sync ddl or not")
+	fs.Int64Var(&cfg.SyncerCfg.ChannelID, "channel-id", 0, "sync channel id ")
 	fs.StringVar(&cfg.SyncerCfg.IgnoreSchemas, "ignore-schemas", "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql", "disable sync those schemas")
 	fs.IntVar(&cfg.SyncerCfg.WorkerCount, "c", 16, "parallel worker count")
 	fs.StringVar(&cfg.SyncerCfg.DestDBType, "dest-db-type", "mysql", "target db type: mysql or tidb or file or kafka; see syncer section in conf/drainer.toml")
 	fs.BoolVar(&cfg.SyncerCfg.DisableDispatch, "disable-dispatch", false, "disable dispatching sqls that in one same binlog; if set true, work-count and txn-batch would be useless")
+	fs.StringVar(&cfg.SyncerCfg.Relay.LogDir, "relay-log-dir", "", "path to relay log of syncer")
+	fs.Int64Var(&cfg.SyncerCfg.Relay.MaxFileSize, "relay-max-file-size", 10485760, "max file size of each relay log")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
@@ -193,6 +214,13 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.tls, err = cfg.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Errorf("tls config %+v error %v", cfg.Security, err)
+	}
+
+	if cfg.SyncerCfg != nil && cfg.SyncerCfg.To != nil {
+		cfg.SyncerCfg.To.TLS, err = cfg.SyncerCfg.To.Security.ToTLSConfig()
+		if err != nil {
+			return errors.Errorf("tls config %+v error %v", cfg.SyncerCfg.To.Security, err)
+		}
 	}
 
 	if err = cfg.adjustConfig(); err != nil {
@@ -374,9 +402,26 @@ func (cfg *Config) adjustConfig() error {
 			}
 			cfg.SyncerCfg.To.User = user
 		}
-		if len(cfg.SyncerCfg.To.Password) == 0 {
+
+		if len(cfg.SyncerCfg.To.EncryptedPassword) > 0 {
+			decrypt, err := encrypt.Decrypt(cfg.SyncerCfg.To.EncryptedPassword)
+			if err != nil {
+				return errors.Annotate(err, "failed to decrypt password in `to.encrypted_password`")
+			}
+
+			cfg.SyncerCfg.To.Password = decrypt
+		} else if len(cfg.SyncerCfg.To.Password) == 0 {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
+	}
+
+	if len(cfg.SyncerCfg.To.Checkpoint.EncryptedPassword) > 0 {
+		decrypt, err := encrypt.Decrypt(cfg.SyncerCfg.To.EncryptedPassword)
+		if err != nil {
+			return errors.Annotate(err, "failed to decrypt password in `checkpoint.encrypted_password`")
+		}
+
+		cfg.SyncerCfg.To.Checkpoint.Password = decrypt
 	}
 
 	cfg.SyncerCfg.adjustWorkCount()

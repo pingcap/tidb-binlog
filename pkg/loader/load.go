@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -69,6 +71,9 @@ type loaderImpl struct {
 
 	batchSize   int
 	workerCount int
+	syncMode    SyncMode
+
+	loopBackSyncInfo *loopbacksync.LoopBackSync
 
 	input      chan *Txn
 	successTxn chan *Txn
@@ -99,22 +104,42 @@ type MetricsGroup struct {
 	QueryHistogramVec *prometheus.HistogramVec
 }
 
+// SyncMode represents the sync mode of DML.
+type SyncMode int
+
+// SyncMode values.
+const (
+	SyncFullColumn SyncMode = 1 + iota
+	SyncPartialColumn
+)
+
 type options struct {
-	workerCount   int
-	batchSize     int
-	metrics       *MetricsGroup
-	saveAppliedTS bool
+	workerCount      int
+	batchSize        int
+	loopBackSyncInfo *loopbacksync.LoopBackSync
+	metrics          *MetricsGroup
+	saveAppliedTS    bool
+	syncMode         SyncMode
 }
 
 var defaultLoaderOptions = options{
-	workerCount:   16,
-	batchSize:     20,
-	metrics:       nil,
-	saveAppliedTS: false,
+	workerCount:      16,
+	batchSize:        20,
+	loopBackSyncInfo: nil,
+	metrics:          nil,
+	saveAppliedTS:    false,
+	syncMode:         SyncFullColumn,
 }
 
 // A Option sets options such batch size, worker count etc.
 type Option func(*options)
+
+// SyncModeOption set sync mode of loader.
+func SyncModeOption(n SyncMode) Option {
+	return func(o *options) {
+		o.syncMode = n
+	}
+}
 
 // WorkerCount set worker count of loader
 func WorkerCount(n int) Option {
@@ -127,6 +152,13 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+//SetloopBackSyncInfo set loop back sync info of loader
+func SetloopBackSyncInfo(loopBackSyncInfo *loopbacksync.LoopBackSync) Option {
+	return func(o *options) {
+		o.loopBackSyncInfo = loopBackSyncInfo
 	}
 }
 
@@ -154,15 +186,18 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// TODO just save opts in loaderImpl instead of copy every field.
 	s := &loaderImpl{
-		db:            db,
-		workerCount:   opts.workerCount,
-		batchSize:     opts.batchSize,
-		metrics:       opts.metrics,
-		input:         make(chan *Txn),
-		successTxn:    make(chan *Txn),
-		merge:         true,
-		saveAppliedTS: opts.saveAppliedTS,
+		db:               db,
+		workerCount:      opts.workerCount,
+		batchSize:        opts.batchSize,
+		metrics:          opts.metrics,
+		syncMode:         opts.syncMode,
+		loopBackSyncInfo: opts.loopBackSyncInfo,
+		input:            make(chan *Txn),
+		successTxn:       make(chan *Txn),
+		merge:            true,
+		saveAppliedTS:    opts.saveAppliedTS,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -262,6 +297,10 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 	return
 }
 
+func (s *loaderImpl) evitTableInfo(schema string, table string) {
+	s.tableInfos.Delete(quoteSchema(schema, table))
+}
+
 func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo, err error) {
 	v, ok := s.tableInfos.Load(quoteSchema(schema, table))
 	if ok {
@@ -306,6 +345,9 @@ func isCreateDatabaseDDL(sql string) bool {
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
+	if ddl.ShouldSkip {
+		return nil
+	}
 
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
@@ -392,6 +434,20 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func removeOrphanCols(info *tableInfo, dml *DML) {
+	mp := make(map[string]struct{}, len(info.columns))
+	for _, name := range info.columns {
+		mp[name] = struct{}{}
+	}
+
+	for name := range dml.Values {
+		if _, ok := mp[name]; !ok {
+			delete(dml.Values, name)
+			delete(dml.OldValues, name)
+		}
+	}
+}
+
 func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
@@ -402,6 +458,9 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 			return errors.Trace(err)
 		}
 		filterGeneratedCols(dml)
+		if s.syncMode == SyncPartialColumn {
+			removeOrphanCols(dml.info, dml)
+		}
 	}
 
 	batchTables, singleDMLs := s.groupDMLs(dmls)
@@ -428,14 +487,34 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 	return errors.Trace(err)
 }
 
+func (s *loaderImpl) initMarkTable() error {
+	if err := loopbacksync.CreateMarkTable(s.db); err != nil {
+		return errors.Trace(err)
+	}
+	return loopbacksync.InitMarkTableData(s.db, s.workerCount, s.loopBackSyncInfo.ChannelID)
+}
+
 // Run will quit when meet any error, or all the txn are drained
 func (s *loaderImpl) Run() error {
-	txnManager := newTxnManager(1024, s.input)
 	defer func() {
 		log.Info("Run()... in Loader quit")
 		close(s.successTxn)
-		txnManager.Close()
 	}()
+
+	if s.loopBackSyncInfo != nil && s.loopBackSyncInfo.LoopbackControl {
+		if err := s.initMarkTable(); err != nil {
+			return errors.Trace(err)
+		}
+		defer func() {
+			err := loopbacksync.CleanMarkTableData(s.db, s.loopBackSyncInfo.ChannelID)
+			if err != nil {
+				log.Error("fail to clean mark table data", zap.Error(err))
+			}
+		}()
+	}
+
+	txnManager := newTxnManager(1024, s.input)
+	defer txnManager.Close()
 
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
@@ -538,6 +617,11 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	if s.syncMode == SyncPartialColumn {
+		e = e.withRefreshTableInfo(s.refreshTableInfo)
+	}
+	e.setSyncInfo(s.loopBackSyncInfo)
+	e.setWorkerCount(s.workerCount)
 	if s.metrics != nil && s.metrics.QueryHistogramVec != nil {
 		e = e.withQueryHistogramVec(s.metrics.QueryHistogramVec)
 	}
@@ -552,6 +636,11 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
+			if txn.DDL.ShouldSkip {
+				s.evitTableInfo(txn.DDL.Database, txn.DDL.Table)
+				return
+			}
+
 			if needRefreshTableInfo(txn.DDL.SQL) {
 				if _, err := s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table); err != nil {
 					log.Error("refresh table info failed", zap.String("database", txn.DDL.Database), zap.String("table", txn.DDL.Table), zap.Error(err))
