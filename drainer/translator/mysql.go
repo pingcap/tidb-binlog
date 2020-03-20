@@ -102,14 +102,15 @@ func genMysqlDelete(schema string, table *model.TableInfo, row []byte) (names []
 }
 
 // TiBinlogToTxn translate the format to loader.Txn
-func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue) (txn *loader.Txn, err error) {
+func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {
 		txn.DDL = &loader.DDL{
-			Database: schema,
-			Table:    table,
-			SQL:      string(tiBinlog.GetDdlQuery()),
+			Database:   schema,
+			Table:      table,
+			SQL:        string(tiBinlog.GetDdlQuery()),
+			ShouldSkip: shouldSkip,
 		}
 	} else {
 		for _, mut := range pv.GetMutations() {

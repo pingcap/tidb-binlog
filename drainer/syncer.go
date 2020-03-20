@@ -14,9 +14,13 @@
 package drainer
 
 import (
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -24,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/relay"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
@@ -45,6 +50,8 @@ type Syncer struct {
 	input chan *binlogItem
 
 	filter *filter.Filter
+
+	loopbackSync *loopbacksync.LoopBackSync
 
 	// last time we successfully sync binlog item to downstream
 	lastSyncTime time.Time
@@ -70,6 +77,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		ignoreDBs = strings.Split(cfg.IgnoreSchemas, ",")
 	}
 	syncer.filter = filter.NewFilter(ignoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables)
+	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL)
 
 	var err error
 	// create schema
@@ -78,7 +86,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -86,7 +94,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
@@ -98,13 +106,14 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema) (dsyncer dsync.Syncer, err
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "flash":
-		dsyncer, err = dsync.NewFlashSyncer(cfg.To, schema)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to create flash dsyncer")
-		}
 	case "mysql", "tidb":
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType)
+		var relayer relay.Relayer
+		if cfg.Relay.IsEnabled() {
+			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
+				return nil, errors.Annotate(err, "fail to create relayer")
+			}
+		}
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -249,7 +258,7 @@ func (s *Syncer) savePoint(ts, slaveTS int64) {
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, slaveTS)
+	err := s.cp.Save(ts, slaveTS, false)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -348,6 +357,15 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
+			var isFilterTransaction = false
+			var err1 error
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
+				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
+				if err1 != nil {
+					err = errors.Annotate(err1, "analyze transaction failed")
+					break ForLoop
+				}
+			}
 
 			var ignore bool
 			ignore, err = filterTable(preWrite, s.filter, s.schema)
@@ -356,7 +374,7 @@ ForLoop:
 				break ForLoop
 			}
 
-			if !ignore {
+			if !ignore && !isFilterTransaction {
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
 				lastAddComitTS = binlog.GetCommitTs()
@@ -397,23 +415,38 @@ ForLoop:
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
-				log.Info("skip ddl", zap.String("schema", schema), zap.String("table", table),
+				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
-			} else if sql != "" {
-				s.addDDLCount()
-				beginTime := time.Now()
-				lastAddComitTS = binlog.GetCommitTs()
-
-				log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
-					zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
-
-				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table})
-				if err != nil {
-					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
-					break ForLoop
-				}
-				executeHistogram.Observe(time.Since(beginTime).Seconds())
+				continue
 			}
+
+			shouldSkip := false
+
+			if !s.cfg.SyncDDL {
+				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				// A empty sql force it to evict the downstream table info.
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+					shouldSkip = true
+				} else {
+					continue
+				}
+			}
+
+			// Add ddl item to downstream.
+			s.addDDLCount()
+			beginTime := time.Now()
+			lastAddComitTS = binlog.GetCommitTs()
+
+			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
+				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+
+			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip})
+			if err != nil {
+				err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
+				break ForLoop
+			}
+			executeHistogram.Observe(time.Since(beginTime).Seconds())
 		}
 	}
 
@@ -433,7 +466,41 @@ ForLoop:
 	if err != nil {
 		return err
 	}
-	return cerr
+
+	if cerr != nil {
+		return cerr
+	}
+
+	return s.cp.Save(s.cp.TS(), 0, true /*consistent*/)
+}
+
+func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {
+	for _, dml := range dmls {
+		tableName := dml.Database + "." + dml.Table
+		if strings.EqualFold(tableName, loopbacksync.MarkTableName) {
+			channelID, ok := dml.Values[loopbacksync.ChannelID]
+			if ok {
+				channelIDInt64, ok := channelID.(int64)
+				if !ok {
+					return false, errors.Errorf("wrong type of channelID: %s", reflect.TypeOf(channelID))
+				}
+				if channelIDInt64 == info.ChannelID {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGetter translator.TableInfoGetter, info *loopbacksync.LoopBackSync) (bool, error) {
+	var tableName string
+	var schemaName string
+	txn, err := translator.TiBinlogToTxn(infoGetter, schemaName, tableName, binlog, prewriteValue, false)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	return findLoopBackMark(txn.DMLs, info)
 }
 
 // filterTable may drop some table mutation in `PrewriteValue`

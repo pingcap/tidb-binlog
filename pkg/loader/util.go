@@ -14,12 +14,16 @@
 package loader
 
 import (
+	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
 	"hash/crc32"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 )
 
@@ -77,12 +81,23 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	return
 }
 
+var customID int64
+
 // CreateDBWithSQLMode return sql.DB
-func CreateDBWithSQLMode(user string, password string, host string, port int, sqlMode *string) (db *gosql.DB, err error) {
+func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string) (db *gosql.DB, err error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
 	if sqlMode != nil {
 		// same as "set sql_mode = '<sqlMode>'"
 		dsn += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
+	}
+
+	if tlsConfig != nil {
+		name := "custom_" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
+		err := mysql.RegisterTLSConfig(name, tlsConfig)
+		if err != nil {
+			return nil, errors.Annotate(err, "failed to RegisterTLSConfig")
+		}
+		dsn += "&tls=" + name
 	}
 
 	db, err = gosql.Open("mysql", dsn)
@@ -93,8 +108,8 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, sq
 }
 
 // CreateDB return sql.DB
-func CreateDB(user string, password string, host string, port int) (db *gosql.DB, err error) {
-	return CreateDBWithSQLMode(user, password, host, port, nil)
+func CreateDB(user string, password string, host string, port int, tls *tls.Config) (db *gosql.DB, err error) {
+	return CreateDBWithSQLMode(user, password, host, port, tls, nil)
 }
 
 func quoteSchema(schema string, table string) string {

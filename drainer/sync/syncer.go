@@ -24,9 +24,14 @@ type Item struct {
 	PrewriteValue *pb.PrewriteValue // only for DML
 	Schema        string
 	Table         string
+	RelayLogPos   pb.Pos
 
 	// the applied TS executed in downstream, only for tidb
 	AppliedTS int64
+	// should skip to replicate this item at downstream
+	// currently only used for signal the syncer to learn that the downstream schema is changed
+	// when we don't replicate DDL.
+	ShouldSkip bool
 }
 
 // Syncer sync binlog item to downstream
@@ -38,6 +43,7 @@ type Syncer interface {
 	// Return not nil if fail to sync data to downstream or nil if closed normally
 	Error() <-chan error
 	// Close the Syncer, no more item can be added by `Sync`
+	// will drain all items and return nil if all successfully sync into downstream
 	Close() error
 }
 

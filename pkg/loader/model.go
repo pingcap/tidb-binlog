@@ -15,6 +15,7 @@ package loader
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,9 @@ type DDL struct {
 	Database string
 	Table    string
 	SQL      string
+	// should skip to execute this DDL at downstream and just refresh the downstream table info.
+	// one case for this usage is for bidirectional replication and only execute DDL at one side.
+	ShouldSkip bool
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -166,10 +170,11 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
 
-	for name, arg := range dml.Values {
+	for _, name := range dml.columnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
+		arg := dml.Values[name]
 		fmt.Fprintf(builder, "%s = ?", quoteName(name))
 		args = append(args, arg)
 	}
@@ -230,7 +235,8 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 	}
 
 	// Fallback to use all columns
-	return dml.info.columns, dml.whereValues(dml.info.columns)
+	names := dml.columnNames()
+	return names, dml.whereValues(names)
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
@@ -244,10 +250,21 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) columnNames() []string {
+	names := make([]string, 0, len(dml.Values))
+
+	for name := range dml.Values {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+	return names
+}
+
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
-	info := dml.info
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(info.columns), holderString(len(info.columns)))
-	for _, name := range info.columns {
+	names := dml.columnNames()
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names), holderString(len(names)))
+	for _, name := range names {
 		v := dml.Values[name]
 		args = append(args, v)
 	}

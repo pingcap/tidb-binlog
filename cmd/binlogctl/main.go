@@ -45,21 +45,27 @@ func main() {
 	case ctl.GenerateMeta:
 		err = ctl.GenerateMetaInfo(cfg)
 	case ctl.QueryPumps:
-		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.PumpNode, cfg.ShowOfflineNodes)
+		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.PumpNode, cfg.ShowOfflineNodes, cfg.TLS)
 	case ctl.QueryDrainers:
-		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.DrainerNode, cfg.ShowOfflineNodes)
+		err = ctl.QueryNodesByKind(cfg.EtcdURLs, node.DrainerNode, cfg.ShowOfflineNodes, cfg.TLS)
 	case ctl.UpdatePump:
-		err = ctl.UpdateNodeState(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, cfg.State)
+		err = ctl.UpdateNodeState(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, cfg.State, cfg.TLS)
 	case ctl.UpdateDrainer:
-		err = ctl.UpdateNodeState(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, cfg.State)
+		err = ctl.UpdateNodeState(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, cfg.State, cfg.TLS)
 	case ctl.PausePump:
-		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, pause)
+		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, pause, cfg.TLS)
 	case ctl.PauseDrainer:
-		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, pause)
+		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, pause, cfg.TLS)
 	case ctl.OfflinePump:
-		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, close)
+		err = ctl.ApplyAction(cfg.EtcdURLs, node.PumpNode, cfg.NodeID, close, cfg.TLS)
 	case ctl.OfflineDrainer:
-		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, close)
+		err = ctl.ApplyAction(cfg.EtcdURLs, node.DrainerNode, cfg.NodeID, close, cfg.TLS)
+	case ctl.Encrypt:
+		if len(cfg.Text) == 0 {
+			err = errors.New("need to specify the text to be encrypt")
+		} else {
+			err = ctl.EncryptHandler(cfg.Text)
+		}
 	default:
 		err = errors.NotSupportedf("cmd %s", cfg.Command)
 	}

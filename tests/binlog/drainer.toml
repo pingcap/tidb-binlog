@@ -39,7 +39,7 @@ disable-dispatch = false
 safe-mode = false
 
 # downstream storage, equal to --dest-db-type
-# valid values are "mysql", "file", "tidb", "flash", "kafka"
+# valid values are "mysql", "file", "tidb", "kafka"
 db-type = "mysql"
 
 ##replicate-do-db priority over replicate-do-table if have same db name
@@ -60,9 +60,6 @@ host = "127.0.0.1"
 user = "root"
 password = ""
 port = 3306
-# Time and size limits for flash batch write
-# time-limit = "30s"
-# size-limit = "100000"
 [syncer.to.checkpoint]
 #schema = "tidb_binlog"
 
@@ -78,6 +75,7 @@ port = 3306
 # kafka-addrs = "127.0.0.1:9092"
 # kafka-version = "0.8.2.0"
 # kafka-max-messages = 1024
+# kafka-client-id = "tidb_binlog"
 #
 #
 # the topic name drainer will push msg, the default name is <cluster-id>_obinlog

@@ -21,7 +21,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
-	check "github.com/pingcap/check"
+	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -35,6 +35,37 @@ func (cs *LoadSuite) SetUpTest(c *check.C) {
 }
 
 func (cs *LoadSuite) TearDownTest(c *check.C) {
+}
+
+func (cs *LoadSuite) TestRemoveOrphanCols(c *check.C) {
+	dml := &DML{
+		Values: map[string]interface{}{
+			"exist1":  11,
+			"exist2":  22,
+			"orhpan1": 11,
+			"orhpan2": 22,
+		},
+		OldValues: map[string]interface{}{
+			"exist1":  1,
+			"exist2":  2,
+			"orhpan1": 1,
+			"orhpan2": 2,
+		},
+	}
+
+	info := &tableInfo{
+		columns: []string{"exist1", "exist2"},
+	}
+
+	removeOrphanCols(info, dml)
+	c.Assert(dml.Values, check.DeepEquals, map[string]interface{}{
+		"exist1": 11,
+		"exist2": 22,
+	})
+	c.Assert(dml.OldValues, check.DeepEquals, map[string]interface{}{
+		"exist1": 1,
+		"exist2": 2,
+	})
 }
 
 func (cs *LoadSuite) TestOptions(c *check.C) {
@@ -120,8 +151,9 @@ func (cs *LoadSuite) TestNewClose(c *check.C) {
 	db, _, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
 
-	loader, err := NewLoader(db)
+	loader, err := NewLoader(db, SyncModeOption(SyncPartialColumn))
 	c.Assert(err, check.IsNil)
+	c.Assert(loader.(*loaderImpl).syncMode, check.Equals, SyncPartialColumn)
 
 	loader.Close()
 }

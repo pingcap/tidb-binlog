@@ -31,10 +31,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(int64, int64) error
+	Save(commitTS int64, slaveTS int64, consistent bool) error
 
-	// Pos gets position information.
+	// TS gets checkpoint commit timestamp.
 	TS() int64
+
+	// IsConsistent return the Consistent status saved.
+	IsConsistent() bool
 
 	// Close closes the CheckPoint and release resources, after closed other methods should not be called again.
 	Close() error
@@ -50,9 +53,7 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 	case "mysql", "tidb":
 		cp, err = newMysql(cfg)
 	case "file":
-		cp, err = NewFile(cfg)
-	case "flash":
-		cp, err = newFlash(cfg)
+		cp, err = NewFile(cfg.InitialCommitTS, cfg.CheckPointFile)
 	default:
 		err = errors.Errorf("unsupported checkpoint type %s", cfg.CheckpointType)
 	}

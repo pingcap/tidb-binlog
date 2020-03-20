@@ -19,6 +19,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
@@ -35,9 +38,12 @@ type MysqlCheckPoint struct {
 	schema string
 	table  string
 
-	CommitTS int64            `toml:"commitTS" json:"commitTS"`
-	TsMap    map[string]int64 `toml:"ts-map" json:"ts-map"`
+	ConsistentSaved bool             `toml:"consistent" json:"consistent"`
+	CommitTS        int64            `toml:"commitTS" json:"commitTS"`
+	TsMap           map[string]int64 `toml:"ts-map" json:"ts-map"`
 }
+
+var _ CheckPoint = &MysqlCheckPoint{}
 
 var sqlOpenDB = pkgsql.OpenDB
 
@@ -66,6 +72,16 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	sql = genCreateTable(sp)
 	if _, err = db.Exec(sql); err != nil {
 		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
+	}
+
+	if sp.clusterID == 0 {
+		id, err := getClusterID(db, sp.schema, sp.table)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		log.Info("set cluster id", zap.Uint64("id", id))
+		sp.clusterID = id
 	}
 
 	err = sp.Load()
@@ -106,7 +122,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
+func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -115,6 +131,7 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	sp.CommitTS = ts
+	sp.ConsistentSaved = consistent
 
 	if slaveTS > 0 {
 		sp.TsMap["master-ts"] = ts
@@ -133,6 +150,14 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64) error {
 	}
 
 	return nil
+}
+
+// IsConsistent implements CheckPoint interface
+func (sp *MysqlCheckPoint) IsConsistent() bool {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.ConsistentSaved
 }
 
 // TS implements CheckPoint.TS interface

@@ -13,9 +13,9 @@
 package sync
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"reflect"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,7 +37,6 @@ type syncerSuite struct {
 	syncers []Syncer
 
 	mysqlMock    sqlmock.Sqlmock
-	flashMock    sqlmock.Sqlmock
 	mockProducer *mocks.AsyncProducer
 }
 
@@ -49,8 +48,6 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 		Password:     "",
 		Port:         3306,
 		KafkaVersion: "0.8.2.0",
-		TimeLimit:    "1s",
-		SizeLimit:    "1024",
 	}
 
 	// create pb syncer
@@ -61,7 +58,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 
 	// create mysql syncer
 	oldCreateDB := createDB
-	createDB = func(string, string, string, int, *string) (db *sql.DB, err error) {
+	createDB = func(string, string, string, int, *tls.Config, *string) (db *sql.DB, err error) {
 		db, s.mysqlMock, err = sqlmock.New()
 		return
 	}
@@ -69,7 +66,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 		createDB = oldCreateDB
 	}()
 
-	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql")
+	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil)
 	c.Assert(err, check.IsNil)
 	s.syncers = append(s.syncers, mysql)
 
@@ -87,27 +84,10 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 	c.Assert(err, check.IsNil)
 	s.syncers = append(s.syncers, kafka)
 
-	// create flash
-	oldOpenCH := openCH
-	defer func() {
-		openCH = oldOpenCH
-	}()
-	openCH = func(string, int, string, string, string, int) (db *sql.DB, err error) {
-		db, s.flashMock, err = sqlmock.New()
-		return
-	}
-
-	// flash does not use `cfg.Port`, and use `cfg.Host` as an `addr`
-	cfg.Host += ":" + strconv.Itoa(cfg.Port)
-	flash, err := NewFlashSyncer(cfg, infoGetter)
-	c.Assert(err, check.IsNil)
-	s.syncers = append(s.syncers, flash)
-
 	c.Logf("set up %d syncer", len(s.syncers))
 }
 
 func (s *syncerSuite) TearDownTest(c *check.C) {
-	s.flashMock.ExpectClose()
 	s.mysqlMock.ExpectClose()
 
 	closeSyncers(c, s.syncers)
@@ -119,7 +99,7 @@ func (s *syncerSuite) TestOpenAndClose(c *check.C) {
 }
 
 func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
-	gen := translator.BinlogGenrator{}
+	gen := translator.BinlogGenerator{}
 
 	// set up mysql db mock expect
 	s.mysqlMock.ExpectBegin()
@@ -129,11 +109,6 @@ func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
 
 	// set up kafka producer mock expect
 	s.mockProducer.ExpectInputAndSucceed()
-
-	// set up flash db mock expect
-	s.flashMock.ExpectBegin()
-	s.flashMock.ExpectExec("CREATE TABLE .*").WillReturnResult(sqlmock.NewResult(0, 0))
-	s.flashMock.ExpectCommit()
 
 	var successCount = make([]int64, len(s.syncers))
 	for idx, syncer := range s.syncers {
