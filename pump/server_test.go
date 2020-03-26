@@ -27,7 +27,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v3/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -556,7 +556,7 @@ func (pc *mockPdCli) Close() {}
 type newServerSuite struct {
 	origGetPdClientFn         func(string, security.Config) (pd.Client, error)
 	origNewKVStoreFn          func(string) (kv.Storage, error)
-	origNewTiKVLockResolverFn func([]string, config.Security) (*tikv.LockResolver, error)
+	origNewTiKVLockResolverFn func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error)
 	cfg                       *Config
 }
 
@@ -616,7 +616,7 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
-	newTiKVLockResolverFn = func([]string, config.Security) (*tikv.LockResolver, error) {
+	newTiKVLockResolverFn = func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error) {
 		return nil, nil
 	}
 	newKVStoreFn = func(path string) (kv.Storage, error) {

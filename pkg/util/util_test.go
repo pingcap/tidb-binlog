@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v3/client"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
@@ -189,7 +189,7 @@ func (s *getPdClientSuite) TestShouldRejectInvalidAddr(c *C) {
 func (s *getPdClientSuite) TestShouldRetPdCli(c *C) {
 	expected := dummyCli{}
 	origF := newPdCli
-	newPdCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
+	newPdCli = func(pdAddrs []string, security pd.SecurityOption, _ ...pd.ClientOption) (pd.Client, error) {
 		return expected, nil
 	}
 	defer func() {
