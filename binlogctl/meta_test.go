@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	. "github.com/pingcap/check"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 )
 
 type metaSuite struct{}
