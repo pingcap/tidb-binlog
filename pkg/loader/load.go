@@ -376,6 +376,10 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 		return nil
 	})
 
+	if err != nil && isSetTiFlashReplica(ddl.SQL) {
+		return nil
+	}
+
 	return errors.Trace(err)
 }
 
@@ -815,4 +819,25 @@ func getAppliedTS(db *gosql.DB) int64 {
 		return 0
 	}
 	return appliedTS
+}
+
+func isSetTiFlashReplica(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("failed to parse", zap.Error(err), zap.String("sql", sql))
+		return false
+	}
+
+	n, ok := stmt.(*ast.AlterTableStmt)
+	if !ok {
+		return false
+	}
+
+	for _, spec := range n.Specs {
+		if spec.Tp == ast.AlterTableSetTiFlashReplica {
+			return true
+		}
+	}
+
+	return false
 }
