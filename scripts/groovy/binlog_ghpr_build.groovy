@@ -1,4 +1,4 @@
-def rsfSpec = "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
+def refSpec = "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
 if (ghprbPullId == null || ghprbPullId == "") {
 	refSpec = "+refs/heads/*:refs/remotes/origin/*"
 }
@@ -13,7 +13,7 @@ catchError {
                     deleteDir()
                 }
                 try {
-                    checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'PruneStaleBranch'], [$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'github-sre-bot-ssh', refspec: rsfSpec, url: 'git@github.com:pingcap/tidb-binlog.git']]]
+                    checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'PruneStaleBranch'], [$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'github-sre-bot-ssh', refspec: refSpec, url: 'git@github.com:pingcap/tidb-binlog.git']]]
                 } catch (error) {
                     retry(2) {
                         echo "checkout failed, retry.."

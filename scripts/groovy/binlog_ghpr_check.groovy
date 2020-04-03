@@ -1,4 +1,4 @@
-def rsfSpec = "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
+def refSpec = "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
 if (ghprbPullId == null || ghprbPullId == "") {
 	refSpec = "+refs/heads/*:refs/remotes/origin/*"
 }
