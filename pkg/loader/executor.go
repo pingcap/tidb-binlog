@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
@@ -32,11 +33,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var defaultBatchSize = 128
+var (
+	defaultBatchSize   = 128
+	defaultWorkerCount = 16
+	index              int64
+)
 
 type executor struct {
 	db                *gosql.DB
 	batchSize         int
+	workerCount       int
 	info              *loopbacksync.LoopBackSync
 	queryHistogramVec *prometheus.HistogramVec
 	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
@@ -44,8 +50,9 @@ type executor struct {
 
 func newExecutor(db *gosql.DB) *executor {
 	exe := &executor{
-		db:        db,
-		batchSize: defaultBatchSize,
+		db:          db,
+		batchSize:   defaultBatchSize,
+		workerCount: defaultWorkerCount,
 	}
 
 	return exe
@@ -63,6 +70,10 @@ func (e *executor) withBatchSize(batchSize int) *executor {
 
 func (e *executor) setSyncInfo(info *loopbacksync.LoopBackSync) {
 	e.info = info
+}
+
+func (e *executor) setWorkerCount(workerCount int) {
+	e.workerCount = workerCount
 }
 
 func (e *executor) withQueryHistogramVec(queryHistogramVec *prometheus.HistogramVec) *executor {
@@ -117,20 +128,8 @@ func (tx *tx) commit() error {
 	return errors.Trace(err)
 }
 
-func (e *executor) updateMark(channel string, tx *tx) error {
-	if e.info == nil {
-		return nil
-	}
-	status := 1
-	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	var args []interface{}
-	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
-	args = append(args, e.info.ChannelID, status, channel)
-	_, err := tx.autoRollbackExec(sql, args...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+func (e *executor) addIndex() int64 {
+	return atomic.AddInt64(&index, 1) % ((int64)(e.workerCount))
 }
 
 // return a wrap of sql.Tx
@@ -146,9 +145,19 @@ func (e *executor) begin() (*tx, error) {
 	}
 
 	if e.info != nil && e.info.LoopbackControl {
-		err1 := e.updateMark("", tx)
-		if err1 != nil {
-			return nil, errors.Trace(err1)
+		start := time.Now()
+
+		err = loopbacksync.UpdateMark(tx.Tx, e.addIndex(), e.info.ChannelID)
+		if err != nil {
+			rerr := tx.Rollback()
+			if rerr != nil {
+				log.Error("fail to rollback", zap.Error(rerr))
+			}
+			return nil, errors.Annotate(err, "failed to update mark data")
+		}
+
+		if tx.queryHistogramVec != nil {
+			tx.queryHistogramVec.WithLabelValues("update_mark_table").Observe(time.Since(start).Seconds())
 		}
 	}
 

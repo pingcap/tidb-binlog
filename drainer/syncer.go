@@ -113,7 +113,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
+		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
 		}
@@ -387,6 +387,10 @@ ForLoop:
 			}
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
+
+			if skipFlash(b.job) {
+				continue
+			}
 
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen

@@ -15,6 +15,7 @@ package drainer
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"path"
 	"testing"
@@ -135,17 +136,76 @@ func (t *testDrainerSuite) TestValidate(c *C) {
 	c.Assert(err, IsNil)
 }
 
+func (t *testDrainerSuite) TestEnableDisable(c *C) {
+	truev := true
+	falsev := false
+	for _, enableFlag := range []*bool{nil, &truev, &falsev} {
+		for _, enableFile := range []*bool{nil, &truev, &falsev} {
+			for _, disableFlag := range []*bool{nil, &truev, &falsev} {
+				for _, disableFile := range []*bool{nil, &truev, &falsev} {
+					f, err := ioutil.TempFile("", "test-enable")
+					c.Assert(err, check.IsNil)
+
+					fmt.Fprintf(f, "[syncer]\n")
+					if enableFile != nil {
+						fmt.Fprintf(f, "enable-dispatch = %v\n", *enableFile)
+						fmt.Fprintf(f, "enable-detect = %v\n", *enableFile)
+					}
+
+					if disableFile != nil {
+						fmt.Fprintf(f, "disable-dispatch = %v\n", *disableFile)
+						fmt.Fprintf(f, "disable-detect = %v\n", *disableFile)
+					}
+
+					var args []string
+
+					if enableFlag != nil {
+						args = append(args, fmt.Sprintf("-enable-dispatch=%v", *enableFlag))
+						args = append(args, fmt.Sprintf("-enable-detect=%v", *enableFlag))
+					}
+
+					if disableFlag != nil {
+						args = append(args, fmt.Sprintf("-disable-dispatch=%v", *disableFlag))
+						args = append(args, fmt.Sprintf("-disable-detect=%v", *disableFlag))
+					}
+
+					args = append(args, "--config", f.Name())
+
+					cf := NewConfig()
+					err = cf.Parse(args)
+					c.Assert(err, check.IsNil)
+
+					res := true
+					if disableFlag != nil {
+						res = !*disableFlag
+					} else if disableFile != nil {
+						res = !*disableFile
+					} else if enableFlag != nil {
+						res = *enableFlag
+					} else if enableFile != nil {
+						res = *enableFile
+					}
+
+					c.Log("config file: ", f.Name())
+					c.Log(enableFlag, enableFile, disableFlag, disableFile)
+
+					c.Assert(cf.SyncerCfg.EnableDispatch(), check.Equals, res)
+					c.Assert(cf.SyncerCfg.EnableCausality(), check.Equals, res)
+				}
+			}
+		}
+	}
+}
+
 func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	cfg := NewConfig()
 	cfg.SyncerCfg.DestDBType = "pb"
 	cfg.SyncerCfg.WorkerCount = 10
-	cfg.SyncerCfg.EnableDispatch = true
 
 	err := cfg.adjustConfig()
 	c.Assert(err, IsNil)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
 	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
-	c.Assert(cfg.SyncerCfg.EnableDispatch, IsFalse)
 
 	cfg = NewConfig()
 	err = cfg.adjustConfig()

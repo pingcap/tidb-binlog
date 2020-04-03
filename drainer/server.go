@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,6 +95,11 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	if err := os.MkdirAll(cfg.DataDir, 0700); err != nil {
 		return nil, err
+	}
+
+	if cfg.tls != nil {
+		// TODO: avoid this magic enabling TLS for tikv client.
+		var _ = cfg.Security.ToTiDBSecurityConfig()
 	}
 
 	// get pd client and cluster ID
@@ -284,15 +288,12 @@ func (s *Server) Start() error {
 		}
 	})
 
-	// start a TCP listener
-	tcpURL, err := url.Parse(s.tcpAddr)
+	// We need to manage TLS here for cmux to distinguish between HTTP and gRPC.
+	tcpLis, err := util.Listen("tcp", s.tcpAddr, s.cfg.tls)
 	if err != nil {
-		return errors.Annotatef(err, "invalid listening tcp addr (%s)", s.tcpAddr)
+		return errors.Trace(err)
 	}
-	tcpLis, err := net.Listen("tcp", tcpURL.Host)
-	if err != nil {
-		return errors.Annotatef(err, "fail to start TCP listener on %s", tcpURL.Host)
-	}
+
 	m := cmux.New(tcpLis)
 	grpcL := m.MatchWithWriters(
 		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),

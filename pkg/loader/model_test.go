@@ -241,26 +241,24 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
-	defer db.Close()
-	columns := fmt.Sprintf("(%s,%s,%s) VALUES(?,?,?)", loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	sql := fmt.Sprintf("INSERT INTO %s%s on duplicate key update %s=%s+1;", loopbacksync.MarkTableName, columns, loopbacksync.Val, loopbacksync.Val)
+
+	sql := fmt.Sprintf("update %s set %s=%s+1 where %s=? and %s=? limit 1;", loopbacksync.MarkTableName, loopbacksync.Val, loopbacksync.Val, loopbacksync.ID, loopbacksync.ChannelID)
+
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(sql)).
-		WithArgs(100, 1, "").WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(1, 100).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
+
 	e := newExecutor(db)
-	tx, err := e.begin()
-	c.Assert(err, check.IsNil)
 	info := &loopbacksync.LoopBackSync{ChannelID: 100, LoopbackControl: true, SyncDDL: true}
 	e.info = info
-	err1 := e.updateMark("", tx)
-	c.Assert(err1, check.IsNil)
-	err2 := tx.commit()
-	c.Assert(err2, check.IsNil)
+
+	// begin will update the mark table if LoopbackControl is true.
+	tx, err := e.begin()
+	c.Assert(err, check.IsNil)
+
+	err = tx.commit()
+	c.Assert(err, check.IsNil)
+
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
-}
-func (s *SQLSuite) TestCreateMarkTable(c *check.C) {
-	sql := createMarkTableDDL()
-	sql1 := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	c.Assert(sql, check.Equals, sql1)
 }

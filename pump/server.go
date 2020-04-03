@@ -19,7 +19,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,7 +28,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -47,7 +46,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -128,9 +126,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	log.Info("get clusterID success", zap.Uint64("clusterID", clusterID))
 
 	grpcOpts := []grpc.ServerOption{grpc.MaxRecvMsgSize(GlobalConfig.maxMsgSize)}
-	if cfg.tls != nil {
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(cfg.tls)))
-	}
 
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
 	if err != nil {
@@ -339,12 +334,11 @@ func (s *Server) startHeartbeat() {
 
 // Start runs Pump Server to serve the listening addr, and maintains heartbeat to Etcd
 func (s *Server) Start() error {
-
 	// start a UNIX listener
 	var unixLis net.Listener
 	var err error
 	if s.unixAddr != "" {
-		unixLis, err = listen("unix", s.unixAddr)
+		unixLis, err = util.Listen("unix", s.unixAddr, s.cfg.tls)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -353,7 +347,8 @@ func (s *Server) Start() error {
 	log.Debug("init success")
 
 	// start a TCP listener
-	tcpLis, err := listen("tcp", s.tcpAddr)
+	// we need to manage TLS here for cmux to distinguish between HTTP and gRPC.
+	tcpLis, err := util.Listen("tcp", s.tcpAddr, s.cfg.tls)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -400,6 +395,7 @@ func (s *Server) Start() error {
 	)
 
 	httpL := m.Match(cmux.HTTP1Fast())
+
 	go func() {
 		if err := s.gs.Serve(grpcL); err != nil {
 			log.Error("Unexpected exit of gRPC server", zap.Error(err))
@@ -966,16 +962,4 @@ func (s *Server) waitUntilCommitTSSaved(ctx context.Context, ts int64, checkInte
 			return errors.Trace(ctx.Err())
 		}
 	}
-}
-
-func listen(network, addr string) (net.Listener, error) {
-	URL, err := url.Parse(addr)
-	if err != nil {
-		return nil, errors.Annotatef(err, "invalid listening socket addr (%s)", addr)
-	}
-	listener, err := net.Listen(network, URL.Host)
-	if err != nil {
-		return nil, errors.Annotatef(err, "fail to start %s on %s", network, URL.Host)
-	}
-	return listener, nil
 }

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"net/http"
 	"path"
 	"strconv"
@@ -28,7 +27,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
@@ -550,28 +549,6 @@ func (s *waitCommitTSSuite) TestShouldWaitUntilTs(c *C) {
 	}
 }
 
-type listenSuite struct{}
-
-var _ = Suite(&listenSuite{})
-
-func (s *listenSuite) TestWrongAddr(c *C) {
-	_, err := listen("unix", "://asdf:1231:123:12")
-	c.Assert(err, ErrorMatches, ".*invalid .* socket addr.*")
-}
-
-func (s *listenSuite) TestUnbindableAddr(c *C) {
-	_, err := listen("tcp", "http://asdf;klj:7979/12")
-	c.Assert(err, ErrorMatches, ".*fail to start.*")
-}
-
-func (s *listenSuite) TestReturnListener(c *C) {
-	var l net.Listener
-	l, err := listen("tcp", "http://localhost:17979")
-	c.Assert(err, IsNil)
-	defer l.Close()
-	c.Assert(l, NotNil)
-}
-
 type mockPdCli struct {
 	pd.Client
 }
@@ -585,7 +562,7 @@ func (pc *mockPdCli) Close() {}
 type newServerSuite struct {
 	origGetPdClientFn         func(string, security.Config) (pd.Client, error)
 	origNewKVStoreFn          func(string) (kv.Storage, error)
-	origNewTiKVLockResolverFn func([]string, config.Security) (*tikv.LockResolver, error)
+	origNewTiKVLockResolverFn func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error)
 	cfg                       *Config
 }
 
@@ -645,7 +622,7 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
-	newTiKVLockResolverFn = func([]string, config.Security) (*tikv.LockResolver, error) {
+	newTiKVLockResolverFn = func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error) {
 		return nil, nil
 	}
 	newKVStoreFn = func(path string) (kv.Storage, error) {

@@ -262,6 +262,17 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	return nil
 }
 
+func skipFlash(job *model.Job) bool {
+	switch job.Type {
+	case model.ActionUpdateTiFlashReplicaStatus: // empty job.Query
+		return true
+		// case model.ActionSetTiFlashReplica:
+		// 	return true
+	}
+
+	return false
+}
+
 // handleDDL has four return values,
 // the first value[string]: the schema name
 // the second value[string]: the table name

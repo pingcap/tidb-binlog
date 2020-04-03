@@ -24,6 +24,13 @@ pd-urls = "http://127.0.0.1:2379"
 # syncer Configuration.
 [syncer]
 
+
+# just for test compatible
+disable-dispatch = false
+enable-dispatch = true
+disable-detect = false
+enable-detect = true
+
 # disable sync these schema
 ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 

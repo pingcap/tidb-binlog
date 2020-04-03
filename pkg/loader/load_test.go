@@ -17,12 +17,14 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
+	"sync"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -35,6 +37,16 @@ func (cs *LoadSuite) SetUpTest(c *check.C) {
 }
 
 func (cs *LoadSuite) TearDownTest(c *check.C) {
+}
+
+func (cs *LoadSuite) TestTiFlash(c *check.C) {
+	sql := "ALTER TABLE t SET TIFLASH REPLICA 3 LOCATION LABELS \"rack\", \"host\", \"abc\""
+	res := isSetTiFlashReplica(sql)
+	c.Assert(res, check.IsTrue)
+
+	sql = "create table a(id int)"
+	res = isSetTiFlashReplica(sql)
+	c.Assert(res, check.IsFalse)
 }
 
 func (cs *LoadSuite) TestRemoveOrphanCols(c *check.C) {
@@ -66,6 +78,68 @@ func (cs *LoadSuite) TestRemoveOrphanCols(c *check.C) {
 		"exist1": 1,
 		"exist2": 2,
 	})
+}
+
+func (cs *LoadSuite) TestDisableDispatch(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+
+	utilGetTableInfo := func(db *sql.DB, schema string, table string) (*tableInfo, error) {
+		return &tableInfo{columns: []string{"id"}}, nil
+	}
+
+	ldi, err := NewLoader(db, EnableDispatch(false))
+	ld := ldi.(*loaderImpl)
+	c.Assert(err, check.IsNil)
+	ld.getTableInfoFromDB = utilGetTableInfo
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		for range ld.Successes() {
+			c.Log("get success")
+		}
+		wg.Done()
+		log.Info("succ quit")
+	}()
+
+	var runErr error
+	go func() {
+		runErr = ld.Run()
+		c.Assert(err, check.IsNil)
+		log.Info("run quit")
+		wg.Done()
+	}()
+
+	dml := DML{
+		Database: "test",
+		Table:    "test",
+		Tp:       InsertDMLType,
+		Values: map[string]interface{}{
+			"id": 1,
+		},
+	}
+
+	txn := new(Txn)
+	for i := 0; i < 100; i++ {
+		txn.DMLs = append(txn.DMLs, &dml)
+	}
+
+	// the txn must be execute in one txn at downstream.
+	mock.ExpectBegin()
+	for i := 0; i < 100; i++ {
+		mock.ExpectExec("INSERT INTO .*").WithArgs(1).WillReturnResult(sqlmock.NewResult(0, 1))
+	}
+	mock.ExpectCommit()
+	ld.Input() <- txn
+	ld.Close()
+
+	wg.Wait()
+	c.Assert(runErr, check.IsNil)
+
+	err = mock.ExpectationsWereMet()
+	c.Assert(err, check.IsNil)
 }
 
 func (cs *LoadSuite) TestOptions(c *check.C) {
@@ -160,14 +234,10 @@ func (cs *LoadSuite) TestNewClose(c *check.C) {
 
 func (cs *LoadSuite) TestSetDMLInfo(c *check.C) {
 	info := tableInfo{columns: []string{"id", "name"}}
-	origGet := utilGetTableInfo
-	utilGetTableInfo = func(db *sql.DB, schema string, table string) (*tableInfo, error) {
+	utilGetTableInfo := func(db *sql.DB, schema string, table string) (*tableInfo, error) {
 		return &info, nil
 	}
-	defer func() {
-		utilGetTableInfo = origGet
-	}()
-	ld := loaderImpl{}
+	ld := loaderImpl{getTableInfoFromDB: utilGetTableInfo}
 
 	dml := DML{Database: "test", Table: "t1"}
 	c.Assert(dml.info, check.IsNil)
@@ -212,7 +282,7 @@ func (s *groupDMLsSuite) TestSingleDMLsOnlyIfDisableMerge(c *check.C) {
 
 func (s *groupDMLsSuite) TestGroupByTableName(c *check.C) {
 	ld := loaderImpl{merge: true}
-	canBatch := tableInfo{primaryKey: &indexInfo{}}
+	canBatch := tableInfo{primaryKey: &indexInfo{}, uniqueKeys: []indexInfo{{}}}
 	onlySingle := tableInfo{}
 	dmls := []*DML{
 		{Table: "test1", info: &canBatch},
@@ -232,16 +302,12 @@ type getTblInfoSuite struct{}
 var _ = check.Suite(&getTblInfoSuite{})
 
 func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
-	origGet := utilGetTableInfo
 	nCalled := 0
-	utilGetTableInfo = func(db *sql.DB, schema string, table string) (info *tableInfo, err error) {
+	utilGetTableInfo := func(db *sql.DB, schema string, table string) (info *tableInfo, err error) {
 		nCalled++
 		return &tableInfo{columns: []string{"id", "name"}}, nil
 	}
-	defer func() {
-		utilGetTableInfo = origGet
-	}()
-	ld := loaderImpl{}
+	ld := loaderImpl{getTableInfoFromDB: utilGetTableInfo}
 
 	info, err := ld.getTableInfo("test", "contacts")
 	c.Assert(err, check.IsNil)
@@ -333,7 +399,8 @@ func (s *batchManagerSuite) TestShouldExecDDLImmediately(c *check.C) {
 	var executed *DDL
 	var cbTxn *Txn
 	bm := batchManager{
-		limit: 1024,
+		limit:          1024,
+		enableDispatch: true,
 		fExecDDL: func(ddl *DDL) error {
 			executed = ddl
 			return nil
@@ -354,7 +421,8 @@ func (s *batchManagerSuite) TestShouldExecDDLImmediately(c *check.C) {
 func (s *batchManagerSuite) TestShouldHandleDDLError(c *check.C) {
 	var nCalled int
 	bm := batchManager{
-		limit: 1024,
+		limit:          1024,
+		enableDispatch: true,
 		fDDLSuccessCallback: func(t *Txn) {
 			nCalled++
 		},
@@ -382,7 +450,8 @@ func (s *batchManagerSuite) TestShouldExecAccumulatedDMLs(c *check.C) {
 	var executed []*DML
 	var calledback []*Txn
 	bm := batchManager{
-		limit: 3,
+		limit:          3,
+		enableDispatch: true,
 		fExecDMLs: func(dmls []*DML) error {
 			executed = append(executed, dmls...)
 			return nil
@@ -552,7 +621,8 @@ func (s *runSuite) TestShouldExecuteAllPendingDMLsOnClose(c *check.C) {
 	origF := fNewBatchManager
 	fNewBatchManager = func(s *loaderImpl) *batchManager {
 		return &batchManager{
-			limit: 1024,
+			limit:          1024,
+			enableDispatch: true,
 			fExecDMLs: func(dmls []*DML) error {
 				executed = dmls
 				return nil
@@ -601,7 +671,8 @@ func (s *runSuite) TestShouldFlushWhenInputIsEmpty(c *check.C) {
 	origF := fNewBatchManager
 	fNewBatchManager = func(s *loaderImpl) *batchManager {
 		return &batchManager{
-			limit: 1024,
+			limit:          1024,
+			enableDispatch: true,
 			fExecDMLs: func(dmls []*DML) error {
 				executed <- dmls
 				return nil

@@ -22,7 +22,18 @@ echo "[$(date)] <<<<<< START IN TEST ${TEST_NAME-} FOR: $config >>>>>>" >> "$OUT
 
 if [ -f "$config" ]
 then
-	drainer -log-file $OUT_DIR/drainer.log -config $config $* >> $OUT_DIR/drainer.log 2>&1
-else
-	drainer -log-file $OUT_DIR/drainer.log $* >> $OUT_DIR/drainer.log 2>&1
+    rm -f $OUT_DIR/drainer-config-tmp.toml
+    cp $config $OUT_DIR/drainer-config-tmp.toml
 fi
+
+    # Append the TLS config
+    cat - >> "$OUT_DIR/drainer-config-tmp.toml" <<EOF
+[security]
+ssl-ca = "$OUT_DIR/cert/ca.pem"
+ssl-cert = "$OUT_DIR/cert/drainer.pem"
+ssl-key = "$OUT_DIR/cert/drainer.key"
+cert-allowed-cn = ["binlog"]
+
+EOF
+
+    drainer -log-file $OUT_DIR/drainer.log -config "$OUT_DIR/drainer-config-tmp.toml" -pd-urls https://127.0.0.1:2379 -addr 0.0.0.0:8249 -advertise-addr 127.0.0.1:8249 -node-id drainer-id $* >> $OUT_DIR/drainer.log 2>&1

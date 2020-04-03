@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
@@ -172,10 +170,11 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
 
-	for name, arg := range dml.Values {
+	for _, name := range dml.columnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
+		arg := dml.Values[name]
 		fmt.Fprintf(builder, "%s = ?", quoteName(name))
 		args = append(args, arg)
 	}
@@ -188,11 +187,6 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder.WriteString(" LIMIT 1")
 	sql = builder.String()
 	return
-}
-
-func createMarkTableDDL() string {
-	sql := fmt.Sprintf("CREATE TABLE If Not Exists %s ( %s bigint primary key, %s bigint DEFAULT 0, %s varchar(64));", loopbacksync.MarkTableName, loopbacksync.ChannelID, loopbacksync.Val, loopbacksync.ChannelInfo)
-	return sql
 }
 
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
