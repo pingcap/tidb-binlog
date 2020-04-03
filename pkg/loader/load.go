@@ -833,6 +833,10 @@ func isSetTiFlashReplica(sql string) bool {
 		return false
 	}
 
+	if len(n.Specs) > 1 {
+		return false
+	}
+
 	for _, spec := range n.Specs {
 		if spec.Tp == ast.AlterTableSetTiFlashReplica {
 			return true
