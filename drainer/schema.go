@@ -266,8 +266,8 @@ func skipFlash(job *model.Job) bool {
 	switch job.Type {
 	case model.ActionUpdateTiFlashReplicaStatus: // empty job.Query
 		return true
-	case model.ActionSetTiFlashReplica:
-		return true
+		// case model.ActionSetTiFlashReplica:
+		// 	return true
 	}
 
 	return false
