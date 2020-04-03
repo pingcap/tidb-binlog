@@ -388,6 +388,10 @@ ForLoop:
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
+			if skipFlash(b.job) {
+				continue
+			}
+
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)

@@ -74,9 +74,11 @@ allow-auto-random = true
 EOF
 
     port=${1-4000}
+    sport=${2-10080}
     echo "Starting TiDB at port: $port..."
     tidb-server \
         -P $port \
+        -status $sport \
         -config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2379 \
@@ -194,8 +196,8 @@ EOF
 
     sleep 5
 
-    start_upstream_tidb 4000
-    start_upstream_tidb 4001
+    start_upstream_tidb 4000 10080
+    start_upstream_tidb 4001 10081
 
 
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
