@@ -25,11 +25,15 @@ run_sql "CREATE DATABASE do_name;"
 run_sql "CREATE DATABASE do_not_start1;"
 run_sql "CREATE DATABASE do_not_name;"
 
+
 run_sql "CREATE TABLE test.do_start1(id int);"
 run_sql "CREATE TABLE test.do_name(id int);"
 run_sql "CREATE TABLE test.do_not_start1(id int);"
 run_sql "CREATE TABLE test.do_not_name(id int);"
 run_sql "CREATE TABLE test.do_ignore_name(id int);"
+
+# Test this DDL about tiflash will not abort the replication.
+run_sql "ALTER TABLE test.do_start1 SET TIFLASH REPLICA 3 LOCATION LABELS \"rack\", \"host\", \"abc\"";
 
 run_sql "INSERT INTO test.do_start1(id) VALUES (1);"
 run_sql "INSERT INTO test.do_name(id) VALUES (1);"
