@@ -251,6 +251,11 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 			log.Info("Got DeleteOnly Job", zap.Stringer("job", job))
 			continue
 		}
+
+		if skipFlash(job) {
+			continue
+		}
+
 		_, _, _, err := s.handleDDL(job)
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
