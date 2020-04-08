@@ -89,6 +89,9 @@ type SyncerConfig struct {
 	EnableCausalityFlag  *bool `toml:"-" json:"enable-detect-flag"`
 	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
+
+	PluginPath string `toml:"plugin-path" json:"plugin-path"`
+	PluginName string `toml:"plugin-name" json:"plugin-name"`
 }
 
 // EnableDispatch return true if enable dispatch.
@@ -216,6 +219,8 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
+	fs.StringVar(&cfg.SyncerCfg.PluginName, "plugin-name", "", "syncer plugin name")
+	fs.StringVar(&cfg.SyncerCfg.PluginPath, "plugin-path", "", "syncer plugin path")
 
 	return cfg
 }

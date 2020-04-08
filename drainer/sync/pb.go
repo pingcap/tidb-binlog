@@ -28,7 +28,7 @@ import (
 var _ Syncer = &pbSyncer{}
 
 type pbSyncer struct {
-	*baseSyncer
+	*BaseSyncer
 
 	binlogger binlogfile.Binlogger
 	cancel    func()
@@ -45,7 +45,7 @@ func NewPBSyncer(dir string, retentionDays int, tableInfoGetter translator.Table
 
 	s := &pbSyncer{
 		binlogger:  binlogger,
-		baseSyncer: newBaseSyncer(tableInfoGetter),
+		BaseSyncer: newBaseSyncer(tableInfoGetter),
 		cancel:     cancel,
 	}
 
