@@ -21,6 +21,7 @@ func (ds *DemoSyncer) Sync(item *sync.Item) error {
 func (ds *DemoSyncer) Close() error {
 	return nil
 }
+
 //NewSyncerPlugin return A syncer instance which implemented interface of sync.Syncer
 func NewSyncerPlugin(
 	cfg *sync.DBConfig,

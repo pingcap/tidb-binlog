@@ -16,6 +16,7 @@ const (
 	//NewSyncerPlugin is the name of exported function by syncer plugin
 	NewSyncerPlugin = "NewSyncerPlugin"
 )
+
 //NewSyncerFunc is a function type which syncer plugin must implement
 type NewSyncerFunc func(
 	cfg *sync.DBConfig,
