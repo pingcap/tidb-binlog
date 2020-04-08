@@ -10,14 +10,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+//DemoSyncer is a syncer demo
 type DemoSyncer struct {
 	sync.BaseSyncer
 }
 
+//Sync should be implemented
 func (ds *DemoSyncer) Sync(item *sync.Item) error {
 	return nil
 }
 
+//Close should be implemented
 func (ds *DemoSyncer) Close() error {
 	return nil
 }
