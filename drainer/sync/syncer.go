@@ -47,6 +47,7 @@ type Syncer interface {
 	Close() error
 }
 
+//BaseSyncer is basic implementation of syncer
 type BaseSyncer struct {
 	*baseError
 	success         chan *Item
