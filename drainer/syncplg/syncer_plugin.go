@@ -13,9 +13,10 @@ import (
 )
 
 const (
+	//NewSyncerPlugin is the name of exported function by syncer plugin
 	NewSyncerPlugin = "NewSyncerPlugin"
 )
-
+//NewSyncerFunc is a function type which syncer plugin must implement
 type NewSyncerFunc func(
 	cfg *sync.DBConfig,
 	tableInfoGetter translator.TableInfoGetter,
@@ -29,6 +30,7 @@ type NewSyncerFunc func(
 	enableDispatch bool,
 	enableCausility bool) (dsyncer sync.Syncer, err error)
 
+//LoadPlugin load syncer plugin
 func LoadPlugin(path, name string) (NewSyncerFunc, error) {
 	fp := path + "/" + name
 	p, err := plugin.Open(fp)
