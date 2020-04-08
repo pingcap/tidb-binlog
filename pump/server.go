@@ -73,16 +73,17 @@ type Server struct {
 	// node maintains the status of this pump and interact with etcd registry
 	node node.Node
 
-	tcpAddr    string
-	unixAddr   string
-	gs         *grpc.Server
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	gcDuration time.Duration
-	triggerGC  chan time.Time
-	pullClose  chan struct{}
-	metrics    *util.MetricClient
+	tcpAddr       string
+	advertiseAddr string
+	unixAddr      string
+	gs            *grpc.Server
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+	gcDuration    time.Duration
+	triggerGC     chan time.Time
+	pullClose     chan struct{}
+	metrics       *util.MetricClient
 	// save the last time we write binlog to Storage
 	// if long time not write, we can write a fake binlog
 	lastWriteBinlogUnixNano int64
@@ -162,22 +163,23 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
-		dataDir:    cfg.DataDir,
-		storage:    storage,
-		clusterID:  clusterID,
-		node:       n,
-		unixAddr:   cfg.Socket,
-		tcpAddr:    cfg.ListenAddr,
-		gs:         grpc.NewServer(grpcOpts...),
-		ctx:        ctx,
-		cancel:     cancel,
-		metrics:    metrics,
-		tiStore:    tiStore,
-		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
-		pdCli:      pdCli,
-		cfg:        cfg,
-		triggerGC:  make(chan time.Time),
-		pullClose:  make(chan struct{}),
+		dataDir:       cfg.DataDir,
+		storage:       storage,
+		clusterID:     clusterID,
+		node:          n,
+		unixAddr:      cfg.Socket,
+		tcpAddr:       cfg.ListenAddr,
+		advertiseAddr: cfg.AdvertiseAddr,
+		gs:            grpc.NewServer(grpcOpts...),
+		ctx:           ctx,
+		cancel:        cancel,
+		metrics:       metrics,
+		tiStore:       tiStore,
+		gcDuration:    time.Duration(cfg.GC) * 24 * time.Hour,
+		pdCli:         pdCli,
+		cfg:           cfg,
+		triggerGC:     make(chan time.Time),
+		pullClose:     make(chan struct{}),
 	}, nil
 }
 
@@ -433,7 +435,7 @@ func (s *Server) Start() error {
 
 	s.startHeartbeat()
 
-	log.Info("start to server request", zap.String("addr", s.tcpAddr))
+	log.Info("start to server request", zap.String("addr", s.advertiseAddr))
 	err = m.Serve()
 	if strings.Contains(err.Error(), "use of closed network connection") {
 		err = nil
