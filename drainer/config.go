@@ -413,8 +413,13 @@ func (cfg *Config) adjustConfig() error {
 	// adjust configuration
 	util.AdjustString(&cfg.ListenAddr, util.DefaultListenAddr(8249))
 	util.AdjustString(&cfg.AdvertiseAddr, cfg.ListenAddr)
-	cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
-	cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
+	if cfg.tls != nil {
+		cfg.ListenAddr = "https://" + cfg.ListenAddr       // add 'https:' scheme to facilitate parsing
+		cfg.AdvertiseAddr = "https://" + cfg.AdvertiseAddr // add 'https:' scheme to facilitate parsing
+	} else {
+		cfg.ListenAddr = "http://" + cfg.ListenAddr       // add 'http:' scheme to facilitate parsing
+		cfg.AdvertiseAddr = "http://" + cfg.AdvertiseAddr // add 'http:' scheme to facilitate parsing
+	}
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.DetectInterval, defaultDetectInterval)
 

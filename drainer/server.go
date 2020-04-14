@@ -59,16 +59,17 @@ type Server struct {
 	host string
 	cfg  *Config
 
-	collector *Collector
-	tcpAddr   string
-	gs        *grpc.Server
-	metrics   *util.MetricClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	tg        taskGroup
-	syncer    *Syncer
-	cp        checkpoint.CheckPoint
-	isClosed  int32
+	collector     *Collector
+	tcpAddr       string
+	advertiseAddr string
+	gs            *grpc.Server
+	metrics       *util.MetricClient
+	ctx           context.Context
+	cancel        context.CancelFunc
+	tg            taskGroup
+	syncer        *Syncer
+	cp            checkpoint.CheckPoint
+	isClosed      int32
 
 	statusMu sync.RWMutex
 	status   *node.Status
@@ -171,18 +172,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	status := node.NewStatus(cfg.NodeID, advURL.Host, node.Online, 0, syncer.GetLatestCommitTS(), util.GetApproachTS(latestTS, latestTime))
 
 	return &Server{
-		ID:        cfg.NodeID,
-		host:      advURL.Host,
-		cfg:       cfg,
-		collector: c,
-		metrics:   metrics,
-		tcpAddr:   cfg.ListenAddr,
-		gs:        grpc.NewServer(),
-		ctx:       ctx,
-		cancel:    cancel,
-		syncer:    syncer,
-		cp:        cp,
-		status:    status,
+		ID:            cfg.NodeID,
+		host:          advURL.Host,
+		cfg:           cfg,
+		collector:     c,
+		metrics:       metrics,
+		tcpAddr:       cfg.ListenAddr,
+		advertiseAddr: cfg.AdvertiseAddr,
+		gs:            grpc.NewServer(),
+		ctx:           ctx,
+		cancel:        cancel,
+		syncer:        syncer,
+		cp:            cp,
+		status:        status,
 
 		latestTS:   latestTS,
 		latestTime: latestTime,
@@ -321,7 +323,7 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	log.Info("start to server request", zap.String("addr", s.tcpAddr))
+	log.Info("start to server request", zap.String("addr", s.advertiseAddr))
 	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
 		return errors.Trace(err)
 	}
