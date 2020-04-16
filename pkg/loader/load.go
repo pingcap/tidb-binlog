@@ -41,7 +41,7 @@ const (
 	maxDMLRetryCount = 100
 	maxDDLRetryCount = 5
 
-	execLimitMultiple = 3
+	execLimitMultiple = 1
 )
 
 var (
@@ -444,7 +444,13 @@ func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
 func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 	causality := NewCausality()
 
-	var byHash = make([][]*DML, s.workerCount)
+	workerCount := len(dmls) / s.batchSize
+	if workerCount == 0 {
+		workerCount = 1
+	} else if workerCount > s.workerCount {
+		workerCount = s.workerCount
+	}
+	var byHash = make([][]*DML, workerCount)
 
 	for _, dml := range dmls {
 		keys := getKeys(dml)
@@ -567,6 +573,9 @@ func (s *loaderImpl) Run() error {
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
 
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+
 	for {
 		select {
 		case txn, ok := <-input:
@@ -583,10 +592,15 @@ func (s *loaderImpl) Run() error {
 			if err := batch.put(txn); err != nil {
 				return errors.Trace(err)
 			}
-
+		case <-t.C:
+			if len(batch.dmls) > 0 {
+				if err := batch.execAccumulatedDMLs(); err != nil {
+					return errors.Trace(err)
+				}
+			}
 		default:
 			// execute DMLs ASAP if the `input` channel is empty
-			if len(batch.dmls) > 0 {
+			if len(batch.dmls) >= batch.limit || !batch.enableDispatch {
 				if err := batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
@@ -710,6 +724,7 @@ type batchManager struct {
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
+	log.Info("execAccumulatedDMLs", zap.Int("batch dmls", len(b.dmls)))
 	if len(b.dmls) == 0 {
 		return nil
 	}
