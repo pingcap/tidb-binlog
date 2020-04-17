@@ -162,8 +162,9 @@ func relaxSQLMode(db *sql.DB) (oldMode string, newMode string, err error) {
 }
 
 // SetSafeMode make the MysqlSyncer to use safe mode or not
-func (m *MysqlSyncer) SetSafeMode(mode bool) {
+func (m *MysqlSyncer) SetSafeMode(mode bool) bool {
 	m.loader.SetSafeMode(mode)
+	return true
 }
 
 // Sync implements Syncer interface

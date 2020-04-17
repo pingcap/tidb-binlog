@@ -161,18 +161,15 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 	translator.SetSQLMode(s.cfg.SQLMode)
 
 	// for mysql
-	// set safeMode to true at the first, and will use the config after 5 minutes.
-	mysqlSyncer, ok := s.dsyncer.(*dsync.MysqlSyncer)
-	if !ok {
+	// set safeMode to true, it will use the config after 5 minutes.
+	if !s.dsyncer.SetSafeMode(true) {
 		return
 	}
-
-	mysqlSyncer.SetSafeMode(true)
 
 	go func() {
 		select {
 		case <-time.After(5 * time.Minute):
-			mysqlSyncer.SetSafeMode(s.cfg.SafeMode)
+			s.dsyncer.SetSafeMode(s.cfg.SafeMode)
 		case <-s.shutdown:
 			return
 		}
@@ -606,6 +603,11 @@ func newInterceptSyncer() *interceptSyncer {
 		successes: make(chan *dsync.Item, 1024),
 		closed:    make(chan struct{}),
 	}
+}
+
+// SetSafeMode should be ignore by interceptSyncer
+func (s *interceptSyncer) SetSafeMode(mode bool) bool {
+	return false
 }
 
 func (s *interceptSyncer) Sync(item *dsync.Item) error {
