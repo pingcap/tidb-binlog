@@ -44,6 +44,11 @@ func NewPBSyncer(dir string, tableInfoGetter translator.TableInfoGetter) (*pbSyn
 	return s, nil
 }
 
+// SetSafeMode should be ignore by pbSyncer
+func (p *pbSyncer) SetSafeMode(mode bool) bool {
+	return false
+}
+
 func (p *pbSyncer) Sync(item *Item) error {
 	pbBinlog, err := translator.TiBinlogToPbBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
 	if err != nil {
