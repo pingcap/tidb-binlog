@@ -573,7 +573,8 @@ func (s *loaderImpl) Run() error {
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
 
-	t := time.NewTicker(5 * time.Second)
+	//lastExecTime := time.Now()
+	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 
 	for {
@@ -593,7 +594,7 @@ func (s *loaderImpl) Run() error {
 				return errors.Trace(err)
 			}
 		case <-t.C:
-			if len(batch.dmls) > 0 {
+			if len(batch.dmls) > 0 && time.Since(batch.lastExecTime) > 2*time.Second {
 				if err := batch.execAccumulatedDMLs(); err != nil {
 					return errors.Trace(err)
 				}
@@ -709,6 +710,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
+		lastExecTime: time.Now(),
 	}
 }
 
@@ -721,10 +723,12 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
+	lastExecTime         time.Time
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
 	log.Info("execAccumulatedDMLs", zap.Int("batch dmls", len(b.dmls)))
+	b.lastExecTime = time.Now()
 	if len(b.dmls) == 0 {
 		return nil
 	}
