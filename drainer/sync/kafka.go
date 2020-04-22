@@ -114,6 +114,11 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	return executor, nil
 }
 
+// SetSafeMode should be ignore by KafkaSyncer
+func (p *KafkaSyncer) SetSafeMode(mode bool) bool {
+	return false
+}
+
 // Sync implements Syncer interface
 func (p *KafkaSyncer) Sync(item *Item) error {
 	slaveBinlog, err := translator.TiBinlogToSlaveBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
