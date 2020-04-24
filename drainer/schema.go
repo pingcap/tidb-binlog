@@ -359,7 +359,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionCreateTable, model.ActionCreateView, model.ActionRecoverTable:
+	case model.ActionCreateTable, model.ActionCreateView, model.ActionCreateSequence, model.ActionRecoverTable:
 		table := job.BinlogInfo.TableInfo
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
@@ -380,7 +380,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionDropTable, model.ActionDropView:
+	case model.ActionDropTable, model.ActionDropView, model.ActionDropSequence:
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -422,7 +422,6 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 		s.truncateTableID[job.TableID] = struct{}{}
-
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
