@@ -1,0 +1,17 @@
+data-dir = '/tmp/tidb_binlog_test/data.drainer'
+
+[syncer]
+txn-batch = 1
+worker-count = 1
+safe-mode = false
+db-type = 'mysql'
+replicate-do-db = ['seq']
+
+[syncer.to]
+host = '127.0.0.1'
+user = 'root'
+password = ''
+port = 3306
+
+[syncer.to.checkpoint]
+schema = "seq_checkpoint"
