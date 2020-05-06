@@ -35,11 +35,11 @@ import (
 
 const (
 	maxKafkaMsgSize = 1024 * 1024 * 1024
+	maxGrpcMsgSize  = math.MaxInt32
 )
 
 var (
-	maxGrpcMsgSize = math.MaxInt32
-	maxMsgSize     = maxGrpcMsgSize
+	maxMsgSize = maxGrpcMsgSize
 )
 
 // taskGroup is a wrapper of `sync.WaitGroup`.
