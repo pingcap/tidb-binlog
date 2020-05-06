@@ -102,7 +102,7 @@ func init() {
 	// it must be set before any real grpc operation.
 	grpc.EnableTracing = false
 	GlobalConfig = &globalConfig{
-		maxMsgSize: defautMaxKafkaSize,
+		maxMsgSize: defautMaxMsgSize,
 	}
 }
 
