@@ -573,7 +573,6 @@ func (s *loaderImpl) Run() error {
 	batch := fNewBatchManager(s)
 	input := txnManager.run()
 
-	//lastExecTime := time.Now()
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 
@@ -727,7 +726,6 @@ type batchManager struct {
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
-	log.Info("execAccumulatedDMLs", zap.Int("batch dmls", len(b.dmls)))
 	b.lastExecTime = time.Now()
 	if len(b.dmls) == 0 {
 		return nil
