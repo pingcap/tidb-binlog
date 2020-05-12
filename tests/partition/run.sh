@@ -9,18 +9,17 @@ run_drainer &
 sleep 3
 
 run_sql 'create database partition_test;'
-run_sql 'use partition_test'
 # range partition
-run_sql 'create table t1( a int ,b varchar(128) ) partition by range (a) (partition p0 values less than (3),partition p1 values less than (7));'
-run_sql "insert into t1 (a,b) values(1,'a'),(2,'b'),(3,'c'),(4,'d');"
-run_sql "alter table t1 add partition (partition p2 values less than (10));"
-run_sql "insert into t1 (a,b) values(5,'e'),(6,'f'),(7,'g'),(8,'h');"
+run_sql 'create table partition_test.t1( a int ,b varchar(128) ) partition by range (a) (partition p0 values less than (3),partition p1 values less than (7));'
+run_sql "insert into partition_test.t1 (a,b) values(1,'a'),(2,'b'),(3,'c'),(4,'d');"
+run_sql "alter table partition_test.t1 add partition (partition p2 values less than (10));"
+run_sql "insert into partition_test.t1 (a,b) values(5,'e'),(6,'f'),(7,'g'),(8,'h');"
 
 # hash partition
-run_sql 'create table t2(a int ,b varchar(128) ) partition by hash (a) partitions 2;'
-run_sql "insert into t2 (a,b) values(1,'a'),(2,'b'),(3,'c'),(4,'d');"
-run_sql 'truncate table t2;'
-run_sql "insert into t2 (a,b) values(5,'e'),(6,'f'),(7,'g'),(8,'h');"
+run_sql 'create table partition_test.t2(a int ,b varchar(128) ) partition by hash (a) partitions 2;'
+run_sql "insert into partition_test.t2 (a,b) values(1,'a'),(2,'b'),(3,'c'),(4,'d');"
+run_sql 'truncate table partition_test.t2;'
+run_sql "insert into partition_test.t2 (a,b) values(5,'e'),(6,'f'),(7,'g'),(8,'h');"
 
 sleep 3
 
