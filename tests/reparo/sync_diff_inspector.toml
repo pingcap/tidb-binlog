@@ -22,7 +22,7 @@ tidb-instance-id = "source-1"
 use-checksum=true
 
 [[check-tables]]
-schema = "reparo_test"
+schema = "reparo-test"
 tables = ["~.*"]
 
 [target-db]
