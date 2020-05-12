@@ -206,6 +206,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
 	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
+	c.Assert(maxMsgSize, Equals, maxGrpcMsgSize)
 
 	cfg = NewConfig()
 	err = cfg.adjustConfig()
@@ -334,6 +335,7 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, defaultKafkaAddrs)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
+	c.Assert(maxMsgSize, Equals, maxKafkaMsgSize)
 
 	// With Zookeeper address
 	cfg = NewConfig()

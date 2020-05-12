@@ -434,6 +434,8 @@ func (cfg *Config) adjustConfig() error {
 	}
 
 	if cfg.SyncerCfg.DestDBType == "kafka" {
+		maxMsgSize = maxKafkaMsgSize
+
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
 			zkClient, err := newZKFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
