@@ -5,7 +5,7 @@ txn-batch = 1
 worker-count = 1
 safe-mode = false
 db-type = 'mysql'
-replicate-do-db = ['seq']
+replicate-do-db = ['partition_test']
 
 [syncer.to]
 host = '127.0.0.1'
@@ -14,4 +14,4 @@ password = ''
 port = 3306
 
 [syncer.to.checkpoint]
-schema = "seq_checkpoint"
+schema = "partition_test_checkpoint"
