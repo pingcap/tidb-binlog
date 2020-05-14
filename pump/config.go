@@ -17,6 +17,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -35,7 +36,7 @@ const (
 	defaultEtcdDialTimeout   = 5 * time.Second
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
 	defaultListenAddr        = "127.0.0.1:8250"
-	defautMaxKafkaSize       = 1024 * 1024 * 1024
+	defautMaxMsgSize         = math.MaxInt32 // max grpc message size
 	defaultHeartbeatInterval = 2
 	defaultGC                = 7
 	defaultDataDir           = "data.pump"
@@ -110,7 +111,7 @@ func NewConfig() *Config {
 
 	// global config
 	fs.BoolVar(&GlobalConfig.enableDebug, "enable-debug", false, "enable print debug log")
-	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxKafkaSize, "max msg size producer produce into kafka")
+	fs.IntVar(&GlobalConfig.maxMsgSize, "max-message-size", defautMaxMsgSize, "max message size tidb produce into pump")
 	fs.Int64Var(new(int64), "binlog-file-size", 0, "DEPRECATED")
 	fs.BoolVar(new(bool), "enable-binlog-slice", false, "DEPRECATED")
 	fs.IntVar(new(int), "binlog-slice-size", 0, "DEPRECATED")

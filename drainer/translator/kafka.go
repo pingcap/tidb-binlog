@@ -233,7 +233,8 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.StringValue = proto.String(str)
 
 	// numeric type
-	case "int", "bigint", "smallint", "tinyint":
+	// https://dev.mysql.com/doc/refman/8.0/en/integer-types.html
+	case "int", "bigint", "smallint", "tinyint", "mediumint":
 		str := fmt.Sprintf("%v", datum.GetValue())
 		if mysql.HasUnsignedFlag(colInfo.Flag) {
 			val, err := strconv.ParseUint(str, 10, 64)
