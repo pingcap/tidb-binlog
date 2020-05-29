@@ -64,6 +64,30 @@ func (t *testKafkaSuite) testDML(c *check.C, tp obinlog.MutationType) {
 	}
 }
 
+func (t *testKafkaSuite) TestAllDML(c *check.C) {
+	t.SetAllDML(c)
+
+	slaveBinog, err := TiBinlogToSlaveBinlog(t, t.Schema, t.Table, t.TiBinlog, t.PV)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(slaveBinog.Type, check.Equals, obinlog.BinlogType_DML)
+	c.Assert(slaveBinog.GetCommitTs(), check.Equals, t.TiBinlog.GetCommitTs())
+
+	table := slaveBinog.DmlData.Tables[0]
+
+	insertMut := table.Mutations[0]
+	updateMut := table.Mutations[1]
+	deleteMut := table.Mutations[2]
+	c.Assert(insertMut.GetType(), check.Equals, obinlog.MutationType_Insert)
+	c.Assert(updateMut.GetType(), check.Equals, obinlog.MutationType_Update)
+	c.Assert(deleteMut.GetType(), check.Equals, obinlog.MutationType_Delete)
+
+	checkColumns(c, table.ColumnInfo, insertMut.Row.Columns, t.getDatums())
+	checkColumns(c, table.ColumnInfo, deleteMut.Row.Columns, t.getDatums())
+	checkColumns(c, table.ColumnInfo, updateMut.Row.Columns, t.getDatums())
+	checkColumns(c, table.ColumnInfo, updateMut.ChangeRow.Columns, t.getOldDatums())
+}
+
 func (t *testKafkaSuite) TestInsert(c *check.C) {
 	t.SetInsert(c)
 

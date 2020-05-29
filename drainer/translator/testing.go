@@ -148,6 +148,33 @@ func (g *BinlogGenerator) SetInsert(c *check.C) {
 	})
 }
 
+// SetAllDML one insert/update/delete/update in one txn.
+func (g *BinlogGenerator) SetAllDML(c *check.C) {
+	g.reset()
+	info := g.setEvent(c)
+
+	mut := ti.TableMutation{
+		TableId: info.ID,
+	}
+
+	// insert
+	row := testGenInsertBinlog(c, info, g.datums)
+	mut.InsertedRows = append(mut.InsertedRows, row)
+	mut.Sequence = append(mut.Sequence, ti.MutationType_Insert)
+
+	// update
+	row = testGenUpdateBinlog(c, info, g.oldDatums, g.datums)
+	mut.UpdatedRows = append(mut.UpdatedRows, row)
+	mut.Sequence = append(mut.Sequence, ti.MutationType_Update)
+
+	// delete
+	row = testGenDeleteBinlog(c, info, g.datums)
+	mut.DeletedRows = append(mut.DeletedRows, row)
+	mut.Sequence = append(mut.Sequence, ti.MutationType_DeleteRow)
+
+	g.PV.Mutations = append(g.PV.Mutations, mut)
+}
+
 // SetUpdate set up a update event binlog.
 func (g *BinlogGenerator) SetUpdate(c *check.C) {
 	g.reset()
