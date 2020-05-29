@@ -14,6 +14,7 @@
 package pump
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -35,6 +36,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -50,6 +52,7 @@ type pumpNode struct {
 	*node.EtcdRegistry
 	status            *node.Status
 	heartbeatInterval time.Duration
+	tls               *tls.Config
 
 	// latestTS and latestTime is used for get approach ts
 	latestTS   int64
@@ -115,6 +118,7 @@ func NewPumpNode(cfg *Config, getMaxCommitTs func() int64) (node.Node, error) {
 	}
 
 	node := &pumpNode{
+		tls:               cfg.tls,
 		EtcdRegistry:      etcdRegistry,
 		status:            status,
 		heartbeatInterval: time.Duration(cfg.HeartbeatInterval) * time.Second,
@@ -167,8 +171,13 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
 			return net.DialTimeout("tcp", addr, timeout)
 		}),
-		grpc.WithInsecure(),
 		grpc.WithBlock(),
+	}
+
+	if p.tls != nil {
+		dialerOpts = append(dialerOpts, grpc.WithTransportCredentials(credentials.NewTLS(p.tls)))
+	} else {
+		dialerOpts = append(dialerOpts, grpc.WithInsecure())
 	}
 
 	for _, c := range drainers {
