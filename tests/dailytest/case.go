@@ -28,7 +28,7 @@ import (
 
 // https://pingcap.com/docs-cn/dev/reference/sql/attributes/auto-random/
 var caseAutoRandom = []string{
-	"create table t (a int primary key auto_random, b varchar(255))",
+	"create table t (a bigint primary key auto_random, b varchar(255))",
 	"insert into t(b) values('11')",
 }
 
