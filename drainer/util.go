@@ -90,7 +90,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	}
 
 	switch toCheckpoint.Type {
-	case "mysql", "tidb":
+	case "mysql", "tidb", "plugin":
 		checkpointCfg.CheckpointType = toCheckpoint.Type
 		checkpointCfg.Db = &checkpoint.DBConfig{
 			Host:     toCheckpoint.Host,
