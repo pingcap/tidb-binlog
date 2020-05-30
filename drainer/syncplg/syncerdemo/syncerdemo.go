@@ -12,7 +12,7 @@ import (
 //PluginFactory is the Factory struct
 type PluginFactory struct{}
 
-//NewPluginFactory() is factory function of plugin
+//NewPluginFactory is factory function of plugin
 func NewPluginFactory() interface{} {
 	log.Info("call NewPluginFactory")
 	return PluginFactory{}
