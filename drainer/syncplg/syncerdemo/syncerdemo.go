@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/sync"
@@ -12,6 +13,7 @@ import (
 type PluginFactory struct {}
 
 func NewPluginFactory() interface{} {
+	log.Info("call NewPluginFactory")
 	return PluginFactory{}
 }
 

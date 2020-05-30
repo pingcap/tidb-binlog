@@ -42,5 +42,6 @@ func NewSyncerDemo (
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
 ) (Syncer, error) {
+		log.Info("call NewSyncerDemo()")
 		return &SyncerDemo{}, nil
 }
