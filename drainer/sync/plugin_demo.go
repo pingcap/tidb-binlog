@@ -32,7 +32,7 @@ func (sd *SyncerDemo) SetSafeMode(mode bool) bool {
 
 func NewSyncerDemo (
 	cfg *DBConfig,
-	cfgFile string,
+	file string,
 	tableInfoGetter translator.TableInfoGetter,
 	worker int,
 	batchSize int,
@@ -41,8 +41,6 @@ func NewSyncerDemo (
 	destDBType string,
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
-	enableDispatch bool,
-	enableCausility bool,
-) (dsyncer Syncer, err error) {
+) (Syncer, error) {
 		return &SyncerDemo{}, nil
 }
