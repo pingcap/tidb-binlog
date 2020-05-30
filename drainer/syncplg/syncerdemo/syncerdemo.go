@@ -34,3 +34,6 @@ func (pf PluginFactory) NewSyncerPlugin(
 	return sync.NewSyncerDemo(cfg, file, tableInfoGetter, worker, batchSize, queryHistogramVec, sqlMode,
 		destDBType, relayer, info)
 }
+
+var _ PluginFactory
+var _ = NewPluginFactory()
