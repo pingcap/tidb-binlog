@@ -78,6 +78,9 @@ type SyncerConfig struct {
 	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+	PluginPath        string             `toml:"plugin-path" json:"plugin-path"`
+	PluginName        string             `toml:"plugin-name" json:"plugin-name"`
+	PluginCfgFile     string             `toml:"plugin-cfg-file" json:"plugin-cfg-file"`
 }
 
 // RelayConfig is the Relay log's configuration.
@@ -156,6 +159,9 @@ func NewConfig() *Config {
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
+	fs.StringVar(&cfg.SyncerCfg.PluginName, "plugin-name", "", "syncer plugin name")
+	fs.StringVar(&cfg.SyncerCfg.PluginPath, "plugin-path", "", "syncer plugin path")
+	fs.StringVar(&cfg.SyncerCfg.PluginCfgFile, "plugin-cfg-path", "", "syncer plugin's config file")
 
 	return cfg
 }
