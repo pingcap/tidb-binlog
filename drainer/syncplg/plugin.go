@@ -29,7 +29,7 @@ type FactoryInterface interface {
 		destDBType string,
 		relayer relay.Relayer,
 		info *loopbacksync.LoopBackSync,
-	) (*sync.Syncer, error)
+	) (sync.Syncer, error)
 }
 
 //NewSyncerFunc is a function type which syncer plugin must implement
