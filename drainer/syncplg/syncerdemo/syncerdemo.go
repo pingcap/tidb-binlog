@@ -8,8 +8,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+//PluginFactory is the Factory struct
+type PluginFactory struct {}
+
+func NewPluginFactory() interface{} {
+	return PluginFactory{}
+}
+
 //NewSyncerPlugin return A syncer instance which implemented interface of sync.Syncer
-func NewSyncerPlugin (
+func (pf PluginFactory) NewSyncerPlugin (
 	cfg *sync.DBConfig,
 	file string,
 	tableInfoGetter translator.TableInfoGetter,
