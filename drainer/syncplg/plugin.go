@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	//NewSyncerPlugin is the name of exported function by syncer plugin
+	//NewPlugin is the name of exported function by syncer plugin
 	NewPlugin = "NewPluginFactory"
 )
 
+//FactoryInterface is interface of Factory
 type FactoryInterface interface {
-	NewSyncerPlugin (
+	NewSyncerPlugin(
 		cfg *sync.DBConfig,
 		file string,
 		tableInfoGetter translator.TableInfoGetter,
@@ -33,7 +34,7 @@ type FactoryInterface interface {
 }
 
 //NewSyncerFunc is a function type which syncer plugin must implement
-type NewSyncerFunc func (
+type NewSyncerFunc func(
 	cfg *sync.DBConfig,
 	file string,
 	tableInfoGetter translator.TableInfoGetter,

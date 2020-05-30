@@ -11,10 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
+//SyncerDemo is a syncer demo
 type SyncerDemo struct {
 	*baseSyncer
 }
 
+//Sync is the method that interface must implement
 func (sd *SyncerDemo) Sync(item *Item) error {
 	//demo
 	log.Info("item", zap.String("%s", fmt.Sprintf("%v", item)))
@@ -22,15 +24,18 @@ func (sd *SyncerDemo) Sync(item *Item) error {
 	return nil
 }
 
+//Close is the method that interface must implement
 func (sd *SyncerDemo) Close() error {
 	return nil
 }
 
+//SetSafeMode is the method that interface must implement
 func (sd *SyncerDemo) SetSafeMode(mode bool) bool {
 	return false
 }
 
-func NewSyncerDemo (
+//NewSyncerDemo is a syncer demo
+func NewSyncerDemo(
 	cfg *DBConfig,
 	file string,
 	tableInfoGetter translator.TableInfoGetter,
@@ -42,8 +47,8 @@ func NewSyncerDemo (
 	relayer relay.Relayer,
 	info *loopbacksync.LoopBackSync,
 ) (Syncer, error) {
-  log.Info("call NewSyncerDemo()")
-  executor := &SyncerDemo{}
-  executor.baseSyncer = newBaseSyncer(tableInfoGetter)
-  return executor, nil
+	log.Info("call NewSyncerDemo()")
+	executor := &SyncerDemo{}
+	executor.baseSyncer = newBaseSyncer(tableInfoGetter)
+	return executor, nil
 }

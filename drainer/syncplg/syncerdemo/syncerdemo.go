@@ -10,15 +10,16 @@ import (
 )
 
 //PluginFactory is the Factory struct
-type PluginFactory struct {}
+type PluginFactory struct{}
 
+//NewPluginFactory() is factory function of plugin
 func NewPluginFactory() interface{} {
 	log.Info("call NewPluginFactory")
 	return PluginFactory{}
 }
 
 //NewSyncerPlugin return A syncer instance which implemented interface of sync.Syncer
-func (pf PluginFactory) NewSyncerPlugin (
+func (pf PluginFactory) NewSyncerPlugin(
 	cfg *sync.DBConfig,
 	file string,
 	tableInfoGetter translator.TableInfoGetter,
