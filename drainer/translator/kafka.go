@@ -52,6 +52,7 @@ func TiBinlogToSlaveBinlog(
 		}
 		return slaveBinlog, nil
 	}
+
 	slaveBinlog := &obinlog.Binlog{
 		Type:     obinlog.BinlogType_DML,
 		CommitTs: tiBinlog.GetCommitTs(),
@@ -71,15 +72,18 @@ func TiBinlogToSlaveBinlog(
 		}
 
 		iter := newSequenceIterator(&mut)
+		table := genTable(schema, info)
+		slaveBinlog.DmlData.Tables = append(slaveBinlog.DmlData.Tables, table)
+
 		for {
-			table, err := nextRow(schema, info, isTblDroppingCol, iter)
+			tableMutation, err := nextRow(schema, info, isTblDroppingCol, iter)
 			if err != nil {
 				if errors.Cause(err) == io.EOF {
 					break
 				}
 				return nil, errors.Trace(err)
 			}
-			slaveBinlog.DmlData.Tables = append(slaveBinlog.DmlData.Tables, table)
+			table.Mutations = append(table.Mutations, tableMutation)
 		}
 	}
 	return slaveBinlog, nil
@@ -229,7 +233,8 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.StringValue = proto.String(str)
 
 	// numeric type
-	case "int", "bigint", "smallint", "tinyint":
+	// https://dev.mysql.com/doc/refman/8.0/en/integer-types.html
+	case "int", "bigint", "smallint", "tinyint", "mediumint":
 		str := fmt.Sprintf("%v", datum.GetValue())
 		if mysql.HasUnsignedFlag(colInfo.Flag) {
 			val, err := strconv.ParseUint(str, 10, 64)
@@ -310,7 +315,7 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 	return mut, nil
 }
 
-func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *sequenceIterator) (*obinlog.Table, error) {
+func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *sequenceIterator) (*obinlog.TableMutation, error) {
 	mutType, row, err := iter.next()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -320,7 +325,6 @@ func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	table := genTable(schema, info)
-	table.Mutations = append(table.Mutations, tableMutation)
-	return table, nil
+
+	return tableMutation, nil
 }

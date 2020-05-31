@@ -10,5 +10,5 @@ batch = 10
 host = "127.0.0.1"
 user = "root"
 password = ""
-name = "reparo_test"
+name = "reparo-test"
 port = 4000

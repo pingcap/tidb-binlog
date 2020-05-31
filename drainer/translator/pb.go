@@ -16,6 +16,7 @@ package translator
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -48,7 +49,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 		if isCreateDatabase {
 			sql += ";"
 		} else {
-			sql = fmt.Sprintf("use %s; %s;", schema, sql)
+			sql = fmt.Sprintf("use %s; %s;", quoteName(schema), sql)
 		}
 
 		pbBinlog.Tp = pb.BinlogType_DDL
@@ -302,4 +303,12 @@ func packEvent(schemaName, tableName string, tp pb.EventType, rowData [][]byte) 
 	}
 
 	return event
+}
+
+func escapeName(name string) string {
+	return strings.Replace(name, "`", "``", -1)
+}
+
+func quoteName(name string) string {
+	return "`" + escapeName(name) + "`"
 }

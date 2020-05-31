@@ -14,7 +14,9 @@ run_drainer "$args" &
 
 GO111MODULE=on go build -o out
 
-run_sql "CREATE DATABASE IF NOT EXISTS \`reparo_test\`"
+sleep 5
+
+run_sql "CREATE DATABASE IF NOT EXISTS \`reparo-test\`"
 
 ./out -config ./config.toml > ${OUT_DIR-/tmp}/$TEST_NAME.out 2>&1
 
@@ -27,6 +29,6 @@ sleep 15
 check_data ./sync_diff_inspector.toml 
 
 # clean up
-run_sql "DROP DATABASE IF EXISTS \`reparo_test\`"
+run_sql "DROP DATABASE IF EXISTS \`reparo-test\`"
 
 killall drainer

@@ -199,7 +199,6 @@ EOF
     start_upstream_tidb 4000 10080
     start_upstream_tidb 4001 10081
 
-
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
 [experimental]
 allow-auto-random = true

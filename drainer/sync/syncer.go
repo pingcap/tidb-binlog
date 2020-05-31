@@ -45,6 +45,8 @@ type Syncer interface {
 	// Close the Syncer, no more item can be added by `Sync`
 	// will drain all items and return nil if all successfully sync into downstream
 	Close() error
+	// SetSafeMode make the Syncer to use safe mode or not. If no need to handle, it should return false
+	SetSafeMode(mode bool) bool
 }
 
 type baseSyncer struct {
