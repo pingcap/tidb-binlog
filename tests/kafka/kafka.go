@@ -58,7 +58,7 @@ func main() {
 		panic(err)
 	}
 
-	sinkDB, err := util.CreateSinkDB()
+	sinkDB, err := loader.CreateDB("root", "", "127.0.0.1", 3306, nil)
 	if err != nil {
 		panic(err)
 	}

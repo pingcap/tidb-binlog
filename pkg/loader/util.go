@@ -25,6 +25,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/sql"
 )
 
 var (
@@ -83,6 +84,57 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 
 var customID int64
 
+func isUnknownSystemVariableErr(err error) bool {
+	code, ok := sql.GetSQLErrCode(err)
+	if !ok {
+		return strings.Contains(err.Error(), "Unknown system variable")
+	}
+
+	// ErrUnknownSystemVariable
+	return code == 1193
+}
+
+func createDBWitSessions(dsn string) (db *gosql.DB, err error) {
+	// Try set this sessions if it's supported.
+	params := map[string]string{
+		// After https://github.com/pingcap/tidb/pull/17102
+		// default is false, must enable for insert value explicit, or can't replicate.
+		"allow_auto_random_explicit_insert": "1",
+	}
+
+	var tryDB *gosql.DB
+	tryDB, err = gosql.Open("mysql", dsn)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer tryDB.Close()
+
+	support := make(map[string]string)
+	for k, v := range params {
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := tryDB.Exec(s, v)
+		if err != nil {
+			if isUnknownSystemVariableErr(err) {
+				continue
+			}
+			return nil, errors.Trace(err)
+		}
+
+		support[k] = v
+	}
+
+	for k, v := range support {
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
+	}
+
+	db, err = gosql.Open("mysql", dsn)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
+}
+
 // CreateDBWithSQLMode return sql.DB
 func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string) (db *gosql.DB, err error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
@@ -100,11 +152,7 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 		dsn += "&tls=" + name
 	}
 
-	db, err = gosql.Open("mysql", dsn)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return
+	return createDBWitSessions(dsn)
 }
 
 // CreateDB return sql.DB
