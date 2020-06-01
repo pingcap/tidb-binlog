@@ -122,31 +122,24 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 	case "_intercept":
 		dsyncer = newInterceptSyncer()
 	case "plugin":
-		if len(cfg.PluginName) != 0 {
-			if len(cfg.PluginName) == 0 || len(cfg.PluginPath) == 0 {
-				return nil, errors.Errorf("plugin-name or plugin-path is incorrect")
-			}
-			newSyncer, err := syncplg.LoadPlugin(cfg.PluginPath, cfg.PluginName)
-			if err != nil {
-				return nil, errors.Annotate(err, "fail to load plugin dsyncer")
-			}
+		if len(cfg.PluginName) == 0 || len(cfg.PluginPath) == 0 {
+			return nil, errors.Errorf("plugin-name or plugin-path is incorrect")
+		}
+		newSyncer, err := syncplg.LoadPlugin(cfg.PluginPath, cfg.PluginName)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to load plugin dsyncer")
+		}
 
-			var relayer relay.Relayer
-			if cfg.Relay.IsEnabled() {
-				if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
-					return nil, errors.Annotate(err, "fail to create relayer")
-				}
+		var relayer relay.Relayer
+		if cfg.Relay.IsEnabled() {
+			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
+				return nil, errors.Annotate(err, "fail to create relayer")
 			}
+		}
 
-			dsyncer, err = newSyncer(cfg.To, cfg.PluginCfgFile, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
-			if err != nil {
-				return nil, errors.Annotate(err, "fail to create plugin dsyncer")
-			}
-		} else {
-			dsyncer, err = dsync.NewKafka(cfg.To, schema)
-			if err != nil {
-				return nil, errors.Annotate(err, "fail to create kafka dsyncer")
-			}
+		dsyncer, err = newSyncer(cfg.To, cfg.PluginCfgFile, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to create plugin dsyncer")
 		}
 	default:
 		return nil, errors.Errorf("unknown DestDBType: %s", cfg.DestDBType)
