@@ -126,6 +126,7 @@ type options struct {
 	syncMode         SyncMode
 	enableDispatch   bool
 	enableCausality  bool
+	merge            bool
 }
 
 var defaultLoaderOptions = options{
@@ -137,6 +138,7 @@ var defaultLoaderOptions = options{
 	syncMode:         SyncFullColumn,
 	enableDispatch:   true,
 	enableCausality:  true,
+	merge:            false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -177,6 +179,13 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+// Merge set merge options.
+func Merge(v bool) Option {
+	return func(o *options) {
+		o.merge = v
 	}
 }
 
@@ -231,7 +240,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		loopBackSyncInfo:   opts.loopBackSyncInfo,
 		input:              make(chan *Txn),
 		successTxn:         make(chan *Txn),
-		merge:              false,
+		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
 
 		ctx:    ctx,
@@ -620,8 +629,7 @@ func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, sing
 	batchByTbls = make(map[string][]*DML)
 	for _, dml := range dmls {
 		info := dml.info
-		// info.uniqueKeys include pk.
-		if info.primaryKey != nil && len(info.uniqueKeys) == 1 {
+		if info.primaryKey != nil {
 			tblName := dml.TableName()
 			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
 		} else {

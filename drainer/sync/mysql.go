@@ -66,6 +66,7 @@ func CreateLoader(
 
 	opts = append(opts, loader.EnableDispatch(enableDispatch))
 	opts = append(opts, loader.EnableCausality(enableCausility))
+	opts = append(opts, loader.Merge(cfg.Merge))
 
 	if cfg.SyncMode != 0 {
 		mode := loader.SyncMode(cfg.SyncMode)
