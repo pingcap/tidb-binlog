@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -106,6 +107,7 @@ type loaderImpl struct {
 type MetricsGroup struct {
 	EventCounterVec   *prometheus.CounterVec
 	QueryHistogramVec *prometheus.HistogramVec
+	QueueSizeGauge    *prometheus.GaugeVec
 }
 
 // SyncMode represents the sync mode of DML.
@@ -486,6 +488,14 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 		byHash[idx] = append(byHash[idx], dml)
 	}
 
+	if s.metrics.QueueSizeGauge != nil {
+		// limit 10 sample
+		for i := 0; i < len(byHash) && i < 10; i++ {
+			name := "worker_" + strconv.Itoa(i)
+			s.metrics.QueueSizeGauge.WithLabelValues(name).Set(float64(len(byHash[i])))
+		}
+	}
+
 	err := s.execByHash(executor, byHash)
 	return errors.Trace(err)
 }
@@ -570,7 +580,7 @@ func (s *loaderImpl) Run() error {
 		}()
 	}
 
-	txnManager := newTxnManager(1024, s.input)
+	txnManager := newTxnManager(100*1024 /* limit dml number */, s.input)
 	defer txnManager.Close()
 
 	batch := fNewBatchManager(s)

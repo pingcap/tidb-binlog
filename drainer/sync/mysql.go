@@ -30,6 +30,9 @@ import (
 
 var _ Syncer = &MysqlSyncer{}
 
+// QueueSizeGauge to be used.
+var QueueSizeGauge *prometheus.GaugeVec
+
 // MysqlSyncer sync binlog to Mysql
 type MysqlSyncer struct {
 	db      *sql.DB
@@ -61,6 +64,7 @@ func CreateLoader(
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,
 			EventCounterVec:   nil,
+			QueueSizeGauge:    QueueSizeGauge,
 		}))
 	}
 
