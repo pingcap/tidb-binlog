@@ -488,7 +488,7 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 		byHash[idx] = append(byHash[idx], dml)
 	}
 
-	if s.metrics.QueueSizeGauge != nil {
+	if s.metrics != nil && s.metrics.QueueSizeGauge != nil {
 		// limit 10 sample
 		for i := 0; i < len(byHash) && i < 10; i++ {
 			name := "worker_" + strconv.Itoa(i)
