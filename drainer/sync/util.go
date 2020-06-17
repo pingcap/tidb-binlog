@@ -36,6 +36,8 @@ type DBConfig struct {
 	BinlogFileDir           string           `toml:"dir" json:"dir"`
 	BinlogFileRetentionTime int              `toml:"retention-time" json:"retention-time"`
 
+	Merge bool `toml:"merge" json:"merge"`
+
 	ZKAddrs          string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion     string `toml:"kafka-version" json:"kafka-version"`
