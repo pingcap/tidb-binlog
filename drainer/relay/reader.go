@@ -79,8 +79,8 @@ func (r *reader) Run() context.CancelFunc {
 				break
 			}
 
-			slaveBinlog := new(obinlog.Binlog)
-			if err = slaveBinlog.Unmarshal(blg.Payload); err != nil {
+			secondaryBinlog := new(obinlog.Binlog)
+			if err = secondaryBinlog.Unmarshal(blg.Payload); err != nil {
 				break
 			}
 
@@ -88,7 +88,7 @@ func (r *reader) Run() context.CancelFunc {
 			case <-ctx.Done():
 				err = ctx.Err()
 				log.Warn("Producing transaction is interrupted")
-			case r.binlogs <- slaveBinlog:
+			case r.binlogs <- secondaryBinlog:
 			}
 		}
 		// If binlogger is not done, notify it to stop.

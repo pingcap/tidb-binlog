@@ -122,7 +122,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
+func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -133,9 +133,9 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
 
-	if slaveTS > 0 {
-		sp.TsMap["master-ts"] = ts
-		sp.TsMap["slave-ts"] = slaveTS
+	if secondaryTS > 0 {
+		sp.TsMap["primary-ts"] = ts
+		sp.TsMap["secondary-ts"] = secondaryTS
 	}
 
 	b, err := json.Marshal(sp)
