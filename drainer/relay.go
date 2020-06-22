@@ -113,7 +113,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 				continue
 			}
 
-			txn, err := loader.SlaveBinlogToTxn(sbinlog)
+			txn, err := loader.SecondaryBinlogToTxn(sbinlog)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -150,7 +150,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 		return errors.Trace(readerErr)
 	}
 
-	err := cp.Save(lastSuccessTS, 0 /* slaveTS */, true /*consistent*/)
+	err := cp.Save(lastSuccessTS, 0 /* secondaryTS */, true /*consistent*/)
 	if err != nil {
 		return errors.Trace(err)
 	}
