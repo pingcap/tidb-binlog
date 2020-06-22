@@ -7,7 +7,7 @@ A package to load data into MySQL in real-time, aimed to be used by *reparo*, *d
 ### Getting started
 - Example is available via [example_loader_test.go](./example_loader_test.go)
 
-	You need to write a translator to use *Loader* like *SlaveBinlogToTxn* in [translate.go](./translate.go) to translate upstream data format (e.g. binlog) into `Txn` objects.
+	You need to write a translator to use *Loader* like *SecondaryBinlogToTxn* in [translate.go](./translate.go) to translate upstream data format (e.g. binlog) into `Txn` objects.
 
 
 ## Overview
