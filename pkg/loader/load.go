@@ -877,7 +877,7 @@ func getAppliedTS(db *gosql.DB) int64 {
 		errCode, ok := pkgsql.GetSQLErrCode(err)
 		// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
 		if !ok || int(errCode) != tmysql.ErrUnknown {
-			log.Warn("get ts from slave cluster failed", zap.Error(err))
+			log.Warn("get ts from secondary cluster failed", zap.Error(err))
 		}
 		return 0
 	}

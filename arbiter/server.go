@@ -297,7 +297,7 @@ func syncBinlogs(ctx context.Context, source <-chan *reader.Message, ld loader.L
 		}
 		receivedTs = msg.Binlog.CommitTs
 
-		txn, err := loader.SlaveBinlogToTxn(msg.Binlog)
+		txn, err := loader.SecondaryBinlogToTxn(msg.Binlog)
 		if err != nil {
 			log.Error("transfer binlog failed, program will stop handling data from loader", zap.Error(err))
 			return err

@@ -121,12 +121,12 @@ func (p *KafkaSyncer) SetSafeMode(mode bool) bool {
 
 // Sync implements Syncer interface
 func (p *KafkaSyncer) Sync(item *Item) error {
-	slaveBinlog, err := translator.TiBinlogToSlaveBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
+	secondaryBinlog, err := translator.TiBinlogToSecondaryBinlog(p.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = p.saveBinlog(slaveBinlog, item)
+	err = p.saveBinlog(secondaryBinlog, item)
 	if err != nil {
 		return errors.Trace(err)
 	}

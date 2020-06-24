@@ -63,7 +63,7 @@ func NewRelayer(dir string, maxFileSize int64, tableInfoGetter translator.TableI
 // WriteBinlog writes binlog to relay log.
 func (r *relayer) WriteBinlog(schema string, table string, tiBinlog *tb.Binlog, pv *tb.PrewriteValue) (tb.Pos, error) {
 	pos := tb.Pos{}
-	binlog, err := translator.TiBinlogToSlaveBinlog(r.tableInfoGetter, schema, table, tiBinlog, pv)
+	binlog, err := translator.TiBinlogToSecondaryBinlog(r.tableInfoGetter, schema, table, tiBinlog, pv)
 	if err != nil {
 		return pos, errors.Trace(err)
 	}

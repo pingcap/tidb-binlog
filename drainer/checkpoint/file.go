@@ -82,7 +82,7 @@ func (sp *FileCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *FileCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
+func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 	sp.Lock()
 	defer sp.Unlock()
 
