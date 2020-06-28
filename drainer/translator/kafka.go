@@ -32,8 +32,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// TiBinlogToSlaveBinlog translates the format to slave binlog
-func TiBinlogToSlaveBinlog(
+// TiBinlogToSecondaryBinlog translates the format to secondary binlog
+func TiBinlogToSecondaryBinlog(
 	infoGetter TableInfoGetter,
 	schema string,
 	table string,
@@ -41,7 +41,7 @@ func TiBinlogToSlaveBinlog(
 	pv *pb.PrewriteValue,
 ) (*obinlog.Binlog, error) {
 	if tiBinlog.DdlJobId > 0 { // DDL
-		slaveBinlog := &obinlog.Binlog{
+		secondaryBinlog := &obinlog.Binlog{
 			Type:     obinlog.BinlogType_DDL,
 			CommitTs: tiBinlog.GetCommitTs(),
 			DdlData: &obinlog.DDLData{
@@ -50,10 +50,10 @@ func TiBinlogToSlaveBinlog(
 				DdlQuery:   tiBinlog.GetDdlQuery(),
 			},
 		}
-		return slaveBinlog, nil
+		return secondaryBinlog, nil
 	}
 
-	slaveBinlog := &obinlog.Binlog{
+	secondaryBinlog := &obinlog.Binlog{
 		Type:     obinlog.BinlogType_DML,
 		CommitTs: tiBinlog.GetCommitTs(),
 		DmlData:  new(obinlog.DMLData),
@@ -73,7 +73,7 @@ func TiBinlogToSlaveBinlog(
 
 		iter := newSequenceIterator(&mut)
 		table := genTable(schema, info)
-		slaveBinlog.DmlData.Tables = append(slaveBinlog.DmlData.Tables, table)
+		secondaryBinlog.DmlData.Tables = append(secondaryBinlog.DmlData.Tables, table)
 
 		for {
 			tableMutation, err := nextRow(schema, info, isTblDroppingCol, iter)
@@ -86,7 +86,7 @@ func TiBinlogToSlaveBinlog(
 			table.Mutations = append(table.Mutations, tableMutation)
 		}
 	}
-	return slaveBinlog, nil
+	return secondaryBinlog, nil
 }
 
 func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) {

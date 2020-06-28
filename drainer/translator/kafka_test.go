@@ -33,10 +33,10 @@ var _ = check.Suite(&testKafkaSuite{})
 func (t *testKafkaSuite) TestDDL(c *check.C) {
 	t.SetDDL()
 
-	slaveBinog, err := TiBinlogToSlaveBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
+	secondaryBinlog, err := TiBinlogToSecondaryBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(slaveBinog, check.DeepEquals, &obinlog.Binlog{
+	c.Assert(secondaryBinlog, check.DeepEquals, &obinlog.Binlog{
 		Type:     obinlog.BinlogType_DDL,
 		CommitTs: t.TiBinlog.GetCommitTs(),
 		DdlData: &obinlog.DDLData{
@@ -48,13 +48,13 @@ func (t *testKafkaSuite) TestDDL(c *check.C) {
 }
 
 func (t *testKafkaSuite) testDML(c *check.C, tp obinlog.MutationType) {
-	slaveBinog, err := TiBinlogToSlaveBinlog(t, t.Schema, t.Table, t.TiBinlog, t.PV)
+	secondaryBinlog, err := TiBinlogToSecondaryBinlog(t, t.Schema, t.Table, t.TiBinlog, t.PV)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(slaveBinog.GetCommitTs(), check.Equals, t.TiBinlog.GetCommitTs())
-	c.Assert(slaveBinog.Type, check.Equals, obinlog.BinlogType_DML)
+	c.Assert(secondaryBinlog.GetCommitTs(), check.Equals, t.TiBinlog.GetCommitTs())
+	c.Assert(secondaryBinlog.Type, check.Equals, obinlog.BinlogType_DML)
 
-	table := slaveBinog.DmlData.Tables[0]
+	table := secondaryBinlog.DmlData.Tables[0]
 	tableMut := table.Mutations[0]
 	c.Assert(tableMut.GetType(), check.Equals, tp)
 
@@ -67,13 +67,13 @@ func (t *testKafkaSuite) testDML(c *check.C, tp obinlog.MutationType) {
 func (t *testKafkaSuite) TestAllDML(c *check.C) {
 	t.SetAllDML(c)
 
-	slaveBinog, err := TiBinlogToSlaveBinlog(t, t.Schema, t.Table, t.TiBinlog, t.PV)
+	secondaryBinlog, err := TiBinlogToSecondaryBinlog(t, t.Schema, t.Table, t.TiBinlog, t.PV)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(slaveBinog.Type, check.Equals, obinlog.BinlogType_DML)
-	c.Assert(slaveBinog.GetCommitTs(), check.Equals, t.TiBinlog.GetCommitTs())
+	c.Assert(secondaryBinlog.Type, check.Equals, obinlog.BinlogType_DML)
+	c.Assert(secondaryBinlog.GetCommitTs(), check.Equals, t.TiBinlog.GetCommitTs())
 
-	table := slaveBinog.DmlData.Tables[0]
+	table := secondaryBinlog.DmlData.Tables[0]
 
 	insertMut := table.Mutations[0]
 	updateMut := table.Mutations[1]
@@ -137,7 +137,7 @@ func checkColumn(c *check.C, info *obinlog.ColumnInfo, col *obinlog.Column, datu
 
 	datumV := fmt.Sprintf("%v", datum.GetValue())
 	if info.GetMysqlType() == "enum" {
-		// we set uint64 as the index for slave proto but not the name
+		// we set uint64 as the index for secondary proto but not the name
 		datumV = fmt.Sprintf("%v", datum.GetInt64())
 	}
 
