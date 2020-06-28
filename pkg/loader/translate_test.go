@@ -19,11 +19,11 @@ import (
 	. "github.com/pingcap/check"
 )
 
-type slaveBinlogToTxnSuite struct{}
+type secondaryBinlogToTxnSuite struct{}
 
-var _ = Suite(&slaveBinlogToTxnSuite{})
+var _ = Suite(&secondaryBinlogToTxnSuite{})
 
-func (s *slaveBinlogToTxnSuite) TestTranslateDDL(c *C) {
+func (s *secondaryBinlogToTxnSuite) TestTranslateDDL(c *C) {
 	db, table := "test", "hello"
 	sql := "CREATE TABLE hello (id INT AUTO_INCREMENT) PRIMARY KEY(id);"
 	binlog := pb.Binlog{
@@ -34,14 +34,14 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDDL(c *C) {
 			DdlQuery:   []byte(sql),
 		},
 	}
-	txn, err := SlaveBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DDL.Database, Equals, db)
 	c.Assert(txn.DDL.Table, Equals, table)
 	c.Assert(txn.DDL.SQL, Equals, sql)
 }
 
-func (s *slaveBinlogToTxnSuite) TestTranslateDML(c *C) {
+func (s *secondaryBinlogToTxnSuite) TestTranslateDML(c *C) {
 	db, table := "test", "hello"
 	var oldVal, newVal int64 = 41, 42
 	dml := pb.DMLData{
@@ -81,7 +81,7 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDML(c *C) {
 	binlog := pb.Binlog{
 		DmlData: &dml,
 	}
-	txn, err := SlaveBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DMLs, HasLen, 2)
 	for _, dml := range txn.DMLs {
@@ -99,7 +99,7 @@ func (s *slaveBinlogToTxnSuite) TestTranslateDML(c *C) {
 	c.Assert(insert.Values["uid"], Equals, newVal)
 }
 
-func (s *slaveBinlogToTxnSuite) TestGetDMLType(c *C) {
+func (s *secondaryBinlogToTxnSuite) TestGetDMLType(c *C) {
 	mut := pb.TableMutation{}
 	mut.Type = pb.MutationType(404).Enum()
 	c.Assert(getDMLType(&mut), Equals, UnknownDMLType)

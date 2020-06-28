@@ -191,7 +191,7 @@ func GetTidbPosition(db *sql.DB) (int64, error) {
 	defer rows.Close()
 
 	if !rows.Next() {
-		return 0, errors.New("get slave cluster's ts failed")
+		return 0, errors.New("get secondary cluster's ts failed")
 	}
 
 	fields, err := ScanRow(rows)

@@ -77,14 +77,14 @@ func (s *Filter) genRegexMap() {
 	}
 }
 
-// whiteFilter whitelist filtering
-func (s *Filter) whiteFilter(stbs []TableName) []TableName {
+// allowFilter allowlist filtering
+func (s *Filter) allowFilter(stbs []TableName) []TableName {
 	var tbs []TableName
 	if len(s.doTables) == 0 && len(s.doDBs) == 0 {
 		return stbs
 	}
 	for _, tb := range stbs {
-		// if the white list contains "schema_s.table_t" and "schema_s",
+		// if the allow list contains "schema_s.table_t" and "schema_s",
 		// all tables in that schema_s will pass the Filter.
 		if s.matchTable(s.doTables, tb) {
 			tbs = append(tbs, tb)
@@ -96,8 +96,8 @@ func (s *Filter) whiteFilter(stbs []TableName) []TableName {
 	return tbs
 }
 
-// blackFilter return TableName which is not in the blacklist
-func (s *Filter) blackFilter(stbs []TableName) []TableName {
+// blockFilter return TableName which is not in the blocklist
+func (s *Filter) blockFilter(stbs []TableName) []TableName {
 	var tbs []TableName
 	if len(s.ignoreTables) == 0 && len(s.ignoreDBs) == 0 {
 		return stbs
@@ -119,8 +119,8 @@ func (s *Filter) blackFilter(stbs []TableName) []TableName {
 func (s *Filter) SkipSchemaAndTable(schema string, table string) bool {
 	tbs := []TableName{{Schema: strings.ToLower(schema), Table: strings.ToLower(table)}}
 
-	tbs = s.whiteFilter(tbs)
-	tbs = s.blackFilter(tbs)
+	tbs = s.allowFilter(tbs)
+	tbs = s.blockFilter(tbs)
 	return len(tbs) == 0
 }
 
