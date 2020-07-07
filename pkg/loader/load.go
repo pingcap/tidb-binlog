@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -102,6 +103,7 @@ type loaderImpl struct {
 type MetricsGroup struct {
 	EventCounterVec   *prometheus.CounterVec
 	QueryHistogramVec *prometheus.HistogramVec
+	QueueSizeGauge    *prometheus.GaugeVec
 }
 
 // SyncMode represents the sync mode of DML.
@@ -120,6 +122,7 @@ type options struct {
 	metrics          *MetricsGroup
 	saveAppliedTS    bool
 	syncMode         SyncMode
+	merge            bool
 }
 
 var defaultLoaderOptions = options{
@@ -129,6 +132,7 @@ var defaultLoaderOptions = options{
 	metrics:          nil,
 	saveAppliedTS:    false,
 	syncMode:         SyncFullColumn,
+	merge:            false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -152,6 +156,13 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+// Merge set merge options.
+func Merge(v bool) Option {
+	return func(o *options) {
+		o.merge = v
 	}
 }
 
@@ -196,11 +207,10 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		loopBackSyncInfo: opts.loopBackSyncInfo,
 		input:            make(chan *Txn),
 		successTxn:       make(chan *Txn),
-		merge:            true,
+		merge:            opts.merge,
 		saveAppliedTS:    opts.saveAppliedTS,
-
-		ctx:    ctx,
-		cancel: cancel,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 
 	db.SetMaxOpenConns(opts.workerCount)
@@ -430,6 +440,14 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 
 	}
 
+	if s.metrics != nil && s.metrics.QueueSizeGauge != nil {
+		// limit 10 sample
+		for i := 0; i < len(byHash) && i < 10; i++ {
+			name := "worker_" + strconv.Itoa(i)
+			s.metrics.QueueSizeGauge.WithLabelValues(name).Set(float64(len(byHash[i])))
+		}
+	}
+
 	err := s.execByHash(executor, byHash)
 	return errors.Trace(err)
 }
@@ -513,7 +531,7 @@ func (s *loaderImpl) Run() error {
 		}()
 	}
 
-	txnManager := newTxnManager(1024, s.input)
+	txnManager := newTxnManager(100*1024 /* limit dml number */, s.input)
 	defer txnManager.Close()
 
 	batch := fNewBatchManager(s)
@@ -572,7 +590,7 @@ func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, sing
 	batchByTbls = make(map[string][]*DML)
 	for _, dml := range dmls {
 		info := dml.info
-		if info.primaryKey != nil && len(info.uniqueKeys) == 0 {
+		if info.primaryKey != nil {
 			tblName := dml.TableName()
 			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
 		} else {
