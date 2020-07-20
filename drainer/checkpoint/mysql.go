@@ -24,7 +24,7 @@ import (
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
-	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
 // MysqlCheckPoint is a local savepoint struct for mysql
@@ -45,12 +45,16 @@ type MysqlCheckPoint struct {
 
 var _ CheckPoint = &MysqlCheckPoint{}
 
-var sqlOpenDB = pkgsql.OpenDB
+var sqlOpenDB = loader.CreateDB
 
 func newMysql(cfg *Config) (CheckPoint, error) {
 	setDefaultConfig(cfg)
 
-	db, err := sqlOpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
+	if cfg.Db.TLS != nil {
+		log.Info("enalbe TLS for saving checkpoint")
+	}
+
+	db, err := sqlOpenDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.TLS)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}

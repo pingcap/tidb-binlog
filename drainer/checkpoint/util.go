@@ -14,6 +14,7 @@
 package checkpoint
 
 import (
+	"crypto/tls"
 	"database/sql"
 	stderrors "errors"
 	"fmt"
@@ -29,10 +30,11 @@ var ErrNoCheckpointItem = stderrors.New("no any checkpoint item")
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
-	Host     string `toml:"host" json:"host"`
-	User     string `toml:"user" json:"user"`
-	Password string `toml:"password" json:"password"`
-	Port     int    `toml:"port" json:"port"`
+	Host     string      `toml:"host" json:"host"`
+	User     string      `toml:"user" json:"user"`
+	Password string      `toml:"password" json:"password"`
+	Port     int         `toml:"port" json:"port"`
+	TLS      *tls.Config `toml:"-" json:"-"`
 }
 
 // Config is the savepoint configuration

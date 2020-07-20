@@ -14,6 +14,7 @@
 package checkpoint
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"testing"
 
@@ -118,7 +119,7 @@ var _ = Suite(&newMysqlSuite{})
 func (s *newMysqlSuite) TestCannotOpenDB(c *C) {
 	origOpen := sqlOpenDB
 	defer func() { sqlOpenDB = origOpen }()
-	sqlOpenDB = func(proto, host string, port int, username, password string) (*sql.DB, error) {
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
 		return nil, errors.New("no db")
 	}
 
@@ -133,7 +134,7 @@ func (s *newMysqlSuite) TestCreationErrors(c *C) {
 
 	origOpen := sqlOpenDB
 	defer func() { sqlOpenDB = origOpen }()
-	sqlOpenDB = func(proto, host string, port int, username, password string) (*sql.DB, error) {
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
 		return db, nil
 	}
 
