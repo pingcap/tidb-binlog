@@ -51,7 +51,7 @@ func newMysql(cfg *Config) (CheckPoint, error) {
 	setDefaultConfig(cfg)
 
 	if cfg.Db.TLS != nil {
-		log.Info("enalbe TLS for saving checkpoint")
+		log.Info("enable TLS for saving checkpoint")
 	}
 
 	db, err := sqlOpenDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.TLS)
