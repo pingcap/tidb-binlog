@@ -135,6 +135,15 @@ port = 3306
 # encrypted_password = ""
 # password = ""
 # port = 3306
+# [syncer.to.checkpoint.security]
+# Path of file that contains list of trusted SSL CAs.
+# ssl-ca = "/path/to/ca.pem"
+# Path of file that contains X509 certificate in PEM format.
+# ssl-cert = "/path/to/drainer.pem"
+# Path of file that contains X509 key in PEM format.
+# ssl-key = "/path/to/drainer-key.pem"
+# The common name which is allowed to connection with cluster components.
+# cert-allowed-cn = ["binlog"]
 
 # Uncomment this if you want to use file as db-type.
 #[syncer.to]

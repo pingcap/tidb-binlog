@@ -309,6 +309,11 @@ func (cfg *Config) Parse(args []string) error {
 		if err != nil {
 			return errors.Errorf("tls config %+v error %v", cfg.SyncerCfg.To.Security, err)
 		}
+
+		cfg.SyncerCfg.To.Checkpoint.TLS, err = cfg.SyncerCfg.To.Checkpoint.Security.ToTLSConfig()
+		if err != nil {
+			return errors.Errorf("tls config %+v error %v", cfg.SyncerCfg.To.Checkpoint.Security, err)
+		}
 	}
 
 	if err = cfg.adjustConfig(); err != nil {

@@ -82,7 +82,6 @@ func (g *taskGroup) Wait() {
 
 // GenCheckPointCfg returns an CheckPoint config instance
 func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
-
 	checkpointCfg := &checkpoint.Config{
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
@@ -103,6 +102,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 			User:     toCheckpoint.User,
 			Password: toCheckpoint.Password,
 			Port:     toCheckpoint.Port,
+			TLS:      toCheckpoint.TLS,
 		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
@@ -113,6 +113,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 				User:     cfg.SyncerCfg.To.User,
 				Password: cfg.SyncerCfg.To.Password,
 				Port:     cfg.SyncerCfg.To.Port,
+				TLS:      cfg.SyncerCfg.To.TLS,
 			}
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
