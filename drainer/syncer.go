@@ -377,7 +377,7 @@ ForLoop:
 				lastAddComitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
 				if err != nil {
-					err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
+					err = errors.Annotatef(err, "failed to add item")
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
