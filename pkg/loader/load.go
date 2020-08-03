@@ -684,7 +684,6 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 func (b *batchManager) execDDL(txn *Txn) error {
 	if err := b.fExecDDL(txn.DDL); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
-			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
 			return errors.Trace(err)
 		}
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
@@ -706,6 +705,12 @@ func (b *batchManager) put(txn *Txn) error {
 			return errors.Trace(err)
 		}
 		if err := b.execDDL(txn); err != nil {
+			meta := zap.Skip()
+			if s, ok := txn.Metadata.(fmt.Stringer); txn.Metadata != nil && ok {
+				meta = zap.Stringer("metadata", s)
+			}
+
+			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), meta, zap.Error(err))
 			return errors.Trace(err)
 		}
 		return nil
