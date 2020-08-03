@@ -14,6 +14,8 @@
 package sync
 
 import (
+	"fmt"
+
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
@@ -32,6 +34,10 @@ type Item struct {
 	// currently only used for signal the syncer to learn that the downstream schema is changed
 	// when we don't replicate DDL.
 	ShouldSkip bool
+}
+
+func (i *Item) String() string {
+	return fmt.Sprintf("commit ts: %v", i.Binlog.CommitTs)
 }
 
 // Syncer sync binlog item to downstream
