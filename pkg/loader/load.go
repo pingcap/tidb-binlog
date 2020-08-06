@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -106,6 +107,7 @@ type loaderImpl struct {
 type MetricsGroup struct {
 	EventCounterVec   *prometheus.CounterVec
 	QueryHistogramVec *prometheus.HistogramVec
+	QueueSizeGauge    *prometheus.GaugeVec
 }
 
 // SyncMode represents the sync mode of DML.
@@ -126,6 +128,7 @@ type options struct {
 	syncMode         SyncMode
 	enableDispatch   bool
 	enableCausality  bool
+	merge            bool
 }
 
 var defaultLoaderOptions = options{
@@ -137,6 +140,7 @@ var defaultLoaderOptions = options{
 	syncMode:         SyncFullColumn,
 	enableDispatch:   true,
 	enableCausality:  true,
+	merge:            false,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -177,6 +181,13 @@ func WorkerCount(n int) Option {
 func BatchSize(n int) Option {
 	return func(o *options) {
 		o.batchSize = n
+	}
+}
+
+// Merge set merge options.
+func Merge(v bool) Option {
+	return func(o *options) {
+		o.merge = v
 	}
 }
 
@@ -231,7 +242,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		loopBackSyncInfo:   opts.loopBackSyncInfo,
 		input:              make(chan *Txn),
 		successTxn:         make(chan *Txn),
-		merge:              false,
+		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
 
 		ctx:    ctx,
@@ -477,6 +488,14 @@ func (s *loaderImpl) singleExec(executor *executor, dmls []*DML) error {
 		byHash[idx] = append(byHash[idx], dml)
 	}
 
+	if s.metrics != nil && s.metrics.QueueSizeGauge != nil {
+		// limit 10 sample
+		for i := 0; i < len(byHash) && i < 10; i++ {
+			name := "worker_" + strconv.Itoa(i)
+			s.metrics.QueueSizeGauge.WithLabelValues(name).Set(float64(len(byHash[i])))
+		}
+	}
+
 	err := s.execByHash(executor, byHash)
 	return errors.Trace(err)
 }
@@ -561,7 +580,7 @@ func (s *loaderImpl) Run() error {
 		}()
 	}
 
-	txnManager := newTxnManager(1024, s.input)
+	txnManager := newTxnManager(100*1024 /* limit dml number */, s.input)
 	defer txnManager.Close()
 
 	batch := fNewBatchManager(s)
@@ -620,8 +639,7 @@ func (s *loaderImpl) groupDMLs(dmls []*DML) (batchByTbls map[string][]*DML, sing
 	batchByTbls = make(map[string][]*DML)
 	for _, dml := range dmls {
 		info := dml.info
-		// info.uniqueKeys include pk.
-		if info.primaryKey != nil && len(info.uniqueKeys) == 1 {
+		if info.primaryKey != nil {
 			tblName := dml.TableName()
 			batchByTbls[tblName] = append(batchByTbls[tblName], dml)
 		} else {
@@ -729,7 +747,6 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 func (b *batchManager) execDDL(txn *Txn) error {
 	if err := b.fExecDDL(txn.DDL); err != nil {
 		if !pkgsql.IgnoreDDLError(err) {
-			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), zap.Error(err))
 			return errors.Trace(err)
 		}
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))
@@ -751,6 +768,12 @@ func (b *batchManager) put(txn *Txn) error {
 			return errors.Trace(err)
 		}
 		if err := b.execDDL(txn); err != nil {
+			meta := zap.Skip()
+			if s, ok := txn.Metadata.(fmt.Stringer); txn.Metadata != nil && ok {
+				meta = zap.Stringer("metadata", s)
+			}
+
+			log.Error("exec failed", zap.String("sql", txn.DDL.SQL), meta, zap.Error(err))
 			return errors.Trace(err)
 		}
 		return nil
@@ -859,7 +882,7 @@ func getAppliedTS(db *gosql.DB) int64 {
 		errCode, ok := pkgsql.GetSQLErrCode(err)
 		// if tidb dont't support `show master status`, will return 1105 ErrUnknown error
 		if !ok || int(errCode) != tmysql.ErrUnknown {
-			log.Warn("get ts from slave cluster failed", zap.Error(err))
+			log.Warn("get ts from secondary cluster failed", zap.Error(err))
 		}
 		return 0
 	}

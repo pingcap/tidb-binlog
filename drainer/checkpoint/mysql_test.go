@@ -14,6 +14,7 @@
 package checkpoint
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"testing"
 
@@ -65,8 +66,8 @@ func (s *saveSuite) TestShouldUpdateTsMap(c *C) {
 	}
 	err = cp.Save(65536, 3333, false)
 	c.Assert(err, IsNil)
-	c.Assert(cp.TsMap["master-ts"], Equals, int64(65536))
-	c.Assert(cp.TsMap["slave-ts"], Equals, int64(3333))
+	c.Assert(cp.TsMap["primary-ts"], Equals, int64(65536))
+	c.Assert(cp.TsMap["secondary-ts"], Equals, int64(3333))
 }
 
 type loadSuite struct{}
@@ -83,15 +84,15 @@ func (s *loadSuite) TestShouldLoadFromDB(c *C) {
 		TsMap:  make(map[string]int64),
 	}
 	rows := sqlmock.NewRows([]string{"checkPoint"}).
-		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"master-ts": 2000, "slave-ts": 1999}}`)
+		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
 	mock.ExpectQuery("select checkPoint from db.tbl.*").WillReturnRows(rows)
 
 	err = cp.Load()
 	c.Assert(err, IsNil)
 	c.Assert(cp.CommitTS, Equals, int64(1024))
 	c.Assert(cp.ConsistentSaved, Equals, true)
-	c.Assert(cp.TsMap["master-ts"], Equals, int64(2000))
-	c.Assert(cp.TsMap["slave-ts"], Equals, int64(1999))
+	c.Assert(cp.TsMap["primary-ts"], Equals, int64(2000))
+	c.Assert(cp.TsMap["secondary-ts"], Equals, int64(1999))
 }
 
 func (s *loadSuite) TestShouldUseInitialCommitTs(c *C) {
@@ -118,7 +119,7 @@ var _ = Suite(&newMysqlSuite{})
 func (s *newMysqlSuite) TestCannotOpenDB(c *C) {
 	origOpen := sqlOpenDB
 	defer func() { sqlOpenDB = origOpen }()
-	sqlOpenDB = func(proto, host string, port int, username, password string) (*sql.DB, error) {
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
 		return nil, errors.New("no db")
 	}
 
@@ -133,7 +134,7 @@ func (s *newMysqlSuite) TestCreationErrors(c *C) {
 
 	origOpen := sqlOpenDB
 	defer func() { sqlOpenDB = origOpen }()
-	sqlOpenDB = func(proto, host string, port int, username, password string) (*sql.DB, error) {
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
 		return db, nil
 	}
 

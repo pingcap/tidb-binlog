@@ -18,8 +18,8 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-// SlaveBinlogToTxn translate the Binlog format into Txn
-func SlaveBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
+// SecondaryBinlogToTxn translate the Binlog format into Txn
+func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	txn := new(Txn)
 	var err error
 	switch binlog.Type {

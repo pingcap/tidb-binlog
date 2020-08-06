@@ -24,7 +24,7 @@ import (
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
-	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
 // MysqlCheckPoint is a local savepoint struct for mysql
@@ -45,12 +45,16 @@ type MysqlCheckPoint struct {
 
 var _ CheckPoint = &MysqlCheckPoint{}
 
-var sqlOpenDB = pkgsql.OpenDB
+var sqlOpenDB = loader.CreateDB
 
 func newMysql(cfg *Config) (CheckPoint, error) {
 	setDefaultConfig(cfg)
 
-	db, err := sqlOpenDB("mysql", cfg.Db.Host, cfg.Db.Port, cfg.Db.User, cfg.Db.Password)
+	if cfg.Db.TLS != nil {
+		log.Info("enable TLS for saving checkpoint")
+	}
+
+	db, err := sqlOpenDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.TLS)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}
@@ -122,7 +126,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
+func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -133,9 +137,9 @@ func (sp *MysqlCheckPoint) Save(ts, slaveTS int64, consistent bool) error {
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
 
-	if slaveTS > 0 {
-		sp.TsMap["master-ts"] = ts
-		sp.TsMap["slave-ts"] = slaveTS
+	if secondaryTS > 0 {
+		sp.TsMap["primary-ts"] = ts
+		sp.TsMap["secondary-ts"] = secondaryTS
 	}
 
 	b, err := json.Marshal(sp)

@@ -36,6 +36,8 @@ type DBConfig struct {
 	BinlogFileDir           string           `toml:"dir" json:"dir"`
 	BinlogFileRetentionTime int              `toml:"retention-time" json:"retention-time"`
 
+	Merge bool `toml:"merge" json:"merge"`
+
 	ZKAddrs          string `toml:"zookeeper-addrs" json:"zookeeper-addrs"`
 	KafkaAddrs       string `toml:"kafka-addrs" json:"kafka-addrs"`
 	KafkaVersion     string `toml:"kafka-version" json:"kafka-version"`
@@ -54,8 +56,10 @@ type CheckpointConfig struct {
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
 	// if EncryptedPassword is not empty, Password will be ignore.
-	EncryptedPassword string `toml:"encrypted_password" json:"encrypted_password"`
-	Port              int    `toml:"port" json:"port"`
+	EncryptedPassword string          `toml:"encrypted_password" json:"encrypted_password"`
+	Port              int             `toml:"port" json:"port"`
+	Security          security.Config `toml:"security" json:"security"`
+	TLS               *tls.Config     `toml:"-" json:"-"`
 }
 
 type baseError struct {

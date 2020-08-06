@@ -31,7 +31,7 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(commitTS int64, slaveTS int64, consistent bool) error
+	Save(commitTS int64, secondaryTS int64, consistent bool) error
 
 	// TS gets checkpoint commit timestamp.
 	TS() int64
