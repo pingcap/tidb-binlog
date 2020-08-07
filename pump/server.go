@@ -175,7 +175,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:        cancel,
 		metrics:       metrics,
 		tiStore:       tiStore,
-		gcDuration:    cfg.GCDuration,
+		gcDuration:    cfg.GC.Duration,
 		pdCli:         pdCli,
 		cfg:           cfg,
 		triggerGC:     make(chan time.Time),
