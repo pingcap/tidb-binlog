@@ -66,7 +66,7 @@ type Config struct {
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	// pump only stores binlog events whose ts >= current time - GC Time. The default unit is day
-	GC       string          `toml:"gc" json:"gc"`
+	GC       util.Duration   `toml:"gc" json:"gc"`
 	LogFile  string          `toml:"log-file" json:"log-file"`
 	Security security.Config `toml:"security" json:"security"`
 
@@ -76,7 +76,7 @@ type Config struct {
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
-	GCDuration      time.Duration `tome:"-" json:"-"`
+	GCStr           string
 	tls             *tls.Config
 	Storage         storage.Config `toml:"storage" json:"storage"`
 }
@@ -101,7 +101,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
-	fs.StringVar(&cfg.GC, "gc", defaultGC, "recycle binlog files older than gc time. default unit is day. also accept 8h format time(max unit is hour)")
+	fs.StringVar(&cfg.GCStr, "gc", "", "recycle binlog files older than gc time. default unit is day. also accept 8h format time(max unit is hour)")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
@@ -177,9 +177,14 @@ func (cfg *Config) Parse(arguments []string) error {
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
-	cfg.GCDuration, err = util.ParseGCDuration(cfg.GC)
-	if err != nil {
-		return err
+	if cfg.GC.Duration == 0 && cfg.GCStr == "" {
+		cfg.GCStr = defaultGC
+	}
+	if cfg.GCStr != "" {
+		cfg.GC, err = util.ParseDuration(cfg.GCStr)
+		if err != nil {
+			return err
+		}
 	}
 	return cfg.validate()
 }
@@ -191,7 +196,7 @@ func (cfg *Config) configFromFile(path string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check GC
-	if cfg.GCDuration <= 0 {
+	if cfg.GC.Duration <= 0 {
 		return errors.Errorf("GC is %s, must bigger than 0", cfg.GC)
 	}
 
