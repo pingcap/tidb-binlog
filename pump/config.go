@@ -65,7 +65,7 @@ type Config struct {
 	DataDir           string `toml:"data-dir" json:"data-dir"`
 	HeartbeatInterval int    `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	// pump only stores binlog events whose ts >= current time - GC Time. The default unit is day
-	GC       string             `toml:"gc" json:"gc"`
+	GC       string          `toml:"gc" json:"gc"`
 	LogFile  string          `toml:"log-file" json:"log-file"`
 	Security security.Config `toml:"security" json:"security"`
 
