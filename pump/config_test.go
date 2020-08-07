@@ -159,12 +159,12 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 
 func (s *testConfigSuite) TestConfigParsingDuration(c *C) {
 	yc := struct {
-		ListenAddr             string `toml:"addr" json:"addr"`
-		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
-		EtcdURLs               string `toml:"pd-urls" json:"pd-urls"`
-		BinlogDir              string `toml:"data-dir" json:"data-dir"`
-		GC                     int    `toml:"gc" json:"gc"`
-		HeartbeatInterval      uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+		ListenAddr        string `toml:"addr" json:"addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir         string `toml:"data-dir" json:"data-dir"`
+		GC                int    `toml:"gc" json:"gc"`
+		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	}{
 		"192.168.199.100:8260",
 		"192.168.199.100:8260",
@@ -191,17 +191,17 @@ func (s *testConfigSuite) TestConfigParsingDuration(c *C) {
 
 	cfg := NewConfig()
 	err = cfg.Parse(args)
-	c.Assert(cfg.GC, Equals, util.NewDuration(5 * 24 * time.Hour))
+	c.Assert(cfg.GC, Equals, util.NewDuration(5*24*time.Hour))
 }
 
 func (s *testConfigSuite) TestConfigParsingDurationStr(c *C) {
 	yc := struct {
-		ListenAddr             string `toml:"addr" json:"addr"`
-		AdvertiseAddr          string `toml:"advertise-addr" json:"advertise-addr"`
-		EtcdURLs               string `toml:"pd-urls" json:"pd-urls"`
-		BinlogDir              string `toml:"data-dir" json:"data-dir"`
-		GC                     string `toml:"gc" json:"gc"`
-		HeartbeatInterval      uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+		ListenAddr        string `toml:"addr" json:"addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir         string `toml:"data-dir" json:"data-dir"`
+		GC                string `toml:"gc" json:"gc"`
+		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
 	}{
 		"192.168.199.100:8260",
 		"192.168.199.100:8260",
@@ -228,7 +228,7 @@ func (s *testConfigSuite) TestConfigParsingDurationStr(c *C) {
 
 	cfg := NewConfig()
 	err = cfg.Parse(args)
-	c.Assert(cfg.GC, Equals, util.NewDuration(30 * time.Minute))
+	c.Assert(cfg.GC, Equals, util.NewDuration(30*time.Minute))
 }
 
 func mustSuccess(c *C, err error) {
