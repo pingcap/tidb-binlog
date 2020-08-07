@@ -191,6 +191,7 @@ func (s *testConfigSuite) TestConfigParsingDuration(c *C) {
 
 	cfg := NewConfig()
 	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
 	c.Assert(cfg.GC, Equals, util.NewDuration(5*24*time.Hour))
 }
 
@@ -228,6 +229,7 @@ func (s *testConfigSuite) TestConfigParsingDurationStr(c *C) {
 
 	cfg := NewConfig()
 	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
 	c.Assert(cfg.GC, Equals, util.NewDuration(30*time.Minute))
 }
 
