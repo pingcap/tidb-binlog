@@ -311,7 +311,7 @@ func ParseGCDuration(gc string) (time.Duration, error) {
 	}
 	gcDuration, err := time.ParseDuration(gc)
 	if err != nil {
-		return 0, errors.Errorf("unsupported gc time %s, err: %s. please use 7 or 8h(max unit is hour) format gc time", err, gc)
+		return 0, errors.Errorf("unsupported gc time %s, please use 7 or 8h(max unit is hour) format gc time. err: %s", gc, err)
 	}
 	return gcDuration, nil
 }

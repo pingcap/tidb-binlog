@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
@@ -29,7 +30,7 @@ type testConfigSuite struct{}
 
 func (s *testConfigSuite) TestValidate(c *C) {
 	cfg := Config{}
-	cfg.GC = 1
+	cfg.GCDuration = 24 * time.Hour
 	cfg.ListenAddr = "http://:8250"
 	cfg.EtcdURLs = "http://192.168.10.23:7777"
 

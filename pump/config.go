@@ -75,6 +75,7 @@ type Config struct {
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
+	GCDuration      time.Duration `tome:"-" json:"-"`
 	tls             *tls.Config
 	Storage         storage.Config `toml:"storage" json:"storage"`
 }
@@ -175,6 +176,10 @@ func (cfg *Config) Parse(arguments []string) error {
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
+	cfg.GCDuration, err = util.ParseGCDuration(cfg.GC)
+	if err != nil {
+		return err
+	}
 	return cfg.validate()
 }
 
@@ -185,8 +190,8 @@ func (cfg *Config) configFromFile(path string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check GC
-	if cfg.GC <= 0 {
-		return errors.Errorf("GC is %d, must bigger than 0", cfg.GC)
+	if cfg.GCDuration <= 0 {
+		return errors.Errorf("GC is %s, must bigger than 0", cfg.GC)
 	}
 
 	// check ListenAddr
