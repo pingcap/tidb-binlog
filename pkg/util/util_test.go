@@ -117,7 +117,7 @@ func (s *utilSuite) TestParseGCDuration(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(duration, Equals, expectDuration)
 
-	gc = "30min"
+	gc = "30m"
 	expectDuration = 30 * time.Minute
 	duration, err = ParseGCDuration(gc)
 	c.Assert(err, IsNil)
@@ -125,7 +125,7 @@ func (s *utilSuite) TestParseGCDuration(c *C) {
 
 	gc = "7d"
 	duration, err = ParseGCDuration(gc)
-	c.Assert(err, ErrorMatches, "unsupported gc time 7d, err: .* please use 7 or 8h(max unit is hour) format gc time")
+	c.Assert(err, ErrorMatches, `unsupported gc time 7d, please use 7 or 8h\(max unit is hour\) format gc time.*`)
 }
 
 type getAddrIPSuite struct{}

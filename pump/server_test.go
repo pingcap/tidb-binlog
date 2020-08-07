@@ -719,7 +719,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		ctx:        ctx,
 		cancel:     cancel,
 		tiStore:    nil,
-		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		gcDuration: 24 * time.Hour,
 		pdCli:      nil,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time),
