@@ -124,7 +124,7 @@ func (s *utilSuite) TestParseGCDuration(c *C) {
 	c.Assert(duration, Equals, expectDuration)
 
 	gc = "7d"
-	duration, err = ParseGCDuration(gc)
+	_, err = ParseGCDuration(gc)
 	c.Assert(err, ErrorMatches, `unsupported gc time 7d, please use 7 or 8h\(max unit is hour\) format gc time.*`)
 }
 
