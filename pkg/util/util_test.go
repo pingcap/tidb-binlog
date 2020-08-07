@@ -110,6 +110,24 @@ func (s *utilSuite) TestStdLogger(c *C) {
 	c.Assert(entrys[2].Message, Matches, ".*hola:Goodbye!.*")
 }
 
+func (s *utilSuite) TestParseGCDuration(c *C) {
+	gc := "7"
+	expectDuration := 7 * 24 * time.Hour
+	duration, err := ParseGCDuration(gc)
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, expectDuration)
+
+	gc = "30min"
+	expectDuration = 30 * time.Minute
+	duration, err = ParseGCDuration(gc)
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, expectDuration)
+
+	gc = "7d"
+	duration, err = ParseGCDuration(gc)
+	c.Assert(err, ErrorMatches, "unsupported gc time 7d, err: .* please use 7 or 8h(max unit is hour) format gc time")
+}
+
 type getAddrIPSuite struct{}
 
 var _ = Suite(&getAddrIPSuite{})
