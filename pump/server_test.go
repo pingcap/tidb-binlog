@@ -585,6 +585,7 @@ func (s *newServerSuite) SetUpTest(c *C) {
 		LogLevel:          "debug",
 		MetricsAddr:       "192.168.199.100:5000",
 		MetricsInterval:   15,
+		GC:                "7",
 		Security: security.Config{
 			SSLCA:   "/path/to/ca.pem",
 			SSLCert: "/path/to/drainer.pem",
@@ -719,7 +720,7 @@ func (s *startServerSuite) TestStartPumpServer(c *C) {
 		ctx:        ctx,
 		cancel:     cancel,
 		tiStore:    nil,
-		gcDuration: time.Duration(cfg.GC) * 24 * time.Hour,
+		gcDuration: 24 * time.Hour,
 		pdCli:      nil,
 		cfg:        cfg,
 		triggerGC:  make(chan time.Time),

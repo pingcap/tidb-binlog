@@ -18,9 +18,11 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var _ = Suite(&testConfigSuite{})
@@ -29,7 +31,7 @@ type testConfigSuite struct{}
 
 func (s *testConfigSuite) TestValidate(c *C) {
 	cfg := Config{}
-	cfg.GC = 1
+	cfg.GC = util.NewDuration(24 * time.Hour)
 	cfg.ListenAddr = "http://:8250"
 	cfg.EtcdURLs = "http://192.168.10.23:7777"
 
@@ -153,6 +155,100 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
+}
+
+func (s *testConfigSuite) TestConfigParsingIntegerDuration(c *C) {
+	yc := struct {
+		ListenAddr        string `toml:"addr" json:"addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir         string `toml:"data-dir" json:"data-dir"`
+		GC                int    `toml:"gc" json:"gc"`
+		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	}{
+		"192.168.199.100:8260",
+		"192.168.199.100:8260",
+		"http://192.168.199.110:2379,http://hostname:2379",
+		"/tmp/pump",
+		5,
+		1500,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, IsNil)
+
+	configFilename := path.Join(c.MkDir(), "pump_config_gc_int.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, IsNil)
+
+	args := []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+	}
+
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+	duration, err := cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 5*24*time.Hour)
+
+	// test whether gc config can be covered by command lines
+	args = []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+		"--gc", "3",
+	}
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+	duration, err = cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 3*24*time.Hour)
+}
+
+func (s *testConfigSuite) TestConfigParsingStringDuration(c *C) {
+	yc := struct {
+		ListenAddr        string `toml:"addr" json:"addr"`
+		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
+		EtcdURLs          string `toml:"pd-urls" json:"pd-urls"`
+		BinlogDir         string `toml:"data-dir" json:"data-dir"`
+		GC                string `toml:"gc" json:"gc"`
+		HeartbeatInterval uint   `toml:"heartbeat-interval" json:"heartbeat-interval"`
+	}{
+		"192.168.199.100:8260",
+		"192.168.199.100:8260",
+		"http://192.168.199.110:2379,http://hostname:2379",
+		"/tmp/pump",
+		"30m",
+		1500,
+	}
+
+	var buf bytes.Buffer
+	e := toml.NewEncoder(&buf)
+	err := e.Encode(yc)
+	c.Assert(err, IsNil)
+
+	configFilename := path.Join(c.MkDir(), "pump_config_gc_str.toml")
+	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	c.Assert(err, IsNil)
+
+	args := []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+	}
+
+	cfg := NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+	duration, err := cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 30*time.Minute)
 }
 
 func mustSuccess(c *C, err error) {
