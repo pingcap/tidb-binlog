@@ -14,12 +14,20 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 )
+
+var empty = ""
+var _ toml.TextMarshaler = Duration(empty)
+var _ toml.TextUnmarshaler = (*Duration)(&empty)
+var _ json.Marshaler = Duration(empty)
+var _ json.Unmarshaler = (*Duration)(&empty)
 
 // Duration is a wrapper of time.Duration for TOML and JSON.
 type Duration string
@@ -30,13 +38,18 @@ func NewDuration(duration time.Duration) Duration {
 }
 
 // MarshalJSON returns the duration as a JSON string.
-func (d *Duration) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`"%s"`, *d)), nil
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%s"`, d)), nil
 }
 
 // UnmarshalJSON parses a JSON string into the duration.
 func (d *Duration) UnmarshalJSON(text []byte) error {
 	s, err := strconv.Unquote(string(text))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	td := Duration(s)
+	_, err = td.ParseDuration()
 	if err != nil {
 		return errors.WithStack(err)
 	}
