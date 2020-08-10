@@ -8,7 +8,7 @@ advertise-addr = ""
 
 # a integer value to control expiry date of the binlog data, indicates for how long (in days) the binlog data would be stored. 
 # must bigger than 0
-gc = 7
+gc = 3
 
 # path to the data directory of pump's data
 data-dir = "data.pump"

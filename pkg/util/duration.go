@@ -22,18 +22,16 @@ import (
 )
 
 // Duration is a wrapper of time.Duration for TOML and JSON.
-type Duration struct {
-	time.Duration
-}
+type Duration string
 
 // NewDuration creates a Duration from time.Duration.
 func NewDuration(duration time.Duration) Duration {
-	return Duration{Duration: duration}
+	return Duration(duration.String())
 }
 
 // MarshalJSON returns the duration as a JSON string.
 func (d *Duration) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`"%s"`, d.String())), nil
+	return []byte(fmt.Sprintf(`"%s"`, *d)), nil
 }
 
 // UnmarshalJSON parses a JSON string into the duration.
@@ -42,39 +40,37 @@ func (d *Duration) UnmarshalJSON(text []byte) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	duration, err := time.ParseDuration(s)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	d.Duration = duration
+	*d = Duration(s)
 	return nil
 }
 
 // UnmarshalText parses a TOML string into the duration.
 func (d *Duration) UnmarshalText(text []byte) error {
 	var err error
-	duration, err := ParseDuration(string(text))
+	td := Duration(text)
+	_, err = td.ParseDuration()
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	d.Duration = duration.Duration
+	*d = Duration(text)
 	return nil
 }
 
 // MarshalText returns the duration as a JSON string.
 func (d Duration) MarshalText() ([]byte, error) {
-	return []byte(d.String()), nil
+	return []byte(d), nil
 }
 
 // ParseDuration parses gc durations. The default unit is day.
-func ParseDuration(gc string) (Duration, error) {
-	d, err := strconv.ParseUint(gc, 10, 64)
+func (d Duration) ParseDuration() (time.Duration, error) {
+	gc := string(d)
+	t, err := strconv.ParseUint(gc, 10, 64)
 	if err == nil {
-		return Duration{time.Duration(d) * 24 * time.Hour}, nil
+		return time.Duration(t) * 24 * time.Hour, nil
 	}
 	gcDuration, err := time.ParseDuration(gc)
 	if err != nil {
-		return Duration{0}, errors.Annotatef(err, "unsupported gc time %s, etc: use 7 for 7 day, 7h for 7 hour", gc)
+		return 0, errors.Annotatef(err, "unsupported gc time %s, etc: use 7 for 7 day, 7h for 7 hour", gc)
 	}
-	return Duration{gcDuration}, nil
+	return gcDuration, nil
 }

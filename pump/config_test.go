@@ -157,7 +157,7 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 	c.Assert(err, ErrorMatches, ".*contained unknown configuration options: unrecognized-option-test.*")
 }
 
-func (s *testConfigSuite) TestConfigParsingDuration(c *C) {
+func (s *testConfigSuite) TestConfigParsingIntegerDuration(c *C) {
 	yc := struct {
 		ListenAddr        string `toml:"addr" json:"addr"`
 		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
@@ -192,10 +192,26 @@ func (s *testConfigSuite) TestConfigParsingDuration(c *C) {
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.GC, Equals, util.NewDuration(5*24*time.Hour))
+	duration, err := cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 5*24*time.Hour)
+
+	// test whether gc config can be covered by command lines
+	args = []string{
+		"--config",
+		configFilename,
+		"-L", "debug",
+		"--gc", "3",
+	}
+	cfg = NewConfig()
+	err = cfg.Parse(args)
+	c.Assert(err, IsNil)
+	duration, err = cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 3*24*time.Hour)
 }
 
-func (s *testConfigSuite) TestConfigParsingDurationStr(c *C) {
+func (s *testConfigSuite) TestConfigParsingStringDuration(c *C) {
 	yc := struct {
 		ListenAddr        string `toml:"addr" json:"addr"`
 		AdvertiseAddr     string `toml:"advertise-addr" json:"advertise-addr"`
@@ -230,7 +246,9 @@ func (s *testConfigSuite) TestConfigParsingDurationStr(c *C) {
 	cfg := NewConfig()
 	err = cfg.Parse(args)
 	c.Assert(err, IsNil)
-	c.Assert(cfg.GC, Equals, util.NewDuration(30*time.Minute))
+	duration, err := cfg.GC.ParseDuration()
+	c.Assert(err, IsNil)
+	c.Assert(duration, Equals, 30*time.Minute)
 }
 
 func mustSuccess(c *C, err error) {

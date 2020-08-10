@@ -24,19 +24,19 @@ type durationSuite struct{}
 var _ = Suite(&durationSuite{})
 
 func (s *durationSuite) TestParseDuration(c *C) {
-	gc := "7"
-	expectDuration := NewDuration(7 * 24 * time.Hour)
-	duration, err := ParseDuration(gc)
+	gc := Duration("7")
+	expectDuration := 7 * 24 * time.Hour
+	duration, err := gc.ParseDuration()
 	c.Assert(err, IsNil)
 	c.Assert(duration, Equals, expectDuration)
 
 	gc = "30m"
-	expectDuration = NewDuration(30 * time.Minute)
-	duration, err = ParseDuration(gc)
+	expectDuration = 30 * time.Minute
+	duration, err = gc.ParseDuration()
 	c.Assert(err, IsNil)
 	c.Assert(duration, Equals, expectDuration)
 
 	gc = "7d"
-	_, err = ParseDuration(gc)
+	_, err = gc.ParseDuration()
 	c.Assert(err, NotNil)
 }
