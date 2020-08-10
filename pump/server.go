@@ -108,6 +108,10 @@ func init() {
 
 // NewServer returns a instance of pump server
 func NewServer(cfg *Config) (*Server, error) {
+	gcDuration, err := cfg.GC.ParseDuration()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	var metrics *util.MetricClient
 	if cfg.MetricsAddr != "" && cfg.MetricsInterval != 0 {
 		metrics = util.NewMetricClient(
@@ -175,7 +179,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		cancel:        cancel,
 		metrics:       metrics,
 		tiStore:       tiStore,
-		gcDuration:    cfg.GC.Duration,
+		gcDuration:    gcDuration,
 		pdCli:         pdCli,
 		cfg:           cfg,
 		triggerGC:     make(chan time.Time),

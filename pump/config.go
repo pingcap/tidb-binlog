@@ -75,7 +75,6 @@ type Config struct {
 	MetricsInterval int
 	configFile      string
 	printVersion    bool
-	GCStr           string
 	tls             *tls.Config
 	Storage         storage.Config `toml:"storage" json:"storage"`
 }
@@ -100,7 +99,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.EtcdURLs, "pd-urls", defaultEtcdURLs, "a comma separated list of the PD endpoints")
 	fs.StringVar(&cfg.DataDir, "data-dir", "", "the path to store binlog data")
 	fs.IntVar(&cfg.HeartbeatInterval, "heartbeat-interval", defaultHeartbeatInterval, "number of seconds between heartbeat ticks")
-	fs.StringVar(&cfg.GCStr, "gc", "", "recycle binlog files older than gc time. default unit is day. also accept 8h format time(max unit is hour)")
+	fs.StringVar((*string)(&cfg.GC), "gc", defaultGC, "recycle binlog files older than gc time. default unit is day. also accept 8h format time(max unit is hour)")
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.MetricsAddr, "metrics-addr", "", "prometheus pushgateway address, leaves it empty will disable prometheus push")
 	fs.IntVar(&cfg.MetricsInterval, "metrics-interval", 15, "prometheus client push interval in second, set \"0\" to disable prometheus push")
@@ -176,15 +175,6 @@ func (cfg *Config) Parse(arguments []string) error {
 	util.AdjustString(&cfg.DataDir, defaultDataDir)
 	util.AdjustInt(&cfg.HeartbeatInterval, defaultHeartbeatInterval)
 
-	if cfg.GC.Duration == 0 && cfg.GCStr == "" {
-		cfg.GCStr = defaultGC
-	}
-	if cfg.GCStr != "" {
-		cfg.GC, err = util.ParseDuration(cfg.GCStr)
-		if err != nil {
-			return err
-		}
-	}
 	return cfg.validate()
 }
 
@@ -195,8 +185,12 @@ func (cfg *Config) configFromFile(path string) error {
 // validate checks whether the configuration is valid
 func (cfg *Config) validate() error {
 	// check GC
-	if cfg.GC.Duration <= 0 {
-		return errors.Errorf("GC is %s, must bigger than 0", cfg.GC)
+	if duration, err := cfg.GC.ParseDuration(); err == nil {
+		if duration <= 0 {
+			return errors.Errorf("GC is %s, must bigger than 0", cfg.GC)
+		}
+	} else {
+		return errors.Errorf("parse GC time failed, err: %s", err)
 	}
 
 	// check ListenAddr
