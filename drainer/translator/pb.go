@@ -203,7 +203,7 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRowToDatumMap(row, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}

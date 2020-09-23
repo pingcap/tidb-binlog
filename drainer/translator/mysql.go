@@ -86,7 +86,7 @@ func genMysqlDelete(schema string, table *model.TableInfo, row []byte) (names []
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRowToDatumMap(row, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -252,7 +252,7 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	switch ft.Tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeJSON:
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
 		data = types.NewDatum(data.GetMysqlEnum().Value)

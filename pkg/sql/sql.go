@@ -26,12 +26,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tmysql "github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var (
@@ -164,13 +164,13 @@ func IgnoreDDLError(err error) bool {
 }
 
 // GetSQLErrCode returns error code if err is a mysql error
-func GetSQLErrCode(err error) (terror.ErrCode, bool) {
+func GetSQLErrCode(err error) (errors.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
 	if !ok {
 		return -1, false
 	}
 
-	return terror.ErrCode(mysqlErr.Number), true
+	return errors.ErrCode(mysqlErr.Number), true
 }
 
 // GetTidbPosition gets tidb's position.

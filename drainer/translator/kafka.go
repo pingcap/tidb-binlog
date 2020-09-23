@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -166,7 +166,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	columns := tableInfo.Columns
 
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	columnValues, err := tablecodec.DecodeRow(raw, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRowToDatumMap(raw, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotate(err, "DecodeRow failed")
 	}
