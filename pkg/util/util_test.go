@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	pd "github.com/pingcap/pd/v4/client"
+	pd "github.com/tikv/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"

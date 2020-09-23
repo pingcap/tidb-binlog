@@ -26,7 +26,7 @@ import (
 
 	"github.com/gorilla/mux"
 	. "github.com/pingcap/check"
-	pd "github.com/pingcap/pd/v4/client"
+	pd "github.com/tikv/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
