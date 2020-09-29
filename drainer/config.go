@@ -49,6 +49,7 @@ const (
 	defaultSyncedCheckTime = 5 // 5 minute
 	defaultKafkaAddrs      = "127.0.0.1:9092"
 	defaultKafkaVersion    = "0.8.2.0"
+	defaultTiDBTxnMode     = "optimistic"
 )
 
 var (
@@ -500,6 +501,9 @@ func (cfg *Config) adjustConfig() error {
 				user = "root"
 			}
 			cfg.SyncerCfg.To.User = user
+		}
+		if cfg.SyncerCfg.DestDBType == "tidb" && cfg.SyncerCfg.To.TiDBTxnMode == "" {
+			cfg.SyncerCfg.To.TiDBTxnMode = defaultTiDBTxnMode
 		}
 
 		if len(cfg.SyncerCfg.To.EncryptedPassword) > 0 {

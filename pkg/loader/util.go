@@ -32,6 +32,12 @@ import (
 var (
 	// ErrTableNotExist means the table not exist.
 	ErrTableNotExist = errors.New("table not exist")
+	// DefaultDBParams means the default db parameters
+	DefaultDBParams = map[string]string{
+		// After https://github.com/pingcap/tidb/pull/17102
+		// default is false, must enable for insert value explicit, or can't replicate.
+		"allow_auto_random_explicit_insert": "1",
+	}
 )
 
 const (
@@ -94,14 +100,7 @@ func isUnknownSystemVariableErr(err error) bool {
 	return code == errno.ErrUnknownSystemVariable
 }
 
-func createDBWitSessions(dsn string) (db *gosql.DB, err error) {
-	// Try set this sessions if it's supported.
-	params := map[string]string{
-		// After https://github.com/pingcap/tidb/pull/17102
-		// default is false, must enable for insert value explicit, or can't replicate.
-		"allow_auto_random_explicit_insert": "1",
-	}
-
+func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, err error) {
 	var tryDB *gosql.DB
 	tryDB, err = gosql.Open("mysql", dsn)
 	if err != nil {
@@ -136,7 +135,7 @@ func createDBWitSessions(dsn string) (db *gosql.DB, err error) {
 }
 
 // CreateDBWithSQLMode return sql.DB
-func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string) (db *gosql.DB, err error) {
+func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string, params map[string]string) (db *gosql.DB, err error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
 	if sqlMode != nil {
 		// same as "set sql_mode = '<sqlMode>'"
@@ -151,13 +150,16 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 		}
 		dsn += "&tls=" + name
 	}
+	if params == nil {
+		params = DefaultDBParams
+	}
 
-	return createDBWitSessions(dsn)
+	return createDBWitSessions(dsn, params)
 }
 
 // CreateDB return sql.DB
 func CreateDB(user string, password string, host string, port int, tls *tls.Config) (db *gosql.DB, err error) {
-	return CreateDBWithSQLMode(user, password, host, port, tls, nil)
+	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil)
 }
 
 func quoteSchema(schema string, table string) string {
