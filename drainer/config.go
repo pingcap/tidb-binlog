@@ -501,12 +501,6 @@ func (cfg *Config) adjustConfig() error {
 			}
 			cfg.SyncerCfg.To.User = user
 		}
-		if cfg.SyncerCfg.To.TiDBTxnMode != "" {
-			if cfg.SyncerCfg.To.Params == nil {
-				cfg.SyncerCfg.To.Params = make(map[string]string)
-			}
-			cfg.SyncerCfg.To.Params["tidb_txn_mode"] = cfg.SyncerCfg.To.TiDBTxnMode
-		}
 
 		if len(cfg.SyncerCfg.To.EncryptedPassword) > 0 {
 			decrypt, err := encrypt.Decrypt(cfg.SyncerCfg.To.EncryptedPassword)

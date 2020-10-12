@@ -35,7 +35,6 @@ type DBConfig struct {
 	Checkpoint              CheckpointConfig  `toml:"checkpoint" json:"checkpoint"`
 	BinlogFileDir           string            `toml:"dir" json:"dir"`
 	BinlogFileRetentionTime int               `toml:"retention-time" json:"retention-time"`
-	TiDBTxnMode             string            `toml:"tidb-txn-mode" json:"tidb-txn-mode"`
 	Params                  map[string]string `toml:"params" json:"params"`
 
 	Merge bool `toml:"merge" json:"merge"`
