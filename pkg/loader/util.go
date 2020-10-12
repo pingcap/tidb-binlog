@@ -31,13 +31,8 @@ import (
 
 var (
 	// ErrTableNotExist means the table not exist.
-	ErrTableNotExist = errors.New("table not exist")
-	// DefaultDBParams means the default db parameters
-	DefaultDBParams = map[string]string{
-		// After https://github.com/pingcap/tidb/pull/17102
-		// default is false, must enable for insert value explicit, or can't replicate.
-		"allow_auto_random_explicit_insert": "1",
-	}
+	ErrTableNotExist   = errors.New("table not exist")
+	defaultTiDBTxnMode = "optimistic"
 )
 
 const (
@@ -101,6 +96,13 @@ func isUnknownSystemVariableErr(err error) bool {
 }
 
 func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, err error) {
+	// Try set this sessions if it's supported.
+	defaultParams := map[string]string{
+		// After https://github.com/pingcap/tidb/pull/17102
+		// default is false, must enable for insert value explicit, or can't replicate.
+		"allow_auto_random_explicit_insert": "1",
+		"tidb_txn_mode":                     defaultTiDBTxnMode,
+	}
 	var tryDB *gosql.DB
 	tryDB, err = gosql.Open("mysql", dsn)
 	if err != nil {
@@ -109,7 +111,7 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 	defer tryDB.Close()
 
 	support := make(map[string]string)
-	for k, v := range params {
+	for k, v := range defaultParams {
 		s := fmt.Sprintf("SET SESSION %s = ?", k)
 		_, err := tryDB.Exec(s, v)
 		if err != nil {
@@ -119,6 +121,14 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 			return nil, errors.Trace(err)
 		}
 
+		support[k] = v
+	}
+	for k, v := range params {
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := tryDB.Exec(s, v)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		support[k] = v
 	}
 
@@ -149,9 +159,6 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 			return nil, errors.Annotate(err, "failed to RegisterTLSConfig")
 		}
 		dsn += "&tls=" + name
-	}
-	if params == nil {
-		params = DefaultDBParams
 	}
 
 	return createDBWitSessions(dsn, params)

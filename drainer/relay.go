@@ -43,11 +43,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 		return errors.Annotate(err, "failed to create reader")
 	}
 
-	params := loader.DefaultDBParams
-	if scfg.To.TiDBTxnMode != "" {
-		params["tidb_txn_mode"] = scfg.To.TiDBTxnMode
-	}
-	db, err := loader.CreateDBWithSQLMode(scfg.To.User, scfg.To.Password, scfg.To.Host, scfg.To.Port, scfg.To.TLS, scfg.StrSQLMode, params)
+	db, err := loader.CreateDBWithSQLMode(scfg.To.User, scfg.To.Password, scfg.To.Host, scfg.To.Port, scfg.To.TLS, scfg.StrSQLMode, scfg.To.Params)
 	if err != nil {
 		return errors.Annotate(err, "failed to create SQL db")
 	}
