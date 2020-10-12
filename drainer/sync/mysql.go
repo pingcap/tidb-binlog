@@ -119,7 +119,7 @@ func NewMysqlSyncer(
 
 		if newMode != oldMode {
 			db.Close()
-			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, &newMode, params)
+			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, &newMode, cfg.Params)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
