@@ -23,10 +23,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/tikv/pd/client"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/siddontang/go/ioutil2"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
