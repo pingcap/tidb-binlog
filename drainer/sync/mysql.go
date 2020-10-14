@@ -103,7 +103,7 @@ func NewMysqlSyncer(
 		log.Info("enable TLS to connect downstream MySQL/TiDB")
 	}
 
-	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, sqlMode)
+	db, err := createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, sqlMode, cfg.Params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -119,7 +119,7 @@ func NewMysqlSyncer(
 
 		if newMode != oldMode {
 			db.Close()
-			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, &newMode)
+			db, err = createDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.TLS, &newMode, cfg.Params)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
