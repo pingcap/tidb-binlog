@@ -29,11 +29,12 @@ type DBConfig struct {
 	Security security.Config `toml:"security" json:"security"`
 	TLS      *tls.Config     `toml:"-" json:"-"`
 	// if EncryptedPassword is not empty, Password will be ignore.
-	EncryptedPassword string           `toml:"encrypted_password" json:"encrypted_password"`
-	SyncMode          int              `toml:"sync-mode" json:"sync-mode"`
-	Port              int              `toml:"port" json:"port"`
-	Checkpoint        CheckpointConfig `toml:"checkpoint" json:"checkpoint"`
-	BinlogFileDir     string           `toml:"dir" json:"dir"`
+	EncryptedPassword string            `toml:"encrypted_password" json:"encrypted_password"`
+	SyncMode          int               `toml:"sync-mode" json:"sync-mode"`
+	Port              int               `toml:"port" json:"port"`
+	Checkpoint        CheckpointConfig  `toml:"checkpoint" json:"checkpoint"`
+	BinlogFileDir     string            `toml:"dir" json:"dir"`
+	Params            map[string]string `toml:"params" json:"params"`
 
 	Merge bool `toml:"merge" json:"merge"`
 
