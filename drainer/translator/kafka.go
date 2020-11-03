@@ -64,7 +64,7 @@ func TiBinlogToSecondaryBinlog(
 		if !ok {
 			return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 		}
-		isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
+		canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 
 		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 		if !ok {
@@ -76,7 +76,7 @@ func TiBinlogToSecondaryBinlog(
 		secondaryBinlog.DmlData.Tables = append(secondaryBinlog.DmlData.Tables, table)
 
 		for {
-			tableMutation, err := nextRow(schema, info, isTblDroppingCol, iter)
+			tableMutation, err := nextRow(schema, info, canAppendDefaultValue, iter)
 			if err != nil {
 				if errors.Cause(err) == io.EOF {
 					break
@@ -287,7 +287,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 	return
 }
 
-func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppingCol bool, row []byte) (*obinlog.TableMutation, error) {
+func createTableMutation(tp pb.MutationType, info *model.TableInfo, canAppendDefaultValue bool, row []byte) (*obinlog.TableMutation, error) {
 	var err error
 	mut := new(obinlog.TableMutation)
 	switch tp {
@@ -299,7 +299,7 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 		}
 	case pb.MutationType_Update:
 		mut.Type = obinlog.MutationType_Update.Enum()
-		mut.Row, mut.ChangeRow, err = updateRowToRow(info, row, isTblDroppingCol)
+		mut.Row, mut.ChangeRow, err = updateRowToRow(info, row, canAppendDefaultValue)
 		if err != nil {
 			return nil, err
 		}
@@ -315,13 +315,13 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 	return mut, nil
 }
 
-func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *sequenceIterator) (*obinlog.TableMutation, error) {
+func nextRow(schema string, info *model.TableInfo, canAppendDefaultValue bool, iter *sequenceIterator) (*obinlog.TableMutation, error) {
 	mutType, row, err := iter.next()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	tableMutation, err := createTableMutation(mutType, info, isTblDroppingCol, row)
+	tableMutation, err := createTableMutation(mutType, info, canAppendDefaultValue, row)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

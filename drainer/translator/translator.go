@@ -77,6 +77,8 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 		}
 	}
 
+	log.S().Debugf("get insert row pk: %v, datums: %+v", pk, datums)
+
 	return
 }
 
@@ -103,7 +105,7 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 
 // DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, isTblDroppingCol bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, canAppendDefaultValue bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}
@@ -158,11 +160,11 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 	parsedCols := cnt / 2
 	isInvalid := len(newRow) != len(oldRow) || (len(cols) != parsedCols && len(cols)-1 != parsedCols)
 	if isInvalid {
-		return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 	}
 	if parsedCols == len(cols)-1 {
-		if !isTblDroppingCol {
-			return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		if !canAppendDefaultValue {
+			return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 		}
 		var missingCol *model.ColumnInfo
 		for colID, col := range cols {

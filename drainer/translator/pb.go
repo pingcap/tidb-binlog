@@ -65,7 +65,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}
 
-			isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
+			canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 
 			schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 			if !ok {
@@ -90,7 +90,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 					}
 					pbBinlog.DmlData.Events = append(pbBinlog.DmlData.Events, *event)
 				case tipb.MutationType_Update:
-					event, err := genUpdate(schema, info, row, isTblDroppingCol)
+					event, err := genUpdate(schema, info, row, canAppendDefaultValue)
 					if err != nil {
 						return nil, errors.Annotatef(err, "genUpdate failed")
 					}
@@ -154,11 +154,11 @@ func genInsert(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 	return
 }
 
-func genUpdate(schema string, table *model.TableInfo, row []byte, isTblDroppingCol bool) (event *pb.Event, err error) {
+func genUpdate(schema string, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (event *pb.Event, err error) {
 	columns := writableColumns(table)
 	colsMap := util.ToColumnMap(columns)
 
-	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local, isTblDroppingCol)
+	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local, canAppendDefaultValue)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}

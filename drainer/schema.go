@@ -39,6 +39,8 @@ type Schema struct {
 	truncateTableID map[int64]struct{}
 	tblsDroppingCol map[int64]bool
 
+	tableSchemaVersion map[int64]int64
+
 	schemaMetaVersion int64
 
 	hasImplicitCol bool
@@ -58,6 +60,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
 		tblsDroppingCol:     make(map[int64]bool),
+		tableSchemaVersion:  make(map[int64]int64),
 		jobs:                jobs,
 	}
 
@@ -260,6 +263,8 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
+
+		s.tableSchemaVersion[job.TableID] = job.BinlogInfo.SchemaVersion
 	}
 
 	s.jobs = s.jobs[i:]
@@ -454,6 +459,21 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 	}
 
 	return
+}
+
+// CanAppendDefaultValue means we can safely add the default value to the column if missing the value.
+func (s *Schema) CanAppendDefaultValue(id int64, schemaVersion int64) bool {
+	if s.IsDroppingColumn(id) {
+		return true
+	}
+
+	if v, ok := s.tableSchemaVersion[id]; ok {
+		if schemaVersion < v {
+			return true
+		}
+	}
+
+	return false
 }
 
 // IsDroppingColumn returns true if the table is in the middle of dropping a column

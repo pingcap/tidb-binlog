@@ -100,6 +100,11 @@ func (g *BinlogGenerator) IsDroppingColumn(id int64) bool {
 	return false
 }
 
+// CanAppendDefaultValue implements TableInfoGetter interface
+func (g *BinlogGenerator) CanAppendDefaultValue(id int64, schemaVersion int64) bool {
+	return false
+}
+
 // SetDDL set up a ddl binlog.
 func (g *BinlogGenerator) SetDDL() {
 	g.reset()
