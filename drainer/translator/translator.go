@@ -193,22 +193,22 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 }
 
 type updateDecoder struct {
-	columns          map[int64]*model.ColumnInfo
-	isTblDroppingCol bool
+	columns               map[int64]*model.ColumnInfo
+	canAppendDefaultValue bool
 }
 
-func newUpdateDecoder(table *model.TableInfo, isTblDroppingCol bool) updateDecoder {
+func newUpdateDecoder(table *model.TableInfo, canAppendDefaultValue bool) updateDecoder {
 	columns := writableColumns(table)
 	return updateDecoder{
-		columns:          util.ToColumnMap(columns),
-		isTblDroppingCol: isTblDroppingCol,
+		columns:               util.ToColumnMap(columns),
+		canAppendDefaultValue: canAppendDefaultValue,
 	}
 }
 
 // decode decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	return DecodeOldAndNewRow(b, ud.columns, loc, ud.isTblDroppingCol)
+	return DecodeOldAndNewRow(b, ud.columns, loc, ud.canAppendDefaultValue)
 }
 
 func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {

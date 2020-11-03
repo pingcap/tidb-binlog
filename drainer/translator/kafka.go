@@ -188,8 +188,8 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	return
 }
 
-func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	updtDecoder := newUpdateDecoder(tableInfo, isTblDroppingCol)
+func updateRowToRow(tableInfo *model.TableInfo, raw []byte, canAppendDefaultValue bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
+	updtDecoder := newUpdateDecoder(tableInfo, canAppendDefaultValue)
 	oldDatums, newDatums, err := updtDecoder.decode(raw, time.Local)
 	if err != nil {
 		return
