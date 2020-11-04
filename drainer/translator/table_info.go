@@ -21,4 +21,5 @@ type TableInfoGetter interface {
 	SchemaAndTableName(id int64) (string, string, bool)
 	CanAppendDefaultValue(id int64, schemaVersion int64) bool
 	// IsDroppingColumn(id int64) bool
+	TableBySchemaVersion(version int64, tid int64) (info *model.TableInfo, ok bool)
 }

@@ -82,6 +82,12 @@ func (g *BinlogGenerator) TableByID(id int64) (info *model.TableInfo, ok bool) {
 	return
 }
 
+// TableBySchemaVersion implements TableInfoGetter interface
+func (g *BinlogGenerator) TableBySchemaVersion(ver int64, id int64) (info *model.TableInfo, ok bool) {
+	info, ok = g.id2info[id]
+	return
+}
+
 // SchemaAndTableName implements TableInfoGetter interface
 func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table string, ok bool) {
 	names, ok := g.id2name[id]

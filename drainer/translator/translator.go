@@ -82,7 +82,20 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 	return
 }
 
-func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
+func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) types.Datum {
+	getCol := col
+	if tableInfo != nil {
+		for _, c := range tableInfo.Columns {
+			if c.ID == col.ID {
+				getCol = c
+			}
+		}
+	}
+
+	if getCol.GetDefaultValue() != nil {
+		return types.NewDatum(getCol.GetDefaultValue())
+	}
+
 	// see https://github.com/pingcap/tidb/issues/9304
 	// must use null if TiDB not write the column value when default value is null
 	// and the value is null
@@ -90,10 +103,7 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 		return types.NewDatum(nil)
 	}
 
-	if col.GetDefaultValue() != nil {
-		return types.NewDatum(col.GetDefaultValue())
-	}
-
+	// if !mysql.HasNotNullFlag(col.Flag) {
 	if col.Tp == mysql.TypeEnum {
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
@@ -105,7 +115,12 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 
 // DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, canAppendDefaultValue bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte,
+	cols map[int64]*model.ColumnInfo,
+	loc *time.Location,
+	canAppendDefaultValue bool,
+	pinfo *model.TableInfo,
+) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}
@@ -158,11 +173,11 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 	}
 
 	parsedCols := cnt / 2
-	isInvalid := len(newRow) != len(oldRow) || (len(cols) != parsedCols && len(cols)-1 != parsedCols)
+	isInvalid := len(newRow) != len(oldRow)
 	if isInvalid {
 		return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 	}
-	if parsedCols == len(cols)-1 {
+	if parsedCols < len(cols) {
 		if !canAppendDefaultValue {
 			return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 		}
@@ -179,14 +194,20 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 		if missingCol == nil {
 			return nil, nil, errors.Errorf("row data is corrupted %v", b)
 		}
+
+		v := getDefaultOrZeroValue(pinfo, missingCol)
+		oldRow[missingCol.ID] = v
+		newRow[missingCol.ID] = v
+
+		log.S().Debugf("missing col: %+v", *missingCol)
+
 		log.Info(
 			"Fill missing col with default val",
 			zap.String("name", missingCol.Name.O),
 			zap.Int64("id", missingCol.ID),
 			zap.Int("Tp", int(missingCol.FieldType.Tp)),
-		)
-		oldRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
-		newRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
+			zap.Reflect("value", v))
+
 	}
 
 	return oldRow, newRow, nil
@@ -195,20 +216,22 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 type updateDecoder struct {
 	columns               map[int64]*model.ColumnInfo
 	canAppendDefaultValue bool
+	ptable                *model.TableInfo
 }
 
-func newUpdateDecoder(table *model.TableInfo, canAppendDefaultValue bool) updateDecoder {
+func newUpdateDecoder(ptable, table *model.TableInfo, canAppendDefaultValue bool) updateDecoder {
 	columns := writableColumns(table)
 	return updateDecoder{
 		columns:               util.ToColumnMap(columns),
 		canAppendDefaultValue: canAppendDefaultValue,
+		ptable:                ptable,
 	}
 }
 
 // decode decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	return DecodeOldAndNewRow(b, ud.columns, loc, ud.canAppendDefaultValue)
+	return DecodeOldAndNewRow(b, ud.columns, loc, ud.canAppendDefaultValue, ud.ptable)
 }
 
 func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {

@@ -67,6 +67,8 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 
 			canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 
+			pinfo, ok := infoGetter.TableBySchemaVersion(pv.SchemaVersion, mut.GetTableId())
+
 			schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 			if !ok {
 				return nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
@@ -84,13 +86,13 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					event, err := genInsert(schema, info, row)
+					event, err := genInsert(schema, pinfo, info, row)
 					if err != nil {
 						return nil, errors.Annotatef(err, "genInsert failed")
 					}
 					pbBinlog.DmlData.Events = append(pbBinlog.DmlData.Events, *event)
 				case tipb.MutationType_Update:
-					event, err := genUpdate(schema, info, row, canAppendDefaultValue)
+					event, err := genUpdate(schema, pinfo, info, row, canAppendDefaultValue)
 					if err != nil {
 						return nil, errors.Annotatef(err, "genUpdate failed")
 					}
@@ -113,7 +115,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 	return
 }
 
-func genInsert(schema string, table *model.TableInfo, row []byte) (event *pb.Event, err error) {
+func genInsert(schema string, ptable, table *model.TableInfo, row []byte) (event *pb.Event, err error) {
 	columns := table.Columns
 
 	_, columnValues, err := insertRowToDatums(table, row)
@@ -134,7 +136,7 @@ func genInsert(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 		mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			val = getDefaultOrZeroValue(ptable, col)
 		}
 
 		value, err := formatData(val, col.FieldType)
@@ -154,11 +156,11 @@ func genInsert(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 	return
 }
 
-func genUpdate(schema string, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (event *pb.Event, err error) {
+func genUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (event *pb.Event, err error) {
 	columns := writableColumns(table)
 	colsMap := util.ToColumnMap(columns)
 
-	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local, canAppendDefaultValue)
+	oldColumnValues, newColumnValues, err := DecodeOldAndNewRow(row, colsMap, time.Local, canAppendDefaultValue, ptable)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
