@@ -189,7 +189,7 @@ func (s *Schema) appendTableInfo(schemaVersion int64, table *model.TableInfo) {
 	tbls := s.tables[table.ID]
 	tbls = append(tbls, schemaVersionTableInfo{SchemaVersion: schemaVersion, TableInfo: table})
 	if len(tbls) > 2 {
-		tbls = tbls[len(tbls)-2 : len(tbls)]
+		tbls = tbls[len(tbls)-2:]
 	}
 	s.tables[table.ID] = tbls
 }
