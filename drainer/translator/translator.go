@@ -181,33 +181,35 @@ func DecodeOldAndNewRow(b []byte,
 		if !canAppendDefaultValue {
 			return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 		}
-		var missingCol *model.ColumnInfo
+
+		var missingCols []*model.ColumnInfo
 		for colID, col := range cols {
 			_, inOld := oldRow[colID]
 			_, inNew := newRow[colID]
 			if !inOld && !inNew {
-				missingCol = col
-				break
+				missingCols = append(missingCols, col)
 			}
 		}
-		// We can't find a column that's missing in both old and new
-		if missingCol == nil {
+
+		// We can't find columns that's missing in both old and new
+		if len(missingCols) != len(cols)-parsedCols {
 			return nil, nil, errors.Errorf("row data is corrupted %v", b)
 		}
 
-		v := getDefaultOrZeroValue(pinfo, missingCol)
-		oldRow[missingCol.ID] = v
-		newRow[missingCol.ID] = v
+		for _, missingCol := range missingCols {
+			v := getDefaultOrZeroValue(pinfo, missingCol)
+			oldRow[missingCol.ID] = v
+			newRow[missingCol.ID] = v
 
-		log.S().Debugf("missing col: %+v", *missingCol)
+			log.S().Debugf("missing col: %+v", *missingCol)
 
-		log.Info(
-			"Fill missing col with default val",
-			zap.String("name", missingCol.Name.O),
-			zap.Int64("id", missingCol.ID),
-			zap.Int("Tp", int(missingCol.FieldType.Tp)),
-			zap.Reflect("value", v))
-
+			log.Info(
+				"fill missing col with default val",
+				zap.String("name", missingCol.Name.O),
+				zap.Int64("id", missingCol.ID),
+				zap.Int("Tp", int(missingCol.FieldType.Tp)),
+				zap.Reflect("value", v))
+		}
 	}
 
 	return oldRow, newRow, nil
