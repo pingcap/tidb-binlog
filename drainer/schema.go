@@ -128,7 +128,7 @@ func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 
 // TableByID returns the TableInfo by table id
 func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
-	tbls, ok := s.tables[id]
+	tbls := s.tables[id]
 	if len(tbls) == 0 {
 		return nil, false
 	}
