@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
@@ -41,6 +42,7 @@ func genMysqlInsert(schema string, ptable, table *model.TableInfo, row []byte) (
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
+			log.S().Debugf("missing col: %+v", *col)
 			val = getDefaultOrZeroValue(ptable, col)
 		}
 
