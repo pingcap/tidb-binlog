@@ -1,5 +1,5 @@
 ### Makefile for tidb-binlog
-.PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter binlogctl
+.PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter binlogctl relayprinter
 
 PROJECT=tidb-binlog
 
@@ -53,6 +53,9 @@ reparo:
 
 binlogctl:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlogctl cmd/binlogctl/main.go
+
+relayprinter:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/relayprinter cmd/relayprinter/main.go
 
 install:
 	go install ./...
