@@ -82,6 +82,22 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 	return
 }
 
+func transTimestampToLocal(getCol *model.ColumnInfo) (string, error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	value, ok := ivalue.(string)
+	if !ok {
+		return "", errors.New("not string value")
+	}
+
+	t, err := time.Parse(types.TimeFormat, value)
+	if err != nil {
+		return "", errors.AddStack(err)
+	}
+
+	value = t.Local().Format(types.TimeFormat)
+	return value, nil
+}
+
 func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) types.Datum {
 	getCol := col
 	if tableInfo != nil {
@@ -92,8 +108,21 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 		}
 	}
 
-	if getCol.GetDefaultValue() != nil {
-		return types.NewDatum(getCol.GetDefaultValue())
+	if getCol.GetOriginDefaultValue() != nil {
+		// ref https://github.com/pingcap/tidb/blob/release-4.0/ddl/column.go#L675
+		// trans value from UTC to local timezone value format.
+		if getCol.Tp == mysql.TypeTimestamp {
+			value, err := transTimestampToLocal(getCol)
+			if err != nil {
+				log.Warn("failed to transTimestampToLocal",
+					zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return types.NewDatum(value)
+			}
+		}
+
+		return types.NewDatum(getCol.GetOriginDefaultValue())
 	}
 
 	// see https://github.com/pingcap/tidb/issues/9304
