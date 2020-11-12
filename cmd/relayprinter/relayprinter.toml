@@ -1,0 +1,23 @@
+# directory to relay log files
+data-dir = "/dir/to/relay/log"
+
+# specific file to handle, empty for all files
+# file = "binlog-0000000000000067-20201111050014"
+
+# do-db priority over do-table if have same db name
+# and we support regular expression , start with '~' declare use regular expression.
+#
+# do-db = ["~^b.*","s1"]
+# [[do-table]]
+# db-name = "test"
+# tbl-name = "log"
+
+# [[do-table]]
+# db-name = "test"
+# tbl-name = "~^a.*"
+
+# ignore-db = ["~^c.*","s2"]
+# [[ignore-table]]
+# db-name = "test"
+# tbl-name = "~^a.*"
+

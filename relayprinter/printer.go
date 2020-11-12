@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
 	"github.com/pingcap/tipb/go-binlog"
@@ -29,6 +30,7 @@ import (
 // Printer is used to print the content of relay log files.
 type Printer struct {
 	cfg    *Config
+	filter *filter.Filter
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
 }
@@ -36,7 +38,8 @@ type Printer struct {
 // NewPrinter creates a new Printer instance.
 func NewPrinter(cfg *Config) *Printer {
 	return &Printer{
-		cfg: cfg,
+		cfg:    cfg,
+		filter: filter.NewFilter(cfg.IgnoreDBs, cfg.IgnoreTables, cfg.DoDBs, cfg.DoTables),
 	}
 }
 
@@ -113,17 +116,28 @@ func (p *Printer) print(blg *binlog.Entity) error {
 	}
 	txn.Metadata = oblg.CommitTs
 
-	// TODO: filter
-
-	fmt.Printf("# at %s\n", blg.Pos.String())
-	fmt.Printf("# commitTS:%d\n", oblg.CommitTs)
-
 	switch oblg.Type {
 	case obinlog.BinlogType_DDL:
+		if p.filter.SkipSchemaAndTable(*oblg.DdlData.SchemaName, *oblg.DdlData.TableName) {
+			return nil
+		}
+
+		fmt.Printf("# at %s\n", blg.Pos.String())
+		fmt.Printf("# commitTS:%d\n", oblg.CommitTs)
 		fmt.Printf("# schema:%s table:%s\n", *oblg.DdlData.SchemaName, *oblg.DdlData.TableName)
 		fmt.Printf("%s\n\n", oblg.DdlData.DdlQuery)
 	case obinlog.BinlogType_DML:
+		var printedCommon bool
 		for _, dml := range txn.DMLs {
+			if p.filter.SkipSchemaAndTable(dml.Database, dml.Table) {
+				return nil
+			}
+
+			if !printedCommon {
+				printedCommon = true
+				fmt.Printf("# at %s\n", blg.Pos.String())
+				fmt.Printf("# commitTS:%d\n", oblg.CommitTs)
+			}
 			fmt.Printf("# schema: %s table:%s\n", dml.Database, dml.Table)
 
 			cols := dml.ColumnNames()

@@ -14,6 +14,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,16 +22,17 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/version"
 	"github.com/pingcap/tidb-binlog/relayprinter"
-	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
+	log.SetLevel(zapcore.ErrorLevel) // increase error log level
 	cfg := relayprinter.NewConfig()
 	if err := cfg.Parse(os.Args[1:]); err != nil {
-		log.Fatal("verify flags failed, see 'relayprinter --help'.", zap.Error(err))
+		panic(fmt.Sprintf("verify flags failed, see 'relayprinter --help'. %v", err))
 	}
 
-	version.PrintVersionInfo("relay-printer")
+	fmt.Println(version.GetRawVersionInfo())
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -42,14 +44,13 @@ func main() {
 	p := relayprinter.NewPrinter(cfg)
 
 	go func() {
-		sig := <-sc
-		log.Info("got signal to exit.", zap.Stringer("signal", sig))
+		<-sc
 		p.Close()
 		os.Exit(0)
 	}()
 
 	if err := p.Process(); err != nil {
-		log.Error("relay-printer process failed", zap.Error(err))
+		fmt.Println("relay-printer process failed", err)
 	}
 	p.Close()
 }
