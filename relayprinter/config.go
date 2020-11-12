@@ -63,7 +63,7 @@ func NewConfig() *Config {
 }
 
 func (c *Config) String() string {
-	cfgBytes, err := json.Marshal(c)
+	cfgBytes, err := json.Marshal(c) //nolint:staticcheck
 	if err != nil {
 		log.Error("marshal config failed", zap.Error(err))
 	}

@@ -90,8 +90,6 @@ func (p *Printer) Process() error {
 			return err
 		}
 	}
-
-	return nil
 }
 
 // Close closes the Printer instance.
