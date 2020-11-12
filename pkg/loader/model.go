@@ -250,6 +250,7 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
+// ColumnNames returns sorted column names.
 func (dml *DML) ColumnNames() []string {
 	names := make([]string, 0, len(dml.Values))
 
