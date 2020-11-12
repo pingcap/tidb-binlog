@@ -170,12 +170,12 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
 
-	for _, name := range dml.columnNames() {
+	for _, name := range dml.ColumnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
 		arg := dml.Values[name]
-		fmt.Fprintf(builder, "%s = ?", quoteName(name))
+		fmt.Fprintf(builder, "%s = ?", QuoteName(name))
 		args = append(args, arg)
 	}
 
@@ -196,9 +196,9 @@ func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
+			builder.WriteString(QuoteName(wnames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quoteName(wnames[i]) + " = ?")
+			builder.WriteString(QuoteName(wnames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
@@ -235,7 +235,7 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 	}
 
 	// Fallback to use all columns
-	names := dml.columnNames()
+	names := dml.ColumnNames()
 	return names, dml.whereValues(names)
 }
 
@@ -250,7 +250,7 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
-func (dml *DML) columnNames() []string {
+func (dml *DML) ColumnNames() []string {
 	names := make([]string, 0, len(dml.Values))
 
 	for name := range dml.Values {
@@ -262,8 +262,8 @@ func (dml *DML) columnNames() []string {
 }
 
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
-	names := dml.columnNames()
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names), holderString(len(names)))
+	names := dml.ColumnNames()
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), BuildColumnList(names), holderString(len(names)))
 	for _, name := range names {
 		v := dml.Values[name]
 		args = append(args, v)
