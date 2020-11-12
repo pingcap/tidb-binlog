@@ -71,6 +71,7 @@ func (c *Config) String() string {
 	return string(cfgBytes)
 }
 
+// Parse parses keys/values from command line flags and toml configuration file.
 func (c *Config) Parse(args []string) error {
 	// Parse first to get the config file
 	perr := c.FlagSet.Parse(args)
