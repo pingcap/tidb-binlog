@@ -19,10 +19,8 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tipb/go-binlog"
-	"go.uber.org/zap"
 )
 
 // Printer is used to print the content of relay log files.
@@ -60,29 +58,27 @@ func (p *Printer) Process() error {
 	bCh, eCh := binlogger.ReadAll(ctx)
 
 	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case blg := <-bCh:
-				if suffix != 0 {
-					if blg.Pos.Suffix < suffix {
-						// NOTE: `binlogger.ReadFrom` is not suitable to read all binlog items from the specified file,
-						// so we use `binlogger.ReadAll` to read all of them but do not process them.
-						continue
-					} else if blg.Pos.Suffix > suffix {
-						return // all contents in the specified file have been processed.
-					}
+	defer p.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case blg := <-bCh:
+			if suffix != 0 {
+				if blg.Pos.Suffix < suffix {
+					// NOTE: `binlogger.ReadFrom` is not suitable to read all binlog items from the specified file,
+					// so we use `binlogger.ReadAll` to read all of them but do not process them.
+					continue
+				} else if blg.Pos.Suffix > suffix {
+					return nil // all contents in the specified file have been processed.
 				}
-				p.print(blg)
-			case err2 := <-eCh:
-				// abort process for any error.
-				log.Error("got an error while processing", zap.Error(err2))
 			}
+			p.print(blg)
+		case err2 := <-eCh:
+			// abort process for any error.
+			return err2
 		}
-	}()
+	}
 
 	return nil
 }
