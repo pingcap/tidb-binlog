@@ -76,6 +76,8 @@ type Server struct {
 
 	latestTS   int64
 	latestTime time.Time
+
+	errCh chan error
 }
 
 func init() {
@@ -188,6 +190,8 @@ func NewServer(cfg *Config) (*Server, error) {
 
 		latestTS:   latestTS,
 		latestTime: latestTime,
+
+		errCh: make(chan error, 1),
 	}, nil
 }
 
@@ -269,6 +273,7 @@ func (s *Server) Start() error {
 	go func() {
 		for err := range errc {
 			log.Error("send heart failed", zap.Error(err))
+			s.reportError(err)
 		}
 	}()
 
@@ -287,6 +292,7 @@ func (s *Server) Start() error {
 		defer func() { go s.Close() }()
 		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
+			s.reportError(err)
 		}
 	})
 
@@ -329,6 +335,20 @@ func (s *Server) Start() error {
 	}
 
 	return nil
+}
+
+// Errors returns errors from background goroutines.
+// NOTE: not all background goroutines return some should-be-failure errors now.
+func (s *Server) Errors() <-chan error {
+	return s.errCh
+}
+
+func (s *Server) reportError(err error) {
+	select {
+	case s.errCh <- err:
+	default:
+		log.Error("ignore to report error", zap.Error(err))
+	}
 }
 
 // ApplyAction change the pump's state, now can be pause or close.

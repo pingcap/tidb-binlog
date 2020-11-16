@@ -65,6 +65,13 @@ func main() {
 		os.Exit(0)
 	}()
 
+	go func() {
+		err2 := <-bs.Errors()
+		log.Error("drainer reported error", zap.Error(err2))
+		bs.Close()
+		os.Exit(2)
+	}()
+
 	if err := bs.Start(); err != nil {
 		log.Error("start drainer server failed", zap.Error(err))
 		os.Exit(2)
