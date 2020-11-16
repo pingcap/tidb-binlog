@@ -14,6 +14,7 @@
 package translator
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -82,6 +83,34 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 	return
 }
 
+func getEnumDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	switch value := ivalue.(type) {
+	case string:
+		enum, err := types.ParseEnumName(getCol.Elems, value, "")
+		if err != nil {
+			return types.Datum{}, errors.AddStack(err)
+		}
+		return types.NewDatum(enum), nil
+	}
+
+	return types.Datum{}, errors.Errorf("unknown type: %v", reflect.TypeOf(ivalue))
+}
+
+func getSetDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	switch value := ivalue.(type) {
+	case string:
+		enum, err := types.ParseSetName(getCol.Elems, value, "")
+		if err != nil {
+			return types.Datum{}, errors.AddStack(err)
+		}
+		return types.NewDatum(enum), nil
+	}
+
+	return types.Datum{}, errors.Errorf("unknown type: %v", reflect.TypeOf(ivalue))
+}
+
 func transTimestampToLocal(getCol *model.ColumnInfo) (string, error) {
 	ivalue := getCol.GetOriginDefaultValue()
 	value, ok := ivalue.(string)
@@ -119,6 +148,22 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 					zap.Error(err))
 			} else {
 				return types.NewDatum(value)
+			}
+		} else if getCol.Tp == mysql.TypeEnum {
+			data, err := getEnumDatum(getCol)
+			if err != nil {
+				log.Warn("failed to get enum datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return data
+			}
+		} else if getCol.Tp == mysql.TypeSet {
+			data, err := getSetDatum(getCol)
+			if err != nil {
+				log.Warn("failed to get set datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return data
 			}
 		}
 
