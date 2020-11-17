@@ -83,7 +83,7 @@ func (g *BinlogGenerator) TableByID(id int64) (info *model.TableInfo, ok bool) {
 }
 
 // TableBySchemaVersion implements TableInfoGetter interface
-func (g *BinlogGenerator) TableBySchemaVersion(ver int64, id int64) (info *model.TableInfo, ok bool) {
+func (g *BinlogGenerator) TableBySchemaVersion(id int64, schemaVersion int64) (info *model.TableInfo, ok bool) {
 	info, ok = g.id2info[id]
 	return
 }

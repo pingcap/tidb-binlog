@@ -123,7 +123,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}
 
-			pinfo, _ := infoGetter.TableBySchemaVersion(pv.SchemaVersion, mut.GetTableId())
+			pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
 
 			canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 

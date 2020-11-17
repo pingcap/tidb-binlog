@@ -66,7 +66,7 @@ func TiBinlogToSecondaryBinlog(
 		}
 		canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 
-		pinfo, _ := infoGetter.TableBySchemaVersion(pv.SchemaVersion, mut.GetTableId())
+		pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
 
 		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 		if !ok {

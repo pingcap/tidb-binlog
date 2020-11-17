@@ -195,7 +195,7 @@ func (s *Schema) appendTableInfo(schemaVersion int64, table *model.TableInfo) {
 }
 
 // TableBySchemaVersion get the table info according  the schemaVersion and table id.
-func (s *Schema) TableBySchemaVersion(schemaVersion int64, id int64) (table *model.TableInfo, ok bool) {
+func (s *Schema) TableBySchemaVersion(id int64, schemaVersion int64) (table *model.TableInfo, ok bool) {
 	tbls, ok := s.tables[id]
 	if !ok {
 		return nil, false
