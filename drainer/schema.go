@@ -34,10 +34,12 @@ type Schema struct {
 	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
-	tables  map[int64]*model.TableInfo
+	tables  map[int64][]schemaVersionTableInfo
 
 	truncateTableID map[int64]struct{}
 	tblsDroppingCol map[int64]bool
+
+	tableSchemaVersion map[int64]int64
 
 	schemaMetaVersion int64
 
@@ -51,6 +53,11 @@ type Schema struct {
 // TableName stores the table and schema name
 type TableName = filter.TableName
 
+type schemaVersionTableInfo struct {
+	SchemaVersion int64
+	TableInfo     *model.TableInfo
+}
+
 // NewSchema returns the Schema object
 func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{
@@ -58,13 +65,14 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
 		tblsDroppingCol:     make(map[int64]bool),
+		tableSchemaVersion:  make(map[int64]int64),
 		jobs:                jobs,
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
-	s.tables = make(map[int64]*model.TableInfo)
+	s.tables = make(map[int64][]schemaVersionTableInfo)
 
 	return s, nil
 }
@@ -120,8 +128,11 @@ func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 
 // TableByID returns the TableInfo by table id
 func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
-	val, ok = s.tables[id]
-	return
+	tbls := s.tables[id]
+	if len(tbls) == 0 {
+		return nil, false
+	}
+	return tbls[len(tbls)-1].TableInfo, true
 }
 
 // DropSchema deletes the given DBInfo
@@ -157,10 +168,11 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 
 // DropTable deletes the given TableInfo
 func (s *Schema) DropTable(id int64) (string, error) {
-	table, ok := s.tables[id]
+	tables, ok := s.tables[id]
 	if !ok {
 		return "", errors.NotFoundf("table %d", id)
 	}
+	table := tables[len(tables)-1].TableInfo
 	err := s.removeTable(id)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -173,8 +185,33 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	return table.Name.O, nil
 }
 
+func (s *Schema) appendTableInfo(schemaVersion int64, table *model.TableInfo) {
+	tbls := s.tables[table.ID]
+	tbls = append(tbls, schemaVersionTableInfo{SchemaVersion: schemaVersion, TableInfo: table})
+	if len(tbls) > 2 {
+		tbls = tbls[len(tbls)-2:]
+	}
+	s.tables[table.ID] = tbls
+}
+
+// TableBySchemaVersion get the table info according  the schemaVersion and table id.
+func (s *Schema) TableBySchemaVersion(id int64, schemaVersion int64) (table *model.TableInfo, ok bool) {
+	tbls, ok := s.tables[id]
+	if !ok {
+		return nil, false
+	}
+
+	for _, t := range tbls {
+		if t.SchemaVersion >= schemaVersion {
+			return t.TableInfo, true
+		}
+	}
+
+	return nil, false
+}
+
 // CreateTable creates new TableInfo
-func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
+func (s *Schema) CreateTable(schemaVersion int64, schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -185,7 +222,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	}
 
 	schema.Tables = append(schema.Tables, table)
-	s.tables[table.ID] = table
+	s.appendTableInfo(schemaVersion, table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
@@ -193,7 +230,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *Schema) ReplaceTable(table *model.TableInfo) error {
+func (s *Schema) ReplaceTable(schemaVersion int64, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
@@ -203,7 +240,7 @@ func (s *Schema) ReplaceTable(table *model.TableInfo) error {
 		addImplicitColumn(table)
 	}
 
-	s.tables[table.ID] = table
+	s.appendTableInfo(schemaVersion, table)
 
 	return nil
 }
@@ -260,6 +297,8 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
 		}
+
+		s.tableSchemaVersion[job.TableID] = job.BinlogInfo.SchemaVersion
 	}
 
 	s.jobs = s.jobs[i:]
@@ -349,7 +388,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err = s.CreateTable(schema, table)
+		err = s.CreateTable(job.BinlogInfo.SchemaVersion, schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -370,7 +409,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.CreateTable(schema, table)
+		err := s.CreateTable(job.BinlogInfo.SchemaVersion, schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -412,7 +451,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
 
-		err = s.CreateTable(schema, table)
+		err = s.CreateTable(job.BinlogInfo.SchemaVersion, schema, table)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -437,7 +476,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
 		}
 
-		err := s.ReplaceTable(tbInfo)
+		err := s.ReplaceTable(job.BinlogInfo.SchemaVersion, tbInfo)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
 		}
@@ -454,6 +493,21 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 	}
 
 	return
+}
+
+// CanAppendDefaultValue means we can safely add the default value to the column if missing the value.
+func (s *Schema) CanAppendDefaultValue(id int64, schemaVersion int64) bool {
+	if s.IsDroppingColumn(id) {
+		return true
+	}
+
+	if v, ok := s.tableSchemaVersion[id]; ok {
+		if schemaVersion < v {
+			return true
+		}
+	}
+
+	return false
 }
 
 // IsDroppingColumn returns true if the table is in the middle of dropping a column

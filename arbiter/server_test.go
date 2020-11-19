@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-tools/tidb-binlog/driver/reader"
-	pb "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 )
 
 type dummyLoader struct {
