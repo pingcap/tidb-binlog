@@ -47,6 +47,7 @@ import (
 var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
+	heartbeatMaxErr   = 10 // max continual number of errors to abort the replication of drainer
 	getPdClient       = util.GetPdClient
 )
 
@@ -76,8 +77,6 @@ type Server struct {
 
 	latestTS   int64
 	latestTime time.Time
-
-	errCh chan error
 }
 
 func init() {
@@ -190,8 +189,6 @@ func NewServer(cfg *Config) (*Server, error) {
 
 		latestTS:   latestTS,
 		latestTime: latestTime,
-
-		errCh: make(chan error, 1),
 	}, nil
 }
 
@@ -236,28 +233,25 @@ func (s *Server) DumpDDLJobs(ctx context.Context, req *binlog.DumpDDLJobsReq) (r
 	return
 }
 
-func (s *Server) heartbeat(ctx context.Context) <-chan error {
-	errc := make(chan error, 1)
-
-	s.tg.Go("heartbeat", func() {
-		defer func() {
-			close(errc)
-			go s.Close()
-		}()
-
-		for {
-			err := s.updateStatus()
-			if err != nil {
-				errc <- errors.Trace(err)
+func (s *Server) heartbeat(ctx context.Context) error {
+	errCounter := 0
+	for {
+		err := s.updateStatus()
+		if err != nil {
+			log.Error("send heartbeat failed", zap.Error(err))
+			errCounter++
+			if errCounter >= heartbeatMaxErr {
+				return errors.Annotate(err, "fail to send heartbeat") // return the last error
 			}
-			select {
-			case <-time.After(heartbeatInterval):
-			case <-ctx.Done():
-				return
-			}
+		} else {
+			errCounter = 0 // reset counter
 		}
-	})
-	return errc
+		select {
+		case <-time.After(heartbeatInterval):
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 // Start runs CisternServer to serve the listening addr, and starts to collect binlog
@@ -268,14 +262,17 @@ func (s *Server) Start() error {
 	}
 	log.Info("register success", zap.String("drainer node id", s.ID))
 
+	// chan to record errors from some background goroutines, increase the cap if needed.
+	errCh := make(chan error, 10)
+
 	// start heartbeat
-	errc := s.heartbeat(s.ctx)
-	go func() {
-		for err := range errc {
-			log.Error("send heart failed", zap.Error(err))
-			s.reportError(err)
+	s.tg.GoNoPanic("heartbeat", func() {
+		defer func() { go s.Close() }()
+		if err := s.heartbeat(s.ctx); err != nil {
+			log.Error("heartbeat exited abnormal", zap.Error(err))
+			errCh <- err
 		}
-	}()
+	})
 
 	s.tg.GoNoPanic("collect", func() {
 		defer func() { go s.Close() }()
@@ -292,7 +289,7 @@ func (s *Server) Start() error {
 		defer func() { go s.Close() }()
 		if err := s.syncer.Start(); err != nil {
 			log.Error("syncer exited abnormal", zap.Error(err))
-			s.reportError(err)
+			errCh <- err
 		}
 	})
 
@@ -330,25 +327,22 @@ func (s *Server) Start() error {
 	}()
 
 	log.Info("start to server request", zap.String("addr", s.advertiseAddr))
-	if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
-		return errors.Trace(err)
-	}
+	go func() {
+		defer func() { go s.Close() }()
+		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed network connection") {
+			errCh <- errors.Trace(err)
+		}
+	}()
 
-	return nil
-}
-
-// Errors returns errors from background goroutines.
-// NOTE: not all background goroutines return some should-be-failure errors now.
-func (s *Server) Errors() <-chan error {
-	return s.errCh
-}
-
-func (s *Server) reportError(err error) {
 	select {
-	case s.errCh <- err:
-	default:
-		log.Error("ignore to report error", zap.Error(err))
+	case err = <-errCh:
+	case <-s.ctx.Done():
 	}
+	// wait some background to return, but pay attention to potential blocking:
+	// - without errors: external caller `Close` drainer
+	// - with errors: this function `Close` drainer
+	s.tg.Wait()
+	return err
 }
 
 // ApplyAction change the pump's state, now can be pause or close.
