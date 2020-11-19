@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
@@ -30,7 +31,7 @@ import (
 
 const implicitColID = -1
 
-func genMysqlInsert(schema string, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
+func genMysqlInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
 	_, columnValues, err := insertRowToDatums(table, row)
@@ -41,7 +42,8 @@ func genMysqlInsert(schema string, table *model.TableInfo, row []byte) (names []
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			log.S().Debugf("missing col: %+v", *col)
+			val = getDefaultOrZeroValue(ptable, col)
 		}
 
 		value, err := formatData(val, col.FieldType)
@@ -56,9 +58,9 @@ func genMysqlInsert(schema string, table *model.TableInfo, row []byte) (names []
 	return names, args, nil
 }
 
-func genMysqlUpdate(schema string, table *model.TableInfo, row []byte, isTblDroppingCol bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genMysqlUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
-	updtDecoder := newUpdateDecoder(table, isTblDroppingCol)
+	updtDecoder := newUpdateDecoder(ptable, table, canAppendDefaultValue)
 
 	var updateColumns []*model.ColumnInfo
 
@@ -121,7 +123,9 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}
 
-			isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
+			pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
+
+			canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
 
 			schema, table, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 			if !ok {
@@ -140,7 +144,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genMysqlInsert(schema, info, row)
+					names, args, err := genMysqlInsert(schema, pinfo, info, row)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -156,7 +160,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						dml.Values[name] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genMysqlUpdate(schema, info, row, isTblDroppingCol)
+					names, args, oldArgs, err := genMysqlUpdate(schema, pinfo, info, row, canAppendDefaultValue)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}

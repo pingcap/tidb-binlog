@@ -7,7 +7,7 @@ Arbiter
 
 整体工作原理如下：
 
-1. 读取 Kafka 的 [Protobuf](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/slave_binlog_proto/proto/binlog.proto) 格式 Binlog 。
+1. 读取 Kafka 的 [Protobuf](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/proto/proto/binlog.proto) 格式 Binlog 。
 2. 达到一定数据量后 根据 Binlog 构造对应 SQL 并发写入下游（注意 Arbiter 会拆分上游事务)。
 3. 保存 checkpoint 。
 

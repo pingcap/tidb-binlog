@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/slave_binlog_proto/go-binlog"
+	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -64,7 +64,9 @@ func TiBinlogToSecondaryBinlog(
 		if !ok {
 			return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 		}
-		isTblDroppingCol := infoGetter.IsDroppingColumn(mut.GetTableId())
+		canAppendDefaultValue := infoGetter.CanAppendDefaultValue(mut.GetTableId(), pv.SchemaVersion)
+
+		pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
 
 		schema, _, ok = infoGetter.SchemaAndTableName(mut.GetTableId())
 		if !ok {
@@ -76,7 +78,7 @@ func TiBinlogToSecondaryBinlog(
 		secondaryBinlog.DmlData.Tables = append(secondaryBinlog.DmlData.Tables, table)
 
 		for {
-			tableMutation, err := nextRow(schema, info, isTblDroppingCol, iter)
+			tableMutation, err := nextRow(schema, pinfo, info, canAppendDefaultValue, iter)
 			if err != nil {
 				if errors.Cause(err) == io.EOF {
 					break
@@ -143,7 +145,7 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 	return
 }
 
-func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
+func insertRowToRow(ptableInfo, tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
 	_, columnValues, err := insertRowToDatums(tableInfo, raw)
 	columns := tableInfo.Columns
 
@@ -152,7 +154,7 @@ func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			val = getDefaultOrZeroValue(ptableInfo, col)
 		}
 
 		column := DatumToColumn(col, val)
@@ -162,7 +164,7 @@ func insertRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	return
 }
 
-func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
+func deleteRowToRow(ptableinfo, tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
 	columns := tableInfo.Columns
 
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
@@ -178,7 +180,7 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			val = getDefaultOrZeroValue(ptableinfo, col)
 		}
 
 		column := DatumToColumn(col, val)
@@ -188,8 +190,8 @@ func deleteRowToRow(tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, e
 	return
 }
 
-func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
-	updtDecoder := newUpdateDecoder(tableInfo, isTblDroppingCol)
+func updateRowToRow(ptableinfo, tableInfo *model.TableInfo, raw []byte, canAppendDefaultValue bool) (row *obinlog.Row, changedRow *obinlog.Row, err error) {
+	updtDecoder := newUpdateDecoder(ptableinfo, tableInfo, canAppendDefaultValue)
 	oldDatums, newDatums, err := updtDecoder.decode(raw, time.Local)
 	if err != nil {
 		return
@@ -202,13 +204,13 @@ func updateRowToRow(tableInfo *model.TableInfo, raw []byte, isTblDroppingCol boo
 		var ok bool
 
 		if val, ok = newDatums[col.ID]; !ok {
-			getDefaultOrZeroValue(col)
+			getDefaultOrZeroValue(ptableinfo, col)
 		}
 		column := DatumToColumn(col, val)
 		row.Columns = append(row.Columns, column)
 
 		if val, ok = oldDatums[col.ID]; !ok {
-			getDefaultOrZeroValue(col)
+			getDefaultOrZeroValue(ptableinfo, col)
 		}
 		column = DatumToColumn(col, val)
 		changedRow.Columns = append(changedRow.Columns, column)
@@ -287,25 +289,25 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 	return
 }
 
-func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppingCol bool, row []byte) (*obinlog.TableMutation, error) {
+func createTableMutation(tp pb.MutationType, pinfo, info *model.TableInfo, canAppendDefaultValue bool, row []byte) (*obinlog.TableMutation, error) {
 	var err error
 	mut := new(obinlog.TableMutation)
 	switch tp {
 	case pb.MutationType_Insert:
 		mut.Type = obinlog.MutationType_Insert.Enum()
-		mut.Row, err = insertRowToRow(info, row)
+		mut.Row, err = insertRowToRow(pinfo, info, row)
 		if err != nil {
 			return nil, err
 		}
 	case pb.MutationType_Update:
 		mut.Type = obinlog.MutationType_Update.Enum()
-		mut.Row, mut.ChangeRow, err = updateRowToRow(info, row, isTblDroppingCol)
+		mut.Row, mut.ChangeRow, err = updateRowToRow(pinfo, info, row, canAppendDefaultValue)
 		if err != nil {
 			return nil, err
 		}
 	case pb.MutationType_DeleteRow:
 		mut.Type = obinlog.MutationType_Delete.Enum()
-		mut.Row, err = deleteRowToRow(info, row)
+		mut.Row, err = deleteRowToRow(pinfo, info, row)
 		if err != nil {
 			return nil, err
 		}
@@ -315,13 +317,13 @@ func createTableMutation(tp pb.MutationType, info *model.TableInfo, isTblDroppin
 	return mut, nil
 }
 
-func nextRow(schema string, info *model.TableInfo, isTblDroppingCol bool, iter *sequenceIterator) (*obinlog.TableMutation, error) {
+func nextRow(schema string, pinfo, info *model.TableInfo, canAppendDefaultValue bool, iter *sequenceIterator) (*obinlog.TableMutation, error) {
 	mutType, row, err := iter.next()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	tableMutation, err := createTableMutation(mutType, info, isTblDroppingCol, row)
+	tableMutation, err := createTableMutation(mutType, pinfo, info, canAppendDefaultValue, row)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
