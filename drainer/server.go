@@ -338,7 +338,7 @@ func (s *Server) Start() error {
 	case err = <-errCh:
 	case <-s.ctx.Done():
 	}
-	// wait some background to return, but pay attention to potential blocking:
+	// wait some background goroutines to return, but pay attention to potential blocking:
 	// - without errors: external caller `Close` drainer
 	// - with errors: this function `Close` drainer
 	s.tg.Wait()

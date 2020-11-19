@@ -247,11 +247,10 @@ func (s *heartbeatSuite) TestShouldStopWhenDone(c *C) {
 		isClosed: 1, // Hack to avoid actually running close
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	err := server.heartbeat(ctx)
 	c.Assert(err, IsNil)
-	c.Assert(ctx.Err(), IsNil)
-	cancel()
 }
 
 func (s *heartbeatSuite) TestShouldUpdateStatusPeriodically(c *C) {
