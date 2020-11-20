@@ -47,7 +47,7 @@ import (
 var (
 	nodePrefix        = "drainers"
 	heartbeatInterval = 1 * time.Second
-	heartbeatMaxErr   = 10 // max continual number of errors to abort the replication of drainer
+	heartbeatMaxErr   = 20 // max continual number of errors to abort the replication of drainer. NOTE: pd client has its own retry.
 	getPdClient       = util.GetPdClient
 )
 
