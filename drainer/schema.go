@@ -289,7 +289,8 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 			continue
 		}
 
-		if skipFlash(job) {
+		if skipUnsupportedDDLJob(job) {
+			log.Info("skip unsupported DDL job", zap.Stringer("job", job))
 			continue
 		}
 
@@ -306,12 +307,14 @@ func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
 	return nil
 }
 
-func skipFlash(job *model.Job) bool {
+func skipUnsupportedDDLJob(job *model.Job) bool {
 	switch job.Type {
 	case model.ActionUpdateTiFlashReplicaStatus: // empty job.Query
 		return true
-		// case model.ActionSetTiFlashReplica:
-		// 	return true
+	// case model.ActionSetTiFlashReplica:
+	// 	return true
+	case model.ActionLockTable, model.ActionUnlockTable:
+		return true
 	}
 
 	return false

@@ -385,7 +385,8 @@ ForLoop:
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
-			if skipFlash(b.job) {
+			if skipUnsupportedDDLJob(b.job) {
+				log.Info("skip unsupported DDL job", zap.Stringer("job", b.job))
 				continue
 			}
 
