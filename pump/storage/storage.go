@@ -50,6 +50,9 @@ const (
 )
 
 var (
+	// ErrRequestGCedBinlog indicates a Drainer is requesting some purged binlogs.
+	ErrRequestGCedBinlog = errors.New("request a purged binlog")
+
 	// save gcTS, the max TS we have gc, for binlog not greater than gcTS, we can delete it from storage
 	gcTSKey = []byte("!binlog!gcts")
 	// save maxCommitTS, we can get binlog in range [gcTS, maxCommitTS]  from PullCommitBinlog
@@ -104,7 +107,7 @@ type Append struct {
 	latestTS       int64
 
 	gcWorking     int32
-	gcTS          int64
+	gcTS          GCTS
 	maxCommitTS   int64
 	headPointer   valuePointer
 	handlePointer valuePointer
@@ -166,11 +169,12 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		sortItems: make(chan sortItem, 1024),
 	}
 
-	append.gcTS, err = append.readGCTSFromDB()
+	gcTS, err := append.readGCTSFromDB()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(append.gcTS))))
+	append.gcTS.Store(gcTS)
+	gcTSGauge.Set(float64(oracle.ExtractPhysical(uint64(gcTS))))
 
 	append.maxCommitTS, err = append.readInt64(maxCommitTSKey)
 	if err != nil {
@@ -214,7 +218,7 @@ func NewAppendWithResolver(dir string, options *Options, tiStore kv.Storage, tiL
 		minPointer = append.handlePointer
 	}
 
-	log.Info("Append info", zap.Int64("gcTS", append.gcTS),
+	log.Info("Append info", zap.Int64("gcTS", gcTS),
 		zap.Int64("maxCommitTS", append.maxCommitTS),
 		zap.Reflect("headPointer", append.headPointer),
 		zap.Reflect("handlePointer", append.handlePointer))
@@ -646,12 +650,12 @@ func (a *Append) Close() error {
 
 // GetGCTS implement Storage.GetGCTS
 func (a *Append) GetGCTS() int64 {
-	return atomic.LoadInt64(&a.gcTS)
+	return a.gcTS.Load()
 }
 
 // GC implement Storage.GC
 func (a *Append) GC(ts int64) {
-	lastTS := atomic.LoadInt64(&a.gcTS)
+	lastTS := a.gcTS.Load()
 	if ts <= lastTS {
 		log.Info("ignore gc request", zap.Int64("ts", ts), zap.Int64("lastTS", lastTS))
 		return
@@ -665,7 +669,7 @@ func (a *Append) GC(ts int64) {
 		return
 	}
 
-	atomic.StoreInt64(&a.gcTS, ts)
+	a.gcTS.Store(ts) // once `Store` returned, no guarantee for metadata or vlog.
 	if err := a.saveGCTSToDB(ts); err != nil {
 		log.Error("Failed to save GCTS", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -1113,10 +1117,15 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		}
 	}()
 
-	gcTS := atomic.LoadInt64(&a.gcTS)
+	gcTS := a.gcTS.Load()
 	if last < gcTS {
-		log.Warn("last ts less than gcTS", zap.Int64("last ts", last), zap.Int64("gcTS", gcTS))
-		last = gcTS
+		if last == 0 {
+			log.Warn("last TS is 0, will send binlog from gcTS", zap.Int64("gcTS", gcTS))
+			last = gcTS
+		} else {
+			log.Error("last TS less than gcTS", zap.Int64("lastTS", last), zap.Int64("gcTS", gcTS))
+			// TODO: report error
+		}
 	}
 
 	values := make(chan []byte, 5)

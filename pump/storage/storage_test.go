@@ -200,7 +200,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	populateBinlog(c, append, 128, 1)
 	time.Sleep(time.Millisecond * 100)
 
-	gcTS := append.gcTS
+	gcTS := append.gcTS.Load()
 	maxCommitTS := append.maxCommitTS
 	headPointer := append.headPointer
 	handlePointer := append.handlePointer
@@ -213,7 +213,7 @@ func (as *AppendSuit) TestCloseAndOpenAgain(c *check.C) {
 	append, err = NewAppend(append.dir, append.options)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(gcTS, check.Equals, append.gcTS)
+	c.Assert(gcTS, check.Equals, append.gcTS.Load())
 	c.Assert(maxCommitTS, check.Equals, append.maxCommitTS)
 	c.Assert(headPointer, check.Equals, append.headPointer)
 	c.Assert(handlePointer, check.Equals, append.handlePointer)
@@ -350,7 +350,7 @@ func (as *AppendSuit) TestReadWriteGCTS(c *check.C) {
 	append, err = NewAppend(append.dir, append.options)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(append.gcTS, check.Equals, int64(100))
+	c.Assert(append.gcTS.Load(), check.Equals, int64(100))
 	append.Close()
 }
 

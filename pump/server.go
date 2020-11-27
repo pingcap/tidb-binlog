@@ -289,8 +289,11 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 	last := in.StartFrom.Offset
 
 	gcTS := s.storage.GetGCTS()
-	if last <= gcTS {
+	if last != 0 && last <= gcTS {
+		// if requested with 0, then send binlog from oldest but not GCed TS.
+		// simple check TS before read binlog, but more checks are still needed in storage.
 		log.Error("drainer request a purged binlog TS, some binlog events may be loss", zap.Int64("gc TS", gcTS), zap.Reflect("request", in))
+		return errors.Annotatef(storage.ErrRequestGCedBinlog, "requested TS %d, GC TS %d", last, gcTS)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
