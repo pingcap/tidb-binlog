@@ -1145,7 +1145,6 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) (<-chan []byt
 	go func() {
 		defer close(values)
 
-	outerForLoop:
 		for {
 			startTS := last + 1
 			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
@@ -1174,6 +1173,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) (<-chan []byt
 
 			// log.Debugf("try to get range [%d,%d)", startTS, atomic.LoadInt64(&a.maxCommitTS)+1)
 
+		readForLoop:
 			for ok := iter.Seek(encodeTSKey(startTS)); ok; ok = iter.Next() {
 				var vp valuePointer
 				err := vp.UnmarshalBinary(iter.Value())
@@ -1245,10 +1245,9 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) (<-chan []byt
 				case values <- value:
 					log.Debug("send value success")
 				case <-time.After(gcMaxBlockTime):
-					iter.Release()
-					a.gcTS.ReleaseLoadLock()
+					// do not update `last` anymore.
 					log.Warn("can not send the binlog for a long time, will try to read again", zap.Duration("duration", gcMaxBlockTime), zap.Int64("current TS", decodeTSKey(iter.Key())))
-					break outerForLoop
+					break readForLoop
 				case <-ctx.Done():
 					iter.Release()
 					a.gcTS.ReleaseLoadLock()
