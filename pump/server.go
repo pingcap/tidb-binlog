@@ -646,7 +646,7 @@ func (s *Server) detectDrainerCheckPoints(ctx context.Context, gcTS int64) {
 				zap.String("drainer", drainer.NodeID),
 				zap.Int64("alert gc ts", gcTS),
 				zap.Int64("drainer checkpoint", drainer.MaxCommitTS),
-				zap.Duration("alert time", earlyAlertGC)
+				zap.Duration("alert time", earlyAlertGC),
 			)
 			// will add test when binlog have failpoint
 			// NOTE: this metrics do not mean the binlogs have been purge, but mean some binlogs will be purge after alert time.
