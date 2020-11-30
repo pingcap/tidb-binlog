@@ -34,3 +34,14 @@ func (g *GCTS) Load() int64 {
 	defer g.mux.RUnlock()
 	return g.ts
 }
+
+// LoadAndLock loads the current TS value and hold the read-lock.
+func (g *GCTS) LoadAndLock() int64 {
+	g.mux.RLock()
+	return g.ts
+}
+
+// ReleaseLoadLock releases the read-lock acquired by LoadAndLock.
+func (g *GCTS) ReleaseLoadLock() {
+	g.mux.RUnlock()
+}

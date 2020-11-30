@@ -298,12 +298,15 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	binlogs := s.storage.PullCommitBinlog(ctx, last)
+	binlogs, errs := s.storage.PullCommitBinlog(ctx, last)
 
 	for {
 		select {
 		case <-s.pullClose:
 			return nil
+		case err2 := <-errs:
+			log.Error("pull binlog failed", zap.Error(err2))
+			return err2
 		case data, ok := <-binlogs:
 			if !ok {
 				return nil

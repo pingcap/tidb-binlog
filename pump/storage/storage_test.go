@@ -241,7 +241,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		values := appendStorage.PullCommitBinlog(ctx, 0)
+		values, errs := appendStorage.PullCommitBinlog(ctx, 0)
 
 		// pull the binlogs back and check sorted
 		var binlogs []*pb.Binlog
@@ -265,6 +265,7 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 		for i := 1; i < len(binlogs); i++ {
 			c.Assert(binlogs[i].CommitTs, check.Greater, binlogs[i-1].CommitTs)
 		}
+		c.Assert(errs, check.HasLen, 0)
 
 		cancel()
 	}

@@ -43,6 +43,7 @@ import (
 
 const (
 	maxTxnTimeoutSecond int64 = 600
+	gcMaxBlockTime            = 30 * time.Minute // we run GC at every 1 hour, but may block GC when reading and sending binlog at most in this duration.
 	chanCapacity              = 1 << 20
 	// if pump takes a long time to write binlog, pump will display the binlog meta information (unit: Second)
 	slowWriteThreshold               = 1.0
@@ -86,7 +87,7 @@ type Storage interface {
 	GetBinlog(ts int64) (binlog *pb.Binlog, err error)
 
 	// PullCommitBinlog return the chan to consume the binlog
-	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
+	PullCommitBinlog(ctx context.Context, last int64) (<-chan []byte, <-chan error)
 
 	Close() error
 }
@@ -1105,7 +1106,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 }
 
 // PullCommitBinlog return commit binlog  > last
-func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+func (a *Append) PullCommitBinlog(ctx context.Context, last int64) (<-chan []byte, <-chan error) {
 	log.Debug("new PullCommitBinlog", zap.Int64("last ts", last))
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -1117,18 +1118,20 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		}
 	}()
 
+	values := make(chan []byte, 5)
+	errs := make(chan error, 5) // we `return` after sending an error now, so it should never block on this chan.
+
 	gcTS := a.gcTS.Load()
 	if last < gcTS {
 		if last == 0 {
 			log.Warn("last TS is 0, will send binlog from gcTS", zap.Int64("gcTS", gcTS))
 			last = gcTS
 		} else {
-			log.Error("last TS less than gcTS", zap.Int64("lastTS", last), zap.Int64("gcTS", gcTS))
-			// TODO: report error
+			log.Error("last TS less than gcTS, some binlog events may be loss", zap.Int64("lastTS", last), zap.Int64("gcTS", gcTS))
+			errs <- errors.Annotatef(ErrRequestGCedBinlog, "requested TS %d, GC TS %d", last, gcTS)
+			return values, errs
 		}
 	}
-
-	values := make(chan []byte, 5)
 
 	irange := &util.Range{
 		Start: encodeTSKey(0),
@@ -1142,6 +1145,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 	go func() {
 		defer close(values)
 
+	outerForLoop:
 		for {
 			startTS := last + 1
 			limitTS := atomic.LoadInt64(&a.maxCommitTS) + 1
@@ -1152,6 +1156,16 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 				})
 				time.Sleep(time.Second)
 				continue
+			}
+
+			// acquire the lock to block GC.
+			// NOTE: do not forget to release the lock carefully.
+			gcTS = a.gcTS.LoadAndLock()
+			if last < gcTS {
+				a.gcTS.ReleaseLoadLock()
+				log.Error("last TS less than gcTS, some binlog events may be loss", zap.Int64("lastTS", last), zap.Int64("gcTS", gcTS))
+				errs <- errors.Annotatef(ErrRequestGCedBinlog, "requested TS %d, GC TS %d", last, gcTS)
+				return
 			}
 
 			irange.Start = encodeTSKey(startTS)
@@ -1172,17 +1186,21 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 
 				value, err := a.vlog.readValue(vp)
 				if err != nil {
-					log.Error("read value failed", zap.Error(err))
 					iter.Release()
 					errorCount.WithLabelValues("read_value").Add(1.0)
+					a.gcTS.ReleaseLoadLock()
+					log.Error("read value failed", zap.Int64("TS", decodeTSKey(iter.Key())), zap.Error(err))
+					errs <- errors.Errorf("read value failed, TS %d", decodeTSKey(iter.Key()))
 					return
 				}
 
 				binlog := new(pb.Binlog)
 				err = binlog.Unmarshal(value)
 				if err != nil {
-					log.Error("Unmarshal Binlog failed", zap.Error(err))
 					iter.Release()
+					a.gcTS.ReleaseLoadLock()
+					log.Error("Unmarshal Binlog failed", zap.Int64("TS", decodeTSKey(iter.Key())), zap.Error(err))
+					errs <- errors.Errorf("Unmarshal Binlog failed, TS %d", decodeTSKey(iter.Key()))
 					return
 				}
 
@@ -1206,30 +1224,41 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 						}
 
 						errorCount.WithLabelValues("feed_pre_write_value").Add(1.0)
-						log.Error("feed pre write value failed", zap.Error(err))
 						iter.Release()
+						a.gcTS.ReleaseLoadLock()
+						log.Error("feed pre write value failed", zap.Int64("TS", decodeTSKey(iter.Key())), zap.Error(err))
+						errs <- errors.Errorf("feed pre write value failed, TS %d", decodeTSKey(iter.Key()))
 						return
 					}
 				}
 
 				value, err = binlog.Marshal()
 				if err != nil {
-					log.Error("marshal failed", zap.Error(err))
 					iter.Release()
+					a.gcTS.ReleaseLoadLock()
+					log.Error("marshal failed", zap.Int64("TS", decodeTSKey(iter.Key())), zap.Error(err))
+					errs <- errors.Errorf("marshal failed, TS %d", decodeTSKey(iter.Key()))
 					return
 				}
 
 				select {
 				case values <- value:
 					log.Debug("send value success")
+				case <-time.After(gcMaxBlockTime):
+					iter.Release()
+					a.gcTS.ReleaseLoadLock()
+					log.Warn("can not send the binlog for a long time, will try to read again", zap.Duration("duration", gcMaxBlockTime), zap.Int64("current TS", decodeTSKey(iter.Key())))
+					break outerForLoop
 				case <-ctx.Done():
 					iter.Release()
+					a.gcTS.ReleaseLoadLock()
 					return
 				}
 
 				last = decodeTSKey(iter.Key())
 			}
 			iter.Release()
+			a.gcTS.ReleaseLoadLock()
 			err := iter.Error()
 			if err != nil {
 				log.Error("encounter iterator error", zap.Error(err))
@@ -1244,7 +1273,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		}
 	}()
 
-	return values
+	return values, errs
 }
 
 type storageSize struct {
