@@ -17,11 +17,11 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/kvproto v0.0.0-20200317043902-2838e21ca222
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
-	github.com/pingcap/parser v3.1.0-beta.1.0.20200318061433-f0b8f6cdca0d+incompatible
+	github.com/pingcap/parser v3.1.3-0.20200720062353-d20c1603c1de+incompatible
 	github.com/pingcap/pd/v3 v3.1.0-beta.2.0.20200312100832-1206736bd050
-	github.com/pingcap/tidb v1.1.0-beta.0.20200319063417-875036363e1e
+	github.com/pingcap/tidb v1.1.0-beta.0.20201010034748-8fc719be5a25
 	github.com/pingcap/tidb-tools v4.0.0-beta.1.0.20200317092225-ed6b2a87af54+incompatible
-	github.com/pingcap/tipb v0.0.0-20191126033718-169898888b24
+	github.com/pingcap/tipb v0.0.0-20200426072603-ce17d2d03251
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
