@@ -480,7 +480,8 @@ func (a *Append) resolve(startTS int64) bool {
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
 	elapseSecond := maxSecond - startSecond
 
-	// `GetTxnStatus` will not cleanup any locks now, but we still keep this logic and only `GetTxnStatus` after `maxTxnTimeoutSecond`.
+	// `GetTxnStatus` will not abort valid txn now, but we still keep this logic and only `GetTxnStatus` after `maxTxnTimeoutSecond`.
+	// for expired locks, Pump and/or TiDB try to cleanup them should have no side effects.
 	if elapseSecond <= maxTxnTimeoutSecond {
 		log.Info(
 			"Find no MVCC record for a young txn",
