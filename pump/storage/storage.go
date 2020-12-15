@@ -485,6 +485,8 @@ func (a *Append) resolve(startTS int64) bool {
 	maxSecond := oracle.ExtractPhysical(uint64(latestTS)) / int64(time.Second/time.Millisecond)
 	elapseSecond := maxSecond - startSecond
 
+	// `GetTxnStatus` will not abort valid txn now, but we still keep this logic and only `GetTxnStatus` after `maxTxnTimeoutSecond`.
+	// for expired locks, Pump and/or TiDB try to cleanup them should have no side effects.
 	if elapseSecond <= maxTxnTimeoutSecond {
 		log.Info(
 			"Find no MVCC record for a young txn",
@@ -494,13 +496,24 @@ func (a *Append) resolve(startTS int64) bool {
 		return false
 	}
 
-	log.Warn("unknown commit stats", zap.Int64("start ts", startTS))
-
 	tikvQueryCount.Add(1.0)
 	primaryKey := pbinlog.GetPrewriteKey()
 	status, err := a.tiLockResolver.GetTxnStatus(uint64(pbinlog.StartTs), uint64(pbinlog.StartTs), primaryKey)
 	if err != nil {
-		log.Error("GetTxnStatus failed", zap.Int64("start ts", startTS), zap.Error(err))
+		log.Error("get commit status failed for unknown txn", zap.Int64("start ts", startTS), zap.Error(err))
+		return false
+	}
+
+	log.Info("got commit status for unknown txn",
+		zap.Int64("start ts", startTS),
+		zap.Uint64("commit ts", status.CommitTS()),
+		zap.Uint64("ttl", status.TTL()),
+		zap.Reflect("action", status.Action()),
+		zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0))
+
+	// check TTL (whether the lock is valid)
+	if status.TTL() > 0 {
+		log.Warn("the txn lock is still valid, will retry later", zap.Int64("start ts", startTS), zap.Uint64("ttl", status.TTL()))
 		return false
 	}
 
@@ -543,12 +556,7 @@ func (a *Append) resolve(startTS int64) bool {
 		}
 	}
 
-	log.Info("known txn is committed from tikv",
-		zap.Int64("start ts", startTS),
-		zap.Uint64("commit ts", status.CommitTS()),
-		zap.Bool("isDDL", pbinlog.GetDdlJobId() > 0))
 	return true
-
 }
 
 // GetBinlog gets binlog by ts
