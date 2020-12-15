@@ -13,11 +13,11 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
+	github.com/pingcap/errors v0.11.5-0.20201029093017-5a7df2af2ac7
 	github.com/pingcap/kvproto v0.0.0-20200907074027-32a3a0accf7d
-	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-	github.com/pingcap/parser v0.0.0-20201022083903-fbe80b0c40bb
-	github.com/pingcap/tidb v1.1.0-beta.0.20201027110222-66ac9fc31f17
+	github.com/pingcap/log v0.0.0-20201112100606-8f1e84a3abc8
+	github.com/pingcap/parser v0.0.0-20201130080042-c3ddfec58248
+	github.com/pingcap/tidb v1.1.0-beta.0.20201214152324-ce2f365189d3
 	github.com/pingcap/tidb-tools v4.0.8+incompatible
 	github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3
 	github.com/prometheus/client_golang v1.5.1
