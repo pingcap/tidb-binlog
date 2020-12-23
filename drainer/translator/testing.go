@@ -82,6 +82,12 @@ func (g *BinlogGenerator) TableByID(id int64) (info *model.TableInfo, ok bool) {
 	return
 }
 
+// TableBySchemaVersion implements TableInfoGetter interface
+func (g *BinlogGenerator) TableBySchemaVersion(id int64, schemaVersion int64) (info *model.TableInfo, ok bool) {
+	info, ok = g.id2info[id]
+	return
+}
+
 // SchemaAndTableName implements TableInfoGetter interface
 func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table string, ok bool) {
 	names, ok := g.id2name[id]
@@ -97,6 +103,11 @@ func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table str
 
 // IsDroppingColumn implements TableInfoGetter interface
 func (g *BinlogGenerator) IsDroppingColumn(id int64) bool {
+	return false
+}
+
+// CanAppendDefaultValue implements TableInfoGetter interface
+func (g *BinlogGenerator) CanAppendDefaultValue(id int64, schemaVersion int64) bool {
 	return false
 }
 
@@ -353,13 +364,13 @@ func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, int
 		d.SetMysqlBit(bit)
 	case mysql.TypeSet:
 		elems := []string{"a", "b", "c", "d"}
-		set, err := types.ParseSetName(elems, elems[base-1])
+		set, err := types.ParseSetName(elems, elems[base-1], "")
 		c.Assert(err, check.IsNil)
 		d.SetMysqlSet(set, "utf8mb4_bin")
 		e = set.Value
 	case mysql.TypeEnum:
 		elems := []string{"male", "female"}
-		enum, err := types.ParseEnumName(elems, elems[base-1])
+		enum, err := types.ParseEnumName(elems, elems[base-1], "")
 		c.Assert(err, check.IsNil)
 		d.SetMysqlEnum(enum, "utf8mb4_bin")
 		e = enum.Value
