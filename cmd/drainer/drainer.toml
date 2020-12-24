@@ -62,7 +62,7 @@ worker-count = 16
 safe-mode = false
 
 # downstream storage, equal to --dest-db-type
-# valid values are "mysql", "file", "tidb", "kafka"
+# valid values are "mysql", "file", "tidb", "kafka", "rabbitmq"
 db-type = "mysql"
 
 # ignore syncing the txn with specified commit ts to downstream
@@ -120,6 +120,12 @@ port = 3306
 # ssl-key = "/path/to/drainer-key.pem"
 # The common name which is allowed to connection with cluster components.
 # cert-allowed-cn = ["binlog"]
+#
+# see doc https://godoc.org/github.com/streadway/amqp
+# rabbitmq syncer config
+# rabbitmq-addr = "amqp://guest:guest@127.0.0.1:5672"
+# rabbitmq-exchange = "binlog-event"
+# rabbitmq-exchange-type = "topic"
 
 [syncer.to.checkpoint]
 # only support mysql or tidb now, you can uncomment this to control where the checkpoint is saved.

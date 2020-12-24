@@ -115,9 +115,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 				Port:     cfg.SyncerCfg.To.Port,
 				TLS:      cfg.SyncerCfg.To.TLS,
 			}
-		case "pb", "file":
-			checkpointCfg.CheckpointType = "file"
-		case "kafka":
+		case "pb", "file", "kafka", "rabbitmq":
 			checkpointCfg.CheckpointType = "file"
 		case "flash":
 			return nil, errors.New("the flash DestDBType is no longer supported")
