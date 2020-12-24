@@ -26,6 +26,7 @@ require (
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
 	github.com/soheilhy/cmux v0.1.4
+	github.com/streadway/amqp v1.0.0
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/tikv/pd v1.1.0-beta.0.20200921100508-9ee41c4144f3
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d

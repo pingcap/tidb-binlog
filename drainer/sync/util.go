@@ -47,6 +47,15 @@ type DBConfig struct {
 	TopicName        string `toml:"topic-name" json:"topic-name"`
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
+
+	// RabbitMQ Config
+	RabbitMQAddr         string `toml:"rabbitmq-addr" json:"rabbitmq-addr"`
+	RabbitMQExchange     string `toml:"rabbitmq-exchange" json:"rabbitmq-exchange"`
+	RabbitMQExchangeType string `toml:"rabbitmq-exchange-type" json:"rabbitmq-exchange-type"`
+	RabbitMQDurable      bool   `toml:"rabbitmq-durable" json:"rabbitmq-durable"`
+	RabbitMQAutoDelete   bool   `toml:"rabbitmq-auto-delete" json:"rabbitmq-auto-delete"`
+	RabbitMQInternal     bool   `toml:"rabbitmq-internal" json:"rabbitmq-auto-internal"`
+	RabbitMQNoWait       bool   `toml:"rabbitmq-no-wait" json:"rabbitmq-no-wait"`
 }
 
 // CheckpointConfig is the Checkpoint configuration.

@@ -102,3 +102,42 @@ func BenchmarkKafka(b *testing.B) {
 		}
 	}
 }
+
+// with bytes = 5KB
+// BenchmarkRabbitmqWithSingleChannel-16    	     678	   1829698 ns/op
+// means 546 op/second
+func BenchmarkRabbitmqWithSingleChannel(b *testing.B) {
+	cfg := &DBConfig{
+		RabbitMQAddr:         "amqp://guest:guest@127.0.0.1:5672",
+		RabbitMQExchange:     "benchmark",
+		RabbitMQExchangeType: "fanout",
+	}
+
+	binlog := &obinlog.Binlog{
+		DmlData: &obinlog.DMLData{
+			Tables: []*obinlog.Table{table},
+		},
+	}
+
+	item := &Item{Binlog: &ti.Binlog{}}
+
+	syncer, err := NewRabbitmqSyncer(cfg, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	// Just drain is, or may be block if the buffer is full
+	go func() {
+		for range syncer.Successes() {
+		}
+	}()
+
+	for i := 0; i < b.N; i++ {
+		err = syncer.saveBinlog(binlog, item)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

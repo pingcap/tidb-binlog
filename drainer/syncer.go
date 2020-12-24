@@ -96,6 +96,11 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 
 func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
+	case "rabbitmq":
+		dsyncer, err = dsync.NewRabbitmqSyncer(cfg.To, schema)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to create rabbitmq dsyncer")
+		}
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
 		if err != nil {
