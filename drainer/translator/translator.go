@@ -14,6 +14,7 @@
 package translator
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -77,10 +78,98 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 		}
 	}
 
+	log.S().Debugf("get insert row pk: %v, datums: %+v", pk, datums)
+
 	return
 }
 
-func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
+func getEnumDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	switch value := ivalue.(type) {
+	case string:
+		enum, err := types.ParseEnumName(getCol.Elems, value, "")
+		if err != nil {
+			return types.Datum{}, errors.AddStack(err)
+		}
+		return types.NewDatum(enum), nil
+	}
+
+	return types.Datum{}, errors.Errorf("unknown type: %v", reflect.TypeOf(ivalue))
+}
+
+func getSetDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	switch value := ivalue.(type) {
+	case string:
+		enum, err := types.ParseSetName(getCol.Elems, value, "")
+		if err != nil {
+			return types.Datum{}, errors.AddStack(err)
+		}
+		return types.NewDatum(enum), nil
+	}
+
+	return types.Datum{}, errors.Errorf("unknown type: %v", reflect.TypeOf(ivalue))
+}
+
+func transTimestampToLocal(getCol *model.ColumnInfo) (string, error) {
+	ivalue := getCol.GetOriginDefaultValue()
+	value, ok := ivalue.(string)
+	if !ok {
+		return "", errors.New("not string value")
+	}
+
+	t, err := time.Parse(types.TimeFormat, value)
+	if err != nil {
+		return "", errors.AddStack(err)
+	}
+
+	value = t.Local().Format(types.TimeFormat)
+	return value, nil
+}
+
+func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) types.Datum {
+	getCol := col
+	if tableInfo != nil {
+		for _, c := range tableInfo.Columns {
+			if c.ID == col.ID {
+				getCol = c
+			}
+		}
+	}
+
+	if getCol.GetOriginDefaultValue() != nil {
+		// ref https://github.com/pingcap/tidb/blob/release-4.0/ddl/column.go#L675
+		// trans value from UTC to local timezone value format.
+		if getCol.Tp == mysql.TypeTimestamp {
+			value, err := transTimestampToLocal(getCol)
+			if err != nil {
+				log.Warn("failed to transTimestampToLocal",
+					zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return types.NewDatum(value)
+			}
+		} else if getCol.Tp == mysql.TypeEnum {
+			data, err := getEnumDatum(getCol)
+			if err != nil {
+				log.Warn("failed to get enum datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return data
+			}
+		} else if getCol.Tp == mysql.TypeSet {
+			data, err := getSetDatum(getCol)
+			if err != nil {
+				log.Warn("failed to get set datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
+					zap.Error(err))
+			} else {
+				return data
+			}
+		}
+
+		return types.NewDatum(getCol.GetOriginDefaultValue())
+	}
+
 	// see https://github.com/pingcap/tidb/issues/9304
 	// must use null if TiDB not write the column value when default value is null
 	// and the value is null
@@ -88,10 +177,7 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 		return types.NewDatum(nil)
 	}
 
-	if col.GetDefaultValue() != nil {
-		return types.NewDatum(col.GetDefaultValue())
-	}
-
+	// if !mysql.HasNotNullFlag(col.Flag) {
 	if col.Tp == mysql.TypeEnum {
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
@@ -103,7 +189,12 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 
 // DecodeOldAndNewRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
-func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Location, isTblDroppingCol bool) (map[int64]types.Datum, map[int64]types.Datum, error) {
+func DecodeOldAndNewRow(b []byte,
+	cols map[int64]*model.ColumnInfo,
+	loc *time.Location,
+	canAppendDefaultValue bool,
+	pinfo *model.TableInfo,
+) (map[int64]types.Datum, map[int64]types.Datum, error) {
 	if b == nil {
 		return nil, nil, nil
 	}
@@ -156,57 +247,67 @@ func DecodeOldAndNewRow(b []byte, cols map[int64]*model.ColumnInfo, loc *time.Lo
 	}
 
 	parsedCols := cnt / 2
-	isInvalid := len(newRow) != len(oldRow) || (len(cols) != parsedCols && len(cols)-1 != parsedCols)
+	isInvalid := len(newRow) != len(oldRow)
 	if isInvalid {
-		return nil, nil, errors.Errorf("row data is corrupted %v", b)
+		return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 	}
-	if parsedCols == len(cols)-1 {
-		if !isTblDroppingCol {
-			return nil, nil, errors.Errorf("row data is corrupted %v", b)
+	if parsedCols < len(cols) {
+		if !canAppendDefaultValue {
+			return nil, nil, errors.Errorf("row data is corrupted cols num: %d, oldRow: %v, newRow: %v", len(cols), oldRow, newRow)
 		}
-		var missingCol *model.ColumnInfo
+
+		var missingCols []*model.ColumnInfo
 		for colID, col := range cols {
 			_, inOld := oldRow[colID]
 			_, inNew := newRow[colID]
 			if !inOld && !inNew {
-				missingCol = col
-				break
+				missingCols = append(missingCols, col)
 			}
 		}
-		// We can't find a column that's missing in both old and new
-		if missingCol == nil {
+
+		// We can't find columns that's missing in both old and new
+		if len(missingCols) != len(cols)-parsedCols {
 			return nil, nil, errors.Errorf("row data is corrupted %v", b)
 		}
-		log.Info(
-			"Fill missing col with default val",
-			zap.String("name", missingCol.Name.O),
-			zap.Int64("id", missingCol.ID),
-			zap.Int("Tp", int(missingCol.FieldType.Tp)),
-		)
-		oldRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
-		newRow[missingCol.ID] = getDefaultOrZeroValue(missingCol)
+
+		for _, missingCol := range missingCols {
+			v := getDefaultOrZeroValue(pinfo, missingCol)
+			oldRow[missingCol.ID] = v
+			newRow[missingCol.ID] = v
+
+			log.S().Debugf("missing col: %+v", *missingCol)
+
+			log.Info(
+				"fill missing col with default val",
+				zap.String("name", missingCol.Name.O),
+				zap.Int64("id", missingCol.ID),
+				zap.Int("Tp", int(missingCol.FieldType.Tp)),
+				zap.Reflect("value", v))
+		}
 	}
 
 	return oldRow, newRow, nil
 }
 
 type updateDecoder struct {
-	columns          map[int64]*model.ColumnInfo
-	isTblDroppingCol bool
+	columns               map[int64]*model.ColumnInfo
+	canAppendDefaultValue bool
+	ptable                *model.TableInfo
 }
 
-func newUpdateDecoder(table *model.TableInfo, isTblDroppingCol bool) updateDecoder {
+func newUpdateDecoder(ptable, table *model.TableInfo, canAppendDefaultValue bool) updateDecoder {
 	columns := writableColumns(table)
 	return updateDecoder{
-		columns:          util.ToColumnMap(columns),
-		isTblDroppingCol: isTblDroppingCol,
+		columns:               util.ToColumnMap(columns),
+		canAppendDefaultValue: canAppendDefaultValue,
+		ptable:                ptable,
 	}
 }
 
 // decode decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Datum, map[int64]types.Datum, error) {
-	return DecodeOldAndNewRow(b, ud.columns, loc, ud.isTblDroppingCol)
+	return DecodeOldAndNewRow(b, ud.columns, loc, ud.canAppendDefaultValue, ud.ptable)
 }
 
 func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {

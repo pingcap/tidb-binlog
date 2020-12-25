@@ -26,12 +26,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tmysql "github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var (

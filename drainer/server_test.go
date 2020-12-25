@@ -248,13 +248,9 @@ func (s *heartbeatSuite) TestShouldStopWhenDone(c *C) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	errc := server.heartbeat(ctx)
 	cancel()
-	select {
-	case <-errc:
-	case <-time.After(time.Second):
-		c.Fatal("Doesn't stop in time")
-	}
+	err := server.heartbeat(ctx)
+	c.Assert(err, IsNil)
 }
 
 func (s *heartbeatSuite) TestShouldUpdateStatusPeriodically(c *C) {
@@ -278,7 +274,10 @@ func (s *heartbeatSuite) TestShouldUpdateStatusPeriodically(c *C) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_ = server.heartbeat(ctx)
+	go func() {
+		err := server.heartbeat(ctx)
+		c.Assert(err, IsNil)
+	}()
 	c.Assert(server.status.MaxCommitTS, Equals, int64(1024))
 	cp.commitTS = 100200
 	time.Sleep(heartbeatInterval * 3)
