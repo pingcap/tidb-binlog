@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -232,7 +233,7 @@ func TryUntilSuccess(ctx context.Context, waitInterval time.Duration, errMsg str
 
 // QueryLatestTsFromPD returns the latest ts
 func QueryLatestTsFromPD(tiStore kv.Storage) (int64, error) {
-	version, err := tiStore.CurrentVersion()
+	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
 	if err != nil {
 		log.Error("get current version failed", zap.Error(err))
 		return 0, errors.Trace(err)
