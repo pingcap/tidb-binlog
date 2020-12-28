@@ -25,11 +25,11 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -175,7 +175,7 @@ func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
 	snapMeta, err := getSnapshotMeta(tiStore)
 	log.Debug("get snap meta")
 	if err != nil {
-		return nil,nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 	dom := getDomain(tiStore)
 	log.Debug("get domain")
@@ -183,7 +183,13 @@ func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
+	version, err := tiStore.CurrentVersion()
+	log.Debug("get store")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	log.Debug("get snapshot")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -195,7 +201,7 @@ func mockFactory() (pools.Resource, error) {
 	return nil, errors.New("mock factory should not be called")
 }
 
-func getDomain(tiStore kv.Storage) *domain.Domain{
+func getDomain(tiStore kv.Storage) *domain.Domain {
 	dom := domain.NewDomain(tiStore, 0, 0, mockFactory)
 	return dom
 }
