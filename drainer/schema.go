@@ -51,7 +51,7 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
-	store kv.Storage
+	store               kv.Storage
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -275,13 +275,13 @@ func (s *Schema) addJob(job *model.Job) {
 
 func (s *Schema) restoreFromSnapshot(version int64) error {
 	var (
-		batchSize = 100
-		jobs []*model.Job
+		batchSize       = 100
+		jobs            []*model.Job
 		droppingColumns = make(map[int64]int64)
-		jobsMeta *meta.Meta
-		dom *domain.Domain
-		iter *meta.LastJobIterator
-		err error
+		jobsMeta        *meta.Meta
+		dom             *domain.Domain
+		iter            *meta.LastJobIterator
+		err             error
 	)
 	log.Debug("restore from snapshot")
 
@@ -364,9 +364,9 @@ func (s *Schema) loadFromSnapshotSchema(snapshotSchema infoschema.InfoSchema) {
 		for _, table := range tables {
 			tableInfos = append(tableInfos, schemaVersionTableInfo{
 				SchemaVersion: version,
-				TableInfo: table,
+				TableInfo:     table,
 			})
-			s.tableIDToName[table.ID] =  TableName{Schema: schema.Name.O, Table: table.Name.O}
+			s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 		}
 		s.tables[schema.ID] = tableInfos
 	}
