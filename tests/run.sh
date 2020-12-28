@@ -199,8 +199,6 @@ EOF
 
 
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
-[experimental]
-allow-auto-random = true
 EOF
 
     echo "Starting Downstream TiDB..."
