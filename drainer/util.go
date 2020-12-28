@@ -173,10 +173,12 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 
 func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
 	snapMeta, err := getSnapshotMeta(tiStore)
+	log.Debug("get snap meta")
 	if err != nil {
 		return nil,nil, errors.Trace(err)
 	}
 	dom := getDomain(tiStore)
+	log.Debug("get domain")
 	return snapMeta, dom, nil
 }
 
