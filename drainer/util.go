@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -169,14 +170,11 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion()
+	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	snapshot, err := tiStore.GetSnapshot(version)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	snapshot := tiStore.GetSnapshot(version)
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 

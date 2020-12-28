@@ -57,7 +57,7 @@ func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
 		case *ast.AlterTableStmt:
 			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.RenameTableStmt:
-			setSchemaIfExists(&table, v.OldTable.Schema.O, v.OldTable.Name.O)
+			setSchemaIfExists(&table, v.TableToTables[0].OldTable.Schema.O, v.TableToTables[0].OldTable.Name.O)
 		case *ast.TruncateTableStmt:
 			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.CreateIndexStmt:
