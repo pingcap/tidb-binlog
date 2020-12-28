@@ -289,10 +289,12 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("load history meta")
 	iter, err = jobsMeta.GetLastHistoryDDLJobsIterator()
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("get history iterator")
 	for {
 		jobs, err = iter.GetLastJobs(batchSize, jobs)
 		if err != nil {
