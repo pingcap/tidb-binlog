@@ -297,6 +297,9 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if len(jobs) > 0 {
+			log.Debug("get batched job %v", zap.Int64("schema version", jobs[0].BinlogInfo.SchemaVersion))
+		}
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion > version {
 				s.jobs = append(s.jobs, job)
