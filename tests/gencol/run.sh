@@ -15,7 +15,7 @@ run_sql 'CREATE TABLE gencol.gct(a INT PRIMARY KEY, b INT GENERATED ALWAYS AS (a
 
 run_sql 'INSERT INTO gencol.gct (a, c) VALUES (1, 10), (2, 12), (3, 32);'
 
-sleep 3
+sleep 5
 
 down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
 check_contains 'count(*): 3'
@@ -27,7 +27,7 @@ check_contains 'sum(c): 54'
 
 run_sql 'UPDATE gencol.gct SET a = 7, c = 8 WHERE b = 1;'
 
-sleep 3
+sleep 5
 
 down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
 check_contains 'count(*): 3'
@@ -37,7 +37,7 @@ check_contains 'sum(c): 52'
 
 run_sql 'UPDATE gencol.gct SET c = b WHERE a = 7;'
 
-sleep 3
+sleep 5
 
 down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
 check_contains 'count(*): 3'
@@ -49,7 +49,7 @@ check_contains 'sum(c): 93'
 
 run_sql 'DELETE FROM gencol.gct WHERE b = 9;'
 
-sleep 3
+sleep 5
 
 down_run_sql 'SELECT count(*), sum(a), sum(b), sum(c) FROM gencol.gct;'
 check_contains 'count(*): 2'

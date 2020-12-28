@@ -168,7 +168,7 @@ func deleteRowToRow(ptableinfo, tableInfo *model.TableInfo, raw []byte) (row *ob
 	columns := tableInfo.Columns
 
 	colsTypeMap := util.ToColumnTypeMap(tableInfo.Columns)
-	columnValues, err := tablecodec.DecodeRow(raw, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRowToDatumMap(raw, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, errors.Annotate(err, "DecodeRow failed")
 	}
