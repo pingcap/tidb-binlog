@@ -287,6 +287,7 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 
 	jobsMeta, dom, err = loadHistoryMeta(s.store)
 	if err != nil {
+		log.Error("load history meta failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 	log.Debug("load history meta")
