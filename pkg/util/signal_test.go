@@ -64,6 +64,7 @@ func (s *signalSuite) TestShouldDumpStack(c *C) {
 
 	record := buf.String()
 	parts := strings.Split(strings.TrimSpace(record), "\n")
+	c.Log(record)
 	c.Assert(len(parts), Greater, 1)
-	c.Assert(parts[1], Matches, ".*Got signal.*to dump.*")
+	c.Assert(parts[0], Matches, ".*Got signal.*to dump.*")
 }
