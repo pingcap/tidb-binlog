@@ -14,6 +14,8 @@
 package drainer
 
 import (
+	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/meta"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -63,7 +65,7 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (*Syncer, error) {
+func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job, jobsMeta *meta.Meta, dom *domain.Domain) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.cp = cp
@@ -85,6 +87,8 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	syncer.schema.jobsMeta = jobsMeta
+	syncer.schema.dom = dom
 
 	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
 	if err != nil {

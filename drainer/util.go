@@ -15,6 +15,7 @@ package drainer
 
 import (
 	"fmt"
+	"github.com/ngaut/pools"
 	"math"
 	"net"
 	"net/url"
@@ -24,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -169,6 +171,15 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	return jobs, nil
 }
 
+func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
+	snapMeta, err := getSnapshotMeta(tiStore)
+	if err != nil {
+		return nil,nil, errors.Trace(err)
+	}
+	dom := getDomain(tiStore)
+	return snapMeta, dom, nil
+}
+
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
 	if err != nil {
@@ -176,6 +187,15 @@ func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	}
 	snapshot := tiStore.GetSnapshot(version)
 	return meta.NewSnapshotMeta(snapshot), nil
+}
+
+func mockFactory() (pools.Resource, error) {
+	return nil, errors.New("mock factory should not be called")
+}
+
+func getDomain(tiStore kv.Storage) *domain.Domain{
+	dom := domain.NewDomain(tiStore, 0, 0, mockFactory)
+	return dom
 }
 
 func genDrainerID(listenAddr string) (string, error) {

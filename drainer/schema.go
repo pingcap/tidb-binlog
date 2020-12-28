@@ -15,6 +15,10 @@ package drainer
 
 import (
 	"encoding/json"
+	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/meta"
+	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -46,6 +50,8 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
+	jobsMeta *meta.Meta
+	dom *domain.Domain
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -267,7 +273,99 @@ func (s *Schema) addJob(job *model.Job) {
 	}
 }
 
+func (s *Schema) restoreFromSnapshot(version int64) error {
+	var (
+		batchSize = 100
+		jobs []*model.Job
+		droppingColumns = make(map[int64]int64)
+		iter *meta.LastJobIterator
+		err error
+	)
+	iter, err = s.jobsMeta.GetLastHistoryDDLJobsIterator()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for {
+		jobs, err = iter.GetLastJobs(batchSize, jobs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		for _, job := range jobs {
+			if job.BinlogInfo.SchemaVersion > version {
+				s.jobs = append(s.jobs, job)
+			} else {
+				s.tableSchemaVersion[job.TableID] = job.BinlogInfo.SchemaVersion
+				switch job.Type {
+				case model.ActionTruncateTable:
+					s.truncateTableID[job.TableID] = struct{}{}
+				case model.ActionDropColumn:
+					droppingColumn := droppingColumns[job.TableID]
+					if job.SchemaState == model.StateDeleteOnly {
+						log.Info("Got DeleteOnly Job", zap.Stringer("job", job))
+						droppingColumn++
+					} else {
+						log.Info("Finished dropping column", zap.Stringer("job", job))
+						droppingColumn--
+					}
+					droppingColumns[job.TableID] = droppingColumn
+				}
+			}
+		}
+		if len(jobs) < batchSize {
+			break
+		}
+	}
+
+	for tableID, droppingColumn := range droppingColumns {
+		if droppingColumn > 0 {
+			s.tblsDroppingCol[tableID] = true
+		}
+	}
+
+	// jobs from GetLastHistoryDDLJobsIterator are sorted by job id, need sorted by schema version
+	sort.Slice(s.jobs, func(i, j int) bool {
+		return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
+	})
+
+	snapshotSchema, err := s.dom.GetSnapshotInfoSchema(uint64(version))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.loadFromSnapshotSchema(snapshotSchema)
+
+	s.jobsMeta = nil
+	s.dom = nil
+	return nil
+}
+
+func (s *Schema) loadFromSnapshotSchema(snapshotSchema infoschema.InfoSchema) {
+	schemas := snapshotSchema.AllSchemas()
+	version := snapshotSchema.SchemaMetaVersion()
+	s.schemaMetaVersion = version
+	for _, schema := range schemas {
+		s.schemas[schema.ID] = schema
+		s.schemaNameToID[schema.Name.O] = schema.ID
+		tables := schema.Tables
+		tableInfos := make([]schemaVersionTableInfo, 0, len(tables))
+		for _, table := range tables {
+			tableInfos = append(tableInfos, schemaVersionTableInfo{
+				SchemaVersion: version,
+				TableInfo: table,
+			})
+			s.tableIDToName[table.ID] =  TableName{Schema: schema.Name.O, Table: table.Name.O}
+		}
+		s.tables[schema.ID] = tableInfos
+	}
+}
+
 func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
+	if s.jobsMeta != nil {
+		if err := s.restoreFromSnapshot(version); err != nil {
+			return err
+		}
+	}
+
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
 		job := s.jobs[i]

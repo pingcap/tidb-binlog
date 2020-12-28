@@ -15,6 +15,7 @@ package drainer
 
 import (
 	"fmt"
+	"github.com/pingcap/parser/model"
 	"net/http"
 	"net/url"
 	"os"
@@ -199,12 +200,13 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 	}
 	defer tiStore.Close()
 
-	jobs, err := loadHistoryDDLJobs(tiStore)
+	//jobs, err := loadHistoryDDLJobs(tiStore)
+	jobsMeta, dom, err := loadHistoryMeta(tiStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	syncer, err = NewSyncer(cp, cfg, jobs)
+	syncer, err = NewSyncer(cp, cfg, []*model.Job{}, jobsMeta, dom)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
