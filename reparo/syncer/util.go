@@ -23,7 +23,7 @@ import (
 func formatValueToString(data types.Datum, tp byte) string {
 	val := data.GetValue()
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
 		if val != nil {
 			return fmt.Sprintf("%s", val)
 		}
@@ -39,7 +39,7 @@ func formatValue(value types.Datum, tp byte) types.Datum {
 	}
 
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeVarchar, mysql.TypeString, mysql.TypeJSON:
 		value = types.NewDatum(fmt.Sprintf("%s", value.GetValue()))
 	case mysql.TypeEnum:
 		value = types.NewDatum(value.GetMysqlEnum().Value)

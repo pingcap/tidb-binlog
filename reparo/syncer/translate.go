@@ -212,10 +212,10 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 			}
 			table = node.Tables[0].Name.O
 		case *ast.RenameTableStmt:
-			if len(node.NewTable.Schema.O) != 0 {
-				schema = node.NewTable.Schema.O
+			if len(node.TableToTables[0].NewTable.Schema.O) != 0 {
+				schema = node.TableToTables[0].NewTable.Schema.O
 			}
-			table = node.NewTable.Name.O
+			table = node.TableToTables[0].NewTable.Name.O
 		default:
 			return "", "", errors.Errorf("unknown ddl type, ddl: %s", ddlQuery)
 		}
