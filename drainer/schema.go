@@ -283,6 +283,7 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 		iter *meta.LastJobIterator
 		err error
 	)
+	log.Debug("restore from snapshot")
 
 	jobsMeta, dom, err = loadHistoryMeta(s.store)
 	if err != nil {
@@ -298,7 +299,7 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 			return errors.Trace(err)
 		}
 		if len(jobs) > 0 {
-			log.Debug("get batched job %v", zap.Int64("schema version", jobs[0].BinlogInfo.SchemaVersion))
+			log.Debug("get batched job", zap.Int64("schema version", jobs[0].BinlogInfo.SchemaVersion))
 		}
 		for _, job := range jobs {
 			if job.BinlogInfo.SchemaVersion > version {
