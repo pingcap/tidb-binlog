@@ -201,12 +201,12 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 	defer tiStore.Close()
 
 	//jobs, err := loadHistoryDDLJobs(tiStore)
-	jobsMeta, dom, err := loadHistoryMeta(tiStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	//jobsMeta, dom, err := loadHistoryMeta(tiStore)
+	//if err != nil {
+	//	return nil, errors.Trace(err)
+	//}
 
-	syncer, err = NewSyncer(cp, cfg, []*model.Job{}, jobsMeta, dom)
+	syncer, err = NewSyncer(cp, cfg, []*model.Job{}, tiStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

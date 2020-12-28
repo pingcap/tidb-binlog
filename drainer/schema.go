@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"sort"
 
@@ -50,8 +51,7 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
-	jobsMeta *meta.Meta
-	dom *domain.Domain
+	store kv.Storage
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -278,10 +278,17 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 		batchSize = 100
 		jobs []*model.Job
 		droppingColumns = make(map[int64]int64)
+		jobsMeta *meta.Meta
+		dom *domain.Domain
 		iter *meta.LastJobIterator
 		err error
 	)
-	iter, err = s.jobsMeta.GetLastHistoryDDLJobsIterator()
+
+	jobsMeta, dom, err = loadHistoryMeta(s.store)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	iter, err = jobsMeta.GetLastHistoryDDLJobsIterator()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -327,15 +334,14 @@ func (s *Schema) restoreFromSnapshot(version int64) error {
 		return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
 	})
 
-	snapshotSchema, err := s.dom.GetSnapshotInfoSchema(uint64(version))
+	snapshotSchema, err := dom.GetSnapshotInfoSchema(uint64(version))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	s.loadFromSnapshotSchema(snapshotSchema)
 
-	s.jobsMeta = nil
-	s.dom = nil
+	s.store = nil
 	return nil
 }
 
@@ -360,7 +366,7 @@ func (s *Schema) loadFromSnapshotSchema(snapshotSchema infoschema.InfoSchema) {
 }
 
 func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
-	if s.jobsMeta != nil {
+	if s.store != nil {
 		if err := s.restoreFromSnapshot(version); err != nil {
 			return err
 		}
