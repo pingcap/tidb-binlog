@@ -276,6 +276,7 @@ func (s *Syncer) run() error {
 	var lastSuccessTS int64
 	var fakeBinlogs []*pb.Binlog
 	var fakeBinlogPreAddTS []int64
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	go func() {
 		defer close(wait)
@@ -315,10 +316,10 @@ ForLoop:
 		}
 
 		// ****** 0.1% quit drainer
-		if rand.Float64() < 0.001 && notFake {
+		if rd.Float64() < 0.001 && notFake {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
-			if rand.Float64() < 0.5 {
+			if rd.Float64() < 0.5 {
 				log.Info("[FAILPOINT] drainer got quit without writing checkpoint")
 				if b != nil {
 					log.Info("[FAILPOINT] last binlog",
@@ -351,7 +352,7 @@ ForLoop:
 		jobID := binlog.GetDdlJobId()
 
 		// ****** 0.05% quit drainer
-		if rand.Float64() < 0.0005 {
+		if rd.Float64() < 0.0005 {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
 			log.Info("[FAILPOINT] current binlog",
 				zap.String("node ID", b.nodeID),
