@@ -52,7 +52,6 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
-	etcdURLs            string
 	store               kv.Storage
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64

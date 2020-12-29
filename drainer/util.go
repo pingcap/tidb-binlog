@@ -21,7 +21,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"sort"
 	"sync"
 
 	"github.com/Shopify/sarama"
@@ -150,25 +149,6 @@ func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	return job, nil
-}
-
-// loadHistoryDDLJobs loads all history DDL jobs from TiDB
-func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
-	snapMeta, err := getSnapshotMeta(tiStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.SchemaVersion < jobs[j].BinlogInfo.SchemaVersion
-	})
-
-	return jobs, nil
 }
 
 func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
