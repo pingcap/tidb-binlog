@@ -350,8 +350,8 @@ ForLoop:
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		// ****** 0.5% quit drainer
-		if rand.Float64() < 0.005 {
+		// ****** 0.05% quit drainer
+		if rand.Float64() < 0.0005 {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
 			log.Info("[FAILPOINT] current binlog",
 				zap.String("node ID", b.nodeID),
