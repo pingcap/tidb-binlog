@@ -115,8 +115,8 @@ func (sp *MysqlCheckPoint) Load() error {
 	var str string
 	selectSQL := genSelectSQL(sp)
 
-	// ***** 0.5% fail loading check point
-	if rand.Float64() < 0.005 {
+	// ***** 0.05% fail loading check point
+	if rand.Float64() < 0.0005 {
 		log.Info("[FAILPOINT] load mysql check point failed",
 			zap.String("SQL", selectSQL),
 			zap.Int64("commitTS", sp.CommitTS))

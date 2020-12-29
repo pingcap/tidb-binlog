@@ -315,8 +315,8 @@ ForLoop:
 			}
 		}
 
-		// ****** 0.05% quit drainer
-		if rd.Float64() < 0.0003 && notFake {
+		// ****** 0.005% quit drainer
+		if rd.Float64() < 0.00005 && notFake {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
 			if rd.Float64() < 0.5 {
@@ -351,8 +351,8 @@ ForLoop:
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
-		// ****** 0.03% quit drainer
-		if rd.Float64() < 0.0003 {
+		// ****** 0.003% quit drainer
+		if rd.Float64() < 0.00003 {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
 			log.Info("[FAILPOINT] current binlog",
 				zap.String("node ID", b.nodeID),

@@ -15,11 +15,12 @@ package translator
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"math/rand"
 	"os"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -110,8 +111,8 @@ func genMysqlDelete(schema string, table *model.TableInfo, row []byte) (names []
 func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 
-	// ****** 0.5% quit drainer
-	if rand.Float64() < 0.005 {
+	// ****** 0.05% quit drainer
+	if rand.Float64() < 0.0005 {
 		log.Info("[FAILPOINT] drainer got quit when transfer binlog to txn")
 		log.Info("[FAILPOINT] last binlog",
 			zap.Stringer("binlog", tiBinlog))
