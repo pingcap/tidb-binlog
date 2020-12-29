@@ -15,6 +15,7 @@ package drainer
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/session"
 	"math"
 	"net"
 	"net/url"
@@ -183,11 +184,7 @@ func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := tiStore.GetSnapshot(version)
+	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
