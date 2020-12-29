@@ -117,7 +117,7 @@ func (sp *MysqlCheckPoint) Load() error {
 
 	// ***** 5% fail loading check point
 	if rand.Float64() < 0.05 {
-		log.Info("[FAILPOINT] fake load mysql check point failed",
+		log.Info("[FAILPOINT] load mysql check point failed",
 			zap.String("SQL", selectSQL),
 			zap.Int64("commitTS", sp.CommitTS))
 		return errors.Errorf("fake load mysql check point failed: %s, current TS: %d", selectSQL, sp.CommitTS)
