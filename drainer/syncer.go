@@ -314,8 +314,8 @@ ForLoop:
 			}
 		}
 
-		// ****** 1% quit drainer
-		if rand.Float64() < 0.01 && notFake {
+		// ****** 0.1% quit drainer
+		if rand.Float64() < 0.001 && notFake {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
 			if rand.Float64() < 0.5 {
