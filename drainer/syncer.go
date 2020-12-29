@@ -294,6 +294,7 @@ func (s *Syncer) run() error {
 
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
+	notFake := false
 
 	var fakeBinlog *pb.Binlog
 	var pushFakeBinlog chan<- *pb.Binlog
@@ -314,7 +315,7 @@ ForLoop:
 		}
 
 		// ****** 1% quit drainer
-		if rand.Float64() < 0.01 {
+		if rand.Float64() < 0.01 && notFake {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
 			if rand.Float64() < 0.5 {
@@ -335,9 +336,11 @@ ForLoop:
 		case <-s.shutdown:
 			break ForLoop
 		case pushFakeBinlog <- fakeBinlog:
+			notFake = false
 			pushFakeBinlog = nil
 			continue
 		case b = <-s.input:
+			notFake = true
 			queueSizeGauge.WithLabelValues("syncer_input").Set(float64(len(s.input)))
 			log.Debug("consume binlog item", zap.Stringer("item", b))
 		}
