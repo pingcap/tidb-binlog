@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -113,6 +114,15 @@ func (sp *MysqlCheckPoint) Load() error {
 
 	var str string
 	selectSQL := genSelectSQL(sp)
+
+	// ***** 5% fail loading check point
+	if rand.Float64() < 0.05 {
+		log.Info("[FAILPOINT] fake load mysql check point failed",
+			zap.String("SQL", selectSQL),
+			zap.Int64("commitTS", sp.CommitTS))
+		return errors.Errorf("fake load mysql check point failed: %s, current TS: %d", selectSQL, sp.CommitTS)
+	}
+
 	err := sp.db.QueryRow(selectSQL).Scan(&str)
 	switch {
 	case err == sql.ErrNoRows:
@@ -156,6 +166,14 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version 
 
 	sql := genReplaceSQL(sp, string(b))
 	return util.RetryContext(context.TODO(), 5, time.Second, 1, func(context.Context) error {
+		// ***** 5% fail writing check point
+		if rand.Float64() < 0.05 {
+			log.Info("[FAILPOINT] fake write mysql check point failed",
+				zap.String("SQL", sql),
+				zap.Int64("commitTS", sp.CommitTS))
+			return errors.Errorf("fake write mysql check point failed: %s, current TS: %d", sql, sp.CommitTS)
+		}
+
 		_, err = sp.db.Exec(sql)
 		if err != nil {
 			return errors.Annotatef(err, "query sql failed: %s", sql)

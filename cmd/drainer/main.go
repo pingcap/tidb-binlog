@@ -30,6 +30,10 @@ import (
 	_ "google.golang.org/grpc/encoding/gzip"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	rand.Seed(time.Now().UTC().UnixNano())

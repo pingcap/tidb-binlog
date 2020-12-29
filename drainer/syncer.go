@@ -14,6 +14,8 @@
 package drainer
 
 import (
+	"math/rand"
+	"os"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -311,6 +313,22 @@ ForLoop:
 			}
 		}
 
+		// ****** 1% quit drainer
+		if rand.Float64() < 0.01 {
+			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
+			// 50% quit without save checkpoint
+			if rand.Float64() < 0.5 {
+				log.Info("[FAILPOINT] drainer got quit without writing checkpoint")
+				if b != nil {
+					log.Info("[FAILPOINT] last binlog",
+						zap.String("node ID", b.nodeID),
+						zap.Stringer("binlog", b.binlog))
+				}
+				os.Exit(1)
+			}
+			break ForLoop
+		}
+
 		select {
 		case err = <-dsyncError:
 			break ForLoop
@@ -328,6 +346,15 @@ ForLoop:
 		startTS := binlog.GetStartTs()
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
+
+		// ****** 0.5% quit drainer
+		if rand.Float64() < 0.005 {
+			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
+			log.Info("[FAILPOINT] current binlog",
+				zap.String("node ID", b.nodeID),
+				zap.Stringer("binlog", b.binlog))
+			os.Exit(1)
+		}
 
 		if isIgnoreTxnCommitTS(s.cfg.IgnoreTxnCommitTS, commitTS) {
 			log.Warn("skip txn", zap.Stringer("binlog", b.binlog))
