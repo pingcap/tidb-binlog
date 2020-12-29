@@ -6,6 +6,9 @@ require (
 	github.com/Shopify/sarama v1.24.1
 	github.com/dgraph-io/ristretto v0.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.0
+	github.com/fatih/color v1.10.0 // indirect
+	github.com/go-openapi/spec v0.20.0 // indirect
+	github.com/go-playground/overalls v0.0.0-20191218162659-7df9f728c018 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/mock v1.4.3
@@ -29,8 +32,10 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563
 	github.com/samuel/go-zookeeper v0.0.0-20170815201139-e6b59f6144be
+	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
 	github.com/soheilhy/cmux v0.1.4
+	github.com/swaggo/swag v1.7.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/tikv/pd v1.1.0-beta.0.20201125070607-d4b90eee0c70
 	github.com/unrolled/render v1.0.1
@@ -45,3 +50,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/pingcap/tidb => github.com/you06/tidb v1.1.0-beta.0.20201229071942-2be3600223c7

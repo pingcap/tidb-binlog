@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"fmt"
-	"github.com/ngaut/pools"
 	"math"
 	"net"
 	"net/url"
@@ -172,24 +171,23 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 }
 
 func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
-	log.Debug("get snap meta", zap.String("store", fmt.Sprintf("%T", tiStore)))
 	snapMeta, err := getSnapshotMeta(tiStore)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	dom := getDomain(tiStore)
-	log.Debug("get domain")
+	dom, err := getDomain(tiStore)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
 	return snapMeta, dom, nil
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	version, err := tiStore.CurrentVersion()
-	log.Debug("get store")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	snapshot, err := tiStore.GetSnapshot(version)
-	log.Debug("get snapshot")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -197,13 +195,12 @@ func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 
-func mockFactory() (pools.Resource, error) {
-	return nil, errors.New("mock factory should not be called")
-}
-
-func getDomain(tiStore kv.Storage) *domain.Domain {
-	dom := domain.NewDomain(tiStore, 0, 0, mockFactory)
-	return dom
+func getDomain(tiStore kv.Storage) (*domain.Domain, error) {
+	dom, err := session.GetDomain(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dom, nil
 }
 
 func genDrainerID(listenAddr string) (string, error) {
