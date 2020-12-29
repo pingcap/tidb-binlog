@@ -238,7 +238,7 @@ trap stop_services EXIT
 start_services
 
 if [ "${1-}" = '--debug' ]; then
-    echo 'You may now debug from another terminal. Press [ENTER] to continue.'
+    echo 'You may now debug from the other terminal. Press [ENTER] to continue.'
     read line
 fi
 
