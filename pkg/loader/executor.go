@@ -97,8 +97,8 @@ type tx struct {
 
 // wrap of sql.Tx.Exec()
 func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
-	// ****** 10% fail exec
-	if rand.Float64() < 0.1 {
+	// ****** 0.1% fail exec
+	if rand.Float64() < 0.001 {
 		log.Info("[FAILPOINT] exec SQL failed",
 			zap.String("query", query),
 			zap.String("args", fmt.Sprintln(args...)))
