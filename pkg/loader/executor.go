@@ -101,7 +101,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	if rand.Float64() < 0.1 {
 		log.Info("[FAILPOINT] exec SQL failed",
 			zap.String("query", query),
-			zap.String("args", fmt.Sprintln(args)))
+			zap.String("args", fmt.Sprintln(args...)))
 		return nil, errors.Errorf("fake exec error: %s", query)
 	}
 	start := time.Now()
