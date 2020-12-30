@@ -31,10 +31,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(commitTS int64, secondaryTS int64, consistent bool) error
+	Save(commitTS int64, secondaryTS int64, consistent bool, version int64) error
 
 	// TS gets checkpoint commit timestamp.
 	TS() int64
+
+	// SchemaVersion gets checkpoint current schemaversion.
+	SchemaVersion() int64
 
 	// IsConsistent return the Consistent status saved.
 	IsConsistent() bool

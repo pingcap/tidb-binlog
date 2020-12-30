@@ -74,7 +74,7 @@ var _ loader.Loader = &noOpLoader{}
 func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	cp, err := checkpoint.NewFile(0 /* initialCommitTS */, c.MkDir()+"/checkpoint")
 	c.Assert(err, check.IsNil)
-	err = cp.Save(0, 0, false)
+	err = cp.Save(0, 0, false, 0)
 	c.Assert(err, check.IsNil)
 	c.Assert(cp.IsConsistent(), check.Equals, false)
 

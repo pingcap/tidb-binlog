@@ -184,6 +184,7 @@ func (s *Syncer) enableSafeModeInitializationPhase() {
 func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 	successes := s.dsyncer.Successes()
 	var lastSaveTS int64
+	var latestVersion int64
 	lastSaveTime := time.Now()
 
 	for {
@@ -208,6 +209,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 			if ts > atomic.LoadInt64(lastTS) {
 				atomic.StoreInt64(lastTS, ts)
 			}
+			latestVersion = item.SchemaVersion
 
 			// save ASAP for DDL, and if FinishTS > 0, we should save the ts map
 			if item.Binlog.DdlJobId > 0 || item.AppliedTS > 0 {
@@ -229,7 +231,7 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 		ts := atomic.LoadInt64(lastTS)
 		if ts > lastSaveTS {
 			if saveNow || time.Since(lastSaveTime) > 3*time.Second {
-				s.savePoint(ts, appliedTS)
+				s.savePoint(ts, appliedTS, latestVersion)
 				lastSaveTime = time.Now()
 				lastSaveTS = ts
 				appliedTS = 0
@@ -242,20 +244,20 @@ func (s *Syncer) handleSuccess(fakeBinlog chan *pb.Binlog, lastTS *int64) {
 
 	ts := atomic.LoadInt64(lastTS)
 	if ts > lastSaveTS {
-		s.savePoint(ts, 0)
+		s.savePoint(ts, 0, latestVersion)
 		eventCounter.WithLabelValues("savepoint").Add(1)
 	}
 
 	log.Info("handleSuccess quit")
 }
 
-func (s *Syncer) savePoint(ts, secondaryTS int64) {
+func (s *Syncer) savePoint(ts, secondaryTS, version int64) {
 	if ts < s.cp.TS() {
 		log.Error("save ts is less than checkpoint ts %d", zap.Int64("save ts", ts), zap.Int64("checkpoint ts", s.cp.TS()))
 	}
 
 	log.Info("write save point", zap.Int64("ts", ts))
-	err := s.cp.Save(ts, secondaryTS, false)
+	err := s.cp.Save(ts, secondaryTS, false, version)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
 	}
@@ -281,6 +283,12 @@ func (s *Syncer) run() error {
 	var err error
 
 	s.enableSafeModeInitializationPhase()
+
+	err = s.schema.handlePreviousDDLJobIfNeed(s.cp.SchemaVersion())
+	if err != nil {
+		err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
+		return err
+	}
 
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
@@ -354,6 +362,7 @@ ForLoop:
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
 			}
+
 			var isFilterTransaction = false
 			var err1 error
 			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
@@ -375,7 +384,7 @@ ForLoop:
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
 				lastAddComitTS = binlog.GetCommitTs()
-				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite})
+				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite, SchemaVersion: preWrite.SchemaVersion})
 				if err != nil {
 					err = errors.Annotatef(err, "failed to add item")
 					break ForLoop
@@ -396,7 +405,6 @@ ForLoop:
 
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
-
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
@@ -443,7 +451,7 @@ ForLoop:
 			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
 				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
 
-			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip})
+			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip, SchemaVersion: lastDDLSchemaVersion})
 			if err != nil {
 				err = errors.Annotatef(err, "add to dsyncer, commit ts %d", binlog.CommitTs)
 				break ForLoop
@@ -473,7 +481,7 @@ ForLoop:
 		return cerr
 	}
 
-	return s.cp.Save(s.cp.TS(), 0, true /*consistent*/)
+	return s.cp.Save(s.cp.TS(), 0, true /*consistent*/, lastDDLSchemaVersion)
 }
 
 func findLoopBackMark(dmls []*loader.DML, info *loopbacksync.LoopBackSync) (bool, error) {

@@ -33,6 +33,7 @@ type FileCheckPoint struct {
 
 	ConsistentSaved bool  `toml:"consistent" json:"consistent"`
 	CommitTS        int64 `toml:"commitTS" json:"commitTS"`
+	Version 	    int64   `toml:"schema-version" json:"schema-version"`
 }
 
 // NewFile creates a new FileCheckpoint.
@@ -82,7 +83,7 @@ func (sp *FileCheckPoint) Load() error {
 }
 
 // Save implements CheckPoint.Save interface
-func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
+func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool, version int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -92,6 +93,7 @@ func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
+	sp.Version = version
 
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
@@ -114,6 +116,14 @@ func (sp *FileCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// SchemaVersion implements CheckPoint.SchemaVersion interface.
+func (sp *FileCheckPoint) SchemaVersion() int64 {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.Version
 }
 
 // IsConsistent implements CheckPoint interface
