@@ -41,7 +41,7 @@ type MysqlCheckPoint struct {
 	ConsistentSaved bool             `toml:"consistent" json:"consistent"`
 	CommitTS        int64            `toml:"commitTS" json:"commitTS"`
 	TsMap           map[string]int64 `toml:"ts-map" json:"ts-map"`
-	Version         int64              `toml:"schema-version" json:"schema-version"`
+	Version         int64            `toml:"schema-version" json:"schema-version"`
 }
 
 var _ CheckPoint = &MysqlCheckPoint{}
@@ -173,6 +173,7 @@ func (sp *MysqlCheckPoint) TS() int64 {
 
 	return sp.CommitTS
 }
+
 // SchemaVersion implements CheckPoint.SchemaVersion interface.
 func (sp *MysqlCheckPoint) SchemaVersion() int64 {
 	sp.RLock()

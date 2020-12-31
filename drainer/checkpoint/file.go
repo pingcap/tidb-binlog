@@ -33,7 +33,7 @@ type FileCheckPoint struct {
 
 	ConsistentSaved bool  `toml:"consistent" json:"consistent"`
 	CommitTS        int64 `toml:"commitTS" json:"commitTS"`
-	Version 	    int64   `toml:"schema-version" json:"schema-version"`
+	Version         int64 `toml:"schema-version" json:"schema-version"`
 }
 
 // NewFile creates a new FileCheckpoint.

@@ -31,7 +31,7 @@ type Item struct {
 	// Each item has a schemaVersion. with amend txn feature the prewrite DML's SchemaVersion could change.
 	// which makes restart & reload history DDL with previous SchemaVersion not reliable.
 	// so we should save this version as checkpoint.
-	SchemaVersion   int64
+	SchemaVersion int64
 
 	// the applied TS executed in downstream, only for tidb
 	AppliedTS int64
