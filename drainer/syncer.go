@@ -352,6 +352,10 @@ ForLoop:
 		commitTS := binlog.GetCommitTs()
 		jobID := binlog.GetDdlJobId()
 
+		if binlog.Tp == pb.BinlogType_Rollback {
+			notFake = false
+		}
+
 		// ****** 0.003% quit drainer
 		if rd.Float64() < 0.00003 && startFailpoint {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
