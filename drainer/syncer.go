@@ -357,7 +357,7 @@ ForLoop:
 		}
 
 		// ****** 0.003% quit drainer
-		if rd.Float64() < 0.00003 && startFailpoint {
+		if rd.Float64() < 0.00003 && notFake && startFailpoint {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
 			log.Info("[FAILPOINT] current binlog",
 				zap.String("node ID", b.nodeID),
