@@ -296,6 +296,7 @@ func (s *Syncer) run() error {
 	var lastDDLSchemaVersion int64
 	var b *binlogItem
 	notFake := false
+	startFailpoint := false
 
 	var fakeBinlog *pb.Binlog
 	var pushFakeBinlog chan<- *pb.Binlog
@@ -316,7 +317,7 @@ ForLoop:
 		}
 
 		// ****** 0.005% quit drainer
-		if rd.Float64() < 0.00005 && notFake {
+		if rd.Float64() < 0.00005 && notFake && startFailpoint {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
 			if rd.Float64() < 0.5 {
@@ -352,7 +353,7 @@ ForLoop:
 		jobID := binlog.GetDdlJobId()
 
 		// ****** 0.003% quit drainer
-		if rd.Float64() < 0.00003 {
+		if rd.Float64() < 0.00003 && startFailpoint {
 			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
 			log.Info("[FAILPOINT] current binlog",
 				zap.String("node ID", b.nodeID),
@@ -384,6 +385,7 @@ ForLoop:
 			}
 
 			log.Debug("get DML", zap.Int64("SchemaVersion", preWrite.SchemaVersion))
+			startFailpoint = true
 			if preWrite.SchemaVersion < lastDDLSchemaVersion {
 				log.Debug("encounter older schema dml")
 			}
@@ -436,6 +438,7 @@ ForLoop:
 
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
+			startFailpoint = true
 			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
