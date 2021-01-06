@@ -16,11 +16,7 @@ package translator
 import (
 	"fmt"
 	"io"
-	"math/rand"
-	"os"
 	"time"
-
-	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -112,12 +108,12 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 	txn = new(loader.Txn)
 
 	// ****** 0.05% quit drainer
-	if rand.Float64() < 0.0005 {
-		log.Info("[FAILPOINT] drainer got quit when transfer binlog to txn")
-		log.Info("[FAILPOINT] last binlog",
-			zap.Stringer("binlog", tiBinlog))
-		os.Exit(1)
-	}
+	//if rand.Float64() < 0.0005 {
+	//	log.Info("[FAILPOINT] drainer got quit when transfer binlog to txn")
+	//	log.Info("[FAILPOINT] last binlog",
+	//		zap.Stringer("binlog", tiBinlog))
+	//	os.Exit(1)
+	//}
 
 	if tiBinlog.DdlJobId > 0 {
 		txn.DDL = &loader.DDL{

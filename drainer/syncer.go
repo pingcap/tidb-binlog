@@ -15,7 +15,6 @@ package drainer
 
 import (
 	"math/rand"
-	"os"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -320,15 +319,15 @@ ForLoop:
 		if rd.Float64() < 0.00005 && notFake && startFailpoint {
 			log.Info("[FAILPOINT] drainer got quit without receiving binlog")
 			// 50% quit without save checkpoint
-			if rd.Float64() < 0.5 {
-				log.Info("[FAILPOINT] drainer got quit without writing checkpoint")
-				if b != nil {
-					log.Info("[FAILPOINT] last binlog",
-						zap.String("node ID", b.nodeID),
-						zap.Stringer("binlog", b.binlog))
-				}
-				os.Exit(1)
-			}
+			//if rd.Float64() < 0.5 {
+			//	log.Info("[FAILPOINT] drainer got quit without writing checkpoint")
+			//	if b != nil {
+			//		log.Info("[FAILPOINT] last binlog",
+			//			zap.String("node ID", b.nodeID),
+			//			zap.Stringer("binlog", b.binlog))
+			//	}
+			//	os.Exit(1)
+			//}
 			break ForLoop
 		}
 
@@ -357,13 +356,13 @@ ForLoop:
 		}
 
 		// ****** 0.003% quit drainer
-		if rd.Float64() < 0.00003 && notFake && startFailpoint {
-			log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
-			log.Info("[FAILPOINT] current binlog",
-				zap.String("node ID", b.nodeID),
-				zap.Stringer("binlog", b.binlog))
-			os.Exit(1)
-		}
+		//if rd.Float64() < 0.00003 && notFake && startFailpoint {
+		//	log.Info("[FAILPOINT] drainer got quit with receiving binlog, skip checkpoint")
+		//	log.Info("[FAILPOINT] current binlog",
+		//		zap.String("node ID", b.nodeID),
+		//		zap.Stringer("binlog", b.binlog))
+		//	os.Exit(1)
+		//}
 
 		if isIgnoreTxnCommitTS(s.cfg.IgnoreTxnCommitTS, commitTS) {
 			log.Warn("skip txn", zap.Stringer("binlog", b.binlog))
