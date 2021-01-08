@@ -137,7 +137,7 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version 
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
-	if version > sp.Versoin {
+	if version > sp.Version {
 		sp.Version = version
 	}
 

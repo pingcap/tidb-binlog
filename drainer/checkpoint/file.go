@@ -93,7 +93,7 @@ func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool, version i
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
-	if version > sp.Versoin {
+	if version > sp.Version {
 		sp.Version = version
 	}
 
