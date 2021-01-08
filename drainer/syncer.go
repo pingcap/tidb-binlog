@@ -256,7 +256,7 @@ func (s *Syncer) savePoint(ts, secondaryTS, version int64) {
 		log.Error("save ts is less than checkpoint ts %d", zap.Int64("save ts", ts), zap.Int64("checkpoint ts", s.cp.TS()))
 	}
 
-	log.Info("write save point", zap.Int64("ts", ts))
+	log.Info("write save point", zap.Int64("ts", ts), zap.Int64("version", version))
 	err := s.cp.Save(ts, secondaryTS, false, version)
 	if err != nil {
 		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Error(err))
