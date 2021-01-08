@@ -137,7 +137,9 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version 
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
-	sp.Version = version
+	if version > sp.Versoin {
+		sp.Version = version
+	}
 
 	if secondaryTS > 0 {
 		sp.TsMap["primary-ts"] = ts

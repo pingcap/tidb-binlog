@@ -93,7 +93,9 @@ func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool, version i
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
-	sp.Version = version
+	if version > sp.Versoin {
+		sp.Version = version
+	}
 
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
