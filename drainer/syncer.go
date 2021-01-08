@@ -284,7 +284,7 @@ func (s *Syncer) run() error {
 
 	s.enableSafeModeInitializationPhase()
 
-	err = s.schema.handlePreviousDDLJobIfNeed(s.cp.SchemaVersion()+1)
+	err = s.schema.handlePreviousDDLJobIfNeed(s.cp.SchemaVersion() + 1)
 	if err != nil {
 		err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 		return err
