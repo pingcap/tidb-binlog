@@ -259,7 +259,7 @@ func (s *Syncer) savePoint(ts, secondaryTS, version int64) {
 	log.Info("write save point", zap.Int64("ts", ts), zap.Int64("version", version))
 	err := s.cp.Save(ts, secondaryTS, false, version)
 	if err != nil {
-		log.Error("save checkpoint failed", zap.Int64("ts", ts), zap.Int64("version", version), zap.Error(err))
+		log.Fatal("save checkpoint failed", zap.Int64("ts", ts), zap.Int64("version", version), zap.Error(err))
 	}
 
 	checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(ts))))
