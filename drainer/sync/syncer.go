@@ -28,6 +28,11 @@ type Item struct {
 	Table         string
 	RelayLogPos   pb.Pos
 
+	// Each item has a schemaVersion. with amend txn feature the prewrite DML's SchemaVersion could change.
+	// which makes restart & reload history DDL with previous SchemaVersion not reliable.
+	// so we should save this version as checkpoint.
+	SchemaVersion int64
+
 	// the applied TS executed in downstream, only for tidb
 	AppliedTS int64
 	// should skip to replicate this item at downstream

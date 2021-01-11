@@ -31,10 +31,13 @@ type CheckPoint interface {
 	Load() error
 
 	// Save saves checkpoint information.
-	Save(commitTS int64, secondaryTS int64, consistent bool) error
+	Save(commitTS int64, secondaryTS int64, consistent bool, version int64) error
 
 	// TS gets checkpoint commit timestamp.
 	TS() int64
+
+	// SchemaVersion gets checkpoint current schemaversion.
+	SchemaVersion() int64
 
 	// IsConsistent return the Consistent status saved.
 	IsConsistent() bool
@@ -61,7 +64,7 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 		return nil, errors.Annotatef(err, "initialize %s type checkpoint with config %+v", cfg.CheckpointType, cfg)
 	}
 
-	log.Info("initialize checkpoint", zap.String("type", cfg.CheckpointType), zap.Int64("checkpoint", cp.TS()), zap.Reflect("cfg", cfg))
+	log.Info("initialize checkpoint", zap.String("type", cfg.CheckpointType), zap.Int64("checkpoint", cp.TS()), zap.Int64("version", cp.SchemaVersion()), zap.Reflect("cfg", cfg))
 
 	return cp, nil
 }

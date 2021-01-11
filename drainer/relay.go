@@ -150,7 +150,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 		return errors.Trace(readerErr)
 	}
 
-	err := cp.Save(lastSuccessTS, 0 /* secondaryTS */, true /*consistent*/)
+	err := cp.Save(lastSuccessTS, 0 /* secondaryTS */, true /*consistent*/, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}

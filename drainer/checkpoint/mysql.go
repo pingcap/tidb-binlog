@@ -14,9 +14,11 @@
 package checkpoint
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +27,7 @@ import (
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // MysqlCheckPoint is a local savepoint struct for mysql
@@ -41,6 +44,7 @@ type MysqlCheckPoint struct {
 	ConsistentSaved bool             `toml:"consistent" json:"consistent"`
 	CommitTS        int64            `toml:"commitTS" json:"commitTS"`
 	TsMap           map[string]int64 `toml:"ts-map" json:"ts-map"`
+	Version         int64            `toml:"schema-version" json:"schema-version"`
 }
 
 var _ CheckPoint = &MysqlCheckPoint{}
@@ -126,7 +130,7 @@ func (sp *MysqlCheckPoint) Load() error {
 }
 
 // Save implements checkpoint.Save interface
-func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
+func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version int64) error {
 	sp.Lock()
 	defer sp.Unlock()
 
@@ -136,6 +140,9 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 
 	sp.CommitTS = ts
 	sp.ConsistentSaved = consistent
+	if version > sp.Version {
+		sp.Version = version
+	}
 
 	if secondaryTS > 0 {
 		sp.TsMap["primary-ts"] = ts
@@ -148,12 +155,13 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool) error {
 	}
 
 	sql := genReplaceSQL(sp, string(b))
-	_, err = sp.db.Exec(sql)
-	if err != nil {
-		return errors.Annotatef(err, "query sql failed: %s", sql)
-	}
-
-	return nil
+	return util.RetryContext(context.TODO(), 5, time.Second, 1, func(context.Context) error {
+		_, err = sp.db.Exec(sql)
+		if err != nil {
+			return errors.Annotatef(err, "query sql failed: %s", sql)
+		}
+		return nil
+	})
 }
 
 // IsConsistent implements CheckPoint interface
@@ -170,6 +178,14 @@ func (sp *MysqlCheckPoint) TS() int64 {
 	defer sp.RUnlock()
 
 	return sp.CommitTS
+}
+
+// SchemaVersion implements CheckPoint.SchemaVersion interface.
+func (sp *MysqlCheckPoint) SchemaVersion() int64 {
+	sp.RLock()
+	defer sp.RUnlock()
+
+	return sp.Version
 }
 
 // Close implements CheckPoint.Close interface

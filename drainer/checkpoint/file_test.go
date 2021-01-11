@@ -33,7 +33,7 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 
 	testTs := int64(1)
 	// save ts
-	err = meta.Save(testTs, 0, false)
+	err = meta.Save(testTs, 0, false, 0)
 	c.Assert(err, IsNil)
 	// check ts
 	ts := meta.TS()
@@ -41,7 +41,7 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 	c.Assert(meta.IsConsistent(), Equals, false)
 
 	// check consistent true case.
-	err = meta.Save(testTs, 0, true)
+	err = meta.Save(testTs, 0, true, 0)
 	c.Assert(err, IsNil)
 	ts = meta.TS()
 	c.Assert(ts, Equals, testTs)
@@ -70,6 +70,6 @@ func (t *testCheckPointSuite) TestFile(c *C) {
 	err = meta.Close()
 	c.Assert(err, IsNil)
 	c.Assert(errors.Cause(meta.Load()), Equals, ErrCheckPointClosed)
-	c.Assert(errors.Cause(meta.Save(0, 0, true)), Equals, ErrCheckPointClosed)
+	c.Assert(errors.Cause(meta.Save(0, 0, true, 0)), Equals, ErrCheckPointClosed)
 	c.Assert(errors.Cause(meta.Close()), Equals, ErrCheckPointClosed)
 }
