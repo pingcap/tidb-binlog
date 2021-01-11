@@ -14,9 +14,11 @@
 package checkpoint
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +27,7 @@ import (
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // MysqlCheckPoint is a local savepoint struct for mysql
@@ -152,12 +155,13 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version 
 	}
 
 	sql := genReplaceSQL(sp, string(b))
-	_, err = sp.db.Exec(sql)
-	if err != nil {
-		return errors.Annotatef(err, "query sql failed: %s", sql)
-	}
-
-	return nil
+	return util.RetryContext(context.TODO(), 5, time.Second, 1, func(context.Context) error {
+		_, err = sp.db.Exec(sql)
+		if err != nil {
+			return errors.Annotatef(err, "query sql failed: %s", sql)
+		}
+		return nil
+	})
 }
 
 // IsConsistent implements CheckPoint interface
