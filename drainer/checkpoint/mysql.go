@@ -143,6 +143,11 @@ func (sp *MysqlCheckPoint) Load() error {
 func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version int64) error {
 	sp.Lock()
 	defer sp.Unlock()
+	log.Info("Save checkpoint",
+		zap.Int64("ts", ts),
+		zap.Int64("secondary ts", secondaryTS),
+		zap.Int64("version", version),
+		zap.Stack("calling stack"))
 
 	if sp.closed {
 		return errors.Trace(ErrCheckPointClosed)
@@ -166,12 +171,13 @@ func (sp *MysqlCheckPoint) Save(ts, secondaryTS int64, consistent bool, version 
 
 	sql := genReplaceSQL(sp, string(b))
 	return util.RetryContext(context.TODO(), 5, time.Second, 1, func(context.Context) error {
-		// ***** 5% fail writing check point
-		if rand.Float64() < 0.05 {
+		// ***** 0.02% fail writing check point
+		if rand.Float64() < 0.0002 {
 			log.Info("[FAILPOINT] fake write mysql check point failed",
 				zap.String("SQL", sql),
-				zap.Int64("commitTS", sp.CommitTS))
-			return errors.Errorf("fake write mysql check point failed: %s, current TS: %d", sql, sp.CommitTS)
+				zap.Int64("commitTS", sp.CommitTS),
+				zap.Int64("commitTS", sp.Version))
+			return errors.Errorf("fake write mysql check point failed: %s, current TS: %d, version: %d", sql, sp.CommitTS, sp.Version)
 		}
 
 		_, err = sp.db.Exec(sql)
