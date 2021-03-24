@@ -201,7 +201,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 
 	var builder strings.Builder
 
-	cols := "(" + buildColumnList(info.columns) + ")"
+	cols := "(" + BuildColumnList(info.columns) + ")"
 	builder.WriteString("REPLACE INTO " + inserts[0].TableName() + cols + " VALUES ")
 
 	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))

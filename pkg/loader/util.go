@@ -173,7 +173,8 @@ func quoteSchema(schema string, table string) string {
 	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
 }
 
-func quoteName(name string) string {
+// QuoteName quotes a database/table/column... name.
+func QuoteName(name string) string {
 	return "`" + escapeName(name) + "`"
 }
 
@@ -208,13 +209,14 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 	return
 }
 
-func buildColumnList(names []string) string {
+// BuildColumnList builds column names as "`col1`,`col2`,...".
+func BuildColumnList(names []string) string {
 	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(quoteName(name))
+		b.WriteString(QuoteName(name))
 
 	}
 

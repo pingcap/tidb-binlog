@@ -400,7 +400,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 		}
 
 		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
-			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
+			_, err = tx.Exec(fmt.Sprintf("use %s;", QuoteName(ddl.Database)))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
 					log.Error("Rollback failed", zap.Error(rbErr))
