@@ -15,12 +15,12 @@ package drainer
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/session"
 	"math"
 	"net"
 	"net/url"
 	"os"
 	"path"
-	"sort"
 	"sync"
 
 	"github.com/Shopify/sarama"
@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -150,23 +151,16 @@ func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
 	return job, nil
 }
 
-// loadHistoryDDLJobs loads all history DDL jobs from TiDB
-func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
+func loadHistoryMeta(tiStore kv.Storage) (*meta.Meta, *domain.Domain, error) {
 	snapMeta, err := getSnapshotMeta(tiStore)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	dom, err := getDomain(tiStore)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
-
-	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.SchemaVersion < jobs[j].BinlogInfo.SchemaVersion
-	})
-
-	return jobs, nil
+	return snapMeta, dom, nil
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
@@ -176,6 +170,14 @@ func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	}
 	snapshot := tiStore.GetSnapshot(version)
 	return meta.NewSnapshotMeta(snapshot), nil
+}
+
+func getDomain(tiStore kv.Storage) (*domain.Domain, error) {
+	dom, err := session.GetDomain(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return dom, nil
 }
 
 func genDrainerID(listenAddr string) (string, error) {

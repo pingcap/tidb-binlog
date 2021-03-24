@@ -99,7 +99,7 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cp, err := checkpoint.NewFile(0, cpFile)
 	c.Assert(err, check.IsNil)
 
-	syncer, err := NewSyncer(cp, cfg, nil)
+	syncer, err := NewSyncer(cp, cfg, nil, nil)
 	c.Assert(err, check.IsNil)
 
 	// run syncer

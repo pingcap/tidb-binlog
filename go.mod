@@ -6,6 +6,7 @@ require (
 	github.com/Shopify/sarama v1.24.1
 	github.com/dgraph-io/ristretto v0.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.0
+	github.com/fatih/color v1.10.0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/mock v1.4.3
@@ -13,7 +14,6 @@ require (
 	github.com/google/gofuzz v1.0.0
 	github.com/gorilla/mux v1.7.4
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/onsi/ginkgo v1.11.0 // indirect
 	github.com/onsi/gomega v1.8.1 // indirect
@@ -37,11 +37,15 @@ require (
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
 	go.uber.org/zap v1.16.0
-	golang.org/x/net v0.0.0-20200904194848-62affa334b73
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20200819171115-d785dc25833f
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
+	golang.org/x/tools v0.0.0-20201120155355-20be4ac4bd6e // indirect
 	google.golang.org/grpc v1.27.1
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 )
 
 go 1.13
+
+replace github.com/pingcap/tidb => github.com/you06/tidb v1.1.0-beta.0.20201229074854-c45f38760eff

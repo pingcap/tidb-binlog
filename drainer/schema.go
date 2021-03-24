@@ -15,12 +15,18 @@ package drainer
 
 import (
 	"encoding/json"
+	"math"
+	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 )
 
@@ -46,6 +52,7 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
+	store               kv.Storage
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -267,7 +274,127 @@ func (s *Schema) addJob(job *model.Job) {
 	}
 }
 
+var mDDLJobHistoryKey = []byte("DDLJobHistory")
+
+func (s *Schema) restoreFromSnapshot(version int64) error {
+	var (
+		jobs            []*model.Job
+		droppingColumns = make(map[int64]int64)
+		jobsMeta        *meta.Meta
+		dom             *domain.Domain
+		latestJob       *model.Job
+		err             error
+	)
+	log.Info("restore from snapshot", zap.Int64("version", version))
+
+	jobsMeta, dom, err = loadHistoryMeta(s.store)
+	if err != nil {
+		log.Error("load history meta failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	txn := jobsMeta.GetTxn()
+
+	i := 0
+	err = txn.IterateHash(mDDLJobHistoryKey, func(field []byte, value []byte) error {
+		i++
+		job := &model.Job{}
+		err := job.Decode(value)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if i%1000 == 0 {
+			log.Info("get batched job",
+				zap.Int("i", i),
+				zap.Int64("schema version", job.BinlogInfo.SchemaVersion))
+		}
+		for _, job := range jobs {
+			if job.BinlogInfo.SchemaVersion > version {
+				s.jobs = append(s.jobs, job)
+				if latestJob == nil {
+					latestJob = job
+				} else {
+					if job.SnapshotVer < latestJob.SnapshotVer {
+						latestJob = job
+					}
+				}
+			} else {
+				s.tableSchemaVersion[job.TableID] = job.BinlogInfo.SchemaVersion
+				switch job.Type {
+				case model.ActionTruncateTable:
+					s.truncateTableID[job.TableID] = struct{}{}
+				case model.ActionDropColumn:
+					droppingColumn := droppingColumns[job.TableID]
+					if job.SchemaState == model.StateDeleteOnly {
+						log.Info("Got DeleteOnly Job", zap.Stringer("job", job))
+						droppingColumn++
+					} else {
+						log.Info("Finished dropping column", zap.Stringer("job", job))
+						droppingColumn--
+					}
+					droppingColumns[job.TableID] = droppingColumn
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("load all history")
+
+	for tableID, droppingColumn := range droppingColumns {
+		if droppingColumn > 0 {
+			s.tblsDroppingCol[tableID] = true
+		}
+	}
+
+	// jobs from GetLastHistoryDDLJobsIterator are sorted by job id, need sorted by schema version
+	sort.Slice(s.jobs, func(i, j int) bool {
+		return s.jobs[i].BinlogInfo.SchemaVersion < s.jobs[j].BinlogInfo.SchemaVersion
+	})
+
+	snapshotTS := uint64(math.MaxUint64)
+	if latestJob != nil {
+		snapshotTS = uint64(latestJob.SnapshotVer)
+	}
+	snapshotSchema, err := dom.GetSnapshotInfoSchema(snapshotTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.loadFromSnapshotSchema(snapshotSchema)
+
+	s.store.Close()
+	log.Info("clear store")
+	s.store = nil
+	return nil
+}
+
+func (s *Schema) loadFromSnapshotSchema(snapshotSchema infoschema.InfoSchema) {
+	schemas := snapshotSchema.AllSchemas()
+	version := snapshotSchema.SchemaMetaVersion()
+	s.schemaMetaVersion = version
+	for _, schema := range schemas {
+		s.schemas[schema.ID] = schema
+		s.schemaNameToID[schema.Name.O] = schema.ID
+		tables := schema.Tables
+		for _, table := range tables {
+			s.tables[table.ID] = []schemaVersionTableInfo{{
+				SchemaVersion: version,
+				TableInfo:     table,
+			}}
+			s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+		}
+	}
+}
+
 func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
+	if s.store != nil {
+		if err := s.restoreFromSnapshot(version); err != nil {
+			return err
+		}
+	}
+
 	var i int
 	for i = 0; i < len(s.jobs); i++ {
 		job := s.jobs[i]
