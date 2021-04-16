@@ -160,6 +160,7 @@ type Config struct {
 	Security        security.Config `toml:"security" json:"security"`
 	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
 	Compressor      string          `toml:"compressor" json:"compressor"`
+	MaxMessageSize  int32           `toml:"max-message-size" json:"max-message-size" default:"2147483647"`
 	EtcdTimeout     time.Duration
 	MetricsAddr     string
 	MetricsInterval int
@@ -320,7 +321,9 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Trace(err)
 	}
 
-	initializeSaramaGlobalConfig()
+	initializeSaramaGlobalConfig(cfg.MaxMessageSize)
+	maxMsgSize = int(cfg.MaxMessageSize)
+
 	return cfg.validate()
 }
 
@@ -439,8 +442,6 @@ func (cfg *Config) adjustConfig() error {
 	}
 
 	if cfg.SyncerCfg.DestDBType == "kafka" {
-		maxMsgSize = maxKafkaMsgSize
-
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
 			zkClient, err := newZKFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)
