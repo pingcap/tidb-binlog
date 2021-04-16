@@ -335,7 +335,7 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, defaultKafkaAddrs)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
-	c.Assert(maxMsgSize, Equals, maxKafkaMsgSize)
+	c.Assert(maxMsgSize, Equals, cfg.MaxMessageSize)
 
 	// With Zookeeper address
 	cfg = NewConfig()
