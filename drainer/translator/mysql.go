@@ -34,7 +34,7 @@ const implicitColID = -1
 func genMysqlInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
-	_, columnValues, err := insertRowToDatums(table, row)
+	columnValues, err := insertRowToDatums(table, row)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -225,9 +225,28 @@ func genColumnNameList(columns []*model.ColumnInfo) (names []string) {
 	return
 }
 
-// IsPKHandleColumn check if the column if the pk handle of tidb
-func IsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
-	return (mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle) || column.ID == implicitColID
+type columnType int
+
+const (
+	normalCol columnType = iota
+	intHandlePk
+	clusteredPk
+)
+
+func classifyColumnType(table *model.TableInfo, column *model.ColumnInfo) columnType {
+	if column.ID == implicitColID {
+		return intHandlePk
+	}
+	if !mysql.HasPriKeyFlag(column.Flag) {
+		return normalCol
+	}
+	if table.IsCommonHandle {
+		return clusteredPk
+	}
+	if table.PKIsHandle {
+		return intHandlePk
+	}
+	return normalCol
 }
 
 func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {

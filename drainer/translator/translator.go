@@ -44,19 +44,40 @@ func getParser() (p *parser.Parser) {
 	return
 }
 
-func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datums map[int64]types.Datum, err error) {
+func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]types.Datum, err error) {
 	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 
-	// decode the pk value
-	var remain []byte
-	remain, pk, err = codec.DecodeOne(row)
-	if err != nil {
-		return types.Datum{}, nil, errors.Trace(err)
+	var (
+		commonPKInfo *model.IndexInfo
+		pkLen        = 1
+	)
+	if table.IsCommonHandle {
+		for _, idx := range table.Indices {
+			if idx.Primary {
+				commonPKInfo = idx
+				break
+			}
+		}
+		if commonPKInfo != nil {
+			pkLen = len(commonPKInfo.Columns)
+		}
+	}
+	var (
+		pk     []types.Datum
+		remain = row
+	)
+	for i := 0; i < pkLen; i++ {
+		var aPK types.Datum
+		remain, aPK, err = codec.DecodeOne(remain)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		pk = append(pk, aPK)
 	}
 
 	datums, err = tablecodec.DecodeRowToDatumMap(remain, colsTypeMap, time.Local)
 	if err != nil {
-		return types.Datum{}, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	// if only one column and IsPKHandleColumn then datums contains no any columns.
@@ -64,8 +85,9 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 		datums = make(map[int64]types.Datum)
 	}
 
-	for _, col := range table.Columns {
-		if IsPKHandleColumn(table, col) {
+	for tblColOrdinal, col := range table.Columns {
+		switch classifyColumnType(table, col) {
+		case intHandlePk:
 			// If pk is handle, the datums TiDB write will always be Int64 type.
 			// https://github.com/pingcap/tidb/blob/cd10bca6660937beb5d6de11d49ec50e149fe083/table/tables/tables.go#L721
 			//
@@ -74,7 +96,18 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datu
 			//
 			// Will get -1 here, note: uint64(int64(-1)) = 18446744073709551615
 			// so we change it to uint64 if the column type is unsigned
-			datums[col.ID] = fixType(pk, col)
+			datums[col.ID] = fixType(pk[0], col)
+		case clusteredPk:
+			for idxColOrdinal, idxCol := range commonPKInfo.Columns {
+				if idxCol.Length != types.UnspecifiedLength {
+					// primary key's prefixed column already in row data.
+					continue
+				}
+				if tblColOrdinal == idxCol.Offset {
+					datums[col.ID] = pk[idxColOrdinal]
+					break
+				}
+			}
 		}
 	}
 

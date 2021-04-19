@@ -146,7 +146,7 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 }
 
 func insertRowToRow(ptableInfo, tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
-	_, columnValues, err := insertRowToDatums(tableInfo, raw)
+	columnValues, err := insertRowToDatums(tableInfo, raw)
 	columns := tableInfo.Columns
 
 	row = new(obinlog.Row)
