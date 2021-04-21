@@ -69,8 +69,6 @@ cluster-ssl-ca = "$OUT_DIR/cert/ca.pem"
 cluster-ssl-cert = "$OUT_DIR/cert/tidb.pem"
 cluster-ssl-key = "$OUT_DIR/cert/tidb.key"
 
-[experimental]
-allow-auto-random = true
 EOF
 
     port=${1-4000}
@@ -202,7 +200,6 @@ EOF
 
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
 [experimental]
-allow-auto-random = true
 EOF
 
     echo "Starting Downstream TiDB..."

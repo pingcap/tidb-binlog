@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -490,7 +490,7 @@ func createTiStore(urls string) (kv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if err := store.Register("tikv", tikv.Driver{}); err != nil {
+	if err := store.Register("tikv", driver.TiKVDriver{}); err != nil {
 		return nil, errors.Trace(err)
 	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
