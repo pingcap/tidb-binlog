@@ -60,6 +60,8 @@ stop_services() {
 
 start_upstream_tidb() {
     cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+new_collations_enabled_on_first_bootstrap = true
+
 [performance]
 txn-total-size-limit = 104857599
 
@@ -199,7 +201,7 @@ EOF
 
 
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
-[experimental]
+new_collations_enabled_on_first_bootstrap = true
 EOF
 
     echo "Starting Downstream TiDB..."

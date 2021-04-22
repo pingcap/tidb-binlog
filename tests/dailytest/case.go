@@ -37,12 +37,12 @@ var caseAutoRandomClean = []string{
 }
 
 var caseClusteredIndexInsert = []string{
-	"create table cluster_t1(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c))",
-	"create table cluster_t2(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b))",
-	"create table cluster_t3(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, a, b))",
-	"create table cluster_t4(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1)))",
-	"create table cluster_t5(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b(1)))",
-	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b))",
+	"create table cluster_t1(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c)) collate utf8mb4_general_ci",
+	"create table cluster_t2(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b)) collate utf8mb4_general_ci",
+	"create table cluster_t3(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, a, b)) collate utf8mb4_general_ci",
+	"create table cluster_t4(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1))) collate utf8mb4_general_ci",
+	"create table cluster_t5(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b(1))) collate utf8mb4_general_ci",
+	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b)) collate utf8mb4_general_ci",
 
 	"insert into cluster_t1(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
 	"insert into cluster_t2(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
