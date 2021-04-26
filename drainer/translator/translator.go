@@ -58,9 +58,11 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 				break
 			}
 		}
-		if commonPKInfo != nil {
-			pkLen = len(commonPKInfo.Columns)
+		if commonPKInfo == nil {
+			err = errors.New("Unsupported clustered index without primary key")
+			return
 		}
+		pkLen = len(commonPKInfo.Columns)
 	}
 	var (
 		pk     []types.Datum
@@ -85,28 +87,27 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 		datums = make(map[int64]types.Datum)
 	}
 
-	for tblColOrdinal, col := range table.Columns {
-		switch classifyColumnType(table, col) {
-		case intHandlePk:
-			// If pk is handle, the datums TiDB write will always be Int64 type.
-			// https://github.com/pingcap/tidb/blob/cd10bca6660937beb5d6de11d49ec50e149fe083/table/tables/tables.go#L721
-			//
-			// create table pk(id BIGINT UNSIGNED);
-			// insert into pk(id) values(18446744073709551615)
-			//
-			// Will get -1 here, note: uint64(int64(-1)) = 18446744073709551615
-			// so we change it to uint64 if the column type is unsigned
-			datums[col.ID] = fixType(pk[0], col)
-		case clusteredPk:
-			for idxColOrdinal, idxCol := range commonPKInfo.Columns {
-				if idxCol.Length != types.UnspecifiedLength {
-					// primary key's prefixed column already in row data.
-					continue
-				}
-				if tblColOrdinal == idxCol.Offset {
-					datums[col.ID] = pk[idxColOrdinal]
-					break
-				}
+	if table.IsCommonHandle {
+		for idxColOrdinal, idxCol := range commonPKInfo.Columns {
+			if idxCol.Length != types.UnspecifiedLength {
+				// primary key's prefixed column already in row data.
+				continue
+			}
+			tblIdxCol := table.Columns[idxCol.Offset]
+			datums[tblIdxCol.ID] = pk[idxColOrdinal]
+		}
+	} else {
+		for _, col := range table.Columns {
+			if (table.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == implicitColID {
+				// If pk is handle, the datums TiDB write will always be Int64 type.
+				// https://github.com/pingcap/tidb/blob/cd10bca6660937beb5d6de11d49ec50e149fe083/table/tables/tables.go#L721
+				//
+				// create table pk(id BIGINT UNSIGNED);
+				// insert into pk(id) values(18446744073709551615)
+				//
+				// Will get -1 here, note: uint64(int64(-1)) = 18446744073709551615
+				// so we change it to uint64 if the column type is unsigned
+				datums[col.ID] = fixType(pk[0], col)
 			}
 		}
 	}

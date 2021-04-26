@@ -225,30 +225,6 @@ func genColumnNameList(columns []*model.ColumnInfo) (names []string) {
 	return
 }
 
-type columnType int
-
-const (
-	normalCol columnType = iota
-	intHandlePk
-	clusteredPk
-)
-
-func classifyColumnType(table *model.TableInfo, column *model.ColumnInfo) columnType {
-	if column.ID == implicitColID {
-		return intHandlePk
-	}
-	if !mysql.HasPriKeyFlag(column.Flag) {
-		return normalCol
-	}
-	if table.PKIsHandle {
-		return intHandlePk
-	}
-	if table.IsCommonHandle {
-		return clusteredPk
-	}
-	return normalCol
-}
-
 func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {
 	var newColumn []*model.ColumnInfo
 	var newColumnsValues []interface{}
