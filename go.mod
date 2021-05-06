@@ -24,12 +24,12 @@ require (
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
-	github.com/pingcap/kvproto v0.0.0-20210308063835-39b884695fb8
+	github.com/pingcap/kvproto v0.0.0-20210429093846-65f54a202d7e
 	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
-	github.com/pingcap/parser v0.0.0-20210330190622-f959a136fc19
-	github.com/pingcap/tidb v1.1.0-beta.0.20210419082952-421571f49de5
+	github.com/pingcap/parser v0.0.0-20210427084954-8e8ed7927bde
+	github.com/pingcap/tidb v1.1.0-beta.0.20210506105953-6ef4815d283c
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
-	github.com/pingcap/tipb v0.0.0-20210326161441-1164ca065d1b
+	github.com/pingcap/tipb v0.0.0-20210422074242-57dd881b81b1
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563
