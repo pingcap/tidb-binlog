@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/kv"
 	kvstore "github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	binlog "github.com/pingcap/tipb/go-binlog"
@@ -142,7 +143,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	err = kvstore.Register("tikv", tikv.Driver{})
+	err = kvstore.Register("tikv", driver.TiKVDriver{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

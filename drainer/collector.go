@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
@@ -92,7 +92,7 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 		return nil, errors.Trace(err)
 	}
 
-	if err := store.Register("tikv", tikv.Driver{}); err != nil {
+	if err := store.Register("tikv", driver.TiKVDriver{}); err != nil {
 		if !strings.Contains(err.Error(), "already registered") {
 			return nil, errors.Trace(err)
 		}
