@@ -74,6 +74,13 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if table.IsCommonHandle {
+			// clustered index could be complex type that need Unflatten from raw datum.
+			aPK, err = tablecodec.Unflatten(aPK, &table.Columns[commonPKInfo.Columns[i].Offset].FieldType, time.Local)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
 		pk = append(pk, aPK)
 	}
 
