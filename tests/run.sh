@@ -60,6 +60,8 @@ stop_services() {
 
 start_upstream_tidb() {
     cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+new_collations_enabled_on_first_bootstrap = true
+
 [performance]
 txn-total-size-limit = 104857599
 
@@ -69,8 +71,6 @@ cluster-ssl-ca = "$OUT_DIR/cert/ca.pem"
 cluster-ssl-cert = "$OUT_DIR/cert/tidb.pem"
 cluster-ssl-key = "$OUT_DIR/cert/tidb.key"
 
-[experimental]
-allow-auto-random = true
 EOF
 
     port=${1-4000}
@@ -201,8 +201,7 @@ EOF
 
 
     cat - > "$OUT_DIR/down-tidb-config.toml" <<EOF
-[experimental]
-allow-auto-random = true
+new_collations_enabled_on_first_bootstrap = true
 EOF
 
     echo "Starting Downstream TiDB..."

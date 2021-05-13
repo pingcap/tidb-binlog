@@ -36,6 +36,57 @@ var caseAutoRandomClean = []string{
 	"drop table t",
 }
 
+var caseClusteredIndexInsert = []string{
+	"create table cluster_t1(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c)) collate utf8mb4_general_ci",
+	"create table cluster_t2(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b)) collate utf8mb4_general_ci",
+	"create table cluster_t3(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, a, b)) collate utf8mb4_general_ci",
+	"create table cluster_t4(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1))) collate utf8mb4_general_ci",
+	"create table cluster_t5(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b(1))) collate utf8mb4_general_ci",
+	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b)) collate utf8mb4_general_ci",
+	"create table cluster_t7(c1 timestamp, c2 datetime, c3 int, primary key(c1, c2, c3) clustered)",
+	"create table cluster_t8(c1 float, c2 enum('a', 'b'), c3 bit, c4 SET('a', 'b'), c5 time, primary key(c1, c2, c3, c4, c5) clustered)",
+
+	"insert into cluster_t1(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t2(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t3(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t4(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t5(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t6(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
+	"insert into cluster_t7(c1, c2, c3) values ('1996-11-13 10:38:39', '9472-11-22 10:36:06', 1709134011)",
+	"insert into cluster_t8(c1, c2, c3, c4, c5) values (1.1, 'a', 1, 'b', '01:01:01')",
+}
+
+var caseClusteredIndexUpdateNoPK = []string{
+	"update cluster_t1 set d = 'dddd' where a = 'aaa'",
+	"update cluster_t2 set d = 'dddd' where a = 'aaa'",
+	"update cluster_t3 set d = 'dddd' where a = 'aaa'",
+	"update cluster_t4 set d = 'dddd' where a = 'aaa'",
+	"update cluster_t5 set d = 'dddd' where a = 'aaa'",
+	"update cluster_t6 set d = 'dddd' where a = 'aaa'",
+}
+
+var caseClusteredIndexUpdatePK = []string{
+	"update cluster_t1 set c = 'pccc', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+	"update cluster_t2 set c = 'pccc', b = 'pbbb', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+	"update cluster_t3 set c = 'pccc', b = 'pbbb', a = 'paaa', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+	"update cluster_t4 set c = 'pccc', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+	"update cluster_t5 set c = 'pccc', b = 'pbbb', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+	"update cluster_t6 set c = 'pccc', b = 'pbbb', a = 'paaa', d = 'pdddd' where a = 'aaa' and d = 'dddd'",
+}
+
+var caseClusteredIndexDelete = []string{
+	"delete from cluster_t1 where a = '111'",
+	"delete from cluster_t2 where a = '111'",
+	"delete from cluster_t3 where a = '111'",
+	"delete from cluster_t4 where a = '111'",
+	"delete from cluster_t5 where a = '111'",
+	"delete from cluster_t6 where a = '111'",
+}
+
+var caseClusteredIndexClean = []string{
+	"drop table cluster_t1, cluster_t2, cluster_t3, cluster_t4, cluster_t5, cluster_t6",
+}
+
 // test different data type of mysql
 // mysql will change boolean to tinybit(1)
 var caseMultiDataType = []string{`
@@ -215,6 +266,12 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.execSQLs(caseAutoRandom)
 	tr.execSQLs(caseAutoRandomClean)
+
+	tr.execSQLs(caseClusteredIndexInsert)
+	tr.execSQLs(caseClusteredIndexUpdateNoPK)
+	tr.execSQLs(caseClusteredIndexUpdatePK)
+	tr.execSQLs(caseClusteredIndexDelete)
+	tr.execSQLs(caseClusteredIndexClean)
 
 	tr.execSQLs(caseMultiDataType)
 	tr.execSQLs(caseMultiDataTypeClean)
@@ -627,7 +684,7 @@ func runPKcases(tr *testRunner) {
 	}
 
 	for _, c := range cases {
-		for _, ispk := range []string{"", "PRIMARY KEY"} {
+		for _, ispk := range []string{"", "PRIMARY KEY NONCLUSTERED", "PRIMARY KEY CLUSTERED"} {
 
 			tr.run(func(src *sql.DB) {
 				sql := fmt.Sprintf("CREATE TABLE pk(id %s %s)", c.Tp, ispk)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/config"
+	kvcfg "github.com/pingcap/tidb/store/tikv/config"
 )
 
 // Config is security config
@@ -105,8 +106,8 @@ func (c *Config) ToTLSConfig() (tlsConfig *tls.Config, err error) {
 }
 
 // ToTiDBSecurityConfig generates tidb security config
-func (c *Config) ToTiDBSecurityConfig() config.Security {
-	security := config.Security{
+func (c *Config) ToTiDBSecurityConfig() kvcfg.Security {
+	s := config.Security{
 		ClusterSSLCA:   c.SSLCA,
 		ClusterSSLCert: c.SSLCert,
 		ClusterSSLKey:  c.SSLKey,
@@ -114,6 +115,8 @@ func (c *Config) ToTiDBSecurityConfig() config.Security {
 
 	// The TiKV client(kvstore.New) we use will use this global var as the TLS config.
 	// TODO avoid such magic implicit change when call this func.
-	config.GetGlobalConfig().Security = security
-	return security
+	config.GetGlobalConfig().Security = s
+	kvSec := kvcfg.NewSecurity(s.ClusterSSLCA, s.ClusterSSLCert, s.ClusterSSLKey, s.ClusterVerifyCN)
+	kvcfg.GetGlobalConfig().Security = kvSec
+	return kvSec
 }
