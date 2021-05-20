@@ -87,11 +87,11 @@ func (s *testSecuritySuite) TestToTiDBSecurityConfig(c *C) {
 	}()
 
 	newSecurityConfig := dummyConfig.ToTiDBSecurityConfig()
-	c.Assert(oldSecurityConfig, Not(DeepEquals), newSecurityConfig)
+	c.Assert(oldSecurityConfig, Not(DeepEquals), config.GetGlobalConfig().Security)
 	c.Assert(newSecurityConfig.ClusterSSLCA, Equals, dummyConfig.SSLCA)
 	c.Assert(newSecurityConfig.ClusterSSLKey, Equals, dummyConfig.SSLKey)
 	c.Assert(newSecurityConfig.ClusterSSLCert, Equals, dummyConfig.SSLCert)
-	c.Assert(globalConfig.Security, DeepEquals, newSecurityConfig)
+	c.Assert(globalConfig.Security, DeepEquals, config.GetGlobalConfig().Security)
 }
 
 func (s *testSecuritySuite) TestToTLSConfig(c *C) {
