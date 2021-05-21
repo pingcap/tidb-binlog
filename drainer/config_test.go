@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"path"
 	"testing"
 	"time"
@@ -335,12 +336,14 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, defaultKafkaAddrs)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
-	c.Assert(maxMsgSize, Equals, cfg.MaxMessageSize)
+	c.Assert(maxMsgSize, Equals, maxKafkaMsgSize)
 
-	// With Zookeeper address
+	// With Zookeeper address and maxKafkaMsgSize
+	kafkaMsgSize := math.MaxInt32
 	cfg = NewConfig()
 	cfg.SyncerCfg.To = new(dsync.DBConfig)
 	cfg.SyncerCfg.To.ZKAddrs = "host1:2181"
+	cfg.SyncerCfg.To.KafkaMaxMessageSize = kafkaMsgSize
 	err = cfg.Parse(args)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.MetricsAddr, Equals, "192.168.15.10:9091")
@@ -354,4 +357,6 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, `(192\.0\.2\.1:9092,192\.0\.2\.2:9092|192\.0\.2\.2:9092,192\.0\.2\.1:9092)`)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
+	c.Assert(maxMsgSize, Equals, kafkaMsgSize)
+	maxMsgSize = maxKafkaMsgSize
 }
