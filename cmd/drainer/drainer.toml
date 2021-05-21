@@ -150,6 +150,10 @@ port = 3306
 # directory to save binlog file, default same as data-dir(save checkpoint file) if this is not configured.
 # dir = "data.drainer"
 #
+# an integer value to control expiry date of the saved binlog data, indicates for how long (in days) the binlog data would be stored.
+# the default value is 0. If this value is set to less or equal to 0, drainer will never gc saved binlog files.
+# Otherwise, drainer will check each saved binlog per hour and erase the binlogs whose last mod time is retention-time * days ago.
+# However, drainer will never gc the newest binlog file.
 # retention-time = 7
 
 
