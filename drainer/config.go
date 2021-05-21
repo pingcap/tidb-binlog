@@ -160,7 +160,6 @@ type Config struct {
 	Security        security.Config `toml:"security" json:"security"`
 	SyncedCheckTime int             `toml:"synced-check-time" json:"synced-check-time"`
 	Compressor      string          `toml:"compressor" json:"compressor"`
-	MaxMessageSize  int32           `toml:"max-message-size" json:"max-message-size" default:"2147483647"`
 	EtcdTimeout     time.Duration
 	MetricsAddr     string
 	MetricsInterval int
@@ -322,7 +321,6 @@ func (cfg *Config) Parse(args []string) error {
 	}
 
 	initializeSaramaGlobalConfig()
-
 	return cfg.validate()
 }
 
