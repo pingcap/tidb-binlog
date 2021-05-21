@@ -137,6 +137,8 @@ func initializeSaramaGlobalConfig() {
 	// add 1 to avoid confused log: Producer.MaxMessageBytes must be smaller than MaxRequestSize; it will be ignored
 	if maxMsgSize < math.MaxInt32 {
 		sarama.MaxRequestSize = int32(maxMsgSize) + 1
+	} else {
+		sarama.MaxRequestSize = int32(maxMsgSize)
 	}
 }
 
