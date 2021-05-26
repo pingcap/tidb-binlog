@@ -37,12 +37,12 @@ var caseAutoRandomClean = []string{
 }
 
 var caseClusteredIndexInsert = []string{
-	"create table cluster_t1(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c)) collate utf8mb4_general_ci",
-	"create table cluster_t2(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b)) collate utf8mb4_general_ci",
-	"create table cluster_t3(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, a, b)) collate utf8mb4_general_ci",
-	"create table cluster_t4(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1))) collate utf8mb4_general_ci",
-	"create table cluster_t5(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b(1))) collate utf8mb4_general_ci",
-	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b)) collate utf8mb4_general_ci",
+	"create table cluster_t1(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c) clustered) collate utf8mb4_general_ci",
+	"create table cluster_t2(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b) clustered) collate utf8mb4_general_ci",
+	"create table cluster_t3(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, a, b) clustered) collate utf8mb4_general_ci",
+	"create table cluster_t4(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1)) clustered) collate utf8mb4_general_ci",
+	"create table cluster_t5(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c, b(1)) clustered) collate utf8mb4_general_ci",
+	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b) clustered) collate utf8mb4_general_ci",
 	"create table cluster_t7(c1 timestamp, c2 datetime, c3 int, primary key(c1, c2, c3) clustered)",
 	"create table cluster_t8(c1 float, c2 enum('a', 'b'), c3 bit, c4 SET('a', 'b'), c5 time, primary key(c1, c2, c3, c4, c5) clustered)",
 	"create table cluster_t9(c1 char(64) COLLATE utf8mb4_unicode_ci NOT NULL, primary key(c1) clustered)",
