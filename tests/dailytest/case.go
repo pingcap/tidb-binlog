@@ -45,6 +45,7 @@ var caseClusteredIndexInsert = []string{
 	"create table cluster_t6(a varchar(100), b varchar(100), d varchar(100), c varchar(100), primary key(c(1), a(1), b)) collate utf8mb4_general_ci",
 	"create table cluster_t7(c1 timestamp, c2 datetime, c3 int, primary key(c1, c2, c3) clustered)",
 	"create table cluster_t8(c1 float, c2 enum('a', 'b'), c3 bit, c4 SET('a', 'b'), c5 time, primary key(c1, c2, c3, c4, c5) clustered)",
+	"create table cluster_t9(c1 char(64) COLLATE utf8mb4_unicode_ci NOT NULL, primary key(c1) clustered)",
 
 	"insert into cluster_t1(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
 	"insert into cluster_t2(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
@@ -54,6 +55,7 @@ var caseClusteredIndexInsert = []string{
 	"insert into cluster_t6(a, b, d, c) values ('aaa', 'bbb', 'ddd', 'ccc'), ('111', '222', '444', '333')",
 	"insert into cluster_t7(c1, c2, c3) values ('1996-11-13 10:38:39', '9472-11-22 10:36:06', 1709134011)",
 	"insert into cluster_t8(c1, c2, c3, c4, c5) values (1.1, 'a', 1, 'b', '01:01:01')",
+	"insert into cluster_t9(c1) values ('1020')",
 }
 
 var caseClusteredIndexUpdateNoPK = []string{
