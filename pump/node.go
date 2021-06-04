@@ -16,7 +16,6 @@ package pump
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -275,7 +274,7 @@ func readLocalNodeID(dataDir string) (string, error) {
 	} else if fi.IsDir() {
 		return "", errors.Errorf("Local nodeID path is a directory: %s", dataDir)
 	}
-	data, err := ioutil.ReadFile(nodeIDPath)
+	data, err := os.ReadFile(nodeIDPath)
 	if err != nil {
 		return "", errors.Annotate(err, "local nodeID file is collapsed")
 	}
@@ -309,7 +308,7 @@ func generateLocalNodeID(dataDir string, listenAddr string) (string, error) {
 	nodeID := FormatNodeID(id)
 
 	nodeIDPath := filepath.Join(dataDir, nodeIDFile)
-	if err := ioutil.WriteFile(nodeIDPath, []byte(nodeID), file.PrivateFileMode); err != nil {
+	if err := os.WriteFile(nodeIDPath, []byte(nodeID), file.PrivateFileMode); err != nil {
 		return "", errors.Trace(err)
 	}
 	return id, nil

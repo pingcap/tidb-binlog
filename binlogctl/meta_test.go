@@ -15,7 +15,7 @@ package binlogctl
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"path"
 	"strings"
 
@@ -41,7 +41,7 @@ func (s *metaSuite) TestSaveMeta(c *C) {
 	err := saveMeta(filename, 123, "Local")
 	c.Assert(err, IsNil)
 
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	c.Assert(err, IsNil)
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	c.Assert(lines, HasLen, 3)
@@ -83,7 +83,7 @@ func (s *metaSuite) TestGenerateMetaInfo(c *C) {
 	err := GenerateMetaInfo(cfg)
 	c.Assert(err, IsNil)
 
-	b, err := ioutil.ReadFile(path.Join(dir, "savepoint"))
+	b, err := os.ReadFile(path.Join(dir, "savepoint"))
 	c.Assert(err, IsNil)
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	c.Assert(lines, HasLen, 1)

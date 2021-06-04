@@ -16,7 +16,10 @@ package util
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -301,4 +304,24 @@ func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
 		log.Info("abort goroutine (with GoAndAbortGoroutine help)", fName)
 	case <-exited:
 	}
+}
+
+func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
+	dir, name := path.Dir(filename), path.Base(filename)
+	f, err := os.CreateTemp(dir, name)
+	if err != nil {
+		return err
+	}
+	n, err := f.Write(data)
+	f.Close()
+	if err == nil && n < len(data) {
+		err = io.ErrShortWrite
+	} else {
+		err = os.Chmod(f.Name(), perm)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	return os.Rename(f.Name(), filename)
 }

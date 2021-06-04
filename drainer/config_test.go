@@ -16,7 +16,7 @@ package drainer
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"testing"
 	"time"
@@ -143,7 +143,7 @@ func (t *testDrainerSuite) TestEnableDisable(c *C) {
 		for _, enableFile := range []*bool{nil, &truev, &falsev} {
 			for _, disableFlag := range []*bool{nil, &truev, &falsev} {
 				for _, disableFile := range []*bool{nil, &truev, &falsev} {
-					f, err := ioutil.TempFile("", "test-enable")
+					f, err := os.CreateTemp("", "test-enable")
 					c.Assert(err, check.IsNil)
 
 					fmt.Fprintf(f, "[syncer]\n")
@@ -270,7 +270,7 @@ func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
 	c.Assert(err, IsNil)
 
 	configFilename := path.Join(c.MkDir(), "drainer_config_invalid.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{

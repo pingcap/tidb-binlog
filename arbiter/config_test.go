@@ -16,7 +16,7 @@ package arbiter
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"runtime"
 	"strings"
@@ -127,7 +127,7 @@ func (t *TestConfigSuite) TestParseConfigFileWithInvalidArgs(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	configFilename := path.Join(c.MkDir(), "arbiter_config_invalid.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, check.IsNil)
 
 	args := []string{

@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
@@ -199,7 +198,7 @@ func (lfs *LogFileSuit) TestCorruption(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	rd := bufio.NewReader(io.NewSectionReader(lf.fd, 0, int64(size)))
-	data, err := ioutil.ReadAll(rd)
+	data, err := io.ReadAll(rd)
 	c.Assert(err, check.IsNil)
 	c.Log(data)
 
