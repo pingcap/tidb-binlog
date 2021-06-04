@@ -313,16 +313,23 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
+
 	n, err := f.Write(data)
 	f.Close()
-	if err == nil && n < len(data) {
+	if err != nil {
+		return err
+	}
+
+	if n < len(data) {
 		err = io.ErrShortWrite
 	} else {
 		err = os.Chmod(f.Name(), perm)
 	}
+
 	if err != nil {
 		os.Remove(f.Name())
 		return err
 	}
+
 	return os.Rename(f.Name(), filename)
 }
