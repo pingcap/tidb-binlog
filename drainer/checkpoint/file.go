@@ -15,12 +15,12 @@ package checkpoint
 
 import (
 	"bytes"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	"os"
 	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // FileCheckPoint is local CheckPoint struct.
