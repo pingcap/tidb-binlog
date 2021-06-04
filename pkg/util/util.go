@@ -306,6 +306,7 @@ func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
 	}
 }
 
+// WriteFileAtomic writes file to temp and atomically move when everything else succeeds.
 func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 	dir, name := path.Dir(filename), path.Base(filename)
 	f, err := os.CreateTemp(dir, name)
