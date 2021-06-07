@@ -24,3 +24,4 @@ All notable changes to this project are documented in this file.
 - Add package pkg/loader [#471](https://github.com/pingcap/tidb-binlog/pull/471)
 - Add tool Arbiter sync from Kafka to Mysql [#441](https://github.com/pingcap/tidb-binlog/pull/441)
 
+
