@@ -16,7 +16,6 @@ package binlogfile
 import (
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"time"
@@ -272,7 +271,7 @@ func (s *testBinloggerSuite) TestGCByTime(c *C) {
 }
 
 func (s *testBinloggerSuite) TestSeekBinlog(c *C) {
-	f, err := ioutil.TempFile(os.TempDir(), "testOffset")
+	f, err := os.CreateTemp(os.TempDir(), "testOffset")
 	c.Assert(err, IsNil)
 	defer func() {
 		f.Close()
