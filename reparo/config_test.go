@@ -16,7 +16,7 @@ package reparo
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"runtime"
 
@@ -102,7 +102,7 @@ func (s *testConfigSuite) TestParseConfigFileWithInvalidArgs(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	configFilename := path.Join(c.MkDir(), "reparo_config_invalid.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, check.IsNil)
 
 	args := []string{

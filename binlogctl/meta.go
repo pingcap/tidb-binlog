@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/siddontang/go/ioutil2"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -103,7 +102,7 @@ func saveMeta(metaFileName string, ts int64, timeZone string) error {
 		}
 	}
 
-	err = ioutil2.WriteFileAtomic(metaFileName, buf.Bytes(), 0644)
+	err = util.WriteFileAtomic(metaFileName, buf.Bytes(), 0644)
 	if err != nil {
 		return errors.Annotatef(err, "save meta %+v into %s", meta, metaFileName)
 	}

@@ -14,7 +14,6 @@
 package file
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +37,7 @@ func (t *testLockSuite) TestLockAndUnlock(c *C) {
 	c.Assert(err, NotNil)
 
 	// create test file
-	f, err := ioutil.TempFile("", "lock")
+	f, err := os.CreateTemp("", "lock")
 	c.Assert(err, IsNil)
 	f.Close()
 	defer func() {

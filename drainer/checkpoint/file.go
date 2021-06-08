@@ -20,7 +20,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
-	"github.com/siddontang/go/ioutil2"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // FileCheckPoint is local CheckPoint struct.
@@ -104,7 +104,7 @@ func (sp *FileCheckPoint) Save(ts, secondaryTS int64, consistent bool, version i
 		return errors.Annotate(err, "encode checkpoint failed")
 	}
 
-	err = ioutil2.WriteFileAtomic(sp.name, buf.Bytes(), 0644)
+	err = util.WriteFileAtomic(sp.name, buf.Bytes(), 0644)
 	if err != nil {
 		return errors.Annotatef(err, "write file %s failed", sp.name)
 	}

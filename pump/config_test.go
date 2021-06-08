@@ -15,7 +15,6 @@ package pump
 
 import (
 	"bytes"
-	"io/ioutil"
 	"os"
 	"path"
 	"time"
@@ -106,7 +105,7 @@ func (s *testConfigSuite) TestConfigParsingFileFlags(c *C) {
 	c.Assert(err, IsNil)
 
 	configFilename := path.Join(c.MkDir(), "pump_config.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{
@@ -143,7 +142,7 @@ func (s *testConfigSuite) TestConfigParsingFileWithInvalidArgs(c *C) {
 	c.Assert(err, IsNil)
 
 	configFilename := path.Join(c.MkDir(), "pump_config_invalid.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{
@@ -180,7 +179,7 @@ func (s *testConfigSuite) TestConfigParsingIntegerDuration(c *C) {
 	c.Assert(err, IsNil)
 
 	configFilename := path.Join(c.MkDir(), "pump_config_gc_int.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{
@@ -234,7 +233,7 @@ func (s *testConfigSuite) TestConfigParsingStringDuration(c *C) {
 	c.Assert(err, IsNil)
 
 	configFilename := path.Join(c.MkDir(), "pump_config_gc_str.toml")
-	err = ioutil.WriteFile(configFilename, buf.Bytes(), 0644)
+	err = os.WriteFile(configFilename, buf.Bytes(), 0644)
 	c.Assert(err, IsNil)
 
 	args := []string{

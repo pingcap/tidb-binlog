@@ -14,7 +14,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	stdlog "log"
 	"net/http"
 	_ "net/http/pprof"
@@ -44,7 +44,7 @@ func main() {
 	// We have set sarama.Logger in util.InitLogger.
 	if !cfg.OpenSaramaLog {
 		// may too many noise, discard sarama log now
-		sarama.Logger = stdlog.New(ioutil.Discard, "[Sarama] ", stdlog.LstdFlags)
+		sarama.Logger = stdlog.New(io.Discard, "[Sarama] ", stdlog.LstdFlags)
 	}
 
 	log.Info("start arbiter...", zap.Reflect("config", cfg))
