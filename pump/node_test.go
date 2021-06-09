@@ -15,7 +15,6 @@ package pump
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -119,7 +118,7 @@ func (s *ReadLocalNodeIDSuite) TestIsDirectory(c *C) {
 func (s *ReadLocalNodeIDSuite) TestCanReadNodeID(c *C) {
 	dir := c.MkDir()
 	nodeIDPath := filepath.Join(dir, nodeIDFile)
-	if err := ioutil.WriteFile(nodeIDPath, []byte(" this-node\n"), 0644); err != nil {
+	if err := os.WriteFile(nodeIDPath, []byte(" this-node\n"), 0644); err != nil {
 		c.Fatal("Fail to write file for testing")
 	}
 	nodeID, err := readLocalNodeID(dir)

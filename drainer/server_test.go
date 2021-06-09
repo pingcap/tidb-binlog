@@ -16,7 +16,7 @@ package drainer
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -55,7 +55,7 @@ func (t *testServerSuite) TestGetLatestTS(c *C) {
 	resp := w.Result()
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	var decoded util.Response
 	err := json.Unmarshal(body, &decoded)
 	c.Assert(err, IsNil)
@@ -168,7 +168,7 @@ func (s *applyActionSuite) TestShouldCheckNodeID(c *C) {
 	s.router.ServeHTTP(w, req)
 
 	resp := w.Result()
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
 	var decoded util.Response
@@ -187,7 +187,7 @@ func (s *applyActionSuite) TestShouldCheckState(c *C) {
 	s.router.ServeHTTP(w, req)
 
 	resp := w.Result()
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
 	var decoded util.Response
@@ -211,7 +211,7 @@ func (s *applyActionSuite) TestShouldApplyAction(c *C) {
 		s.router.ServeHTTP(w, req)
 
 		resp := w.Result()
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 
 		c.Assert(resp.StatusCode, Equals, http.StatusOK)
 
@@ -313,7 +313,7 @@ func (s *newServerSuite) TearDownTest(c *C) {
 }
 
 func (s *newServerSuite) TestCannotCreateDataDir(c *C) {
-	tmpfile, err := ioutil.TempFile("", "test")
+	tmpfile, err := os.CreateTemp("", "test")
 	if err != nil {
 		c.Fatal("Failed to create temp file.")
 	}

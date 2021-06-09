@@ -101,6 +101,11 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 				continue
 			}
 			tblIdxCol := table.Columns[idxCol.Offset]
+			if _, exists := datums[tblIdxCol.ID]; exists {
+				// use row column instead of pk column if row column exists
+				// e.g. new collation's pk just be sortKey, but row column have full data.
+				continue
+			}
 			datums[tblIdxCol.ID] = pk[idxColOrdinal]
 		}
 	} else {

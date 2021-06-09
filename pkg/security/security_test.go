@@ -16,7 +16,7 @@ package security_test
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -102,13 +102,13 @@ func (s *testSecuritySuite) TestToTLSConfig(c *C) {
 		SSLKey:  filepath.Join(temp, "ssl.key"),
 	}
 
-	err := ioutil.WriteFile(dummyConfig.SSLCA, []byte(testCa), 0644)
+	err := os.WriteFile(dummyConfig.SSLCA, []byte(testCa), 0644)
 	c.Assert(err, IsNil)
 
-	err = ioutil.WriteFile(dummyConfig.SSLCert, []byte(testCert), 0644)
+	err = os.WriteFile(dummyConfig.SSLCert, []byte(testCert), 0644)
 	c.Assert(err, IsNil)
 
-	err = ioutil.WriteFile(dummyConfig.SSLKey, []byte(testKey), 0600)
+	err = os.WriteFile(dummyConfig.SSLKey, []byte(testKey), 0600)
 	c.Assert(err, IsNil)
 
 	config, err := dummyConfig.ToTLSConfig()
@@ -146,7 +146,7 @@ func (s *testSecuritySuite) TestInvalidTLSConfig(c *C) {
 	_, err := dummyConfig.ToTLSConfig()
 	c.Assert(err, ErrorMatches, "could not read ca certificate.*")
 
-	err = ioutil.WriteFile(dummyConfig.SSLCA, []byte("invalid certificate"), 0644)
+	err = os.WriteFile(dummyConfig.SSLCA, []byte("invalid certificate"), 0644)
 	c.Assert(err, IsNil)
 
 	_, err = dummyConfig.ToTLSConfig()
@@ -155,21 +155,21 @@ func (s *testSecuritySuite) TestInvalidTLSConfig(c *C) {
 	dummyConfig.SSLCert = filepath.Join(temp, "invalid-ssl.crt")
 	dummyConfig.SSLKey = filepath.Join(temp, "invalid-ssl.key")
 
-	err = ioutil.WriteFile(dummyConfig.SSLCert, []byte("invalid certificate"), 0644)
+	err = os.WriteFile(dummyConfig.SSLCert, []byte("invalid certificate"), 0644)
 	c.Assert(err, IsNil)
-	err = ioutil.WriteFile(dummyConfig.SSLKey, []byte("invalid key"), 0600)
+	err = os.WriteFile(dummyConfig.SSLKey, []byte("invalid key"), 0600)
 	c.Assert(err, IsNil)
 
 	// make ca valid.
-	err = ioutil.WriteFile(dummyConfig.SSLCA, []byte(testCa), 0644)
+	err = os.WriteFile(dummyConfig.SSLCA, []byte(testCa), 0644)
 	c.Assert(err, IsNil)
 	_, err = dummyConfig.ToTLSConfig()
 	c.Assert(err, ErrorMatches, "could not load client key pair.*")
 
 	// make cert/key valid can check again.
-	err = ioutil.WriteFile(dummyConfig.SSLCert, []byte(testCert), 0644)
+	err = os.WriteFile(dummyConfig.SSLCert, []byte(testCert), 0644)
 	c.Assert(err, IsNil)
-	err = ioutil.WriteFile(dummyConfig.SSLKey, []byte(testKey), 0600)
+	err = os.WriteFile(dummyConfig.SSLKey, []byte(testKey), 0600)
 	c.Assert(err, IsNil)
 	_, err = dummyConfig.ToTLSConfig()
 	c.Assert(err, IsNil)
