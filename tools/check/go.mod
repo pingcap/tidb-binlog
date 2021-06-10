@@ -5,4 +5,4 @@ require (
 	github.com/mgechev/revive v0.0.0-20191017201419-88015ccf8e97 // indirect
 )
 
-go 1.13
+go 1.16

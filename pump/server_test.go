@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"path"
@@ -750,7 +750,7 @@ WAIT:
 			// should receive valid and correct node status info
 			c.Assert(resp, NotNil)
 			defer resp.Body.Close()
-			bodyByte, err := ioutil.ReadAll(resp.Body)
+			bodyByte, err := io.ReadAll(resp.Body)
 			c.Assert(err, IsNil)
 
 			nodesStatus := &HTTPStatus{}
@@ -824,7 +824,7 @@ func httpRequest(c *C, method, url string) string {
 	c.Assert(err, IsNil)
 	c.Assert(resp, NotNil)
 	defer resp.Body.Close()
-	bodyByte, err := ioutil.ReadAll(resp.Body)
+	bodyByte, err := io.ReadAll(resp.Body)
 	c.Assert(err, IsNil)
 	bodyStr := string(bodyByte)
 	return bodyStr

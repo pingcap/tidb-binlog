@@ -14,7 +14,6 @@
 package binlogfile
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
@@ -34,7 +33,7 @@ var _ = Suite(&testFileSuite{})
 type testFileSuite struct{}
 
 func (t *testFileSuite) TestCreate(c *C) {
-	tmpdir, err := ioutil.TempDir("", "")
+	tmpdir, err := os.MkdirTemp("", "")
 	defer os.RemoveAll(tmpdir)
 	c.Assert(err, IsNil)
 
@@ -60,7 +59,7 @@ func (t *testFileSuite) TestReadNorExistDir(c *C) {
 }
 
 func (t *testFileSuite) TestCreateDirAll(c *C) {
-	tmpdir, err := ioutil.TempDir(os.TempDir(), "foo")
+	tmpdir, err := os.MkdirTemp(os.TempDir(), "foo")
 	c.Assert(err, IsNil)
 	defer os.RemoveAll(tmpdir)
 
@@ -68,7 +67,7 @@ func (t *testFileSuite) TestCreateDirAll(c *C) {
 	err = CreateDirAll(tmpdir2)
 	c.Assert(err, IsNil)
 
-	err = ioutil.WriteFile(path.Join(tmpdir2, "text.txt"), []byte("test text"), file.PrivateFileMode)
+	err = os.WriteFile(path.Join(tmpdir2, "text.txt"), []byte("test text"), file.PrivateFileMode)
 	c.Assert(err, IsNil)
 
 	err = CreateDirAll(tmpdir2)
@@ -77,7 +76,7 @@ func (t *testFileSuite) TestCreateDirAll(c *C) {
 }
 
 func (t *testFileSuite) TestExist(c *C) {
-	f, err := ioutil.TempFile(os.TempDir(), "fileutil")
+	f, err := os.CreateTemp(os.TempDir(), "fileutil")
 	c.Assert(err, IsNil)
 	f.Close()
 

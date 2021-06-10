@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -225,7 +224,7 @@ func (vlog *valueLog) open(path string, opt *Options) error {
 }
 
 func (vlog *valueLog) openOrCreateFiles() error {
-	files, err := ioutil.ReadDir(vlog.dirPath)
+	files, err := os.ReadDir(vlog.dirPath)
 	if err != nil {
 		return errors.Annotatef(err, "error while read dir: %s", vlog.dirPath)
 	}
