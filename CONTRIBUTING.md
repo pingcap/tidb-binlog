@@ -57,7 +57,7 @@ Please follow this style to make TiDB-Binlog easy to review, maintain and develo
 
 ### Format of the Commit Message
 
-We follow a rough convention for commit messages that is designed to answer two
+We follow a rough convention for commit messages that are designed to answer two
 questions: what changed and why. The subject line should feature the what and
 the body of the commit should describe the why.
 
