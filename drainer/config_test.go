@@ -69,6 +69,22 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	var strSQLMode *string
 	c.Assert(cfg.SyncerCfg.StrSQLMode, Equals, strSQLMode)
 	c.Assert(cfg.SyncerCfg.SQLMode, Equals, mysql.SQLMode(0))
+	c.Assert(cfg.SyncerCfg.To.ReadTimeout, Equals, time.Minute)
+
+	dstFile := path.Join(c.MkDir(), "drainer.toml")
+	err = os.WriteFile(dstFile, []byte(`[syncer.to]
+read-timeout = "10m"
+`), 0644)
+	c.Assert(err, IsNil)
+	cfg2 := NewConfig()
+	args = []string{
+		"-data-dir", "data.drainer",
+		"-dest-db-type", "mysql",
+		"-config", dstFile,
+	}
+	err = cfg2.Parse(args)
+	c.Assert(err, IsNil)
+	c.Assert(cfg2.SyncerCfg.To.ReadTimeout, check.Equals, time.Minute*10)
 }
 
 func (t *testDrainerSuite) TestValidateFilter(c *C) {
@@ -237,6 +253,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.SyncerCfg.To.Password, check.Equals, "origin")
 	c.Assert(cfg.SyncerCfg.To.Checkpoint.Password, check.Equals, "origin")
+	c.Assert(cfg.SyncerCfg.To.ReadTimeout, check.Equals, time.Minute)
 
 	// test false positive
 	cfg.SyncerCfg.To = &dsync.DBConfig{
