@@ -17,8 +17,6 @@ sample-percent = 100
 # the name of the file which saves sqls used to fix different data
 fix-sql-file = "/tmp/tidb_binlog_test/fix.sql"
 
-tidb-instance-id = "source-1"
-
 use-checksum=true
 
 [[check-tables]]
