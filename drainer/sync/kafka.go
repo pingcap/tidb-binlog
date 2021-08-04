@@ -14,6 +14,7 @@
 package sync
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,8 +40,9 @@ type KafkaSyncer struct {
 	producer sarama.AsyncProducer
 	topic    string
 
-	toBeAckCommitTSMu      sync.Mutex
+	toBeAckCommitTSMu      sync.RWMutex
 	toBeAckCommitTS        map[int64]int
+	toBeAckBinlog          map[int64]*obinlog.Binlog
 	toBeAckTotalSize       int
 	resumeProduce          chan struct{}
 	resumeProduceCloseOnce sync.Once
@@ -68,6 +70,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 		addr:            strings.Split(cfg.KafkaAddrs, ","),
 		topic:           topic,
 		toBeAckCommitTS: make(map[int64]int),
+		toBeAckBinlog:   make(map[int64]*obinlog.Binlog),
 		shutdown:        make(chan struct{}),
 		baseSyncer:      newBaseSyncer(tableInfoGetter),
 	}
@@ -128,6 +131,7 @@ func (p *KafkaSyncer) Sync(item *Item) error {
 
 	err = p.saveBinlog(secondaryBinlog, item)
 	if err != nil {
+		p.printUnsyncedBinlogs()
 		return errors.Trace(err)
 	}
 
@@ -160,6 +164,7 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 		p.lastSuccessTime = time.Now()
 	}
 	p.toBeAckCommitTS[binlog.CommitTs] = len(data)
+	p.toBeAckBinlog[binlog.CommitTs] = binlog
 	p.toBeAckTotalSize += len(data)
 	if p.toBeAckTotalSize >= stallWriteSize && len(p.toBeAckCommitTS) > 1 {
 		p.resumeProduce = make(chan struct{})
@@ -207,6 +212,7 @@ func (p *KafkaSyncer) run() {
 				})
 			}
 			delete(p.toBeAckCommitTS, commitTs)
+			delete(p.toBeAckBinlog, commitTs)
 			p.toBeAckCommitTSMu.Unlock()
 
 			p.success <- item
@@ -220,6 +226,7 @@ func (p *KafkaSyncer) run() {
 		defer wg.Done()
 
 		for err := range p.producer.Errors() {
+			p.printUnsyncedBinlogs()
 			log.Fatal("fail to produce message to kafka, please check the state of kafka server", zap.Error(err))
 		}
 	}()
@@ -248,3 +255,29 @@ func (p *KafkaSyncer) run() {
 		}
 	}
 }
+
+type printBinlog struct {
+	CommitTS int64
+	binlog   *obinlog.Binlog
+}
+type byPrintBinlogCommitTS []printBinlog
+
+func (p *KafkaSyncer) printUnsyncedBinlogs() {
+	p.toBeAckCommitTSMu.RLock()
+	binlogs := make(byPrintBinlogCommitTS, 0, len(p.toBeAckBinlog))
+	for commitTs, binlog := range p.toBeAckBinlog {
+		binlogs = append(binlogs, printBinlog{
+			CommitTS: commitTs,
+			binlog:   binlog,
+		})
+	}
+	p.toBeAckCommitTSMu.RUnlock()
+	sort.Sort(binlogs)
+	for _, item := range binlogs {
+		log.Warn("unsynced binlogs to kafka", zap.Int64("commitTS", item.CommitTS), zap.Stringer("binlog", item.binlog))
+	}
+}
+
+func (x byPrintBinlogCommitTS) Len() int           { return len(x) }
+func (x byPrintBinlogCommitTS) Less(i, j int) bool { return x[i].CommitTS < x[j].CommitTS }
+func (x byPrintBinlogCommitTS) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
