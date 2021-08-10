@@ -49,6 +49,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 		Port:          3306,
 		KafkaVersion:  "0.8.2.0",
 		BinlogFileDir: c.MkDir(),
+		ReadTimeout:   time.Minute,
 	}
 
 	// create pb syncer
@@ -59,7 +60,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 
 	// create mysql syncer
 	oldCreateDB := createDB
-	createDB = func(string, string, string, int, *tls.Config, *string, map[string]string) (db *sql.DB, err error) {
+	createDB = func(string, string, string, int, *tls.Config, *string, map[string]string, time.Duration) (db *sql.DB, err error) {
 		db, s.mysqlMock, err = sqlmock.New()
 		return
 	}

@@ -30,6 +30,9 @@ var _ json.Marshaler = Duration(empty)
 var _ json.Unmarshaler = (*Duration)(&empty)
 
 // Duration is a wrapper of time.Duration for TOML and JSON.
+// it can be parsed to both integer and string
+// integer 7 will be parsed to 7*24h
+// string 10m will be parsed to 10m
 type Duration string
 
 // NewDuration creates a Duration from time.Duration.
