@@ -194,7 +194,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		metrics:          opts.metrics,
 		syncMode:         opts.syncMode,
 		loopBackSyncInfo: opts.loopBackSyncInfo,
-		input:            make(chan *Txn),
+		input:            make(chan *Txn, 8),
 		successTxn:       make(chan *Txn),
 		merge:            true,
 		saveAppliedTS:    opts.saveAppliedTS,

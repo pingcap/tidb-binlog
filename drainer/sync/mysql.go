@@ -14,18 +14,19 @@
 package sync
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ Syncer = &MysqlSyncer{}
@@ -37,6 +38,49 @@ type MysqlSyncer struct {
 	relayer relay.Relayer
 
 	*baseSyncer
+
+	workerCnt    int
+	curWorkerIdx int
+	workers      []*mysqlWorker
+	ctx          context.Context
+	cancel       context.CancelFunc
+	itemErrCh    chan error
+}
+
+type mysqlWorker struct {
+	syncer *MysqlSyncer
+	ch     chan *Item
+	output chan *loader.Txn
+}
+
+func (w *mysqlWorker) run() {
+	for {
+		var txn *loader.Txn
+		select {
+		case item, ok := <-w.ch:
+			if !ok {
+				return
+			}
+			tx, err := translator.TiBinlogToTxn(w.syncer.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip)
+			if err != nil {
+				select {
+				case w.syncer.itemErrCh <- err:
+				default:
+				}
+				w.syncer.cancel()
+				return
+			}
+			tx.Metadata = item
+			txn = tx
+		case <-w.syncer.ctx.Done():
+			return
+		}
+		select {
+		case w.output <- txn:
+		case <-w.syncer.ctx.Done():
+			return
+		}
+	}
 }
 
 // should only be used for unit test to create mock db
@@ -82,6 +126,7 @@ func NewMysqlSyncer(
 	tableInfoGetter translator.TableInfoGetter,
 	worker int,
 	batchSize int,
+	encoderCount int,
 	queryHistogramVec *prometheus.HistogramVec,
 	sqlMode *string,
 	destDBType string,
@@ -115,19 +160,35 @@ func NewMysqlSyncer(
 		}
 	}
 
-	loader, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
+	l, err := CreateLoader(db, cfg, worker, batchSize, queryHistogramVec, sqlMode, destDBType, info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	s := &MysqlSyncer{
 		db:         db,
-		loader:     loader,
+		loader:     l,
 		relayer:    relayer,
 		baseSyncer: newBaseSyncer(tableInfoGetter),
+		itemErrCh:  make(chan error, 1),
+	}
+
+	if encoderCount <= 0 {
+		encoderCount = 1
+	}
+
+	for i := 0; i < encoderCount; i++ {
+		w := &mysqlWorker{
+			syncer: s,
+			ch:     make(chan *Item, 2),
+			output: make(chan *loader.Txn, 2),
+		}
+		go w.run()
+		s.workers = append(s.workers, w)
 	}
 
 	go s.run()
+	go s.syncMsg()
 
 	return s, nil
 }
@@ -172,18 +233,14 @@ func (m *MysqlSyncer) Sync(item *Item) error {
 		item.RelayLogPos = pos
 	}
 
-	txn, err := translator.TiBinlogToTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	txn.Metadata = item
-
 	select {
-	case <-m.errCh:
-		return m.err
-	case m.loader.Input() <- txn:
-		return nil
+	case m.workers[m.curWorkerIdx].ch <- item:
+	case e := <-m.itemErrCh:
+		return e
 	}
+
+	m.curWorkerIdx = (m.curWorkerIdx + 1) % m.workerCnt
+	return nil
 }
 
 // Close implements Syncer interface
@@ -228,4 +285,26 @@ func (m *MysqlSyncer) run() {
 	wg.Wait()
 	m.db.Close()
 	m.setErr(err)
+}
+
+func (m *MysqlSyncer) syncMsg() {
+	cnt := 0
+	for {
+		var tx *loader.Txn
+		select {
+		case txn, ok := <-m.workers[cnt%m.workerCnt].output:
+			if !ok {
+				return
+			}
+			tx = txn
+		case <-m.ctx.Done():
+			return
+		}
+		select {
+		case m.loader.Input() <- tx:
+		case <-m.ctx.Done():
+			return
+		}
+		cnt++
+	}
 }

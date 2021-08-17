@@ -78,6 +78,8 @@ type SyncerConfig struct {
 	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+
+	EncoderCount int `toml:"encoder-concurrency" json:"encoder-concurrency"`
 }
 
 // RelayConfig is the Relay log's configuration.
@@ -426,6 +428,9 @@ func (cfg *Config) adjustConfig() error {
 
 	cfg.SyncerCfg.adjustWorkCount()
 	cfg.SyncerCfg.adjustDoDBAndTable()
+	if cfg.SyncerCfg.EncoderCount == 0 {
+		cfg.SyncerCfg.EncoderCount = 4
+	}
 
 	return nil
 }
