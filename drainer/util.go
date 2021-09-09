@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -170,12 +169,15 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 }
 
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion(oracle.GlobalTxnScope)
+	version, err := tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	snapshot := tiStore.GetSnapshot(version)
-	return meta.NewSnapshotMeta(snapshot), nil
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, err
+	}
+	return meta.NewSnapshotMeta(snapshot), err
 }
 
 func genDrainerID(listenAddr string) (string, error) {
