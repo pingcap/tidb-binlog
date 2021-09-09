@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/godror/godror"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/sql"
 	"github.com/pingcap/tidb/errno"
@@ -168,6 +169,28 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 // CreateDB return sql.DB
 func CreateDB(user string, password string, host string, port int, tls *tls.Config) (db *gosql.DB, err error) {
 	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil, time.Minute)
+}
+
+func CreateOracleDB(user string, password string, connectString string) (db *gosql.DB, err error) {
+	// 时区以及配置设置
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		return nil, err
+	}
+	oraDSN := godror.ConnectionParams{
+		CommonParams: godror.CommonParams{
+			Username: user,
+			Password: godror.NewPassword(password),
+			ConnectString: connectString,
+			Timezone: loc,
+		},
+	}
+	sqlDB := gosql.OpenDB(godror.NewConnector(oraDSN))
+	err = sqlDB.Ping()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sqlDB, nil
 }
 
 func quoteSchema(schema string, table string) string {

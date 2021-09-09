@@ -101,6 +101,10 @@ func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table str
 	return
 }
 
+func (g *BinlogGenerator) ResolveDownstreamSchema(upStreamSchema string) string {
+	return upStreamSchema
+}
+
 // IsDroppingColumn implements TableInfoGetter interface
 func (g *BinlogGenerator) IsDroppingColumn(id int64) bool {
 	return false

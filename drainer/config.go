@@ -70,6 +70,7 @@ type SyncerConfig struct {
 	SyncDDL           bool               `toml:"sync-ddl" json:"sync-ddl"`
 	ChannelID         int64              `toml:"channel-id" json:"channel-id"`
 	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
+	SchemaMap         map[string]string  `toml:"schema-map" json:"schema_map"`
 	To                *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`
