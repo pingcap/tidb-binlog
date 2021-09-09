@@ -29,6 +29,8 @@ var (
 
 	// SlowWarnLog defines the duration to log warn log of sql when exec time greater than
 	SlowWarnLog = 100 * time.Millisecond
+
+	defaultTiDBTxnMode = "optimistic"
 )
 
 // ExecuteSQLs execute sqls in a transaction with retry.
@@ -116,24 +118,77 @@ func ExecuteTxnWithHistogram(db *sql.DB, sqls []string, args [][]interface{}, hi
 	return nil
 }
 
+func isUnknownSystemVariableErr(err error) bool {
+	code, ok := GetSQLErrCode(err)
+	if !ok {
+		return strings.Contains(err.Error(), "Unknown system variable")
+	}
+
+	return code == tmysql.ErrUnknownSystemVariable
+}
+
+func createDBWitSessions(dsn string, params map[string]string) (db *sql.DB, err error) {
+	// Try set this sessions if it's supported.
+	defaultParams := map[string]string{
+		// After https://github.com/pingcap/tidb/pull/17102
+		// default is false, must enable for insert value explicit, or can't replicate.
+		"allow_auto_random_explicit_insert": "1",
+		"tidb_txn_mode":                     defaultTiDBTxnMode,
+	}
+	var tryDB *sql.DB
+	tryDB, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer tryDB.Close()
+
+	support := make(map[string]string)
+	for k, v := range defaultParams {
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := tryDB.Exec(s, v)
+		if err != nil {
+			if isUnknownSystemVariableErr(err) {
+				continue
+			}
+			return nil, errors.Trace(err)
+		}
+
+		support[k] = v
+	}
+	for k, v := range params {
+		s := fmt.Sprintf("SET SESSION %s = ?", k)
+		_, err := tryDB.Exec(s, v)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		support[k] = v
+	}
+
+	for k, v := range support {
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
+	}
+
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
+}
+
 // OpenDBWithSQLMode creates an instance of sql.DB.
-func OpenDBWithSQLMode(proto string, host string, port int, username string, password string, sqlMode *string) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&multiStatements=true", username, password, host, port)
+func OpenDBWithSQLMode(proto string, host string, port int, username string, password string, sqlMode *string, params map[string]string) (*sql.DB, error) {
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&multiStatements=true", username, password, host, port)
 	if sqlMode != nil {
 		// same as "set sql_mode = '<sqlMode>'"
 		dbDSN += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
 	}
-	db, err := sql.Open(proto, dbDSN)
-	if err != nil {
-		return nil, errors.Annotatef(err, "dsn: %s", dbDSN)
-	}
-
-	return db, nil
+	return createDBWitSessions(dbDSN, params)
 }
 
 // OpenDB creates an instance of sql.DB.
 func OpenDB(proto string, host string, port int, username string, password string) (*sql.DB, error) {
-	return OpenDBWithSQLMode(proto, host, port, username, password, nil)
+	return OpenDBWithSQLMode(proto, host, port, username, password, nil, nil)
 }
 
 // IgnoreDDLError checks the error can be ignored or not.

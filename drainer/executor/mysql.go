@@ -3,6 +3,7 @@ package executor
 import (
 	"database/sql"
 	"fmt"
+
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/mysql"
@@ -22,7 +23,7 @@ type mysqlExecutor struct {
 }
 
 func newMysql(cfg *DBConfig, strSQLMode *string) (Executor, error) {
-	db, err := pkgsql.OpenDBWithSQLMode("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password, strSQLMode)
+	db, err := pkgsql.OpenDBWithSQLMode("mysql", cfg.Host, cfg.Port, cfg.User, cfg.Password, strSQLMode, cfg.Params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
