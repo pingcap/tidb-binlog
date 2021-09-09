@@ -46,7 +46,7 @@ type dummyStore struct {
 	kv.Storage
 }
 
-func (ds dummyStore) CurrentVersion(string) (kv.Version, error) {
+func (ds dummyStore) CurrentVersion() (kv.Version, error) {
 	return kv.NewVersion(2), nil
 }
 
