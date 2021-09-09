@@ -127,7 +127,7 @@ func isUnknownSystemVariableErr(err error) bool {
 	return code == tmysql.ErrUnknownSystemVariable
 }
 
-func createDBWitSessions(dsn string, params map[string]string) (db *sql.DB, err error) {
+func createDBWitSessions(proto, dsn string, params map[string]string) (db *sql.DB, err error) {
 	// Try set this sessions if it's supported.
 	defaultParams := map[string]string{
 		// After https://github.com/pingcap/tidb/pull/17102
@@ -136,7 +136,7 @@ func createDBWitSessions(dsn string, params map[string]string) (db *sql.DB, err 
 		"tidb_txn_mode":                     defaultTiDBTxnMode,
 	}
 	var tryDB *sql.DB
-	tryDB, err = sql.Open("mysql", dsn)
+	tryDB, err = sql.Open(proto, dsn)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -168,7 +168,7 @@ func createDBWitSessions(dsn string, params map[string]string) (db *sql.DB, err 
 		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
 	}
 
-	db, err = sql.Open("mysql", dsn)
+	db, err = sql.Open(proto, dsn)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -183,7 +183,7 @@ func OpenDBWithSQLMode(proto string, host string, port int, username string, pas
 		// same as "set sql_mode = '<sqlMode>'"
 		dbDSN += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
 	}
-	return createDBWitSessions(dbDSN, params)
+	return createDBWitSessions(proto, dbDSN, params)
 }
 
 // OpenDB creates an instance of sql.DB.
