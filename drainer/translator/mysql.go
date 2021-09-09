@@ -88,7 +88,7 @@ func genMysqlDelete(schema string, table *model.TableInfo, row []byte) (names []
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	columnValues, err := tablecodec.DecodeRowToDatumMap(row, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRow(row, colsTypeMap, time.Local)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
