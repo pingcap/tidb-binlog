@@ -58,6 +58,8 @@ type SyncerConfig struct {
 	DisableDispatch   bool               `toml:"disable-dispatch" json:"disable-dispatch"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+
+	CheckpointSaveInterval int `toml:"checkpoint-save-interval" json:"checkpoint-save-interval"`
 }
 
 // Config holds the configuration of drainer
@@ -343,6 +345,9 @@ func (cfg *Config) adjustConfig() error {
 		if len(cfg.SyncerCfg.To.Password) == 0 {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
 		}
+	}
+	if cfg.SyncerCfg.CheckpointSaveInterval <= 0 {
+		cfg.SyncerCfg.CheckpointSaveInterval = 3
 	}
 
 	cfg.SyncerCfg.adjustWorkCount()

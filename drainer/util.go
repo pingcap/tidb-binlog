@@ -37,6 +37,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) *checkpoint.Config {
 		ClusterID:       id,
 		InitialCommitTS: cfg.InitialCommitTS,
 		CheckPointFile:  path.Join(cfg.DataDir, "savepoint"),
+		MaxSaveTime:     time.Duration(cfg.SyncerCfg.CheckpointSaveInterval) * time.Second,
 	}
 
 	if cfg.SyncerCfg.To.Checkpoint.Schema != "" {

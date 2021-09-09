@@ -21,6 +21,7 @@ var (
 type PbCheckPoint struct {
 	sync.RWMutex
 	initialCommitTS int64
+	maxSaveTime     time.Duration
 
 	name     string
 	saveTime time.Time
@@ -30,7 +31,7 @@ type PbCheckPoint struct {
 
 // NewPb creates a new Pb.
 func newPb(cfg *Config) (CheckPoint, error) {
-	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, saveTime: time.Now()}
+	pb := &PbCheckPoint{initialCommitTS: cfg.InitialCommitTS, name: cfg.CheckPointFile, saveTime: time.Now(), maxSaveTime: cfg.MaxSaveTime}
 	err := pb.Load()
 	if err != nil {
 		return pb, errors.Trace(err)
@@ -96,7 +97,7 @@ func (sp *PbCheckPoint) Check(int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	return time.Since(sp.saveTime) >= maxSaveTime
+	return time.Since(sp.saveTime) >= sp.maxSaveTime
 }
 
 // TS implements CheckPoint.TS interface

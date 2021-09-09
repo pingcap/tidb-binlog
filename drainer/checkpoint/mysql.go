@@ -21,6 +21,7 @@ type MysqlCheckPoint struct {
 	sync.RWMutex
 	clusterID       uint64
 	initialCommitTS int64
+	maxSaveTime     time.Duration
 
 	db       *sql.DB
 	schema   string
@@ -51,6 +52,7 @@ func newMysql(tp string, cfg *Config) (CheckPoint, error) {
 		db:              db,
 		clusterID:       cfg.ClusterID,
 		initialCommitTS: cfg.InitialCommitTS,
+		maxSaveTime:     cfg.MaxSaveTime,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		tp:              tp,
@@ -156,7 +158,7 @@ func (sp *MysqlCheckPoint) Check(int64) bool {
 	sp.RLock()
 	defer sp.RUnlock()
 
-	return time.Since(sp.saveTime) >= maxSaveTime
+	return time.Since(sp.saveTime) >= sp.maxSaveTime
 }
 
 // TS implements CheckPoint.TS interface

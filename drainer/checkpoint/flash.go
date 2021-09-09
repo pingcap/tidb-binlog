@@ -18,6 +18,7 @@ type FlashCheckPoint struct {
 	sync.RWMutex
 	clusterID       uint64
 	initialCommitTS int64
+	maxSaveTime     time.Duration
 
 	db       *sql.DB
 	schema   string
@@ -72,6 +73,7 @@ func newFlash(cfg *Config) (CheckPoint, error) {
 		db:              db,
 		clusterID:       cfg.ClusterID,
 		initialCommitTS: cfg.InitialCommitTS,
+		maxSaveTime:     cfg.MaxSaveTime,
 		schema:          cfg.Schema,
 		table:           cfg.Table,
 		metaCP:          flash.GetInstance(),
@@ -173,7 +175,7 @@ func (sp *FlashCheckPoint) Check(ts int64) bool {
 
 	sp.metaCP.PushPendingCP(ts)
 
-	return time.Since(sp.saveTime) >= maxSaveTime
+	return time.Since(sp.saveTime) >= sp.maxSaveTime
 }
 
 // TS implements CheckPoint.TS interface

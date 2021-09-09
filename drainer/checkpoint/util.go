@@ -3,6 +3,7 @@ package checkpoint
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
@@ -22,6 +23,7 @@ type Config struct {
 	Schema string
 	Table  string
 
+	MaxSaveTime     time.Duration
 	ClusterID       uint64
 	InitialCommitTS int64
 	CheckPointFile  string `toml:"dir" json:"dir"`

@@ -81,10 +81,12 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.DisableDispatch, IsTrue)
 
 	cfg = NewConfig()
+	cfg.SyncerCfg.CheckpointSaveInterval = -1
 	err = cfg.adjustConfig()
 	c.Assert(err, IsNil)
 	c.Assert(cfg.ListenAddr, Equals, "http://"+util.DefaultListenAddr(8249))
 	c.Assert(cfg.AdvertiseAddr, Equals, cfg.ListenAddr)
+	c.Assert(cfg.SyncerCfg.CheckpointSaveInterval, Equals, 3)
 
 	cfg = NewConfig()
 	cfg.ListenAddr = "0.0.0.0:8257"
@@ -93,6 +95,7 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.ListenAddr, Equals, "http://0.0.0.0:8257")
 	c.Assert(cfg.AdvertiseAddr, Equals, "http://192.168.15.12:8257")
+	c.Assert(cfg.SyncerCfg.CheckpointSaveInterval, Equals, 3)
 }
 
 func (t *testDrainerSuite) TestConfigParsingFileWithInvalidOptions(c *C) {
