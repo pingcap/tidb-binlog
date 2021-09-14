@@ -201,7 +201,7 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 		p.grpcConn.Close()
 	}
 
-	callOpts := []grpc.CallOption{grpc.MaxCallRecvMsgSize(maxMsgSize)}
+	callOpts := []grpc.CallOption{grpc.MaxCallRecvMsgSize(maxGrpcMsgSize)}
 
 	if compressor, ok := getCompressorName(ctx); ok {
 		p.logger.Info("pump grpc compression enabled")

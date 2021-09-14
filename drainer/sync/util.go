@@ -44,7 +44,7 @@ type DBConfig struct {
 	KafkaVersion        string `toml:"kafka-version" json:"kafka-version"`
 	KafkaMaxMessages    int    `toml:"kafka-max-messages" json:"kafka-max-messages"`
 	KafkaClientID       string `toml:"kafka-client-id" json:"kafka-client-id"`
-	KafkaMaxMessageSize int    `toml:"kafka-max-message-size" json:"kafka-max-message-size"`
+	KafkaMaxMessageSize int32  `toml:"kafka-max-message-size" json:"kafka-max-message-size"`
 	TopicName           string `toml:"topic-name" json:"topic-name"`
 
 	// get it from pd
