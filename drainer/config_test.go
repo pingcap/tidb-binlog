@@ -208,7 +208,6 @@ func (t *testDrainerSuite) TestAdjustConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(cfg.SyncerCfg.DestDBType, Equals, "file")
 	c.Assert(cfg.SyncerCfg.WorkerCount, Equals, 1)
-	c.Assert(maxMsgSize, Equals, maxGrpcMsgSize)
 
 	cfg = NewConfig()
 	err = cfg.adjustConfig()
@@ -337,8 +336,6 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, defaultKafkaAddrs)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
-	c.Assert(maxMsgSize, Equals, maxKafkaMsgSize)
-	initializeSaramaGlobalConfig()
 	c.Assert(sarama.MaxResponseSize, Equals, int32(maxKafkaMsgSize))
 	c.Assert(sarama.MaxRequestSize, Equals, int32(maxKafkaMsgSize)+1)
 
@@ -347,7 +344,7 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	cfg = NewConfig()
 	cfg.SyncerCfg.To = new(dsync.DBConfig)
 	cfg.SyncerCfg.To.ZKAddrs = "host1:2181"
-	cfg.SyncerCfg.To.KafkaMaxMessageSize = maxInt32
+	cfg.SyncerCfg.To.KafkaMaxMessageSize = int32(maxInt32)
 	err = cfg.Parse(args)
 	c.Assert(err, IsNil)
 	c.Assert(cfg.MetricsAddr, Equals, "192.168.15.10:9091")
@@ -361,10 +358,7 @@ func (t *testKafkaSuite) TestConfigDestDBTypeKafka(c *C) {
 	c.Assert(cfg.SyncerCfg.To.KafkaAddrs, Matches, `(192\.0\.2\.1:9092,192\.0\.2\.2:9092|192\.0\.2\.2:9092,192\.0\.2\.1:9092)`)
 	c.Assert(cfg.SyncerCfg.To.KafkaVersion, Equals, defaultKafkaVersion)
 	c.Assert(cfg.SyncerCfg.To.KafkaMaxMessages, Equals, 1024)
-	c.Assert(maxMsgSize, Equals, maxInt32)
-	initializeSaramaGlobalConfig()
 	c.Assert(sarama.MaxResponseSize, Equals, int32(maxInt32))
 	c.Assert(sarama.MaxRequestSize, Equals, int32(maxInt32))
-	maxMsgSize = maxKafkaMsgSize
-	initializeSaramaGlobalConfig()
+	initializeSaramaGlobalConfig(maxKafkaMsgSize)
 }
