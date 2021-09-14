@@ -9,6 +9,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/godror/godror v0.25.3
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.4.3
 	github.com/golang/protobuf v1.3.4

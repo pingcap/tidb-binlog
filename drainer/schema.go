@@ -48,6 +48,8 @@ type Schema struct {
 	jobs                []*model.Job
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
+
+	UpDownSchemaMap  map[string]string
 }
 
 // TableName stores the table and schema name
@@ -532,6 +534,20 @@ func (s *Schema) getSchemaTableAndDelete(version int64) (string, string, error) 
 	delete(s.version2SchemaTable, version)
 
 	return schemaTable.Schema, schemaTable.Table, nil
+}
+
+func (s *Schema) setUpDownSchemaMap(schemaMap map[string]string) {
+	s.UpDownSchemaMap = schemaMap
+}
+
+func (s *Schema) ResolveDownstreamSchema(upStreamSchema string) string {
+	if s.UpDownSchemaMap == nil {
+		return upStreamSchema
+	}
+	if downSchema, ok := s.UpDownSchemaMap[upStreamSchema]; ok {
+		return downSchema
+	}
+	return upStreamSchema
 }
 
 func addImplicitColumn(table *model.TableInfo) {

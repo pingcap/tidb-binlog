@@ -41,6 +41,7 @@ var (
 
 type executor struct {
 	db                *gosql.DB
+	destDBType 		  string
 	batchSize         int
 	workerCount       int
 	info              *loopbacksync.LoopBackSync
@@ -60,6 +61,11 @@ func newExecutor(db *gosql.DB) *executor {
 
 func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (info *tableInfo, err error)) *executor {
 	e.refreshTableInfo = fn
+	return e
+}
+
+func (e *executor) withDestDBType(destDBType string) *executor {
+	e.destDBType = destDBType
 	return e
 }
 
@@ -231,6 +237,55 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	return errors.Trace(err)
 }
 
+func (e *executor) oracleBulkDelete(deletes []*DML) error {
+	if len(deletes) == 0 {
+		return nil
+	}
+	tx, err := e.begin()
+	for _, dml := range deletes {
+		sql := dml.oracleSql()
+		_, err = tx.autoRollbackExec(sql, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = tx.commit()
+	return errors.Trace(err)
+
+}
+
+func (e *executor) oracleBulkInsert(inserts []*DML) error {
+	if len(inserts) == 0 {
+		return nil
+	}
+	tx, err := e.begin()
+	for _, dml := range inserts {
+		sql := dml.oracleSql()
+		_, err = tx.autoRollbackExec(sql, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = tx.commit()
+	return errors.Trace(err)
+}
+
+func (e *executor) oracleBulkUpdate(updates []*DML) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	tx, err := e.begin()
+	for _, dml := range updates {
+		sql := dml.oracleSql()
+		_, err = tx.autoRollbackExec(sql, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	err = tx.commit()
+	return errors.Trace(err)
+}
+
 // we merge dmls by primary key, after merge by key, we
 // have only one dml for one primary key which contains the newest value(like a kv store),
 // to avoid other column's duplicate entry, we should apply delete dmls first, then insert&update
@@ -250,19 +305,31 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 	log.Debug("merge dmls", zap.Reflect("dmls", dmls), zap.Reflect("merged", types))
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
-		if err := e.splitExecDML(ctx, allDeletes, e.bulkDelete); err != nil {
+		bulkDelete := e.bulkDelete
+		if e.destDBType == "oracle" {
+			bulkDelete = e.oracleBulkDelete
+		}
+		if err := e.splitExecDML(ctx, allDeletes, bulkDelete); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allInserts, ok := types[InsertDMLType]; ok {
-		if err := e.splitExecDML(ctx, allInserts, e.bulkReplace); err != nil {
+		bulkInsert := e.bulkReplace
+		if e.destDBType == "oracle" {
+			bulkInsert = e.oracleBulkInsert
+		}
+		if err := e.splitExecDML(ctx, allInserts, bulkInsert); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
-		if err := e.splitExecDML(ctx, allUpdates, e.bulkReplace); err != nil {
+		bulkUpdate := e.bulkReplace
+		if e.destDBType == "oracle" {
+			bulkUpdate = e.oracleBulkUpdate
+		}
+		if err := e.splitExecDML(ctx, allUpdates, bulkUpdate); err != nil {
 			return errors.Trace(err)
 		}
 	}

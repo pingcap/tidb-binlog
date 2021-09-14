@@ -68,6 +68,8 @@ type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
 	db *gosql.DB
+	//downStream db type, mysql,tidb,oracle
+	destDBType string
 	// only set for test
 	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
 	opts               options
@@ -129,6 +131,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
+	destDBType		 string
 }
 
 var defaultLoaderOptions = options{
@@ -141,6 +144,7 @@ var defaultLoaderOptions = options{
 	enableDispatch:   true,
 	enableCausality:  true,
 	merge:            false,
+	destDBType:       "tidb",
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -188,6 +192,13 @@ func BatchSize(n int) Option {
 func Merge(v bool) Option {
 	return func(o *options) {
 		o.merge = v
+	}
+}
+
+//DestinationDBType set destDBType option.
+func DestinationDBType(t string) Option {
+	return func(o *options) {
+		o.destDBType = t
 	}
 }
 
@@ -244,6 +255,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:         make(chan *Txn),
 		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
+		destDBType: 		opts.destDBType,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -353,6 +365,37 @@ func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo,
 	}
 
 	return s.refreshTableInfo(schema, table)
+}
+
+func (s *loaderImpl) getTableInfoFromUpStreamDB(dml *DML) (info *tableInfo, err error)  {
+	v, ok := s.tableInfos.Load(quoteSchema(dml.Database, dml.Table))
+	if ok {
+		info = v.(*tableInfo)
+		return
+	}
+
+	info = new(tableInfo)
+	names := make([]string, 0, len(dml.Values))
+	//translator have filtered generated and non-public columns
+	for name := range dml.Values {
+		names = append(names, name)
+	}
+	info.columns = names
+	indexInfos := make([]indexInfo, 0)
+	for _, index :=  range  dml.UpIndexs{
+		if index.Primary || index.Unique {
+			indexColNames := make([]string, 0)
+			for _, indexColumn := range index.Columns{
+				indexColNames = append(indexColNames, indexColumn.Name.O)
+			}
+			indexInfos = append(indexInfos, indexInfo{name: index.Name.O, columns:indexColNames})
+		}
+	}
+	info.uniqueKeys = indexInfos
+	info.primaryKey = &info.uniqueKeys[0]
+
+	s.tableInfos.Store(quoteSchema(dml.Database, dml.Table), info)
+	return
 }
 
 func needRefreshTableInfo(sql string) bool {
@@ -524,7 +567,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 			return errors.Trace(err)
 		}
 		filterGeneratedCols(dml)
-		if s.syncMode == SyncPartialColumn {
+		if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
 			removeOrphanCols(dml.info, dml)
 		}
 	}
@@ -664,7 +707,11 @@ func countEvents(dmls []*DML) (insertEvent float64, deleteEvent float64, updateE
 }
 
 func (s *loaderImpl) setDMLInfo(dml *DML) (err error) {
-	dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+	if s.destDBType == "oracle" {
+		dml.info, err = s.getTableInfoFromUpStreamDB(dml)
+	}else {
+		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
+	}
 	if err != nil {
 		err = errors.Trace(err)
 	}
@@ -684,7 +731,8 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize)
-	if s.syncMode == SyncPartialColumn {
+	//for oracle db, no need to refresh table info
+	if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
 	e.setSyncInfo(s.loopBackSyncInfo)
