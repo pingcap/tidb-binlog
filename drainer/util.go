@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	maxKafkaMsgSize = 1024 * 1024 * 1024
-	maxGrpcMsgSize  = math.MaxInt32
+	maxKafkaMsgSize = 1 << 30
+	maxGrpcMsgSize  = int(^uint(0) >> 1)
 )
 
 var (
@@ -132,13 +132,13 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	return checkpointCfg, nil
 }
 
-func initializeSaramaGlobalConfig() {
-	sarama.MaxResponseSize = int32(maxMsgSize)
+func initializeSaramaGlobalConfig(kafkaMsgSize int32) {
+	sarama.MaxResponseSize = kafkaMsgSize
 	// add 1 to avoid confused log: Producer.MaxMessageBytes must be smaller than MaxRequestSize; it will be ignored
-	if maxMsgSize < math.MaxInt32 {
-		sarama.MaxRequestSize = int32(maxMsgSize) + 1
+	if kafkaMsgSize < math.MaxInt32 {
+		sarama.MaxRequestSize = kafkaMsgSize + 1
 	} else {
-		sarama.MaxRequestSize = int32(maxMsgSize)
+		sarama.MaxRequestSize = kafkaMsgSize
 	}
 }
 
