@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -145,8 +146,8 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 }
 
 // CreateDBWithSQLMode return sql.DB
-func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string, params map[string]string) (db *gosql.DB, err error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=1m&multiStatements=true", user, password, host, port)
+func CreateDBWithSQLMode(user string, password string, host string, port int, tlsConfig *tls.Config, sqlMode *string, params map[string]string, readTimeout time.Duration) (db *gosql.DB, err error) {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4,utf8&interpolateParams=true&readTimeout=%s&multiStatements=true", user, password, host, port, readTimeout)
 	if sqlMode != nil {
 		// same as "set sql_mode = '<sqlMode>'"
 		dsn += "&sql_mode='" + url.QueryEscape(*sqlMode) + "'"
@@ -166,7 +167,7 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 
 // CreateDB return sql.DB
 func CreateDB(user string, password string, host string, port int, tls *tls.Config) (db *gosql.DB, err error) {
-	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil)
+	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil, time.Minute)
 }
 
 func quoteSchema(schema string, table string) string {
