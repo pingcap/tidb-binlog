@@ -39,10 +39,6 @@ const (
 	maxGrpcMsgSize  = int(^uint(0) >> 1)
 )
 
-var (
-	maxMsgSize = maxGrpcMsgSize
-)
-
 // taskGroup is a wrapper of `sync.WaitGroup`.
 type taskGroup struct {
 	wg sync.WaitGroup
