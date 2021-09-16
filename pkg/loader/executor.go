@@ -372,7 +372,14 @@ func tryRefreshTableErr(err error) bool {
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			execErr := e.singleExec(dmls, safeMode)
+			var execErr error
+			if e.destDBType == "oracle"{
+				//for oracle db,no need to execute refresh table
+				return e.singleOracleExec(dmls, safeMode)
+			} else{
+				execErr = e.singleExec(dmls, safeMode)
+			}
+
 			if execErr == nil {
 				return nil
 			}
@@ -425,7 +432,6 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-
 			sql, args = dml.replaceSQL()
 			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
@@ -440,6 +446,56 @@ func (e *executor) singleExec(dmls []*DML, safeMode bool) error {
 		} else {
 			sql, args := dml.sql()
 			_, err := tx.autoRollbackExec(sql, args...)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
+	err = tx.commit()
+	return errors.Trace(err)
+}
+
+func (e *executor) singleOracleExec(dmls []*DML, safeMode bool) error {
+	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, dml := range dmls {
+		if safeMode && dml.Tp == UpdateDMLType {
+			//delete old row
+			sql := dml.oracleDeleteSQL()
+			_, err := tx.autoRollbackExec(sql, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			//delete new row
+			sql = dml.oracleDeleteNewValueSQL()
+			_, err = tx.autoRollbackExec(sql, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			//insert new row
+			sql = dml.oracleInsertSQL()
+			_, err = tx.autoRollbackExec(sql, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		} else if safeMode && dml.Tp == InsertDMLType {
+			sql := dml.oracleDeleteSQL()
+			_, err := tx.autoRollbackExec(sql, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			sql = dml.oracleInsertSQL()
+			_, err = tx.autoRollbackExec(sql, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		} else {
+			sql := dml.oracleSql()
+			_, err := tx.autoRollbackExec(sql, nil)
 			if err != nil {
 				return errors.Trace(err)
 			}

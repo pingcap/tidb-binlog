@@ -127,7 +127,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 	return
 }
 
-func genColumnInfoMap(table * model.TableInfo) (map[string] *model.ColumnInfo) {
+func genColumnInfoMap(table * model.TableInfo) map[string] *model.ColumnInfo {
 	colsMap := make(map[string] *model.ColumnInfo)
 	for _, column := range table.Columns {
 		colsMap[column.Name.O] = column

@@ -317,6 +317,48 @@ func (dml *DML) oracleDeleteSQL() (sql string) {
 	return
 }
 
+func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
+	valueMap := dml.Values
+	colNames := make([]string, 0)
+	colValues := make([]interface{}, 0)
+	notAnyNil := true
+	for _, index := range dml.info.uniqueKeys {
+		colNames = colNames[:0]
+		colValues = colValues[:0]
+		for _, colName := range index.columns {
+			if valueMap[colName] == nil {
+				notAnyNil = false
+				break
+			}
+			colNames = append(colNames, colName)
+			colValues = append(colValues, valueMap[colName])
+		}
+	}
+	if !notAnyNil {
+		for _, col := range dml.columnNames() {
+			colNames = append(colNames, col)
+			colValues = append(colValues, valueMap[col])
+		}
+	}
+
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if colValues[i] == nil {
+			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
+		}
+	}
+	builder.WriteString(" rownum <=1")
+	sql = builder.String()
+	return
+}
+
 func (dml *DML) columnNames() []string {
 	names := make([]string, 0, len(dml.Values))
 
@@ -347,7 +389,8 @@ func (dml *DML) insertSQL() (sql string, args []interface{}) {
 func (dml *DML) oracleInsertSQL() (sql string) {
 	builder := new(strings.Builder)
 	columns, values := dml.buildOracleInsertColAndValue()
-	fmt.Fprintf(builder, "INSERT INTO %s (%s) VALUES(%s) ", dml.OracleTableName(), columns, values)
+	fmt.Fprintf(builder, "INSERT INTO %s (%s) VALUES (%s)", dml.OracleTableName(), columns, values)
+	sql = builder.String()
 	return
 }
 
