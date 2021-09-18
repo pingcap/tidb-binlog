@@ -783,7 +783,7 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
 	//for oracle db, no need to refresh table info
 	if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
 		e = e.withRefreshTableInfo(s.refreshTableInfo)

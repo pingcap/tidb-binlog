@@ -52,8 +52,6 @@ type DML struct {
 	//order in UpIndexs is pk, uk, and normal index
 	UpIndexs []*model.IndexInfo
 	UpInfo *model.TableInfo
-
-	DownstreamSchema string
 }
 
 // DDL holds the ddl info
@@ -64,8 +62,6 @@ type DDL struct {
 	// should skip to execute this DDL at downstream and just refresh the downstream table info.
 	// one case for this usage is for bidirectional replication and only execute DDL at one side.
 	ShouldSkip bool
-
-	DownstreamSchema string
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -225,7 +221,7 @@ func (dml *DML) oracleUpdateSQL() (sql string) {
 	builder.WriteString(" WHERE ")
 
 	dml.buildOracleWhere(builder)
-	builder.WriteString(" rownum <=1")
+	builder.WriteString(" AND rownum <=1")
 
 	sql = builder.String()
 	return
@@ -312,7 +308,7 @@ func (dml *DML) oracleDeleteSQL() (sql string) {
 
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
 	dml.buildOracleWhere(builder)
-	builder.WriteString(" rownum <=1")
+	builder.WriteString(" AND rownum <=1")
 	sql = builder.String()
 	return
 }
@@ -354,7 +350,7 @@ func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
 			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
 		}
 	}
-	builder.WriteString(" rownum <=1")
+	builder.WriteString(" AND rownum <=1")
 	sql = builder.String()
 	return
 }
