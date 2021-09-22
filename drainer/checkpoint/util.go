@@ -35,6 +35,7 @@ type DBConfig struct {
 	Password string      `toml:"password" json:"password"`
 	Port     int         `toml:"port" json:"port"`
 	TLS      *tls.Config `toml:"-" json:"-"`
+	ConnectString string `toml:"connect-string" json:"connect-string"`
 }
 
 // Config is the savepoint configuration

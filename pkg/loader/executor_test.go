@@ -17,6 +17,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/pingcap/parser/model"
+	tmysql "github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
 	"regexp"
 	"sync/atomic"
 
@@ -215,6 +218,190 @@ func (s *singleExecSuite) TestSafeUpdate(c *C) {
 
 	e = newExecutor(s.db)
 	err = e.singleExec([]*DML{&dml}, true)
+	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+}
+
+func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
+	dml := DML{
+		Database: "unicorn",
+		Table:    "users",
+		Tp:       UpdateDMLType,
+		OldValues: map[string]interface{}{
+			"name": "tester",
+			"age":  1999,
+		},
+		Values: map[string]interface{}{
+			"name": "tester_new",
+			"age":  2019,
+		},
+		info: &tableInfo{
+			columns: []string{"name", "age"},
+			uniqueKeys: []indexInfo{
+				{name: "name", columns: []string{"name"}},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"name": {
+				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+			"age": {
+				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+
+		},
+	}
+	delSQL := "DELETE FROM unicorn.users.*"
+	insertSQL := "INSERT INTO unicorn.users.*"
+	// When firstly  deleting failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
+
+	e := newExecutor(s.db)
+	e.destDBType = "oracle"
+	err := e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, ErrorMatches, "del")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	// When the second deleting failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
+	e = newExecutor(s.db)
+	e.destDBType = "oracle"
+	err = e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, ErrorMatches, "del")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	//when two deleting succeed, insert failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(insertSQL).WillReturnError(errors.New("insert"))
+	e = newExecutor(s.db)
+	err = e.singleOracleExec([]*DML{&dml}, true)
+	e.destDBType = "oracle"
+	c.Assert(err, ErrorMatches, "insert")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	//all db operation successfully
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(insertSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectCommit()
+	e = newExecutor(s.db)
+	e.destDBType = "oracle"
+	err = e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+
+}
+
+func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
+	dml := DML{
+		Database: "unicorn",
+		Table:    "users",
+		Tp:       InsertDMLType,
+		Values: map[string]interface{}{
+			"name": "tester",
+			"age":  2019,
+		},
+		info: &tableInfo{
+			columns: []string{"name", "age"},
+			uniqueKeys: []indexInfo{
+				{name: "name", columns: []string{"name"}},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"name": {
+				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+			"age": {
+				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+
+		},
+	}
+	delSQL := "DELETE FROM unicorn.users.*"
+	insertSQL := "INSERT INTO unicorn.users.*"
+
+	// When deleting failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
+
+	e := newExecutor(s.db)
+	e.destDBType = "oracle"
+	err := e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, ErrorMatches, "del")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	//When deleting succeed but insert failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(insertSQL).WillReturnError(errors.New("insert"))
+	e = newExecutor(s.db)
+	e.destDBType = "oracle"
+	err = e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, ErrorMatches, "insert")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	//all operation successfully
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectExec(insertSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectCommit()
+	e = newExecutor(s.db)
+	e.destDBType = "oracle"
+	err = e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, IsNil)
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+}
+
+func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
+	dml := DML{
+		Database: "unicorn",
+		Table:    "users",
+		Tp:       DeleteDMLType,
+		Values: map[string]interface{}{
+			"name": "tester",
+			"age":  2019,
+		},
+		info: &tableInfo{
+			columns: []string{"name", "age"},
+			uniqueKeys: []indexInfo{
+				{name: "name", columns: []string{"name"}},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"name": {
+				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+			"age": {
+				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+
+		},
+	}
+	delSQL := "DELETE FROM unicorn.users.*"
+
+	// When deleting failed
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
+
+	e := newExecutor(s.db)
+	e.destDBType = "oracle"
+	err := e.singleOracleExec([]*DML{&dml}, true)
+	c.Assert(err, ErrorMatches, "del")
+	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
+	s.resetMock(c)
+
+	//all operation successfully
+	s.dbMock.ExpectBegin()
+	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	s.dbMock.ExpectCommit()
+	e = newExecutor(s.db)
+	e.destDBType = "oracle"
+	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 }

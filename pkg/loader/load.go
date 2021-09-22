@@ -435,7 +435,13 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	if ddl.ShouldSkip {
 		return nil
 	}
+	if s.destDBType == "oracle" {
+		return s.processOracleDDL(ddl)
+	}
+	return s.processMysqlDDL(ddl)
+}
 
+func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -472,6 +478,53 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	}
 
 	return errors.Trace(err)
+}
+
+func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
+	ddlStmt := ddl.SQL
+	if !isOracleSupportDDL(ddlStmt){
+		log.Warn(fmt.Sprintf("until now, oracle do not support this ddl %s", ddl.SQL))
+		return nil
+	}
+
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		ddlStmt = fmt.Sprintf("truncate table %s.%s", ddl.Database, ddl.Table)
+		if _, err = tx.Exec(ddlStmt); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Rollback failed", zap.String("sql", ddl.SQL), zap.Error(rbErr))
+			}
+			return err
+		}
+
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+
+		log.Info("exec ddl success", zap.String("sql", ddl.SQL))
+		return nil
+	})
+	if err == nil {
+		return nil
+	}
+	return errors.Trace(err)
+}
+
+func isOracleSupportDDL(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return true
+	}
+
+	switch stmt.(type) {
+	case *ast.TruncateTableStmt:
+		return true
+	}
+	return false
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
@@ -730,7 +783,7 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
 	//for oracle db, no need to refresh table info
 	if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
