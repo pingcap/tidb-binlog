@@ -446,12 +446,19 @@ ForLoop:
 				} else {
 					continue
 				}
-			} else if s.cfg.SyncDDL == "truncate-only" && (b.job.Type == model.ActionTruncateTable || b.job.Type == model.ActionTruncateTablePartition) {
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
+			} else if s.cfg.SyncDDL == "truncate-only" {
+				if b.job.Type == model.ActionTruncateTable || b.job.Type == model.ActionTruncateTablePartition {
 					shouldSkip = false
 				} else {
+					log.Info("skip ddl by SyncDDL setting to 'truncate-only'", zap.String("schema", schema), zap.String("table", table),
+						zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 					shouldSkip = true
 				}
+				//if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
+				//	shouldSkip = false
+				//} else {
+				//	shouldSkip = true
+				//}
 			}
 
 			// Add ddl item to downstream.

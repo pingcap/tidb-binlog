@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -260,7 +261,9 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-
+	if opts.destDBType == "oracle" {
+		s.getTableInfoFromDB = getOracleTableInfo
+	}
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
@@ -482,20 +485,32 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 
 func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 	ddlStmt := ddl.SQL
-	if !isOracleSupportDDL(ddlStmt){
-		log.Warn(fmt.Sprintf("until now, oracle do not support this ddl %s", ddl.SQL))
-		return nil
+	var newStmt string
+	if isTruncateTableStmt(ddlStmt) {
+		newStmt = fmt.Sprintf("truncate table %s.%s", ddl.Database, ddl.Table)
+	}else {
+		ok, astStmt := isTruncateTablePartitionStmt(ddlStmt)
+		if ok {
+			partitions := astStmt.Specs[0].PartitionNames
+			partitionNames := make([]string, 0, len(partitions))
+			for _, p := range partitions {
+				partitionNames = append(partitionNames, p.O)
+			}
+			newStmt = fmt.Sprintf("alter table %s.%s truncate partition %s", ddl.Database, ddl.Table, strings.Join(partitionNames,","))
+		}else {
+			log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
+		}
 	}
 
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
+		stmt := newStmt
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
 		}
-		ddlStmt = fmt.Sprintf("truncate table %s.%s", ddl.Database, ddl.Table)
-		if _, err = tx.Exec(ddlStmt); err != nil {
+		if _, err = tx.Exec(stmt); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Rollback failed", zap.String("sql", ddl.SQL), zap.Error(rbErr))
+				log.Error("Rollback failed", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", stmt),zap.Error(rbErr))
 			}
 			return err
 		}
@@ -504,7 +519,7 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 			return err
 		}
 
-		log.Info("exec ddl success", zap.String("sql", ddl.SQL))
+		log.Info("exec ddl success", zap.String("sql", ddl.SQL), zap.String("new ddl", stmt))
 		return nil
 	})
 	if err == nil {
@@ -513,18 +528,37 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 	return errors.Trace(err)
 }
 
-func isOracleSupportDDL(sql string) bool {
+func isTruncateTableStmt(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return true
+		return false
 	}
-
-	switch stmt.(type) {
-	case *ast.TruncateTableStmt:
-		return true
+	_, ok := stmt.(*ast.TruncateTableStmt)
+	if !ok {
+		return false
 	}
-	return false
+	return true
+}
+func isTruncateTablePartitionStmt(sql string) (bool, *ast.AlterTableStmt){
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false, nil
+	}
+	n, ok := stmt.(*ast.AlterTableStmt)
+	if !ok {
+		return false, nil
+	}
+	if len(n.Specs) > 1 {
+		return false, nil
+	}
+	for _, spec := range n.Specs {
+		if spec.Tp == ast.AlterTableTruncatePartition {
+			return true, n
+		}
+	}
+	return false, nil
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
@@ -620,7 +654,7 @@ func (s *loaderImpl) execDMLs(dmls []*DML) error {
 			return errors.Trace(err)
 		}
 		filterGeneratedCols(dml)
-		if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
+		if s.syncMode == SyncPartialColumn{
 			removeOrphanCols(dml.info, dml)
 		}
 	}
@@ -760,11 +794,7 @@ func countEvents(dmls []*DML) (insertEvent float64, deleteEvent float64, updateE
 }
 
 func (s *loaderImpl) setDMLInfo(dml *DML) (err error) {
-	if s.destDBType == "oracle" {
-		dml.info, err = s.getTableInfoFromUpStreamDB(dml)
-	}else {
-		dml.info, err = s.getTableInfo(dml.Database, dml.Table)
-	}
+	dml.info, err = s.getTableInfo(dml.Database, dml.Table)
 	if err != nil {
 		err = errors.Trace(err)
 	}
@@ -785,7 +815,7 @@ func filterGeneratedCols(dml *DML) {
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
 	//for oracle db, no need to refresh table info
-	if s.syncMode == SyncPartialColumn && s.destDBType != "oracle"{
+	if s.syncMode == SyncPartialColumn {
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
 	e.setSyncInfo(s.loopBackSyncInfo)
@@ -814,6 +844,8 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
+		//downStream db type, mysql,tidb,oracle
+		destDBType : s.destDBType,
 	}
 }
 
@@ -826,6 +858,8 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
+	//downStream db type, mysql,tidb,oracle
+	destDBType 			 string
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
@@ -847,7 +881,7 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 
 func (b *batchManager) execDDL(txn *Txn) error {
 	if err := b.fExecDDL(txn.DDL); err != nil {
-		if !pkgsql.IgnoreDDLError(err) {
+		if b.destDBType == "oracle" || !pkgsql.IgnoreDDLError(err){
 			return errors.Trace(err)
 		}
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))

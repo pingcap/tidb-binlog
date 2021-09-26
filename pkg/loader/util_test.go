@@ -84,3 +84,47 @@ func (cs *UtilSuite) TestGetTableInfo(c *check.C) {
 			{"dex2", []string{"a2", "a3"}},
 		}})
 }
+
+func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	defer db.Close()
+
+	columnRows := sqlmock.NewRows([]string{"column_name", "virtual_column"}).
+		AddRow("C1", "NO").
+		AddRow("C2", "NO").
+		AddRow("C3", "NO").
+		AddRow("C4", "NO").
+		AddRow("C5", "NO").
+		AddRow("C6", "NO").
+		AddRow("C7", "NO").
+		AddRow("C8", "NO")
+	mock.ExpectQuery(regexp.QuoteMeta(colsOracleSQL)).WithArgs("test","t3").WillReturnRows(columnRows)
+
+	indexRows := sqlmock.NewRows([]string{"index_type", "index_name", "column_position", "column_name"}).
+		AddRow("NONUNIQUE", "T3_C7_C8_INDEX", 1, "C7").
+		AddRow("NONUNIQUE", "T3_C7_C8_INDEX", 2, "C8").
+		AddRow("PUNIQUE", "T3_PK", 1, "C1").
+		AddRow("PUNIQUE", "T3_PK", 2, "C2").
+		AddRow("UNIQUE", "T3_C3_C4_UINDEX", 1, "C3").
+		AddRow("UNIQUE", "T3_C3_C4_UINDEX", 2, "C4").
+		AddRow("UNIQUE", "T3_C5_C6_UINDEX", 1, "C5").
+		AddRow("UNIQUE", "T3_C5_C6_UINDEX", 2, "C6")
+
+	mock.ExpectQuery(regexp.QuoteMeta(uniqKeyOracleSQL)).WithArgs("test", "t3").WillReturnRows(indexRows)
+
+	info, err := getOracleTableInfo(db, "test", "t3")
+	c.Assert(err, check.IsNil)
+	c.Assert(info, check.NotNil)
+
+	c.Assert(info, check.DeepEquals, &tableInfo{
+		columns: []string{"C1", "C2", "C3", "C4", "C5", "C6","C7", "C8"},
+		primaryKey: &indexInfo{name: "T3_PK", columns: []string{"C1", "C2"}},
+		uniqueKeys: []indexInfo{
+			{name:"T3_PK", columns:[]string{"C1", "C2"}},
+			{name:"T3_C3_C4_UINDEX", columns:[]string{"C3", "C4"}},
+			{name:"T3_C5_C6_UINDEX", columns:[]string{"C5", "C6"}},
+		},
+	})
+
+}

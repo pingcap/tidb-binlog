@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/godror/godror"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -391,13 +392,26 @@ func tryRefreshTableErr(err error) bool {
 	return false
 }
 
+func tryRefreshTableOracleErr(err error) bool {
+	oraErr, ok := godror.AsOraErr(err)
+	if !ok {
+		return false
+	}
+	if oraErr.Code() == 904 {
+		return true
+	}
+	return false
+}
+
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
 			var execErr error
+			//default using tidb
+			fTryRefreshTableErr := tryRefreshTableErr
 			if e.destDBType == "oracle"{
-				//for oracle db,no need to execute refresh table
-				return e.singleOracleExec(dmls, safeMode)
+				fTryRefreshTableErr = tryRefreshTableOracleErr
+				execErr = e.singleOracleExec(dmls, safeMode)
 			} else{
 				execErr = e.singleExec(dmls, safeMode)
 			}
@@ -406,7 +420,7 @@ func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode
 				return nil
 			}
 
-			if tryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
+			if fTryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
 				log.Info("try refresh table info")
 				name2info := make(map[string]*tableInfo)
 				for _, dml := range dmls {
