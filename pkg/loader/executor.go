@@ -502,35 +502,41 @@ func (e *executor) singleOracleExec(dmls []*DML, safeMode bool) error {
 		if safeMode && dml.Tp == UpdateDMLType {
 			//delete old row
 			sql := dml.oracleDeleteSQL()
+			log.Debug("safeMode and UpdateDMLType", zap.String("delete old", sql))
 			_, err := tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//delete new row
 			sql = dml.oracleDeleteNewValueSQL()
+			log.Debug("safeMode and UpdateDMLType", zap.String("delete new old", sql))
 			_, err = tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//insert new row
 			sql = dml.oracleInsertSQL()
+			log.Debug("safeMode and UpdateDMLType", zap.String("insert new old", sql))
 			_, err = tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql := dml.oracleDeleteSQL()
+			log.Debug("safeMode and InsertDMLType", zap.String("delete sql", sql))
 			_, err := tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			sql = dml.oracleInsertSQL()
+			log.Debug("safeMode and InsertDMLType", zap.String("insert sql", sql))
 			_, err = tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
 			sql := dml.oracleSql()
+			log.Debug("normal sql with no safeMode", zap.String("sql", sql))
 			_, err := tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {
 				return errors.Trace(err)

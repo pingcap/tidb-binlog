@@ -49,8 +49,6 @@ type DML struct {
 	info *tableInfo
 
 	UpColumnsInfoMap map[string]*model.ColumnInfo
-	//order in UpIndexs is pk, uk, and normal index
-	UpIndexs []*model.IndexInfo
 	UpInfo *model.TableInfo
 }
 
@@ -315,15 +313,14 @@ func (dml *DML) oracleDeleteSQL() (sql string) {
 
 func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
 	builder := new(strings.Builder)
-
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
+
 	valueMap := dml.Values
 	colNames := make([]string, 0)
 	colValues := make([]interface{}, 0)
-	notAnyNil := true
+	// Try to use unique key values when available
 	for _, index := range dml.info.uniqueKeys {
-		colNames = colNames[:0]
-		colValues = colValues[:0]
+		notAnyNil := true
 		for _, colName := range index.columns {
 			if valueMap[colName] == nil {
 				notAnyNil = false
@@ -332,8 +329,13 @@ func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
 			colNames = append(colNames, colName)
 			colValues = append(colValues, valueMap[colName])
 		}
+		if !notAnyNil {
+			colNames = colNames[:0]
+			colValues = colValues[:0]
+		}
 	}
-	if !notAnyNil {
+	// Fallback to use all columns
+	if len(colNames) == 0 {
 		for _, col := range dml.columnNames() {
 			colNames = append(colNames, col)
 			colValues = append(colValues, valueMap[col])

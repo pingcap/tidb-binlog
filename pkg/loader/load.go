@@ -370,37 +370,6 @@ func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo,
 	return s.refreshTableInfo(schema, table)
 }
 
-func (s *loaderImpl) getTableInfoFromUpStreamDB(dml *DML) (info *tableInfo, err error)  {
-	v, ok := s.tableInfos.Load(quoteSchema(dml.Database, dml.Table))
-	if ok {
-		info = v.(*tableInfo)
-		return
-	}
-
-	info = new(tableInfo)
-	names := make([]string, 0, len(dml.Values))
-	//translator have filtered generated and non-public columns
-	for name := range dml.Values {
-		names = append(names, name)
-	}
-	info.columns = names
-	indexInfos := make([]indexInfo, 0)
-	for _, index :=  range  dml.UpIndexs{
-		if index.Primary || index.Unique {
-			indexColNames := make([]string, 0)
-			for _, indexColumn := range index.Columns{
-				indexColNames = append(indexColNames, indexColumn.Name.O)
-			}
-			indexInfos = append(indexInfos, indexInfo{name: index.Name.O, columns:indexColNames})
-		}
-	}
-	info.uniqueKeys = indexInfos
-	info.primaryKey = &info.uniqueKeys[0]
-
-	s.tableInfos.Store(quoteSchema(dml.Database, dml.Table), info)
-	return
-}
-
 func needRefreshTableInfo(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {

@@ -293,7 +293,47 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 	sql	:= dml.oracleSql()
 	c.Assert(
 		sql, check.Equals,
-		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND name = 'pingcap' rownum <=1")
+		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND name = 'pingcap' AND rownum <=1")
+}
+
+func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
+	dml := DML{
+		Tp:       UpdateDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"id":123,
+			"name": "pc",
+		},
+		OldValues: map[string]interface{}{
+			"id":123,
+			"name": "pingcap",
+		},
+		info: &tableInfo{
+			columns: []string{"id", "name"},
+			uniqueKeys: []indexInfo{
+						{
+							name:    "uniq name",
+							columns: []string{"id"},
+						},
+						{
+							name:    "other",
+							columns: []string{"other"},
+						},
+						},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"id": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"name": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+
+		},
+	}
+	sql	:= dml.oracleSql()
+	c.Assert(
+		sql, check.Equals,
+		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
@@ -319,7 +359,7 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 	sql	:= dml.oracleSql()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE id = 123 AND name = 'pc' rownum <=1")
+		"DELETE FROM db.tbl WHERE id = 123 AND name = 'pc' AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
