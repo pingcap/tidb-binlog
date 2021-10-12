@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tipb/go-binlog"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
@@ -53,6 +54,15 @@ func GetTSO(pdCli pd.Client) (int64, error) {
 	ts := int64(oracle.ComposeTS(physical, logical))
 
 	return ts, nil
+}
+
+// GenFakeBinlog generates a fake binlog from given tso
+func GenFakeBinlog(ts int64) *binlog.Binlog {
+	return &binlog.Binlog{
+		StartTs:  ts,
+		Tp:       binlog.BinlogType_Rollback,
+		CommitTs: ts,
+	}
 }
 
 // TSOToRoughTime translates tso to rough time that used to display
