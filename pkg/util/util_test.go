@@ -44,7 +44,7 @@ type dummyStore struct {
 	ver kv.Version
 }
 
-func (s dummyStore) CurrentVersion(string) (kv.Version, error) {
+func (s dummyStore) CurrentVersion() (kv.Version, error) {
 	return s.ver, s.err
 }
 
