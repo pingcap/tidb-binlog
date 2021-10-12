@@ -74,7 +74,7 @@ func (t *testDrainerSuite) TestConfig(c *C) {
 	c.Assert(cfg.SyncerCfg.To.ReadTimeout, Equals, time.Minute)
 
 	dstFile := path.Join(c.MkDir(), "drainer.toml")
-	err = os.WriteFile(dstFile, []byte(`[syncer.to]
+	err = ioutil.WriteFile(dstFile, []byte(`[syncer.to]
 read-timeout = "10m"
 `), 0644)
 	c.Assert(err, IsNil)
