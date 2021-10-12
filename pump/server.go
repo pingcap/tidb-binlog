@@ -469,13 +469,7 @@ func (s *Server) genFakeBinlog() (*pb.Binlog, error) {
 		return nil, errors.Trace(err)
 	}
 
-	bl := &binlog.Binlog{
-		StartTs:  ts,
-		Tp:       binlog.BinlogType_Rollback,
-		CommitTs: ts,
-	}
-
-	return bl, nil
+	return util.GenFakeBinlog(ts), nil
 }
 
 func (s *Server) writeFakeBinlog() (*pb.Binlog, error) {
