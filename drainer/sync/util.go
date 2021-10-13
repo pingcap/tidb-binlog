@@ -15,10 +15,13 @@ package sync
 
 import (
 	"crypto/tls"
+	"time"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
+
 	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // DBConfig is the DB configuration.
@@ -36,6 +39,9 @@ type DBConfig struct {
 	BinlogFileDir           string            `toml:"dir" json:"dir"`
 	BinlogFileRetentionTime int               `toml:"retention-time" json:"retention-time"`
 	Params                  map[string]string `toml:"params" json:"params"`
+
+	ReadTimeout    time.Duration `toml:"-" json:"-"`
+	ReadTimeoutStr util.Duration `toml:"read-timeout" json:"read-timeout"`
 
 	Merge bool `toml:"merge" json:"merge"`
 
