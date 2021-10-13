@@ -368,7 +368,7 @@ func (s *execDDLSuite) TestShouldExecInTransaction(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background()}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
 	ddl := DDL{SQL: "CREATE TABLE"}
 	err = loader.execDDL(&ddl)
@@ -384,9 +384,39 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background()}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
 	ddl := DDL{SQL: "CREATE TABLE", Database: "test_db"}
+	err = loader.execDDL(&ddl)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("truncate table test.t1").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
+
+	ddl := DDL{SQL: "truncate table t1", Database: "test", Table:"t1"}
+	err = loader.execDDL(&ddl)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *execDDLSuite) TestTruncateTablePartitionDDL(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("alter table test.t1 truncate partition p1,p2").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
+
+	ddl := DDL{SQL: "alter table t1 truncate partition p1,p2", Database: "test", Table:"t1"}
 	err = loader.execDDL(&ddl)
 	c.Assert(err, check.IsNil)
 }

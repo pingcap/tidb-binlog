@@ -6,7 +6,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	tipb "github.com/pingcap/tipb/go-binlog"
 	"io"
-	"sort"
+	"strings"
 )
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
@@ -22,7 +22,6 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 		}
 	} else {
 		tableIdColumnsMap := make(map[int64]map[string]*model.ColumnInfo)
-		tableIdIndexsMap := make(map[int64][]*model.IndexInfo)
 		for _, mut := range pv.GetMutations() {
 			var info *model.TableInfo
 			var ok bool
@@ -33,7 +32,6 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 			if _, ok := tableIdColumnsMap[mut.GetTableId()]; !ok {
 				tableIdColumnsMap[mut.GetTableId()] = genColumnInfoMap(info)
-				tableIdIndexsMap[mut.GetTableId()] = FindAllIndex(info)
 			}
 
 			pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
@@ -68,12 +66,11 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:    table,
 						Values:   make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpIndexs: tableIdIndexsMap[mut.GetTableId()],
 						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
-						dml.Values[name] = args[i]
+						dml.Values[strings.ToUpper(name)] = args[i]
 					}
 				case tipb.MutationType_Update:
 					names, args, oldArgs, err := genMysqlUpdate(schema, pinfo, info, row, canAppendDefaultValue)
@@ -88,13 +85,12 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Values:    make(map[string]interface{}),
 						OldValues: make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpIndexs: tableIdIndexsMap[mut.GetTableId()],
 						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
-						dml.Values[name] = args[i]
-						dml.OldValues[name] = oldArgs[i]
+						dml.Values[strings.ToUpper(name)] = args[i]
+						dml.OldValues[strings.ToUpper(name)] = oldArgs[i]
 					}
 
 				case tipb.MutationType_DeleteRow:
@@ -109,12 +105,11 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:    table,
 						Values:   make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpIndexs: tableIdIndexsMap[mut.GetTableId()],
 						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
-						dml.Values[name] = args[i]
+						dml.Values[strings.ToUpper(name)] = args[i]
 					}
 
 				default:
@@ -130,31 +125,9 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 func genColumnInfoMap(table * model.TableInfo) map[string] *model.ColumnInfo {
 	colsMap := make(map[string] *model.ColumnInfo)
 	for _, column := range table.Columns {
-		colsMap[column.Name.O] = column
+		//for oracle downstream db, column name should be upper case.
+		colsMap[strings.ToUpper(column.Name.O)] = column
 	}
 	return colsMap
-}
-
-// FindAllIndex returns all index, order is pk, uk, and normal index.
-func FindAllIndex(tableInfo *model.TableInfo) []*model.IndexInfo {
-	indices := make([]*model.IndexInfo, len(tableInfo.Indices))
-	copy(indices, tableInfo.Indices)
-	sort.SliceStable(indices, func(i, j int) bool {
-		a := indices[i]
-		b := indices[j]
-		switch {
-		case b.Primary:
-			return false
-		case a.Primary:
-			return true
-		case b.Unique:
-			return false
-		case a.Unique:
-			return true
-		default:
-			return false
-		}
-	})
-	return indices
 }
 
