@@ -30,12 +30,12 @@ var ErrNoCheckpointItem = stderrors.New("no any checkpoint item")
 
 // DBConfig is the DB configuration.
 type DBConfig struct {
-	Host     string      `toml:"host" json:"host"`
-	User     string      `toml:"user" json:"user"`
-	Password string      `toml:"password" json:"password"`
-	Port     int         `toml:"port" json:"port"`
-	TLS      *tls.Config `toml:"-" json:"-"`
-	ConnectString string `toml:"connect-string" json:"connect-string"`
+	Host          string      `toml:"host" json:"host"`
+	User          string      `toml:"user" json:"user"`
+	Password      string      `toml:"password" json:"password"`
+	Port          int         `toml:"port" json:"port"`
+	TLS           *tls.Config `toml:"-" json:"-"`
+	ConnectString string      `toml:"connect-string" json:"connect-string"`
 }
 
 // Config is the savepoint configuration
@@ -84,6 +84,18 @@ func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
 }
 
+func genCheckTableIsExist2o(sp *OracleCheckPoint) string {
+	return fmt.Sprintf("select table_name from user_tables where table_name=`%s`", sp.schema)
+}
+
+func genCreateTable2o(sp *OracleCheckPoint) string {
+	return fmt.Sprintf("create table %s.%s (clusterID number primary key, checkPoint varchar2(4000))", sp.schema, sp.table)
+}
+
+func genReplaceSQL2o(sp *OracleCheckPoint, str string) string {
+	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
+}
+
 // getClusterID return the cluster id iff the checkpoint table exist only one row.
 func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error) {
 	sqlQuery := fmt.Sprintf("select clusterID from %s.%s", schema, table)
@@ -115,5 +127,9 @@ func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error
 }
 
 func genSelectSQL(sp *MysqlCheckPoint) string {
+	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
+}
+
+func genSelectSQL2o(sp *OracleCheckPoint) string {
 	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
 }
