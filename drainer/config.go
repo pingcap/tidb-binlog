@@ -146,7 +146,7 @@ func (rc RelayConfig) IsEnabled() bool {
 
 // Config holds the configuration of drainer
 type Config struct {
-	*flag.FlagSet   `json:"-"`
+	*flag.FlagSet   `toml:"-" json:"-"`
 	LogLevel        string          `toml:"log-level" json:"log-level"`
 	NodeID          string          `toml:"node-id" json:"node-id"`
 	ListenAddr      string          `toml:"addr" json:"addr"`
@@ -514,6 +514,15 @@ func (cfg *Config) adjustConfig() error {
 			cfg.SyncerCfg.To.Password = decrypt
 		} else if len(cfg.SyncerCfg.To.Password) == 0 {
 			cfg.SyncerCfg.To.Password = os.Getenv("MYSQL_PSWD")
+		}
+		if cfg.SyncerCfg.To.ReadTimeoutStr == "" {
+			cfg.SyncerCfg.To.ReadTimeout = time.Minute
+		} else {
+			var err error
+			cfg.SyncerCfg.To.ReadTimeout, err = cfg.SyncerCfg.To.ReadTimeoutStr.ParseDuration()
+			if err != nil {
+				return err
+			}
 		}
 	}
 
