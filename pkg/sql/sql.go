@@ -205,6 +205,26 @@ func GetTidbPosition(db *sql.DB) (int64, error) {
 	return ts, nil
 }
 
+func GetOraclePosition(db *sql.DB) (int64, error) {
+	rows, err := db.Query("select dbms_flashback.get_system_change_number as current_scn from dual")
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return 0, errors.New("get oracle position failed.")
+	}
+	fields, err := ScanRow(rows)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	ts, err := strconv.ParseInt(string(fields["CURRENT_SCN"]), 10, 64)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return ts, nil
+}
+
 // ScanRow scans rows into a map.
 func ScanRow(rows *sql.Rows) (map[string][]byte, error) {
 	cols, err := rows.Columns()

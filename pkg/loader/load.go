@@ -305,6 +305,9 @@ func (s *loaderImpl) GetSafeMode() bool {
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
 	if s.saveAppliedTS && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
+		if s.destDBType == "oracle" {
+			fGetAppliedTS = getOracleAppliedTS
+		}
 		txns[len(txns)-1].AppliedTS = fGetAppliedTS(s.db)
 		s.lastUpdateAppliedTSTime = time.Now()
 	}
@@ -988,6 +991,15 @@ func getAppliedTS(db *gosql.DB) int64 {
 		if !ok || int(errCode) != tmysql.ErrUnknown {
 			log.Warn("get ts from secondary cluster failed", zap.Error(err))
 		}
+		return 0
+	}
+	return appliedTS
+}
+
+func getOracleAppliedTS(db *gosql.DB) int64 {
+	appliedTS, err := pkgsql.GetOraclePosition(db)
+	if err != nil {
+		log.Warn("get ts from oracle failed.", zap.Error(err))
 		return 0
 	}
 	return appliedTS
