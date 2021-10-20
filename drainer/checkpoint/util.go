@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	stderrors "errors"
 	"fmt"
+	"strings"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
@@ -85,7 +86,8 @@ func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 }
 
 func genCheckTableIsExist2o(sp *OracleCheckPoint) string {
-	return fmt.Sprintf("select table_name from user_tables where table_name=`%s`", sp.schema)
+	tableName := strings.ToUpper(sp.table)
+	return fmt.Sprintf("select table_name from user_tables where table_name='%s'", tableName)
 }
 
 func genCreateTable2o(sp *OracleCheckPoint) string {
@@ -93,7 +95,11 @@ func genCreateTable2o(sp *OracleCheckPoint) string {
 }
 
 func genReplaceSQL2o(sp *OracleCheckPoint, str string) string {
-	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
+	return fmt.Sprintf("merge into %s.%s  t using (select %d clusterID,'%s'  checkPoint from dual) temp on(t.clusterID=temp.clusterID) "+
+		"when matched then "+
+		"update set t.checkPoint=temp.checkPoint "+
+		"when not matched then "+
+		"insert values(temp.clusterID,temp.checkPoint)", sp.schema, sp.table, sp.clusterID, str)
 }
 
 // getClusterID return the cluster id iff the checkpoint table exist only one row.

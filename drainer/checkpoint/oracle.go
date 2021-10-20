@@ -15,7 +15,7 @@ package checkpoint
 
 import (
 	"context"
-	"database/sql"
+	dbsql "database/sql"
 	"encoding/json"
 	"sync"
 	"time"
@@ -37,7 +37,7 @@ type OracleCheckPoint struct {
 	clusterID       uint64
 	initialCommitTS int64
 
-	db     *sql.DB
+	db     *dbsql.DB
 	schema string
 	table  string
 
@@ -49,7 +49,7 @@ type OracleCheckPoint struct {
 
 var _ CheckPoint = &OracleCheckPoint{}
 
-var sqlOpenDB2O = loader.CreateOracleDB
+var sqlOpenOracleDB = loader.CreateOracleDB
 
 func newOracle(cfg *Config) (CheckPoint, error) {
 	setDefaultConfig(cfg)
@@ -58,7 +58,7 @@ func newOracle(cfg *Config) (CheckPoint, error) {
 		log.Info("enable TLS for saving checkpoint")
 	}
 
-	db, err := sqlOpenDB2O(cfg.Db.User, cfg.Db.Password, cfg.Db.ConnectString)
+	db, err := sqlOpenOracleDB(cfg.Db.User, cfg.Db.Password, cfg.Db.ConnectString)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}
@@ -73,17 +73,17 @@ func newOracle(cfg *Config) (CheckPoint, error) {
 	}
 
 	sql := genCheckTableIsExist2o(sp)
-	tableName, err := db.Exec(sql)
 
-	if err != nil {
-		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
-	}
-
-	if tableName == nil {
+	var tableName string
+	err = db.QueryRow(sql).Scan(&tableName)
+	switch {
+	case err == dbsql.ErrNoRows:
 		sql = genCreateTable2o(sp)
 		if _, err = db.Exec(sql); err != nil {
 			return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
 		}
+	case err != nil:
+		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
 	}
 
 	if sp.clusterID == 0 {
@@ -119,7 +119,7 @@ func (sp *OracleCheckPoint) Load() error {
 	selectSQL := genSelectSQL2o(sp)
 	err := sp.db.QueryRow(selectSQL).Scan(&str)
 	switch {
-	case err == sql.ErrNoRows:
+	case err == dbsql.ErrNoRows:
 		sp.CommitTS = sp.initialCommitTS
 		return nil
 	case err != nil:
