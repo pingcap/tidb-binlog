@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -295,14 +296,27 @@ func (s *Syncer) run() error {
 		return err
 	}
 
-	var lastDDLSchemaVersion int64
-	var b *binlogItem
-
-	var fakeBinlog *pb.Binlog
-	var pushFakeBinlog chan<- *pb.Binlog
-
-	var lastAddComitTS int64
+	var (
+		lastDDLSchemaVersion int64
+		b                    *binlogItem
+		fakeBinlog           *pb.Binlog
+		pushFakeBinlog       chan<- *pb.Binlog
+		lastAddCommitTS      int64
+		lastFakeCommitTime   time.Time
+	)
 	dsyncError := s.dsyncer.Error()
+
+	appendFakeBinlogIfNeeded := func(binlog *pb.Binlog, commitTS int64) {
+		if fakeCommitTime := oracle.GetTimeFromTS(uint64(commitTS)); fakeCommitTime.Sub(lastFakeCommitTime) > 3*time.Second {
+			lastFakeCommitTime = fakeCommitTime
+			if binlog == nil {
+				binlog = util.GenFakeBinlog(commitTS)
+			}
+			fakeBinlogs = append(fakeBinlogs, binlog)
+			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddCommitTS)
+		}
+	}
+
 ForLoop:
 	for {
 		// check if we can safely push a fake binlog
@@ -340,8 +354,7 @@ ForLoop:
 		}
 
 		if startTS == commitTS {
-			fakeBinlogs = append(fakeBinlogs, binlog)
-			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddComitTS)
+			appendFakeBinlogIfNeeded(binlog, commitTS)
 		} else if jobID == 0 {
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
@@ -368,39 +381,45 @@ ForLoop:
 				break ForLoop
 			}
 
-			var isFilterTransaction = false
-			var err1 error
-			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle" {
+			var (
+				isFilterTransaction = false
+				ignore              = false
+				err1                error
+			)
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle"{
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")
 					break ForLoop
 				}
 			}
-
-			var ignore bool
-			ignore, err = filterTable(preWrite, s.filter, s.schema)
-			if err != nil {
-				err = errors.Annotate(err, "filterTable failed")
-				break ForLoop
+			if !isFilterTransaction {
+				ignore, err = filterTable(preWrite, s.filter, s.schema)
+				if err != nil {
+					err = errors.Annotate(err, "filterTable failed")
+					break ForLoop
+				}
 			}
 
 			if !ignore && !isFilterTransaction {
 				s.addDMLEventMetrics(preWrite.GetMutations())
 				beginTime := time.Now()
-				lastAddComitTS = binlog.GetCommitTs()
+				lastAddCommitTS = binlog.GetCommitTs()
 				err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: preWrite, SchemaVersion: preWrite.SchemaVersion})
 				if err != nil {
 					err = errors.Annotatef(err, "failed to add item")
 					break ForLoop
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
+			} else {
+				appendFakeBinlogIfNeeded(nil, commitTS)
 			}
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
 			if skipUnsupportedDDLJob(b.job) {
 				log.Info("skip unsupported DDL job", zap.Stringer("job", b.job))
+				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
 			}
 
@@ -418,6 +437,7 @@ ForLoop:
 
 			if b.job.SchemaState == model.StateDeleteOnly && b.job.Type == model.ActionDropColumn {
 				log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
+				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
 			}
 
@@ -432,6 +452,7 @@ ForLoop:
 			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
 			}
 
@@ -444,6 +465,7 @@ ForLoop:
 				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
+					appendFakeBinlogIfNeeded(nil, commitTS)
 					continue
 				}
 			} else if s.cfg.SyncDDL == "truncate-only" {
@@ -454,17 +476,12 @@ ForLoop:
 						zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 					shouldSkip = true
 				}
-				//if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
-				//	shouldSkip = false
-				//} else {
-				//	shouldSkip = true
-				//}
 			}
 
 			// Add ddl item to downstream.
 			s.addDDLCount()
 			beginTime := time.Now()
-			lastAddComitTS = binlog.GetCommitTs()
+			lastAddCommitTS = binlog.GetCommitTs()
 
 			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
 				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))

@@ -321,7 +321,9 @@ func (cfg *Config) Parse(args []string) error {
 		return errors.Trace(err)
 	}
 
-	initializeSaramaGlobalConfig()
+	if cfg.SyncerCfg.DestDBType == "kafka" {
+		initializeSaramaGlobalConfig(cfg.SyncerCfg.To.KafkaMaxMessageSize)
+	}
 	return cfg.validate()
 }
 
@@ -440,8 +442,9 @@ func (cfg *Config) adjustConfig() error {
 	}
 
 	if cfg.SyncerCfg.DestDBType == "kafka" {
-		maxMsgSize = maxKafkaMsgSize
-
+		if cfg.SyncerCfg.To.KafkaMaxMessageSize <= 0 {
+			cfg.SyncerCfg.To.KafkaMaxMessageSize = maxKafkaMsgSize
+		}
 		// get KafkaAddrs from zookeeper if ZkAddrs is setted
 		if cfg.SyncerCfg.To.ZKAddrs != "" {
 			zkClient, err := newZKFromConnectionString(cfg.SyncerCfg.To.ZKAddrs, time.Second*5, time.Second*60)

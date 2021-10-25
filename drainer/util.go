@@ -35,12 +35,8 @@ import (
 )
 
 const (
-	maxKafkaMsgSize = 1024 * 1024 * 1024
-	maxGrpcMsgSize  = math.MaxInt32
-)
-
-var (
-	maxMsgSize = maxGrpcMsgSize
+	maxKafkaMsgSize = 1 << 30
+	maxGrpcMsgSize  = int(^uint(0) >> 1)
 )
 
 // taskGroup is a wrapper of `sync.WaitGroup`.
@@ -141,10 +137,14 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	return checkpointCfg, nil
 }
 
-func initializeSaramaGlobalConfig() {
-	sarama.MaxResponseSize = int32(maxKafkaMsgSize)
+func initializeSaramaGlobalConfig(kafkaMsgSize int32) {
+	sarama.MaxResponseSize = kafkaMsgSize
 	// add 1 to avoid confused log: Producer.MaxMessageBytes must be smaller than MaxRequestSize; it will be ignored
-	sarama.MaxRequestSize = int32(maxKafkaMsgSize) + 1
+	if kafkaMsgSize < math.MaxInt32 {
+		sarama.MaxRequestSize = kafkaMsgSize + 1
+	} else {
+		sarama.MaxRequestSize = kafkaMsgSize
+	}
 }
 
 func getDDLJob(tiStore kv.Storage, id int64) (*model.Job, error) {
