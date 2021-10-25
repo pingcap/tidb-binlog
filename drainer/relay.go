@@ -61,7 +61,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 		return errors.Annotate(err, "failed to create loader")
 	}
 
-	err = feedByRelayLog(reader, ld, cp)
+	err = feedByRelayLog(reader, ld, cp, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -70,7 +70,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 }
 
 // feedByRelayLog will take over the `ld loader.Loader`.
-func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) error {
+func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, cfg *Config) error {
 	checkpointTS := cp.TS()
 	lastSuccessTS := checkpointTS
 	r.Run()
@@ -117,8 +117,13 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 			if sbinlog.CommitTs <= checkpointTS {
 				continue
 			}
-
-			txn, err := loader.SecondaryBinlogToTxn(sbinlog)
+			var txn *loader.Txn
+			var err error
+			if cfg.SyncerCfg.DestDBType == "oracle" {
+				txn, err = loader.SecondaryBinlogToOracleTxn(sbinlog, cfg.SyncerCfg.SchemaMap)
+			}else {
+				txn, err = loader.SecondaryBinlogToTxn(sbinlog)
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}

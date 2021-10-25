@@ -66,7 +66,6 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:    table,
 						Values:   make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -85,7 +84,6 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Values:    make(map[string]interface{}),
 						OldValues: make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -105,7 +103,6 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:    table,
 						Values:   make(map[string]interface{}),
 						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
-						UpInfo: info,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {

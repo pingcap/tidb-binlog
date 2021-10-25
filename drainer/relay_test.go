@@ -100,7 +100,7 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	reader, err := relay.NewReader(relayDir, 1)
 	c.Assert(err, check.IsNil)
 
-	err = feedByRelayLog(reader, ld, cp)
+	err = feedByRelayLog(reader, ld, cp, nil)
 	c.Assert(err, check.IsNil)
 
 	ts := cp.TS()

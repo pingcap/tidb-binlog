@@ -49,7 +49,6 @@ type DML struct {
 	info *tableInfo
 
 	UpColumnsInfoMap map[string]*model.ColumnInfo
-	UpInfo *model.TableInfo
 }
 
 // DDL holds the ddl info

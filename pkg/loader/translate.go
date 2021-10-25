@@ -14,8 +14,11 @@
 package loader
 
 import (
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
+	"strings"
 )
 
 // SecondaryBinlogToTxn translate the Binlog format into Txn
@@ -57,6 +60,66 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	return txn, nil
 }
 
+func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, schemaMap map[string]string) (*Txn, error) {
+	txn := new(Txn)
+	var err error
+	switch binlog.Type {
+	case pb.BinlogType_DDL:
+		data := binlog.DdlData
+		txn.DDL = new(DDL)
+		txn.DDL.Database = ResolveDownstreamSchema(data.GetSchemaName(), schemaMap)
+		txn.DDL.Table = data.GetTableName()
+		txn.DDL.SQL = string(data.GetDdlQuery())
+	case pb.BinlogType_DML:
+		for _, table := range binlog.DmlData.GetTables() {
+			for _, mut := range table.GetMutations() {
+				dml := new(DML)
+				dml.Database = ResolveDownstreamSchema(table.GetSchemaName(), schemaMap)
+				dml.Table = table.GetTableName()
+				dml.Tp = getDMLType(mut)
+
+				// setup values
+				dml.Values, err = getColVals(table, mut.Row.GetColumns())
+				if err != nil {
+					return nil, err
+				}
+
+				// setup old values
+				if dml.Tp == UpdateDMLType {
+					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns())
+					if err != nil {
+						return nil, err
+					}
+				}
+				dml.UpColumnsInfoMap = getColumnsInfoMap(table.ColumnInfo)
+				txn.DMLs = append(txn.DMLs, dml)
+			}
+		}
+	}
+	return txn, nil
+}
+
+func ResolveDownstreamSchema(upStreamSchema string, schemaMap map[string]string) string {
+	if schemaMap == nil {
+		return upStreamSchema
+	}
+	if downSchema, ok := schemaMap[upStreamSchema]; ok {
+		return downSchema
+	}
+	return upStreamSchema
+}
+
+func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
+	colMap := make(map[string]*model.ColumnInfo)
+	for _, col := range columnInfos {
+		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
+			Name: model.CIStr{O:col.Name},
+			FieldType: types.FieldType{Tp: typeString2Type(col.MysqlType),Flen:int(col.Flen),Decimal: int(col.Decimal)},
+		}
+	}
+	return colMap
+}
+
 func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, error) {
 	vals := make(map[string]interface{}, len(cols))
 	for i, col := range cols {
@@ -65,7 +128,7 @@ func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, err
 		if err != nil {
 			return vals, err
 		}
-		vals[name] = arg
+		vals[strings.ToUpper(name)] = arg
 	}
 	return vals, nil
 }
@@ -118,4 +181,38 @@ func getDMLType(mut *pb.TableMutation) DMLType {
 	default:
 		return UnknownDMLType
 	}
+}
+
+func typeString2Type(typeSring string) byte {
+	return Str2Type[typeSring]
+}
+
+var Str2Type = map[string]byte{
+	"bit": mysql.TypeBit,
+	"text":mysql.TypeBlob,
+	"date":mysql.TypeDate,
+	"datetime":mysql.TypeDatetime,
+	"unspecified":mysql.TypeUnspecified,
+	"decimal":mysql.TypeNewDecimal,
+	"double":mysql.TypeDouble,
+	"enum":mysql.TypeEnum,
+	"float":mysql.TypeFloat,
+	"geometry": mysql.TypeGeometry,
+	"mediumint": mysql.TypeInt24,
+	"json":mysql.TypeJSON,
+	"int":mysql.TypeLong,
+	"bigint":mysql.TypeLonglong,
+	"longtext":mysql.TypeLongBlob,
+	"mediumtext":mysql.TypeMediumBlob,
+	"null":mysql.TypeNull,
+	"set":mysql.TypeSet,
+	"smallint":mysql.TypeShort,
+	"char":mysql.TypeString,
+	"time":mysql.TypeDuration,
+	"timestamp":mysql.TypeTimestamp,
+	"tinyint":mysql.TypeTiny,
+	"tinytext":mysql.TypeTinyBlob,
+	"varchar":mysql.TypeVarchar,
+	"var_string":mysql.TypeVarString,
+	"year":mysql.TypeYear,
 }
