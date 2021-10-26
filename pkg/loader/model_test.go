@@ -441,4 +441,11 @@ func (s *SQLSuite) TestGenOracleValue(c *check.C) {
 	c.Assert(
 		val, check.Equals,"'2021'")
 
+	columnInfo = model.ColumnInfo{
+		FieldType: types.FieldType{Tp: mysql.TypeDuration},
+	}
+	colVaue = "23:11:59"
+	val = genOracleValue(&columnInfo, colVaue)
+	c.Assert(
+		val, check.Equals,"TO_DATE('23:11:59', 'hh24:mi:ss')")
 }
