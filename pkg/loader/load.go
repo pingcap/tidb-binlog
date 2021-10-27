@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -459,16 +458,12 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 	ddlStmt := ddl.SQL
 	var newStmt string
 	if isTruncateTableStmt(ddlStmt) {
-		newStmt = fmt.Sprintf("truncate table %s.%s", ddl.Database, ddl.Table)
+		newStmt = fmt.Sprintf("exec %s.do_truncate('%s.%s','')", ddl.Database, ddl.Database, ddl.Table)
 	}else {
 		ok, astStmt := isTruncateTablePartitionStmt(ddlStmt)
 		if ok {
 			partitions := astStmt.Specs[0].PartitionNames
-			partitionNames := make([]string, 0, len(partitions))
-			for _, p := range partitions {
-				partitionNames = append(partitionNames, p.O)
-			}
-			newStmt = fmt.Sprintf("alter table %s.%s truncate partition %s", ddl.Database, ddl.Table, strings.Join(partitionNames,","))
+			newStmt = fmt.Sprintf("exec %s.do_truncate('%s.%s','%s')", ddl.Database, ddl.Database, ddl.Table, partitions[0].O)
 		}else {
 			log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
 		}

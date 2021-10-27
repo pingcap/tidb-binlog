@@ -498,6 +498,9 @@ func getKeys(dml *DML) (keys []string) {
 }
 
 func genOracleValue(column *model.ColumnInfo, value interface{}) string{
+	if value == nil {
+		return "NULL"
+	}
 	switch column.Tp {
 	case mysql.TypeDate:
 		return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd')", value)

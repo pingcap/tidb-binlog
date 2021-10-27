@@ -396,7 +396,7 @@ func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("truncate table test.t1").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("exec test.do_truncate").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
@@ -411,12 +411,12 @@ func (s *execDDLSuite) TestTruncateTablePartitionDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("alter table test.t1 truncate partition p1,p2").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("exec test.do_truncate").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
 
-	ddl := DDL{SQL: "alter table t1 truncate partition p1,p2", Database: "test", Table:"t1"}
+	ddl := DDL{SQL: "alter table t1 truncate partition p1", Database: "test", Table:"t1"}
 	err = loader.execDDL(&ddl)
 	c.Assert(err, check.IsNil)
 }

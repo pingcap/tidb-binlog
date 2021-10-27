@@ -370,14 +370,17 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 		Values: map[string]interface{}{
 			"id":123,
 			"name": "pc",
+			"c2":nil,
 		},
 		info: &tableInfo{
-			columns: []string{"id", "name"},
+			columns: []string{"id", "name", "c2"},
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"id": {
 				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
 			"name": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"c2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 
 		},
@@ -385,7 +388,7 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 	sql	:= dml.oracleSql()
 	c.Assert(
 		sql, check.Equals,
-		"INSERT INTO db.tbl (id, name) VALUES (123, 'pc')")
+		"INSERT INTO db.tbl (c2, id, name) VALUES (NULL, 123, 'pc')")
 }
 
 func (s *SQLSuite) TestGenOracleValue(c *check.C) {
@@ -448,4 +451,9 @@ func (s *SQLSuite) TestGenOracleValue(c *check.C) {
 	val = genOracleValue(&columnInfo, colVaue)
 	c.Assert(
 		val, check.Equals,"TO_DATE('23:11:59', 'hh24:mi:ss')")
+
+	var colVaue2 interface{}
+	val = genOracleValue(&columnInfo, colVaue2)
+	c.Assert(
+		val, check.Equals,"NULL")
 }
