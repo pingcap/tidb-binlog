@@ -458,12 +458,12 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 	ddlStmt := ddl.SQL
 	var newStmt string
 	if isTruncateTableStmt(ddlStmt) {
-		newStmt = fmt.Sprintf("exec %s.do_truncate('%s.%s','')", ddl.Database, ddl.Database, ddl.Table)
+		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
 	}else {
 		ok, astStmt := isTruncateTablePartitionStmt(ddlStmt)
 		if ok {
 			partitions := astStmt.Specs[0].PartitionNames
-			newStmt = fmt.Sprintf("exec %s.do_truncate('%s.%s','%s')", ddl.Database, ddl.Database, ddl.Table, partitions[0].O)
+			newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','%s');END;", ddl.Database, ddl.Database, ddl.Table, partitions[0].O)
 		}else {
 			log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
 		}
@@ -476,8 +476,9 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 			return err
 		}
 		if _, err = tx.Exec(stmt); err != nil {
+			log.Error("DDL exec failed.", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", stmt),zap.Error(err))
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Rollback failed", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", stmt),zap.Error(rbErr))
+				log.Error("Rollback DDL failed", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", stmt),zap.Error(rbErr))
 			}
 			return err
 		}
