@@ -32,10 +32,10 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/ast"
-	tmysql "github.com/pingcap/parser/mysql"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 )
 
 const (

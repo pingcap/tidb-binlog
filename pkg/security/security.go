@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/config"
-	kvcfg "github.com/pingcap/tidb/store/tikv/config"
+	kvcfg "github.com/tikv/client-go/v2/config"
 )
 
 // Config is security config

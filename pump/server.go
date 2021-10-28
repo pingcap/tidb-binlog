@@ -35,13 +35,12 @@ import (
 	"github.com/pingcap/tidb/kv"
 	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	binlog "github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
+	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"github.com/unrolled/render"
 	"go.uber.org/zap"
@@ -538,7 +537,7 @@ func (s *Server) detectDrainerCheckpoint() {
 		case <-ticker.C:
 			gcTS := s.storage.GetGCTS()
 			alertGCMS := earlyAlertGC.Nanoseconds() / 1000 / 1000
-			alertGCTS := gcTS + int64(oracle.EncodeTSO(alertGCMS))
+			alertGCTS := gcTS + int64(storage.EncodeTSO(alertGCMS))
 
 			log.Info("use gc ts to detect drainer checkpoint", zap.Int64("gc ts", gcTS))
 			// detect whether the binlog before drainer's checkpoint had been purged
@@ -586,7 +585,7 @@ func (s *Server) gcBinlogFile() {
 		}
 
 		millisecond := time.Now().Add(-s.gcDuration).UnixNano() / 1000 / 1000
-		gcTS := int64(oracle.EncodeTSO(millisecond))
+		gcTS := int64(storage.EncodeTSO(millisecond))
 
 		log.Info("send gc request to storage", zap.Int64("request gc ts", gcTS))
 		s.storage.GC(gcTS)

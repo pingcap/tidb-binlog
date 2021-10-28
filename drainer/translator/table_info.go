@@ -13,7 +13,7 @@
 
 package translator
 
-import "github.com/pingcap/parser/model"
+import "github.com/pingcap/tidb/parser/model"
 
 // TableInfoGetter is used to get table info by table id of TiDB
 type TableInfoGetter interface {
