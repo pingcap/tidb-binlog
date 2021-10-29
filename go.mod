@@ -30,9 +30,10 @@ require (
 	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211026030648-c497d5c06348
 	github.com/pingcap/tipb v0.0.0-20211026080602-ec68283c1735
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.32.1 // indirect
+	github.com/prometheus/common v0.26.0 // indirect
+	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
 	github.com/soheilhy/cmux v0.1.5
