@@ -1455,6 +1455,7 @@ func (a *Append) AllMatched() bool {
 }
 
 // EncodeTSO encodes a millisecond into tso.
+// TODO: Use the function defined in github.com/tikv/client-go/v2.
 func EncodeTSO(ts int64) uint64 {
 	return uint64(ts) << physicalShiftBits
 }

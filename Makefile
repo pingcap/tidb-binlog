@@ -13,7 +13,8 @@ TEST_DIR := /tmp/tidb_binlog_test
 
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
-GOTEST   := CGO_ENABLED=1 $(GO) test -p 1
+# TODO: Remove this ldflags. It is used to fix unit tests temporarily. See https://developers.google.com/protocol-buffers/docs/reference/go/faq#namespace-conflict.
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 1 -ldflags "-X google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn"
 GOVERSION := "`go version`"
 
 ARCH  := "`uname -s`"
@@ -27,6 +28,8 @@ FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor' | grep -vE 'binlog.p
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.GitHash=$(shell git rev-parse HEAD)"
 LDFLAGS += -X "github.com/pingcap/tidb-binlog/pkg/version.ReleaseVersion=$(shell git describe --tags --dirty)"
+# TODO: Remove this ldflags. See https://developers.google.com/protocol-buffers/docs/reference/go/faq#namespace-conflict.
+LDFLAGS += -X "google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=warn"
 
 default: build buildsucc
 
