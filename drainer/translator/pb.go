@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/util"
