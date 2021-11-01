@@ -27,7 +27,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20211011042309-a4518fcacbc8
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
 	github.com/pingcap/tidb v1.1.0-beta.0.20211026030648-c497d5c06348
-	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
+	github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211026030648-c497d5c06348
 	github.com/pingcap/tipb v0.0.0-20211026080602-ec68283c1735
 	github.com/prometheus/client_golang v1.7.1
@@ -52,5 +52,3 @@ require (
 )
 
 replace google.golang.org/grpc => google.golang.org/grpc v1.29.1
-
-replace github.com/pingcap/tidb-tools => github.com/rleungx/tidb-tools v5.2.3-0.20211101050842-23301ee7b003+incompatible
