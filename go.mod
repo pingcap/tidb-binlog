@@ -52,3 +52,5 @@ require (
 )
 
 replace google.golang.org/grpc => google.golang.org/grpc v1.29.1
+
+replace github.com/pingcap/tidb-tools => github.com/rleungx/tidb-tools v5.2.3-0.20211101050842-23301ee7b003+incompatible
