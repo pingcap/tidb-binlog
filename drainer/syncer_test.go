@@ -21,9 +21,9 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"github.com/pingcap/tidb/parser/model"
 	pb "github.com/pingcap/tipb/go-binlog"
 )
 

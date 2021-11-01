@@ -16,11 +16,12 @@ package translator
 import (
 	"fmt"
 
+	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 )
 

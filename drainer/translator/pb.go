@@ -19,12 +19,13 @@ import (
 	"strings"
 	"time"
 
+	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"

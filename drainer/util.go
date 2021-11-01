@@ -26,11 +26,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 

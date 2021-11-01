@@ -19,8 +19,8 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	gb "github.com/pingcap/tipb/go-binlog"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 var _ = Suite(&testFileSuite{})
