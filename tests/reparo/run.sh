@@ -14,7 +14,7 @@ run_drainer "$args" &
 
 GO111MODULE=on go build -o out
 
-sleep 5
+sleep 8
 
 run_sql "CREATE DATABASE IF NOT EXISTS \`reparo-test\`"
 

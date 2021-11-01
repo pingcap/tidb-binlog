@@ -1,37 +1,42 @@
 # diff Configuration.
 
-log-level = "debug"
-
-# for example, the whole data is [1...100]
-# we can split these data to [1...10], [11...20], ..., [91...100]
-# the [1...10] is a chunk, and it's chunk size is 10
-# size of the split chunk
-chunk-size = 100
+######################### Global config #########################
 
 # how many goroutines are created to check data
 check-thread-count = 1
 
-# sampling check percent, for example 10 means only check 10% data
-sample-percent = 100
+# set false if just want compare data by checksum, will skip select data when checksum is not equal.
+# set true if want compare all different rows, will slow down the total compare time.
+export-fix-sql = true
 
-# the name of the file which saves sqls used to fix different data
-fix-sql-file = "/tmp/tidb_binlog_test/fix.sql"
+# ignore check table's data
+check-struct-only = false
 
-use-checksum=true
+######################### Databases config #########################
+[data-sources]
+[data-sources.source1]
+host = "127.0.0.1"
+port = 4000
+user = "root"
+password = ""
 
-[[check-tables]]
-schema = "RESTART_TEST"
-tables = ["TEST"]
-
-[target-db]
+[data-sources.target]
 host = "127.0.0.1"
 port = 3306
 user = "root"
 password = ""
 
-[[source-db]]
-host = "127.0.0.1"
-port = 4000
-user = "root"
-password = ""
-instance-id = "source-1"
+######################### Task config #########################
+[task]
+# 1 fix sql: fix-target-TIDB1.sql
+# 2 log: sync-diff.log
+# 3 summary: summary.txt
+# 4 checkpoint: a dir
+output-dir = "/tmp/tidb_binlog_test/sync_diff_test-name-placeholder"
+
+source-instances = ["source1"]
+
+target-instance = "target"
+
+# tables need to check. *Include `schema` and `table`. Use `.` to split*
+target-check-tables = ["RESTART_TEST.TEST"]
