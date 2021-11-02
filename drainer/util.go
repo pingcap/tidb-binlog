@@ -104,11 +104,12 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	case "oracle":
 		checkpointCfg.CheckpointType = toCheckpoint.Type
 		checkpointCfg.Db = &checkpoint.DBConfig{
-			Host:     toCheckpoint.Host,
-			User:     toCheckpoint.User,
-			Password: toCheckpoint.Password,
-			TLS:      toCheckpoint.TLS,
-			ConnectString: toCheckpoint.ConnectString,
+			Host:     	 toCheckpoint.Host,
+			User:     	 toCheckpoint.User,
+			Password: 	 toCheckpoint.Password,
+			Port:     	 toCheckpoint.Port,
+			TLS:      	 toCheckpoint.TLS,
+			ServiceName: toCheckpoint.ServiceName,
 		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {

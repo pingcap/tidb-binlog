@@ -20,6 +20,7 @@ type OracleSyncer struct {
 	*baseSyncer
 }
 
+// NewOracleSyncer returns a instance of OracleSyncer
 func NewOracleSyncer(
 	cfg *DBConfig,
 	tableInfoGetter translator.TableInfoGetter,
@@ -36,7 +37,7 @@ func NewOracleSyncer(
 		log.Info("enable TLS to connect downstream MySQL/TiDB")
 	}
 
-	db, err := loader.CreateOracleDB(cfg.User, cfg.Password, cfg.ConnectString)
+	db, err := loader.CreateOracleDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.ServiceName)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -57,6 +58,7 @@ func NewOracleSyncer(
 	return s, nil
 }
 
+// SetSafeMode make the OracleSyncer to use safe mode or not
 func (m *OracleSyncer) SetSafeMode(mode bool) bool {
 	m.loader.SetSafeMode(mode)
 	return true

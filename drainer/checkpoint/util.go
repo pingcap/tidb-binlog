@@ -36,7 +36,8 @@ type DBConfig struct {
 	Password      string      `toml:"password" json:"password"`
 	Port          int         `toml:"port" json:"port"`
 	TLS           *tls.Config `toml:"-" json:"-"`
-	ConnectString string      `toml:"connect-string" json:"connect-string"`
+	//for oracle database
+	ServiceName 	string	`toml:"service-name" json:"service-name"`
 }
 
 // Config is the savepoint configuration
@@ -95,7 +96,7 @@ func genCreateTable2o(sp *OracleCheckPoint) string {
 }
 
 func genReplaceSQL2o(sp *OracleCheckPoint, str string) string {
-	return fmt.Sprintf("merge into %s.%s  t using (select %d clusterID,'%s'  checkPoint from dual) temp on(t.clusterID=temp.clusterID) "+
+	return fmt.Sprintf("merge into %s.%s t using (select %d clusterID, '%s' checkPoint from dual) temp on(t.clusterID=temp.clusterID) "+
 		"when matched then "+
 		"update set t.checkPoint=temp.checkPoint "+
 		"when not matched then "+

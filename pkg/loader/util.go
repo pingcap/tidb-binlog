@@ -199,12 +199,13 @@ func CreateDB(user string, password string, host string, port int, tls *tls.Conf
 	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil, time.Minute)
 }
 
-func CreateOracleDB(user string, password string, connectString string) (db *gosql.DB, err error) {
-	// 时区以及配置设置
+func CreateOracleDB(user string, password string, host string, port int, serviceName string) (db *gosql.DB, err error) {
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
 		return nil, err
 	}
+	// build connect string
+	connectString := fmt.Sprintf("%s:%d/%s?connect_timeout=2", host, port, serviceName)
 	oraDSN := godror.ConnectionParams{
 		CommonParams: godror.CommonParams{
 			Username: user,

@@ -21,7 +21,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 			ShouldSkip: shouldSkip,
 		}
 	} else {
-		tableIdColumnsMap := make(map[int64]map[string]*model.ColumnInfo)
+		tableIDColumnsMap := make(map[int64]map[string]*model.ColumnInfo)
 		for _, mut := range pv.GetMutations() {
 			var info *model.TableInfo
 			var ok bool
@@ -30,8 +30,8 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 				return nil, errors.Errorf("TableByID empty table id: %d", mut.GetTableId())
 			}
 
-			if _, ok := tableIdColumnsMap[mut.GetTableId()]; !ok {
-				tableIdColumnsMap[mut.GetTableId()] = genColumnInfoMap(info)
+			if _, ok := tableIDColumnsMap[mut.GetTableId()]; !ok {
+				tableIDColumnsMap[mut.GetTableId()] = genColumnInfoMap(info)
 			}
 
 			pinfo, _ := infoGetter.TableBySchemaVersion(mut.GetTableId(), pv.SchemaVersion)
@@ -55,35 +55,35 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genMysqlInsert(schema, pinfo, info, row)
+					names, args, err := genDBInsert(schema, pinfo, info, row)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
 
 					dml := &loader.DML{
-						Tp:       loader.InsertDMLType,
-						Database: infoGetter.ResolveDownstreamSchema(schema),
-						Table:    table,
-						Values:   make(map[string]interface{}),
-						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
+						Tp:               loader.InsertDMLType,
+						Database:         infoGetter.ResolveDownstreamSchema(schema),
+						Table:            table,
+						Values:           make(map[string]interface{}),
+						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
 						dml.Values[strings.ToUpper(name)] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genMysqlUpdate(schema, pinfo, info, row, canAppendDefaultValue)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
 
 					dml := &loader.DML{
-						Tp:        loader.UpdateDMLType,
-						Database:  infoGetter.ResolveDownstreamSchema(schema),
-						Table:     table,
-						Values:    make(map[string]interface{}),
-						OldValues: make(map[string]interface{}),
-						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
+						Tp:               loader.UpdateDMLType,
+						Database:         infoGetter.ResolveDownstreamSchema(schema),
+						Table:            table,
+						Values:           make(map[string]interface{}),
+						OldValues:        make(map[string]interface{}),
+						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -92,17 +92,17 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genMysqlDelete(schema, info, row)
+					names, args, err := genDBDelete(schema, info, row)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}
 
 					dml := &loader.DML{
-						Tp:       loader.DeleteDMLType,
-						Database: infoGetter.ResolveDownstreamSchema(schema),
-						Table:    table,
-						Values:   make(map[string]interface{}),
-						UpColumnsInfoMap: tableIdColumnsMap[mut.GetTableId()],
+						Tp:               loader.DeleteDMLType,
+						Database:         infoGetter.ResolveDownstreamSchema(schema),
+						Table:            table,
+						Values:           make(map[string]interface{}),
+						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {

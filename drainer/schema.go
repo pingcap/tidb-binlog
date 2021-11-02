@@ -540,6 +540,8 @@ func (s *Schema) setUpDownSchemaMap(schemaMap map[string]string) {
 	s.UpDownSchemaMap = schemaMap
 }
 
+// ResolveDownstreamSchema if schema in upstream db is diffrent from schema in downstream db,
+//so we should map to downstream schema.UpDownSchemaMap store the mapping between upstream and  downstream schema
 func (s *Schema) ResolveDownstreamSchema(upStreamSchema string) string {
 	if s.UpDownSchemaMap == nil {
 		return upStreamSchema

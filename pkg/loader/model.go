@@ -507,9 +507,8 @@ func genOracleValue(column *model.ColumnInfo, value interface{}) string{
 	case mysql.TypeDatetime:
 		if column.Decimal == 0 {
 			return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd hh24:mi:ss')", value)
-		}else {
-			return fmt.Sprintf("TO_TIMESTAMP('%v', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
 		}
+		return fmt.Sprintf("TO_TIMESTAMP('%v', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
 	case mysql.TypeTimestamp:
 		return fmt.Sprintf("TO_TIMESTAMP('%s', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
 	case mysql.TypeDuration:

@@ -56,7 +56,7 @@ type DBConfig struct {
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
 	//for oracle database
-	ConnectString 	string	`toml:"connect_string" json:"connect_string"`
+	ServiceName 	string	`toml:"service-name" json:"service-name"`
 }
 
 // CheckpointConfig is the Checkpoint configuration.
@@ -72,7 +72,7 @@ type CheckpointConfig struct {
 	Security          security.Config `toml:"security" json:"security"`
 	TLS               *tls.Config     `toml:"-" json:"-"`
 	//for oracle database
-	ConnectString 	string	`toml:"connect_string" json:"connect_string"`
+	ServiceName 	  string	`toml:"service-name" json:"service-name"`
 }
 
 type baseError struct {

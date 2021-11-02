@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ func newOracle(cfg *Config) (CheckPoint, error) {
 		log.Info("enable TLS for saving checkpoint")
 	}
 
-	db, err := sqlOpenOracleDB(cfg.Db.User, cfg.Db.Password, cfg.Db.ConnectString)
+	db, err := sqlOpenOracleDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.ServiceName)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}

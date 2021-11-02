@@ -67,10 +67,10 @@ type SyncerConfig struct {
 	IgnoreTables      []filter.TableName `toml:"ignore-table" json:"ignore-table"`
 	TxnBatch          int                `toml:"txn-batch" json:"txn-batch"`
 	LoopbackControl   bool               `toml:"loopback-control" json:"loopback-control"`
-	SyncDDL           string               `toml:"sync-ddl" json:"sync-ddl"`
+	SyncDDL           string             `toml:"sync-ddl" json:"sync-ddl"`
 	ChannelID         int64              `toml:"channel-id" json:"channel-id"`
 	WorkerCount       int                `toml:"worker-count" json:"worker-count"`
-	SchemaMap         map[string]string  `toml:"schema-map" json:"schema_map"`
+	SchemaMap         map[string]string  `toml:"schema-map" json:"schema-map"`
 	To                *dsync.DBConfig    `toml:"to" json:"to"`
 	DoTables          []filter.TableName `toml:"replicate-do-table" json:"replicate-do-table"`
 	DoDBs             []string           `toml:"replicate-do-db" json:"replicate-do-db"`

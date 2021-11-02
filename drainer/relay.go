@@ -45,7 +45,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 	}
 	var db *sql.DB
 	if cfg.SyncerCfg.DestDBType == "oracle" {
-		db, err = loader.CreateOracleDB(cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.ConnectString)
+		db, err = loader.CreateOracleDB(cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, scfg.To.Host, scfg.To.Port, cfg.SyncerCfg.To.ServiceName)
 	}else {
 		db, err = loader.CreateDBWithSQLMode(scfg.To.User, scfg.To.Password, scfg.To.Host, scfg.To.Port, scfg.To.TLS, scfg.StrSQLMode, scfg.To.Params, scfg.To.ReadTimeout)
 	}

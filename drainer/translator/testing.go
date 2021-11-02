@@ -101,6 +101,7 @@ func (g *BinlogGenerator) SchemaAndTableName(id int64) (schema string, table str
 	return
 }
 
+// ResolveDownstreamSchema implements TableInfoGetter interface
 func (g *BinlogGenerator) ResolveDownstreamSchema(upStreamSchema string) string {
 	return upStreamSchema
 }

@@ -260,12 +260,12 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	return errors.Trace(err)
 }
 
-func (e *executor) oracleBulkDelete(deletes []*DML) error {
-	if len(deletes) == 0 {
+func (e *executor) oracleBulkOperation(dmls []*DML) error {
+	if len(dmls) == 0 {
 		return nil
 	}
 	tx, err := e.begin()
-	for _, dml := range deletes {
+	for _, dml := range dmls {
 		sql := dml.oracleSql()
 		_, err = tx.autoRollbackExecWithNoArgs(sql)
 		if err != nil {
@@ -275,38 +275,6 @@ func (e *executor) oracleBulkDelete(deletes []*DML) error {
 	err = tx.commit()
 	return errors.Trace(err)
 
-}
-
-func (e *executor) oracleBulkInsert(inserts []*DML) error {
-	if len(inserts) == 0 {
-		return nil
-	}
-	tx, err := e.begin()
-	for _, dml := range inserts {
-		sql := dml.oracleSql()
-		_, err = tx.autoRollbackExecWithNoArgs(sql)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	err = tx.commit()
-	return errors.Trace(err)
-}
-
-func (e *executor) oracleBulkUpdate(updates []*DML) error {
-	if len(updates) == 0 {
-		return nil
-	}
-	tx, err := e.begin()
-	for _, dml := range updates {
-		sql := dml.oracleSql()
-		_, err = tx.autoRollbackExecWithNoArgs(sql)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	err = tx.commit()
-	return errors.Trace(err)
 }
 
 // we merge dmls by primary key, after merge by key, we
@@ -330,7 +298,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 	if allDeletes, ok := types[DeleteDMLType]; ok {
 		bulkDelete := e.bulkDelete
 		if e.destDBType == "oracle" {
-			bulkDelete = e.oracleBulkDelete
+			bulkDelete = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allDeletes, bulkDelete); err != nil {
 			return errors.Trace(err)
@@ -340,7 +308,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 	if allInserts, ok := types[InsertDMLType]; ok {
 		bulkInsert := e.bulkReplace
 		if e.destDBType == "oracle" {
-			bulkInsert = e.oracleBulkInsert
+			bulkInsert = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allInserts, bulkInsert); err != nil {
 			return errors.Trace(err)
@@ -350,7 +318,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 	if allUpdates, ok := types[UpdateDMLType]; ok {
 		bulkUpdate := e.bulkReplace
 		if e.destDBType == "oracle" {
-			bulkUpdate = e.oracleBulkUpdate
+			bulkUpdate = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allUpdates, bulkUpdate); err != nil {
 			return errors.Trace(err)
