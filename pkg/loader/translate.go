@@ -187,10 +187,10 @@ func getDMLType(mut *pb.TableMutation) DMLType {
 }
 
 func typeString2Type(typeSring string) byte {
-	return Str2Type[typeSring]
+	return str2Type[typeSring]
 }
 
-var Str2Type = map[string]byte{
+var str2Type = map[string]byte{
 	"bit": mysql.TypeBit,
 	"text":mysql.TypeBlob,
 	"date":mysql.TypeDate,
