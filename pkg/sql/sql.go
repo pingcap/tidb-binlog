@@ -205,6 +205,7 @@ func GetTidbPosition(db *sql.DB) (int64, error) {
 	return ts, nil
 }
 
+//GetOraclePosition return oracle scn
 func GetOraclePosition(db *sql.DB) (int64, error) {
 	rows, err := db.Query("select dbms_flashback.get_system_change_number as current_scn from dual")
 	if err != nil {
@@ -212,7 +213,7 @@ func GetOraclePosition(db *sql.DB) (int64, error) {
 	}
 	defer rows.Close()
 	if !rows.Next() {
-		return 0, errors.New("get oracle position failed.")
+		return 0, errors.New("get oracle position failed")
 	}
 	fields, err := ScanRow(rows)
 	if err != nil {

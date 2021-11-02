@@ -266,7 +266,7 @@ func (e *executor) oracleBulkOperation(dmls []*DML) error {
 	}
 	tx, err := e.begin()
 	for _, dml := range dmls {
-		sql := dml.oracleSql()
+		sql := dml.oracleSQL()
 		_, err = tx.autoRollbackExecWithNoArgs(sql)
 		if err != nil {
 			return errors.Trace(err)
@@ -503,7 +503,7 @@ func (e *executor) singleOracleExec(dmls []*DML, safeMode bool) error {
 				return errors.Trace(err)
 			}
 		} else {
-			sql := dml.oracleSql()
+			sql := dml.oracleSQL()
 			log.Debug("normal sql with no safeMode", zap.String("sql", sql))
 			_, err := tx.autoRollbackExecWithNoArgs(sql)
 			if err != nil {

@@ -415,7 +415,7 @@ func (dml *DML) sql() (sql string, args []interface{}) {
 	return
 }
 
-func (dml *DML) oracleSql() (sql string) {
+func (dml *DML) oracleSQL() (sql string) {
 	switch dml.Tp {
 	case InsertDMLType:
 		return dml.oracleInsertSQL()

@@ -13,6 +13,7 @@ import (
 
 var _ Syncer = &OracleSyncer{}
 
+// OracleSyncer sync binlog to Oracle
 type OracleSyncer struct {
 	db      *sql.DB
 	loader  loader.Loader

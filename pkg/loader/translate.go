@@ -60,6 +60,7 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	return txn, nil
 }
 
+// SecondaryBinlogToOracleTxn translate the Binlog format into Oracle Txn
 func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, schemaMap map[string]string) (*Txn, error) {
 	txn := new(Txn)
 	var err error
@@ -99,6 +100,8 @@ func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, schemaMap map[string]string) 
 	return txn, nil
 }
 
+// ResolveDownstreamSchema if schema in upstream db is diffrent from schema in downstream db,
+//so we should map to downstream schema.schemaMap store the mapping between upstream and  downstream schema
 func ResolveDownstreamSchema(upStreamSchema string, schemaMap map[string]string) string {
 	if schemaMap == nil {
 		return upStreamSchema

@@ -290,7 +290,7 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 
 		},
 	}
-	sql	:= dml.oracleSql()
+	sql	:= dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
 		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND name = 'pingcap' AND rownum <=1")
@@ -330,7 +330,7 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 
 		},
 	}
-	sql	:= dml.oracleSql()
+	sql	:= dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
 		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND rownum <=1")
@@ -356,7 +356,7 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 
 		},
 	}
-	sql	:= dml.oracleSql()
+	sql	:= dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
 		"DELETE FROM db.tbl WHERE id = 123 AND name = 'pc' AND rownum <=1")
@@ -385,7 +385,7 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 
 		},
 	}
-	sql	:= dml.oracleSql()
+	sql	:= dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
 		"INSERT INTO db.tbl (c2, id, name) VALUES (NULL, 123, 'pc')")
