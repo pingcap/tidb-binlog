@@ -121,7 +121,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 			dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
 		}
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
+			return nil, errors.Annotate(err, "fail to create db dsyncer")
 		}
 		// only use for test
 	case "_intercept":

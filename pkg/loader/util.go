@@ -200,19 +200,26 @@ func CreateDB(user string, password string, host string, port int, tls *tls.Conf
 }
 
 //CreateOracleDB create Oracle DB connection and return it
-func CreateOracleDB(user string, password string, host string, port int, serviceName string) (db *gosql.DB, err error) {
+func CreateOracleDB(user string, password string, host string, port int, serviceName, connectString string) (db *gosql.DB, err error) {
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
 		return nil, err
 	}
-	// build connect string
-	connectString := fmt.Sprintf("%s:%d/%s?connect_timeout=2", host, port, serviceName)
+	pConnectString := ""
+	if connectString == "" {
+		if serviceName == "" {
+			return nil, errors.New("service-name should not be empty")
+		}
+		pConnectString = fmt.Sprintf("%s:%d/%s?connect_timeout=2", host, port, serviceName)
+	} else {
+		pConnectString = connectString
+	}
 	oraDSN := godror.ConnectionParams{
 		CommonParams: godror.CommonParams{
-			Username: user,
-			Password: godror.NewPassword(password),
-			ConnectString: connectString,
-			Timezone: loc,
+			Username:      user,
+			Password:      godror.NewPassword(password),
+			ConnectString: pConnectString,
+			Timezone:      loc,
 		},
 	}
 	sqlDB := gosql.OpenDB(godror.NewConnector(oraDSN))
