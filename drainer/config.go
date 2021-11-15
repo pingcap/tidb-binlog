@@ -61,39 +61,39 @@ var (
 // TaskTableMigrateRule defines upstream table to downstream migrate rules
 type TaskTableMigrateRule struct {
 	// filter rule name
-	BinlogFilterRule *[]string `json:"binlog-filter-rule,omitempty"`
+	BinlogFilterRule *[]string `toml:"binlog-filter-rule,omitempty" json:"binlog-filter-rule,omitempty"`
 
 	// source-related configuration
 	Source struct {
 		// schema name, wildcard support
-		Schema string `json:"schema"`
+		Schema string `toml:"schema" json:"schema"`
 
 		// table name, wildcard support
-		Table string `json:"table"`
-	} `json:"source"`
+		Table string `toml:"table" json:"table"`
+	} `toml:"source" json:"source"`
 
 	// downstream-related configuration
 	Target *struct {
 		// schema name, does not support wildcards
-		Schema string `json:"schema"`
+		Schema string `toml:"schema" json:"schema"`
 
 		// table name, does not support wildcards
-		Table string `json:"table"`
-	} `json:"target,omitempty"`
+		Table string `toml:"table" json:"table"`
+	} `toml:"target,omitempty" json:"target,omitempty"`
 }
 
 // TaskBinLogFilterRule defines filtering rules at binlog level
 type TaskBinLogFilterRule struct {
 	// event type
-	IgnoreEvent *[]string `json:"ignore-event,omitempty"`
+	IgnoreEvent *[]string `toml:"ignore-event,omitempty" json:"ignore-event,omitempty"`
 
 	// sql pattern to filter
-	IgnoreSql *[]string `json:"ignore-sql,omitempty"`
+	IgnoreSQL *[]string `toml:"ignore-sql,omitempty" json:"ignore-sql,omitempty"`
 }
 
 // TaskBinlogFilterRuleMap defines name -> rule model for Task.BinlogFilterRule.
 type TaskBinlogFilterRuleMap struct {
-	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
+	AdditionalProperties map[string]TaskBinLogFilterRule `toml:"-" json:"-"`
 }
 
 // SyncerConfig is the Syncer's configuration.

@@ -18,14 +18,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ Syncer = &MysqlSyncer{}

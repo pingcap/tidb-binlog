@@ -23,19 +23,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const (

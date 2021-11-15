@@ -459,10 +459,7 @@ ForLoop:
 				break ForLoop
 			}
 
-			if ignore, err := skipDDLEvent(sql, schema, table, p, s.filter, s.binlogFilter); err != nil {
-				err = errors.Trace(err)
-				break ForLoop
-			} else if ignore {
+			if s.filter.SkipSchemaAndTable(schema, table) {
 				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
@@ -470,6 +467,20 @@ ForLoop:
 			}
 
 			shouldSkip := false
+			if ignore, err := skipDDLEvent(sql, schema, table, p, s.filter, s.binlogFilter); err != nil {
+				err = errors.Trace(err)
+				break ForLoop
+			} else if ignore {
+				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				// A empty sql force it to evict the downstream table info.
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+					shouldSkip = true
+				} else {
+					appendFakeBinlogIfNeeded(nil, commitTS)
+					continue
+				}
+			}
 
 			if !s.cfg.SyncDDL {
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
@@ -597,7 +608,7 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 
 				needSkip, err := skipByFilter(binlogFilter, schemaName, tableName, et, "")
 				if err != nil {
-					return
+					return false, errors.Trace(err)
 				}
 				if !needSkip {
 					switch tp {
@@ -639,9 +650,6 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 // skipDDLEvent may drop some ddl event
 // Return true if this job is filtered.
 func skipDDLEvent(sql, schema, table string, p *parser.Parser, filter *filter.Filter, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
-	if filter.SkipSchemaAndTable(schema, table) {
-		return true, nil
-	}
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.L().Error("fail to parse ddl", zap.String("ddl", sql), logutil.ShortError(err))
@@ -742,8 +750,8 @@ func (s *Syncer) genTableMigrationRules() error {
 				}
 				ruleT.Events = events
 			}
-			if rule.IgnoreSql != nil {
-				ruleT.SQLPattern = *rule.IgnoreSql
+			if rule.IgnoreSQL != nil {
+				ruleT.SQLPattern = *rule.IgnoreSQL
 			}
 			eventFilterTemplateMap[ruleName] = ruleT
 		}
@@ -783,13 +791,17 @@ func (s *Syncer) genTableMigrationRules() error {
 	// if err != nil {
 	// 	return errors.Annotate(err, "generate block allow list error")
 	// }
-	s.tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
-	if err != nil {
-		return errors.Annotate(err, "generate table router error")
+	if len(routeRules) > 0 && cfg.DestDBType == "oracle" {
+		s.tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
+		if err != nil {
+			return errors.Annotate(err, "generate table router error")
+		}
 	}
-	s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, filterRules)
-	if err != nil {
-		return errors.Annotate(err, "generate binlog event filter error")
+	if len(filterRules) > 0 {
+		s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, filterRules)
+		if err != nil {
+			return errors.Annotate(err, "generate binlog event filter error")
+		}
 	}
 	return nil
 }
