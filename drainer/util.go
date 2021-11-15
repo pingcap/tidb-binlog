@@ -26,12 +26,15 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 )
 
 const (
@@ -195,4 +198,11 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
+}
+
+func getParser(sqlMode mysql.SQLMode) (p *parser.Parser) {
+	p = parser.New()
+	p.SetSQLMode(sqlMode)
+
+	return
 }

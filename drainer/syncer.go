@@ -24,6 +24,8 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	baf "github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/br/pkg/logutil"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
@@ -310,6 +312,7 @@ func (s *Syncer) run() error {
 		pushFakeBinlog       chan<- *pb.Binlog
 		lastAddCommitTS      int64
 		lastFakeCommitTime   time.Time
+		p                    = getParser(s.cfg.SQLMode)
 	)
 	dsyncError := s.dsyncer.Error()
 
@@ -401,9 +404,9 @@ ForLoop:
 				}
 			}
 			if !isFilterTransaction {
-				ignore, err = skipRowsEvent(preWrite, s.filter, s.schema, s.binlogFilter)
+				ignore, err = skipDMLEvent(preWrite, s.schema, s.filter, s.binlogFilter)
 				if err != nil {
-					err = errors.Annotate(err, "skipRowsEvent failed")
+					err = errors.Annotate(err, "skipDMLEvent failed")
 					break ForLoop
 				}
 			}
@@ -456,7 +459,10 @@ ForLoop:
 				break ForLoop
 			}
 
-			if s.filter.SkipSchemaAndTable(schema, table) {
+			if ignore, err := skipDDLEvent(sql, schema, table, p, s.filter, s.binlogFilter); err != nil {
+				err = errors.Trace(err)
+				break ForLoop
+			} else if ignore {
 				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
@@ -547,15 +553,9 @@ func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGett
 	return findLoopBackMark(txn.DMLs, info)
 }
 
-var mutationTypeToBFEventType = map[binlog.MutationType]bf.EventType{
-	binlog.MutationType_Insert:    bf.InsertEvent,
-	binlog.MutationType_Update:    bf.UpdateEvent,
-	binlog.MutationType_DeleteRow: bf.DeleteEvent,
-}
-
-// skipRowsEvent may drop some table mutation and some sequence in mut in `PrewriteValue`
+// skipDMLEvent may drop some table mutation and some sequence in mut in `PrewriteValue`
 // Return true if all table mutations are dropped.
-func skipRowsEvent(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
+func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
 	var muts []pb.TableMutation
 	for _, mutation := range pv.GetMutations() {
 		schemaName, tableName, ok := schema.SchemaAndTableName(mutation.GetTableId())
@@ -580,9 +580,6 @@ func skipRowsEvent(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema, 
 			)
 			for _, tp := range mutation.Sequence {
 				var et bf.EventType
-				if et, ok = mutationTypeToBFEventType[tp]; !ok {
-					return false, errors.Errorf("unknown mutation type: %v", tp)
-				}
 				switch tp {
 				case binlog.MutationType_Insert:
 					et = bf.InsertEvent
@@ -637,6 +634,23 @@ func skipRowsEvent(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema, 
 	}
 
 	return
+}
+
+// skipDDLEvent may drop some ddl event
+// Return true if this job is filtered.
+func skipDDLEvent(sql, schema, table string, p *parser.Parser, filter *filter.Filter, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
+	if filter.SkipSchemaAndTable(schema, table) {
+		return true, nil
+	}
+	stmt, err := p.ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.L().Error("fail to parse ddl", zap.String("ddl", sql), logutil.ShortError(err))
+		// return error if parse fail and filter fail
+		needSkip, err2 := skipByFilter(binlogFilter, schema, table, bf.NullEvent, sql)
+		return needSkip, err2
+	}
+	et := bf.AstToDDLEvent(stmt)
+	return skipByFilter(binlogFilter, schema, table, et, sql)
 }
 
 // skipByFilter returns true when
