@@ -58,6 +58,44 @@ var (
 	newZKFromConnectionString = zk.NewFromConnectionString
 )
 
+// TaskTableMigrateRule defines upstream table to downstream migrate rules
+type TaskTableMigrateRule struct {
+	// filter rule name
+	BinlogFilterRule *[]string `json:"binlog-filter-rule,omitempty"`
+
+	// source-related configuration
+	Source struct {
+		// schema name, wildcard support
+		Schema string `json:"schema"`
+
+		// table name, wildcard support
+		Table string `json:"table"`
+	} `json:"source"`
+
+	// downstream-related configuration
+	Target *struct {
+		// schema name, does not support wildcards
+		Schema string `json:"schema"`
+
+		// table name, does not support wildcards
+		Table string `json:"table"`
+	} `json:"target,omitempty"`
+}
+
+// TaskBinLogFilterRule defines filtering rules at binlog level
+type TaskBinLogFilterRule struct {
+	// event type
+	IgnoreEvent *[]string `json:"ignore-event,omitempty"`
+
+	// sql pattern to filter
+	IgnoreSql *[]string `json:"ignore-sql,omitempty"`
+}
+
+// TaskBinlogFilterRuleMap defines name -> rule model for Task.BinlogFilterRule.
+type TaskBinlogFilterRuleMap struct {
+	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
+}
+
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
 	StrSQLMode        *string            `toml:"sql-mode" json:"sql-mode"`
@@ -89,6 +127,11 @@ type SyncerConfig struct {
 	EnableCausalityFlag  *bool `toml:"-" json:"enable-detect-flag"`
 	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
+
+	// v2 filter rules
+	CaseSensitive    bool                     `toml:"case-sensitive" json:"case-sensitive"`
+	TableMigrateRule []TaskTableMigrateRule   `toml:"table-migrate-rule,omitempty" json:"table-migrate-rule,omitempty"`
+	BinlogFilterRule *TaskBinlogFilterRuleMap `toml:"binlog-filter-rule,omitempty" json:"binlog-filter-rule,omitempty"`
 }
 
 // EnableDispatch return true if enable dispatch.

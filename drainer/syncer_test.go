@@ -46,7 +46,7 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 		},
 	}
 
-	ignore, err := filterTable(pv, filter, schema)
+	ignore, err := skipRowsEvent(pv, filter, schema)
 	c.Assert(err, check.IsNil)
 	c.Assert(ignore, check.IsTrue)
 
@@ -55,7 +55,7 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 	schema.tableIDToName[keepID] = TableName{Schema: "keep", Table: "keep"}
 	pv.Mutations = append(pv.Mutations, pb.TableMutation{TableId: keepID})
 
-	ignore, err = filterTable(pv, filter, schema)
+	ignore, err = skipRowsEvent(pv, filter, schema)
 	c.Assert(err, check.IsNil)
 	c.Assert(ignore, check.IsFalse)
 	c.Assert(len(pv.Mutations), check.Equals, 1)
