@@ -396,6 +396,17 @@ func (t *schemaSuite) TestAddImplicitColumn(c *C) {
 	c.Assert(tbl.Indices[0].Primary, IsTrue)
 }
 
+func (t *schemaSuite) TestResolveDownstreamSchema(c *C) {
+	schema, err := NewSchema(nil, false)
+	c.Assert(err, IsNil)
+	schema.UpDownSchemaMap = map[string]string{"test":"test2"}
+	vSchema := schema.ResolveDownstreamSchema("test")
+	c.Assert(vSchema, Equals, "test2")
+
+	vSchema = schema.ResolveDownstreamSchema("test1")
+	c.Assert(vSchema, Equals, "test1")
+}
+
 func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
 	schemaName, tableName, resSQL, err := schema.handleDDL(job)
 	c.Logf("handle: %s", job.Query)

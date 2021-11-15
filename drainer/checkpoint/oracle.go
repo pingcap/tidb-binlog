@@ -80,7 +80,7 @@ func newOracle(cfg *Config) (CheckPoint, error) {
 	case err == dbsql.ErrNoRows:
 		sql = genCreateTable2o(sp)
 		if _, err = db.Exec(sql); err != nil {
-			return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
+			return nil, errors.Annotatef(err, "create checkpoint table failed, sql: %s", sql)
 		}
 	case err != nil:
 		return nil, errors.Annotatef(err, "exec failed, sql: %s", sql)
