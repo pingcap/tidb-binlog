@@ -466,9 +466,12 @@ ForLoop:
 				continue
 			}
 
-			shouldSkip := false
-			if ignore, err := skipDDLEvent(sql, schema, table, p, s.filter, s.binlogFilter); err != nil {
-				err = errors.Trace(err)
+			// shouldSkip is used specially for database dsyncers like tidb/mysql/oracle
+			// although we skip some ddls, but we still need to update table info
+			// ignore means whether we should should this ddl event after binlogFilter
+			var shouldSkip, ignore bool
+
+			if ignore, err = skipDDLEvent(sql, schema, table, p, s.binlogFilter); err != nil {
 				break ForLoop
 			} else if ignore {
 				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
@@ -649,7 +652,10 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 
 // skipDDLEvent may drop some ddl event
 // Return true if this job is filtered.
-func skipDDLEvent(sql, schema, table string, p *parser.Parser, filter *filter.Filter, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
+func skipDDLEvent(sql, schema, table string, p *parser.Parser, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
+	if binlogFilter == nil {
+		return false, nil
+	}
 	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.L().Error("fail to parse ddl", zap.String("ddl", sql), logutil.ShortError(err))
