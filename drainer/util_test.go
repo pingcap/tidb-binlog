@@ -94,7 +94,7 @@ func (t *taskGroupSuite) TestCombineFilterRules(c *C) {
 			Action:        bf.Ignore,
 			SchemaPattern: "do_not_add_col_database*",
 			TablePattern:  "do_not_add_col_table*",
-			Events:        nil,
+			Events:        []bf.EventType{},
 			SQLPattern:    []string{"alter table .* add column aaa int"},
 		},
 		"`do_not_delete_database*`.`do_not_delete_table*`": {
@@ -102,13 +102,14 @@ func (t *taskGroupSuite) TestCombineFilterRules(c *C) {
 			SchemaPattern: "do_not_delete_database*",
 			TablePattern:  "do_not_delete_table*",
 			Events:        []bf.EventType{"delete"},
-			SQLPattern:    nil,
+			SQLPattern:    []string{},
 		},
 	}
 	combinedFilters := combineFilterRules(filterRules)
 	for _, filterRule := range combinedFilters {
 		expectFilter, ok := expectRules[fmt.Sprintf("`%s`.`%s`", filterRule.SchemaPattern, filterRule.TablePattern)]
 		c.Assert(ok, IsTrue)
+		c.Assert(expectFilter.Action, Equals, filterRule.Action)
 		c.Assert(expectFilter.SchemaPattern, Equals, filterRule.SchemaPattern)
 		c.Assert(expectFilter.TablePattern, Equals, filterRule.TablePattern)
 		c.Assert(expectFilter.Events, DeepEquals, filterRule.Events)
