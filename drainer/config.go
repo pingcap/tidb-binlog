@@ -91,11 +91,6 @@ type TaskBinLogFilterRule struct {
 	IgnoreSQL *[]string `toml:"ignore-sql,omitempty" json:"ignore-sql,omitempty"`
 }
 
-// TaskBinlogFilterRuleMap defines name -> rule model for Task.BinlogFilterRule.
-type TaskBinlogFilterRuleMap struct {
-	AdditionalProperties map[string]TaskBinLogFilterRule `toml:"-" json:"-"`
-}
-
 // SyncerConfig is the Syncer's configuration.
 type SyncerConfig struct {
 	StrSQLMode        *string            `toml:"sql-mode" json:"sql-mode"`
@@ -129,9 +124,10 @@ type SyncerConfig struct {
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
 
 	// v2 filter rules
-	CaseSensitive    bool                     `toml:"case-sensitive" json:"case-sensitive"`
-	TableMigrateRule []TaskTableMigrateRule   `toml:"table-migrate-rule,omitempty" json:"table-migrate-rule,omitempty"`
-	BinlogFilterRule *TaskBinlogFilterRuleMap `toml:"binlog-filter-rule,omitempty" json:"binlog-filter-rule,omitempty"`
+	CaseSensitive    bool                   `toml:"case-sensitive" json:"case-sensitive"`
+	TableMigrateRule []TaskTableMigrateRule `toml:"table-migrate-rule" json:"table-migrate-rule"`
+
+	BinlogFilterRule map[string]TaskBinLogFilterRule `toml:"binlog-filter-rule,omitempty" json:"binlog-filter-rule,omitempty"`
 }
 
 // EnableDispatch return true if enable dispatch.

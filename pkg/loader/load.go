@@ -387,7 +387,7 @@ func isCreateDatabaseDDL(sql string) bool {
 }
 
 func (s *loaderImpl) execDDL(ddl *DDL) error {
-	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
+	log.Debug("exec ddl", zap.Reflect("ddl", ddl), zap.Bool("shouldSkip", ddl.ShouldSkip))
 	if ddl.ShouldSkip {
 		return nil
 	}

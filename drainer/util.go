@@ -26,6 +26,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser"
@@ -205,4 +206,39 @@ func getParser(sqlMode mysql.SQLMode) (p *parser.Parser) {
 	p.SetSQLMode(sqlMode)
 
 	return
+}
+
+func combineFilterRules(filterRules []*bf.BinlogEventRule) []*bf.BinlogEventRule {
+	rules := make([]*bf.BinlogEventRule, 0, len(filterRules)/2)
+	rulesMap := make(map[string]map[string]*bf.BinlogEventRule)
+	for _, rule := range filterRules {
+		schema, table := rule.SchemaPattern, rule.TablePattern
+		var (
+			tableMap map[string]*bf.BinlogEventRule
+			ok       bool
+			ruleE    *bf.BinlogEventRule
+		)
+		if tableMap, ok = rulesMap[schema]; !ok {
+			tableMap = make(map[string]*bf.BinlogEventRule)
+			rulesMap[schema] = tableMap
+		}
+		if ruleE, ok = tableMap[table]; !ok {
+			tableMap[table] = &bf.BinlogEventRule{
+				Action:        bf.Ignore,
+				SchemaPattern: schema,
+				TablePattern:  table,
+				Events:        append([]bf.EventType{}, rule.Events...),
+				SQLPattern:    append([]string{}, rule.SQLPattern...),
+			}
+		} else {
+			ruleE.Events = append(ruleE.Events, rule.Events...)
+			ruleE.SQLPattern = append(ruleE.SQLPattern, rule.SQLPattern...)
+		}
+	}
+	for _, tableMap := range rulesMap {
+		for _, rule := range tableMap {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
 }

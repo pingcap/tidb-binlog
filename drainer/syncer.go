@@ -460,7 +460,7 @@ ForLoop:
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
-				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
+				log.Info("skip ddl by block allow filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
@@ -474,7 +474,7 @@ ForLoop:
 			if ignore, err = skipDDLEvent(sql, schema, table, p, s.binlogFilter); err != nil {
 				break ForLoop
 			} else if ignore {
-				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
+				log.Info("skip ddl by binlog event filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
 				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
@@ -503,7 +503,7 @@ ForLoop:
 			lastAddCommitTS = binlog.GetCommitTs()
 
 			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
-				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs), zap.Bool("shouldSkip", shouldSkip))
 
 			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip, SchemaVersion: lastDDLSchemaVersion})
 			if err != nil {
@@ -747,7 +747,7 @@ func (s *Syncer) genTableMigrationRules() error {
 	// filter rule name -> filter rule template
 	eventFilterTemplateMap := make(map[string]bf.BinlogEventRule)
 	if cfg.BinlogFilterRule != nil {
-		for ruleName, rule := range cfg.BinlogFilterRule.AdditionalProperties {
+		for ruleName, rule := range cfg.BinlogFilterRule {
 			ruleT := bf.BinlogEventRule{Action: bf.Ignore}
 			if rule.IgnoreEvent != nil {
 				events := make([]bf.EventType, len(*rule.IgnoreEvent))
@@ -804,7 +804,7 @@ func (s *Syncer) genTableMigrationRules() error {
 		}
 	}
 	if len(filterRules) > 0 {
-		s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, filterRules)
+		s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, combineFilterRules(filterRules))
 		if err != nil {
 			return errors.Annotate(err, "generate binlog event filter error")
 		}

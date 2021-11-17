@@ -15,6 +15,7 @@ package drainer
 
 import (
 	. "github.com/pingcap/check"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 )
 
 type taskGroupSuite struct{}
@@ -40,3 +41,67 @@ func (s *taskGroupSuite) TestShouldRecoverFromPanic(c *C) {
 	c.Assert(logHook.Entrys[1].Message, Matches, ".*Exit.*")
 }
 */
+
+func (t *taskGroupSuite) TestCombineFilterRules(c *C) {
+	filterRules := []*bf.BinlogEventRule{
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_drop_database*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{"drop database"},
+			SQLPattern:    nil,
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_drop_database*",
+			TablePattern:  "*",
+			Events:        nil,
+			SQLPattern:    []string{"alter table .* add column aaa int"},
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_drop_database*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{"delete"},
+			SQLPattern:    nil,
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_add_col_database*",
+			TablePattern:  "do_not_add_col_table*",
+			Events:        nil,
+			SQLPattern:    []string{"alter table .* add column aaa int"},
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_delete_database*",
+			TablePattern:  "do_not_delete_table*",
+			Events:        []bf.EventType{"delete"},
+			SQLPattern:    nil,
+		},
+	}
+	expectRules := []*bf.BinlogEventRule{
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_drop_database*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{"drop database", "delete"},
+			SQLPattern:    []string{"alter table .* add column aaa int"},
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_add_col_database*",
+			TablePattern:  "do_not_add_col_table*",
+			Events:        nil,
+			SQLPattern:    []string{"alter table .* add column aaa int"},
+		},
+		{
+			Action:        bf.Ignore,
+			SchemaPattern: "do_not_delete_database*",
+			TablePattern:  "do_not_delete_table*",
+			Events:        []bf.EventType{"delete"},
+			SQLPattern:    nil,
+		},
+	}
+	c.Assert(expectRules, DeepEquals, combineFilterRules(filterRules))
+}
