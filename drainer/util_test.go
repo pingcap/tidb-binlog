@@ -14,6 +14,8 @@
 package drainer
 
 import (
+	"fmt"
+
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 )
@@ -80,22 +82,22 @@ func (t *taskGroupSuite) TestCombineFilterRules(c *C) {
 			SQLPattern:    nil,
 		},
 	}
-	expectRules := []*bf.BinlogEventRule{
-		{
+	expectRules := map[string]*bf.BinlogEventRule{
+		"`do_not_drop_database*`.`*`": {
 			Action:        bf.Ignore,
 			SchemaPattern: "do_not_drop_database*",
 			TablePattern:  "*",
 			Events:        []bf.EventType{"drop database", "delete"},
 			SQLPattern:    []string{"alter table .* add column aaa int"},
 		},
-		{
+		"`do_not_add_col_database*`.`do_not_add_col_table*`": {
 			Action:        bf.Ignore,
 			SchemaPattern: "do_not_add_col_database*",
 			TablePattern:  "do_not_add_col_table*",
 			Events:        nil,
 			SQLPattern:    []string{"alter table .* add column aaa int"},
 		},
-		{
+		"`do_not_delete_database*`.`do_not_delete_table*`": {
 			Action:        bf.Ignore,
 			SchemaPattern: "do_not_delete_database*",
 			TablePattern:  "do_not_delete_table*",
@@ -103,5 +105,13 @@ func (t *taskGroupSuite) TestCombineFilterRules(c *C) {
 			SQLPattern:    nil,
 		},
 	}
-	c.Assert(expectRules, DeepEquals, combineFilterRules(filterRules))
+	combinedFilters := combineFilterRules(filterRules)
+	for _, filterRule := range combinedFilters {
+		expectFilter, ok := expectRules[fmt.Sprintf("`%s`.`%s`", filterRule.SchemaPattern, filterRule.TablePattern)]
+		c.Assert(ok, IsTrue)
+		c.Assert(expectFilter.SchemaPattern, Equals, filterRule.SchemaPattern)
+		c.Assert(expectFilter.TablePattern, Equals, filterRule.TablePattern)
+		c.Assert(expectFilter.Events, DeepEquals, filterRule.Events)
+		c.Assert(expectFilter.SQLPattern, DeepEquals, filterRule.SQLPattern)
+	}
 }

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 run_drainer &
 
-tables=["do_not_drop_database1.do_not_truncate_table1", "do_not_add_col_database1.do_not_add_col_table1", "do_not_delete_database1.do_not_delete_table1", "test.do_not_filter"]
+tables=["do_not_drop_database1.do_not_truncate_table1" "do_not_add_col_database1.do_not_add_col_table1" "do_not_delete_database1.do_not_delete_table1" "test.do_not_filter"]
 
 function clean_up() {
   run_sql "DROP DATABASE IF EXISTS do_not_drop_database1;"
