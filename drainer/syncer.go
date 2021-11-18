@@ -588,11 +588,12 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 				deleteIdx = 0
 				updateIdx = 0
 
+				filteredIdx       = 0
 				filteredInsertIdx = 0
 				filteredDeleteIdx = 0
 				filteredUpdateIdx = 0
 			)
-			for _, tp := range mutation.Sequence {
+			for i, tp := range mutation.Sequence {
 				var et bf.EventType
 				switch tp {
 				case binlog.MutationType_Insert:
@@ -614,6 +615,8 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 					return false, errors.Trace(err)
 				}
 				if !needSkip {
+					mutation.Sequence[filteredIdx] = mutation.Sequence[i]
+					filteredIdx++
 					switch tp {
 					case binlog.MutationType_Insert:
 						mutation.InsertedRows[filteredInsertIdx] = mutation.InsertedRows[insertIdx-1]
@@ -627,6 +630,7 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 					}
 				}
 			}
+			mutation.Sequence = mutation.Sequence[0:filteredIdx]
 			if mutation.InsertedRows != nil {
 				mutation.InsertedRows = mutation.InsertedRows[0:filteredInsertIdx]
 			}
