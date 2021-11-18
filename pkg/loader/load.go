@@ -739,8 +739,8 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 	if b.fDMLsSuccessCallback != nil {
 		b.fDMLsSuccessCallback(b.txns...)
 	}
-	b.txns = b.txns[:0]
-	b.dmls = b.dmls[:0]
+	b.txns = nil
+	b.dmls = nil
 	return nil
 }
 
