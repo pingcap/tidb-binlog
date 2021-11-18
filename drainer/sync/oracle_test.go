@@ -13,7 +13,7 @@
 package sync
 
 import (
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/parser/model"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"

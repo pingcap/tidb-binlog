@@ -25,10 +25,10 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tmysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )

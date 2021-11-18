@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 

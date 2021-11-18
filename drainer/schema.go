@@ -18,9 +18,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 )
 
@@ -316,6 +316,8 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 	// case model.ActionSetTiFlashReplica:
 	// 	return true
 	case model.ActionLockTable, model.ActionUnlockTable:
+		return true
+	case model.ActionAlterTableAttributes, model.ActionAlterTablePartitionAttributes:
 		return true
 	}
 

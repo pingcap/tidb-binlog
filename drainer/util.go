@@ -26,12 +26,16 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 )
 
 const (
@@ -206,4 +210,46 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
+}
+
+func getParser(sqlMode mysql.SQLMode) (p *parser.Parser) {
+	p = parser.New()
+	p.SetSQLMode(sqlMode)
+
+	return
+}
+
+func combineFilterRules(filterRules []*bf.BinlogEventRule) []*bf.BinlogEventRule {
+	rules := make([]*bf.BinlogEventRule, 0, len(filterRules)/2)
+	rulesMap := make(map[string]map[string]*bf.BinlogEventRule)
+	for _, rule := range filterRules {
+		schema, table := rule.SchemaPattern, rule.TablePattern
+		var (
+			tableMap map[string]*bf.BinlogEventRule
+			ok       bool
+			ruleE    *bf.BinlogEventRule
+		)
+		if tableMap, ok = rulesMap[schema]; !ok {
+			tableMap = make(map[string]*bf.BinlogEventRule)
+			rulesMap[schema] = tableMap
+		}
+		if ruleE, ok = tableMap[table]; !ok {
+			tableMap[table] = &bf.BinlogEventRule{
+				Action:        bf.Ignore,
+				SchemaPattern: schema,
+				TablePattern:  table,
+				Events:        append([]bf.EventType{}, rule.Events...),
+				SQLPattern:    append([]string{}, rule.SQLPattern...),
+			}
+		} else {
+			ruleE.Events = append(ruleE.Events, rule.Events...)
+			ruleE.SQLPattern = append(ruleE.SQLPattern, rule.SQLPattern...)
+		}
+	}
+	for _, tableMap := range rulesMap {
+		for _, rule := range tableMap {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
 }

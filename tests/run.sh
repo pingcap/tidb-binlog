@@ -83,7 +83,8 @@ EOF
         --store tikv \
         --path 127.0.0.1:2379 \
         --enable-binlog=true \
-        --log-file "$OUT_DIR/tidb.log" &
+        --log-file "$OUT_DIR/tidb_$port.log" \
+        -socket "$OUT_DIR/tidb_$port.sock" &
 
     echo "Verifying TiDB is started..."
     i=0
@@ -211,7 +212,8 @@ EOF
         --store tikv \
         --path 127.0.0.1:2381 \
         --status=20080 \
-        --log-file "$OUT_DIR/down_tidb.log" &
+        --log-file "$OUT_DIR/down_tidb.log" \
+        -socket "$OUT_DIR/down_tidb.sock" &
 
     echo "Verifying Downstream TiDB is started..."
     i=0

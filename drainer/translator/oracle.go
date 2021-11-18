@@ -2,7 +2,7 @@ package translator
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	tipb "github.com/pingcap/tipb/go-binlog"
 	"io"

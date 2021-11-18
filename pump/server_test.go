@@ -31,11 +31,11 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/node"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/config"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tipb/go-binlog"
+	"github.com/tikv/client-go/v2/config"
+	"github.com/tikv/client-go/v2/txnkv/txnlock"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/integration"
 	"golang.org/x/net/context"
@@ -452,7 +452,7 @@ type gcBinlogFileSuite struct{}
 var _ = Suite(&gcBinlogFileSuite{})
 
 func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
-	storage := dummyStorage{}
+	store := dummyStorage{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -460,19 +460,19 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	registry := node.NewEtcdRegistry(cli, time.Second)
 	server := Server{
 		ctx:        ctx,
-		storage:    &storage,
+		storage:    &store,
 		node:       &pumpNode{EtcdRegistry: registry},
 		gcDuration: time.Hour,
 	}
 
 	millisecond := time.Now().Add(-server.gcDuration).UnixNano() / 1000 / 1000
-	gcTS := int64(oracle.EncodeTSO(millisecond))
+	gcTS := int64(storage.EncodeTSO(millisecond))
 
 	inAlertGCMS := millisecond + 10*time.Minute.Nanoseconds()/1000/1000
-	inAlertGCTS := int64(oracle.EncodeTSO(inAlertGCMS))
+	inAlertGCTS := int64(storage.EncodeTSO(inAlertGCMS))
 
 	outAlertGCMS := millisecond + (earlyAlertGC+10*time.Minute).Nanoseconds()/1000/1000
-	outAlertGCTS := int64(oracle.EncodeTSO(outAlertGCMS))
+	outAlertGCTS := int64(storage.EncodeTSO(outAlertGCMS))
 
 	mustUpdateNode(ctx, registry, "drainers/1", &node.Status{MaxCommitTS: inAlertGCTS, State: node.Online})
 	mustUpdateNode(ctx, registry, "drainers/2", &node.Status{MaxCommitTS: 1002, State: node.Online})
@@ -494,7 +494,7 @@ func (s *gcBinlogFileSuite) TestShouldGCMinDrainerTSO(c *C) {
 	time.Sleep(1000 * gcInterval)
 	cancel()
 
-	c.Assert(storage.gcTS, GreaterEqual, gcTS)
+	c.Assert(store.gcTS, GreaterEqual, gcTS)
 	// todo: add in and out of alert test while binlog has failpoint
 }
 
@@ -562,7 +562,7 @@ func (pc *mockPdCli) Close() {}
 type newServerSuite struct {
 	origGetPdClientFn         func(string, security.Config) (pd.Client, error)
 	origNewKVStoreFn          func(string) (kv.Storage, error)
-	origNewTiKVLockResolverFn func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error)
+	origNewTiKVLockResolverFn func([]string, config.Security, ...pd.ClientOption) (*txnlock.LockResolver, error)
 	cfg                       *Config
 }
 
@@ -623,7 +623,7 @@ func (s *newServerSuite) TestCreateNewPumpServer(c *C) {
 	getPdClientFn = func(string, security.Config) (pd.Client, error) {
 		return &mockPdCli{}, nil
 	}
-	newTiKVLockResolverFn = func([]string, config.Security, ...pd.ClientOption) (*tikv.LockResolver, error) {
+	newTiKVLockResolverFn = func([]string, config.Security, ...pd.ClientOption) (*txnlock.LockResolver, error) {
 		return nil, nil
 	}
 	newKVStoreFn = func(path string) (kv.Storage, error) {
