@@ -34,21 +34,15 @@ ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
 [[syncer.table-migrate-rule]]
 binlog-filter-rule = ["truncate-table-filter","add-column-aaa-filter","delete-filter"]
-[syncer.table-migrate-rule.source]
-schema = "do_not_truncate_database*"
-table = "do_not_truncate_table*"
+source = { schema = "do_not_truncate_database*", table = "do_not_truncate_table*"}
 
 [[syncer.table-migrate-rule]]
 binlog-filter-rule = ["add-column-aaa-filter"]
-[syncer.table-migrate-rule.source]
-schema = "do_not_add_col_database*"
-table = "do_not_add_col_table*"
+source = { schema = "do_not_add_col_database*", table = "do_not_add_col_table*" }
 
 [[syncer.table-migrate-rule]]
 binlog-filter-rule = ["delete-filter"]
-[syncer.table-migrate-rule.source]
-schema = "do_not_delete_database*"
-table = "do_not_delete_table*"
+source = { schema = "do_not_delete_database", table = "do_not_delete_table*" }
 
 [syncer.binlog-filter-rule]
 
