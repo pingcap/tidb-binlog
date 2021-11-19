@@ -91,7 +91,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL)
 
 	var err error
-	err = syncer.genTableMigrationRules()
+	syncer.tableRouter, syncer.binlogFilter, err = genRouterAndBinlogEvent(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -739,80 +739,6 @@ func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
 	}
 	pv.Mutations = mutations
 
-	return nil
-}
-
-func (s *Syncer) genTableMigrationRules() error {
-	var (
-		routeRules  []*router.TableRule
-		filterRules []*bf.BinlogEventRule
-	)
-	cfg := s.cfg
-	// filter rule name -> filter rule template
-	eventFilterTemplateMap := make(map[string]bf.BinlogEventRule)
-	if cfg.BinlogFilterRule != nil {
-		for ruleName, rule := range cfg.BinlogFilterRule {
-			ruleT := bf.BinlogEventRule{Action: bf.Ignore}
-			if rule.IgnoreEvent != nil {
-				events := make([]bf.EventType, len(*rule.IgnoreEvent))
-				for i, eventStr := range *rule.IgnoreEvent {
-					events[i] = bf.EventType(eventStr)
-				}
-				ruleT.Events = events
-			}
-			if rule.IgnoreSQL != nil {
-				ruleT.SQLPattern = *rule.IgnoreSQL
-			}
-			eventFilterTemplateMap[ruleName] = ruleT
-		}
-	}
-
-	// set route,blockAllowList,filter config
-	doCnt := len(cfg.TableMigrateRule)
-	doDBs := make([]string, doCnt)
-	doTables := make([]*baf.Table, doCnt)
-	for j, rule := range cfg.TableMigrateRule {
-		// route
-		if rule.Target != nil {
-			routeRules = append(routeRules, &router.TableRule{
-				SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table,
-				TargetSchema: rule.Target.Schema, TargetTable: rule.Target.Table,
-			})
-		}
-		// filter
-		if rule.BinlogFilterRule != nil {
-			for _, name := range *rule.BinlogFilterRule {
-				filterRule, ok := eventFilterTemplateMap[name] // NOTE: this return a copied value
-				if !ok {
-					return errors.Errorf("event filter rule name %s not found.", name)
-				}
-				filterRule.SchemaPattern = rule.Source.Schema
-				filterRule.TablePattern = rule.Source.Table
-				filterRules = append(filterRules, &filterRule)
-			}
-		}
-		// BlockAllowList
-		doDBs[j] = rule.Source.Schema
-		doTables[j] = &baf.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
-	}
-	var err error
-	// TODO: to discuss block allow list implementation in the future
-	// s.baList, err = baf.New(cfg.CaseSensitive, &baf.Rules{DoDBs: removeDuplication(doDBs), DoTables: doTables})
-	// if err != nil {
-	// 	return errors.Annotate(err, "generate block allow list error")
-	// }
-	if len(routeRules) > 0 && cfg.DestDBType == "oracle" {
-		s.tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
-		if err != nil {
-			return errors.Annotate(err, "generate table router error")
-		}
-	}
-	if len(filterRules) > 0 {
-		s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, combineFilterRules(filterRules))
-		if err != nil {
-			return errors.Annotate(err, "generate binlog event filter error")
-		}
-	}
 	return nil
 }
 
