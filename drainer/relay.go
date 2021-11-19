@@ -75,6 +75,11 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 	lastSuccessTS := checkpointTS
 	r.Run()
 
+	tableRouter, binlogFilter, routeErr := genRouterAndBinlogEvent(cfg.SyncerCfg)
+	if routeErr != nil {
+		return errors.Annotate(routeErr, "when feed by relay log, gen router and filter failed")
+	}
+
 	loaderQuit := make(chan struct{})
 	var loaderErr error
 	go func() {
@@ -120,7 +125,7 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 			var txn *loader.Txn
 			var err error
 			if cfg.SyncerCfg.DestDBType == "oracle" {
-				txn, err = loader.SecondaryBinlogToOracleTxn(sbinlog, cfg.SyncerCfg.SchemaMap)
+				txn, err = loader.SecondaryBinlogToOracleTxn(sbinlog, tableRouter, binlogFilter)
 			}else {
 				txn, err = loader.SecondaryBinlogToTxn(sbinlog)
 			}

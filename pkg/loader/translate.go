@@ -14,9 +14,13 @@
 package loader
 
 import (
-	"github.com/pingcap/tidb/parser/model"
+	"fmt"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 	"strings"
 )
@@ -61,22 +65,30 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 }
 
 // SecondaryBinlogToOracleTxn translate the Binlog format into Oracle Txn
-func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, schemaMap map[string]string) (*Txn, error) {
+func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, tableRouter *router.Table, binlogFilter *bf.BinlogEvent) (*Txn, error) {
 	txn := new(Txn)
 	var err error
 	switch binlog.Type {
 	case pb.BinlogType_DDL:
 		data := binlog.DdlData
+		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(data.GetSchemaName(),data.GetTableName())
+		if routeErr != nil {
+			return nil, errors.Annotate(routeErr, fmt.Sprintf("gen route schema and table failed. schema=%s, tabel=%s",data.GetSchemaName(),data.GetTableName()))
+		}
 		txn.DDL = new(DDL)
-		txn.DDL.Database = ResolveDownstreamSchema(data.GetSchemaName(), schemaMap)
-		txn.DDL.Table = data.GetTableName()
+		txn.DDL.Database = downStreamSchema
+		txn.DDL.Table = downStreamTable
 		txn.DDL.SQL = string(data.GetDdlQuery())
 	case pb.BinlogType_DML:
 		for _, table := range binlog.DmlData.GetTables() {
+			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(table.GetSchemaName(),table.GetTableName())
+			if routeErr != nil {
+				return nil, errors.Annotate(routeErr, fmt.Sprintf("gen route schema and table failed. schema=%s, tabel=%s",table.GetSchemaName(),table.GetTableName()))
+			}
 			for _, mut := range table.GetMutations() {
 				dml := new(DML)
-				dml.Database = ResolveDownstreamSchema(table.GetSchemaName(), schemaMap)
-				dml.Table = table.GetTableName()
+				dml.Database = downStreamSchema
+				dml.Table = downStreamTable
 				dml.Tp = getDMLType(mut)
 
 				// setup values
@@ -98,18 +110,6 @@ func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, schemaMap map[string]string) 
 		}
 	}
 	return txn, nil
-}
-
-// ResolveDownstreamSchema if schema in upstream db is diffrent from schema in downstream db,
-//so we should map to downstream schema.schemaMap store the mapping between upstream and  downstream schema
-func ResolveDownstreamSchema(upStreamSchema string, schemaMap map[string]string) string {
-	if schemaMap == nil {
-		return upStreamSchema
-	}
-	if downSchema, ok := schemaMap[upStreamSchema]; ok {
-		return downSchema
-	}
-	return upStreamSchema
 }
 
 func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
