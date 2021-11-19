@@ -97,12 +97,11 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	}
 	// create schema
 	syncer.schema, err = NewSchema(jobs, false)
-	syncer.schema.setUpDownSchemaMap(cfg.SchemaMap)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync, syncer.tableRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -110,7 +109,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync, tableRouter *router.Table) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
@@ -130,7 +129,7 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 			}
 		}
 		if cfg.DestDBType == "oracle" {
-			dsyncer, err = dsync.NewOracleSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.EnableDispatch(), cfg.EnableCausality())
+			dsyncer, err = dsync.NewOracleSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.EnableDispatch(), cfg.EnableCausality(), tableRouter)
 		}else {
 			dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
 		}
@@ -482,7 +481,7 @@ ForLoop:
 				log.Info("skip ddl by binlog event filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
@@ -490,23 +489,15 @@ ForLoop:
 				}
 			}
 
-			if s.cfg.SyncDDL == "false" {
+			if !s.cfg.SyncDDL {
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle"{
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
 					continue
-				}
-			} else if s.cfg.SyncDDL == "truncate-only" {
-				if b.job.Type == model.ActionTruncateTable || b.job.Type == model.ActionTruncateTablePartition {
-					shouldSkip = false
-				} else {
-					log.Info("skip ddl by SyncDDL setting to 'truncate-only'", zap.String("schema", schema), zap.String("table", table),
-						zap.String("sql", sql), zap.Int64("commit ts", commitTS))
-					shouldSkip = true
 				}
 			}
 
@@ -761,6 +752,16 @@ func (s *Syncer) genTableMigrationRules() error {
 		filterRules []*bf.BinlogEventRule
 	)
 	cfg := s.cfg
+	//only support two type ddl[truncate table xxx, and alter table xx truncate partition xx] for oracle db
+	if cfg.DestDBType == "oracle" {
+		filterRules = append(filterRules, &bf.BinlogEventRule{
+			Action:        bf.Do,
+			SchemaPattern: "*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{"truncate table", "alter table"},
+			SQLPattern:    []string{"truncate table.*", "alter table.*truncate partition.*"},
+		})
+	}
 	// filter rule name -> filter rule template
 	eventFilterTemplateMap := make(map[string]bf.BinlogEventRule)
 	if cfg.BinlogFilterRule != nil {

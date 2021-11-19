@@ -31,7 +31,7 @@ var _ = check.Suite(&loopbackSuite{})
 func (s *loopbackSuite) TestNewLoopBackSyncInfo(c *check.C) {
 	var ChannelID int64 = 1
 	var LoopbackControl = true
-	var SyncDDL = "false"
+	var SyncDDL = false
 	l := NewLoopBackSyncInfo(ChannelID, LoopbackControl, SyncDDL)
 
 	c.Assert(l, check.DeepEquals, &LoopBackSync{

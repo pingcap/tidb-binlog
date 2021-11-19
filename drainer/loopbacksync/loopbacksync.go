@@ -46,11 +46,11 @@ var CreateMarkDBDDL = "create database IF NOT EXISTS retl;"
 type LoopBackSync struct {
 	ChannelID       int64
 	LoopbackControl bool
-	SyncDDL         string
+	SyncDDL         bool
 }
 
 //NewLoopBackSyncInfo return LoopBackSyncInfo objec
-func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl bool, SyncDDL string) *LoopBackSync {
+func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl bool, SyncDDL bool) *LoopBackSync {
 	l := &LoopBackSync{
 		ChannelID:       ChannelID,
 		LoopbackControl: LoopbackControl,

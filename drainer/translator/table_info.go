@@ -22,6 +22,4 @@ type TableInfoGetter interface {
 	CanAppendDefaultValue(id int64, schemaVersion int64) bool
 	// IsDroppingColumn(id int64) bool
 	TableBySchemaVersion(id int64, schemaVersion int64) (info *model.TableInfo, ok bool)
-
-	ResolveDownstreamSchema(upStreamSchema string) string
 }

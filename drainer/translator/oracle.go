@@ -1,7 +1,9 @@
 package translator
 
 import (
+	"fmt"
 	"github.com/pingcap/errors"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	tipb "github.com/pingcap/tipb/go-binlog"
@@ -10,13 +12,17 @@ import (
 )
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
-func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool) (txn *loader.Txn, err error) {
+func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool, tableRouter *router.Table) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {
+		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema,table)
+		if routeErr != nil {
+			return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle ddl txn,route schema and table failed. schema=%s, tabel=%s",schema,table))
+		}
 		txn.DDL = &loader.DDL{
-			Database:   infoGetter.ResolveDownstreamSchema(schema),
-			Table:      table,
+			Database:   downStreamSchema,
+			Table:      downStreamTable,
 			SQL:        string(tiBinlog.GetDdlQuery()),
 			ShouldSkip: shouldSkip,
 		}
@@ -42,7 +48,10 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 			if !ok {
 				return nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
 			}
-
+			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema,table)
+			if routeErr != nil {
+				return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle dml txn,route schema and table failed. schema=%s, tabel=%s",schema,table))
+			}
 			iter := newSequenceIterator(&mut)
 			for {
 				mutType, row, err := iter.next()
@@ -62,8 +71,8 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 					dml := &loader.DML{
 						Tp:               loader.InsertDMLType,
-						Database:         infoGetter.ResolveDownstreamSchema(schema),
-						Table:            table,
+						Database:         downStreamSchema,
+						Table:            downStreamTable,
 						Values:           make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
 					}
@@ -79,8 +88,8 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 					dml := &loader.DML{
 						Tp:               loader.UpdateDMLType,
-						Database:         infoGetter.ResolveDownstreamSchema(schema),
-						Table:            table,
+						Database:         downStreamSchema,
+						Table:            downStreamTable,
 						Values:           make(map[string]interface{}),
 						OldValues:        make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
@@ -99,8 +108,8 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 					dml := &loader.DML{
 						Tp:               loader.DeleteDMLType,
-						Database:         infoGetter.ResolveDownstreamSchema(schema),
-						Table:            table,
+						Database:         downStreamSchema,
+						Table:            downStreamTable,
 						Values:           make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
 					}

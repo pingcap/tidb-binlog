@@ -7,6 +7,7 @@ import (
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 )
@@ -19,6 +20,7 @@ type OracleSyncer struct {
 	loader  loader.Loader
 	relayer relay.Relayer
 	*baseSyncer
+	tableRouter *router.Table
 }
 
 // NewOracleSyncer returns a instance of OracleSyncer
@@ -33,6 +35,7 @@ func NewOracleSyncer(
 	relayer relay.Relayer,
 	enableDispatch bool,
 	enableCausility bool,
+	tableRouter *router.Table,
 ) (*OracleSyncer, error) {
 	if cfg.TLS != nil {
 		log.Info("enable TLS to connect downstream MySQL/TiDB")
@@ -52,6 +55,7 @@ func NewOracleSyncer(
 		loader:     loader,
 		relayer:    relayer,
 		baseSyncer: newBaseSyncer(tableInfoGetter),
+		tableRouter: tableRouter,
 	}
 
 	go s.run()
@@ -76,7 +80,7 @@ func (m *OracleSyncer) Sync(item *Item) error {
 		item.RelayLogPos = pos
 	}
 
-	txn, err := translator.TiBinlogToOracleTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip)
+	txn, err := translator.TiBinlogToOracleTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip,m.tableRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -17,9 +17,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/pingcap/parser/model"
-	tmysql "github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
+	"github.com/pingcap/tidb/parser/model"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"regexp"
 	"sync/atomic"
 

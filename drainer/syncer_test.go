@@ -82,7 +82,7 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 	dmls = append(dmls, &dml1)
 	loopBackSyncInfo := loopbacksync.LoopBackSync{
 		ChannelID:       100,
-		SyncDDL:         "true",
+		SyncDDL:         true,
 		LoopbackControl: false,
 	}
 	status, err := findLoopBackMark(dmls, &loopBackSyncInfo)
@@ -93,7 +93,7 @@ func (s *syncerSuite) TestFilterMarkDatas(c *check.C) {
 func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cfg := &SyncerConfig{
 		DestDBType: "_intercept",
-		SyncDDL:    "true",
+		SyncDDL:    true,
 	}
 
 	cpFile := c.MkDir() + "/checkpoint"
