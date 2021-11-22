@@ -110,13 +110,13 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	case "oracle":
 		checkpointCfg.CheckpointType = toCheckpoint.Type
 		checkpointCfg.Db = &checkpoint.DBConfig{
-			Host:     	 	toCheckpoint.Host,
-			User:     	 	toCheckpoint.User,
-			Password: 	 	toCheckpoint.Password,
-			Port:     	 	toCheckpoint.Port,
-			TLS:      	 	toCheckpoint.TLS,
-			ServiceName: 	toCheckpoint.ServiceName,
-			ConnectString: 	toCheckpoint.ConnectString,
+			Host:                toCheckpoint.Host,
+			User:                toCheckpoint.User,
+			Password:            toCheckpoint.Password,
+			Port:                toCheckpoint.Port,
+			TLS:                 toCheckpoint.TLS,
+			OracleServiceName:   toCheckpoint.OracleServiceName,
+			OracleConnectString: toCheckpoint.OracleConnectString,
 		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
@@ -226,16 +226,6 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		routeRules  []*router.TableRule
 		filterRules []*bf.BinlogEventRule
 	)
-	//only support two type ddl[truncate table xxx, and alter table xx truncate partition xx] for oracle db
-	if cfg.DestDBType == "oracle" {
-		filterRules = append(filterRules, &bf.BinlogEventRule{
-			Action:        bf.Do,
-			SchemaPattern: "*",
-			TablePattern:  "*",
-			Events:        []bf.EventType{"truncate table", "alter table"},
-			SQLPattern:    []string{"truncate table.*", "alter table.*truncate partition.*"},
-		})
-	}
 	// filter rule name -> filter rule template
 	eventFilterTemplateMap := make(map[string]bf.BinlogEventRule)
 	if cfg.BinlogFilterRule != nil {
@@ -283,6 +273,17 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		doDBs[j] = rule.Source.Schema
 		doTables[j] = &baf.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
 	}
+	filterRules = combineFilterRules(filterRules)
+	// only support two type ddl[truncate table xxx, and alter table xx truncate partition xx] for oracle db
+	if cfg.DestDBType == "oracle" {
+		filterRules = append([]*bf.BinlogEventRule{{
+			Action:        bf.Do,
+			SchemaPattern: "*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{"truncate table", "alter table"},
+			SQLPattern:    []string{".*truncate table.*", ".*alter table.*truncate partition.*"},
+		}}, filterRules...)
+	}
 	var (
 		tableRouter  *router.Table
 		binlogFilter *bf.BinlogEvent
@@ -300,7 +301,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		}
 	}
 	if len(filterRules) > 0 {
-		binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, combineFilterRules(filterRules))
+		binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, filterRules)
 		if err != nil {
 			return nil, nil, errors.Annotate(err, "generate binlog event filter error")
 		}

@@ -41,7 +41,7 @@ func NewOracleSyncer(
 		log.Info("enable TLS to connect downstream MySQL/TiDB")
 	}
 
-	db, err := loader.CreateOracleDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.ServiceName, cfg.ConnectString)
+	db, err := loader.CreateOracleDB(cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.OracleServiceName, cfg.OracleConnectString)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

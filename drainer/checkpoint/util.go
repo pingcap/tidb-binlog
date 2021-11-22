@@ -37,8 +37,8 @@ type DBConfig struct {
 	Port          int         `toml:"port" json:"port"`
 	TLS           *tls.Config `toml:"-" json:"-"`
 	//for oracle database
-	ServiceName 	string	`toml:"service-name" json:"service-name"`
-	ConnectString 	string	`toml:"connect-string" json:"connect-string"`
+	OracleServiceName   string `toml:"oracle-service-name" json:"oracle-service-name"`
+	OracleConnectString string `toml:"oracle-connect-string" json:"oracle-connect-string"`
 }
 
 // Config is the savepoint configuration

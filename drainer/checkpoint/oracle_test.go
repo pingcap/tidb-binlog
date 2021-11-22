@@ -93,7 +93,7 @@ func (s *newOracleSuite) TestCannotOpenDB(c *C) {
 		return nil, errors.New("no db")
 	}
 	_, err := newOracle(&Config{
-		Db: &DBConfig{ServiceName: "service-name"},
+		Db: &DBConfig{OracleServiceName: "service-name"},
 	})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*no db.*")
@@ -113,14 +113,14 @@ func (s *newOracleSuite) TestCreationErrors(c *C) {
 	mock.ExpectExec("create table tidb_binlog.checkpoint").WillReturnError(errors.New("create checkpoint failed"))
 
 	_, err = newOracle(&Config{
-		Db: &DBConfig{ServiceName: "service-name"},
+		Db: &DBConfig{OracleServiceName: "service-name"},
 	})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*create checkpoint table failed.*")
 
 	mock.ExpectQuery("select table_name.*").WillReturnError(errors.New("check table failed"))
 	_, err = newOracle(&Config{
-		Db: &DBConfig{ServiceName: "service-name"},
+		Db: &DBConfig{OracleServiceName: "service-name"},
 	})
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*exec failed, sql:.*")
@@ -144,7 +144,7 @@ func (s *newOracleSuite) TestCreationSuccessful(c *C) {
 	mock.ExpectQuery("select checkPoint from tidb_binlog.checkpoint.*").WillReturnRows(checkPointRow)
 
 	cp, err := newOracle(&Config{
-		Db: &DBConfig{ServiceName: "service-name"},
+		Db: &DBConfig{OracleServiceName: "service-name"},
 	})
 	pcp := cp.(*OracleCheckPoint)
 	c.Assert(err, IsNil)

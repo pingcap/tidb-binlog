@@ -58,7 +58,7 @@ func newOracle(cfg *Config) (CheckPoint, error) {
 		log.Info("enable TLS for saving checkpoint")
 	}
 
-	db, err := sqlOpenOracleDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.ServiceName, cfg.Db.ConnectString)
+	db, err := sqlOpenOracleDB(cfg.Db.User, cfg.Db.Password, cfg.Db.Host, cfg.Db.Port, cfg.Db.OracleServiceName, cfg.Db.OracleConnectString)
 	if err != nil {
 		return nil, errors.Annotate(err, "open db failed")
 	}
