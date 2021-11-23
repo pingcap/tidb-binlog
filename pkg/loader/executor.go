@@ -104,17 +104,15 @@ type tx struct {
 // wrap of sql.Tx.Exec()
 func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	start := time.Now()
-	res, err := tx.Tx.Exec(query, args...)
-	if tx.queryHistogramVec != nil {
-		tx.queryHistogramVec.WithLabelValues("exec").Observe(time.Since(start).Seconds())
+	var (
+		res gosql.Result
+		err error
+	)
+	if len(args) == 0 {
+		res, err = tx.Tx.Exec(query)
+	} else {
+		res, err = tx.Tx.Exec(query, args...)
 	}
-
-	return res, err
-}
-
-func (tx *tx) execWithNoArgs(query string) (gosql.Result, error) {
-	start := time.Now()
-	res, err := tx.Tx.Exec(query)
 	if tx.queryHistogramVec != nil {
 		tx.queryHistogramVec.WithLabelValues("exec").Observe(time.Since(start).Seconds())
 	}
@@ -123,21 +121,13 @@ func (tx *tx) execWithNoArgs(query string) (gosql.Result, error) {
 }
 
 func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
-	res, err = tx.exec(query, args...)
+	if len(args) == 0 {
+		res, err = tx.exec(query)
+	} else {
+		res, err = tx.exec(query, args...)
+	}
 	if err != nil {
 		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Auto rollback", zap.Error(rbErr))
-		}
-		err = errors.Trace(err)
-	}
-	return
-}
-
-func (tx *tx) autoRollbackExecWithNoArgs(query string) (res gosql.Result, err error) {
-	res, err = tx.exec(query)
-	if err != nil {
-		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Error(err))
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Auto rollback", zap.Error(rbErr))
 		}
@@ -267,7 +257,7 @@ func (e *executor) oracleBulkOperation(dmls []*DML) error {
 	tx, err := e.begin()
 	for _, dml := range dmls {
 		sql := dml.oracleSQL()
-		_, err = tx.autoRollbackExecWithNoArgs(sql)
+		_, err = tx.autoRollbackExec(sql)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -471,41 +461,41 @@ func (e *executor) singleOracleExec(dmls []*DML, safeMode bool) error {
 			//delete old row
 			sql := dml.oracleDeleteSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("delete old", sql))
-			_, err := tx.autoRollbackExecWithNoArgs(sql)
+			_, err := tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//delete new row
 			sql = dml.oracleDeleteNewValueSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("delete new old", sql))
-			_, err = tx.autoRollbackExecWithNoArgs(sql)
+			_, err = tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//insert new row
 			sql = dml.oracleInsertSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("insert new old", sql))
-			_, err = tx.autoRollbackExecWithNoArgs(sql)
+			_, err = tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
 			sql := dml.oracleDeleteSQL()
 			log.Debug("safeMode and InsertDMLType", zap.String("delete sql", sql))
-			_, err := tx.autoRollbackExecWithNoArgs(sql)
+			_, err := tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			sql = dml.oracleInsertSQL()
 			log.Debug("safeMode and InsertDMLType", zap.String("insert sql", sql))
-			_, err = tx.autoRollbackExecWithNoArgs(sql)
+			_, err = tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
 			sql := dml.oracleSQL()
 			log.Debug("normal sql with no safeMode", zap.String("sql", sql))
-			_, err := tx.autoRollbackExecWithNoArgs(sql)
+			_, err := tx.autoRollbackExec(sql)
 			if err != nil {
 				return errors.Trace(err)
 			}

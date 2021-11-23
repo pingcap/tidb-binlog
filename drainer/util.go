@@ -280,7 +280,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 			Action:        bf.Do,
 			SchemaPattern: "*",
 			TablePattern:  "*",
-			Events:        []bf.EventType{"truncate table", "alter table"},
+			Events:        []bf.EventType{bf.TruncateTable, bf.AlertTable, bf.AllDML},
 			SQLPattern:    []string{".*truncate table.*", ".*alter table.*truncate partition.*"},
 		}}, filterRules...)
 	}

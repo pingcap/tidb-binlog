@@ -426,6 +426,7 @@ ForLoop:
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			} else {
+				log.Info("skip DML by binlog event filter", zap.Int64("SchemaVersion", preWrite.SchemaVersion))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 			}
 		} else if jobID > 0 {
