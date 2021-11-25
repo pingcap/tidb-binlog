@@ -613,21 +613,21 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 				needSkip, err := skipByFilter(binlogFilter, schemaName, tableName, et, "")
 				if err != nil {
 					return false, errors.Trace(err)
+				} else if needSkip {
+					continue
 				}
-				if !needSkip {
-					mutation.Sequence[filteredIdx] = mutation.Sequence[i]
-					filteredIdx++
-					switch tp {
-					case binlog.MutationType_Insert:
-						mutation.InsertedRows[filteredInsertIdx] = mutation.InsertedRows[insertIdx-1]
-						filteredInsertIdx++
-					case binlog.MutationType_Update:
-						mutation.UpdatedRows[filteredUpdateIdx] = mutation.UpdatedRows[updateIdx-1]
-						filteredUpdateIdx++
-					case binlog.MutationType_DeleteRow:
-						mutation.DeletedRows[filteredDeleteIdx] = mutation.DeletedRows[deleteIdx-1]
-						filteredDeleteIdx++
-					}
+				mutation.Sequence[filteredIdx] = mutation.Sequence[i]
+				filteredIdx++
+				switch tp {
+				case binlog.MutationType_Insert:
+					mutation.InsertedRows[filteredInsertIdx] = mutation.InsertedRows[insertIdx-1]
+					filteredInsertIdx++
+				case binlog.MutationType_Update:
+					mutation.UpdatedRows[filteredUpdateIdx] = mutation.UpdatedRows[updateIdx-1]
+					filteredUpdateIdx++
+				case binlog.MutationType_DeleteRow:
+					mutation.DeletedRows[filteredDeleteIdx] = mutation.DeletedRows[deleteIdx-1]
+					filteredDeleteIdx++
 				}
 			}
 			mutation.Sequence = mutation.Sequence[0:filteredIdx]
