@@ -1,0 +1,71 @@
+# drainer Configuration.
+
+# addr (i.e. 'host:port') to listen on for drainer connections
+# will register this addr into etcd
+# addr = "127.0.0.1:8249"
+
+# the interval time (in seconds) of detect pumps' status
+detect-interval = 10
+
+# drainer meta data directory path
+data-dir = "/tmp/tidb_binlog_test/data.drainer"
+
+# a comma separated list of PD endpoints
+pd-urls = "http://127.0.0.1:2379"
+
+# syncer Configuration.
+[syncer]
+
+# number of binlog events in a transaction batch
+txn-batch = 1
+
+# work count to execute binlogs
+worker-count = 1
+
+# safe mode will split update to delete and insert
+safe-mode = false
+
+# downstream storage, equal to --dest-db-type
+# valid values are "mysql", "file", "tidb", "kafka"
+db-type = "mysql"
+
+# disable sync these schema
+ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
+
+[[syncer.table-migrate-rule]]
+binlog-filter-rule = ["truncate-table-filter","add-column-aaa-filter","delete-filter"]
+source = { schema = "do_not_truncate_database*", table = "do_not_truncate_table*"}
+
+[[syncer.table-migrate-rule]]
+binlog-filter-rule = ["add-column-aaa-filter"]
+source = { schema = "do_not_add_col_database*", table = "do_not_add_col_table*" }
+
+[[syncer.table-migrate-rule]]
+binlog-filter-rule = ["delete-filter"]
+source = { schema = "do_not_delete_database*", table = "do_not_delete_table*" }
+
+[syncer.binlog-filter-rule]
+
+[syncer.binlog-filter-rule.truncate-table-filter]
+ignore-event = ["truncate table"]
+ignore-sql = []
+
+[syncer.binlog-filter-rule.add-column-aaa-filter]
+ignore-event = []
+ignore-sql = ["alter table .* add column aaa int"]
+
+[syncer.binlog-filter-rule.delete-filter]
+ignore-event = ["delete"]
+ignore-sql = []
+
+
+# the downstream mysql protocol database
+[syncer.to]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 3306
+[syncer.to.checkpoint]
+#schema = "tidb_binlog"
+
+
