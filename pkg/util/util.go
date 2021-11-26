@@ -337,6 +337,7 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 	return os.Rename(f.Name(), filename)
 }
 
+// IsCreateDatabaseDDL checks whether ddl is a create database statement
 func IsCreateDatabaseDDL(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
