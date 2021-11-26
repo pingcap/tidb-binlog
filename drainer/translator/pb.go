@@ -22,15 +22,15 @@ import (
 	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	tipb "github.com/pingcap/tipb/go-binlog"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 // TiBinlogToPbBinlog translate the binlog format
@@ -41,12 +41,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 
 	if tiBinlog.DdlJobId > 0 { // DDL
 		sql := string(tiBinlog.GetDdlQuery())
-		stmt, err := getParser().ParseOneStmt(sql, "", "")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
+		isCreateDatabase := util.IsCreateDatabaseDDL(sql)
 		if isCreateDatabase {
 			sql += ";"
 		} else {

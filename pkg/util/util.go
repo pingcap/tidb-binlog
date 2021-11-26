@@ -26,14 +26,17 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
@@ -332,4 +335,15 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 	}
 
 	return os.Rename(f.Name(), filename)
+}
+
+func IsCreateDatabaseDDL(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false
+	}
+
+	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
+	return isCreateDatabase
 }

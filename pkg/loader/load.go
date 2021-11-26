@@ -23,19 +23,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	pkgsql "github.com/pingcap/tidb-binlog/pkg/sql"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const (
@@ -376,17 +375,6 @@ func needRefreshTableInfo(sql string) bool {
 	return true
 }
 
-func isCreateDatabaseDDL(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false
-	}
-
-	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
-	return isCreateDatabase
-}
-
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 	if ddl.ShouldSkip {
@@ -399,7 +387,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 			return err
 		}
 
-		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
+		if len(ddl.Database) > 0 && !util.IsCreateDatabaseDDL(ddl.SQL) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {

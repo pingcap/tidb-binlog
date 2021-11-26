@@ -22,13 +22,14 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // Hook up gocheck into the "go test" runner.
@@ -339,4 +340,22 @@ func (s *waitUntilTimeoutSuit) TestGoAndAbortGoroutine(c *C) {
 		<-c
 	}, time.Second)
 	c.Assert(called, IsTrue)
+}
+
+type isCreateDBDDLSuite struct{}
+
+var _ = Suite(&isCreateDBDDLSuite{})
+
+func (s *isCreateDBDDLSuite) TestInvalidSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("INSERT INTO Y a b c;"), IsFalse)
+}
+
+func (s *isCreateDBDDLSuite) TestNonCreateDBSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("SELECT 1;"), IsFalse)
+	c.Assert(IsCreateDatabaseDDL(`INSERT INTO tbl(id, name) VALUES(1, "test";`), IsFalse)
+}
+
+func (s *isCreateDBDDLSuite) TestCreateDBSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("CREATE DATABASE test;"), IsTrue)
+	c.Assert(IsCreateDatabaseDDL("create database `db2`;"), IsTrue)
 }
