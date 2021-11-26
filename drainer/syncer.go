@@ -420,6 +420,7 @@ ForLoop:
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			} else {
+				log.Debug("skip whole dml event by binlog event filter", zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 			}
 		} else if jobID > 0 {
@@ -629,15 +630,9 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 				}
 			}
 			mutation.Sequence = mutation.Sequence[0:filteredIdx]
-			if mutation.InsertedRows != nil {
-				mutation.InsertedRows = mutation.InsertedRows[0:filteredInsertIdx]
-			}
-			if mutation.UpdatedRows != nil {
-				mutation.UpdatedRows = mutation.UpdatedRows[0:filteredUpdateIdx]
-			}
-			if mutation.DeletedRows != nil {
-				mutation.DeletedRows = mutation.DeletedRows[0:filteredDeleteIdx]
-			}
+			mutation.InsertedRows = mutation.InsertedRows[0:filteredInsertIdx]
+			mutation.UpdatedRows = mutation.UpdatedRows[0:filteredUpdateIdx]
+			mutation.DeletedRows = mutation.DeletedRows[0:filteredDeleteIdx]
 		}
 
 		muts = append(muts, mutation)

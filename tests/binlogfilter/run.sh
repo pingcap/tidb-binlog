@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-run_drainer &
+run_drainer -L debug &
 
 function clean_up() {
   run_sql "DROP DATABASE IF EXISTS do_not_truncate_database;"
