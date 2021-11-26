@@ -67,8 +67,6 @@ type Syncer struct {
 	shutdown chan struct{}
 	closed   chan struct{}
 
-	// TODO: to discuss block allow list implementation in the future
-	// baList       *baf.Filter
 	tableRouter  *router.Table
 	binlogFilter *bf.BinlogEvent
 }
@@ -741,23 +739,6 @@ func (s *Syncer) rewriteForOldVersion(pv *pb.PrewriteValue) (err error) {
 
 	return nil
 }
-
-/*
-TODO: to discuss block allow list implementation in the future
-func removeDuplication(in []string) []string {
-	m := make(map[string]struct{}, len(in))
-	j := 0
-	for _, v := range in {
-		_, ok := m[v]
-		if ok {
-			continue
-		}
-		m[v] = struct{}{}
-		in[j] = v
-		j++
-	}
-	return in[:j]
-}*/
 
 // interceptSyncer only use for test
 type interceptSyncer struct {

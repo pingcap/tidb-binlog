@@ -267,11 +267,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		binlogFilter *bf.BinlogEvent
 		err          error
 	)
-	// TODO: to discuss block allow list implementation in the future
-	// s.baList, err = baf.New(cfg.CaseSensitive, &baf.Rules{DoDBs: removeDuplication(doDBs), DoTables: doTables})
-	// if err != nil {
-	// 	return errors.Annotate(err, "generate block allow list error")
-	// }
+
 	if len(routeRules) > 0 && cfg.DestDBType == "oracle" {
 		tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
 		if err != nil {
