@@ -21,10 +21,11 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
-	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	pb "github.com/pingcap/tipb/go-binlog"
+
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 )
 
 type syncerSuite struct{}
@@ -46,7 +47,7 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 		},
 	}
 
-	ignore, err := filterTable(pv, filter, schema)
+	ignore, err := skipDMLEvent(pv, schema, filter, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(ignore, check.IsTrue)
 
@@ -55,7 +56,7 @@ func (s *syncerSuite) TestFilterTable(c *check.C) {
 	schema.tableIDToName[keepID] = TableName{Schema: "keep", Table: "keep"}
 	pv.Mutations = append(pv.Mutations, pb.TableMutation{TableId: keepID})
 
-	ignore, err = filterTable(pv, filter, schema)
+	ignore, err = skipDMLEvent(pv, schema, filter, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(ignore, check.IsFalse)
 	c.Assert(len(pv.Mutations), check.Equals, 1)

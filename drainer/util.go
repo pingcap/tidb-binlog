@@ -26,12 +26,18 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	baf "github.com/pingcap/tidb-tools/pkg/filter"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 )
 
 const (
@@ -195,4 +201,119 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
+}
+
+func getParser(sqlMode mysql.SQLMode) (p *parser.Parser) {
+	p = parser.New()
+	p.SetSQLMode(sqlMode)
+
+	return
+}
+
+func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent, error) {
+	var (
+		routeRules  []*router.TableRule
+		filterRules []*bf.BinlogEventRule
+	)
+	// filter rule name -> filter rule template
+	eventFilterTemplateMap := make(map[string]bf.BinlogEventRule)
+	if cfg.BinlogFilterRule != nil {
+		for ruleName, rule := range cfg.BinlogFilterRule {
+			ruleT := bf.BinlogEventRule{Action: bf.Ignore}
+			if rule.IgnoreEvent != nil {
+				events := make([]bf.EventType, len(*rule.IgnoreEvent))
+				for i, eventStr := range *rule.IgnoreEvent {
+					events[i] = bf.EventType(eventStr)
+				}
+				ruleT.Events = events
+			}
+			if rule.IgnoreSQL != nil {
+				ruleT.SQLPattern = *rule.IgnoreSQL
+			}
+			eventFilterTemplateMap[ruleName] = ruleT
+		}
+	}
+
+	// set route,blockAllowList,filter config
+	doCnt := len(cfg.TableMigrateRule)
+	doDBs := make([]string, doCnt)
+	doTables := make([]*baf.Table, doCnt)
+	for j, rule := range cfg.TableMigrateRule {
+		// route
+		if rule.Target != nil {
+			routeRules = append(routeRules, &router.TableRule{
+				SchemaPattern: rule.Source.Schema, TablePattern: rule.Source.Table,
+				TargetSchema: rule.Target.Schema, TargetTable: rule.Target.Table,
+			})
+		}
+		// filter
+		if rule.BinlogFilterRule != nil {
+			for _, name := range *rule.BinlogFilterRule {
+				filterRule, ok := eventFilterTemplateMap[name] // NOTE: this return a copied value
+				if !ok {
+					return nil, nil, errors.Errorf("event filter rule name %s not found.", name)
+				}
+				filterRule.SchemaPattern = rule.Source.Schema
+				filterRule.TablePattern = rule.Source.Table
+				filterRules = append(filterRules, &filterRule)
+			}
+		}
+		// BlockAllowList
+		doDBs[j] = rule.Source.Schema
+		doTables[j] = &baf.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
+	}
+	var (
+		tableRouter  *router.Table
+		binlogFilter *bf.BinlogEvent
+		err          error
+	)
+
+	if len(routeRules) > 0 && cfg.DestDBType == "oracle" {
+		tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
+		if err != nil {
+			return nil, nil, errors.Annotate(err, "generate table router error")
+		}
+	}
+	if len(filterRules) > 0 {
+		binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, combineFilterRules(filterRules))
+		if err != nil {
+			return nil, nil, errors.Annotate(err, "generate binlog event filter error")
+		}
+	}
+	return tableRouter, binlogFilter, nil
+}
+
+func combineFilterRules(filterRules []*bf.BinlogEventRule) []*bf.BinlogEventRule {
+	rules := make([]*bf.BinlogEventRule, 0, len(filterRules)/2)
+	rulesMap := make(map[string]map[string]*bf.BinlogEventRule)
+	for _, rule := range filterRules {
+		schema, table := rule.SchemaPattern, rule.TablePattern
+		var (
+			tableMap map[string]*bf.BinlogEventRule
+			ok       bool
+			ruleE    *bf.BinlogEventRule
+		)
+		if tableMap, ok = rulesMap[schema]; !ok {
+			tableMap = make(map[string]*bf.BinlogEventRule)
+			rulesMap[schema] = tableMap
+		}
+		if ruleE, ok = tableMap[table]; !ok {
+			tableMap[table] = &bf.BinlogEventRule{
+				Action:        bf.Ignore,
+				SchemaPattern: schema,
+				TablePattern:  table,
+				Events:        append([]bf.EventType{}, rule.Events...),
+				SQLPattern:    append([]string{}, rule.SQLPattern...),
+			}
+		} else {
+			ruleE.Events = append(ruleE.Events, rule.Events...)
+			ruleE.SQLPattern = append(ruleE.SQLPattern, rule.SQLPattern...)
+		}
+	}
+	for _, tableMap := range rulesMap {
+		for _, rule := range tableMap {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
 }
