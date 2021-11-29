@@ -79,4 +79,4 @@ func setSchemaIfExists(table *filter.TableName, schemaName string, tableName str
 	if tableName != "" {
 		table.Table = tableName
 	}
-} 
+}
