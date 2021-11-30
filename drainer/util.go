@@ -262,12 +262,27 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		doDBs[j] = rule.Source.Schema
 		doTables[j] = &baf.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
 	}
+	filterRules = combineFilterRules(filterRules)
+	// only support two type ddl[truncate table xxx, and alter table xx truncate partition xx] for oracle db
+	if cfg.DestDBType == "oracle" {
+		filterRules = append([]*bf.BinlogEventRule{{
+			Action:        bf.Do,
+			SchemaPattern: "*",
+			TablePattern:  "*",
+			Events:        []bf.EventType{bf.TruncateTable, bf.AlertTable, bf.AllDML},
+			SQLPattern:    []string{".*truncate table.*", ".*alter table.*truncate partition.*"},
+		}}, filterRules...)
+	}
 	var (
 		tableRouter  *router.Table
 		binlogFilter *bf.BinlogEvent
 		err          error
 	)
-
+	// TODO: to discuss block allow list implementation in the future
+	// s.baList, err = baf.New(cfg.CaseSensitive, &baf.Rules{DoDBs: removeDuplication(doDBs), DoTables: doTables})
+	// if err != nil {
+	// 	return errors.Annotate(err, "generate block allow list error")
+	// }
 	if len(routeRules) > 0 && cfg.DestDBType == "oracle" {
 		tableRouter, err = router.NewTableRouter(cfg.CaseSensitive, routeRules)
 		if err != nil {
@@ -275,7 +290,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		}
 	}
 	if len(filterRules) > 0 {
-		binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, combineFilterRules(filterRules))
+		binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, filterRules)
 		if err != nil {
 			return nil, nil, errors.Annotate(err, "generate binlog event filter error")
 		}

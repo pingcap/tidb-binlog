@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/godror/godror"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
 
@@ -46,6 +47,20 @@ SELECT non_unique, index_name, seq_in_index, column_name
 FROM information_schema.statistics
 WHERE table_schema = ? AND table_name = ?
 ORDER BY seq_in_index ASC;`
+
+//for oracle db
+colsOracleSQL = `SELECT column_name, virtual_column FROM dba_tab_cols WHERE owner = upper(:1) AND table_name = upper(:2) AND virtual_column = 'NO'`
+uniqKeyOracleSQL = `select c.constraint_type || i.uniqueness index_type, i.index_name, ic.column_position, ic.column_name
+					   from dba_indexes i
+					   left join dba_constraints c
+						 on i.index_name = c.constraint_name
+						and i.owner = c.owner
+					  inner join dba_ind_columns ic
+						 on i.index_name = ic.index_name
+						and i.owner = ic.index_owner
+					  where i.owner = upper(:1)
+						and i.table_name = upper(:2)
+						order by index_type,index_name,column_position`
 )
 
 type tableInfo struct {
@@ -84,6 +99,20 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	}
 
 	return
+}
+
+func getOracleTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, err error) {
+	info = new(tableInfo)
+
+	if info.columns, err = getOracleColsOfTbl(db, schema, table); err != nil {
+		return nil, errors.Annotatef(err, "table %s.%s", schema, table)
+	}
+
+	info.uniqueKeys, info.primaryKey, err = getOracleUniqKeys(db, schema, table)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return info, nil
 }
 
 var customID int64
@@ -169,6 +198,37 @@ func CreateDBWithSQLMode(user string, password string, host string, port int, tl
 // CreateDB return sql.DB
 func CreateDB(user string, password string, host string, port int, tls *tls.Config) (db *gosql.DB, err error) {
 	return CreateDBWithSQLMode(user, password, host, port, tls, nil, nil, time.Minute)
+}
+
+//CreateOracleDB create Oracle DB connection and return it
+func CreateOracleDB(user string, password string, host string, port int, serviceName, connectString string) (db *gosql.DB, err error) {
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		return nil, err
+	}
+	pConnectString := ""
+	if connectString == "" {
+		if serviceName == "" {
+			return nil, errors.New("service-name should not be empty")
+		}
+		pConnectString = fmt.Sprintf("%s:%d/%s?connect_timeout=2", host, port, serviceName)
+	} else {
+		pConnectString = connectString
+	}
+	oraDSN := godror.ConnectionParams{
+		CommonParams: godror.CommonParams{
+			Username:      user,
+			Password:      godror.NewPassword(password),
+			ConnectString: pConnectString,
+			Timezone:      loc,
+		},
+	}
+	sqlDB := gosql.OpenDB(godror.NewConnector(oraDSN))
+	err = sqlDB.Ping()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sqlDB, nil
 }
 
 func quoteSchema(schema string, table string) string {
@@ -259,6 +319,36 @@ func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 	return cols, nil
 }
 
+func getOracleColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
+	rows, err := db.Query(colsOracleSQL, schema, table)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer rows.Close()
+	cols := make([]string, 0, 1)
+	for rows.Next() {
+		var name, virtualColumn string
+		err = rows.Scan(&name, &virtualColumn)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		cols = append(cols, name)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// if no any columns returns, means the table not exist.
+	if len(cols) == 0 {
+		return nil, ErrTableNotExist
+	}
+
+	return cols, nil
+
+}
+
+
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/statistics-table.html
 func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, err error) {
 	rows, err := db.Query(uniqKeysSQL, schema, table)
@@ -302,6 +392,53 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 
 	if err = rows.Err(); err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	return
+}
+
+func getOracleUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, primaryKey *indexInfo, err error) {
+	rows, err := db.Query(uniqKeyOracleSQL, schema, table)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+	defer rows.Close()
+
+	var indexType, indexName, colName string
+	var seqInIndex int
+	havePK := false
+	for rows.Next() {
+		err = rows.Scan(&indexType, &indexName, &seqInIndex, &colName)
+		if err != nil {
+			err = errors.Trace(err)
+			return
+		}
+		//normal index should ignore
+		if indexType == "NONUNIQUE" {
+			continue
+		}
+		if !havePK && indexType == "PUNIQUE" {
+			havePK = true
+		}
+		var i int
+		for i = 0; i < len(uniqueKeys); i++ {
+			if uniqueKeys[i].name == indexName {
+				uniqueKeys[i].columns = append(uniqueKeys[i].columns, colName)
+				break
+			}
+		}
+		// If we don't find the indexInfo with the loop above, create a new one
+		if i == len(uniqueKeys) {
+			uniqueKeys = append(uniqueKeys, indexInfo{indexName, []string{colName}})
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	if havePK {
+		primaryKey = &uniqueKeys[0]
 	}
 
 	return

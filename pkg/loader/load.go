@@ -67,6 +67,8 @@ type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
 	db *gosql.DB
+	//downStream db type, mysql,tidb,oracle
+	destDBType string
 	// only set for test
 	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
 	opts               options
@@ -128,6 +130,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
+	destDBType		 string
 }
 
 var defaultLoaderOptions = options{
@@ -140,6 +143,7 @@ var defaultLoaderOptions = options{
 	enableDispatch:   true,
 	enableCausality:  true,
 	merge:            false,
+	destDBType:       "tidb",
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -187,6 +191,13 @@ func BatchSize(n int) Option {
 func Merge(v bool) Option {
 	return func(o *options) {
 		o.merge = v
+	}
+}
+
+//DestinationDBType set destDBType option.
+func DestinationDBType(t string) Option {
+	return func(o *options) {
+		o.destDBType = t
 	}
 }
 
@@ -243,11 +254,14 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:         make(chan *Txn),
 		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
+		destDBType: 		opts.destDBType,
 
 		ctx:    ctx,
 		cancel: cancel,
 	}
-
+	if opts.destDBType == "oracle" {
+		s.getTableInfoFromDB = getOracleTableInfo
+	}
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
@@ -682,7 +696,7 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
 	if s.syncMode == SyncPartialColumn {
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
@@ -712,6 +726,8 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
+		//downStream db type, mysql,tidb,oracle
+		destDBType : s.destDBType,
 	}
 }
 
@@ -724,6 +740,8 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
+	//downStream db type, mysql,tidb,oracle
+	destDBType 			 string
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {

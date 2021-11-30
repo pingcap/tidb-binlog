@@ -99,7 +99,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync, syncer.tableRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -107,7 +107,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync, tableRouter *router.Table) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
@@ -119,16 +119,20 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "mysql", "tidb":
+	case "mysql", "tidb", "oracle":
 		var relayer relay.Relayer
 		if cfg.Relay.IsEnabled() {
 			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
+		if cfg.DestDBType == "oracle" {
+			dsyncer, err = dsync.NewOracleSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.EnableDispatch(), cfg.EnableCausality(), tableRouter)
+		}else {
+			dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
+		}
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
+			return nil, errors.Annotate(err, "fail to create db dsyncer")
 		}
 		// only use for test
 	case "_intercept":
@@ -394,7 +398,7 @@ ForLoop:
 				ignore              = false
 				err1                error
 			)
-			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle"{
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")

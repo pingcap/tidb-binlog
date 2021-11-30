@@ -15,6 +15,8 @@ package loader
 
 import (
 	"fmt"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +47,8 @@ type DML struct {
 	Values    map[string]interface{}
 
 	info *tableInfo
+
+	UpColumnsInfoMap map[string]*model.ColumnInfo
 }
 
 // DDL holds the ddl info
@@ -165,6 +169,11 @@ func (dml *DML) TableName() string {
 	return quoteSchema(dml.Database, dml.Table)
 }
 
+// OracleTableName returns the fully qualified name of the DML's table in oracle db
+func (dml *DML) OracleTableName() string {
+	return fmt.Sprintf("%s.%s", escapeName(dml.Database), escapeName(dml.Table))
+}
+
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
@@ -189,6 +198,32 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) oracleUpdateSQL() (sql string) {
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "UPDATE %s SET ", dml.OracleTableName())
+
+	for i, name := range dml.columnNames() {
+		if i > 0 {
+			builder.WriteByte(',')
+		}
+		value := dml.Values[name]
+		if value == nil {
+			fmt.Fprintf(builder, "%s = NULL", escapeName(name))
+		}else {
+			fmt.Fprintf(builder, "%s = %s", escapeName(name), genOracleValue(dml.UpColumnsInfoMap[name], value))
+		}
+	}
+
+	builder.WriteString(" WHERE ")
+
+	dml.buildOracleWhere(builder)
+	builder.WriteString(" AND rownum <=1")
+
+	sql = builder.String()
+	return
+}
+
 func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
 	for i := 0; i < len(wnames); i++ {
@@ -200,6 +235,21 @@ func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
 		} else {
 			builder.WriteString(quoteName(wnames[i]) + " = ?")
 			args = append(args, wargs[i])
+		}
+	}
+	return
+}
+
+func (dml *DML) buildOracleWhere(builder *strings.Builder) {
+	colNames, colValues := dml.whereSlice()
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if colValues[i] == nil {
+			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
 		}
 	}
 	return
@@ -250,6 +300,62 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) oracleDeleteSQL() (sql string) {
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
+	dml.buildOracleWhere(builder)
+	builder.WriteString(" AND rownum <=1")
+	sql = builder.String()
+	return
+}
+
+func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
+	builder := new(strings.Builder)
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
+
+	valueMap := dml.Values
+	colNames := make([]string, 0)
+	colValues := make([]interface{}, 0)
+	// Try to use unique key values when available
+	for _, index := range dml.info.uniqueKeys {
+		notAnyNil := true
+		for _, colName := range index.columns {
+			if valueMap[colName] == nil {
+				notAnyNil = false
+				break
+			}
+			colNames = append(colNames, colName)
+			colValues = append(colValues, valueMap[colName])
+		}
+		if !notAnyNil {
+			colNames = colNames[:0]
+			colValues = colValues[:0]
+		}
+	}
+	// Fallback to use all columns
+	if len(colNames) == 0 {
+		for _, col := range dml.columnNames() {
+			colNames = append(colNames, col)
+			colValues = append(colValues, valueMap[col])
+		}
+	}
+
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if colValues[i] == nil {
+			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
+		}
+	}
+	builder.WriteString(" AND rownum <=1")
+	sql = builder.String()
+	return
+}
+
 func (dml *DML) columnNames() []string {
 	names := make([]string, 0, len(dml.Values))
 
@@ -277,6 +383,23 @@ func (dml *DML) insertSQL() (sql string, args []interface{}) {
 	return
 }
 
+func (dml *DML) oracleInsertSQL() (sql string) {
+	builder := new(strings.Builder)
+	columns, values := dml.buildOracleInsertColAndValue()
+	fmt.Fprintf(builder, "INSERT INTO %s (%s) VALUES (%s)", dml.OracleTableName(), columns, values)
+	sql = builder.String()
+	return
+}
+
+func (dml *DML) buildOracleInsertColAndValue() (string, string){
+	names := dml.columnNames()
+	values := make([]string, 0, len(dml.Values))
+	for _, name := range names {
+		values = append(values, genOracleValue(dml.UpColumnsInfoMap[name], dml.Values[name]))
+	}
+	return strings.Join(names, ", "), strings.Join(values, ", ")
+}
+
 func (dml *DML) sql() (sql string, args []interface{}) {
 	switch dml.Tp {
 	case InsertDMLType:
@@ -288,6 +411,21 @@ func (dml *DML) sql() (sql string, args []interface{}) {
 	}
 
 	log.Debug("get sql for dml", zap.Reflect("dml", dml), zap.String("sql", sql), zap.Reflect("args", args))
+
+	return
+}
+
+func (dml *DML) oracleSQL() (sql string) {
+	switch dml.Tp {
+	case InsertDMLType:
+		return dml.oracleInsertSQL()
+	case UpdateDMLType:
+		return dml.oracleUpdateSQL()
+	case DeleteDMLType:
+		return dml.oracleDeleteSQL()
+	}
+
+	log.Debug("get sql for dml", zap.Reflect("dml", dml), zap.String("sql", sql))
 
 	return
 }
@@ -357,4 +495,28 @@ func getKeys(dml *DML) (keys []string) {
 	}
 
 	return
+}
+
+func genOracleValue(column *model.ColumnInfo, value interface{}) string{
+	if value == nil {
+		return "NULL"
+	}
+	switch column.Tp {
+	case mysql.TypeDate:
+		return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd')", value)
+	case mysql.TypeDatetime:
+		if column.Decimal == 0 {
+			return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd hh24:mi:ss')", value)
+		}
+		return fmt.Sprintf("TO_TIMESTAMP('%v', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
+	case mysql.TypeTimestamp:
+		return fmt.Sprintf("TO_TIMESTAMP('%s', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
+	case mysql.TypeDuration:
+		return fmt.Sprintf("TO_DATE('%s', 'hh24:mi:ss')", value)
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24,
+		mysql.TypeYear, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
+		return fmt.Sprintf("%v", value)
+	default:
+		return fmt.Sprintf("'%v'", value)
+	}
 }
