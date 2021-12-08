@@ -730,7 +730,6 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
-		destDBType: s.destDBType,
 	}
 }
 
@@ -743,7 +742,6 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
-	destDBType           string
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {

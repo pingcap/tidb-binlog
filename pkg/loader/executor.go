@@ -363,7 +363,8 @@ func tryRefreshTableOracleErr(err error) bool {
 	if !ok {
 		return false
 	}
-	//Invalid identifier for oracle db error
+	// Invalid identifier for oracle db error
+	// https://docs.oracle.com/database/121/DRDAS/error_code.htm#DRDAS513
 	if oraErr.Code() == 904 {
 		return true
 	}

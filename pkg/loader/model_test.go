@@ -15,11 +15,12 @@ package loader
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"regexp"
-	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
@@ -487,6 +488,39 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 	c.Assert(
 		sql, check.Equals,
 		"DELETE FROM db.tbl WHERE ID = 123 AND rownum <=1")
+
+	// column in UK have nil value, so fall back to all columns
+	dml = DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"NAME": "pc",
+			"C2":   nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME", "C2"},
+			uniqueKeys: []indexInfo{
+				{
+					name:    "uniq_index_name",
+					columns: []string{"ID", "C2"},
+				},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+	}
+	sql = dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = 123 AND NAME = 'pc' AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
@@ -504,12 +538,12 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
 			columns: []string{"ID", "ID2", "NAME", "C2"},
 			uniqueKeys: []indexInfo{
 				{
-					name:    "uniq_index_name_id2",
-					columns: []string{"ID2"},
+					name:    "uniq_index_name_id",
+					columns: []string{"ID", "C2"},
 				},
 				{
-					name:    "uniq_index_name_id",
-					columns: []string{"ID"},
+					name:    "uniq_index_name_id2",
+					columns: []string{"ID2"},
 				},
 			},
 		},

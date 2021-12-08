@@ -2,13 +2,14 @@ package translator
 
 import (
 	"fmt"
+	"io"
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	tipb "github.com/pingcap/tipb/go-binlog"
-	"io"
-	"strings"
 )
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
@@ -18,7 +19,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 	if tiBinlog.DdlJobId > 0 {
 		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema, table)
 		if routeErr != nil {
-			return nil, errors.Annotatef(routeErr, "when binlog to oracle ddl txn,route schema and table failed. schema=%s, table=%s", schema, table)
+			return nil, errors.Annotatef(routeErr, "when binlog to oracle ddl txn, route schema and table failed. schema=%s, table=%s", schema, table)
 		}
 		txn.DDL = &loader.DDL{
 			Database: downStreamSchema,
@@ -51,7 +52,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 			}
 			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema, table)
 			if routeErr != nil {
-				return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle dml txn,route schema and table failed. schema=%s, tabel=%s", schema, table))
+				return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle dml txn, route schema and table failed. schema=%s, table=%s", schema, table))
 			}
 			iter := newSequenceIterator(&mut)
 			for {
