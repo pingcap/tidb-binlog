@@ -53,6 +53,16 @@ func (s *testTranslateSuite) TestPBBinlogToTxn(c *check.C) {
 		},
 		{
 			Tp:       pb.BinlogType_DDL,
+			DdlQuery: []byte("create view `db1`.`view1` as (select 1)"),
+		}: {
+			DDL: &loader.DDL{
+				SQL:      "create view `db1`.`view1` as (select 1)",
+				Database: "db1",
+				Table:    "view1",
+			},
+		},
+		{
+			Tp:       pb.BinlogType_DDL,
 			DdlQuery: []byte("drop database db1"),
 		}: {
 			DDL: &loader.DDL{
