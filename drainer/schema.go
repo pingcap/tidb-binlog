@@ -18,10 +18,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 )
 
 const implicitColName = "_tidb_rowid"
@@ -466,6 +467,32 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 		s.truncateTableID[job.TableID] = struct{}{}
+
+	case model.ActionCreateTables:
+		binlogInfo := job.BinlogInfo
+		if binlogInfo == nil {
+			return "", "", "", errors.NotFoundf("job %d", job.ID)
+		}
+		affected := binlogInfo.Affected
+		for _, history := range affected {
+			schema := history.DBInfo
+			if schema == nil {
+				return "", "", "", errors.NotValidf("job %d", job.ID)
+			}
+			tbInfo := binlogInfo.TableInfo
+			if tbInfo == nil {
+				return "", "", "", errors.NotValidf("job %d", job.ID)
+			}
+
+			err := s.ReplaceTable(job.BinlogInfo.SchemaVersion, tbInfo)
+			if err != nil {
+				return "", "", "", errors.Trace(err)
+			}
+
+			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: tbInfo.Name.O}
+			s.currentVersion = job.BinlogInfo.SchemaVersion
+		}
+
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
