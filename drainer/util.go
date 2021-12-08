@@ -262,7 +262,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 		doDBs[j] = rule.Source.Schema
 		doTables[j] = &baf.Table{Schema: rule.Source.Schema, Name: rule.Source.Table}
 	}
-
+	filterRules = combineFilterRules(filterRules)
 	// only support two type ddl[truncate table xxx, and alter table xx truncate partition xx] for oracle db
 	if cfg.DestDBType == "oracle" {
 		filterRules = append([]*bf.BinlogEventRule{{
@@ -273,7 +273,6 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 			SQLPattern:    []string{".*truncate table.*", ".*alter table.*truncate partition.*"},
 		}}, filterRules...)
 	}
-	filterRules = combineFilterRules(filterRules)
 	var (
 		tableRouter  *router.Table
 		binlogFilter *bf.BinlogEvent
