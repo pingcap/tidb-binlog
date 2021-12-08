@@ -48,9 +48,9 @@ FROM information_schema.statistics
 WHERE table_schema = ? AND table_name = ?
 ORDER BY seq_in_index ASC;`
 
-//for oracle db
-colsOracleSQL = `SELECT column_name, virtual_column FROM dba_tab_cols WHERE owner = upper(:1) AND table_name = upper(:2) AND virtual_column = 'NO'`
-uniqKeyOracleSQL = `select c.constraint_type || i.uniqueness index_type, i.index_name, ic.column_position, ic.column_name
+	//for oracle db
+	colsOracleSQL    = `SELECT column_name FROM dba_tab_cols WHERE owner = upper(:1) AND table_name = upper(:2) AND virtual_column = 'NO'`
+	uniqKeyOracleSQL = `select c.constraint_type || i.uniqueness index_type, i.index_name, ic.column_position, ic.column_name
 					   from dba_indexes i
 					   left join dba_constraints c
 						 on i.index_name = c.constraint_name
@@ -327,8 +327,8 @@ func getOracleColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 	defer rows.Close()
 	cols := make([]string, 0, 1)
 	for rows.Next() {
-		var name, virtualColumn string
-		err = rows.Scan(&name, &virtualColumn)
+		var name string
+		err = rows.Scan(&name)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -347,7 +347,6 @@ func getOracleColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 	return cols, nil
 
 }
-
 
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/statistics-table.html
 func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, err error) {

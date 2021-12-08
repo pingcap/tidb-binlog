@@ -128,11 +128,11 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		}
 		if cfg.DestDBType == "oracle" {
 			dsyncer, err = dsync.NewOracleSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.EnableDispatch(), cfg.EnableCausality(), tableRouter)
-		}else {
+		} else {
 			dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
 		}
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to create db dsyncer")
+			return nil, errors.Annotatef(err, "fail to create %s dsyncer", cfg.DestDBType)
 		}
 		// only use for test
 	case "_intercept":
@@ -398,7 +398,7 @@ ForLoop:
 				ignore              = false
 				err1                error
 			)
-			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle"{
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle" {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")

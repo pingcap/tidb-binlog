@@ -15,11 +15,12 @@ package loader
 
 import (
 	"fmt"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -171,7 +172,7 @@ func (dml *DML) TableName() string {
 
 // OracleTableName returns the fully qualified name of the DML's table in oracle db
 func (dml *DML) OracleTableName() string {
-	return fmt.Sprintf("%s.%s", escapeName(dml.Database), escapeName(dml.Table))
+	return fmt.Sprintf("%s.%s", dml.Database, dml.Table)
 }
 
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
@@ -210,7 +211,7 @@ func (dml *DML) oracleUpdateSQL() (sql string) {
 		value := dml.Values[name]
 		if value == nil {
 			fmt.Fprintf(builder, "%s = NULL", escapeName(name))
-		}else {
+		} else {
 			fmt.Fprintf(builder, "%s = %s", escapeName(name), genOracleValue(dml.UpColumnsInfoMap[name], value))
 		}
 	}
@@ -252,7 +253,6 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder) {
 			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
 		}
 	}
-	return
 }
 
 func (dml *DML) whereValues(names []string) (values []interface{}) {
@@ -310,7 +310,7 @@ func (dml *DML) oracleDeleteSQL() (sql string) {
 	return
 }
 
-func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
+func (dml *DML) oracleDeleteNewValueSQL() (sql string) {
 	builder := new(strings.Builder)
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
 
@@ -331,6 +331,8 @@ func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
 		if !notAnyNil {
 			colNames = colNames[:0]
 			colValues = colValues[:0]
+		} else {
+			break
 		}
 	}
 	// Fallback to use all columns
@@ -348,7 +350,7 @@ func (dml * DML) oracleDeleteNewValueSQL() (sql string) {
 		if colValues[i] == nil {
 			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
+			builder.WriteString(fmt.Sprintf("%s = %s", colNames[i], genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
 		}
 	}
 	builder.WriteString(" AND rownum <=1")
@@ -391,7 +393,7 @@ func (dml *DML) oracleInsertSQL() (sql string) {
 	return
 }
 
-func (dml *DML) buildOracleInsertColAndValue() (string, string){
+func (dml *DML) buildOracleInsertColAndValue() (string, string) {
 	names := dml.columnNames()
 	values := make([]string, 0, len(dml.Values))
 	for _, name := range names {
@@ -497,7 +499,7 @@ func getKeys(dml *DML) (keys []string) {
 	return
 }
 
-func genOracleValue(column *model.ColumnInfo, value interface{}) string{
+func genOracleValue(column *model.ColumnInfo, value interface{}) string {
 	if value == nil {
 		return "NULL"
 	}

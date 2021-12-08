@@ -17,10 +17,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"github.com/godror/godror"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/godror/godror"
 
 	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb/infoschema"
@@ -41,22 +42,26 @@ var (
 )
 
 type executor struct {
-	db                *gosql.DB
-	destDBType 		  string
-	batchSize         int
-	workerCount       int
-	info              *loopbacksync.LoopBackSync
-	queryHistogramVec *prometheus.HistogramVec
-	refreshTableInfo  func(schema string, table string) (info *tableInfo, err error)
+	db                  *gosql.DB
+	destDBType          string
+	batchSize           int
+	workerCount         int
+	info                *loopbacksync.LoopBackSync
+	queryHistogramVec   *prometheus.HistogramVec
+	refreshTableInfo    func(schema string, table string) (info *tableInfo, err error)
+	fTryRefreshTableErr func(err error) bool
+	fSingleExec         func(dmls []*DML, safeMode bool) error
 }
 
 func newExecutor(db *gosql.DB) *executor {
 	exe := &executor{
-		db:          db,
-		batchSize:   defaultBatchSize,
-		workerCount: defaultWorkerCount,
+		db:                  db,
+		batchSize:           defaultBatchSize,
+		workerCount:         defaultWorkerCount,
+		fTryRefreshTableErr: tryRefreshTableErr,
 	}
-
+	//default using tidb singleExec
+	exe.fSingleExec = exe.singleExec
 	return exe
 }
 
@@ -255,6 +260,9 @@ func (e *executor) oracleBulkOperation(dmls []*DML) error {
 		return nil
 	}
 	tx, err := e.begin()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for _, dml := range dmls {
 		sql := dml.oracleSQL()
 		_, err = tx.autoRollbackExec(sql)
@@ -355,6 +363,7 @@ func tryRefreshTableOracleErr(err error) bool {
 	if !ok {
 		return false
 	}
+	//Invalid identifier for oracle db error
 	if oraErr.Code() == 904 {
 		return true
 	}
@@ -362,23 +371,15 @@ func tryRefreshTableOracleErr(err error) bool {
 }
 
 func (e *executor) singleExecRetry(ctx context.Context, allDMLs []*DML, safeMode bool, retryNum int, backoff time.Duration) error {
+	var execErr error
 	for _, dmls := range splitDMLs(allDMLs, e.batchSize) {
 		err := util.RetryContext(ctx, retryNum, backoff, 1, func(context.Context) error {
-			var execErr error
-			//default using tidb
-			fTryRefreshTableErr := tryRefreshTableErr
-			if e.destDBType == "oracle"{
-				fTryRefreshTableErr = tryRefreshTableOracleErr
-				execErr = e.singleOracleExec(dmls, safeMode)
-			} else{
-				execErr = e.singleExec(dmls, safeMode)
-			}
-
+			execErr = e.fSingleExec(dmls, safeMode)
 			if execErr == nil {
 				return nil
 			}
 
-			if fTryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
+			if e.fTryRefreshTableErr(execErr) && e.refreshTableInfo != nil {
 				log.Info("try refresh table info")
 				name2info := make(map[string]*tableInfo)
 				for _, dml := range dmls {

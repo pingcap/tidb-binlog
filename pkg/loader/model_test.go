@@ -272,28 +272,27 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 		Database: "db",
 		Table:    "tbl",
 		Values: map[string]interface{}{
-			"id":123,
-			"name": "pc",
+			"ID":   123,
+			"NAME": "pc",
 		},
 		OldValues: map[string]interface{}{
-			"id":123,
-			"name": "pingcap",
+			"ID":   123,
+			"NAME": "pingcap",
 		},
 		info: &tableInfo{
-			columns: []string{"id", "name"},
+			columns: []string{"ID", "NAME"},
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
-			"id": {
+			"ID": {
 				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
-			"name": {
+			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
-
 		},
 	}
-	sql	:= dml.oracleSQL()
+	sql := dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
-		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND name = 'pingcap' AND rownum <=1")
+		"UPDATE db.tbl SET ID = 123,NAME = 'pc' WHERE ID = 123 AND NAME = 'pingcap' AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
@@ -302,38 +301,37 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 		Database: "db",
 		Table:    "tbl",
 		Values: map[string]interface{}{
-			"id":123,
-			"name": "pc",
+			"ID":   123,
+			"NAME": "pc",
 		},
 		OldValues: map[string]interface{}{
-			"id":123,
-			"name": "pingcap",
+			"ID":   123,
+			"NAME": "pingcap",
 		},
 		info: &tableInfo{
-			columns: []string{"id", "name"},
+			columns: []string{"ID", "NAME"},
 			uniqueKeys: []indexInfo{
 				{
 					name:    "uniq name",
-					columns: []string{"id"},
+					columns: []string{"ID"},
 				},
 				{
 					name:    "other",
-					columns: []string{"other"},
+					columns: []string{"OTHER"},
 				},
 			},
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
-			"id": {
+			"ID": {
 				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
-			"name": {
+			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
-
 		},
 	}
-	sql	:= dml.oracleSQL()
+	sql := dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
-		"UPDATE db.tbl SET id = 123,name = 'pc' WHERE id = 123 AND rownum <=1")
+		"UPDATE db.tbl SET ID = 123,NAME = 'pc' WHERE ID = 123 AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
@@ -342,24 +340,23 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 		Database: "db",
 		Table:    "tbl",
 		Values: map[string]interface{}{
-			"id":123,
-			"name": "pc",
+			"ID":   123,
+			"NAME": "pc",
 		},
 		info: &tableInfo{
-			columns: []string{"id", "name"},
+			columns: []string{"ID", "NAME"},
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
-			"id": {
+			"ID": {
 				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
-			"name": {
+			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
-
 		},
 	}
-	sql	:= dml.oracleSQL()
+	sql := dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE id = 123 AND name = 'pc' AND rownum <=1")
+		"DELETE FROM db.tbl WHERE ID = 123 AND NAME = 'pc' AND rownum <=1")
 }
 
 func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
@@ -368,27 +365,26 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 		Database: "db",
 		Table:    "tbl",
 		Values: map[string]interface{}{
-			"id":123,
-			"name": "pc",
-			"c2":nil,
+			"ID":   123,
+			"NAME": "pc",
+			"C2":   nil,
 		},
 		info: &tableInfo{
-			columns: []string{"id", "name", "c2"},
+			columns: []string{"ID", "NAME", "C2"},
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
-			"id": {
+			"ID": {
 				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
-			"name": {
+			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
-			"c2": {
+			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
-
 		},
 	}
-	sql	:= dml.oracleSQL()
+	sql := dml.oracleSQL()
 	c.Assert(
 		sql, check.Equals,
-		"INSERT INTO db.tbl (c2, id, name) VALUES (NULL, 123, 'pc')")
+		"INSERT INTO db.tbl (C2, ID, NAME) VALUES (NULL, 123, 'pc')")
 }
 
 func (s *SQLSuite) TestGenOracleValue(c *check.C) {
@@ -434,7 +430,7 @@ func (s *SQLSuite) TestGenOracleValue(c *check.C) {
 	colVaue = "2021"
 	val = genOracleValue(&columnInfo, colVaue)
 	c.Assert(
-		val, check.Equals,"2021")
+		val, check.Equals, "2021")
 
 	columnInfo = model.ColumnInfo{
 		FieldType: types.FieldType{Tp: mysql.TypeVarchar},
@@ -442,7 +438,7 @@ func (s *SQLSuite) TestGenOracleValue(c *check.C) {
 	colVaue = "2021"
 	val = genOracleValue(&columnInfo, colVaue)
 	c.Assert(
-		val, check.Equals,"'2021'")
+		val, check.Equals, "'2021'")
 
 	columnInfo = model.ColumnInfo{
 		FieldType: types.FieldType{Tp: mysql.TypeDuration},
@@ -450,10 +446,119 @@ func (s *SQLSuite) TestGenOracleValue(c *check.C) {
 	colVaue = "23:11:59"
 	val = genOracleValue(&columnInfo, colVaue)
 	c.Assert(
-		val, check.Equals,"TO_DATE('23:11:59', 'hh24:mi:ss')")
+		val, check.Equals, "TO_DATE('23:11:59', 'hh24:mi:ss')")
 
 	var colVaue2 interface{}
 	val = genOracleValue(&columnInfo, colVaue2)
 	c.Assert(
-		val, check.Equals,"NULL")
+		val, check.Equals, "NULL")
+}
+
+func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
+	dml := DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"NAME": "pc",
+			"C2":   nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME", "C2"},
+			uniqueKeys: []indexInfo{
+				{
+					name:    "uniq_index_name",
+					columns: []string{"ID"},
+				},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+	}
+
+	sql := dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE ID = 123 AND rownum <=1")
+}
+
+func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
+	dml := DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"ID2":  "456",
+			"NAME": "pc",
+			"C2":   nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "ID2", "NAME", "C2"},
+			uniqueKeys: []indexInfo{
+				{
+					name:    "uniq_index_name_id2",
+					columns: []string{"ID2"},
+				},
+				{
+					name:    "uniq_index_name_id",
+					columns: []string{"ID"},
+				},
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"ID2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+	}
+
+	sql := dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE ID2 = '456' AND rownum <=1")
+}
+
+func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
+	dml := DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"ID2":  "456",
+			"NAME": "pc",
+			"C2":   nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "ID2", "NAME", "C2"},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"ID2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+	}
+
+	sql := dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = 123 AND ID2 = '456' AND NAME = 'pc' AND rownum <=1")
 }

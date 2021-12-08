@@ -130,7 +130,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
-	destDBType		 string
+	destDBType       string
 }
 
 var defaultLoaderOptions = options{
@@ -254,7 +254,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:         make(chan *Txn),
 		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
-		destDBType: 		opts.destDBType,
+		destDBType:         opts.destDBType,
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -697,6 +697,10 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
+	if s.destDBType == "oracle" {
+		e.fTryRefreshTableErr = tryRefreshTableOracleErr
+		e.fSingleExec = e.singleOracleExec
+	}
 	if s.syncMode == SyncPartialColumn {
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
@@ -726,8 +730,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
-		//downStream db type, mysql,tidb,oracle
-		destDBType : s.destDBType,
+		destDBType: s.destDBType,
 	}
 }
 
@@ -740,8 +743,7 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
-	//downStream db type, mysql,tidb,oracle
-	destDBType 			 string
+	destDBType           string
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {

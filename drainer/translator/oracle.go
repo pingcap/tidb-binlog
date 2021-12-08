@@ -16,13 +16,14 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {
-		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema,table)
+		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema, table)
 		if routeErr != nil {
-			return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle ddl txn,route schema and table failed. schema=%s, tabel=%s",schema,table))
+			return nil, errors.Annotatef(routeErr, "when binlog to oracle ddl txn,route schema and table failed. schema=%s, table=%s", schema, table)
 		}
 		txn.DDL = &loader.DDL{
-			Database:   downStreamSchema,
-			Table:      downStreamTable,
+			Database: downStreamSchema,
+			Table:    downStreamTable,
+			// TODO: don't route DDL here because we will rewrite DDLs in loader
 			SQL:        string(tiBinlog.GetDdlQuery()),
 			ShouldSkip: shouldSkip,
 		}
@@ -48,9 +49,9 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 			if !ok {
 				return nil, errors.Errorf("SchemaAndTableName empty table id: %d", mut.GetTableId())
 			}
-			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema,table)
+			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(schema, table)
 			if routeErr != nil {
-				return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle dml txn,route schema and table failed. schema=%s, tabel=%s",schema,table))
+				return nil, errors.Annotate(routeErr, fmt.Sprintf("when binlog to oracle dml txn,route schema and table failed. schema=%s, tabel=%s", schema, table))
 			}
 			iter := newSequenceIterator(&mut)
 			for {
@@ -128,12 +129,11 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 	return
 }
 
-func genColumnInfoMap(table * model.TableInfo) map[string] *model.ColumnInfo {
-	colsMap := make(map[string] *model.ColumnInfo)
+func genColumnInfoMap(table *model.TableInfo) map[string]*model.ColumnInfo {
+	colsMap := make(map[string]*model.ColumnInfo)
 	for _, column := range table.Columns {
 		//for oracle downstream db, column name should be upper case.
 		colsMap[strings.ToUpper(column.Name.O)] = column
 	}
 	return colsMap
 }
-

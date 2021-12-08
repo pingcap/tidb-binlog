@@ -99,7 +99,7 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 		AddRow("C6", "NO").
 		AddRow("C7", "NO").
 		AddRow("C8", "NO")
-	mock.ExpectQuery(regexp.QuoteMeta(colsOracleSQL)).WithArgs("test","t3").WillReturnRows(columnRows)
+	mock.ExpectQuery(regexp.QuoteMeta(colsOracleSQL)).WithArgs("test", "t3").WillReturnRows(columnRows)
 
 	indexRows := sqlmock.NewRows([]string{"index_type", "index_name", "column_position", "column_name"}).
 		AddRow("NONUNIQUE", "T3_C7_C8_INDEX", 1, "C7").
@@ -118,12 +118,12 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 	c.Assert(info, check.NotNil)
 
 	c.Assert(info, check.DeepEquals, &tableInfo{
-		columns: []string{"C1", "C2", "C3", "C4", "C5", "C6","C7", "C8"},
+		columns:    []string{"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"},
 		primaryKey: &indexInfo{name: "T3_PK", columns: []string{"C1", "C2"}},
 		uniqueKeys: []indexInfo{
-			{name:"T3_PK", columns:[]string{"C1", "C2"}},
-			{name:"T3_C3_C4_UINDEX", columns:[]string{"C3", "C4"}},
-			{name:"T3_C5_C6_UINDEX", columns:[]string{"C5", "C6"}},
+			{name: "T3_PK", columns: []string{"C1", "C2"}},
+			{name: "T3_C3_C4_UINDEX", columns: []string{"C3", "C4"}},
+			{name: "T3_C5_C6_UINDEX", columns: []string{"C5", "C6"}},
 		},
 	})
 

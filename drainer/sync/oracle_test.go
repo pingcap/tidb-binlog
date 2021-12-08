@@ -50,23 +50,23 @@ func (l *fakeOracleLoader) Successes() <-chan *loader.Txn {
 }
 
 type fakeSchema struct {
-	UpDownSchemaMap  map[string]string
+	UpDownSchemaMap map[string]string
 }
 
-func (s *fakeSchema)TableByID(id int64) (info *model.TableInfo, ok bool) {
-	return nil,false
+func (s *fakeSchema) TableByID(id int64) (info *model.TableInfo, ok bool) {
+	return nil, false
 }
-func (s *fakeSchema)SchemaAndTableName(id int64) (string, string, bool) {
-	return "","",false
+func (s *fakeSchema) SchemaAndTableName(id int64) (string, string, bool) {
+	return "", "", false
 }
-func (s *fakeSchema)CanAppendDefaultValue(id int64, schemaVersion int64) bool {
+func (s *fakeSchema) CanAppendDefaultValue(id int64, schemaVersion int64) bool {
 	return false
 }
-func (s *fakeSchema)TableBySchemaVersion(id int64, schemaVersion int64) (info *model.TableInfo, ok bool) {
-	return nil,false
+func (s *fakeSchema) TableBySchemaVersion(id int64, schemaVersion int64) (info *model.TableInfo, ok bool) {
+	return nil, false
 }
 
-func (s *fakeSchema)ResolveDownstreamSchema(upStreamSchema string) string {
+func (s *fakeSchema) ResolveDownstreamSchema(upStreamSchema string) string {
 	return "test"
 }
 

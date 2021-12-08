@@ -51,10 +51,10 @@ func NewOracleSyncer(
 	}
 
 	s := &OracleSyncer{
-		db:         db,
-		loader:     loader,
-		relayer:    relayer,
-		baseSyncer: newBaseSyncer(tableInfoGetter),
+		db:          db,
+		loader:      loader,
+		relayer:     relayer,
+		baseSyncer:  newBaseSyncer(tableInfoGetter),
 		tableRouter: tableRouter,
 	}
 
@@ -80,7 +80,7 @@ func (m *OracleSyncer) Sync(item *Item) error {
 		item.RelayLogPos = pos
 	}
 
-	txn, err := translator.TiBinlogToOracleTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip,m.tableRouter)
+	txn, err := translator.TiBinlogToOracleTxn(m.tableInfoGetter, item.Schema, item.Table, item.Binlog, item.PrewriteValue, item.ShouldSkip, m.tableRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}

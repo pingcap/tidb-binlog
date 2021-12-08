@@ -14,6 +14,8 @@ package translator
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
@@ -27,21 +29,23 @@ type testOracleSuite struct {
 }
 
 var _ = check.Suite(&testOracleSuite{})
+
 func (t *testOracleSuite) TestDDL(c *check.C) {
 	t.SetDDL()
 
 	var rules = []*router.TableRule{
-		{"test", "test", "test", "test"},
+		{SchemaPattern: "test", TablePattern: "*", TargetSchema: "test_routed", TargetTable: "test_table_routed"},
 	}
-	router, _ := router.NewTableRouter(false, rules)
+	router, err := router.NewTableRouter(false, rules)
+	c.Assert(err, check.IsNil)
 
 	txn, err := TiBinlogToOracleTxn(t, t.Schema, t.Table, t.TiBinlog, nil, true, router)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(txn, check.DeepEquals, &loader.Txn{
 		DDL: &loader.DDL{
-			Database:   t.Schema,
-			Table:      t.Table,
+			Database:   "test_routed",
+			Table:      "test_table_routed",
 			SQL:        string(t.TiBinlog.GetDdlQuery()),
 			ShouldSkip: true,
 		},
@@ -50,7 +54,7 @@ func (t *testOracleSuite) TestDDL(c *check.C) {
 
 func (t *testOracleSuite) testDML(c *check.C, tp loader.DMLType) {
 	var rules = []*router.TableRule{
-		{"test", "test", "test", "test"},
+		{SchemaPattern: "*", TablePattern: "*", TargetSchema: "test_routed", TargetTable: "test_table_routed"},
 	}
 	router, _ := router.NewTableRouter(false, rules)
 	txn, err := TiBinlogToOracleTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV, false, router)
@@ -64,10 +68,10 @@ func (t *testOracleSuite) testDML(c *check.C, tp loader.DMLType) {
 
 	tableID := t.PV.Mutations[0].TableId
 	info, _ := t.TableByID(tableID)
-	schema, table, _ := t.SchemaAndTableName(tableID)
+	//schema, table, _ := t.SchemaAndTableName(tableID)
 
-	c.Assert(dml.Database, check.Equals, schema)
-	c.Assert(dml.Table, check.Equals, table)
+	c.Assert(dml.Database, check.Equals, "test_routed")
+	c.Assert(dml.Table, check.Equals, "test_table_routed")
 
 	var oldDatums []types.Datum
 	if tp == loader.UpdateDMLType {
@@ -93,15 +97,16 @@ func (t *testOracleSuite) TestDelete(c *check.C) {
 
 func checkOracleColumns(c *check.C, info *model.TableInfo, dml *loader.DML, datums []types.Datum, oldDatums []types.Datum) {
 	for i, column := range info.Columns {
-		myValue := dml.Values[column.Name.O]
+		upCaseColName := strings.ToUpper(column.Name.O)
+		myValue := dml.Values[upCaseColName]
 		checkOracleColumn(c, column, myValue, datums[i])
 
 		if oldDatums != nil {
-			myValue := dml.OldValues[column.Name.O]
+			myValue := dml.OldValues[upCaseColName]
 			checkOracleColumn(c, column, myValue, oldDatums[i])
 		}
 		c.Assert(dml.UpColumnsInfoMap, check.NotNil)
-		checkUpColumnsInfoMap(c, column, dml.UpColumnsInfoMap[column.Name.O])
+		checkUpColumnsInfoMap(c, column, dml.UpColumnsInfoMap[upCaseColName])
 	}
 }
 
