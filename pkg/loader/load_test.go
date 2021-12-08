@@ -391,36 +391,6 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
-func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("BEGIN test.do_truncate").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
-
-	ddl := DDL{SQL: "truncate table t1", Database: "test", Table: "t1"}
-	err = loader.execDDL(&ddl)
-	c.Assert(err, check.IsNil)
-}
-
-func (s *execDDLSuite) TestTruncateTablePartitionDDL(c *check.C) {
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("BEGIN test.do_truncate").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
-
-	ddl := DDL{SQL: "alter table t1 truncate partition p1", Database: "test", Table: "t1"}
-	err = loader.execDDL(&ddl)
-	c.Assert(err, check.IsNil)
-}
-
 type batchManagerSuite struct{}
 
 var _ = check.Suite(&batchManagerSuite{})
