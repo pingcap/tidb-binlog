@@ -255,6 +255,7 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 	return errors.Trace(err)
 }
 
+// TODO: add bulkOperation for oracle
 func (e *executor) oracleBulkOperation(dmls []*DML) error {
 	if len(dmls) == 0 {
 		return nil
