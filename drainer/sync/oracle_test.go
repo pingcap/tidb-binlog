@@ -152,6 +152,7 @@ func (s *oracleSuite) TestOracleSyncerWithRelayer(c *check.C) {
 		{SchemaPattern: "test", TablePattern: "*", TargetSchema: "test_routed", TargetTable: "test_table_routed"},
 	}
 	router, err := router.NewTableRouter(false, rules)
+	c.Assert(err, check.IsNil)
 	db, _, _ := sqlmock.New()
 
 	dir := c.MkDir()
