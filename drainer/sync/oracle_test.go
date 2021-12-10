@@ -13,8 +13,10 @@
 package sync
 
 import (
-	"github.com/pingcap/tidb/parser/model"
 	"time"
+
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/parser/model"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
@@ -66,21 +68,23 @@ func (s *fakeSchema) TableBySchemaVersion(id int64, schemaVersion int64) (info *
 	return nil, false
 }
 
-func (s *fakeSchema) ResolveDownstreamSchema(upStreamSchema string) string {
-	return "test"
-}
-
 func (s *oracleSuite) TestOracleSyncerAvoidBlock(c *check.C) {
 	infoGetter := &fakeSchema{}
 	fakeOracleLoaderImpl := &fakeOracleLoader{
 		successes: make(chan *loader.Txn),
 		input:     make(chan *loader.Txn),
 	}
+	var rules = []*router.TableRule{
+		{SchemaPattern: "test", TablePattern: "*", TargetSchema: "test_routed", TargetTable: "test_table_routed"},
+	}
+	router, err := router.NewTableRouter(false, rules)
+	c.Assert(err, check.IsNil)
 	db, _, _ := sqlmock.New()
 	syncer := &OracleSyncer{
-		db:         db,
-		loader:     fakeOracleLoaderImpl,
-		baseSyncer: newBaseSyncer(infoGetter),
+		db:          db,
+		loader:      fakeOracleLoaderImpl,
+		baseSyncer:  newBaseSyncer(infoGetter),
+		tableRouter: router,
 	}
 	go syncer.run()
 	gen := translator.BinlogGenerator{}
@@ -144,6 +148,10 @@ func (s *oracleSuite) TestOracleSyncerWithRelayer(c *check.C) {
 		successes: make(chan *loader.Txn, 8),
 		input:     make(chan *loader.Txn),
 	}
+	var rules = []*router.TableRule{
+		{SchemaPattern: "test", TablePattern: "*", TargetSchema: "test_routed", TargetTable: "test_table_routed"},
+	}
+	router, err := router.NewTableRouter(false, rules)
 	db, _, _ := sqlmock.New()
 
 	dir := c.MkDir()
@@ -151,10 +159,11 @@ func (s *oracleSuite) TestOracleSyncerWithRelayer(c *check.C) {
 	c.Assert(relayer, check.NotNil)
 	c.Assert(err, check.IsNil)
 	syncer := &OracleSyncer{
-		db:         db,
-		loader:     fakeOracleLoaderImpl,
-		relayer:    relayer,
-		baseSyncer: newBaseSyncer(infoGetter),
+		db:          db,
+		loader:      fakeOracleLoaderImpl,
+		relayer:     relayer,
+		baseSyncer:  newBaseSyncer(infoGetter),
+		tableRouter: router,
 	}
 	defer syncer.Close()
 
