@@ -90,15 +90,15 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer db.Close()
 
-	columnRows := sqlmock.NewRows([]string{"column_name", "virtual_column"}).
-		AddRow("C1", "NO").
-		AddRow("C2", "NO").
-		AddRow("C3", "NO").
-		AddRow("C4", "NO").
-		AddRow("C5", "NO").
-		AddRow("C6", "NO").
-		AddRow("C7", "NO").
-		AddRow("C8", "NO")
+	columnRows := sqlmock.NewRows([]string{"column_name"}).
+		AddRow("C1").
+		AddRow("C2").
+		AddRow("C3").
+		AddRow("C4").
+		AddRow("C5").
+		AddRow("C6").
+		AddRow("C7").
+		AddRow("C8")
 	mock.ExpectQuery(regexp.QuoteMeta(colsOracleSQL)).WithArgs("test", "t3").WillReturnRows(columnRows)
 
 	indexRows := sqlmock.NewRows([]string{"index_type", "index_name", "column_position", "column_name"}).
