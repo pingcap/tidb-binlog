@@ -480,7 +480,7 @@ ForLoop:
 				log.Info("skip ddl by binlog event filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
@@ -492,7 +492,7 @@ ForLoop:
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
