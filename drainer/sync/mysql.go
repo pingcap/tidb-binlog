@@ -205,7 +205,7 @@ func (m *MysqlSyncer) Close() error {
 
 	if m.relayer != nil {
 		closeRelayerErr := m.relayer.Close()
-		if err != nil {
+		if err == nil {
 			err = closeRelayerErr
 		}
 	}

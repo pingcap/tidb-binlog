@@ -2,6 +2,8 @@ package sync
 
 import (
 	"database/sql"
+	"sync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
@@ -9,7 +11,6 @@ import (
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/prometheus/client_golang/prometheus"
-	"sync"
 )
 
 var _ Syncer = &OracleSyncer{}
@@ -102,7 +103,7 @@ func (m *OracleSyncer) Close() error {
 
 	if m.relayer != nil {
 		closeRelayerErr := m.relayer.Close()
-		if err != nil {
+		if err == nil {
 			err = closeRelayerErr
 		}
 	}
