@@ -368,7 +368,7 @@ func (s *execDDLSuite) TestShouldExecInTransaction(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background()}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
 	ddl := DDL{SQL: "CREATE TABLE"}
 	err = loader.execDDL(&ddl)
@@ -384,7 +384,7 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background()}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
 	ddl := DDL{SQL: "CREATE TABLE", Database: "test_db"}
 	err = loader.execDDL(&ddl)

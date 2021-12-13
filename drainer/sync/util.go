@@ -55,6 +55,10 @@ type DBConfig struct {
 
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
+
+	//for oracle database
+	OracleServiceName   string `toml:"oracle-service-name" json:"oracle-service-name"`
+	OracleConnectString string `toml:"oracle-connect-string" json:"oracle-connect-string"`
 }
 
 // CheckpointConfig is the Checkpoint configuration.
