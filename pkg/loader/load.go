@@ -456,14 +456,8 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 	if isTruncateTableStmt(ddlStmt) {
 		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
 	} else {
-		ok, astStmt := isTruncateTablePartitionStmt(ddlStmt)
-		if ok {
-			partitions := astStmt.Specs[0].PartitionNames
-			newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','%s');END;", ddl.Database, ddl.Database, ddl.Table, partitions[0].O)
-		} else {
-			log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
-			return nil
-		}
+		log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
+		return nil
 	}
 
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
@@ -501,26 +495,6 @@ func isTruncateTableStmt(sql string) bool {
 	}
 	_, ok := stmt.(*ast.TruncateTableStmt)
 	return ok
-}
-func isTruncateTablePartitionStmt(sql string) (bool, *ast.AlterTableStmt) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false, nil
-	}
-	n, ok := stmt.(*ast.AlterTableStmt)
-	if !ok {
-		return false, nil
-	}
-	if len(n.Specs) > 1 {
-		return false, nil
-	}
-	for _, spec := range n.Specs {
-		if spec.Tp == ast.AlterTableTruncatePartition {
-			return true, n
-		}
-	}
-	return false, nil
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
