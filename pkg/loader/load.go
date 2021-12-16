@@ -451,7 +451,14 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 }
 
 func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
-	newStmt := fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
+	ddlStmt := ddl.SQL
+	newStmt := ""
+	if isTruncateTableStmt(ddlStmt) {
+		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
+	} else {
+		log.Warn("oracle meet unsupported ddl", zap.String("ddl", ddlStmt))
+		return nil
+	}
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		newStmt := newStmt
 		tx, err := s.db.Begin()
@@ -477,6 +484,16 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 		return nil
 	}
 	return errors.Trace(err)
+}
+
+func isTruncateTableStmt(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false
+	}
+	_, ok := stmt.(*ast.TruncateTableStmt)
+	return ok
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
@@ -765,7 +782,6 @@ func newBatchManager(s *loaderImpl) *batchManager {
 				s.evictTableInfo(txn.DDL.Database, txn.DDL.Table)
 			}
 		},
-		destDBType: s.destDBType,
 	}
 }
 
@@ -778,7 +794,6 @@ type batchManager struct {
 	fDMLsSuccessCallback func(...*Txn)
 	fExecDDL             func(*DDL) error
 	fDDLSuccessCallback  func(*Txn)
-	destDBType           string
 }
 
 func (b *batchManager) execAccumulatedDMLs() (err error) {
@@ -808,7 +823,7 @@ func (b *batchManager) execAccumulatedDMLs() (err error) {
 
 func (b *batchManager) execDDL(txn *Txn) error {
 	if err := b.fExecDDL(txn.DDL); err != nil {
-		if b.destDBType == "oracle" || !pkgsql.IgnoreDDLError(err) {
+		if !pkgsql.IgnoreDDLError(err) {
 			return errors.Trace(err)
 		}
 		log.Warn("ignore ddl", zap.Error(err), zap.String("ddl", txn.DDL.SQL))

@@ -390,6 +390,14 @@ func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s *execDDLSuite) TestIsTruncateTableStmt(c *check.C) {
+	sql := "truncate table test.t1"
+	c.Assert(isTruncateTableStmt(sql), check.IsTrue)
+
+	sql = "alter table test.t1 add column c3 int"
+	c.Assert(isTruncateTableStmt(sql), check.IsFalse)
+}
+
 func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
