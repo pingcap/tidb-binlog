@@ -451,15 +451,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 }
 
 func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
-	ddlStmt := ddl.SQL
-	newStmt := ""
-	if isTruncateTableStmt(ddlStmt) {
-		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
-	} else {
-		log.Warn(fmt.Sprintf("oracle do not support ddl[%s]", ddlStmt))
-		return nil
-	}
-
+	newStmt := fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		newStmt := newStmt
 		tx, err := s.db.Begin()
@@ -478,23 +470,13 @@ func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
 			return err
 		}
 
-		log.Info("exec ddl success", zap.String("sql", ddl.SQL), zap.String("new ddl", newStmt))
+		log.Info("exec oracle ddl success", zap.String("sql", ddl.SQL), zap.String("new ddl", newStmt))
 		return nil
 	})
 	if err == nil {
 		return nil
 	}
 	return errors.Trace(err)
-}
-
-func isTruncateTableStmt(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false
-	}
-	_, ok := stmt.(*ast.TruncateTableStmt)
-	return ok
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
