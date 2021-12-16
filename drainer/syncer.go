@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tidb/parser/ast"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -472,19 +474,27 @@ ForLoop:
 			// shouldSkip is used specially for database dsyncers like tidb/mysql/oracle
 			// although we skip some ddls, but we still need to update table info
 			// ignore means whether we should should this ddl event after binlogFilter
-			var shouldSkip, ignore bool
+			var (
+				shouldSkip, ignore bool
+				stmt               ast.StmtNode
+			)
 
-			if ignore, err = skipDDLEvent(sql, schema, table, p, s.binlogFilter); err != nil {
+			if stmt, ignore, err = skipDDLEvent(sql, schema, table, p, s.binlogFilter); err != nil {
 				break ForLoop
 			} else if ignore {
 				log.Info("skip ddl by binlog event filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
 					continue
+				}
+			} else if !ignore && s.cfg.DestDBType == "oracle" {
+				if _, ok := stmt.(*ast.TruncateTableStmt); !ok {
+					err = errors.Errorf("unsupported ddl %s, you should skip commit ts %d", sql, commitTS)
+					break ForLoop
 				}
 			}
 
@@ -492,7 +502,7 @@ ForLoop:
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
@@ -653,19 +663,20 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 
 // skipDDLEvent may drop some ddl event
 // Return true if this job is filtered.
-func skipDDLEvent(sql, schema, table string, p *parser.Parser, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
+func skipDDLEvent(sql, schema, table string, p *parser.Parser, binlogFilter *bf.BinlogEvent) (stmt ast.StmtNode, ignore bool, err error) {
 	if binlogFilter == nil {
-		return false, nil
+		return nil, false, nil
 	}
-	stmt, err := p.ParseOneStmt(sql, "", "")
+	stmt, err = p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.L().Error("fail to parse ddl", zap.String("ddl", sql), logutil.ShortError(err))
 		// return error if parse fail and filter fail
 		needSkip, err2 := skipByFilter(binlogFilter, schema, table, bf.NullEvent, sql)
-		return needSkip, err2
+		return nil, needSkip, err2
 	}
 	et := bf.AstToDDLEvent(stmt)
-	return skipByFilter(binlogFilter, schema, table, et, sql)
+	flag, err := skipByFilter(binlogFilter, schema, table, et, sql)
+	return stmt, flag, err
 }
 
 // skipByFilter returns true when

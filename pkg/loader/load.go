@@ -405,7 +405,13 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	if ddl.ShouldSkip {
 		return nil
 	}
+	if s.destDBType == "oracle" {
+		return s.processOracleDDL(ddl)
+	}
+	return s.processMysqlDDL(ddl)
+}
 
+func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -442,6 +448,52 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	}
 
 	return errors.Trace(err)
+}
+
+func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
+	ddlStmt := ddl.SQL
+	newStmt := ""
+	if isTruncateTableStmt(ddlStmt) {
+		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
+	} else {
+		log.Warn("oracle meet unsupported ddl", zap.String("ddl", ddlStmt))
+		return nil
+	}
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
+		newStmt := newStmt
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(newStmt); err != nil {
+			log.Error("DDL exec failed.", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", newStmt), zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Rollback DDL failed", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", newStmt), zap.Error(rbErr))
+			}
+			return err
+		}
+
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+
+		log.Info("exec oracle ddl success", zap.String("sql", ddl.SQL), zap.String("new ddl", newStmt))
+		return nil
+	})
+	if err == nil {
+		return nil
+	}
+	return errors.Trace(err)
+}
+
+func isTruncateTableStmt(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false
+	}
+	_, ok := stmt.(*ast.TruncateTableStmt)
+	return ok
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
