@@ -380,7 +380,7 @@ func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("BEGIN test.do_truncate").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("BEGIN test.do_truncate\\('test.t1',''\\);END;").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
