@@ -121,6 +121,17 @@ func (s *sqlSuite) TestGetTidbPosition(c *C) {
 	c.Assert(tso, Equals, int64(407774332609932))
 }
 
+func (s *sqlSuite) TestGetOraclePosition(c *C) {
+	s.mock.ExpectQuery("dbms_flashback.get_system_change_number as current_scn from dual").WillReturnRows(
+		sqlmock.NewRows([]string{"CURRENT_SCN"}).
+			AddRow(uint64(117753824)),
+	)
+
+	tso, err := GetOraclePosition(s.db)
+	c.Assert(err, IsNil)
+	c.Assert(tso, Equals, int64(117753824))
+}
+
 const (
 	testQuery1 = "UPDATE foo SET bar = bar - ?"
 	testQuery2 = "DELETE FROM foo WHERE bar <= ?"

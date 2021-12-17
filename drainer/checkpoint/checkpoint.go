@@ -55,6 +55,8 @@ func NewCheckPoint(cfg *Config) (CheckPoint, error) {
 	switch cfg.CheckpointType {
 	case "mysql", "tidb":
 		cp, err = newMysql(cfg)
+	case "oracle":
+		cp, err = newOracle(cfg)
 	case "file":
 		cp, err = NewFile(cfg.InitialCommitTS, cfg.CheckPointFile)
 	default:

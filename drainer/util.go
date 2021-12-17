@@ -107,6 +107,17 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 			Port:     toCheckpoint.Port,
 			TLS:      toCheckpoint.TLS,
 		}
+	case "oracle":
+		checkpointCfg.CheckpointType = toCheckpoint.Type
+		checkpointCfg.Db = &checkpoint.DBConfig{
+			Host:                toCheckpoint.Host,
+			User:                toCheckpoint.User,
+			Password:            toCheckpoint.Password,
+			Port:                toCheckpoint.Port,
+			TLS:                 toCheckpoint.TLS,
+			OracleServiceName:   toCheckpoint.OracleServiceName,
+			OracleConnectString: toCheckpoint.OracleConnectString,
+		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
 		case "mysql", "tidb":
