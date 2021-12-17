@@ -109,7 +109,7 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
-		case "mysql", "tidb":
+		case "mysql", "tidb", "_intercept":
 			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
 			checkpointCfg.Db = &checkpoint.DBConfig{
 				Host:     cfg.SyncerCfg.To.Host,

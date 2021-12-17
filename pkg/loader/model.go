@@ -365,6 +365,7 @@ func (dml *DML) columnNames() []string {
 		names = append(names, name)
 	}
 
+	// why need sort
 	sort.Strings(names)
 	return names
 }
