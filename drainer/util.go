@@ -129,6 +129,17 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 				Port:     cfg.SyncerCfg.To.Port,
 				TLS:      cfg.SyncerCfg.To.TLS,
 			}
+		case "oracle":
+			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
+			checkpointCfg.Db = &checkpoint.DBConfig{
+				Host:                cfg.SyncerCfg.To.Host,
+				User:                cfg.SyncerCfg.To.User,
+				Password:            cfg.SyncerCfg.To.Password,
+				Port:                cfg.SyncerCfg.To.Port,
+				TLS:                 cfg.SyncerCfg.To.TLS,
+				OracleServiceName:   cfg.SyncerCfg.To.OracleServiceName,
+				OracleConnectString: cfg.SyncerCfg.To.OracleConnectString,
+			}
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
 		case "kafka":

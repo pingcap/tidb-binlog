@@ -261,6 +261,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 	if opts.destDBType == "oracle" {
 		s.getTableInfoFromDB = getOracleTableInfo
+		fGetAppliedTS = getOracleAppliedTS
 	}
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
@@ -303,9 +304,6 @@ func (s *loaderImpl) GetSafeMode() bool {
 
 func (s *loaderImpl) markSuccess(txns ...*Txn) {
 	if s.saveAppliedTS && len(txns) > 0 && time.Since(s.lastUpdateAppliedTSTime) > updateLastAppliedTSInterval {
-		if s.destDBType == "oracle" {
-			fGetAppliedTS = getOracleAppliedTS
-		}
 		txns[len(txns)-1].AppliedTS = fGetAppliedTS(s.db)
 		s.lastUpdateAppliedTSTime = time.Now()
 	}

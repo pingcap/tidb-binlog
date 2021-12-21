@@ -68,7 +68,11 @@ func setDefaultConfig(cfg *Config) {
 		cfg.Db.User = "root"
 	}
 	if cfg.Schema == "" {
-		cfg.Schema = "tidb_binlog"
+		if cfg.CheckpointType == "oracle" {
+			cfg.Schema = cfg.Db.User
+		} else {
+			cfg.Schema = "tidb_binlog"
+		}
 	}
 	if cfg.Table == "" {
 		cfg.Table = "checkpoint"

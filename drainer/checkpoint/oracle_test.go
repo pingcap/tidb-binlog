@@ -15,6 +15,8 @@ package checkpoint
 
 import (
 	"database/sql"
+	"fmt"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -37,6 +39,44 @@ func (t *testOracleCheckPointSuite) TestClose(c *C) {
 type oracleSaveSuite struct{}
 
 var _ = Suite(&oracleSaveSuite{})
+
+func (s *saveSuite) TestShouldSaveOracleCheckpoint(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	checkpointStr := `{"consistent":false,"commitTS":1111,"ts-map":null,"schema-version":0}`
+	expecStr := fmt.Sprintf("merge into %s.%s t using \\(select %d clusterID, '%s' checkPoint from dual\\) temp on\\(t.clusterID=temp.clusterID\\) "+
+		"when matched then "+
+		"update set t.checkPoint=temp.checkPoint "+
+		"when not matched then "+
+		"insert values\\(temp.clusterID,temp.checkPoint\\)", "db", "tbl", 0, checkpointStr)
+	//mock.ExpectExec("merge into db.tbl.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(expecStr).WillReturnResult(sqlmock.NewResult(0, 0))
+	cp := OracleCheckPoint{db: db, schema: "db", table: "tbl"}
+	err = cp.Save(1111, 0, false, 0)
+	c.Assert(err, IsNil)
+}
+
+func (s *saveSuite) TestShouldOracleUpdateTsMap(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+	checkpointStr := `{"consistent":false,"commitTS":65536,"ts-map":{"primary-ts":65536,"secondary-ts":3333},"schema-version":0}`
+	expecStr := fmt.Sprintf("merge into %s.%s t using \\(select %d clusterID, '%s' checkPoint from dual\\) temp on\\(t.clusterID=temp.clusterID\\) "+
+		"when matched then "+
+		"update set t.checkPoint=temp.checkPoint "+
+		"when not matched then "+
+		"insert values\\(temp.clusterID,temp.checkPoint\\)", "db", "tbl", 0, checkpointStr)
+	mock.ExpectExec(expecStr).WillReturnResult(sqlmock.NewResult(0, 0))
+	cp := OracleCheckPoint{
+		db:     db,
+		schema: "db",
+		table:  "tbl",
+		TsMap:  make(map[string]int64),
+	}
+	err = cp.Save(65536, 3333, false, 0)
+	c.Assert(err, IsNil)
+	c.Assert(cp.TsMap["primary-ts"], Equals, int64(65536))
+	c.Assert(cp.TsMap["secondary-ts"], Equals, int64(3333))
+}
 
 func (s *oracleSaveSuite) TestShouldLoadFromDB(c *C) {
 	db, mock, err := sqlmock.New()
