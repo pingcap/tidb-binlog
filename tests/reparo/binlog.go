@@ -75,7 +75,9 @@ func main() {
 		`
 	create table ntest2(
 		a int,
-		b bit(20),
+		b double NOT NULL DEFAULT 2.0,
+		c varchar(10) NOT NULL,
+		d bit(20)
 	);
 	`}
 
