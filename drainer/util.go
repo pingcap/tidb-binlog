@@ -100,17 +100,17 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 
 	switch toCheckpoint.Type {
 	case "mysql", "tidb":
-		buildCheckPointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS)
+		buildCheckPointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS, toCheckpoint.Table)
 	case "oracle":
 		buildOracleCheckpointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS,
-			toCheckpoint.OracleServiceName, toCheckpoint.OracleConnectString)
+			toCheckpoint.OracleServiceName, toCheckpoint.OracleConnectString, toCheckpoint.Table)
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
 		case "mysql", "tidb":
-			buildCheckPointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS)
+			buildCheckPointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, "")
 		case "oracle":
 			buildOracleCheckpointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User,
-				cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString)
+				cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString, "")
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
 		case "kafka":
@@ -127,8 +127,9 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	return checkpointCfg, nil
 }
 
-func buildCheckPointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config) {
+func buildCheckPointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, table string) {
 	checkpointCfg.CheckpointType = cfgType
+	checkpointCfg.Table = table
 	checkpointCfg.Db = &checkpoint.DBConfig{
 		Host:     host,
 		User:     user,
@@ -138,8 +139,8 @@ func buildCheckPointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, p
 	}
 }
 
-func buildOracleCheckpointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, serviceName, connectString string) {
-	buildCheckPointCfg(checkpointCfg, cfgType, host, user, password, port, tls)
+func buildOracleCheckpointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, serviceName, connectString, table string) {
+	buildCheckPointCfg(checkpointCfg, cfgType, host, user, password, port, tls, table)
 	checkpointCfg.Db.OracleServiceName = serviceName
 	checkpointCfg.Db.OracleConnectString = connectString
 }

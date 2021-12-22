@@ -75,7 +75,7 @@ func setDefaultConfig(cfg *Config) {
 		}
 	}
 	if cfg.Table == "" {
-		cfg.Table = "checkpoint"
+		cfg.Table = "tidb_binlog_checkpoint"
 	}
 }
 

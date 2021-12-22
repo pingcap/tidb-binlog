@@ -137,6 +137,7 @@ func (t *checkPointSuite) TestGenTidbCheckPointCfg(c *C) {
 				User:     "user-1",
 				Password: "password-1",
 				TLS:      tls,
+				Table:    "new_checkpoint_table",
 			},
 		},
 	}
@@ -151,6 +152,7 @@ func (t *checkPointSuite) TestGenTidbCheckPointCfg(c *C) {
 	c.Assert(cp.Db.User, Equals, cfg.SyncerCfg.To.Checkpoint.User)
 	c.Assert(cp.Db.Password, Equals, cfg.SyncerCfg.To.Checkpoint.Password)
 	c.Assert(cp.Db.TLS, Equals, tls)
+	c.Assert(cp.Table, Equals, "new_checkpoint_table")
 
 	//checkpoint have not config case
 	cfg.SyncerCfg = &SyncerConfig{
@@ -172,6 +174,7 @@ func (t *checkPointSuite) TestGenTidbCheckPointCfg(c *C) {
 	c.Assert(cp.Db.User, Equals, cfg.SyncerCfg.To.User)
 	c.Assert(cp.Db.Password, Equals, cfg.SyncerCfg.To.Password)
 	c.Assert(cp.Db.TLS, Equals, tls)
+	c.Assert(cp.Table, Equals, "")
 }
 
 func (t *checkPointSuite) TestGenOracleCheckPointCfg(c *C) {
@@ -190,6 +193,7 @@ func (t *checkPointSuite) TestGenOracleCheckPointCfg(c *C) {
 				TLS:                 tls,
 				OracleServiceName:   "oracle-service-name-1",
 				OracleConnectString: "oracle-connect-string-1",
+				Table:               "new_checkpoint_table",
 			},
 		},
 	}
@@ -204,6 +208,7 @@ func (t *checkPointSuite) TestGenOracleCheckPointCfg(c *C) {
 	c.Assert(cp.Db.User, Equals, cfg.SyncerCfg.To.Checkpoint.User)
 	c.Assert(cp.Db.Password, Equals, cfg.SyncerCfg.To.Checkpoint.Password)
 	c.Assert(cp.Db.TLS, Equals, tls)
+	c.Assert(cp.Table, Equals, "new_checkpoint_table")
 
 	//checkpoint have not config case
 	cfg.SyncerCfg = &SyncerConfig{
@@ -227,4 +232,5 @@ func (t *checkPointSuite) TestGenOracleCheckPointCfg(c *C) {
 	c.Assert(cp.Db.User, Equals, cfg.SyncerCfg.To.User)
 	c.Assert(cp.Db.Password, Equals, cfg.SyncerCfg.To.Password)
 	c.Assert(cp.Db.TLS, Equals, tls)
+	c.Assert(cp.Table, Equals, "")
 }

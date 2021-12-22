@@ -64,6 +64,7 @@ type DBConfig struct {
 type CheckpointConfig struct {
 	Type     string `toml:"type" json:"type"`
 	Schema   string `toml:"schema" json:"schema"`
+	Table    string `toml:"table" json:"table"`
 	Host     string `toml:"host" json:"host"`
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
