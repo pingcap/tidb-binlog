@@ -75,7 +75,11 @@ func setDefaultConfig(cfg *Config) {
 		}
 	}
 	if cfg.Table == "" {
-		cfg.Table = "tidb_binlog_checkpoint"
+		if cfg.CheckpointType == "oracle" {
+			cfg.Table = "tidb_binlog_checkpoint"
+		} else {
+			cfg.Table = "checkpoint"
+		}
 	}
 }
 

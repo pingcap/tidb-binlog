@@ -40,7 +40,7 @@ type oracleSaveSuite struct{}
 
 var _ = Suite(&oracleSaveSuite{})
 
-func (s *saveSuite) TestShouldSaveOracleCheckpoint(c *C) {
+func (s *oracleSaveSuite) TestShouldSaveOracleCheckpoint(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	checkpointStr := `{"consistent":false,"commitTS":1111,"ts-map":null,"schema-version":0}`
@@ -56,7 +56,7 @@ func (s *saveSuite) TestShouldSaveOracleCheckpoint(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *saveSuite) TestShouldOracleUpdateTsMap(c *C) {
+func (s *oracleSaveSuite) TestShouldOracleUpdateTsMap(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 	checkpointStr := `{"consistent":false,"commitTS":65536,"ts-map":{"primary-ts":65536,"secondary-ts":3333},"schema-version":0}`
@@ -150,7 +150,7 @@ func (s *newOracleSuite) TestCreationErrors(c *C) {
 	}
 	rows := sqlmock.NewRows([]string{"TABLE_NAME"})
 	mock.ExpectQuery("select table_name.*").WillReturnRows(rows)
-	mock.ExpectExec("create table tidb_binlog.tidb_binlog_checkpoint").WillReturnError(errors.New("create checkpoint failed"))
+	mock.ExpectExec("create table.*").WillReturnError(errors.New("create checkpoint failed"))
 
 	_, err = newOracle(&Config{
 		Db: &DBConfig{OracleServiceName: "service-name"},
@@ -181,7 +181,7 @@ func (s *newOracleSuite) TestCreationSuccessful(c *C) {
 		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
 	mock.ExpectQuery("select table_name.*").WillReturnRows(tableNameRow)
 	mock.ExpectQuery("select clusterID from.*").WillReturnRows(clusterIDRow)
-	mock.ExpectQuery("select checkPoint from tidb_binlog.tidb_binlog_checkpoint.*").WillReturnRows(checkPointRow)
+	mock.ExpectQuery("select checkPoint from.*").WillReturnRows(checkPointRow)
 
 	cp, err := newOracle(&Config{
 		Db: &DBConfig{OracleServiceName: "service-name"},
@@ -195,7 +195,7 @@ func (s *newOracleSuite) TestCreationSuccessful(c *C) {
 	c.Assert(pcp.TsMap["secondary-ts"], Equals, int64(1999))
 }
 
-func (s *newOracleSuite) TestCheckPointTable(c *C) {
+func (s *newOracleSuite) TestDefaultCheckPointTable(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 
@@ -210,7 +210,7 @@ func (s *newOracleSuite) TestCheckPointTable(c *C) {
 		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
 	mock.ExpectQuery("select table_name.*").WillReturnRows(tableNameRow)
 	mock.ExpectQuery("select clusterID from.*").WillReturnRows(clusterIDRow)
-	mock.ExpectQuery("select checkPoint from user-1.tidb_binlog_checkpoint.*").WillReturnRows(checkPointRow)
+	mock.ExpectQuery("select checkPoint from.*").WillReturnRows(checkPointRow)
 
 	cp, err := newOracle(&Config{
 		CheckpointType: "oracle",
@@ -227,5 +227,37 @@ func (s *newOracleSuite) TestCheckPointTable(c *C) {
 	c.Assert(pcp.TsMap["primary-ts"], Equals, int64(2000))
 	c.Assert(pcp.TsMap["secondary-ts"], Equals, int64(1999))
 	c.Assert(pcp.table, Equals, "tidb_binlog_checkpoint")
+	c.Assert(pcp.schema, Equals, "user-1")
+}
+
+func (s *newOracleSuite) TestConfigCheckPointTable(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	origOpen := sqlOpenOracleDB
+	defer func() { sqlOpenOracleDB = origOpen }()
+	sqlOpenOracleDB = func(user string, password string, host string, port int, serviceName, connectString string) (*sql.DB, error) {
+		return db, nil
+	}
+	tableNameRow := sqlmock.NewRows([]string{"TABLE_NAME"}).AddRow("checkPoint")
+	clusterIDRow := sqlmock.NewRows([]string{"CLUSTERID"}).AddRow("12345")
+	checkPointRow := sqlmock.NewRows([]string{"CHECKPOINT"}).
+		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
+	mock.ExpectQuery("select table_name.*").WillReturnRows(tableNameRow)
+	mock.ExpectQuery("select clusterID from.*").WillReturnRows(clusterIDRow)
+	mock.ExpectQuery("select checkPoint from.*").WillReturnRows(checkPointRow)
+
+	cp, err := newOracle(&Config{
+		CheckpointType: "oracle",
+		Db: &DBConfig{
+			User:              "user-1",
+			OracleServiceName: "service-name",
+		},
+		Table: "new_table_name",
+	})
+	pcp := cp.(*OracleCheckPoint)
+	c.Assert(err, IsNil)
+	c.Assert(cp, NotNil)
+	c.Assert(pcp.table, Equals, "new_table_name")
 	c.Assert(pcp.schema, Equals, "user-1")
 }

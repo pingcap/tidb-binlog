@@ -104,6 +104,9 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	case "oracle":
 		buildOracleCheckpointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS,
 			toCheckpoint.OracleServiceName, toCheckpoint.OracleConnectString, toCheckpoint.Table)
+		if len(checkpointCfg.Schema) != 0 && checkpointCfg.Db.User != checkpointCfg.Schema {
+			return nil, errors.New("in oracle, user is like as a schema.so you must keep it same as schema.you can not set schema item in checkpoint configuration")
+		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
 		case "mysql", "tidb":
@@ -111,6 +114,9 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 		case "oracle":
 			buildOracleCheckpointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User,
 				cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString, "")
+			if len(checkpointCfg.Schema) != 0 && checkpointCfg.Db.User != checkpointCfg.Schema {
+				return nil, errors.New("in oracle, user is like as a schema.so you must keep it same as schema.you can not set schema item in checkpoint configuration")
+			}
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
 		case "kafka":
