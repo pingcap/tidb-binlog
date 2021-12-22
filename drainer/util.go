@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"fmt"
 	"math"
 	"net"
@@ -99,47 +100,17 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 
 	switch toCheckpoint.Type {
 	case "mysql", "tidb":
-		checkpointCfg.CheckpointType = toCheckpoint.Type
-		checkpointCfg.Db = &checkpoint.DBConfig{
-			Host:     toCheckpoint.Host,
-			User:     toCheckpoint.User,
-			Password: toCheckpoint.Password,
-			Port:     toCheckpoint.Port,
-			TLS:      toCheckpoint.TLS,
-		}
+		buildCheckPointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS)
 	case "oracle":
-		checkpointCfg.CheckpointType = toCheckpoint.Type
-		checkpointCfg.Db = &checkpoint.DBConfig{
-			Host:                toCheckpoint.Host,
-			User:                toCheckpoint.User,
-			Password:            toCheckpoint.Password,
-			Port:                toCheckpoint.Port,
-			TLS:                 toCheckpoint.TLS,
-			OracleServiceName:   toCheckpoint.OracleServiceName,
-			OracleConnectString: toCheckpoint.OracleConnectString,
-		}
+		buildOracleCheckpointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS,
+			toCheckpoint.OracleServiceName, toCheckpoint.OracleConnectString)
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
 		case "mysql", "tidb":
-			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
-			checkpointCfg.Db = &checkpoint.DBConfig{
-				Host:     cfg.SyncerCfg.To.Host,
-				User:     cfg.SyncerCfg.To.User,
-				Password: cfg.SyncerCfg.To.Password,
-				Port:     cfg.SyncerCfg.To.Port,
-				TLS:      cfg.SyncerCfg.To.TLS,
-			}
+			buildCheckPointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS)
 		case "oracle":
-			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
-			checkpointCfg.Db = &checkpoint.DBConfig{
-				Host:                cfg.SyncerCfg.To.Host,
-				User:                cfg.SyncerCfg.To.User,
-				Password:            cfg.SyncerCfg.To.Password,
-				Port:                cfg.SyncerCfg.To.Port,
-				TLS:                 cfg.SyncerCfg.To.TLS,
-				OracleServiceName:   cfg.SyncerCfg.To.OracleServiceName,
-				OracleConnectString: cfg.SyncerCfg.To.OracleConnectString,
-			}
+			buildOracleCheckpointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User,
+				cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString)
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
 		case "kafka":
@@ -154,6 +125,23 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	}
 
 	return checkpointCfg, nil
+}
+
+func buildCheckPointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config) {
+	checkpointCfg.CheckpointType = cfgType
+	checkpointCfg.Db = &checkpoint.DBConfig{
+		Host:     host,
+		User:     user,
+		Password: password,
+		Port:     port,
+		TLS:      tls,
+	}
+}
+
+func buildOracleCheckpointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, serviceName, connectString string) {
+	buildCheckPointCfg(checkpointCfg, cfgType, host, user, password, port, tls)
+	checkpointCfg.Db.OracleServiceName = serviceName
+	checkpointCfg.Db.OracleConnectString = connectString
 }
 
 func initializeSaramaGlobalConfig(kafkaMsgSize int32) {
