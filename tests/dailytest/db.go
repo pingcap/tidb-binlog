@@ -23,7 +23,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/parser/mysql"
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+
+>>>>>>> d8288e02 (reparo: fix can't decode bit type data (#1103))
 	"github.com/pingcap/tidb-binlog/tests/util"
 )
 
@@ -221,6 +226,11 @@ func genColumnData(table *table, column *column) (string, error) {
 	isUnsigned := mysql.HasUnsignedFlag(tp.Flag)
 
 	switch tp.Tp {
+	case mysql.TypeBit:
+		if randInt(0, 1) == 0 {
+			return "b'0'", nil
+		}
+		return "b'1'", nil
 	case mysql.TypeTiny:
 		var data int64
 		if isUnique {
