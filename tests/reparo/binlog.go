@@ -20,6 +20,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+
 	"github.com/pingcap/tidb-binlog/tests/dailytest"
 	"github.com/pingcap/tidb-binlog/tests/util"
 )
@@ -69,6 +70,14 @@ func main() {
 		b double NOT NULL DEFAULT 2.0,
 		c varchar(10) NOT NULL,
 		d time unique
+	);
+	`,
+		`
+	create table ntest2(
+		a int,
+		b double NOT NULL DEFAULT 2.0,
+		c varchar(10) NOT NULL,
+		d bit(20)
 	);
 	`}
 

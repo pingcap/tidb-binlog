@@ -46,7 +46,8 @@ func formatValue(value types.Datum, tp byte) types.Datum {
 	case mysql.TypeSet:
 		value = types.NewDatum(value.GetMysqlSet().Value)
 	case mysql.TypeBit:
-		value = types.NewDatum(value.GetMysqlBit())
+		// see drainer/translator/mysql.go formatData
+		value = types.NewDatum(value.GetUint64())
 	}
 
 	return value
