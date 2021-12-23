@@ -14,7 +14,17 @@
 package loader
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/pingcap/errors"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+
+	"github.com/pingcap/tidb/parser/mysql"
+
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -38,14 +48,14 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 				dml.Tp = getDMLType(mut)
 
 				// setup values
-				dml.Values, err = getColVals(table, mut.Row.GetColumns())
+				dml.Values, err = getColVals(table, mut.Row.GetColumns(), "tidb")
 				if err != nil {
 					return nil, err
 				}
 
 				// setup old values
 				if dml.Tp == UpdateDMLType {
-					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns())
+					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns(), "tidb")
 					if err != nil {
 						return nil, err
 					}
@@ -57,7 +67,66 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	return txn, nil
 }
 
-func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, error) {
+// SecondaryBinlogToOracleTxn translate the Binlog format into Oracle Txn
+func SecondaryBinlogToOracleTxn(binlog *pb.Binlog, tableRouter *router.Table, binlogFilter *bf.BinlogEvent) (*Txn, error) {
+	txn := new(Txn)
+	var err error
+	switch binlog.Type {
+	case pb.BinlogType_DDL:
+		data := binlog.DdlData
+		downStreamSchema, downStreamTable, routeErr := tableRouter.Route(data.GetSchemaName(), data.GetTableName())
+		if routeErr != nil {
+			return nil, errors.Annotate(routeErr, fmt.Sprintf("gen route schema and table failed. schema=%s, table=%s", data.GetSchemaName(), data.GetTableName()))
+		}
+		txn.DDL = new(DDL)
+		txn.DDL.Database = downStreamSchema
+		txn.DDL.Table = downStreamTable
+		txn.DDL.SQL = string(data.GetDdlQuery())
+	case pb.BinlogType_DML:
+		for _, table := range binlog.DmlData.GetTables() {
+			downStreamSchema, downStreamTable, routeErr := tableRouter.Route(table.GetSchemaName(), table.GetTableName())
+			if routeErr != nil {
+				return nil, errors.Annotate(routeErr, fmt.Sprintf("gen route schema and table failed. schema=%s, table=%s", table.GetSchemaName(), table.GetTableName()))
+			}
+			for _, mut := range table.GetMutations() {
+				dml := new(DML)
+				dml.Database = downStreamSchema
+				dml.Table = downStreamTable
+				dml.Tp = getDMLType(mut)
+
+				// setup values
+				dml.Values, err = getColVals(table, mut.Row.GetColumns(), "oracle")
+				if err != nil {
+					return nil, err
+				}
+
+				// setup old values
+				if dml.Tp == UpdateDMLType {
+					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns(), "oracle")
+					if err != nil {
+						return nil, err
+					}
+				}
+				dml.UpColumnsInfoMap = getColumnsInfoMap(table.ColumnInfo)
+				txn.DMLs = append(txn.DMLs, dml)
+			}
+		}
+	}
+	return txn, nil
+}
+
+func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
+	colMap := make(map[string]*model.ColumnInfo)
+	for _, col := range columnInfos {
+		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
+			Name:      model.CIStr{O: col.Name},
+			FieldType: types.FieldType{Tp: typeString2Type(col.MysqlType), Flen: int(col.Flen), Decimal: int(col.Decimal)},
+		}
+	}
+	return colMap
+}
+
+func getColVals(table *pb.Table, cols []*pb.Column, destDBType string) (map[string]interface{}, error) {
 	vals := make(map[string]interface{}, len(cols))
 	for i, col := range cols {
 		name := table.ColumnInfo[i].Name
@@ -65,7 +134,11 @@ func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, err
 		if err != nil {
 			return vals, err
 		}
-		vals[name] = arg
+		if destDBType == "oracle" {
+			vals[strings.ToUpper(name)] = arg
+		} else {
+			vals[name] = arg
+		}
 	}
 	return vals, nil
 }
@@ -118,4 +191,38 @@ func getDMLType(mut *pb.TableMutation) DMLType {
 	default:
 		return UnknownDMLType
 	}
+}
+
+func typeString2Type(typeString string) byte {
+	return str2Type[typeString]
+}
+
+var str2Type = map[string]byte{
+	"bit":         mysql.TypeBit,
+	"text":        mysql.TypeBlob,
+	"date":        mysql.TypeDate,
+	"datetime":    mysql.TypeDatetime,
+	"unspecified": mysql.TypeUnspecified,
+	"decimal":     mysql.TypeNewDecimal,
+	"double":      mysql.TypeDouble,
+	"enum":        mysql.TypeEnum,
+	"float":       mysql.TypeFloat,
+	"geometry":    mysql.TypeGeometry,
+	"mediumint":   mysql.TypeInt24,
+	"json":        mysql.TypeJSON,
+	"int":         mysql.TypeLong,
+	"bigint":      mysql.TypeLonglong,
+	"longtext":    mysql.TypeLongBlob,
+	"mediumtext":  mysql.TypeMediumBlob,
+	"null":        mysql.TypeNull,
+	"set":         mysql.TypeSet,
+	"smallint":    mysql.TypeShort,
+	"char":        mysql.TypeString,
+	"time":        mysql.TypeDuration,
+	"timestamp":   mysql.TypeTimestamp,
+	"tinyint":     mysql.TypeTiny,
+	"tinytext":    mysql.TypeTinyBlob,
+	"varchar":     mysql.TypeVarchar,
+	"var_string":  mysql.TypeVarString,
+	"year":        mysql.TypeYear,
 }

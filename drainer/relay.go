@@ -1,6 +1,8 @@
 package drainer
 
 import (
+	"database/sql"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
@@ -42,8 +44,12 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 	if err != nil {
 		return errors.Annotate(err, "failed to create reader")
 	}
-
-	db, err := loader.CreateDBWithSQLMode(scfg.To.User, scfg.To.Password, scfg.To.Host, scfg.To.Port, scfg.To.TLS, scfg.StrSQLMode, scfg.To.Params, scfg.To.ReadTimeout)
+	var db *sql.DB
+	if cfg.SyncerCfg.DestDBType == "oracle" {
+		db, err = loader.CreateOracleDB(cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, scfg.To.Host, scfg.To.Port, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString)
+	} else {
+		db, err = loader.CreateDBWithSQLMode(scfg.To.User, scfg.To.Password, scfg.To.Host, scfg.To.Port, scfg.To.TLS, scfg.StrSQLMode, scfg.To.Params, scfg.To.ReadTimeout)
+	}
 	if err != nil {
 		return errors.Annotate(err, "failed to create SQL db")
 	}
@@ -56,7 +62,7 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 		return errors.Annotate(err, "failed to create loader")
 	}
 
-	err = feedByRelayLog(reader, ld, cp)
+	err = feedByRelayLog(reader, ld, cp, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -65,10 +71,15 @@ func feedByRelayLogIfNeed(cfg *Config) error {
 }
 
 // feedByRelayLog will take over the `ld loader.Loader`.
-func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) error {
+func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, cfg *Config) error {
 	checkpointTS := cp.TS()
 	lastSuccessTS := checkpointTS
 	r.Run()
+
+	tableRouter, binlogFilter, routeErr := genRouterAndBinlogEvent(cfg.SyncerCfg)
+	if routeErr != nil {
+		return errors.Annotate(routeErr, "when feed by relay log, gen router and filter failed")
+	}
 
 	loaderQuit := make(chan struct{})
 	var loaderErr error
@@ -112,8 +123,13 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint) 
 			if sbinlog.CommitTs <= checkpointTS {
 				continue
 			}
-
-			txn, err := loader.SecondaryBinlogToTxn(sbinlog)
+			var txn *loader.Txn
+			var err error
+			if cfg.SyncerCfg.DestDBType == "oracle" {
+				txn, err = loader.SecondaryBinlogToOracleTxn(sbinlog, tableRouter, binlogFilter)
+			} else {
+				txn, err = loader.SecondaryBinlogToTxn(sbinlog)
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}

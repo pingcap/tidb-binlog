@@ -14,9 +14,12 @@
 package drainer
 
 import (
+	"crypto/tls"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
+	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
@@ -100,7 +103,26 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	reader, err := relay.NewReader(relayDir, 1)
 	c.Assert(err, check.IsNil)
 
-	err = feedByRelayLog(reader, ld, cp)
+	cfg := &Config{
+		DataDir:         "checkpoint_dir",
+		InitialCommitTS: 2000,
+	}
+	tls := &tls.Config{}
+	cfg.SyncerCfg = &SyncerConfig{
+		To: &dsync.DBConfig{
+			Checkpoint: dsync.CheckpointConfig{
+				Type:                "oracle",
+				Host:                "host-1",
+				User:                "user-1",
+				Password:            "password-1",
+				TLS:                 tls,
+				OracleServiceName:   "oracle-service-name-1",
+				OracleConnectString: "oracle-connect-string-1",
+				Table:               "new_checkpoint_table",
+			},
+		},
+	}
+	err = feedByRelayLog(reader, ld, cp, cfg)
 	c.Assert(err, check.IsNil)
 
 	ts := cp.TS()
