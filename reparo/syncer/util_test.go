@@ -15,8 +15,7 @@ var _ = check.Suite(&testUtilSuite{})
 func (s *testUtilSuite) TestFormatValue(c *check.C) {
 	datetime, err := time.Parse("20060102150405", "20190415121212")
 	c.Assert(err, check.IsNil)
-	bitVal, err2 := types.NewBitLiteral("b'10010'")
-	c.Assert(err2, check.IsNil)
+	bitVal := uint64(12)
 
 	testCases := []struct {
 		value     interface{}
@@ -81,8 +80,8 @@ func (s *testUtilSuite) TestFormatValue(c *check.C) {
 		{
 			value:     bitVal,
 			tp:        mysql.TypeBit,
-			expectStr: "0x12",
-			expectVal: types.BinaryLiteral([]byte{0x12}),
+			expectStr: "12",
+			expectVal: uint64(12),
 		},
 	}
 
