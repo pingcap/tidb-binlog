@@ -261,6 +261,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 	}
 	if opts.destDBType == "oracle" {
 		s.getTableInfoFromDB = getOracleTableInfo
+		fGetAppliedTS = getOracleAppliedTS
 	}
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
@@ -961,6 +962,15 @@ func getAppliedTS(db *gosql.DB) int64 {
 		if !ok || int(errCode) != tmysql.ErrUnknown {
 			log.Warn("get ts from secondary cluster failed", zap.Error(err))
 		}
+		return 0
+	}
+	return appliedTS
+}
+
+func getOracleAppliedTS(db *gosql.DB) int64 {
+	appliedTS, err := pkgsql.GetOraclePosition(db)
+	if err != nil {
+		log.Warn("get ts from oracle failed.", zap.Error(err))
 		return 0
 	}
 	return appliedTS

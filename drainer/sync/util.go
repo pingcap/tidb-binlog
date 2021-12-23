@@ -55,7 +55,6 @@ type DBConfig struct {
 
 	// get it from pd
 	ClusterID uint64 `toml:"-" json:"-"`
-
 	//for oracle database
 	OracleServiceName   string `toml:"oracle-service-name" json:"oracle-service-name"`
 	OracleConnectString string `toml:"oracle-connect-string" json:"oracle-connect-string"`
@@ -65,6 +64,7 @@ type DBConfig struct {
 type CheckpointConfig struct {
 	Type     string `toml:"type" json:"type"`
 	Schema   string `toml:"schema" json:"schema"`
+	Table    string `toml:"table" json:"table"`
 	Host     string `toml:"host" json:"host"`
 	User     string `toml:"user" json:"user"`
 	Password string `toml:"password" json:"password"`
@@ -73,6 +73,9 @@ type CheckpointConfig struct {
 	Port              int             `toml:"port" json:"port"`
 	Security          security.Config `toml:"security" json:"security"`
 	TLS               *tls.Config     `toml:"-" json:"-"`
+	//for oracle database
+	OracleServiceName   string `toml:"oracle-service-name" json:"oracle-service-name"`
+	OracleConnectString string `toml:"oracle-connect-string" json:"oracle-connect-string"`
 }
 
 type baseError struct {

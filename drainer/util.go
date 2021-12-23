@@ -14,6 +14,7 @@
 package drainer
 
 import (
+	"crypto/tls"
 	"fmt"
 	"math"
 	"net"
@@ -99,24 +100,22 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 
 	switch toCheckpoint.Type {
 	case "mysql", "tidb":
-		checkpointCfg.CheckpointType = toCheckpoint.Type
-		checkpointCfg.Db = &checkpoint.DBConfig{
-			Host:     toCheckpoint.Host,
-			User:     toCheckpoint.User,
-			Password: toCheckpoint.Password,
-			Port:     toCheckpoint.Port,
-			TLS:      toCheckpoint.TLS,
+		buildCheckPointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS, toCheckpoint.Table)
+	case "oracle":
+		buildOracleCheckpointCfg(checkpointCfg, toCheckpoint.Type, toCheckpoint.Host, toCheckpoint.User, toCheckpoint.Password, toCheckpoint.Port, toCheckpoint.TLS,
+			toCheckpoint.OracleServiceName, toCheckpoint.OracleConnectString, toCheckpoint.Table)
+		if len(checkpointCfg.Schema) != 0 && checkpointCfg.Db.User != checkpointCfg.Schema {
+			return nil, errors.New("in oracle, user is like as a schema.so you must keep it same as schema.you can not set schema item in checkpoint configuration")
 		}
 	case "":
 		switch cfg.SyncerCfg.DestDBType {
 		case "mysql", "tidb":
-			checkpointCfg.CheckpointType = cfg.SyncerCfg.DestDBType
-			checkpointCfg.Db = &checkpoint.DBConfig{
-				Host:     cfg.SyncerCfg.To.Host,
-				User:     cfg.SyncerCfg.To.User,
-				Password: cfg.SyncerCfg.To.Password,
-				Port:     cfg.SyncerCfg.To.Port,
-				TLS:      cfg.SyncerCfg.To.TLS,
+			buildCheckPointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User, cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, "")
+		case "oracle":
+			buildOracleCheckpointCfg(checkpointCfg, cfg.SyncerCfg.DestDBType, cfg.SyncerCfg.To.Host, cfg.SyncerCfg.To.User,
+				cfg.SyncerCfg.To.Password, cfg.SyncerCfg.To.Port, cfg.SyncerCfg.To.TLS, cfg.SyncerCfg.To.OracleServiceName, cfg.SyncerCfg.To.OracleConnectString, "")
+			if len(checkpointCfg.Schema) != 0 && checkpointCfg.Db.User != checkpointCfg.Schema {
+				return nil, errors.New("in oracle, user is like as a schema.so you must keep it same as schema.you can not set schema item in checkpoint configuration")
 			}
 		case "pb", "file":
 			checkpointCfg.CheckpointType = "file"
@@ -132,6 +131,24 @@ func GenCheckPointCfg(cfg *Config, id uint64) (*checkpoint.Config, error) {
 	}
 
 	return checkpointCfg, nil
+}
+
+func buildCheckPointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, table string) {
+	checkpointCfg.CheckpointType = cfgType
+	checkpointCfg.Table = table
+	checkpointCfg.Db = &checkpoint.DBConfig{
+		Host:     host,
+		User:     user,
+		Password: password,
+		Port:     port,
+		TLS:      tls,
+	}
+}
+
+func buildOracleCheckpointCfg(checkpointCfg *checkpoint.Config, cfgType, host, user, password string, port int, tls *tls.Config, serviceName, connectString, table string) {
+	buildCheckPointCfg(checkpointCfg, cfgType, host, user, password, port, tls, table)
+	checkpointCfg.Db.OracleServiceName = serviceName
+	checkpointCfg.Db.OracleConnectString = connectString
 }
 
 func initializeSaramaGlobalConfig(kafkaMsgSize int32) {
