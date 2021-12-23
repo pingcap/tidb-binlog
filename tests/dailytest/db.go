@@ -23,12 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
 	"github.com/pingcap/parser/mysql"
-=======
-	"github.com/pingcap/tidb/parser/mysql"
-
->>>>>>> d8288e02 (reparo: fix can't decode bit type data (#1103))
 	"github.com/pingcap/tidb-binlog/tests/util"
 )
 
