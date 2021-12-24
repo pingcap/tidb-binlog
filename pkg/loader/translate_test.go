@@ -17,6 +17,7 @@ import (
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
+	ptypes "github.com/pingcap/tidb/parser/types"
 
 	. "github.com/pingcap/check"
 )
@@ -36,7 +37,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateDDL(c *C) {
 			DdlQuery:   []byte(sql),
 		},
 	}
-	txn, err := SecondaryBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog, nil, false)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DDL.Database, Equals, db)
 	c.Assert(txn.DDL.Table, Equals, table)
@@ -58,7 +59,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDDL(c *C) {
 		{SchemaPattern: "test", TablePattern: "t1", TargetSchema: "test_routed", TargetTable: "t1_routed"},
 	}
 	router, _ := router.NewTableRouter(false, rules)
-	txn, err := SecondaryBinlogToOracleTxn(&binlog, router, nil)
+	txn, err := SecondaryBinlogToTxn(&binlog, router, true)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DDL.Database, Equals, "test_routed")
 	c.Assert(txn.DDL.Table, Equals, "t1_routed")
@@ -105,7 +106,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateDML(c *C) {
 	binlog := pb.Binlog{
 		DmlData: &dml,
 	}
-	txn, err := SecondaryBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog, nil, false)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DMLs, HasLen, 2)
 	for _, dml := range txn.DMLs {
@@ -198,7 +199,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDML(c *C) {
 	binlog := pb.Binlog{
 		DmlData: &dml,
 	}
-	txn, err := SecondaryBinlogToOracleTxn(&binlog, router, nil)
+	txn, err := SecondaryBinlogToTxn(&binlog, router, true)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DMLs, HasLen, 2)
 	for _, dml := range txn.DMLs {
@@ -227,7 +228,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDML(c *C) {
 
 func checkColumnInfo(c *C, txnColInfo *model.ColumnInfo, pbColInfo *pb.ColumnInfo) {
 	c.Assert(txnColInfo.Name.O, Equals, pbColInfo.Name)
-	c.Assert(txnColInfo.Tp, Equals, typeString2Type(pbColInfo.MysqlType))
+	c.Assert(txnColInfo.Tp, Equals, ptypes.StrToType(pbColInfo.MysqlType))
 	c.Assert(txnColInfo.Flen, Equals, int(pbColInfo.Flen))
 	c.Assert(txnColInfo.Decimal, Equals, int(pbColInfo.Decimal))
 }

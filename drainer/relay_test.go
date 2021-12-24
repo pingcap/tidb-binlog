@@ -14,8 +14,6 @@
 package drainer
 
 import (
-	"crypto/tls"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
@@ -103,19 +101,67 @@ func (s *relaySuite) TestFeedByRealyLog(c *check.C) {
 	reader, err := relay.NewReader(relayDir, 1)
 	c.Assert(err, check.IsNil)
 
-	cfg := &Config{
-		DataDir:         "checkpoint_dir",
-		InitialCommitTS: 2000,
-	}
-	tls := &tls.Config{}
+	cfg := &Config{}
 	cfg.SyncerCfg = &SyncerConfig{
+		DestDBType: "tidb",
 		To: &dsync.DBConfig{
 			Checkpoint: dsync.CheckpointConfig{
 				Type:                "oracle",
 				Host:                "host-1",
 				User:                "user-1",
 				Password:            "password-1",
-				TLS:                 tls,
+				OracleServiceName:   "oracle-service-name-1",
+				OracleConnectString: "oracle-connect-string-1",
+				Table:               "new_checkpoint_table",
+			},
+		},
+	}
+	err = feedByRelayLog(reader, ld, cp, cfg)
+	c.Assert(err, check.IsNil)
+
+	ts := cp.TS()
+	c.Assert(ts, check.Equals, int64(90) /* latest commit ts */)
+	c.Assert(cp.IsConsistent(), check.Equals, true)
+}
+
+func (s *relaySuite) TestFeedByRealyLogForOracle(c *check.C) {
+	cp, err := checkpoint.NewFile(0 /* initialCommitTS */, c.MkDir()+"/checkpoint")
+	c.Assert(err, check.IsNil)
+	err = cp.Save(0, 0, false, 0)
+	c.Assert(err, check.IsNil)
+	c.Assert(cp.IsConsistent(), check.Equals, false)
+
+	ld := newNoOpLoader()
+
+	// write some relay log
+	gen := &translator.BinlogGenerator{}
+	relayDir := c.MkDir()
+	relayer, err := relay.NewRelayer(relayDir, binlogfile.SegmentSizeBytes, gen)
+	c.Assert(err, check.IsNil)
+
+	for i := 0; i < 10; i++ {
+		gen.SetInsert(c)
+		gen.TiBinlog.StartTs = int64(i)
+		gen.TiBinlog.CommitTs = int64(i) * 10
+		_, err = relayer.WriteBinlog(gen.Schema, gen.Table, gen.TiBinlog, gen.PV)
+		c.Assert(err, check.IsNil)
+	}
+
+	relayer.Close()
+	c.Assert(err, check.IsNil)
+
+	reader, err := relay.NewReader(relayDir, 1)
+	c.Assert(err, check.IsNil)
+
+	cfg := &Config{}
+	cfg.SyncerCfg = &SyncerConfig{
+		DestDBType: "oracle",
+		To: &dsync.DBConfig{
+			Checkpoint: dsync.CheckpointConfig{
+				Type:                "oracle",
+				Host:                "host-1",
+				User:                "user-1",
+				Password:            "password-1",
 				OracleServiceName:   "oracle-service-name-1",
 				OracleConnectString: "oracle-connect-string-1",
 				Table:               "new_checkpoint_table",

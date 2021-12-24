@@ -3,6 +3,8 @@ package drainer
 import (
 	"database/sql"
 
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
@@ -76,11 +78,6 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 	lastSuccessTS := checkpointTS
 	r.Run()
 
-	tableRouter, binlogFilter, routeErr := genRouterAndBinlogEvent(cfg.SyncerCfg)
-	if routeErr != nil {
-		return errors.Annotate(routeErr, "when feed by relay log, gen router and filter failed")
-	}
-
 	loaderQuit := make(chan struct{})
 	var loaderErr error
 	go func() {
@@ -125,11 +122,16 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 			}
 			var txn *loader.Txn
 			var err error
+			var tableRouter *router.Table = nil
+			upperColName := false
 			if cfg.SyncerCfg.DestDBType == "oracle" {
-				txn, err = loader.SecondaryBinlogToOracleTxn(sbinlog, tableRouter, binlogFilter)
-			} else {
-				txn, err = loader.SecondaryBinlogToTxn(sbinlog)
+				upperColName = true
+				tableRouter, _, err = genRouterAndBinlogEvent(cfg.SyncerCfg)
+				if err != nil {
+					return errors.Annotate(err, "when feed by relay log, gen router and filter failed")
+				}
 			}
+			txn, err = loader.SecondaryBinlogToTxn(sbinlog, tableRouter, upperColName)
 			if err != nil {
 				return errors.Trace(err)
 			}
