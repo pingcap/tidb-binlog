@@ -96,6 +96,17 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 
 	loaderClosed := false
 
+	var tableRouter *router.Table = nil
+	upperColName := false
+	var routerErr error
+	if cfg.SyncerCfg.DestDBType == "oracle" {
+		upperColName = true
+		tableRouter, _, routerErr = genRouterAndBinlogEvent(cfg.SyncerCfg)
+		if routerErr != nil {
+			return errors.Annotate(routerErr, "when feed by relay log, gen router and filter failed")
+		}
+	}
+
 	for {
 		// when reader is drained and all txn has been push into loader
 		// we close cloader.
@@ -122,15 +133,6 @@ func feedByRelayLog(r relay.Reader, ld loader.Loader, cp checkpoint.CheckPoint, 
 			}
 			var txn *loader.Txn
 			var err error
-			var tableRouter *router.Table = nil
-			upperColName := false
-			if cfg.SyncerCfg.DestDBType == "oracle" {
-				upperColName = true
-				tableRouter, _, err = genRouterAndBinlogEvent(cfg.SyncerCfg)
-				if err != nil {
-					return errors.Annotate(err, "when feed by relay log, gen router and filter failed")
-				}
-			}
 			txn, err = loader.SecondaryBinlogToTxn(sbinlog, tableRouter, upperColName)
 			if err != nil {
 				return errors.Trace(err)
