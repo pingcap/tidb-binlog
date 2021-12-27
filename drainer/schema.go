@@ -474,19 +474,26 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			return "", "", "", errors.NotFoundf("job %d", job.ID)
 		}
 		multipleTableInfos := binlogInfo.MultipleTableInfos
-		for _, tbInfo := range multipleTableInfos {
-			if tbInfo == nil {
+		for _, table := range multipleTableInfos {
+			if table == nil {
 				return "", "", "", errors.NotValidf("job %d", job.ID)
 			}
 
-			err := s.ReplaceTable(job.BinlogInfo.SchemaVersion, tbInfo)
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err := s.CreateTable(job.BinlogInfo.SchemaVersion, schema, table)
 			if err != nil {
 				return "", "", "", errors.Trace(err)
 			}
 
-			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: job.SchemaName, Table: tbInfo.Name.O}
-			s.currentVersion = job.BinlogInfo.SchemaVersion
+			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+			schemaName = schema.Name.O
+			tableName = table.Name.O
 		}
+		s.currentVersion = job.BinlogInfo.SchemaVersion
 
 	default:
 		binlogInfo := job.BinlogInfo
