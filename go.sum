@@ -686,6 +686,8 @@ github.com/pingcap/sysutil v0.0.0-20211208032423-041a72e5860d h1:k3/APKZjXOyJrFy
 github.com/pingcap/sysutil v0.0.0-20211208032423-041a72e5860d/go.mod h1:7j18ezaWTao2LHOyMlsc2Dg1vW+mDY9dEbPzVyOlaeM=
 github.com/pingcap/tidb v1.1.0-beta.0.20211220144421-fd449399d5de h1:i34gqof7XC3WEVt9LUSw53vAqSRli6V1IiuQ/UoWq20=
 github.com/pingcap/tidb v1.1.0-beta.0.20211220144421-fd449399d5de/go.mod h1:Nv5YNH8bv2rRO8KTS96pWFjDPdG0944gsWKsemXBTX8=
+github.com/pingcap/tidb v1.1.0-beta.0.20211227082104-591a7d08ea44 h1:6HA5OWemASWvyL/8I1WPSe8M0BdTTkN8iEaqQvYoBPk=
+github.com/pingcap/tidb v1.1.0-beta.0.20211227082104-591a7d08ea44/go.mod h1:fVkTJfhnCMVZR7UbC9gpV/Y0+gXdG7urJwTJSoJkq84=
 github.com/pingcap/tidb-dashboard v0.0.0-20211008050453-a25c25809529/go.mod h1:OCXbZTBTIMRcIt0jFsuCakZP+goYRv6IjawKbwLS2TQ=
 github.com/pingcap/tidb-dashboard v0.0.0-20211107164327-80363dfbe884/go.mod h1:OCXbZTBTIMRcIt0jFsuCakZP+goYRv6IjawKbwLS2TQ=
 github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
@@ -694,6 +696,8 @@ github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible/
 github.com/pingcap/tidb/parser v0.0.0-20211011031125-9b13dc409c5e/go.mod h1:e1MGCA9Sg3T8jid8PKAEq5eYVuMMCq4n8gJ+Kqp4Plg=
 github.com/pingcap/tidb/parser v0.0.0-20211220144421-fd449399d5de h1:RYtgZ8/2Qy35DiCNRNoexSvjWVonsF8T9KVUSaoChW0=
 github.com/pingcap/tidb/parser v0.0.0-20211220144421-fd449399d5de/go.mod h1:ElJiub4lRy6UZDb+0JHDkGEdr6aOli+ykhyej7VCLoI=
+github.com/pingcap/tidb/parser v0.0.0-20211227082104-591a7d08ea44 h1:t0Py0AxTgcMYXoD0ypfZZN0Kk5VZQW8iYrswmAFKvsM=
+github.com/pingcap/tidb/parser v0.0.0-20211227082104-591a7d08ea44/go.mod h1:ElJiub4lRy6UZDb+0JHDkGEdr6aOli+ykhyej7VCLoI=
 github.com/pingcap/tipb v0.0.0-20211201080053-bd104bb270ba h1:Tt5W/maVBUbG+wxg2nfc88Cqj/HiWYb0TJQ2Rfi0UOQ=
 github.com/pingcap/tipb v0.0.0-20211201080053-bd104bb270ba/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -829,6 +833,8 @@ github.com/tidwall/match v1.0.1/go.mod h1:LujAq0jyVjBy028G1WhWfIzbpQfMO8bBZ6Tyb0
 github.com/tidwall/pretty v1.0.0/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhVysOjyk=
 github.com/tikv/client-go/v2 v2.0.0-rc.0.20211214093715-605f49d3ba50 h1:B+cAIm2P1/SNsVV1vL9/mRaGUVl/vdgV8MU03O0vY28=
 github.com/tikv/client-go/v2 v2.0.0-rc.0.20211214093715-605f49d3ba50/go.mod h1:wRuh+W35daKTiYBld0oBlT6PSkzEVr+pB/vChzJZk+8=
+github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e h1:UildvukO7gTs4/bW+h6jNnpv6syWmh2VMQxD5sMm9II=
+github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e/go.mod h1:wRuh+W35daKTiYBld0oBlT6PSkzEVr+pB/vChzJZk+8=
 github.com/tikv/pd v1.1.0-beta.0.20211029083450-e65f0c55b6ae/go.mod h1:varH0IE0jJ9E9WN2Ei/N6pajMlPkcXdDEf7f5mmsUVQ=
 github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee h1:rAAdvQ8Hh36syHr92g0VmZEpkH+40RGQBpFL2121xMs=
 github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee/go.mod h1:lRbwxBAhnTQR5vqbTzeI/Bj62bD2OvYYuFezo2vrmeI=

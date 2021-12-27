@@ -473,13 +473,8 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("job %d", job.ID)
 		}
-		affected := binlogInfo.Affected
-		for _, history := range affected {
-			schema := history.DBInfo
-			if schema == nil {
-				return "", "", "", errors.NotValidf("job %d", job.ID)
-			}
-			tbInfo := binlogInfo.TableInfo
+		multipleTableInfos := binlogInfo.MultipleTableInfos
+		for _, tbInfo := range multipleTableInfos {
 			if tbInfo == nil {
 				return "", "", "", errors.NotValidf("job %d", job.ID)
 			}
@@ -489,7 +484,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 				return "", "", "", errors.Trace(err)
 			}
 
-			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: tbInfo.Name.O}
+			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: job.SchemaName, Table: tbInfo.Name.O}
 			s.currentVersion = job.BinlogInfo.SchemaVersion
 		}
 

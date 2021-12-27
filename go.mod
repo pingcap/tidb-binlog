@@ -26,9 +26,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
 	github.com/pingcap/kvproto v0.0.0-20211122024046-03abd340988f
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211220144421-fd449399d5de
+	github.com/pingcap/tidb v1.1.0-beta.0.20211227082104-591a7d08ea44
 	github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211220144421-fd449399d5de
+	github.com/pingcap/tidb/parser v0.0.0-20211227082104-591a7d08ea44
 	github.com/pingcap/tipb v0.0.0-20211201080053-bd104bb270ba
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
@@ -39,7 +39,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.2.1 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
-	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211214093715-605f49d3ba50
+	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211223062159-300275dee63e
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
 	github.com/unrolled/render v1.0.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20210512015243-d19fbe541bf9
