@@ -18,8 +18,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
-	github.com/hypnoglow/gormzap v0.3.0 // indirect
-	github.com/jinzhu/gorm v1.9.12 // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
@@ -29,7 +27,6 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
 	github.com/pingcap/kvproto v0.0.0-20211122024046-03abd340988f
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/parser v0.0.0-20210525032559-c37778aff307 // indirect
 	github.com/pingcap/tidb v1.1.0-beta.0.20211224065547-93d28b9d3ffe
 	github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20211224065547-93d28b9d3ffe
