@@ -102,6 +102,8 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 		info := new(obinlog.ColumnInfo)
 		info.Name = col.Name.O
 		info.MysqlType = types.TypeToStr(col.Tp, col.Charset)
+		info.Flen = int32(col.Flen)
+		info.Decimal = int32(col.Decimal)
 		info.IsPrimaryKey = mysql.HasPriKeyFlag(col.Flag)
 		columnInfos = append(columnInfos, info)
 	}

@@ -14,7 +14,10 @@
 package loader
 
 import (
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	"github.com/pingcap/tidb/parser/model"
+	ptypes "github.com/pingcap/tidb/parser/types"
 
 	. "github.com/pingcap/check"
 )
@@ -34,10 +37,32 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateDDL(c *C) {
 			DdlQuery:   []byte(sql),
 		},
 	}
-	txn, err := SecondaryBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog, nil, false)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DDL.Database, Equals, db)
 	c.Assert(txn.DDL.Table, Equals, table)
+	c.Assert(txn.DDL.SQL, Equals, sql)
+}
+
+func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDDL(c *C) {
+	db, table := "test", "t1"
+	sql := "truncate table test.t1"
+	binlog := pb.Binlog{
+		Type: pb.BinlogType_DDL,
+		DdlData: &pb.DDLData{
+			SchemaName: &db,
+			TableName:  &table,
+			DdlQuery:   []byte(sql),
+		},
+	}
+	rules := []*router.TableRule{
+		{SchemaPattern: "test", TablePattern: "t1", TargetSchema: "test_routed", TargetTable: "t1_routed"},
+	}
+	router, _ := router.NewTableRouter(false, rules)
+	txn, err := SecondaryBinlogToTxn(&binlog, router, true)
+	c.Assert(err, IsNil)
+	c.Assert(txn.DDL.Database, Equals, "test_routed")
+	c.Assert(txn.DDL.Table, Equals, "t1_routed")
 	c.Assert(txn.DDL.SQL, Equals, sql)
 }
 
@@ -81,7 +106,7 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateDML(c *C) {
 	binlog := pb.Binlog{
 		DmlData: &dml,
 	}
-	txn, err := SecondaryBinlogToTxn(&binlog)
+	txn, err := SecondaryBinlogToTxn(&binlog, nil, false)
 	c.Assert(err, IsNil)
 	c.Assert(txn.DMLs, HasLen, 2)
 	for _, dml := range txn.DMLs {
@@ -97,6 +122,115 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateDML(c *C) {
 	insert := txn.DMLs[1]
 	c.Assert(insert.Values, HasLen, 1)
 	c.Assert(insert.Values["uid"], Equals, newVal)
+}
+
+func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDML(c *C) {
+	db, table := "test", "t1"
+	rules := []*router.TableRule{
+		{SchemaPattern: "test", TablePattern: "t1", TargetSchema: "test_routed", TargetTable: "t1_routed"},
+	}
+	router, _ := router.NewTableRouter(false, rules)
+	var c1Old, c1New int64 = 1, 2
+	c2Old, c2New := "2021-12-17 15:34:30.123456", "2021-12-17 15:34:31.654321"
+	c3Old, c3New := 123456789.123456, 123456789.654321
+	c1ColumnInfo := &pb.ColumnInfo{
+		Name:         "c1",
+		MysqlType:    "bigint",
+		IsPrimaryKey: true,
+		Flen:         10,
+		Decimal:      0,
+	}
+	c2ColumnInfo := &pb.ColumnInfo{
+		Name:         "c2",
+		MysqlType:    "datetime",
+		IsPrimaryKey: false,
+		Flen:         0,
+		Decimal:      6,
+	}
+	c3ColumnInfo := &pb.ColumnInfo{
+		Name:         "c3",
+		MysqlType:    "double",
+		IsPrimaryKey: false,
+		Flen:         16,
+		Decimal:      5,
+	}
+	dml := pb.DMLData{
+		Tables: []*pb.Table{
+			{
+				SchemaName: &db,
+				TableName:  &table,
+				ColumnInfo: []*pb.ColumnInfo{
+					c1ColumnInfo,
+					c2ColumnInfo,
+					c3ColumnInfo,
+				},
+				Mutations: []*pb.TableMutation{
+					{
+						Type: pb.MutationType_Update.Enum(),
+						Row: &pb.Row{
+							Columns: []*pb.Column{
+								{Int64Value: &c1New},
+								{StringValue: &c2New},
+								{DoubleValue: &c3New},
+							},
+						},
+						ChangeRow: &pb.Row{
+							Columns: []*pb.Column{
+								{Int64Value: &c1Old},
+								{StringValue: &c2Old},
+								{DoubleValue: &c3Old},
+							},
+						},
+					},
+					{
+						Type: pb.MutationType_Insert.Enum(),
+						Row: &pb.Row{
+							Columns: []*pb.Column{
+								{Int64Value: &c1New},
+								{StringValue: &c2New},
+								{DoubleValue: &c3New},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	binlog := pb.Binlog{
+		DmlData: &dml,
+	}
+	txn, err := SecondaryBinlogToTxn(&binlog, router, true)
+	c.Assert(err, IsNil)
+	c.Assert(txn.DMLs, HasLen, 2)
+	for _, dml := range txn.DMLs {
+		c.Assert(dml.Database, Equals, "test_routed")
+		c.Assert(dml.Table, Equals, "t1_routed")
+	}
+	update := txn.DMLs[0]
+	c.Assert(update.Tp, Equals, UpdateDMLType)
+	c.Assert(update.Values, HasLen, 3)
+	c.Assert(update.Values["C1"], Equals, c1New)
+	c.Assert(update.Values["C2"], Equals, c2New)
+	c.Assert(update.Values["C3"], Equals, c3New)
+	c.Assert(update.OldValues, HasLen, 3)
+	c.Assert(update.OldValues["C1"], Equals, c1Old)
+	c.Assert(update.OldValues["C2"], Equals, c2Old)
+	c.Assert(update.OldValues["C3"], Equals, c3Old)
+	insert := txn.DMLs[1]
+	c.Assert(insert.Values, HasLen, 3)
+	c.Assert(insert.Values["C1"], Equals, c1New)
+	c.Assert(insert.Values["C2"], Equals, c2New)
+	c.Assert(insert.Values["C3"], Equals, c3New)
+	checkColumnInfo(c, update.UpColumnsInfoMap["C1"], c1ColumnInfo)
+	checkColumnInfo(c, update.UpColumnsInfoMap["C2"], c2ColumnInfo)
+	checkColumnInfo(c, update.UpColumnsInfoMap["C2"], c2ColumnInfo)
+}
+
+func checkColumnInfo(c *C, txnColInfo *model.ColumnInfo, pbColInfo *pb.ColumnInfo) {
+	c.Assert(txnColInfo.Name.O, Equals, pbColInfo.Name)
+	c.Assert(txnColInfo.Tp, Equals, ptypes.StrToType(pbColInfo.MysqlType))
+	c.Assert(txnColInfo.Flen, Equals, int(pbColInfo.Flen))
+	c.Assert(txnColInfo.Decimal, Equals, int(pbColInfo.Decimal))
 }
 
 func (s *secondaryBinlogToTxnSuite) TestGetDMLType(c *C) {
