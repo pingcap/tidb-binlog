@@ -5,7 +5,7 @@ txn-batch = 1
 worker-count = 1
 safe-mode = false
 db-type = 'mysql'
-replicate-do-db = ['cache_table']
+replicate-do-db = ['cache_test']
 
 [syncer.to]
 host = '127.0.0.1'
