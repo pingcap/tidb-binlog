@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	stderrors "errors"
 	"fmt"
+	"strings"
 
 	// mysql driver
 	_ "github.com/go-sql-driver/mysql"
@@ -35,6 +36,9 @@ type DBConfig struct {
 	Password string      `toml:"password" json:"password"`
 	Port     int         `toml:"port" json:"port"`
 	TLS      *tls.Config `toml:"-" json:"-"`
+	//for oracle database
+	OracleServiceName   string `toml:"oracle-service-name" json:"oracle-service-name"`
+	OracleConnectString string `toml:"oracle-connect-string" json:"oracle-connect-string"`
 }
 
 // Config is the savepoint configuration
@@ -64,10 +68,18 @@ func setDefaultConfig(cfg *Config) {
 		cfg.Db.User = "root"
 	}
 	if cfg.Schema == "" {
-		cfg.Schema = "tidb_binlog"
+		if cfg.CheckpointType == "oracle" {
+			cfg.Schema = cfg.Db.User
+		} else {
+			cfg.Schema = "tidb_binlog"
+		}
 	}
 	if cfg.Table == "" {
-		cfg.Table = "checkpoint"
+		if cfg.CheckpointType == "oracle" {
+			cfg.Table = "tidb_binlog_checkpoint"
+		} else {
+			cfg.Table = "checkpoint"
+		}
 	}
 }
 
@@ -81,6 +93,23 @@ func genCreateTable(sp *MysqlCheckPoint) string {
 
 func genReplaceSQL(sp *MysqlCheckPoint, str string) string {
 	return fmt.Sprintf("replace into %s.%s values(%d, '%s')", sp.schema, sp.table, sp.clusterID, str)
+}
+
+func genCheckTableIsExist2o(sp *OracleCheckPoint) string {
+	tableName := strings.ToUpper(sp.table)
+	return fmt.Sprintf("select table_name from user_tables where table_name='%s'", tableName)
+}
+
+func genCreateTable2o(sp *OracleCheckPoint) string {
+	return fmt.Sprintf("create table %s.%s (clusterID number primary key, checkPoint varchar2(4000))", sp.schema, sp.table)
+}
+
+func genReplaceSQL2o(sp *OracleCheckPoint, str string) string {
+	return fmt.Sprintf("merge into %s.%s t using (select %d clusterID, '%s' checkPoint from dual) temp on(t.clusterID=temp.clusterID) "+
+		"when matched then "+
+		"update set t.checkPoint=temp.checkPoint "+
+		"when not matched then "+
+		"insert values(temp.clusterID,temp.checkPoint)", sp.schema, sp.table, sp.clusterID, str)
 }
 
 // getClusterID return the cluster id iff the checkpoint table exist only one row.
@@ -114,5 +143,9 @@ func getClusterID(db *sql.DB, schema string, table string) (id uint64, err error
 }
 
 func genSelectSQL(sp *MysqlCheckPoint) string {
+	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
+}
+
+func genSelectSQL2o(sp *OracleCheckPoint) string {
 	return fmt.Sprintf("select checkPoint from %s.%s where clusterID = %d", sp.schema, sp.table, sp.clusterID)
 }

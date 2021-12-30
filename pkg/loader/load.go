@@ -67,6 +67,8 @@ type loaderImpl struct {
 	// we can get table info from downstream db
 	// like column name, pk & uk
 	db *gosql.DB
+	//downStream db type, mysql,tidb,oracle
+	destDBType string
 	// only set for test
 	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
 	opts               options
@@ -128,6 +130,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
+	destDBType       string
 }
 
 var defaultLoaderOptions = options{
@@ -140,6 +143,7 @@ var defaultLoaderOptions = options{
 	enableDispatch:   true,
 	enableCausality:  true,
 	merge:            false,
+	destDBType:       "tidb",
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -187,6 +191,13 @@ func BatchSize(n int) Option {
 func Merge(v bool) Option {
 	return func(o *options) {
 		o.merge = v
+	}
+}
+
+//DestinationDBType set destDBType option.
+func DestinationDBType(t string) Option {
+	return func(o *options) {
+		o.destDBType = t
 	}
 }
 
@@ -243,11 +254,15 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		successTxn:         make(chan *Txn),
 		merge:              opts.merge,
 		saveAppliedTS:      opts.saveAppliedTS,
+		destDBType:         opts.destDBType,
 
 		ctx:    ctx,
 		cancel: cancel,
 	}
-
+	if opts.destDBType == "oracle" {
+		s.getTableInfoFromDB = getOracleTableInfo
+		fGetAppliedTS = getOracleAppliedTS
+	}
 	db.SetMaxOpenConns(opts.workerCount)
 	db.SetMaxIdleConns(opts.workerCount)
 
@@ -391,7 +406,13 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	if ddl.ShouldSkip {
 		return nil
 	}
+	if s.destDBType == "oracle" {
+		return s.processOracleDDL(ddl)
+	}
+	return s.processMysqlDDL(ddl)
+}
 
+func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -428,6 +449,52 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	}
 
 	return errors.Trace(err)
+}
+
+func (s *loaderImpl) processOracleDDL(ddl *DDL) error {
+	ddlStmt := ddl.SQL
+	newStmt := ""
+	if isTruncateTableStmt(ddlStmt) {
+		newStmt = fmt.Sprintf("BEGIN %s.do_truncate('%s.%s','');END;", ddl.Database, ddl.Database, ddl.Table)
+	} else {
+		log.Warn("oracle meet unsupported ddl", zap.String("ddl", ddlStmt))
+		return nil
+	}
+	err := util.RetryContext(s.ctx, maxDDLRetryCount, execDDLRetryWait, 1, func(context.Context) error {
+		newStmt := newStmt
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(newStmt); err != nil {
+			log.Error("DDL exec failed.", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", newStmt), zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Rollback DDL failed", zap.String("old sql", ddl.SQL), zap.String("new ddl sql", newStmt), zap.Error(rbErr))
+			}
+			return err
+		}
+
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+
+		log.Info("exec oracle ddl success", zap.String("sql", ddl.SQL), zap.String("new ddl", newStmt))
+		return nil
+	})
+	if err == nil {
+		return nil
+	}
+	return errors.Trace(err)
+}
+
+func isTruncateTableStmt(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false
+	}
+	_, ok := stmt.(*ast.TruncateTableStmt)
+	return ok
 }
 
 func (s *loaderImpl) execByHash(executor *executor, byHash [][]*DML) error {
@@ -682,7 +749,11 @@ func filterGeneratedCols(dml *DML) {
 }
 
 func (s *loaderImpl) getExecutor() *executor {
-	e := newExecutor(s.db).withBatchSize(s.batchSize)
+	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
+	if s.destDBType == "oracle" {
+		e.fTryRefreshTableErr = tryRefreshTableOracleErr
+		e.fSingleExec = e.singleOracleExec
+	}
 	if s.syncMode == SyncPartialColumn {
 		e = e.withRefreshTableInfo(s.refreshTableInfo)
 	}
@@ -891,6 +962,15 @@ func getAppliedTS(db *gosql.DB) int64 {
 		if !ok || int(errCode) != tmysql.ErrUnknown {
 			log.Warn("get ts from secondary cluster failed", zap.Error(err))
 		}
+		return 0
+	}
+	return appliedTS
+}
+
+func getOracleAppliedTS(db *gosql.DB) int64 {
+	appliedTS, err := pkgsql.GetOraclePosition(db)
+	if err != nil {
+		log.Warn("get ts from oracle failed.", zap.Error(err))
 		return 0
 	}
 	return appliedTS

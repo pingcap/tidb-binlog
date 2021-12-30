@@ -12,7 +12,7 @@ export PATH := $(path_to_add):$(PATH)
 TEST_DIR := /tmp/tidb_binlog_test
 
 GO       := GO111MODULE=on go
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG)
+GOBUILD  := CGO_ENABLED=1 $(GO) build $(BUILD_FLAG)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 1
 GOVERSION := "`go version`"
 
@@ -105,7 +105,7 @@ endif
 
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
-	tools/bin/golangci-lint run $$($(PACKAGE_DIRECTORIES))
+	tools/bin/golangci-lint run --timeout 7m $$($(PACKAGE_DIRECTORIES))
 
 clean:
 	go clean -i ./...

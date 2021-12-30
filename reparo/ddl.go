@@ -64,6 +64,8 @@ func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
 			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.DropIndexStmt:
 			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
+		case *ast.CreateViewStmt:
+			setSchemaIfExists(&table, v.ViewName.Schema.O, v.ViewName.Name.O)
 		}
 	}
 

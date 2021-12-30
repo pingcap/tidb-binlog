@@ -150,3 +150,61 @@ func (s *newMysqlSuite) TestCreationErrors(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(err, ErrorMatches, ".*fail table.*")
 }
+
+func (s *newMysqlSuite) TestDefaultCheckpointTable(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	origOpen := sqlOpenDB
+	defer func() { sqlOpenDB = origOpen }()
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
+		return db, nil
+	}
+
+	mock.ExpectExec("create schema.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("create table if not exists.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	clusterIDRow := sqlmock.NewRows([]string{"clusterID"}).AddRow("12345")
+	mock.ExpectQuery("select clusterID from.*").WillReturnRows(clusterIDRow)
+	checkPointRow := sqlmock.NewRows([]string{"CHECKPOINT"}).
+		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
+	mock.ExpectQuery("select checkPoint from.*").WillReturnRows(checkPointRow)
+	cp, err := newMysql(&Config{
+		CheckpointType: "tidb",
+	})
+	c.Assert(err, IsNil)
+	c.Assert(cp, NotNil)
+	pcp := cp.(*MysqlCheckPoint)
+	c.Assert(err, IsNil)
+	c.Assert(pcp.table, Equals, "checkpoint")
+	c.Assert(pcp.schema, Equals, "tidb_binlog")
+}
+
+func (s *newMysqlSuite) TestConfigCheckpointTable(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	origOpen := sqlOpenDB
+	defer func() { sqlOpenDB = origOpen }()
+	sqlOpenDB = func(user, password string, host string, port int, tls *tls.Config) (*sql.DB, error) {
+		return db, nil
+	}
+
+	mock.ExpectExec("create schema.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("create table if not exists.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	clusterIDRow := sqlmock.NewRows([]string{"clusterID"}).AddRow("12345")
+	mock.ExpectQuery("select clusterID from.*").WillReturnRows(clusterIDRow)
+	checkPointRow := sqlmock.NewRows([]string{"CHECKPOINT"}).
+		AddRow(`{"commitTS": 1024, "consistent": true, "ts-map": {"primary-ts": 2000, "secondary-ts": 1999}}`)
+	mock.ExpectQuery("select checkPoint from.*").WillReturnRows(checkPointRow)
+	cp, err := newMysql(&Config{
+		CheckpointType: "tidb",
+		Table:          "table-1",
+		Schema:         "new_schema",
+	})
+	c.Assert(err, IsNil)
+	c.Assert(cp, NotNil)
+	pcp := cp.(*MysqlCheckPoint)
+	c.Assert(err, IsNil)
+	c.Assert(pcp.table, Equals, "table-1")
+	c.Assert(pcp.schema, Equals, "new_schema")
+}

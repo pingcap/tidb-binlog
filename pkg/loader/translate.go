@@ -14,41 +14,71 @@
 package loader
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/pingcap/errors"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+
 	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	"github.com/pingcap/tidb/parser/model"
+	ptypes "github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/types"
 )
 
 // SecondaryBinlogToTxn translate the Binlog format into Txn
-func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
+func SecondaryBinlogToTxn(binlog *pb.Binlog, tableRouter *router.Table, upperColName bool) (*Txn, error) {
 	txn := new(Txn)
 	var err error
+	downStreamSchema := ""
+	downStreamTable := ""
 	switch binlog.Type {
 	case pb.BinlogType_DDL:
 		data := binlog.DdlData
+		downStreamSchema = data.GetSchemaName()
+		downStreamTable = data.GetTableName()
+		if tableRouter != nil {
+			downStreamSchema, downStreamTable, err = tableRouter.Route(data.GetSchemaName(), data.GetTableName())
+			if err != nil {
+				return nil, errors.Annotate(err, fmt.Sprintf("gen route schema and table failed. schema=%s, table=%s", data.GetSchemaName(), data.GetTableName()))
+			}
+		}
 		txn.DDL = new(DDL)
-		txn.DDL.Database = data.GetSchemaName()
-		txn.DDL.Table = data.GetTableName()
+		txn.DDL.Database = downStreamSchema
+		txn.DDL.Table = downStreamTable
 		txn.DDL.SQL = string(data.GetDdlQuery())
 	case pb.BinlogType_DML:
 		for _, table := range binlog.DmlData.GetTables() {
+			downStreamSchema = table.GetSchemaName()
+			downStreamTable = table.GetTableName()
+			if tableRouter != nil {
+				downStreamSchema, downStreamTable, err = tableRouter.Route(table.GetSchemaName(), table.GetTableName())
+				if err != nil {
+					return nil, errors.Annotate(err, fmt.Sprintf("gen route schema and table failed. schema=%s, table=%s", table.GetSchemaName(), table.GetTableName()))
+				}
+			}
 			for _, mut := range table.GetMutations() {
 				dml := new(DML)
-				dml.Database = table.GetSchemaName()
-				dml.Table = table.GetTableName()
+				dml.Database = downStreamSchema
+				dml.Table = downStreamTable
 				dml.Tp = getDMLType(mut)
 
 				// setup values
-				dml.Values, err = getColVals(table, mut.Row.GetColumns())
+				dml.Values, err = getColVals(table, mut.Row.GetColumns(), upperColName)
 				if err != nil {
 					return nil, err
 				}
 
 				// setup old values
 				if dml.Tp == UpdateDMLType {
-					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns())
+					dml.OldValues, err = getColVals(table, mut.ChangeRow.GetColumns(), upperColName)
 					if err != nil {
 						return nil, err
 					}
+				}
+				//only for oracle
+				if upperColName {
+					dml.UpColumnsInfoMap = getColumnsInfoMap(table.ColumnInfo)
 				}
 				txn.DMLs = append(txn.DMLs, dml)
 			}
@@ -57,7 +87,18 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog) (*Txn, error) {
 	return txn, nil
 }
 
-func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, error) {
+func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
+	colMap := make(map[string]*model.ColumnInfo)
+	for _, col := range columnInfos {
+		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
+			Name:      model.CIStr{O: col.Name},
+			FieldType: types.FieldType{Tp: ptypes.StrToType(col.MysqlType), Flen: int(col.Flen), Decimal: int(col.Decimal)},
+		}
+	}
+	return colMap
+}
+
+func getColVals(table *pb.Table, cols []*pb.Column, upperColName bool) (map[string]interface{}, error) {
 	vals := make(map[string]interface{}, len(cols))
 	for i, col := range cols {
 		name := table.ColumnInfo[i].Name
@@ -65,7 +106,11 @@ func getColVals(table *pb.Table, cols []*pb.Column) (map[string]interface{}, err
 		if err != nil {
 			return vals, err
 		}
-		vals[name] = arg
+		if upperColName {
+			vals[strings.ToUpper(name)] = arg
+		} else {
+			vals[name] = arg
+		}
 	}
 	return vals, nil
 }
