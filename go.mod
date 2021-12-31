@@ -27,9 +27,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
 	github.com/pingcap/kvproto v0.0.0-20211122024046-03abd340988f
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211223053947-7121bf028973
+	github.com/pingcap/tidb v1.1.0-beta.0.20211231061751-74ef32ace2a2
 	github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211231091350-4f30a14256c1
+	github.com/pingcap/tidb/parser v0.0.0-20211231094150-ceed5488cff0
 	github.com/pingcap/tipb v0.0.0-20211227115224-a06a85f9d2a5
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
@@ -48,7 +48,6 @@ require (
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
-	golang.org/x/tools v0.1.8 // indirect
 	google.golang.org/grpc v1.41.0
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
