@@ -316,6 +316,8 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 	// 	return true
 	case model.ActionLockTable, model.ActionUnlockTable:
 		return true
+	case model.ActionAlterCacheTable, model.ActionAlterNoCacheTable:
+		return true
 	case model.ActionAlterTableAttributes, model.ActionAlterTablePartitionAttributes:
 		return true
 	}
