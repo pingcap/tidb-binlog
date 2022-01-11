@@ -23,8 +23,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/tests/util"
 	"github.com/pingcap/tidb/parser/mysql"
+
+	"github.com/pingcap/tidb-binlog/tests/util"
 )
 
 func intRangeValue(column *column, min int64, max int64) (int64, int64) {
@@ -221,6 +222,11 @@ func genColumnData(table *table, column *column) (string, error) {
 	isUnsigned := mysql.HasUnsignedFlag(tp.Flag)
 
 	switch tp.Tp {
+	case mysql.TypeBit:
+		if randInt(0, 1) == 0 {
+			return "b'0'", nil
+		}
+		return "b'1'", nil
 	case mysql.TypeTiny:
 		var data int64
 		if isUnique {

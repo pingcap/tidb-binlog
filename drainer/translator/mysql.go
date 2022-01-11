@@ -31,7 +31,7 @@ import (
 
 const implicitColID = -1
 
-func genMysqlInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
+func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
 	columnValues, err := insertRowToDatums(table, row)
@@ -58,7 +58,7 @@ func genMysqlInsert(schema string, ptable, table *model.TableInfo, row []byte) (
 	return names, args, nil
 }
 
-func genMysqlUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
 	updtDecoder := newUpdateDecoder(ptable, table, canAppendDefaultValue)
 
@@ -84,7 +84,7 @@ func genMysqlUpdate(schema string, ptable, table *model.TableInfo, row []byte, c
 	return
 }
 
-func genMysqlDelete(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, err error) {
+func genDBDelete(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, err error) {
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
@@ -144,7 +144,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genMysqlInsert(schema, pinfo, info, row)
+					names, args, err := genDBInsert(schema, pinfo, info, row)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -160,7 +160,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						dml.Values[name] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genMysqlUpdate(schema, pinfo, info, row, canAppendDefaultValue)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
@@ -179,7 +179,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genMysqlDelete(schema, info, row)
+					names, args, err := genDBDelete(schema, info, row)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}

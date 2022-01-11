@@ -19,22 +19,29 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb/parser/ast"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	baf "github.com/pingcap/tidb-tools/pkg/filter"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/pingcap/tidb/br/pkg/logutil"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tipb/go-binlog"
+	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
-	pb "github.com/pingcap/tipb/go-binlog"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // runWaitThreshold is the expected time for `Syncer.run` to quit
@@ -61,6 +68,9 @@ type Syncer struct {
 
 	shutdown chan struct{}
 	closed   chan struct{}
+
+	tableRouter  *router.Table
+	binlogFilter *bf.BinlogEvent
 }
 
 // NewSyncer returns a Drainer instance
@@ -81,13 +91,17 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	syncer.loopbackSync = loopbacksync.NewLoopBackSyncInfo(cfg.ChannelID, cfg.LoopbackControl, cfg.SyncDDL)
 
 	var err error
+	syncer.tableRouter, syncer.binlogFilter, err = genRouterAndBinlogEvent(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	// create schema
 	syncer.schema, err = NewSchema(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync)
+	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync, syncer.tableRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -95,7 +109,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	return syncer, nil
 }
 
-func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync) (dsyncer dsync.Syncer, err error) {
+func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBackSync, tableRouter *router.Table) (dsyncer dsync.Syncer, err error) {
 	switch cfg.DestDBType {
 	case "kafka":
 		dsyncer, err = dsync.NewKafka(cfg.To, schema)
@@ -107,16 +121,20 @@ func createDSyncer(cfg *SyncerConfig, schema *Schema, info *loopbacksync.LoopBac
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to create pb dsyncer")
 		}
-	case "mysql", "tidb":
+	case "mysql", "tidb", "oracle":
 		var relayer relay.Relayer
 		if cfg.Relay.IsEnabled() {
 			if relayer, err = relay.NewRelayer(cfg.Relay.LogDir, cfg.Relay.MaxFileSize, schema); err != nil {
 				return nil, errors.Annotate(err, "fail to create relayer")
 			}
 		}
-		dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
+		if cfg.DestDBType == "oracle" {
+			dsyncer, err = dsync.NewOracleSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, cfg.EnableDispatch(), cfg.EnableCausality(), tableRouter)
+		} else {
+			dsyncer, err = dsync.NewMysqlSyncer(cfg.To, schema, cfg.WorkerCount, cfg.TxnBatch, queryHistogramVec, cfg.StrSQLMode, cfg.DestDBType, relayer, info, cfg.EnableDispatch(), cfg.EnableCausality())
+		}
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to create mysql dsyncer")
+			return nil, errors.Annotatef(err, "fail to create %s dsyncer", cfg.DestDBType)
 		}
 		// only use for test
 	case "_intercept":
@@ -298,6 +316,7 @@ func (s *Syncer) run() error {
 		pushFakeBinlog       chan<- *pb.Binlog
 		lastAddCommitTS      int64
 		lastFakeCommitTime   time.Time
+		p                    = getParser(s.cfg.SQLMode)
 	)
 	dsyncError := s.dsyncer.Error()
 
@@ -381,7 +400,7 @@ ForLoop:
 				ignore              = false
 				err1                error
 			)
-			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl {
+			if s.loopbackSync != nil && s.loopbackSync.LoopbackControl && s.cfg.DestDBType != "oracle" {
 				isFilterTransaction, err1 = loopBackStatus(binlog, preWrite, s.schema, s.loopbackSync)
 				if err1 != nil {
 					err = errors.Annotate(err1, "analyze transaction failed")
@@ -389,9 +408,9 @@ ForLoop:
 				}
 			}
 			if !isFilterTransaction {
-				ignore, err = filterTable(preWrite, s.filter, s.schema)
+				ignore, err = skipDMLEvent(preWrite, s.schema, s.filter, s.binlogFilter)
 				if err != nil {
-					err = errors.Annotate(err, "filterTable failed")
+					err = errors.Annotate(err, "skipDMLEvent failed")
 					break ForLoop
 				}
 			}
@@ -407,6 +426,7 @@ ForLoop:
 				}
 				executeHistogram.Observe(time.Since(beginTime).Seconds())
 			} else {
+				log.Debug("skip whole dml event by binlog event filter", zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 			}
 		} else if jobID > 0 {
@@ -445,19 +465,44 @@ ForLoop:
 			}
 
 			if s.filter.SkipSchemaAndTable(schema, table) {
-				log.Info("skip ddl by filter", zap.String("schema", schema), zap.String("table", table),
+				log.Info("skip ddl by block allow filter", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
 			}
 
-			shouldSkip := false
+			// shouldSkip is used specially for database dsyncers like tidb/mysql/oracle
+			// although we skip some ddls, but we still need to update table info
+			// ignore means whether we should should this ddl event after binlogFilter
+			var (
+				shouldSkip, ignore bool
+				stmt               ast.StmtNode
+			)
+
+			if stmt, ignore, err = skipDDLEvent(sql, schema, table, p, s.binlogFilter); err != nil {
+				break ForLoop
+			} else if ignore {
+				log.Info("skip ddl by binlog event filter", zap.String("schema", schema), zap.String("table", table),
+					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				// A empty sql force it to evict the downstream table info.
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
+					shouldSkip = true
+				} else {
+					appendFakeBinlogIfNeeded(nil, commitTS)
+					continue
+				}
+			} else if !ignore && s.cfg.DestDBType == "oracle" {
+				if _, ok := stmt.(*ast.TruncateTableStmt); !ok {
+					err = errors.Errorf("unsupported ddl %s, you should skip commit ts %d", sql, commitTS)
+					break ForLoop
+				}
+			}
 
 			if !s.cfg.SyncDDL {
 				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
 					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
-				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" {
+				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
 				} else {
 					appendFakeBinlogIfNeeded(nil, commitTS)
@@ -471,7 +516,7 @@ ForLoop:
 			lastAddCommitTS = binlog.GetCommitTs()
 
 			log.Info("add ddl item to syncer, you can add this commit ts to `ignore-txn-commit-ts` to skip this ddl if needed",
-				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs))
+				zap.String("sql", sql), zap.Int64("commit ts", binlog.CommitTs), zap.Bool("shouldSkip", shouldSkip))
 
 			err = s.dsyncer.Sync(&dsync.Item{Binlog: binlog, PrewriteValue: nil, Schema: schema, Table: table, ShouldSkip: shouldSkip, SchemaVersion: lastDDLSchemaVersion})
 			if err != nil {
@@ -535,9 +580,9 @@ func loopBackStatus(binlog *pb.Binlog, prewriteValue *pb.PrewriteValue, infoGett
 	return findLoopBackMark(txn.DMLs, info)
 }
 
-// filterTable may drop some table mutation in `PrewriteValue`
+// skipDMLEvent may drop some table mutation and some sequence in mut in `PrewriteValue`
 // Return true if all table mutations are dropped.
-func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (ignore bool, err error) {
+func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, binlogFilter *bf.BinlogEvent) (ignore bool, err error) {
 	var muts []pb.TableMutation
 	for _, mutation := range pv.GetMutations() {
 		schemaName, tableName, ok := schema.SchemaAndTableName(mutation.GetTableId())
@@ -550,6 +595,60 @@ func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (i
 			continue
 		}
 
+		if binlogFilter != nil {
+			var (
+				insertIdx = 0
+				deleteIdx = 0
+				updateIdx = 0
+
+				filteredIdx       = 0
+				filteredInsertIdx = 0
+				filteredDeleteIdx = 0
+				filteredUpdateIdx = 0
+			)
+			for i, tp := range mutation.Sequence {
+				var et bf.EventType
+				switch tp {
+				case binlog.MutationType_Insert:
+					et = bf.InsertEvent
+					insertIdx++
+				case binlog.MutationType_Update:
+					et = bf.UpdateEvent
+					updateIdx++
+				case binlog.MutationType_DeleteRow:
+					et = bf.DeleteEvent
+					deleteIdx++
+				default:
+					err = errors.Errorf("unknown mutation type: %v", tp)
+					return
+				}
+
+				needSkip, err := skipByFilter(binlogFilter, schemaName, tableName, et, "")
+				if err != nil {
+					return false, errors.Trace(err)
+				} else if needSkip {
+					continue
+				}
+				mutation.Sequence[filteredIdx] = mutation.Sequence[i]
+				filteredIdx++
+				switch tp {
+				case binlog.MutationType_Insert:
+					mutation.InsertedRows[filteredInsertIdx] = mutation.InsertedRows[insertIdx-1]
+					filteredInsertIdx++
+				case binlog.MutationType_Update:
+					mutation.UpdatedRows[filteredUpdateIdx] = mutation.UpdatedRows[updateIdx-1]
+					filteredUpdateIdx++
+				case binlog.MutationType_DeleteRow:
+					mutation.DeletedRows[filteredDeleteIdx] = mutation.DeletedRows[deleteIdx-1]
+					filteredDeleteIdx++
+				}
+			}
+			mutation.Sequence = mutation.Sequence[0:filteredIdx]
+			mutation.InsertedRows = mutation.InsertedRows[0:filteredInsertIdx]
+			mutation.UpdatedRows = mutation.UpdatedRows[0:filteredUpdateIdx]
+			mutation.DeletedRows = mutation.DeletedRows[0:filteredDeleteIdx]
+		}
+
 		muts = append(muts, mutation)
 	}
 
@@ -560,6 +659,38 @@ func filterTable(pv *pb.PrewriteValue, filter *filter.Filter, schema *Schema) (i
 	}
 
 	return
+}
+
+// skipDDLEvent may drop some ddl event
+// Return true if this job is filtered.
+func skipDDLEvent(sql, schema, table string, p *parser.Parser, binlogFilter *bf.BinlogEvent) (stmt ast.StmtNode, ignore bool, err error) {
+	if binlogFilter == nil {
+		return nil, false, nil
+	}
+	stmt, err = p.ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.L().Error("fail to parse ddl", zap.String("ddl", sql), logutil.ShortError(err))
+		// return error if parse fail and filter fail
+		needSkip, err2 := skipByFilter(binlogFilter, schema, table, bf.NullEvent, sql)
+		return nil, needSkip, err2
+	}
+	et := bf.AstToDDLEvent(stmt)
+	flag, err := skipByFilter(binlogFilter, schema, table, et, sql)
+	return stmt, flag, err
+}
+
+// skipByFilter returns true when
+// * type of SQL doesn't pass binlog-filter.
+// * pattern of SQL doesn't pass binlog-filter.
+func skipByFilter(binlogFilter *bf.BinlogEvent, schemaName, tableName string, et bf.EventType, sql string) (bool, error) {
+	if binlogFilter == nil {
+		return false, nil
+	}
+	action, err := binlogFilter.Filter(schemaName, tableName, et, sql)
+	if err != nil {
+		return false, errors.Annotatef(err, "fail to skip event (tp: %s, sql: %s) on %v", et, &baf.Table{Schema: schemaName, Name: tableName}, sql)
+	}
+	return action == bf.Ignore, nil
 }
 
 func isIgnoreTxnCommitTS(ignoreTxnCommitTS []int64, ts int64) bool {
