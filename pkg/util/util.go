@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -338,8 +339,10 @@ func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
 }
 
 // IsCreateDatabaseDDL checks whether ddl is a create database statement
-func IsCreateDatabaseDDL(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+func IsCreateDatabaseDDL(sql string, sqlMode mysql.SQLMode) bool {
+	p := parser.New()
+	p.SetSQLMode(sqlMode)
+	stmt, err := p.ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
 		return false

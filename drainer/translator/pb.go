@@ -41,11 +41,13 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 
 	if tiBinlog.DdlJobId > 0 { // DDL
 		sql := string(tiBinlog.GetDdlQuery())
-		isCreateDatabase := util.IsCreateDatabaseDDL(sql)
-		if isCreateDatabase {
-			sql += ";"
-		} else {
-			sql = fmt.Sprintf("use %s; %s;", quoteName(schema), sql)
+		if len(schema) > 0 {
+			isCreateDatabase := util.IsCreateDatabaseDDL(sql, sqlMode)
+			if isCreateDatabase {
+				sql += ";"
+			} else {
+				sql = fmt.Sprintf("use %s; %s;", quoteName(schema), sql)
+			}
 		}
 
 		pbBinlog.Tp = pb.BinlogType_DDL

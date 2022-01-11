@@ -408,7 +408,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 			return err
 		}
 
-		if len(ddl.Database) > 0 && !util.IsCreateDatabaseDDL(ddl.SQL) {
+		if len(ddl.Database) > 0 && !util.IsCreateDatabaseDDL(ddl.SQL, tmysql.ModeNone) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {
