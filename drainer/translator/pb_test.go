@@ -77,11 +77,10 @@ func (t *testPbSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	c.Log("get ddl: ", string(pbBinog.GetDdlQuery()))
-	expected = fmt.Sprintf("%s;", string(t.TiBinlog.GetDdlQuery()))
 	c.Assert(pbBinog, check.DeepEquals, &pb.Binlog{
 		Tp:       pb.BinlogType_DDL,
 		CommitTs: t.TiBinlog.GetCommitTs(),
-		DdlQuery: []byte(expected),
+		DdlQuery: t.TiBinlog.GetDdlQuery(),
 	})
 }
 
