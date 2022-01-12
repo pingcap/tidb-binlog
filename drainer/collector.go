@@ -269,6 +269,7 @@ func (c *Collector) reportErr(ctx context.Context, err error) {
 // we CAN NOT query the job from the tikv according the job id.
 // just skip this kind of binlog now.
 func skipQueryJob(binlog *binlog.Binlog) bool {
+	// ToLower is to fix https://github.com/pingcap/tidb/issues/31611
 	q := bytes.ToLower(binlog.GetDdlQuery())
 	return bytes.HasPrefix(q, []byte("select setval"))
 }
