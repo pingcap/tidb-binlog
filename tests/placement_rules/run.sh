@@ -9,6 +9,7 @@ run_drainer &
 sleep 3
 
 run_sql 'CREATE DATABASE placement_test;'
+run_sql 'SET @@global.tidb_enable_alter_placement=1'
 run_sql 'CREATE PLACEMENT POLICY x1 FOLLOWERS=4'
 run_sql 'CREATE TABLE placement_test.t1 (a INT NOT NULL PRIMARY KEY, b VARCHAR(100)) PLACEMENT POLICY=x1;'
 run_sql "INSERT INTO placement_test.t1 (a,b) VALUES(1,'a'),(2,'b'),(3,'c'),(4,'d');"
