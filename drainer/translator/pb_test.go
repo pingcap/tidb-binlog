@@ -17,10 +17,16 @@ import (
 	"fmt"
 
 	"github.com/pingcap/check"
+<<<<<<< HEAD
 	"github.com/pingcap/parser/mysql"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 type testPbSuite struct {
@@ -54,6 +60,32 @@ func (t *testPbSuite) TestDDL(c *check.C) {
 		Tp:       pb.BinlogType_DDL,
 		CommitTs: t.TiBinlog.GetCommitTs(),
 		DdlQuery: []byte(expected),
+	})
+
+	// test PB shouldn't reports an error when meeting unsupported DDL
+	t.TiBinlog.DdlQuery = []byte("invalid sql")
+	pbBinog, err = TiBinlogToPbBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
+	c.Assert(err, check.IsNil)
+
+	c.Log("get ddl: ", string(pbBinog.GetDdlQuery()))
+	expected = fmt.Sprintf("use `%s`; %s;", t.Schema, string(t.TiBinlog.GetDdlQuery()))
+	c.Assert(pbBinog, check.DeepEquals, &pb.Binlog{
+		Tp:       pb.BinlogType_DDL,
+		CommitTs: t.TiBinlog.GetCommitTs(),
+		DdlQuery: []byte(expected),
+	})
+
+	// test PB shouldn't reports an error when meeting unsupported DDL
+	t.TiBinlog.DdlQuery = []byte("invalid sql")
+	t.Schema = ""
+	pbBinog, err = TiBinlogToPbBinlog(t, t.Schema, t.Table, t.TiBinlog, nil)
+	c.Assert(err, check.IsNil)
+
+	c.Log("get ddl: ", string(pbBinog.GetDdlQuery()))
+	c.Assert(pbBinog, check.DeepEquals, &pb.Binlog{
+		Tp:       pb.BinlogType_DDL,
+		CommitTs: t.TiBinlog.GetCommitTs(),
+		DdlQuery: t.TiBinlog.GetDdlQuery(),
 	})
 }
 

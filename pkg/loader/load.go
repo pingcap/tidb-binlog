@@ -376,17 +376,6 @@ func needRefreshTableInfo(sql string) bool {
 	return true
 }
 
-func isCreateDatabaseDDL(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false
-	}
-
-	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
-	return isCreateDatabase
-}
-
 func (s *loaderImpl) execDDL(ddl *DDL) error {
 	log.Debug("exec ddl", zap.Reflect("ddl", ddl))
 	if ddl.ShouldSkip {
@@ -399,7 +388,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 			return err
 		}
 
-		if len(ddl.Database) > 0 && !isCreateDatabaseDDL(ddl.SQL) {
+		if len(ddl.Database) > 0 && !util.IsCreateDatabaseDDL(ddl.SQL, tmysql.ModeNone) {
 			_, err = tx.Exec(fmt.Sprintf("use %s;", quoteName(ddl.Database)))
 			if err != nil {
 				if rbErr := tx.Rollback(); rbErr != nil {

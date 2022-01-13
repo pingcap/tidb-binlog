@@ -14,7 +14,7 @@ run_sql 'CREATE TABLE seq.table_name (id INT DEFAULT NEXT VALUE FOR seq.sequence
 
 run_sql 'INSERT INTO seq.table_name(val) values(10);'
 
-sleep 3
+sleep 5
 
 down_run_sql 'SELECT count(*), sum(id), sum(val) FROM seq.table_name;'
 check_contains 'count(*): 1'

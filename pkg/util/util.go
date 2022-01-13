@@ -23,14 +23,28 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
+=======
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
+	"github.com/tikv/client-go/v2/oracle"
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // DefaultIP get a default non local ip, err is not nil, ip return 127.0.0.1
@@ -302,3 +316,48 @@ func WaitUntilTimeout(name string, fn func(), timeout time.Duration) {
 	case <-exited:
 	}
 }
+<<<<<<< HEAD
+=======
+
+// WriteFileAtomic writes file to temp and atomically move when everything else succeeds.
+func WriteFileAtomic(filename string, data []byte, perm os.FileMode) error {
+	dir, name := path.Dir(filename), path.Base(filename)
+	f, err := os.CreateTemp(dir, name)
+	if err != nil {
+		return err
+	}
+
+	n, err := f.Write(data)
+	f.Close()
+	if err != nil {
+		return err
+	}
+
+	if n < len(data) {
+		err = io.ErrShortWrite
+	} else {
+		err = os.Chmod(f.Name(), perm)
+	}
+
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+
+	return os.Rename(f.Name(), filename)
+}
+
+// IsCreateDatabaseDDL checks whether ddl is a create database statement
+func IsCreateDatabaseDDL(sql string, sqlMode mysql.SQLMode) bool {
+	p := parser.New()
+	p.SetSQLMode(sqlMode)
+	stmt, err := p.ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+		return false
+	}
+
+	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
+	return isCreateDatabase
+}
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))

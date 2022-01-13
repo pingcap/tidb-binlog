@@ -19,15 +19,22 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/util"
+=======
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var sqlMode mysql.SQLMode
@@ -37,6 +44,7 @@ func SetSQLMode(mode mysql.SQLMode) {
 	sqlMode = mode
 }
 
+<<<<<<< HEAD
 func getParser() (p *parser.Parser) {
 	p = parser.New()
 	p.SetSQLMode(sqlMode)
@@ -45,6 +53,9 @@ func getParser() (p *parser.Parser) {
 }
 
 func insertRowToDatums(table *model.TableInfo, row []byte) (pk types.Datum, datums map[int64]types.Datum, err error) {
+=======
+func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]types.Datum, err error) {
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 
 	// decode the pk value

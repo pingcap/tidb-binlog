@@ -22,13 +22,18 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/security"
+=======
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/pingcap/tidb-binlog/pkg/security"
 )
 
 // Hook up gocheck into the "go test" runner.
@@ -339,4 +344,23 @@ func (s *waitUntilTimeoutSuit) TestGoAndAbortGoroutine(c *C) {
 		<-c
 	}, time.Second)
 	c.Assert(called, IsTrue)
+}
+
+type isCreateDBDDLSuite struct{}
+
+var _ = Suite(&isCreateDBDDLSuite{})
+
+func (s *isCreateDBDDLSuite) TestInvalidSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("INSERT INTO Y a b c;", mysql.ModeNone), IsFalse)
+	c.Assert(IsCreateDatabaseDDL("Invalid SQL", mysql.ModeNone), IsFalse)
+}
+
+func (s *isCreateDBDDLSuite) TestNonCreateDBSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("SELECT 1;", mysql.ModeNone), IsFalse)
+	c.Assert(IsCreateDatabaseDDL(`INSERT INTO tbl(id, name) VALUES(1, "test";`, mysql.ModeNone), IsFalse)
+}
+
+func (s *isCreateDBDDLSuite) TestCreateDBSQL(c *C) {
+	c.Assert(IsCreateDatabaseDDL("CREATE DATABASE test;", mysql.ModeNone), IsTrue)
+	c.Assert(IsCreateDatabaseDDL("create database `db2`;", mysql.ModeNone), IsTrue)
 }
