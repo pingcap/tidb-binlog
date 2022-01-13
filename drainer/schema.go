@@ -18,10 +18,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/filter"
 )
 
 const implicitColName = "_tidb_rowid"
@@ -318,6 +319,9 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 	case model.ActionAlterCacheTable, model.ActionAlterNoCacheTable:
 		return true
 	case model.ActionAlterTableAttributes, model.ActionAlterTablePartitionAttributes:
+		return true
+	case model.ActionCreatePlacementPolicy, model.ActionAlterPlacementPolicy, model.ActionDropPlacementPolicy,
+		model.ActionAlterTablePartitionPlacement, model.ActionModifySchemaDefaultPlacement, model.ActionAlterTablePlacement:
 		return true
 	}
 
