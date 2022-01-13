@@ -35,4 +35,14 @@ Related changes
  - Need to cherry-pick to the release branch
  - Need to update the documentation
  - Need to update the `tidb-ansible` repository
+<<<<<<< HEAD
  - Need to be included in the release note
+=======
+ - Need to be included in the release note
+
+### Release note
+
+<!-- bugfix or new feature needs a release note -->
+
+- No release note
+>>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
