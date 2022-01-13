@@ -19,10 +19,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tb "github.com/pingcap/tipb/go-binlog"
+
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-	tb "github.com/pingcap/tipb/go-binlog"
 )
 
 var _ Syncer = &pbSyncer{}
