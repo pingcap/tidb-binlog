@@ -492,7 +492,7 @@ ForLoop:
 					continue
 				}
 			} else if !ignore && s.cfg.DestDBType == "oracle" {
-				if _, ok := stmt.(*ast.TruncateTableStmt); !ok {
+				if _, ok := stmt.(*ast.TruncateTableStmt); !ok && s.cfg.SyncDDL {
 					err = errors.Errorf("unsupported ddl %s, you should skip commit ts %d", sql, commitTS)
 					break ForLoop
 				}
