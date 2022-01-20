@@ -524,5 +524,5 @@ func genOracleValue(column *model.ColumnInfo, value interface{}) string {
 }
 
 func processOracleQuoteStringValue(data string) string {
-	return strings.Replace(data, "'", "''", -1)
+	return strings.ReplaceAll(data, "'", "''")
 }
