@@ -519,6 +519,10 @@ func genOracleValue(column *model.ColumnInfo, value interface{}) string {
 		mysql.TypeYear, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
 		return fmt.Sprintf("%v", value)
 	default:
-		return fmt.Sprintf("'%v'", value)
+		return fmt.Sprintf("'%s'", processOracleQuoteStringValue(fmt.Sprintf("%v", value)))
 	}
+}
+
+func processOracleQuoteStringValue(data string) string {
+	return strings.ReplaceAll(data, "'", "''")
 }
