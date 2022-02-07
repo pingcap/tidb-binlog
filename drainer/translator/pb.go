@@ -21,14 +21,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
-<<<<<<< HEAD
-	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-=======
-	"github.com/pingcap/tidb/parser/model"
->>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"

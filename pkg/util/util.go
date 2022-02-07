@@ -26,23 +26,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
-=======
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
-	"github.com/tikv/client-go/v2/oracle"
->>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 

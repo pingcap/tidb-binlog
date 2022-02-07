@@ -17,12 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
 	"github.com/pingcap/parser/mysql"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
-=======
-	"github.com/pingcap/tidb/parser/mysql"
->>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 

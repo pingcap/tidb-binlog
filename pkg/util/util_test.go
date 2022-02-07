@@ -22,12 +22,8 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-binlog/pkg/security"
-=======
->>>>>>> 194d4ac1 (pb: update pb parser to avoid drainer failure (#1093))
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 	pd "github.com/tikv/pd/client"
