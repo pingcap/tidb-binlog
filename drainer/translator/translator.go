@@ -19,15 +19,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var sqlMode mysql.SQLMode
@@ -35,13 +35,6 @@ var sqlMode mysql.SQLMode
 // SetSQLMode set the sql mode of parser
 func SetSQLMode(mode mysql.SQLMode) {
 	sqlMode = mode
-}
-
-func getParser() (p *parser.Parser) {
-	p = parser.New()
-	p.SetSQLMode(sqlMode)
-
-	return
 }
 
 func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]types.Datum, err error) {

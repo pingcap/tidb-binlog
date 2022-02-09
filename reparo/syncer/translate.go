@@ -20,11 +20,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
 func trimUse(sql string) string {
