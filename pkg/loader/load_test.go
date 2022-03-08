@@ -320,24 +320,6 @@ func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
 	c.Assert(nCalled, check.Equals, 1)
 }
 
-type isCreateDBDDLSuite struct{}
-
-var _ = check.Suite(&isCreateDBDDLSuite{})
-
-func (s *isCreateDBDDLSuite) TestInvalidSQL(c *check.C) {
-	c.Assert(isCreateDatabaseDDL("INSERT INTO Y a b c;"), check.IsFalse)
-}
-
-func (s *isCreateDBDDLSuite) TestNonCreateDBSQL(c *check.C) {
-	c.Assert(isCreateDatabaseDDL("SELECT 1;"), check.IsFalse)
-	c.Assert(isCreateDatabaseDDL(`INSERT INTO tbl(id, name) VALUES(1, "test";`), check.IsFalse)
-}
-
-func (s *isCreateDBDDLSuite) TestCreateDBSQL(c *check.C) {
-	c.Assert(isCreateDatabaseDDL("CREATE DATABASE test;"), check.IsTrue)
-	c.Assert(isCreateDatabaseDDL("create database `db2`;"), check.IsTrue)
-}
-
 type needRefreshTableInfoSuite struct{}
 
 var _ = check.Suite(&needRefreshTableInfoSuite{})
