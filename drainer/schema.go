@@ -472,6 +472,34 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 		s.truncateTableID[job.TableID] = struct{}{}
+
+	case model.ActionCreateTables:
+		binlogInfo := job.BinlogInfo
+		if binlogInfo == nil {
+			return "", "", "", errors.NotFoundf("job %d", job.ID)
+		}
+		multipleTableInfos := binlogInfo.MultipleTableInfos
+		for _, table := range multipleTableInfos {
+			if table == nil {
+				return "", "", "", errors.NotValidf("job %d", job.ID)
+			}
+
+			schema, ok := s.SchemaByID(job.SchemaID)
+			if !ok {
+				return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
+			}
+
+			err := s.CreateTable(job.BinlogInfo.SchemaVersion, schema, table)
+			if err != nil {
+				return "", "", "", errors.Trace(err)
+			}
+
+			s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+			schemaName = schema.Name.O
+			tableName = table.Name.O
+		}
+		s.currentVersion = job.BinlogInfo.SchemaVersion
+
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {

@@ -454,6 +454,10 @@ ForLoop:
 				log.Info("Syncer skips DeleteOnly DDL", zap.Stringer("job", b.job), zap.Int64("ts", b.GetCommitTs()))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
+			} else if (s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql") && b.job.Type == model.ActionCreateTables {
+				log.Info("Syncer skips Batch Create Tables DDL because it will cost too much time", zap.String("query", b.job.Query), zap.Int64("ts", b.GetCommitTs()))
+				appendFakeBinlogIfNeeded(nil, commitTS)
+				continue
 			}
 
 			var (
