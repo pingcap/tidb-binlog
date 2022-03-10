@@ -34,8 +34,9 @@ import (
 
 var (
 	// ErrTableNotExist means the table not exist.
-	ErrTableNotExist   = errors.New("table not exist")
-	defaultTiDBTxnMode = "optimistic"
+	ErrTableNotExist         = errors.New("table not exist")
+	defaultTiDBTxnMode       = "optimistic"
+	defaultTiDBPlacementMode = "ignore"
 )
 
 const (
@@ -133,6 +134,8 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 		// default is false, must enable for insert value explicit, or can't replicate.
 		"allow_auto_random_explicit_insert": "1",
 		"tidb_txn_mode":                     defaultTiDBTxnMode,
+		// ignore all placement settings
+		"tidb_placement_mode": defaultTiDBPlacementMode,
 	}
 	var tryDB *gosql.DB
 	tryDB, err = gosql.Open("mysql", dsn)
@@ -164,7 +167,8 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 	}
 
 	for k, v := range support {
-		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
+		// For key='value', the value should be quoted to prevent it from being regarded as a key word
+		dsn += fmt.Sprintf("&%s='%s'", k, url.QueryEscape(v))
 	}
 
 	db, err = gosql.Open("mysql", dsn)
