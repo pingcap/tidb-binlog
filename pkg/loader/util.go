@@ -167,8 +167,10 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 	}
 
 	for k, v := range support {
-		// For key='value', the value should be quoted to prevent it from being regarded as a key word
-		dsn += fmt.Sprintf("&%s='%s'", k, url.QueryEscape(v))
+		// The value should be quoted and then query escaped
+		// see: https://github.com/go-sql-driver/mysql#system-variables
+		v = fmt.Sprintf("'%s'", v)
+		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
 	}
 
 	db, err = gosql.Open("mysql", dsn)
