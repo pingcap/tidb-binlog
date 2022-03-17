@@ -425,6 +425,9 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 
 		if sql == "" {
 			log.Info("skip ddl with all placement options", zap.String("sql", ddl.SQL))
+			if err = tx.Commit(); err != nil {
+				return err
+			}
 		}
 
 		if _, err = tx.Exec(sql); err != nil {
