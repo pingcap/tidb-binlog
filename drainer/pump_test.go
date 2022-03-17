@@ -54,7 +54,7 @@ type mockPumpPullBinlogsClient struct {
 func (x *mockPumpPullBinlogsClient) Recv() (*binlog.PullBinlogResp, error) {
 	payload, ok := <-x.binlogBytesChan
 	if !ok {
-		return nil, errors.Errorf("pump test has ran out of binlog items!")
+		return nil, errors.Errorf("pump test has ran out of binlog items")
 	}
 	return &binlog.PullBinlogResp{Entity: binlog.Entity{Payload: payload}}, nil
 }
