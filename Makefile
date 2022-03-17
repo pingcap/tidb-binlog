@@ -117,4 +117,4 @@ tools/bin/revive: tools/check/go.mod
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; \
-	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+	GOBIN=$(CURDIR)/tools/bin $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint

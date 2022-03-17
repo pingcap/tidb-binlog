@@ -268,7 +268,7 @@ func genRouterAndBinlogEvent(cfg *SyncerConfig) (*router.Table, *bf.BinlogEvent,
 			for _, name := range *rule.BinlogFilterRule {
 				filterRule, ok := eventFilterTemplateMap[name] // NOTE: this return a copied value
 				if !ok {
-					return nil, nil, errors.Errorf("event filter rule name %s not found.", name)
+					return nil, nil, errors.Errorf("event filter rule name %s not found", name)
 				}
 				filterRule.SchemaPattern = rule.Source.Schema
 				filterRule.TablePattern = rule.Source.Table

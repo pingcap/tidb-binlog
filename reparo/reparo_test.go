@@ -158,7 +158,7 @@ func (s *testReparoSuite) TestProcess(c *C) {
 	arg := fmt.Sprintf("-config=%s", getTemplateConfigFilePath())
 	args = append(args, arg)
 	args = append(args, fmt.Sprintf("-data-dir=%s", dir))
-	args = append(args, fmt.Sprintf("-dest-type=memory"))
+	args = append(args, "-dest-type=memory")
 
 	err := config.Parse(args)
 	c.Assert(err, IsNil, Commentf("arg: %s", arg))
