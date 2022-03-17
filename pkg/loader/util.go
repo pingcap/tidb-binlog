@@ -448,3 +448,26 @@ func getOracleUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexIn
 
 	return
 }
+
+func removeDDLPlacementOptions(sql string) (string, error) {
+	for {
+		start := strings.Index(sql, "/*T![placement]")
+		if start < 0 {
+			break
+		}
+
+		for i := start + 1; i < len(sql); i++ {
+			if i == len(sql)-1 {
+				return "", errors.New("invalid sql: " + sql)
+			}
+
+			if sql[i] == '*' && sql[i+1] == '/' {
+				end := i + 2
+				sql = sql[:start] + sql[end:]
+				break
+			}
+		}
+	}
+
+	return sql, nil
+}
