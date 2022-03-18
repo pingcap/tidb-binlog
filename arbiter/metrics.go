@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"go.uber.org/zap"
 )
 
@@ -70,8 +71,8 @@ var (
 var Registry = prometheus.NewRegistry()
 
 func init() {
-	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	Registry.MustRegister(prometheus.NewGoCollector())
+	Registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	Registry.MustRegister(collectors.NewGoCollector())
 
 	Registry.MustRegister(checkpointTSOGauge)
 	Registry.MustRegister(queryHistogramVec)

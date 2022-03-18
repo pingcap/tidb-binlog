@@ -14,18 +14,19 @@
 package util
 
 import (
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 )
 
 var empty = ""
-var _ toml.TextMarshaler = Duration(empty)
-var _ toml.TextUnmarshaler = (*Duration)(&empty)
+
+var _ encoding.TextMarshaler = Duration(empty)
+var _ encoding.TextUnmarshaler = (*Duration)(&empty)
 var _ json.Marshaler = Duration(empty)
 var _ json.Unmarshaler = (*Duration)(&empty)
 
