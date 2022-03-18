@@ -32,6 +32,8 @@ import (
 )
 
 func Test(t *testing.T) {
+	integration.BeforeTest(t)
+
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
