@@ -159,6 +159,11 @@ func (cs *UtilSuite) TestRemovePlacementSpecialComments(c *check.C) {
 			sql:    "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ /*T![placement] PLACEMENT POLICY = `p1` */",
 			result: "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ ",
 		},
+		{
+			// no placement sql should not change
+			sql:    "create table t1(id int)",
+			result: "create table t1(id int)",
+		},
 	}
 
 	for _, ca := range cases {
