@@ -26,14 +26,15 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/check"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/samuel/go-zookeeper/zk"
+	"go.etcd.io/etcd/tests/v3/integration"
+
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/pkg/encrypt"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pkgzk "github.com/pingcap/tidb-binlog/pkg/zk"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/samuel/go-zookeeper/zk"
-	"go.etcd.io/etcd/integration"
 )
 
 var testEtcdCluster *integration.ClusterV3
