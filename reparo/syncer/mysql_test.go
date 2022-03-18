@@ -37,7 +37,7 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("CREATE DATABASE `test`").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	mock.ExpectQuery("SELECT column_name, extra FROM information_schema.columns").WithArgs("test", "t1").WillReturnRows(sqlmock.NewRows([]string{"column_name", "extra"}).AddRow("a", "").AddRow("b", "").AddRow("c", ""))
