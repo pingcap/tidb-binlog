@@ -457,10 +457,24 @@ func removeDDLPlacementOptions(sql string) (string, error) {
 	}
 
 	var sb strings.Builder
-	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags|format.RestoreTiDBSpecialComment|format.SkipPlacementRuleForRestore, &sb)
+
+	restoreFlags := format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment
+	restoreCtx := format.NewRestoreCtx(restoreFlags, &sb)
 	if err = stmt.Restore(restoreCtx); err != nil {
 		return "", err
 	}
+	restoreSQL := sb.String()
 
-	return sb.String(), nil
+	sb.Reset()
+	restoreCtx = format.NewRestoreCtx(restoreFlags|format.SkipPlacementRuleForRestore, &sb)
+	if err = stmt.Restore(restoreCtx); err != nil {
+		return "", err
+	}
+	withoutPlacementSQL := sb.String()
+
+	if restoreSQL == withoutPlacementSQL {
+		return sql, nil
+	}
+
+	return withoutPlacementSQL, nil
 }
