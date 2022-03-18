@@ -14,9 +14,11 @@
 package drainer
 
 import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+
 	"github.com/pingcap/tidb-binlog/drainer/sync"
 	bf "github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -127,8 +129,8 @@ var registry = prometheus.NewRegistry()
 func init() {
 	sync.QueueSizeGauge = queueSizeGauge
 
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewGoCollector())
 	registry.MustRegister(pumpPositionGauge)
 	registry.MustRegister(ddlJobsCounter)
 	registry.MustRegister(errorCount)
