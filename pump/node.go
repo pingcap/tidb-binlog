@@ -26,16 +26,18 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	"github.com/pingcap/tidb-binlog/pkg/file"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tidb-binlog/pkg/file"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const (
@@ -174,11 +176,13 @@ func (p *pumpNode) Notify(ctx context.Context) error {
 		grpc.WithBlock(),
 	}
 
+	var tlsCredential credentials.TransportCredentials
 	if p.tls != nil {
-		dialerOpts = append(dialerOpts, grpc.WithTransportCredentials(credentials.NewTLS(p.tls)))
+		tlsCredential = credentials.NewTLS(p.tls)
 	} else {
-		dialerOpts = append(dialerOpts, grpc.WithInsecure())
+		tlsCredential = insecure.NewCredentials()
 	}
+	dialerOpts = append(dialerOpts, grpc.WithTransportCredentials(tlsCredential))
 
 	for _, c := range drainers {
 		if c.State != node.Online {
