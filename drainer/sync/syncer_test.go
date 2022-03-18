@@ -106,7 +106,7 @@ func (s *syncerSuite) TestGetFromSuccesses(c *check.C) {
 	// set up mysql db mock expect
 	s.mysqlMock.ExpectBegin()
 	s.mysqlMock.ExpectExec("use .*").WillReturnResult(sqlmock.NewResult(0, 0))
-	s.mysqlMock.ExpectExec("create table .*").WillReturnResult(sqlmock.NewResult(0, 0))
+	s.mysqlMock.ExpectExec("CREATE TABLE .*").WillReturnResult(sqlmock.NewResult(0, 0))
 	s.mysqlMock.ExpectCommit()
 
 	// set up kafka producer mock expect
