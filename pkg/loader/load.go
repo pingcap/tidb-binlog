@@ -420,7 +420,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 
 		sql, err := removeDDLPlacementOptions(ddl.SQL)
 		if err != nil {
-			log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
+			log.Error("process sql failed", zap.String("sql", sql), zap.Error(err))
 			sql = ddl.SQL
 		}
 
