@@ -136,44 +136,34 @@ func (cs *UtilSuite) TestRemovePlacementSpecialComments(c *check.C) {
 		errMsg string
 	}{
 		{
-			sql:    "create table t1(a int) /*T![placement] PLACEMENT POLICY=`p1` */",
-			result: "create table t1(a int) ",
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */",
+			result: "CREATE TABLE `t1` (`a` INT) ",
 		},
 		{
-			sql:    "create table t1(a int) /*T![placement] PLACEMENT POLICY=`p1` */ partition by range(a) (PARTITION `p0` VALUES LESS THAN (100) /*T![placement] PLACEMENT POLICY=`p3` */)",
-			result: "create table t1(a int)  partition by range(a) (PARTITION `p0` VALUES LESS THAN (100) )",
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */ partition by range(a) (PARTITION `p0` VALUES LESS THAN (100) /*T![placement] PLACEMENT POLICY=`p3` */)",
+			result: "CREATE TABLE `t1` (`a` INT)  PARTITION BY RANGE (`a`) (PARTITION `p0` VALUES LESS THAN (100) )",
 		},
 		{
-			sql:    "create table t1(a int) /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS=1 */",
-			result: "create table t1(a int)  /*T! SHARD_ROW_ID_BITS=1 */",
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS = 1 */",
+			result: "CREATE TABLE `t1` (`a` INT)  /*T! SHARD_ROW_ID_BITS = 1 */",
 		},
 		{
-			sql:    "alter table t1 /*T![placement] PLACEMENT POLICY=`p1` */ charset utf8mb4",
-			result: "alter table t1  charset utf8mb4",
+			sql:    "ALTER TABLE `t1` /*T![placement] PLACEMENT POLICY=`p1` */ DEFAULT CHARACTER SET = UTF8MB4",
+			result: "ALTER TABLE `t1`  DEFAULT CHARACTER SET = UTF8MB4",
 		},
 		{
-			sql:    "alter table t1 /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS=1 */",
-			result: "alter table t1  /*T! SHARD_ROW_ID_BITS=1 */",
+			sql:    "ALTER TABLE `t1` /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS = 1 */",
+			result: "ALTER TABLE `t1`  /*T! SHARD_ROW_ID_BITS = 1 */",
 		},
 		{
-			sql:    "alter table t1 /*T! SHARD_ROW_ID_BITS=1 */ /*T![placement] PLACEMENT POLICY=`p1` */",
-			result: "alter table t1 /*T! SHARD_ROW_ID_BITS=1 */ ",
-		},
-		{
-			sql:    "create table t1(a int) /*T![placement] PLACEMENT POLICY=`p1` *",
-			errMsg: "invalid sql: create table t1(a int) /*T![placement] PLACEMENT POLICY=`p1` *",
+			sql:    "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ /*T![placement] PLACEMENT POLICY = `p1` */",
+			result: "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ ",
 		},
 	}
 
 	for _, ca := range cases {
 		sql, err := removeDDLPlacementOptions(ca.sql)
-		if ca.errMsg != "" {
-			c.Assert(err, check.NotNil)
-			c.Assert(err.Error(), check.Equals, ca.errMsg)
-		} else {
-			c.Assert(err, check.IsNil)
-			c.Assert(sql, check.Equals, ca.result)
-		}
-
+		c.Assert(err, check.IsNil)
+		c.Assert(sql, check.Equals, ca.result)
 	}
 }

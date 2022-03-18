@@ -27,9 +27,10 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/errno"
-
 	"github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
 )
 
 var (
@@ -450,24 +451,16 @@ func getOracleUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexIn
 }
 
 func removeDDLPlacementOptions(sql string) (string, error) {
-	for {
-		start := strings.Index(sql, "/*T![placement]")
-		if start < 0 {
-			break
-		}
-
-		for i := start + 1; i < len(sql); i++ {
-			if i == len(sql)-1 {
-				return "", errors.New("invalid sql: " + sql)
-			}
-
-			if sql[i] == '*' && sql[i+1] == '/' {
-				end := i + 2
-				sql = sql[:start] + sql[end:]
-				break
-			}
-		}
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		return "", err
 	}
 
-	return sql, nil
+	var sb strings.Builder
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags|format.RestoreTiDBSpecialComment|format.SkipPlacementRuleForRestore, &sb)
+	if err = stmt.Restore(restoreCtx); err != nil {
+		return "", err
+	}
+
+	return sb.String(), nil
 }
