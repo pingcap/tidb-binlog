@@ -39,9 +39,8 @@ type KafkaSyncer struct {
 	producer sarama.AsyncProducer
 	topic    string
 
-	toBeAckCommitTSMu      sync.Mutex
-	toBeAckCommitTS        map[int64]int
-	toBeAckTotalSize       int
+	ackWindowMu            sync.Mutex
+	ackWindow              *ackWindow
 	resumeProduce          chan struct{}
 	resumeProduceCloseOnce sync.Once
 
@@ -65,11 +64,11 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 	}
 
 	executor := &KafkaSyncer{
-		addr:            strings.Split(cfg.KafkaAddrs, ","),
-		topic:           topic,
-		toBeAckCommitTS: make(map[int64]int),
-		shutdown:        make(chan struct{}),
-		baseSyncer:      newBaseSyncer(tableInfoGetter),
+		addr:       strings.Split(cfg.KafkaAddrs, ","),
+		topic:      topic,
+		ackWindow:  newAckWindow(),
+		shutdown:   make(chan struct{}),
+		baseSyncer: newBaseSyncer(tableInfoGetter),
 	}
 
 	config, err := util.NewSaramaConfig(cfg.KafkaVersion, "kafka.")
@@ -155,18 +154,17 @@ func (p *KafkaSyncer) saveBinlog(binlog *obinlog.Binlog, item *Item) error {
 
 	waitResume := false
 
-	p.toBeAckCommitTSMu.Lock()
-	if len(p.toBeAckCommitTS) == 0 {
+	p.ackWindowMu.Lock()
+	if p.ackWindow.unackedCount == 0 {
 		p.lastSuccessTime = time.Now()
 	}
-	p.toBeAckCommitTS[binlog.CommitTs] = len(data)
-	p.toBeAckTotalSize += len(data)
-	if p.toBeAckTotalSize >= stallWriteSize && len(p.toBeAckCommitTS) > 1 {
+	p.ackWindow.appendTS(binlog.CommitTs, len(data))
+	if p.ackWindow.unackedSize >= stallWriteSize && p.ackWindow.unackedCount > 1 {
 		p.resumeProduce = make(chan struct{})
 		p.resumeProduceCloseOnce = sync.Once{}
 		waitResume = true
 	}
-	p.toBeAckCommitTSMu.Unlock()
+	p.ackWindowMu.Unlock()
 
 	if waitResume {
 		select {
@@ -192,24 +190,35 @@ func (p *KafkaSyncer) run() {
 	go func() {
 		defer wg.Done()
 
+		var readyItems []*Item
 		for msg := range p.producer.Successes() {
 			item := msg.Metadata.(*Item)
 			commitTs := item.Binlog.GetCommitTs()
 			log.Debug("get success msg from producer", zap.Int64("ts", commitTs))
 
-			p.toBeAckCommitTSMu.Lock()
+			p.ackWindowMu.Lock()
 			p.lastSuccessTime = time.Now()
-			size := p.toBeAckCommitTS[commitTs]
-			p.toBeAckTotalSize -= size
-			if p.toBeAckTotalSize < stallWriteSize && p.resumeProduce != nil {
+			p.ackWindow.handleSuccess(item)
+			if p.ackWindow.unackedSize < stallWriteSize && p.resumeProduce != nil {
 				p.resumeProduceCloseOnce.Do(func() {
 					close(p.resumeProduce)
 				})
 			}
-			delete(p.toBeAckCommitTS, commitTs)
-			p.toBeAckCommitTSMu.Unlock()
+			for {
+				item, ok := p.ackWindow.getReadyItem()
+				if ok {
+					readyItems = append(readyItems, item)
+				} else {
+					break
+				}
+			}
+			p.ackWindowMu.Unlock()
 
-			p.success <- item
+			for i, item := range readyItems {
+				p.success <- item
+				readyItems[i] = nil // GC
+			}
+			readyItems = readyItems[:0]
 		}
 		close(p.success)
 	}()
@@ -230,15 +239,15 @@ func (p *KafkaSyncer) run() {
 	for {
 		select {
 		case <-checkTick.C:
-			p.toBeAckCommitTSMu.Lock()
-			if len(p.toBeAckCommitTS) > 0 && time.Since(p.lastSuccessTime) > maxWaitTimeToSendMSG {
+			p.ackWindowMu.Lock()
+			if p.ackWindow.unackedCount > 0 && time.Since(p.lastSuccessTime) > maxWaitTimeToSendMSG {
 				log.Debug("fail to push to kafka")
 				err := errors.Errorf("fail to push msg to kafka after %v, check if kafka is up and working", maxWaitTimeToSendMSG)
 				p.setErr(err)
-				p.toBeAckCommitTSMu.Unlock()
+				p.ackWindowMu.Unlock()
 				return
 			}
-			p.toBeAckCommitTSMu.Unlock()
+			p.ackWindowMu.Unlock()
 		case <-p.shutdown:
 			err := p.producer.Close()
 			p.setErr(err)
@@ -247,4 +256,64 @@ func (p *KafkaSyncer) run() {
 			return
 		}
 	}
+}
+
+type ackItem struct {
+	ts   int64
+	item *Item
+	size int
+}
+
+type ackWindow struct {
+	win          []*ackItem
+	items        map[int64]*ackItem
+	unackedCount int
+	unackedSize  int
+}
+
+func newAckWindow() *ackWindow {
+	return &ackWindow{
+		items: make(map[int64]*ackItem),
+	}
+}
+
+func (a *ackWindow) appendTS(ts int64, size int) {
+	if len(a.win) > 0 && a.win[len(a.win)-1].ts >= ts {
+		log.Warn(
+			"binlog commit ts is out of order, skip it",
+			zap.Int64("last-commit-ts", a.win[len(a.win)-1].ts),
+			zap.Int64("current-commit-ts", a.win[len(a.win)-1].ts),
+		)
+		return
+	}
+	item := &ackItem{
+		ts:   ts,
+		size: size,
+	}
+	a.win = append(a.win, item)
+	a.items[ts] = item
+	a.unackedCount++
+	a.unackedSize += size
+}
+
+func (a *ackWindow) handleSuccess(item *Item) {
+	ts := item.Binlog.GetCommitTs()
+	if v, ok := a.items[ts]; ok {
+		v.item = item
+		a.unackedCount--
+		a.unackedSize -= v.size
+	} else {
+		log.Warn("get unknown success msg from producer, skip it", zap.Int64("ts", ts))
+	}
+}
+
+func (a *ackWindow) getReadyItem() (*Item, bool) {
+	if len(a.win) == 0 || a.win[0].item == nil {
+		return nil, false
+	}
+	delete(a.items, a.win[0].ts)
+	item := a.win[0].item
+	a.win[0] = nil // GC
+	a.win = a.win[1:]
+	return item, true
 }
