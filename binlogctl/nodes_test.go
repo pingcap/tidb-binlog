@@ -25,12 +25,15 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"go.etcd.io/etcd/tests/v3/integration"
+
 	"github.com/pingcap/tidb-binlog/pkg/etcd"
 	"github.com/pingcap/tidb-binlog/pkg/node"
-	"go.etcd.io/etcd/integration"
 )
 
 func Test(t *testing.T) {
+	integration.BeforeTest(t)
+
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
