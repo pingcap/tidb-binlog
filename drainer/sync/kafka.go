@@ -264,6 +264,11 @@ type ackItem struct {
 	size int
 }
 
+// ackWindow is used to handle success message from sarama.AsyncProducer in order.
+//
+// The messages from sarama.AsyncProducer.Success() may not stay in the same order as the messages we send to
+// sarama.AsyncProducer.Input(). Here we use a window sliding window to record the order in which messages are sent.
+// And delivery success messages strictly in this order.
 type ackWindow struct {
 	win          []*ackItem
 	items        map[int64]*ackItem
@@ -277,6 +282,7 @@ func newAckWindow() *ackWindow {
 	}
 }
 
+// appendTS appends the new binlog commit ts and size before it is sent to sarama.AsyncProducer.
 func (a *ackWindow) appendTS(ts int64, size int) {
 	if len(a.win) > 0 && a.win[len(a.win)-1].ts >= ts {
 		log.Warn(
@@ -296,6 +302,7 @@ func (a *ackWindow) appendTS(ts int64, size int) {
 	a.unackedSize += size
 }
 
+// handleSuccess handles the success item from sarama.AsyncProducer.Success().
 func (a *ackWindow) handleSuccess(item *Item) {
 	ts := item.Binlog.GetCommitTs()
 	if v, ok := a.items[ts]; ok {
@@ -307,6 +314,8 @@ func (a *ackWindow) handleSuccess(item *Item) {
 	}
 }
 
+// getReadyItem checks whether the first ackItem is acked. If it is acked, pop it from the window,
+// and then return the *Item its holding and true. Otherwise, return nil and false.
 func (a *ackWindow) getReadyItem() (*Item, bool) {
 	if len(a.win) == 0 || a.win[0].item == nil {
 		return nil, false
