@@ -50,6 +50,7 @@ func (s *signalSuite) TestShouldCallFunc(c *C) {
 func (s *signalSuite) TestShouldDumpStack(c *C) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
+	log.SetFlags(0)
 	defer func() {
 		log.SetOutput(os.Stderr)
 	}()

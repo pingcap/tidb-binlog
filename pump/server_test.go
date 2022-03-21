@@ -27,24 +27,27 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/security"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tipb/go-binlog"
 	"github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/txnkv/txnlock"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/integration"
+	"go.etcd.io/etcd/tests/v3/integration"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/security"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 )
 
 var testEtcdCluster *integration.ClusterV3
 
 func TestPump(t *testing.T) {
+	integration.BeforeTest(t)
+
 	testEtcdCluster = integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
 	defer testEtcdCluster.Terminate(t)
 
