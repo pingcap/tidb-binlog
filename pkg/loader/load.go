@@ -418,9 +418,20 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 			}
 		}
 
-		if _, err = tx.Exec(ddl.SQL); err != nil {
+		sql, err := removeDDLPlacementOptions(ddl.SQL)
+		if err != nil {
+			log.Error("process sql failed", zap.String("sql", sql), zap.Error(err))
+			sql = ddl.SQL
+		}
+
+		if sql == "" {
+			log.Info("skip ddl with all placement options", zap.String("sql", ddl.SQL))
+			return tx.Commit()
+		}
+
+		if _, err = tx.Exec(sql); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Rollback failed", zap.String("sql", ddl.SQL), zap.Error(rbErr))
+				log.Error("Rollback failed", zap.String("sql", sql), zap.Error(rbErr))
 			}
 			return err
 		}
@@ -429,7 +440,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 			return err
 		}
 
-		log.Info("exec ddl success", zap.String("sql", ddl.SQL))
+		log.Info("exec ddl success", zap.String("sql", sql))
 		return nil
 	})
 

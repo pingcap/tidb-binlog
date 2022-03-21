@@ -128,3 +128,47 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 	})
 
 }
+
+func (cs *UtilSuite) TestRemovePlacementSpecialComments(c *check.C) {
+	cases := []struct {
+		sql    string
+		result string
+		errMsg string
+	}{
+		{
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */",
+			result: "CREATE TABLE `t1` (`a` INT) ",
+		},
+		{
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */ partition by range(a) (PARTITION `p0` VALUES LESS THAN (100) /*T![placement] PLACEMENT POLICY=`p3` */)",
+			result: "CREATE TABLE `t1` (`a` INT)  PARTITION BY RANGE (`a`) (PARTITION `p0` VALUES LESS THAN (100) )",
+		},
+		{
+			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS = 1 */",
+			result: "CREATE TABLE `t1` (`a` INT)  /*T! SHARD_ROW_ID_BITS = 1 */",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T![placement] PLACEMENT POLICY=`p1` */ DEFAULT CHARACTER SET = UTF8MB4",
+			result: "ALTER TABLE `t1`  DEFAULT CHARACTER SET = UTF8MB4",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T![placement] PLACEMENT POLICY=`p1` */ /*T! SHARD_ROW_ID_BITS = 1 */",
+			result: "ALTER TABLE `t1`  /*T! SHARD_ROW_ID_BITS = 1 */",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ /*T![placement] PLACEMENT POLICY = `p1` */",
+			result: "ALTER TABLE `t1` /*T! SHARD_ROW_ID_BITS = 1 */ ",
+		},
+		{
+			// no placement sql should not change
+			sql:    "create table t1(id int)",
+			result: "create table t1(id int)",
+		},
+	}
+
+	for _, ca := range cases {
+		sql, err := removeDDLPlacementOptions(ca.sql)
+		c.Assert(err, check.IsNil)
+		c.Assert(sql, check.Equals, ca.result)
+	}
+}
