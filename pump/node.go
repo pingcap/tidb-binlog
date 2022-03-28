@@ -214,7 +214,8 @@ func notifyDrainer(ctx context.Context, c *node.Status, dialerOpts []grpc.DialOp
 
 	err = util.RetryContext(ctx, 3, time.Second, 2, func(ictx context.Context) error {
 		log.Info("Notifying drainer", zap.String("addr", c.Addr))
-		_, err := drainer.Notify(ictx, nil)
+		in := &pb.NotifyReq{}
+		_, err := drainer.Notify(ictx, in)
 		return err
 	})
 	if err != nil {

@@ -542,7 +542,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txn)
 	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
-	inputTxnInTime(c, input, txn, 10*time.Microsecond)
+	inputTxnInTime(c, input, txn, time.Millisecond)
 	// close txnManager and output should be closed when txnManager is closed
 	txnManager.Close()
 	outputClose := make(chan struct{})
