@@ -124,11 +124,17 @@ EOF
 
     # wait until PD is online...
 	# use wget, on CI curl's version is too old: curl: (58) unable to load client key: -8178 (SEC_ERROR_BAD_KEY)))))
+    i=0
     while ! wget -q -O - \
     --ca-certificate="$OUT_DIR/cert/ca.pem" \
     --certificate="$OUT_DIR/cert/client.pem" \
     --private-key="$OUT_DIR/cert/client.key" \
     https://127.0.0.1:2379/pd/api/v1/version; do
+        i=$((i+1))
+        if [ "$i" -gt 30 ]; then
+            echo 'Failed to start upstream PD'
+            exit 1
+        fi
         sleep 1
     done
 
@@ -140,7 +146,13 @@ EOF
         --data-dir "$OUT_DIR/down_pd" &
 
     # wait until downstream PD is online...
+    i=0
     while ! curl -o /dev/null -sf http://127.0.0.1:2381/pd/api/v1/version; do
+        i=$((i+1))
+        if [ "$i" -gt 30 ]; then
+            echo 'Failed to start downstream PD'
+            exit 1
+        fi
         sleep 1
     done
 
@@ -229,11 +241,17 @@ EOF
     echo "Starting Drainer..."
     run_drainer -L debug &
     echo "Verifying drainer is started..."
+    i=0
     while ! wget -q -O - \
     --ca-certificate="$OUT_DIR/cert/ca.pem" \
     --certificate="$OUT_DIR/cert/client.pem" \
     --private-key="$OUT_DIR/cert/client.key" \
     https://127.0.0.1:8249/status; do
+        i=$((i+1))
+        if [ "$i" -gt 30 ]; then
+            echo 'Failed to start Drainer'
+            exit 1
+        fi
         sleep 1
     done
 }
