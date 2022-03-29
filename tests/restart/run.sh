@@ -24,8 +24,11 @@ sleep 5
 sleep 5
 
 # restart pumps
-run_pump 8250 &
 run_pump 8251 &
+# make sure there is always one pump alive
+sleep 2
+check_status pumps "pump:8251" online
+run_pump 8250 &
 
 sleep 5
 
