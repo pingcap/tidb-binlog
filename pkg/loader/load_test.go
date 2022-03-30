@@ -347,12 +347,12 @@ func (s *execDDLSuite) TestShouldExecInTransaction(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE `t` \\(`id` INT\\)").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
-	ddl := DDL{SQL: "CREATE TABLE"}
+	ddl := DDL{SQL: "CREATE TABLE `t` (`id` INT)"}
 	err = loader.execDDL(&ddl)
 	c.Assert(err, check.IsNil)
 }
@@ -386,12 +386,12 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("use `test_db`").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("CREATE TABLE").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE `t` \\(`id` INT\\)").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
 
-	ddl := DDL{SQL: "CREATE TABLE", Database: "test_db"}
+	ddl := DDL{SQL: "CREATE TABLE `t` (`id` INT)", Database: "test_db"}
 	err = loader.execDDL(&ddl)
 	c.Assert(err, check.IsNil)
 }
@@ -542,7 +542,7 @@ func (s *txnManagerSuite) TestRunTxnManager(c *check.C) {
 	txnManager.pop(t)
 	c.Assert(t, check.DeepEquals, txn)
 	// Now txn won't be blocked but txnManager should be blocked at cond.Wait()
-	inputTxnInTime(c, input, txn, 10*time.Microsecond)
+	inputTxnInTime(c, input, txn, time.Millisecond)
 	// close txnManager and output should be closed when txnManager is closed
 	txnManager.Close()
 	outputClose := make(chan struct{})

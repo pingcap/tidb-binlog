@@ -27,15 +27,17 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/errno"
-
 	"github.com/pingcap/tidb-binlog/pkg/sql"
+	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/format"
 )
 
 var (
 	// ErrTableNotExist means the table not exist.
-	ErrTableNotExist   = errors.New("table not exist")
-	defaultTiDBTxnMode = "optimistic"
+	ErrTableNotExist         = errors.New("table not exist")
+	defaultTiDBTxnMode       = "optimistic"
+	defaultTiDBPlacementMode = "ignore"
 )
 
 const (
@@ -133,6 +135,8 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 		// default is false, must enable for insert value explicit, or can't replicate.
 		"allow_auto_random_explicit_insert": "1",
 		"tidb_txn_mode":                     defaultTiDBTxnMode,
+		// ignore all placement settings
+		"tidb_placement_mode": defaultTiDBPlacementMode,
 	}
 	var tryDB *gosql.DB
 	tryDB, err = gosql.Open("mysql", dsn)
@@ -164,6 +168,9 @@ func createDBWitSessions(dsn string, params map[string]string) (db *gosql.DB, er
 	}
 
 	for k, v := range support {
+		// The value should be quoted and then query escaped
+		// see: https://github.com/go-sql-driver/mysql#system-variables
+		v = fmt.Sprintf("'%s'", v)
 		dsn += fmt.Sprintf("&%s=%s", k, url.QueryEscape(v))
 	}
 
@@ -441,4 +448,33 @@ func getOracleUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexIn
 	}
 
 	return
+}
+
+func removeDDLPlacementOptions(sql string) (string, error) {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+
+	restoreFlags := format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment
+	restoreCtx := format.NewRestoreCtx(restoreFlags, &sb)
+	if err = stmt.Restore(restoreCtx); err != nil {
+		return "", err
+	}
+	restoreSQL := sb.String()
+
+	sb.Reset()
+	restoreCtx = format.NewRestoreCtx(restoreFlags|format.SkipPlacementRuleForRestore, &sb)
+	if err = stmt.Restore(restoreCtx); err != nil {
+		return "", err
+	}
+	withoutPlacementSQL := sb.String()
+
+	if restoreSQL == withoutPlacementSQL {
+		return sql, nil
+	}
+
+	return withoutPlacementSQL, nil
 }

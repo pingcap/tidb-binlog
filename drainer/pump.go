@@ -22,8 +22,6 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pump"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -31,7 +29,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump"
 )
 
 const (
@@ -209,11 +211,13 @@ func (p *Pump) createPullBinlogsClient(ctx context.Context, last int64) error {
 	}
 
 	dialOpts := []grpc.DialOption{grpc.WithDefaultCallOptions(callOpts...)}
+	var tlsCredential credentials.TransportCredentials
 	if p.tlsConfig != nil {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(p.tlsConfig)))
+		tlsCredential = credentials.NewTLS(p.tlsConfig)
 	} else {
-		dialOpts = append(dialOpts, grpc.WithInsecure())
+		tlsCredential = insecure.NewCredentials()
 	}
+	dialOpts = append(dialOpts, grpc.WithTransportCredentials(tlsCredential))
 
 	conn, err := grpc.Dial(p.addr, dialOpts...)
 	if err != nil {
