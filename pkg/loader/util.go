@@ -230,6 +230,7 @@ func CreateOracleDB(user string, password string, host string, port int, service
 			Timezone:      loc,
 		},
 	}
+	oraDSN.OnInitStmts = []string{"ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD HH24.MI.SS' NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24.MI.SS.FF' NLS_TIMESTAMP_TZ_FORMAT='YYYY-MM-DD HH24.MI.SS.FF TZR' NLS_TIME_FORMAT='HH24.MI.SS.FF' NLS_TIME_TZ_FORMAT='HH24.MI.SS.FF TZR'"}
 	sqlDB := gosql.OpenDB(godror.NewConnector(oraDSN))
 	err = sqlDB.Ping()
 	if err != nil {
@@ -250,13 +251,17 @@ func escapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
 
-func holderString(n int) string {
+func holderString(n int, destDBType string) string {
 	builder := new(strings.Builder)
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			builder.WriteString(",")
 		}
-		builder.WriteString("?")
+		if destDBType == "oracle" {
+			builder.WriteString(":" + strconv.Itoa(i+1))
+		} else {
+			builder.WriteString("?")
+		}
 	}
 	return builder.String()
 }
@@ -277,13 +282,17 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 	return
 }
 
-func buildColumnList(names []string) string {
+func buildColumnList(names []string, destDBType string) string {
 	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(quoteName(name))
+		if destDBType == "oracle" {
+			b.WriteString(escapeName(name))
+		} else {
+			b.WriteString(quoteName(name))
+		}
 
 	}
 

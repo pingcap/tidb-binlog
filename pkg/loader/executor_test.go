@@ -17,11 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"sync/atomic"
+
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"regexp"
-	"sync/atomic"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
@@ -247,6 +248,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: "oracle",
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 	insertSQL := "INSERT INTO unicorn.users.*"
@@ -319,6 +321,7 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: "oracle",
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 	insertSQL := "INSERT INTO unicorn.users.*"
@@ -378,6 +381,7 @@ func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: "oracle",
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 

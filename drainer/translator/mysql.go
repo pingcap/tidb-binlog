@@ -31,6 +31,8 @@ import (
 
 const implicitColID = -1
 
+var destDBType = "tidb"
+
 func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
@@ -150,10 +152,11 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 					dml := &loader.DML{
-						Tp:       loader.InsertDMLType,
-						Database: schema,
-						Table:    table,
-						Values:   make(map[string]interface{}),
+						Tp:         loader.InsertDMLType,
+						Database:   schema,
+						Table:      table,
+						Values:     make(map[string]interface{}),
+						DestDBType: destDBType,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -166,11 +169,12 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 					dml := &loader.DML{
-						Tp:        loader.UpdateDMLType,
-						Database:  schema,
-						Table:     table,
-						Values:    make(map[string]interface{}),
-						OldValues: make(map[string]interface{}),
+						Tp:         loader.UpdateDMLType,
+						Database:   schema,
+						Table:      table,
+						Values:     make(map[string]interface{}),
+						OldValues:  make(map[string]interface{}),
+						DestDBType: destDBType,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -185,10 +189,11 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 					dml := &loader.DML{
-						Tp:       loader.DeleteDMLType,
-						Database: schema,
-						Table:    table,
-						Values:   make(map[string]interface{}),
+						Tp:         loader.DeleteDMLType,
+						Database:   schema,
+						Table:      table,
+						Values:     make(map[string]interface{}),
+						DestDBType: destDBType,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -251,7 +256,13 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	switch ft.Tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeNewDecimal, mysql.TypeJSON:
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeNewDecimal, mysql.TypeJSON:
+		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
+	case mysql.TypeDuration:
+		//only for oracle db
+		if destDBType == "oracle" {
+			return data, errors.New("unsupport column type[time]")
+		}
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
 		data = types.NewDatum(data.GetMysqlEnum().Value)
@@ -264,6 +275,14 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 			return types.Datum{}, err
 		}
 		data = types.NewUintDatum(val)
+	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		//only for oracle db
+		if destDBType == "oracle" {
+			stype := types.TypeToStr(ft.Tp, ft.Charset)
+			if stype == "blob" || stype == "tinyblob" || stype == "mediumblob" || stype == "longblob" {
+				data = types.NewBytesDatum(data.GetBytes())
+			}
+		}
 	}
 
 	return data, nil

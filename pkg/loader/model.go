@@ -19,10 +19,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/model"
 	"go.uber.org/zap"
 )
 
@@ -50,6 +48,8 @@ type DML struct {
 	info *tableInfo
 
 	UpColumnsInfoMap map[string]*model.ColumnInfo
+
+	DestDBType string
 }
 
 // DDL holds the ddl info
@@ -167,92 +167,73 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 
 // TableName returns the fully qualified name of the DML's table
 func (dml *DML) TableName() string {
+	if dml.DestDBType == "oracle" {
+		return fmt.Sprintf("%s.%s", dml.Database, dml.Table)
+	}
 	return quoteSchema(dml.Database, dml.Table)
-}
-
-// OracleTableName returns the fully qualified name of the DML's table in oracle db
-func (dml *DML) OracleTableName() string {
-	return fmt.Sprintf("%s.%s", dml.Database, dml.Table)
 }
 
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
-
+	colName := ""
+	oracleHolderPos := 1
 	for _, name := range dml.columnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
 		arg := dml.Values[name]
-		fmt.Fprintf(builder, "%s = ?", quoteName(name))
+		if dml.DestDBType == "oracle" {
+			colName = escapeName(name)
+		} else {
+			colName = quoteName(name)
+		}
+		if dml.DestDBType == "oracle" {
+			fmt.Fprintf(builder, "%s = :%d", colName, oracleHolderPos)
+			oracleHolderPos++
+		} else {
+			fmt.Fprintf(builder, "%s = ?", colName)
+		}
 		args = append(args, arg)
 	}
 
 	builder.WriteString(" WHERE ")
 
-	whereArgs := dml.buildWhere(builder)
+	whereArgs := dml.buildWhere(builder, oracleHolderPos)
 	args = append(args, whereArgs...)
-
-	builder.WriteString(" LIMIT 1")
-	sql = builder.String()
-	return
-}
-
-func (dml *DML) oracleUpdateSQL() (sql string) {
-	builder := new(strings.Builder)
-
-	fmt.Fprintf(builder, "UPDATE %s SET ", dml.OracleTableName())
-
-	for i, name := range dml.columnNames() {
-		if i > 0 {
-			builder.WriteByte(',')
-		}
-		value := dml.Values[name]
-		if value == nil {
-			fmt.Fprintf(builder, "%s = NULL", escapeName(name))
-		} else {
-			fmt.Fprintf(builder, "%s = %s", escapeName(name), genOracleValue(dml.UpColumnsInfoMap[name], value))
-		}
+	if dml.DestDBType == "oracle" {
+		builder.WriteString(" AND rownum <=1")
+	} else {
+		builder.WriteString(" LIMIT 1")
 	}
-
-	builder.WriteString(" WHERE ")
-
-	dml.buildOracleWhere(builder)
-	builder.WriteString(" AND rownum <=1")
-
 	sql = builder.String()
 	return
 }
 
-func (dml *DML) buildWhere(builder *strings.Builder) (args []interface{}) {
+func (dml *DML) buildWhere(builder *strings.Builder, oracleHolderPos int) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
-	for i := 0; i < len(wnames); i++ {
+	for i, pOracleHolderPos := 0, oracleHolderPos; i < len(wnames); i++ {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
+			if dml.DestDBType == "oracle" {
+				builder.WriteString(escapeName(wnames[i]) + " IS NULL")
+			} else {
+				builder.WriteString(quoteName(wnames[i]) + " IS NULL")
+			}
 		} else {
-			builder.WriteString(quoteName(wnames[i]) + " = ?")
+			if dml.DestDBType == "oracle" {
+				builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
+				pOracleHolderPos++
+			} else {
+				builder.WriteString(quoteName(wnames[i]) + " = ?")
+			}
 			args = append(args, wargs[i])
 		}
 	}
 	return
-}
-
-func (dml *DML) buildOracleWhere(builder *strings.Builder) {
-	colNames, colValues := dml.whereSlice()
-	for i := 0; i < len(colNames); i++ {
-		if i > 0 {
-			builder.WriteString(" AND ")
-		}
-		if colValues[i] == nil {
-			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
-		} else {
-			builder.WriteString(fmt.Sprintf("%s = %s", escapeName(colNames[i]), genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
-		}
-	}
 }
 
 func (dml *DML) whereValues(names []string) (values []interface{}) {
@@ -293,26 +274,21 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
-	args = dml.buildWhere(builder)
-	builder.WriteString(" LIMIT 1")
+	args = dml.buildWhere(builder, 1)
+
+	if dml.DestDBType == "oracle" {
+		builder.WriteString(" AND rownum <=1")
+	} else {
+		builder.WriteString(" LIMIT 1")
+	}
 
 	sql = builder.String()
 	return
 }
 
-func (dml *DML) oracleDeleteSQL() (sql string) {
+func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
-
-	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
-	dml.buildOracleWhere(builder)
-	builder.WriteString(" AND rownum <=1")
-	sql = builder.String()
-	return
-}
-
-func (dml *DML) oracleDeleteNewValueSQL() (sql string) {
-	builder := new(strings.Builder)
-	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.OracleTableName())
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
 
 	valueMap := dml.Values
 	colNames := make([]string, 0)
@@ -343,14 +319,16 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string) {
 		}
 	}
 
-	for i := 0; i < len(colNames); i++ {
+	for i, oracleHolderPos := 0, 1; i < len(colNames); i++ {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
 		if colValues[i] == nil {
 			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = %s", colNames[i], genOracleValue(dml.UpColumnsInfoMap[colNames[i]], colValues[i])))
+			builder.WriteString(fmt.Sprintf("%s = :%d", colNames[i], oracleHolderPos))
+			oracleHolderPos++
+			args = append(args, colValues[i])
 		}
 	}
 	builder.WriteString(" AND rownum <=1")
@@ -371,7 +349,7 @@ func (dml *DML) columnNames() []string {
 
 func (dml *DML) replaceSQL() (sql string, args []interface{}) {
 	names := dml.columnNames()
-	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names), holderString(len(names)))
+	sql = fmt.Sprintf("REPLACE INTO %s(%s) VALUES(%s)", dml.TableName(), buildColumnList(names, dml.DestDBType), holderString(len(names), dml.DestDBType))
 	for _, name := range names {
 		v := dml.Values[name]
 		args = append(args, v)
@@ -385,23 +363,6 @@ func (dml *DML) insertSQL() (sql string, args []interface{}) {
 	return
 }
 
-func (dml *DML) oracleInsertSQL() (sql string) {
-	builder := new(strings.Builder)
-	columns, values := dml.buildOracleInsertColAndValue()
-	fmt.Fprintf(builder, "INSERT INTO %s (%s) VALUES (%s)", dml.OracleTableName(), columns, values)
-	sql = builder.String()
-	return
-}
-
-func (dml *DML) buildOracleInsertColAndValue() (string, string) {
-	names := dml.columnNames()
-	values := make([]string, 0, len(dml.Values))
-	for _, name := range names {
-		values = append(values, genOracleValue(dml.UpColumnsInfoMap[name], dml.Values[name]))
-	}
-	return strings.Join(names, ", "), strings.Join(values, ", ")
-}
-
 func (dml *DML) sql() (sql string, args []interface{}) {
 	switch dml.Tp {
 	case InsertDMLType:
@@ -413,21 +374,6 @@ func (dml *DML) sql() (sql string, args []interface{}) {
 	}
 
 	log.Debug("get sql for dml", zap.Reflect("dml", dml), zap.String("sql", sql), zap.Reflect("args", args))
-
-	return
-}
-
-func (dml *DML) oracleSQL() (sql string) {
-	switch dml.Tp {
-	case InsertDMLType:
-		return dml.oracleInsertSQL()
-	case UpdateDMLType:
-		return dml.oracleUpdateSQL()
-	case DeleteDMLType:
-		return dml.oracleDeleteSQL()
-	}
-
-	log.Debug("get sql for dml", zap.Reflect("dml", dml), zap.String("sql", sql))
 
 	return
 }
@@ -497,32 +443,4 @@ func getKeys(dml *DML) (keys []string) {
 	}
 
 	return
-}
-
-func genOracleValue(column *model.ColumnInfo, value interface{}) string {
-	if value == nil {
-		return "NULL"
-	}
-	switch column.Tp {
-	case mysql.TypeDate:
-		return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd')", value)
-	case mysql.TypeDatetime:
-		if column.Decimal == 0 {
-			return fmt.Sprintf("TO_DATE('%v', 'yyyy-mm-dd hh24:mi:ss')", value)
-		}
-		return fmt.Sprintf("TO_TIMESTAMP('%v', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
-	case mysql.TypeTimestamp:
-		return fmt.Sprintf("TO_TIMESTAMP('%s', 'yyyy-mm-dd hh24:mi:ss.ff%d')", value, column.Decimal)
-	case mysql.TypeDuration:
-		return fmt.Sprintf("TO_DATE('%s', 'hh24:mi:ss')", value)
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24,
-		mysql.TypeYear, mysql.TypeFloat, mysql.TypeDouble, mysql.TypeNewDecimal:
-		return fmt.Sprintf("%v", value)
-	default:
-		return fmt.Sprintf("'%s'", processOracleQuoteStringValue(fmt.Sprintf("%v", value)))
-	}
-}
-
-func processOracleQuoteStringValue(data string) string {
-	return strings.ReplaceAll(data, "'", "''")
 }

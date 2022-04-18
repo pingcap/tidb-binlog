@@ -47,6 +47,7 @@ func getDML(key bool, tp DMLType) *DML {
 	dml.Database = "test"
 	dml.Table = "test"
 	dml.Tp = tp
+	dml.DestDBType = "tidb"
 
 	return dml
 }
@@ -76,7 +77,7 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	c.Assert(args, check.DeepEquals, []interface{}{1})
 
 	builder := new(strings.Builder)
-	args = dml.buildWhere(builder)
+	args = dml.buildWhere(builder, 0)
 	c.Assert(args, check.DeepEquals, []interface{}{1})
 	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 
@@ -94,14 +95,14 @@ func (d *dmlSuite) testWhere(c *check.C, tp DMLType) {
 	c.Assert(args, check.DeepEquals, []interface{}{1, 1})
 
 	builder.Reset()
-	args = dml.buildWhere(builder)
+	args = dml.buildWhere(builder, 0)
 	c.Assert(args, check.DeepEquals, []interface{}{1, 1})
 	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 
 	// set a1 to NULL value
 	values["a1"] = nil
 	builder.Reset()
-	args = dml.buildWhere(builder)
+	args = dml.buildWhere(builder, 0)
 	c.Assert(args, check.DeepEquals, []interface{}{1})
 	c.Assert(strings.Count(builder.String(), "?"), check.Equals, len(args))
 }
@@ -188,6 +189,7 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
+		DestDBType: "tidb",
 	}
 	sql, args := dml.sql()
 	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`age`,`name`) VALUES(?,?)")
@@ -208,6 +210,7 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
+		DestDBType: "tidb",
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -232,6 +235,7 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name"},
 		},
+		DestDBType: "tidb",
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -289,11 +293,17 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
-	sql := dml.oracleSQL()
+	sql, args := dml.sql()
 	c.Assert(
 		sql, check.Equals,
-		"UPDATE db.tbl SET ID = 123,NAME = 'pc' WHERE ID = 123 AND NAME = 'pingcap' AND rownum <=1")
+		"UPDATE db.tbl SET ID = :1,NAME = :2 WHERE ID = :3 AND NAME = :4 AND rownum <=1")
+	c.Assert(args, check.HasLen, 4)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "pc")
+	c.Assert(args[2], check.Equals, 123)
+	c.Assert(args[3], check.Equals, "pingcap")
 }
 
 func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
@@ -328,11 +338,16 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
-	sql := dml.oracleSQL()
+	sql, args := dml.sql()
 	c.Assert(
 		sql, check.Equals,
-		"UPDATE db.tbl SET ID = 123,NAME = 'pc' WHERE ID = 123 AND rownum <=1")
+		"UPDATE db.tbl SET ID = :1,NAME = :2 WHERE ID = :3 AND rownum <=1")
+	c.Assert(args, check.HasLen, 3)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "pc")
+	c.Assert(args[2], check.Equals, 123)
 }
 
 func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
@@ -353,11 +368,15 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
-	sql := dml.oracleSQL()
+	sql, args := dml.sql()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE ID = 123 AND NAME = 'pc' AND rownum <=1")
+		"DELETE FROM db.tbl WHERE ID = :1 AND NAME = :2 AND rownum <=1")
+	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "pc")
 }
 
 func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
@@ -381,78 +400,16 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
-	sql := dml.oracleSQL()
+	sql, args := dml.sql()
 	c.Assert(
 		sql, check.Equals,
-		"INSERT INTO db.tbl (C2, ID, NAME) VALUES (NULL, 123, 'pc')")
-}
-
-func (s *SQLSuite) TestGenOracleValue(c *check.C) {
-	columnInfo := model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeDate},
-	}
-	colVaue := "2021-09-13"
-	val := genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals,
-		"TO_DATE('2021-09-13', 'yyyy-mm-dd')")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeDatetime, Decimal: 0},
-	}
-	colVaue = "2021-09-13 10:10:23"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals,
-		"TO_DATE('2021-09-13 10:10:23', 'yyyy-mm-dd hh24:mi:ss')")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeDatetime, Decimal: 6},
-	}
-	colVaue = "2021-09-13 10:10:23.123456"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals,
-		"TO_TIMESTAMP('2021-09-13 10:10:23.123456', 'yyyy-mm-dd hh24:mi:ss.ff6')")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeTimestamp, Decimal: 5},
-	}
-	colVaue = "2021-09-13 10:10:23.12345"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals,
-		"TO_TIMESTAMP('2021-09-13 10:10:23.12345', 'yyyy-mm-dd hh24:mi:ss.ff5')")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeYear},
-	}
-	colVaue = "2021"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals, "2021")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeVarchar},
-	}
-	colVaue = "2021"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals, "'2021'")
-
-	columnInfo = model.ColumnInfo{
-		FieldType: types.FieldType{Tp: mysql.TypeDuration},
-	}
-	colVaue = "23:11:59"
-	val = genOracleValue(&columnInfo, colVaue)
-	c.Assert(
-		val, check.Equals, "TO_DATE('23:11:59', 'hh24:mi:ss')")
-
-	var colVaue2 interface{}
-	val = genOracleValue(&columnInfo, colVaue2)
-	c.Assert(
-		val, check.Equals, "NULL")
+		"INSERT INTO db.tbl(C2,ID,NAME) VALUES(:1,:2,:3)")
+	c.Assert(args, check.HasLen, 3)
+	c.Assert(args[0], check.Equals, nil)
+	c.Assert(args[1], check.Equals, 123)
+	c.Assert(args[2], check.Equals, "pc")
 }
 
 func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
@@ -482,12 +439,15 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
 
-	sql := dml.oracleDeleteNewValueSQL()
+	sql, args := dml.oracleDeleteNewValueSQL()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE ID = 123 AND rownum <=1")
+		"DELETE FROM db.tbl WHERE ID = :1 AND rownum <=1")
+	c.Assert(args, check.HasLen, 1)
+	c.Assert(args[0], check.Equals, 123)
 
 	// column in UK have nil value, so fall back to all columns
 	dml = DML{
@@ -516,11 +476,15 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
-	sql = dml.oracleDeleteNewValueSQL()
+	sql, args = dml.oracleDeleteNewValueSQL()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = 123 AND NAME = 'pc' AND rownum <=1")
+		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = :1 AND NAME = :2 AND rownum <=1")
+	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "pc")
 }
 
 func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
@@ -557,12 +521,15 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
 
-	sql := dml.oracleDeleteNewValueSQL()
+	sql, args := dml.oracleDeleteNewValueSQL()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE ID2 = '456' AND rownum <=1")
+		"DELETE FROM db.tbl WHERE ID2 = :1 AND rownum <=1")
+	c.Assert(args, check.HasLen, 1)
+	c.Assert(args[0], check.Equals, "456")
 }
 
 func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
@@ -589,10 +556,15 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
+		DestDBType: "oracle",
 	}
 
-	sql := dml.oracleDeleteNewValueSQL()
+	sql, args := dml.oracleDeleteNewValueSQL()
 	c.Assert(
 		sql, check.Equals,
-		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = 123 AND ID2 = '456' AND NAME = 'pc' AND rownum <=1")
+		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = :1 AND ID2 = :2 AND NAME = :3 AND rownum <=1")
+	c.Assert(args, check.HasLen, 3)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "456")
+	c.Assert(args[2], check.Equals, "pc")
 }
