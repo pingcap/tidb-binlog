@@ -31,7 +31,7 @@ import (
 
 const implicitColID = -1
 
-var destDBType = "tidb"
+var destDBType = loader.MysqlDB
 
 func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
@@ -260,8 +260,8 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeDuration:
 		//only for oracle db
-		if destDBType == "oracle" {
-			return data, errors.New("unsupport column type[time]")
+		if destDBType == loader.OracleDB {
+			return data, errors.New("unsupported column type[time]")
 		}
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
@@ -277,13 +277,18 @@ func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
 		data = types.NewUintDatum(val)
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		//only for oracle db
-		if destDBType == "oracle" {
-			stype := types.TypeToStr(ft.Tp, ft.Charset)
-			if stype == "blob" || stype == "tinyblob" || stype == "mediumblob" || stype == "longblob" {
-				data = types.NewBytesDatum(data.GetBytes())
-			}
+		if destDBType == loader.OracleDB && isBlob(ft) {
+			data = types.NewBytesDatum(data.GetBytes())
 		}
 	}
 
 	return data, nil
+}
+
+func isBlob(ft types.FieldType) bool {
+	stype := types.TypeToStr(ft.Tp, ft.Charset)
+	if stype == "blob" || stype == "tinyblob" || stype == "mediumblob" || stype == "longblob" {
+		return true
+	}
+	return false
 }

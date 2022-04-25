@@ -43,7 +43,7 @@ var (
 
 type executor struct {
 	db                  *gosql.DB
-	destDBType          string
+	destDBType          int
 	batchSize           int
 	workerCount         int
 	info                *loopbacksync.LoopBackSync
@@ -70,7 +70,7 @@ func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (in
 	return e
 }
 
-func (e *executor) withDestDBType(destDBType string) *executor {
+func (e *executor) withDestDBType(destDBType int) *executor {
 	e.destDBType = destDBType
 	return e
 }
@@ -284,7 +284,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
 		bulkDelete := e.bulkDelete
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkDelete = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allDeletes, bulkDelete); err != nil {
@@ -294,7 +294,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allInserts, ok := types[InsertDMLType]; ok {
 		bulkInsert := e.bulkReplace
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkInsert = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allInserts, bulkInsert); err != nil {
@@ -304,7 +304,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
 		bulkUpdate := e.bulkReplace
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkUpdate = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allUpdates, bulkUpdate); err != nil {

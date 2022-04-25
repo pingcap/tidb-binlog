@@ -251,13 +251,13 @@ func escapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
 
-func holderString(n int, destDBType string) string {
+func holderString(n int, destDBType int) string {
 	builder := new(strings.Builder)
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			builder.WriteString(",")
 		}
-		if destDBType == "oracle" {
+		if destDBType == OracleDB {
 			builder.WriteString(":" + strconv.Itoa(i+1))
 		} else {
 			builder.WriteString("?")
@@ -282,13 +282,13 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 	return
 }
 
-func buildColumnList(names []string, destDBType string) string {
+func buildColumnList(names []string, destDBType int) string {
 	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		if destDBType == "oracle" {
+		if destDBType == OracleDB {
 			b.WriteString(escapeName(name))
 		} else {
 			b.WriteString(quoteName(name))

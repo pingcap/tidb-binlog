@@ -47,7 +47,7 @@ func getDML(key bool, tp DMLType) *DML {
 	dml.Database = "test"
 	dml.Table = "test"
 	dml.Tp = tp
-	dml.DestDBType = "tidb"
+	dml.DestDBType = MysqlDB
 
 	return dml
 }
@@ -189,7 +189,7 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
-		DestDBType: "tidb",
+		DestDBType: MysqlDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`age`,`name`) VALUES(?,?)")
@@ -210,7 +210,7 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
-		DestDBType: "tidb",
+		DestDBType: MysqlDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -235,7 +235,7 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name"},
 		},
-		DestDBType: "tidb",
+		DestDBType: MysqlDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -293,7 +293,7 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -338,7 +338,7 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -368,7 +368,7 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 			"NAME": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -400,7 +400,7 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -439,7 +439,7 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 
 	sql, args := dml.oracleDeleteNewValueSQL()
@@ -476,7 +476,7 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 	sql, args = dml.oracleDeleteNewValueSQL()
 	c.Assert(
@@ -521,7 +521,7 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 
 	sql, args := dml.oracleDeleteNewValueSQL()
@@ -556,7 +556,7 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
 			"C2": {
 				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
 		},
-		DestDBType: "oracle",
+		DestDBType: OracleDB,
 	}
 
 	sql, args := dml.oracleDeleteNewValueSQL()

@@ -14,7 +14,7 @@ import (
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
 func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool, tableRouter *router.Table) (txn *loader.Txn, err error) {
-	destDBType = "oracle"
+	destDBType = loader.OracleDB
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {

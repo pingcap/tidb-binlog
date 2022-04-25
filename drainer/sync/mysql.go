@@ -57,10 +57,13 @@ func CreateLoader(
 	enableDispatch bool,
 	enableCausility bool,
 ) (ld loader.Loader, err error) {
-
+	destDBTypeInt := loader.MysqlDB
+	if destDBType == "oracle" {
+		destDBTypeInt = loader.OracleDB
+	}
 	var opts []loader.Option
-	opts = append(opts, loader.DestinationDBType(destDBType), loader.WorkerCount(worker), loader.BatchSize(batchSize),
-		loader.SaveAppliedTS(destDBType == "tidb" || destDBType == "oracle"), loader.SetloopBackSyncInfo(info))
+	opts = append(opts, loader.DestinationDBType(destDBTypeInt), loader.WorkerCount(worker), loader.BatchSize(batchSize),
+		loader.SaveAppliedTS(destDBTypeInt == loader.MysqlDB || destDBTypeInt == loader.OracleDB), loader.SetloopBackSyncInfo(info))
 	if queryHistogramVec != nil {
 		opts = append(opts, loader.Metrics(&loader.MetricsGroup{
 			QueryHistogramVec: queryHistogramVec,

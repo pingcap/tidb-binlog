@@ -35,6 +35,11 @@ const (
 	DeleteDMLType  DMLType = 3
 )
 
+const (
+	MysqlDB = iota
+	OracleDB
+)
+
 // DML holds the dml info
 type DML struct {
 	Database string
@@ -49,7 +54,7 @@ type DML struct {
 
 	UpColumnsInfoMap map[string]*model.ColumnInfo
 
-	DestDBType string
+	DestDBType int
 }
 
 // DDL holds the ddl info
@@ -167,7 +172,7 @@ func (dml *DML) oldPrimaryKeyValues() []interface{} {
 
 // TableName returns the fully qualified name of the DML's table
 func (dml *DML) TableName() string {
-	if dml.DestDBType == "oracle" {
+	if dml.DestDBType == OracleDB {
 		return fmt.Sprintf("%s.%s", dml.Database, dml.Table)
 	}
 	return quoteSchema(dml.Database, dml.Table)
@@ -177,23 +182,17 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
-	colName := ""
 	oracleHolderPos := 1
 	for _, name := range dml.columnNames() {
 		if len(args) > 0 {
 			builder.WriteByte(',')
 		}
 		arg := dml.Values[name]
-		if dml.DestDBType == "oracle" {
-			colName = escapeName(name)
-		} else {
-			colName = quoteName(name)
-		}
-		if dml.DestDBType == "oracle" {
-			fmt.Fprintf(builder, "%s = :%d", colName, oracleHolderPos)
+		if dml.DestDBType == OracleDB {
+			fmt.Fprintf(builder, "%s = :%d", escapeName(name), oracleHolderPos)
 			oracleHolderPos++
 		} else {
-			fmt.Fprintf(builder, "%s = ?", colName)
+			fmt.Fprintf(builder, "%s = ?", quoteName(name))
 		}
 		args = append(args, arg)
 	}
@@ -202,7 +201,7 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 
 	whereArgs := dml.buildWhere(builder, oracleHolderPos)
 	args = append(args, whereArgs...)
-	if dml.DestDBType == "oracle" {
+	if dml.DestDBType == OracleDB {
 		builder.WriteString(" AND rownum <=1")
 	} else {
 		builder.WriteString(" LIMIT 1")
@@ -218,13 +217,13 @@ func (dml *DML) buildWhere(builder *strings.Builder, oracleHolderPos int) (args 
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			if dml.DestDBType == "oracle" {
+			if dml.DestDBType == OracleDB {
 				builder.WriteString(escapeName(wnames[i]) + " IS NULL")
 			} else {
 				builder.WriteString(quoteName(wnames[i]) + " IS NULL")
 			}
 		} else {
-			if dml.DestDBType == "oracle" {
+			if dml.DestDBType == OracleDB {
 				builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
 				pOracleHolderPos++
 			} else {
@@ -276,7 +275,7 @@ func (dml *DML) deleteSQL() (sql string, args []interface{}) {
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
 	args = dml.buildWhere(builder, 1)
 
-	if dml.DestDBType == "oracle" {
+	if dml.DestDBType == OracleDB {
 		builder.WriteString(" AND rownum <=1")
 	} else {
 		builder.WriteString(" LIMIT 1")
