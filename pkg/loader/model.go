@@ -35,6 +35,7 @@ const (
 	DeleteDMLType  DMLType = 3
 )
 
+// Destination database type can be Mysql/Tidb or Oracle
 const (
 	MysqlDB = iota
 	OracleDB
