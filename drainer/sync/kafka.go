@@ -22,10 +22,11 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/drainer/translator"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/drainer/translator"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 var maxWaitTimeToSendMSG = time.Second * 30
@@ -68,7 +69,7 @@ func NewKafka(cfg *DBConfig, tableInfoGetter translator.TableInfoGetter) (*Kafka
 		topic:      topic,
 		ackWindow:  newAckWindow(),
 		shutdown:   make(chan struct{}),
-		baseSyncer: newBaseSyncer(tableInfoGetter),
+		baseSyncer: newBaseSyncer(tableInfoGetter, nil),
 	}
 
 	config, err := util.NewSaramaConfig(cfg.KafkaVersion, "kafka.")

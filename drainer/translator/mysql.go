@@ -20,21 +20,22 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	tipb "github.com/pingcap/tipb/go-binlog"
+
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const implicitColID = -1
 
-func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
+func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte, loc *time.Location) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
-	columnValues, err := insertRowToDatums(table, row)
+	columnValues, err := insertRowToDatums(table, row, loc)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -58,13 +59,13 @@ func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (nam
 	return names, args, nil
 }
 
-func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool, loc *time.Location) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
 	updtDecoder := newUpdateDecoder(ptable, table, canAppendDefaultValue)
 
 	var updateColumns []*model.ColumnInfo
 
-	oldColumnValues, newColumnValues, err := updtDecoder.decode(row, time.Local)
+	oldColumnValues, newColumnValues, err := updtDecoder.decode(row, loc)
 	if err != nil {
 		return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
@@ -84,11 +85,11 @@ func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canA
 	return
 }
 
-func genDBDelete(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, err error) {
+func genDBDelete(schema string, table *model.TableInfo, row []byte, loc *time.Location) (names []string, values []interface{}, err error) {
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
-	columnValues, err := tablecodec.DecodeRowToDatumMap(row, colsTypeMap, time.Local)
+	columnValues, err := tablecodec.DecodeRowToDatumMap(row, colsTypeMap, loc)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -104,7 +105,7 @@ func genDBDelete(schema string, table *model.TableInfo, row []byte) (names []str
 }
 
 // TiBinlogToTxn translate the format to loader.Txn
-func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool) (txn *loader.Txn, err error) {
+func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool, loc *time.Location) (txn *loader.Txn, err error) {
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {
@@ -144,7 +145,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genDBInsert(schema, pinfo, info, row)
+					names, args, err := genDBInsert(schema, pinfo, info, row, loc)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -160,7 +161,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						dml.Values[name] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue, loc)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
@@ -179,7 +180,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genDBDelete(schema, info, row)
+					names, args, err := genDBDelete(schema, info, row, loc)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}
