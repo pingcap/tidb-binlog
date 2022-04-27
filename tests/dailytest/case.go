@@ -748,26 +748,26 @@ func runTimeZoneCase(tr *testRunner) {
 	}
 	for _, c := range cases {
 		for _, ispk := range []string{"", "PRIMARY KEY NONCLUSTERED", "PRIMARY KEY CLUSTERED"} {
-			var caseSql string
+			var caseSQL string
 			tr.run(func(src *sql.DB) {
-				caseSql = fmt.Sprintf("CREATE TABLE tz(t %s %s)", c.Tp, ispk)
-				mustExec(src, caseSql)
-				caseSql = "INSERT INTO tz(t) values( ? )"
-				mustExec(src, caseSql, c.Value)
+				caseSQL = fmt.Sprintf("CREATE TABLE tz(t %s %s)", c.Tp, ispk)
+				mustExec(src, caseSQL)
+				caseSQL = "INSERT INTO tz(t) values( ? )"
+				mustExec(src, caseSQL, c.Value)
 			})
 			if len(ispk) == 0 {
 				tr.run(func(src *sql.DB) {
 					// insert a null value
-					mustExec(src, caseSql, nil)
+					mustExec(src, caseSQL, nil)
 				})
 			}
 			tr.run(func(src *sql.DB) {
-				caseSql = "UPDATE tz set t = ? where t = ?"
-				mustExec(src, caseSql, c.Update, c.Value)
+				caseSQL = "UPDATE tz set t = ? where t = ?"
+				mustExec(src, caseSQL, c.Update, c.Value)
 			})
 			tr.run(func(src *sql.DB) {
-				caseSql = "DELETE from tz where t = ?"
-				mustExec(src, caseSql, c.Update)
+				caseSQL = "DELETE from tz where t = ?"
+				mustExec(src, caseSQL, c.Update)
 			})
 
 			tr.execSQLs([]string{"DROP TABLE tz"})
