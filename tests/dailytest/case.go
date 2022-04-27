@@ -715,13 +715,6 @@ func runPKcases(tr *testRunner) {
 }
 
 func runTimeZoneCase(tr *testRunner) {
-	// set downstream default time_zone to UTC, upstream default time_zone to Asia/Shanghai
-	const setGlobalTimeZoneSql = "SET @@global.time_zone = ?;"
-	mustExec(tr.src, setGlobalTimeZoneSql, "Asia/Shanghai")
-	defer mustExec(tr.src, setGlobalTimeZoneSql, "SYSTEM")
-	mustExec(tr.dst, setGlobalTimeZoneSql, "America/New_York")
-	defer mustExec(tr.dst, setGlobalTimeZoneSql, "SYSTEM")
-
 	cases := []struct {
 		Tp     string
 		Value  interface{}
