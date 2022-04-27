@@ -24,6 +24,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/Shopify/sarama/mocks"
 	"github.com/pingcap/check"
+
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 )
 
@@ -62,6 +63,9 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 	oldCreateDB := createDB
 	createDB = func(string, string, string, int, *tls.Config, *string, map[string]string, time.Duration) (db *sql.DB, err error) {
 		db, s.mysqlMock, err = sqlmock.New()
+		s.mysqlMock.ExpectQuery("SELECT cast.*").
+			WillReturnRows(sqlmock.NewRows([]string{"cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time)"}).
+				AddRow("08:00:00"))
 		return
 	}
 	defer func() {
@@ -70,6 +74,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 
 	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil, true, true)
 	c.Assert(err, check.IsNil)
+	c.Assert(mysql.timeZone, check.Equals, time.FixedZone("+08:00", 8*60*60))
 	s.syncers = append(s.syncers, mysql)
 
 	// create kafka syncer
