@@ -37,7 +37,8 @@ const (
 
 // Destination database type can be Mysql/Tidb or Oracle
 const (
-	MysqlDB = iota
+	DBTypeUnknown = iota
+	MysqlDB
 	OracleDB
 )
 

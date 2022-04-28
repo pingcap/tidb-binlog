@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb-binlog/pkg/loader"
+
 	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
@@ -137,7 +139,7 @@ func genInsert(schema string, ptable, table *model.TableInfo, row []byte) (event
 			val = getDefaultOrZeroValue(ptable, col)
 		}
 
-		value, err := formatData(val, col.FieldType)
+		value, err := formatData(val, col.FieldType, loader.DBTypeUnknown)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -173,11 +175,11 @@ func genUpdate(schema string, ptable, table *model.TableInfo, row []byte, canApp
 	for _, col := range columns {
 		val, ok := newColumnValues[col.ID]
 		if ok {
-			oldValue, err := formatData(oldColumnValues[col.ID], col.FieldType)
+			oldValue, err := formatData(oldColumnValues[col.ID], col.FieldType, loader.DBTypeUnknown)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			newValue, err := formatData(val, col.FieldType)
+			newValue, err := formatData(val, col.FieldType, loader.DBTypeUnknown)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -217,7 +219,7 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 	for _, col := range columns {
 		val, ok := columnValues[col.ID]
 		if ok {
-			value, err := formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType, loader.DBTypeUnknown)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}

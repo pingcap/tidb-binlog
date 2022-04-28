@@ -31,9 +31,7 @@ import (
 
 const implicitColID = -1
 
-var destDBType = loader.MysqlDB
-
-func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (names []string, args []interface{}, err error) {
+func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte, destDBType int) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
 	columnValues, err := insertRowToDatums(table, row)
@@ -48,7 +46,7 @@ func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (nam
 			val = getDefaultOrZeroValue(ptable, col)
 		}
 
-		value, err := formatData(val, col.FieldType)
+		value, err := formatData(val, col.FieldType, destDBType)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
@@ -60,7 +58,7 @@ func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte) (nam
 	return names, args, nil
 }
 
-func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool, destDBType int) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
 	updtDecoder := newUpdateDecoder(ptable, table, canAppendDefaultValue)
 
@@ -71,12 +69,12 @@ func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canA
 		return nil, nil, nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
 
-	_, oldValues, err = generateColumnAndValue(columns, oldColumnValues)
+	_, oldValues, err = generateColumnAndValue(columns, oldColumnValues, destDBType)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
 
-	updateColumns, values, err = generateColumnAndValue(columns, newColumnValues)
+	updateColumns, values, err = generateColumnAndValue(columns, newColumnValues, destDBType)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
@@ -86,7 +84,7 @@ func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canA
 	return
 }
 
-func genDBDelete(schema string, table *model.TableInfo, row []byte) (names []string, values []interface{}, err error) {
+func genDBDelete(schema string, table *model.TableInfo, row []byte, destDBType int) (names []string, values []interface{}, err error) {
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
@@ -95,7 +93,7 @@ func genDBDelete(schema string, table *model.TableInfo, row []byte) (names []str
 		return nil, nil, errors.Trace(err)
 	}
 
-	columns, values, err = generateColumnAndValue(columns, columnValues)
+	columns, values, err = generateColumnAndValue(columns, columnValues, destDBType)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -146,7 +144,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genDBInsert(schema, pinfo, info, row)
+					names, args, err := genDBInsert(schema, pinfo, info, row, loader.MysqlDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -156,14 +154,14 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						Database:   schema,
 						Table:      table,
 						Values:     make(map[string]interface{}),
-						DestDBType: destDBType,
+						DestDBType: loader.MysqlDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
 						dml.Values[name] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue, loader.MysqlDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
@@ -174,7 +172,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						Table:      table,
 						Values:     make(map[string]interface{}),
 						OldValues:  make(map[string]interface{}),
-						DestDBType: destDBType,
+						DestDBType: loader.MysqlDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -183,7 +181,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genDBDelete(schema, info, row)
+					names, args, err := genDBDelete(schema, info, row, loader.MysqlDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}
@@ -193,7 +191,7 @@ func TiBinlogToTxn(infoGetter TableInfoGetter, schema string, table string, tiBi
 						Database:   schema,
 						Table:      table,
 						Values:     make(map[string]interface{}),
-						DestDBType: destDBType,
+						DestDBType: loader.MysqlDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -230,7 +228,7 @@ func genColumnNameList(columns []*model.ColumnInfo) (names []string) {
 	return
 }
 
-func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum) ([]*model.ColumnInfo, []interface{}, error) {
+func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum, destDBType int) ([]*model.ColumnInfo, []interface{}, error) {
 	var newColumn []*model.ColumnInfo
 	var newColumnsValues []interface{}
 
@@ -238,7 +236,7 @@ func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]
 		val, ok := columnValues[col.ID]
 		if ok {
 			newColumn = append(newColumn, col)
-			value, err := formatData(val, col.FieldType)
+			value, err := formatData(val, col.FieldType, destDBType)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
@@ -250,7 +248,7 @@ func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]
 	return newColumn, newColumnsValues, nil
 }
 
-func formatData(data types.Datum, ft types.FieldType) (types.Datum, error) {
+func formatData(data types.Datum, ft types.FieldType, destDBType int) (types.Datum, error) {
 	if data.GetValue() == nil {
 		return data, nil
 	}

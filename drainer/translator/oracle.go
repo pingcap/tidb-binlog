@@ -14,7 +14,6 @@ import (
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
 func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string, tiBinlog *tipb.Binlog, pv *tipb.PrewriteValue, shouldSkip bool, tableRouter *router.Table) (txn *loader.Txn, err error) {
-	destDBType = loader.OracleDB
 	txn = new(loader.Txn)
 
 	if tiBinlog.DdlJobId > 0 {
@@ -67,7 +66,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genDBInsert(schema, pinfo, info, row)
+					names, args, err := genDBInsert(schema, pinfo, info, row, loader.OracleDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -78,14 +77,14 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:            downStreamTable,
 						Values:           make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
-						DestDBType:       destDBType,
+						DestDBType:       loader.OracleDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
 						dml.Values[strings.ToUpper(name)] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue, loader.OracleDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
@@ -97,7 +96,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Values:           make(map[string]interface{}),
 						OldValues:        make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
-						DestDBType:       destDBType,
+						DestDBType:       loader.OracleDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {
@@ -106,7 +105,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genDBDelete(schema, info, row)
+					names, args, err := genDBDelete(schema, info, row, loader.OracleDB)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}
@@ -117,7 +116,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						Table:            downStreamTable,
 						Values:           make(map[string]interface{}),
 						UpColumnsInfoMap: tableIDColumnsMap[mut.GetTableId()],
-						DestDBType:       destDBType,
+						DestDBType:       loader.OracleDB,
 					}
 					txn.DMLs = append(txn.DMLs, dml)
 					for i, name := range names {

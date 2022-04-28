@@ -57,9 +57,11 @@ func CreateLoader(
 	enableDispatch bool,
 	enableCausility bool,
 ) (ld loader.Loader, err error) {
-	destDBTypeInt := loader.MysqlDB
+	destDBTypeInt := loader.DBTypeUnknown
 	if destDBType == "oracle" {
 		destDBTypeInt = loader.OracleDB
+	} else if destDBType == "tidb" || destDBType == "mysql" {
+		destDBTypeInt = loader.MysqlDB
 	}
 	var opts []loader.Option
 	opts = append(opts, loader.DestinationDBType(destDBTypeInt), loader.WorkerCount(worker), loader.BatchSize(batchSize),
