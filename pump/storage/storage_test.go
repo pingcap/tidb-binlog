@@ -250,8 +250,10 @@ func (as *AppendSuit) testWriteBinlogAndPullBack(c *check.C, prewriteValueSize i
 			select {
 			case value := <-values:
 				getBinlog := new(pb.Binlog)
-				err := getBinlog.Unmarshal(value)
+				err := getBinlog.Unmarshal(value.Payload)
 				c.Assert(err, check.IsNil)
+				c.Assert(getBinlog.StartTs, check.Equals, value.Meta.StartTs)
+				c.Assert(getBinlog.CommitTs, check.Equals, value.Meta.CommitTs)
 				binlogs = append(binlogs, getBinlog)
 				if len(binlogs) == int(binlogNum) {
 					break PullLoop
