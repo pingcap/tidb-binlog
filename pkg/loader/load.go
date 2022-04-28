@@ -68,7 +68,7 @@ type loaderImpl struct {
 	// like column name, pk & uk
 	db *gosql.DB
 	//downStream db type, mysql,tidb,oracle
-	destDBType int
+	destDBType DBType
 	// only set for test
 	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
 	opts               options
@@ -130,7 +130,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
-	destDBType       int
+	destDBType       DBType
 }
 
 var defaultLoaderOptions = options{
@@ -195,7 +195,7 @@ func Merge(v bool) Option {
 }
 
 //DestinationDBType set destDBType option.
-func DestinationDBType(t int) Option {
+func DestinationDBType(t DBType) Option {
 	return func(o *options) {
 		o.destDBType = t
 	}

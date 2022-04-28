@@ -43,7 +43,7 @@ var (
 
 type executor struct {
 	db                  *gosql.DB
-	destDBType          int
+	destDBType          DBType
 	batchSize           int
 	workerCount         int
 	info                *loopbacksync.LoopBackSync
@@ -70,7 +70,7 @@ func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (in
 	return e
 }
 
-func (e *executor) withDestDBType(destDBType int) *executor {
+func (e *executor) withDestDBType(destDBType DBType) *executor {
 	e.destDBType = destDBType
 	return e
 }

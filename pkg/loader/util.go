@@ -251,7 +251,7 @@ func escapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
 
-func holderString(n int, destDBType int) string {
+func holderString(n int, destDBType DBType) string {
 	builder := new(strings.Builder)
 	for i := 0; i < n; i++ {
 		if i > 0 {
@@ -282,7 +282,7 @@ func splitDMLs(dmls []*DML, size int) (res [][]*DML) {
 	return
 }
 
-func buildColumnList(names []string, destDBType int) string {
+func buildColumnList(names []string, destDBType DBType) string {
 	var b strings.Builder
 	for i, name := range names {
 		if i > 0 {

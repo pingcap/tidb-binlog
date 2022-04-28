@@ -31,7 +31,7 @@ import (
 
 const implicitColID = -1
 
-func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte, destDBType int) (names []string, args []interface{}, err error) {
+func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte, destDBType loader.DBType) (names []string, args []interface{}, err error) {
 	columns := writableColumns(table)
 
 	columnValues, err := insertRowToDatums(table, row)
@@ -58,7 +58,7 @@ func genDBInsert(schema string, ptable, table *model.TableInfo, row []byte, dest
 	return names, args, nil
 }
 
-func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool, destDBType int) (names []string, values []interface{}, oldValues []interface{}, err error) {
+func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canAppendDefaultValue bool, destDBType loader.DBType) (names []string, values []interface{}, oldValues []interface{}, err error) {
 	columns := writableColumns(table)
 	updtDecoder := newUpdateDecoder(ptable, table, canAppendDefaultValue)
 
@@ -84,7 +84,7 @@ func genDBUpdate(schema string, ptable, table *model.TableInfo, row []byte, canA
 	return
 }
 
-func genDBDelete(schema string, table *model.TableInfo, row []byte, destDBType int) (names []string, values []interface{}, err error) {
+func genDBDelete(schema string, table *model.TableInfo, row []byte, destDBType loader.DBType) (names []string, values []interface{}, err error) {
 	columns := table.Columns
 	colsTypeMap := util.ToColumnTypeMap(columns)
 
@@ -228,7 +228,7 @@ func genColumnNameList(columns []*model.ColumnInfo) (names []string) {
 	return
 }
 
-func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum, destDBType int) ([]*model.ColumnInfo, []interface{}, error) {
+func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]types.Datum, destDBType loader.DBType) ([]*model.ColumnInfo, []interface{}, error) {
 	var newColumn []*model.ColumnInfo
 	var newColumnsValues []interface{}
 
@@ -248,7 +248,7 @@ func generateColumnAndValue(columns []*model.ColumnInfo, columnValues map[int64]
 	return newColumn, newColumnsValues, nil
 }
 
-func formatData(data types.Datum, ft types.FieldType, destDBType int) (types.Datum, error) {
+func formatData(data types.Datum, ft types.FieldType, destDBType loader.DBType) (types.Datum, error) {
 	if data.GetValue() == nil {
 		return data, nil
 	}

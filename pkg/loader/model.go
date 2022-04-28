@@ -36,8 +36,11 @@ const (
 )
 
 // Destination database type can be Mysql/Tidb or Oracle
+type DBType int
+
+// DBType types
 const (
-	DBTypeUnknown = iota
+	DBTypeUnknown DBType = iota
 	MysqlDB
 	OracleDB
 )
@@ -56,7 +59,7 @@ type DML struct {
 
 	UpColumnsInfoMap map[string]*model.ColumnInfo
 
-	DestDBType int
+	DestDBType DBType
 }
 
 // DDL holds the ddl info
