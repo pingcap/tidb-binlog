@@ -74,7 +74,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 
 	mysql, err := NewMysqlSyncer(cfg, infoGetter, 1, 1, nil, nil, "mysql", nil, nil, true, true)
 	c.Assert(err, check.IsNil)
-	c.Assert(mysql.timeZone, check.Equals, time.FixedZone("+08:00", 8*60*60))
+	c.Assert(mysql.timeZone, check.DeepEquals, time.FixedZone("+08:00", 8*60*60))
 	s.syncers = append(s.syncers, mysql)
 
 	// create kafka syncer
