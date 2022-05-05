@@ -350,7 +350,7 @@ func (s *execDDLSuite) TestShouldExecInTransaction(c *check.C) {
 	mock.ExpectExec("CREATE TABLE `t` \\(`id` INT\\)").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: MysqlDB}
 
 	ddl := DDL{SQL: "CREATE TABLE `t` (`id` INT)"}
 	err = loader.execDDL(&ddl)
@@ -365,7 +365,7 @@ func (s *execDDLSuite) TestOracleTruncateDDL(c *check.C) {
 	mock.ExpectExec("BEGIN test.do_truncate\\('test.t1',''\\);END;").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "oracle"}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: OracleDB}
 
 	ddl := DDL{SQL: "truncate table t1", Database: "test", Table: "t1"}
 	err = loader.execDDL(&ddl)
@@ -389,7 +389,7 @@ func (s *execDDLSuite) TestShouldUseDatabase(c *check.C) {
 	mock.ExpectExec("CREATE TABLE `t` \\(`id` INT\\)").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: "mysql"}
+	loader := &loaderImpl{db: db, ctx: context.Background(), destDBType: MysqlDB}
 
 	ddl := DDL{SQL: "CREATE TABLE `t` (`id` INT)", Database: "test_db"}
 	err = loader.execDDL(&ddl)

@@ -17,11 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"sync/atomic"
+
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"regexp"
-	"sync/atomic"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
@@ -247,6 +248,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: OracleDB,
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 	insertSQL := "INSERT INTO unicorn.users.*"
@@ -255,7 +257,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
 
 	e := newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err := e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -266,7 +268,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
 	e = newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -279,7 +281,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(insertSQL).WillReturnError(errors.New("insert"))
 	e = newExecutor(s.db)
 	err = e.singleOracleExec([]*DML{&dml}, true)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	c.Assert(err, ErrorMatches, "insert")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
 	s.resetMock(c)
@@ -291,7 +293,7 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 	s.dbMock.ExpectExec(insertSQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 	e = newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -319,6 +321,7 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: OracleDB,
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 	insertSQL := "INSERT INTO unicorn.users.*"
@@ -328,7 +331,7 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
 
 	e := newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err := e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -339,7 +342,7 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectExec(insertSQL).WillReturnError(errors.New("insert"))
 	e = newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "insert")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -351,7 +354,7 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 	s.dbMock.ExpectExec(insertSQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 	e = newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -378,6 +381,7 @@ func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
 			"age": {
 				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
 		},
+		DestDBType: OracleDB,
 	}
 	delSQL := "DELETE FROM unicorn.users.*"
 
@@ -386,7 +390,7 @@ func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnError(errors.New("del"))
 
 	e := newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err := e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, ErrorMatches, "del")
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)
@@ -397,7 +401,7 @@ func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
 	s.dbMock.ExpectExec(delSQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	s.dbMock.ExpectCommit()
 	e = newExecutor(s.db)
-	e.destDBType = "oracle"
+	e.destDBType = OracleDB
 	err = e.singleOracleExec([]*DML{&dml}, true)
 	c.Assert(err, IsNil)
 	c.Assert(s.dbMock.ExpectationsWereMet(), IsNil)

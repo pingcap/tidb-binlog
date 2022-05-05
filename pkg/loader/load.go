@@ -68,7 +68,7 @@ type loaderImpl struct {
 	// like column name, pk & uk
 	db *gosql.DB
 	//downStream db type, mysql,tidb,oracle
-	destDBType string
+	destDBType DBType
 	// only set for test
 	getTableInfoFromDB func(db *gosql.DB, schema string, table string) (info *tableInfo, err error)
 	opts               options
@@ -130,7 +130,7 @@ type options struct {
 	enableDispatch   bool
 	enableCausality  bool
 	merge            bool
-	destDBType       string
+	destDBType       DBType
 }
 
 var defaultLoaderOptions = options{
@@ -143,7 +143,7 @@ var defaultLoaderOptions = options{
 	enableDispatch:   true,
 	enableCausality:  true,
 	merge:            false,
-	destDBType:       "tidb",
+	destDBType:       MysqlDB,
 }
 
 // A Option sets options such batch size, worker count etc.
@@ -196,8 +196,16 @@ func Merge(v bool) Option {
 
 //DestinationDBType set destDBType option.
 func DestinationDBType(t string) Option {
+	destDBType := DBTypeUnknown
+	if t == "oracle" {
+		destDBType = OracleDB
+	} else if t == "tidb" {
+		destDBType = TiDB
+	} else if t == "mysql" {
+		destDBType = MysqlDB
+	}
 	return func(o *options) {
-		o.destDBType = t
+		o.destDBType = destDBType
 	}
 }
 
@@ -259,7 +267,7 @@ func NewLoader(db *gosql.DB, opt ...Option) (Loader, error) {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-	if opts.destDBType == "oracle" {
+	if opts.destDBType == OracleDB {
 		s.getTableInfoFromDB = getOracleTableInfo
 		fGetAppliedTS = getOracleAppliedTS
 	}
@@ -395,7 +403,7 @@ func (s *loaderImpl) execDDL(ddl *DDL) error {
 	if ddl.ShouldSkip {
 		return nil
 	}
-	if s.destDBType == "oracle" {
+	if s.destDBType == OracleDB {
 		return s.processOracleDDL(ddl)
 	}
 	return s.processMysqlDDL(ddl)
@@ -750,7 +758,7 @@ func filterGeneratedCols(dml *DML) {
 
 func (s *loaderImpl) getExecutor() *executor {
 	e := newExecutor(s.db).withBatchSize(s.batchSize).withDestDBType(s.destDBType)
-	if s.destDBType == "oracle" {
+	if s.destDBType == OracleDB {
 		e.fTryRefreshTableErr = tryRefreshTableOracleErr
 		e.fSingleExec = e.singleOracleExec
 	}
