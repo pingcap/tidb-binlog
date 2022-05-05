@@ -42,6 +42,7 @@ type DBType int
 const (
 	DBTypeUnknown DBType = iota
 	MysqlDB
+	TiDB
 	OracleDB
 )
 
@@ -184,6 +185,35 @@ func (dml *DML) TableName() string {
 }
 
 func (dml *DML) updateSQL() (sql string, args []interface{}) {
+	if dml.DestDBType == OracleDB {
+		return dml.updateOracleSQL()
+	}
+	return dml.updateTiDBSQL()
+}
+
+func (dml *DML) updateTiDBSQL() (sql string, args []interface{}) {
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
+	for _, name := range dml.columnNames() {
+		if len(args) > 0 {
+			builder.WriteByte(',')
+		}
+		arg := dml.Values[name]
+		fmt.Fprintf(builder, "%s = ?", quoteName(name))
+		args = append(args, arg)
+	}
+
+	builder.WriteString(" WHERE ")
+
+	whereArgs := dml.buildTiDBWhere(builder)
+	args = append(args, whereArgs...)
+	builder.WriteString(" LIMIT 1")
+	sql = builder.String()
+	return
+}
+
+func (dml *DML) updateOracleSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
 	fmt.Fprintf(builder, "UPDATE %s SET ", dml.TableName())
@@ -193,47 +223,55 @@ func (dml *DML) updateSQL() (sql string, args []interface{}) {
 			builder.WriteByte(',')
 		}
 		arg := dml.Values[name]
-		if dml.DestDBType == OracleDB {
-			fmt.Fprintf(builder, "%s = :%d", escapeName(name), oracleHolderPos)
-			oracleHolderPos++
-		} else {
-			fmt.Fprintf(builder, "%s = ?", quoteName(name))
-		}
+		fmt.Fprintf(builder, "%s = :%d", escapeName(name), oracleHolderPos)
+		oracleHolderPos++
 		args = append(args, arg)
 	}
 
 	builder.WriteString(" WHERE ")
 
-	whereArgs := dml.buildWhere(builder, oracleHolderPos)
+	whereArgs := dml.buildOracleWhere(builder, oracleHolderPos)
 	args = append(args, whereArgs...)
-	if dml.DestDBType == OracleDB {
-		builder.WriteString(" AND rownum <=1")
-	} else {
-		builder.WriteString(" LIMIT 1")
-	}
+	builder.WriteString(" AND rownum <=1")
 	sql = builder.String()
 	return
 }
 
 func (dml *DML) buildWhere(builder *strings.Builder, oracleHolderPos int) (args []interface{}) {
+	if dml.DestDBType == OracleDB {
+		dml.buildOracleWhere(builder, oracleHolderPos)
+	}
+	return dml.buildTiDBWhere(builder)
+}
+
+func (dml *DML) buildTiDBWhere(builder *strings.Builder) (args []interface{}) {
 	wnames, wargs := dml.whereSlice()
-	for i, pOracleHolderPos := 0, oracleHolderPos; i < len(wnames); i++ {
+	for i := 0; i < len(wnames); i++ {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			if dml.DestDBType == OracleDB {
-				builder.WriteString(escapeName(wnames[i]) + " IS NULL")
-			} else {
-				builder.WriteString(quoteName(wnames[i]) + " IS NULL")
-			}
+			builder.WriteString(quoteName(wnames[i]) + " IS NULL")
 		} else {
-			if dml.DestDBType == OracleDB {
-				builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
-				pOracleHolderPos++
-			} else {
-				builder.WriteString(quoteName(wnames[i]) + " = ?")
-			}
+			builder.WriteString(quoteName(wnames[i]) + " = ?")
+			args = append(args, wargs[i])
+		}
+	}
+	return
+}
+
+func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) (args []interface{}) {
+	wnames, wargs := dml.whereSlice()
+	pOracleHolderPos := oracleHolderPos
+	for i := 0; i < len(wnames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if wargs[i] == nil {
+			builder.WriteString(escapeName(wnames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
+			pOracleHolderPos++
 			args = append(args, wargs[i])
 		}
 	}
@@ -275,16 +313,31 @@ func (dml *DML) whereSlice() (colNames []string, args []interface{}) {
 }
 
 func (dml *DML) deleteSQL() (sql string, args []interface{}) {
+	if dml.DestDBType == OracleDB {
+		return dml.deleteOracleSQL()
+	}
+	return dml.deleteTiDBSQL()
+}
+
+func (dml *DML) deleteTiDBSQL() (sql string, args []interface{}) {
 	builder := new(strings.Builder)
 
 	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
-	args = dml.buildWhere(builder, 1)
+	args = dml.buildTiDBWhere(builder)
 
-	if dml.DestDBType == OracleDB {
-		builder.WriteString(" AND rownum <=1")
-	} else {
-		builder.WriteString(" LIMIT 1")
-	}
+	builder.WriteString(" LIMIT 1")
+
+	sql = builder.String()
+	return
+}
+
+func (dml *DML) deleteOracleSQL() (sql string, args []interface{}) {
+	builder := new(strings.Builder)
+
+	fmt.Fprintf(builder, "DELETE FROM %s WHERE ", dml.TableName())
+	args = dml.buildOracleWhere(builder, 1)
+
+	builder.WriteString(" AND rownum <=1")
 
 	sql = builder.String()
 	return
@@ -322,8 +375,8 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 			colValues = append(colValues, valueMap[col])
 		}
 	}
-
-	for i, oracleHolderPos := 0, 1; i < len(colNames); i++ {
+	oracleHolderPos := 1
+	for i := 0; i < len(colNames); i++ {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}

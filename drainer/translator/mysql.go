@@ -259,7 +259,7 @@ func formatData(data types.Datum, ft types.FieldType, destDBType loader.DBType) 
 	case mysql.TypeDuration:
 		//only for oracle db
 		if destDBType == loader.OracleDB {
-			return data, errors.New("unsupported column type[time]")
+			return types.Datum{}, errors.New("unsupported column type[time]")
 		}
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeEnum:
@@ -285,7 +285,8 @@ func formatData(data types.Datum, ft types.FieldType, destDBType loader.DBType) 
 
 func isBlob(ft types.FieldType) bool {
 	stype := types.TypeToStr(ft.Tp, ft.Charset)
-	if stype == "blob" || stype == "tinyblob" || stype == "mediumblob" || stype == "longblob" {
+	switch stype {
+	case "blob", "tinyblob", "mediumblob", "longblob":
 		return true
 	}
 	return false

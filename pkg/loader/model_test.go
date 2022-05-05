@@ -47,7 +47,7 @@ func getDML(key bool, tp DMLType) *DML {
 	dml.Database = "test"
 	dml.Table = "test"
 	dml.Tp = tp
-	dml.DestDBType = MysqlDB
+	dml.DestDBType = TiDB
 
 	return dml
 }
@@ -189,7 +189,7 @@ func (s *SQLSuite) TestInsertSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
-		DestDBType: MysqlDB,
+		DestDBType: TiDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(sql, check.Equals, "INSERT INTO `test`.`hello`(`age`,`name`) VALUES(?,?)")
@@ -210,7 +210,7 @@ func (s *SQLSuite) TestDeleteSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name", "age"},
 		},
-		DestDBType: MysqlDB,
+		DestDBType: TiDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(
@@ -235,7 +235,7 @@ func (s *SQLSuite) TestUpdateSQL(c *check.C) {
 		info: &tableInfo{
 			columns: []string{"name"},
 		},
-		DestDBType: MysqlDB,
+		DestDBType: TiDB,
 	}
 	sql, args := dml.sql()
 	c.Assert(

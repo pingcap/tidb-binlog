@@ -252,16 +252,30 @@ func escapeName(name string) string {
 }
 
 func holderString(n int, destDBType DBType) string {
+	if destDBType == OracleDB {
+		return holderStringOracle(n)
+	}
+	return holderStringTiDB(n)
+}
+
+func holderStringTiDB(n int) string {
 	builder := new(strings.Builder)
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			builder.WriteString(",")
 		}
-		if destDBType == OracleDB {
-			builder.WriteString(":" + strconv.Itoa(i+1))
-		} else {
-			builder.WriteString("?")
+		builder.WriteString("?")
+	}
+	return builder.String()
+}
+
+func holderStringOracle(n int) string {
+	builder := new(strings.Builder)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			builder.WriteString(",")
 		}
+		builder.WriteString(":" + strconv.Itoa(i+1))
 	}
 	return builder.String()
 }

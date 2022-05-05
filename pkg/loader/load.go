@@ -195,9 +195,17 @@ func Merge(v bool) Option {
 }
 
 //DestinationDBType set destDBType option.
-func DestinationDBType(t DBType) Option {
+func DestinationDBType(t string) Option {
+	destDBType := DBTypeUnknown
+	if t == "oracle" {
+		destDBType = OracleDB
+	} else if t == "tidb" {
+		destDBType = TiDB
+	} else if t == "mysql" {
+		destDBType = MysqlDB
+	}
 	return func(o *options) {
-		o.destDBType = t
+		o.destDBType = destDBType
 	}
 }
 

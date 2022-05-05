@@ -19,8 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-binlog/pkg/loader"
-
 	//nolint
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
@@ -31,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/util/codec"
 	tipb "github.com/pingcap/tipb/go-binlog"
 
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/pkg/util"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
