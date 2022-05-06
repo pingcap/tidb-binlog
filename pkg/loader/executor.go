@@ -43,7 +43,7 @@ var (
 
 type executor struct {
 	db                  *gosql.DB
-	destDBType          string
+	destDBType          DBType
 	batchSize           int
 	workerCount         int
 	info                *loopbacksync.LoopBackSync
@@ -70,7 +70,7 @@ func (e *executor) withRefreshTableInfo(fn func(schema string, table string) (in
 	return e
 }
 
-func (e *executor) withDestDBType(destDBType string) *executor {
+func (e *executor) withDestDBType(destDBType DBType) *executor {
 	e.destDBType = destDBType
 	return e
 }
@@ -109,15 +109,7 @@ type tx struct {
 // wrap of sql.Tx.Exec()
 func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 	start := time.Now()
-	var (
-		res gosql.Result
-		err error
-	)
-	if len(args) == 0 {
-		res, err = tx.Tx.Exec(query)
-	} else {
-		res, err = tx.Tx.Exec(query, args...)
-	}
+	res, err := tx.Tx.Exec(query, args...)
 	if tx.queryHistogramVec != nil {
 		tx.queryHistogramVec.WithLabelValues("exec").Observe(time.Since(start).Seconds())
 	}
@@ -126,11 +118,7 @@ func (tx *tx) exec(query string, args ...interface{}) (gosql.Result, error) {
 }
 
 func (tx *tx) autoRollbackExec(query string, args ...interface{}) (res gosql.Result, err error) {
-	if len(args) == 0 {
-		res, err = tx.exec(query)
-	} else {
-		res, err = tx.exec(query, args...)
-	}
+	res, err = tx.exec(query, args...)
 	if err != nil {
 		log.Error("Exec fail, will rollback", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -225,10 +213,10 @@ func (e *executor) bulkReplace(inserts []*DML) error {
 
 	var builder strings.Builder
 
-	cols := "(" + buildColumnList(info.columns) + ")"
+	cols := "(" + buildColumnList(info.columns, e.destDBType) + ")"
 	builder.WriteString("REPLACE INTO " + inserts[0].TableName() + cols + " VALUES ")
 
-	holder := fmt.Sprintf("(%s)", holderString(len(info.columns)))
+	holder := fmt.Sprintf("(%s)", holderString(len(info.columns), e.destDBType))
 	for i := 0; i < len(inserts); i++ {
 		if i > 0 {
 			builder.WriteByte(',')
@@ -265,8 +253,8 @@ func (e *executor) oracleBulkOperation(dmls []*DML) error {
 		return errors.Trace(err)
 	}
 	for _, dml := range dmls {
-		sql := dml.oracleSQL()
-		_, err = tx.autoRollbackExec(sql)
+		sql, args := dml.sql()
+		_, err = tx.autoRollbackExec(sql, args...)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -296,7 +284,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allDeletes, ok := types[DeleteDMLType]; ok {
 		bulkDelete := e.bulkDelete
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkDelete = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allDeletes, bulkDelete); err != nil {
@@ -306,7 +294,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allInserts, ok := types[InsertDMLType]; ok {
 		bulkInsert := e.bulkReplace
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkInsert = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allInserts, bulkInsert); err != nil {
@@ -316,7 +304,7 @@ func (e *executor) execTableBatch(ctx context.Context, dmls []*DML) error {
 
 	if allUpdates, ok := types[UpdateDMLType]; ok {
 		bulkUpdate := e.bulkReplace
-		if e.destDBType == "oracle" {
+		if e.destDBType == OracleDB {
 			bulkUpdate = e.oracleBulkOperation
 		}
 		if err := e.splitExecDML(ctx, allUpdates, bulkUpdate); err != nil {
@@ -463,43 +451,43 @@ func (e *executor) singleOracleExec(dmls []*DML, safeMode bool) error {
 	for _, dml := range dmls {
 		if safeMode && dml.Tp == UpdateDMLType {
 			//delete old row
-			sql := dml.oracleDeleteSQL()
+			sql, args := dml.deleteSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("delete old", sql))
-			_, err := tx.autoRollbackExec(sql)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//delete new row
-			sql = dml.oracleDeleteNewValueSQL()
+			sql, args = dml.oracleDeleteNewValueSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("delete new old", sql))
-			_, err = tx.autoRollbackExec(sql)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			//insert new row
-			sql = dml.oracleInsertSQL()
+			sql, args = dml.insertSQL()
 			log.Debug("safeMode and UpdateDMLType", zap.String("insert new old", sql))
-			_, err = tx.autoRollbackExec(sql)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else if safeMode && dml.Tp == InsertDMLType {
-			sql := dml.oracleDeleteSQL()
+			sql, args := dml.deleteSQL()
 			log.Debug("safeMode and InsertDMLType", zap.String("delete sql", sql))
-			_, err := tx.autoRollbackExec(sql)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			sql = dml.oracleInsertSQL()
+			sql, args = dml.insertSQL()
 			log.Debug("safeMode and InsertDMLType", zap.String("insert sql", sql))
-			_, err = tx.autoRollbackExec(sql)
+			_, err = tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		} else {
-			sql := dml.oracleSQL()
+			sql, args := dml.sql()
 			log.Debug("normal sql with no safeMode", zap.String("sql", sql))
-			_, err := tx.autoRollbackExec(sql)
+			_, err := tx.autoRollbackExec(sql, args...)
 			if err != nil {
 				return errors.Trace(err)
 			}
