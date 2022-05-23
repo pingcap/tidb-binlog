@@ -18,6 +18,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
@@ -59,7 +60,7 @@ func (s *mysqlSuite) TestMySQLSyncerAvoidBlock(c *check.C) {
 	syncer := &MysqlSyncer{
 		db:         db,
 		loader:     fakeMySQLLoaderImpl,
-		baseSyncer: newBaseSyncer(infoGetter),
+		baseSyncer: newBaseSyncer(infoGetter, nil),
 	}
 	go syncer.run()
 	gen := translator.BinlogGenerator{}
@@ -134,7 +135,7 @@ func (s *mysqlSuite) TestMySQLSyncerWithRelayer(c *check.C) {
 		db:         db,
 		loader:     fakeMySQLLoaderImpl,
 		relayer:    relayer,
-		baseSyncer: newBaseSyncer(infoGetter),
+		baseSyncer: newBaseSyncer(infoGetter, nil),
 	}
 	defer syncer.Close()
 

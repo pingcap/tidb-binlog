@@ -37,7 +37,7 @@ func SetSQLMode(mode mysql.SQLMode) {
 	sqlMode = mode
 }
 
-func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]types.Datum, err error) {
+func insertRowToDatums(table *model.TableInfo, row []byte, loc *time.Location) (datums map[int64]types.Datum, err error) {
 	colsTypeMap := util.ToColumnTypeMap(table.Columns)
 
 	var (
@@ -69,7 +69,7 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 		}
 		if table.IsCommonHandle {
 			// clustered index could be complex type that need Unflatten from raw datum.
-			aPK, err = tablecodec.Unflatten(aPK, &table.Columns[commonPKInfo.Columns[i].Offset].FieldType, time.Local)
+			aPK, err = tablecodec.Unflatten(aPK, &table.Columns[commonPKInfo.Columns[i].Offset].FieldType, loc)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -77,7 +77,7 @@ func insertRowToDatums(table *model.TableInfo, row []byte) (datums map[int64]typ
 		pk = append(pk, aPK)
 	}
 
-	datums, err = tablecodec.DecodeRowToDatumMap(remain, colsTypeMap, time.Local)
+	datums, err = tablecodec.DecodeRowToDatumMap(remain, colsTypeMap, loc)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

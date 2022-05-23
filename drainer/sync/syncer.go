@@ -15,9 +15,11 @@ package sync
 
 import (
 	"fmt"
+	"time"
+
+	pb "github.com/pingcap/tipb/go-binlog"
 
 	"github.com/pingcap/tidb-binlog/drainer/translator"
-	pb "github.com/pingcap/tipb/go-binlog"
 )
 
 // Item contains information about binlog
@@ -64,13 +66,18 @@ type baseSyncer struct {
 	*baseError
 	success         chan *Item
 	tableInfoGetter translator.TableInfoGetter
+	timeZone        *time.Location
 }
 
-func newBaseSyncer(tableInfoGetter translator.TableInfoGetter) *baseSyncer {
+func newBaseSyncer(tableInfoGetter translator.TableInfoGetter, timeZone *time.Location) *baseSyncer {
+	if timeZone == nil {
+		timeZone = time.Local
+	}
 	return &baseSyncer{
 		baseError:       newBaseError(),
 		success:         make(chan *Item, 8),
 		tableInfoGetter: tableInfoGetter,
+		timeZone:        timeZone,
 	}
 }
 

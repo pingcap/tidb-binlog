@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	tipb "github.com/pingcap/tipb/go-binlog"
+
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
 // TiBinlogToOracleTxn translate the format to loader.Txn
@@ -66,7 +68,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 
 				switch mutType {
 				case tipb.MutationType_Insert:
-					names, args, err := genDBInsert(schema, pinfo, info, row, loader.OracleDB)
+					names, args, err := genDBInsert(schema, pinfo, info, row, loader.OracleDB, time.Local)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen insert fail")
 					}
@@ -84,7 +86,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 						dml.Values[strings.ToUpper(name)] = args[i]
 					}
 				case tipb.MutationType_Update:
-					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue, loader.OracleDB)
+					names, args, oldArgs, err := genDBUpdate(schema, pinfo, info, row, canAppendDefaultValue, loader.OracleDB, time.Local)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen update fail")
 					}
@@ -105,7 +107,7 @@ func TiBinlogToOracleTxn(infoGetter TableInfoGetter, schema string, table string
 					}
 
 				case tipb.MutationType_DeleteRow:
-					names, args, err := genDBDelete(schema, info, row, loader.OracleDB)
+					names, args, err := genDBDelete(schema, info, row, loader.OracleDB, time.Local)
 					if err != nil {
 						return nil, errors.Annotate(err, "gen delete fail")
 					}
