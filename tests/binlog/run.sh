@@ -11,7 +11,7 @@ function revert_timezone() {
 
 # set timezone to others before drainer starts
 trap revert_timezone EXIT
-run_sql "SET @@global.time_zone = 'Asia/Shanghai';"
+run_sql "SET @@global.time_zone = 'Asia/Tokyo';"
 down_run_sql "SET @@global.time_zone = 'EST';"
 
 run_drainer &
