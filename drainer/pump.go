@@ -177,7 +177,7 @@ func (p *Pump) PullBinlog(pctx context.Context, last int64) chan MergeItem {
 				p.reportErr(pctx, err)
 				return
 			}
-			resp.Entity.Payload = resp.Entity.Payload[:0]
+			resp.Entity.Payload = nil // GC
 
 			millisecond := time.Now().UnixNano()/1000000 - oracle.ExtractPhysical(uint64(binlog.CommitTs))
 			binlogReachDurationHistogram.WithLabelValues(p.nodeID).Observe(float64(millisecond) / 1000.0)
