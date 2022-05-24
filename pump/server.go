@@ -28,14 +28,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pump/storage"
 	"github.com/pingcap/tidb/kv"
 	kvstore "github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
-	binlog "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tipb/go-binlog"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -46,6 +42,11 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump/storage"
 )
 
 var (
@@ -307,13 +308,14 @@ func (s *Server) PullBinlogs(in *binlog.PullBinlogReq, stream binlog.Pump_PullBi
 			}
 			resp := new(binlog.PullBinlogResp)
 
-			resp.Entity.Payload = data
+			resp.Entity = *data
 			err = stream.Send(resp)
 			if err != nil {
 				log.Warn("send failed", zap.Error(err))
 				return err
 			}
-			log.Debug("PullBinlogs send binlog payload success", zap.Int("len", len(data)))
+			log.Debug("PullBinlogs send binlog payload success", zap.Int("len", len(data.Payload)),
+				zap.Int64("start ts", data.Meta.StartTs), zap.Int64("commit ts", data.Meta.CommitTs))
 		case <-stream.Context().Done():
 			log.Debug("stream done", zap.Error(stream.Context().Err()))
 			return nil

@@ -379,6 +379,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		}
 	})
 	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+
+	runTimeZoneCase(tr)
 }
 
 func caseUpdateWhileAddingCol(db *sql.DB) {
@@ -708,6 +710,67 @@ func runPKcases(tr *testRunner) {
 			})
 
 			tr.execSQLs([]string{"DROP TABLE pk"})
+		}
+	}
+}
+
+func runTimeZoneCase(tr *testRunner) {
+	cases := []struct {
+		Tp     string
+		Value  interface{}
+		Update interface{}
+	}{
+		{
+			Tp:     "TIMESTAMP",
+			Value:  "2022-04-27 04:05:07",
+			Update: "2021-04-27 04:05:06",
+		},
+		{
+			Tp:     "DATETIME",
+			Value:  "2022-04-27 04:05:07",
+			Update: "2021-04-27 04:05:06",
+		},
+		{
+			Tp:     "DATE",
+			Value:  "2022-04-27",
+			Update: "2022-04-26",
+		},
+		{
+			Tp:     "TIME",
+			Value:  "04:05:07",
+			Update: "04:05:06",
+		},
+		{
+			Tp:     "YEAR",
+			Value:  "2022",
+			Update: "2021",
+		},
+	}
+	for _, c := range cases {
+		for _, ispk := range []string{"", "PRIMARY KEY NONCLUSTERED", "PRIMARY KEY CLUSTERED"} {
+			var caseSQL string
+			tr.run(func(src *sql.DB) {
+				caseSQL = fmt.Sprintf("CREATE TABLE tz(t %s %s)", c.Tp, ispk)
+				mustExec(src, caseSQL)
+				caseSQL = "INSERT INTO tz(t) values( ? )"
+				mustExec(src, caseSQL, c.Value)
+			})
+			if len(ispk) == 0 {
+				tr.run(func(src *sql.DB) {
+					// insert a null value
+					mustExec(src, caseSQL, nil)
+				})
+			}
+			tr.run(func(src *sql.DB) {
+				caseSQL = "UPDATE tz set t = ? where t = ?"
+				mustExec(src, caseSQL, c.Update, c.Value)
+			})
+			tr.run(func(src *sql.DB) {
+				caseSQL = "DELETE from tz where t = ?"
+				mustExec(src, caseSQL, c.Update)
+			})
+
+			tr.execSQLs([]string{"DROP TABLE tz"})
 		}
 	}
 }

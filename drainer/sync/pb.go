@@ -46,7 +46,7 @@ func NewPBSyncer(dir string, retentionDays int, tableInfoGetter translator.Table
 
 	s := &pbSyncer{
 		binlogger:  binlogger,
-		baseSyncer: newBaseSyncer(tableInfoGetter),
+		baseSyncer: newBaseSyncer(tableInfoGetter, nil),
 		cancel:     cancel,
 	}
 

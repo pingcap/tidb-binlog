@@ -6,11 +6,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ Syncer = &OracleSyncer{}
@@ -55,7 +56,7 @@ func NewOracleSyncer(
 		db:          db,
 		loader:      loader,
 		relayer:     relayer,
-		baseSyncer:  newBaseSyncer(tableInfoGetter),
+		baseSyncer:  newBaseSyncer(tableInfoGetter, nil),
 		tableRouter: tableRouter,
 	}
 
