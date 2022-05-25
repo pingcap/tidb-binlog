@@ -15,12 +15,14 @@ package translator
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
 type testMysqlSuite struct {
@@ -37,7 +39,7 @@ func (t *testMysqlSuite) TestGenColumnList(c *check.C) {
 func (t *testMysqlSuite) TestDDL(c *check.C) {
 	t.SetDDL()
 
-	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, nil, true)
+	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, nil, true, time.Local)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(txn, check.DeepEquals, &loader.Txn{
@@ -51,7 +53,7 @@ func (t *testMysqlSuite) TestDDL(c *check.C) {
 }
 
 func (t *testMysqlSuite) testDML(c *check.C, tp loader.DMLType) {
-	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV, false)
+	txn, err := TiBinlogToTxn(t, t.Schema, t.Table, t.TiBinlog, t.PV, false, time.Local)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(txn.DMLs, check.HasLen, 1)

@@ -117,7 +117,7 @@ func TiBinlogToPbBinlog(infoGetter TableInfoGetter, schema string, table string,
 func genInsert(schema string, ptable, table *model.TableInfo, row []byte) (event *pb.Event, err error) {
 	columns := table.Columns
 
-	columnValues, err := insertRowToDatums(table, row)
+	columnValues, err := insertRowToDatums(table, row, time.Local)
 	if err != nil {
 		return nil, errors.Annotatef(err, "table `%s`.`%s`", schema, table.Name)
 	}
