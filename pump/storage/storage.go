@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
-	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -40,6 +39,8 @@ import (
 	"github.com/tikv/client-go/v2/txnkv/txnlock"
 	"go.uber.org/zap"
 	"golang.org/x/sys/unix"
+
+	pkgutil "github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 const (
@@ -85,7 +86,7 @@ type Storage interface {
 	GetBinlog(ts int64) (binlog *pb.Binlog, err error)
 
 	// PullCommitBinlog return the chan to consume the binlog
-	PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
+	PullCommitBinlog(ctx context.Context, last int64) <-chan *pb.Entity
 
 	Close() error
 }
@@ -1111,7 +1112,7 @@ func (a *Append) feedPreWriteValue(cbinlog *pb.Binlog) error {
 }
 
 // PullCommitBinlog return commit binlog  > last
-func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte {
+func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan *pb.Entity {
 	log.Debug("new PullCommitBinlog", zap.Int64("last ts", last))
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -1129,7 +1130,7 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 		last = gcTS
 	}
 
-	values := make(chan []byte, 5)
+	values := make(chan *pb.Entity, 5)
 
 	irange := &util.Range{
 		Start: encodeTSKey(0),
@@ -1220,8 +1221,16 @@ func (a *Append) PullCommitBinlog(ctx context.Context, last int64) <-chan []byte
 					return
 				}
 
+				entity := &pb.Entity{
+					Payload: value,
+					Meta: pb.Meta{
+						StartTs:  binlog.StartTs,
+						CommitTs: binlog.CommitTs,
+					},
+				}
+
 				select {
-				case values <- value:
+				case values <- entity:
 					log.Debug("send value success")
 				case <-ctx.Done():
 					iter.Release()

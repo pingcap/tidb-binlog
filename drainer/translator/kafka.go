@@ -23,7 +23,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-binlog/pkg/util"
 	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -31,6 +30,8 @@ import (
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-binlog/pkg/util"
 )
 
 // TiBinlogToSecondaryBinlog translates the format to secondary binlog
@@ -149,7 +150,7 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 }
 
 func insertRowToRow(ptableInfo, tableInfo *model.TableInfo, raw []byte) (row *obinlog.Row, err error) {
-	columnValues, err := insertRowToDatums(tableInfo, raw)
+	columnValues, err := insertRowToDatums(tableInfo, raw, time.Local)
 	columns := tableInfo.Columns
 
 	row = new(obinlog.Row)

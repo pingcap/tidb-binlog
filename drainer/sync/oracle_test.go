@@ -21,6 +21,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
@@ -83,7 +84,7 @@ func (s *oracleSuite) TestOracleSyncerAvoidBlock(c *check.C) {
 	syncer := &OracleSyncer{
 		db:          db,
 		loader:      fakeOracleLoaderImpl,
-		baseSyncer:  newBaseSyncer(infoGetter),
+		baseSyncer:  newBaseSyncer(infoGetter, nil),
 		tableRouter: router,
 	}
 	go syncer.run()
@@ -163,7 +164,7 @@ func (s *oracleSuite) TestOracleSyncerWithRelayer(c *check.C) {
 		db:          db,
 		loader:      fakeOracleLoaderImpl,
 		relayer:     relayer,
-		baseSyncer:  newBaseSyncer(infoGetter),
+		baseSyncer:  newBaseSyncer(infoGetter, nil),
 		tableRouter: router,
 	}
 	defer syncer.Close()
