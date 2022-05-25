@@ -267,7 +267,7 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) 
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
-		if wargs[i] == nil {
+		if wargs[i] == nil || wargs[i] == "" {
 			builder.WriteString(escapeName(wnames[i]) + " IS NULL")
 		} else {
 			builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
@@ -380,7 +380,7 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
-		if colValues[i] == nil {
+		if colValues[i] == nil || colValues[i] == "" {
 			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
 		} else {
 			builder.WriteString(fmt.Sprintf("%s = :%d", colNames[i], oracleHolderPos))
