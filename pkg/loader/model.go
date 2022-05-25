@@ -392,7 +392,7 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 		if colValues[i] == nil || colValues[i] == "" {
 			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = :%d", colNames[i], oracleHolderPos))
+			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(escapeName(colNames[i])), oracleHolderPos))
 			oracleHolderPos++
 			args = append(args, colValues[i])
 		}
