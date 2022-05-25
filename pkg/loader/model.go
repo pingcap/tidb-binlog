@@ -279,7 +279,7 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) 
 }
 
 func (dml *DML) processOracleColumn(colName string) string {
-	dataType, _ := dml.info.dataTypeMap[colName]
+	dataType := dml.info.dataTypeMap[colName]
 	switch dataType {
 	case "CHAR", "NCHAR":
 		return fmt.Sprintf("RTRIM(%s)", colName)
