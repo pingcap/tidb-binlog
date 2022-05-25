@@ -270,12 +270,21 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) 
 		if wargs[i] == nil || wargs[i] == "" {
 			builder.WriteString(escapeName(wnames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = :%d", escapeName(wnames[i]), pOracleHolderPos))
+			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(escapeName(wnames[i])), pOracleHolderPos))
 			pOracleHolderPos++
 			args = append(args, wargs[i])
 		}
 	}
 	return
+}
+
+func (dml *DML) processOracleColumn(colName string) string {
+	dataType, _ := dml.info.dataTypeMap[colName]
+	switch dataType {
+	case "CHAR", "NCHAR":
+		return fmt.Sprintf("RTRIM(%s)", colName)
+	}
+	return colName
 }
 
 func (dml *DML) whereValues(names []string) (values []interface{}) {
