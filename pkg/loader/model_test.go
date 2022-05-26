@@ -271,6 +271,59 @@ func (s *SQLSuite) TestUpdateMarkSQL(c *check.C) {
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
+func (s *SQLSuite) TestOracleUpdateSQLCharType(c *check.C) {
+	dml := DML{
+		Tp:       UpdateDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":      123,
+			"NAME":    "pc",
+			"OFFER":   "oo",
+			"ADDRESS": "aa",
+		},
+		OldValues: map[string]interface{}{
+			"ID":      123,
+			"NAME":    "pingcap",
+			"OFFER":   "o",
+			"ADDRESS": "a",
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME", "OFFER", "ADDRESS"},
+			dataTypeMap: map[string]string{
+				"ID":      "VARCHAR2",
+				"NAME":    "VARCHAR2",
+				"OFFER":   "CHAR",
+				"ADDRESS": "NCHAR",
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"OFFER": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"ADDRESS": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+	sql, args := dml.sql()
+	c.Assert(
+		sql, check.Equals,
+		"UPDATE db.tbl SET ADDRESS = :1,ID = :2,NAME = :3,OFFER = :4 WHERE RTRIM(ADDRESS) = :5 AND ID = :6 AND NAME = :7 AND RTRIM(OFFER) = :8 AND rownum <=1")
+	c.Assert(args, check.HasLen, 8)
+	c.Assert(args[0], check.Equals, "aa")
+	c.Assert(args[1], check.Equals, 123)
+	c.Assert(args[2], check.Equals, "pc")
+	c.Assert(args[3], check.Equals, "oo")
+	c.Assert(args[4], check.Equals, "a")
+	c.Assert(args[5], check.Equals, 123)
+	c.Assert(args[6], check.Equals, "pingcap")
+	c.Assert(args[7], check.Equals, "o")
+}
+
 func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 	dml := DML{
 		Tp:       UpdateDMLType,
@@ -348,6 +401,49 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 	c.Assert(args[0], check.Equals, 123)
 	c.Assert(args[1], check.Equals, "pc")
 	c.Assert(args[2], check.Equals, 123)
+}
+
+func (s *SQLSuite) TestOracleDeleteSQLCharType(c *check.C) {
+	dml := DML{
+		Tp:       DeleteDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":      123,
+			"NAME":    "pc",
+			"OFFER":   "o",
+			"ADDRESS": "a",
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME", "OFFER", "ADDRESS"},
+			dataTypeMap: map[string]string{
+				"ID":      "VARCHAR2",
+				"NAME":    "VARCHAR2",
+				"OFFER":   "CHAR",
+				"ADDRESS": "NCHAR",
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"OFFER": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"ADDRESS": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+	sql, args := dml.sql()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE RTRIM(ADDRESS) = :1 AND ID = :2 AND NAME = :3 AND RTRIM(OFFER) = :4 AND rownum <=1")
+	c.Assert(args, check.HasLen, 4)
+	c.Assert(args[0], check.Equals, "a")
+	c.Assert(args[1], check.Equals, 123)
+	c.Assert(args[2], check.Equals, "pc")
+	c.Assert(args[3], check.Equals, "o")
 }
 
 func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
@@ -568,3 +664,86 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
 	c.Assert(args[1], check.Equals, "456")
 	c.Assert(args[2], check.Equals, "pc")
 }
+<<<<<<< HEAD
+=======
+
+func (s *SQLSuite) TestOracleDeleteNewValueSQLEmptyString(c *check.C) {
+	dml := DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"ID2":  "456",
+			"NAME": "",
+			"C2":   nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "ID2", "NAME", "C2"},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"ID2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+
+	sql, args := dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE C2 IS NULL AND ID = :1 AND ID2 = :2 AND NAME IS NULL AND rownum <=1")
+	c.Assert(args, check.HasLen, 2)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "456")
+}
+
+func (s *SQLSuite) TestOracleDeleteNewValueSQLCharType(c *check.C) {
+	dml := DML{
+		Tp:       InsertDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"ID2":  "456",
+			"NAME": "n",
+			"C2":   "c",
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "ID2", "NAME", "C2"},
+			dataTypeMap: map[string]string{
+				"ID":   "VARCHAR2",
+				"ID2":  "VARCHAR2",
+				"NAME": "CHAR",
+				"C2":   "NCHAR",
+			},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"ID2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"C2": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+
+	sql, args := dml.oracleDeleteNewValueSQL()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE RTRIM(C2) = :1 AND ID = :2 AND ID2 = :3 AND RTRIM(NAME) = :4 AND rownum <=1")
+	c.Assert(args, check.HasLen, 4)
+	c.Assert(args[0], check.Equals, "c")
+	c.Assert(args[1], check.Equals, 123)
+	c.Assert(args[2], check.Equals, "456")
+	c.Assert(args[3], check.Equals, "n")
+}
+>>>>>>> b0214a29 (drainer: rtrim char type column in sql (#1165))
