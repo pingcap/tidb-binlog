@@ -306,7 +306,7 @@ func buildColumnList(names []string, destDBType DBType) string {
 			b.WriteString(",")
 		}
 		if destDBType == OracleDB {
-			b.WriteString(escapeName(name))
+			b.WriteString(name)
 		} else {
 			b.WriteString(quoteName(name))
 		}

@@ -223,7 +223,7 @@ func (dml *DML) updateOracleSQL() (sql string, args []interface{}) {
 			builder.WriteByte(',')
 		}
 		arg := dml.Values[name]
-		fmt.Fprintf(builder, "%s = :%d", escapeName(name), oracleHolderPos)
+		fmt.Fprintf(builder, "%s = :%d", name, oracleHolderPos)
 		oracleHolderPos++
 		args = append(args, arg)
 	}
@@ -268,9 +268,9 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) 
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil || wargs[i] == "" {
-			builder.WriteString(escapeName(wnames[i]) + " IS NULL")
+			builder.WriteString(wnames[i] + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(escapeName(wnames[i])), pOracleHolderPos))
+			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(wnames[i]), pOracleHolderPos))
 			pOracleHolderPos++
 			args = append(args, wargs[i])
 		}
@@ -390,9 +390,9 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 			builder.WriteString(" AND ")
 		}
 		if colValues[i] == nil || colValues[i] == "" {
-			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
+			builder.WriteString(colNames[i] + " IS NULL")
 		} else {
-			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(escapeName(colNames[i])), oracleHolderPos))
+			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(colNames[i]), oracleHolderPos))
 			oracleHolderPos++
 			args = append(args, colValues[i])
 		}
