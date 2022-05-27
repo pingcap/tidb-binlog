@@ -359,6 +359,45 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 	c.Assert(args[3], check.Equals, "pingcap")
 }
 
+func (s *SQLSuite) TestOracleUpdateSQLEmptyString(c *check.C) {
+	dml := DML{
+		Tp:       UpdateDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":    123,
+			"NAME":  "pc",
+			"OFFER": nil,
+		},
+		OldValues: map[string]interface{}{
+			"ID":    123,
+			"NAME":  "",
+			"OFFER": nil,
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME", "OFFER"},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+			"OFFER": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+	sql, args := dml.sql()
+	c.Assert(
+		sql, check.Equals,
+		"UPDATE db.tbl SET ID = :1,NAME = :2,OFFER = :3 WHERE ID = :4 AND NAME IS NULL AND OFFER IS NULL AND rownum <=1")
+	c.Assert(args, check.HasLen, 4)
+	c.Assert(args[0], check.Equals, 123)
+	c.Assert(args[1], check.Equals, "pc")
+	c.Assert(args[2], check.Equals, nil)
+	c.Assert(args[3], check.Equals, 123)
+}
+
 func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 	dml := DML{
 		Tp:       UpdateDMLType,
@@ -473,6 +512,34 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 	c.Assert(args, check.HasLen, 2)
 	c.Assert(args[0], check.Equals, 123)
 	c.Assert(args[1], check.Equals, "pc")
+}
+
+func (s *SQLSuite) TestOracleDeleteSQLEmptyString(c *check.C) {
+	dml := DML{
+		Tp:       DeleteDMLType,
+		Database: "db",
+		Table:    "tbl",
+		Values: map[string]interface{}{
+			"ID":   123,
+			"NAME": "",
+		},
+		info: &tableInfo{
+			columns: []string{"ID", "NAME"},
+		},
+		UpColumnsInfoMap: map[string]*model.ColumnInfo{
+			"ID": {
+				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+			"NAME": {
+				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+		},
+		DestDBType: OracleDB,
+	}
+	sql, args := dml.sql()
+	c.Assert(
+		sql, check.Equals,
+		"DELETE FROM db.tbl WHERE ID = :1 AND NAME IS NULL AND rownum <=1")
+	c.Assert(args, check.HasLen, 1)
+	c.Assert(args[0], check.Equals, 123)
 }
 
 func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
