@@ -267,13 +267,8 @@ func (dml *DML) buildOracleWhere(builder *strings.Builder, oracleHolderPos int) 
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
-<<<<<<< HEAD
-		if wargs[i] == nil {
-			builder.WriteString(escapeName(wnames[i]) + " IS NULL")
-=======
 		if wargs[i] == nil || wargs[i] == "" {
 			builder.WriteString(wnames[i] + " IS NULL")
->>>>>>> b0214a29 (drainer: rtrim char type column in sql (#1165))
 		} else {
 			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(wnames[i]), pOracleHolderPos))
 			pOracleHolderPos++
@@ -394,13 +389,8 @@ func (dml *DML) oracleDeleteNewValueSQL() (sql string, args []interface{}) {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
-<<<<<<< HEAD
-		if colValues[i] == nil {
-			builder.WriteString(escapeName(colNames[i]) + " IS NULL")
-=======
 		if colValues[i] == nil || colValues[i] == "" {
 			builder.WriteString(colNames[i] + " IS NULL")
->>>>>>> b0214a29 (drainer: rtrim char type column in sql (#1165))
 		} else {
 			builder.WriteString(fmt.Sprintf("%s = :%d", dml.processOracleColumn(colNames[i]), oracleHolderPos))
 			oracleHolderPos++

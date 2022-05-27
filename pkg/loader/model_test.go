@@ -664,8 +664,6 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
 	c.Assert(args[1], check.Equals, "456")
 	c.Assert(args[2], check.Equals, "pc")
 }
-<<<<<<< HEAD
-=======
 
 func (s *SQLSuite) TestOracleDeleteNewValueSQLEmptyString(c *check.C) {
 	dml := DML{
@@ -746,4 +744,3 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLCharType(c *check.C) {
 	c.Assert(args[2], check.Equals, "456")
 	c.Assert(args[3], check.Equals, "n")
 }
->>>>>>> b0214a29 (drainer: rtrim char type column in sql (#1165))
