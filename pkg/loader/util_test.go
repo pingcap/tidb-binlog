@@ -90,15 +90,15 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer db.Close()
 
-	columnRows := sqlmock.NewRows([]string{"column_name"}).
-		AddRow("C1").
-		AddRow("C2").
-		AddRow("C3").
-		AddRow("C4").
-		AddRow("C5").
-		AddRow("C6").
-		AddRow("C7").
-		AddRow("C8")
+	columnRows := sqlmock.NewRows([]string{"column_name", "data_type"}).
+		AddRow("C1", "VARCHAR2").
+		AddRow("C2", "VARCHAR2").
+		AddRow("C3", "VARCHAR2").
+		AddRow("C4", "VARCHAR2").
+		AddRow("C5", "VARCHAR2").
+		AddRow("C6", "NUMBER").
+		AddRow("C7", "CHAR").
+		AddRow("C8", "NCHAR")
 	mock.ExpectQuery(regexp.QuoteMeta(colsOracleSQL)).WithArgs("test", "t3").WillReturnRows(columnRows)
 
 	indexRows := sqlmock.NewRows([]string{"index_type", "index_name", "column_position", "column_name"}).
@@ -124,6 +124,16 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 			{name: "T3_PK", columns: []string{"C1", "C2"}},
 			{name: "T3_C3_C4_UINDEX", columns: []string{"C3", "C4"}},
 			{name: "T3_C5_C6_UINDEX", columns: []string{"C5", "C6"}},
+		},
+		dataTypeMap: map[string]string{
+			"C1": "VARCHAR2",
+			"C2": "VARCHAR2",
+			"C3": "VARCHAR2",
+			"C4": "VARCHAR2",
+			"C5": "VARCHAR2",
+			"C6": "NUMBER",
+			"C7": "CHAR",
+			"C8": "NCHAR",
 		},
 	})
 
