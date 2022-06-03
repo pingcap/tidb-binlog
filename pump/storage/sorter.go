@@ -16,6 +16,10 @@ package storage
 import (
 	"container/list"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -105,6 +109,9 @@ type sorter struct {
 	// save the startTS of txn which we need to wait for the C binlog
 	waitStartTS map[int64]struct{}
 
+	commitTsLagMetrics  prometheus.Observer
+	maxPushItemCommitTs int64 // atomic. Used for metrics only
+
 	lock   sync.Mutex
 	cond   *sync.Cond
 	items  *list.List
@@ -114,14 +121,16 @@ type sorter struct {
 
 func newSorter(fn func(item sortItem)) *sorter {
 	sorter := &sorter{
-		maxTSItemCB: fn,
-		items:       list.New(),
-		waitStartTS: make(map[int64]struct{}),
+		maxTSItemCB:        fn,
+		items:              list.New(),
+		waitStartTS:        make(map[int64]struct{}),
+		commitTsLagMetrics: commitTsLagHistogram.With(map[string]string{"type": "sorter"}),
 	}
 
 	sorter.cond = sync.NewCond(&sorter.lock)
-	sorter.wg.Add(1)
+	sorter.wg.Add(2)
 	go sorter.run()
+	go sorter.updateMetrics()
 
 	return sorter
 }
@@ -148,6 +157,12 @@ func (s *sorter) pushTSItem(item sortItem) {
 	if item.tp == pb.BinlogType_Prewrite {
 		s.waitStartTS[item.start] = struct{}{}
 	} else {
+		if item.commit > atomic.LoadInt64(&s.maxPushItemCommitTs) {
+			// No need to CAS because we are inside a lock, and
+			// this is the only place where s.maxPushItemCommitTs
+			// is written to.
+			atomic.StoreInt64(&s.maxPushItemCommitTs, item.commit)
+		}
 		delete(s.waitStartTS, item.start)
 		s.cond.Signal()
 	}
@@ -222,6 +237,35 @@ func (s *sorter) run() {
 			}
 		}
 		s.cond.L.Unlock()
+	}
+}
+
+func (s *sorter) updateMetrics() {
+	defer s.wg.Done()
+
+	tick := time.NewTicker(1 * time.Second)
+	defer tick.Stop()
+
+	rl := rate.NewLimiter(rate.Every(time.Second*10), 1)
+
+	for range tick.C {
+		if s.isClosed() {
+			return
+		}
+
+		curMaxPushItemCommitTs := atomic.LoadInt64(&s.maxPushItemCommitTs)
+		maxCommitTsPhysicalMs := oracle.ExtractPhysical(uint64(curMaxPushItemCommitTs))
+		millisecond := time.Now().UnixMilli() - maxCommitTsPhysicalMs
+
+		// Update metrics
+		s.commitTsLagMetrics.Observe(float64(millisecond) / 1000.0)
+
+		if millisecond > 10000 /* 10s */ && rl.Allow() {
+			// Prints a log if the lag is more than 10 seconds, and
+			// if the rate limiter allows.
+			duration := time.Duration(millisecond) * time.Millisecond
+			log.Info("sorter commit ts lag", zap.Duration("duration", duration))
+		}
 	}
 }
 

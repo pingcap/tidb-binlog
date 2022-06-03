@@ -16,6 +16,7 @@ package storage
 import (
 	"context"
 	"encoding/binary"
+	"golang.org/x/time/rate"
 	"math"
 	"os"
 	"path"
@@ -118,6 +119,8 @@ type Append struct {
 	writeCh chan *request
 
 	options *Options
+
+	maxWriteToKVCommitTs int64 // atomic. Used for metrics only.
 
 	close chan struct{}
 	wg    sync.WaitGroup
@@ -362,6 +365,14 @@ func (a *Append) updateStatus() {
 	logStatsTicker := time.NewTicker(time.Second * 10)
 	defer logStatsTicker.Stop()
 
+	updateMetricsTicker := time.NewTicker(time.Second * 1)
+	defer updateMetricsTicker.Stop()
+
+	kvCommitTsLagMetrics := commitTsLagHistogram.With(map[string]string{
+		"type": "kv",
+	})
+	logRL := rate.NewLimiter(rate.Every(time.Second*10), 1)
+
 	for {
 		select {
 		case <-a.close:
@@ -388,6 +399,20 @@ func (a *Append) updateStatus() {
 				if stats.WritePaused {
 					log.Warn("in WritePaused stat")
 				}
+			}
+		case <-updateMetricsTicker.C:
+			curKVCommitTs := atomic.LoadInt64(&a.maxWriteToKVCommitTs)
+			maxCommitTsPhysicalMs := oracle.ExtractPhysical(uint64(curKVCommitTs))
+			millisecond := time.Now().UnixMilli() - maxCommitTsPhysicalMs
+
+			// Update metrics
+			kvCommitTsLagMetrics.Observe(float64(millisecond) / 1000.0)
+
+			if millisecond > 10000 /* 10s */ && logRL.Allow() {
+				// Prints a log if the lag is more than 10 seconds, and
+				// if the rate limiter allows.
+				duration := time.Duration(millisecond) * time.Millisecond
+				log.Info("kv commit ts lag", zap.Duration("duration", duration))
 			}
 		}
 	}
@@ -888,6 +913,10 @@ func (a *Append) writeToKV(reqs chan *request) chan *request {
 				return
 			}
 			for _, req := range bufReqs {
+				if req.commitTS > atomic.LoadInt64(&a.maxWriteToKVCommitTs) {
+					atomic.StoreInt64(&a.maxWriteToKVCommitTs, req.commitTS)
+				}
+
 				done <- req
 			}
 		}
