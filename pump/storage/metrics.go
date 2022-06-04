@@ -108,6 +108,15 @@ var (
 			Help:      "How long the catch up step takes to run.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 22),
 		})
+
+	commitTsLagHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "binlog",
+			Subsystem: "pump_storage",
+			Name:      "commit_ts_lag_time",
+			Help:      "Bucketed histogram of the lag of currently handled maximum commit-ts",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"type"})
 )
 
 // InitMetircs register the metrics to registry
@@ -123,4 +132,5 @@ func InitMetircs(registry *prometheus.Registry) {
 	registry.MustRegister(storageSizeGauge)
 	registry.MustRegister(slowChaserCount)
 	registry.MustRegister(slowChaserCatchUpTimeHistogram)
+	registry.MustRegister(commitTsLagHistogram)
 }
