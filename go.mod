@@ -17,27 +17,27 @@ require (
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
-	github.com/pingcap/kvproto v0.0.0-20220314103629-10e688307221
-	github.com/pingcap/log v0.0.0-20211215031037-e024ba4eb0ee
-	github.com/pingcap/tidb v1.1.0-beta.0.20220317081830-e8ee6c193948
+	github.com/pingcap/kvproto v0.0.0-20220517085838-12e2f5a9d167
+	github.com/pingcap/log v1.1.0
+	github.com/pingcap/tidb v1.1.0-beta.0.20220622075636-494759d4aa18
 	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220309081549-563c2a342f9c+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220317063031-eb4cfcec7801
-	github.com/pingcap/tipb v0.0.0-20220215045658-d12dec7a7609
-	github.com/prometheus/client_golang v1.11.0
+	github.com/pingcap/tidb/parser v0.0.0-20220622075636-494759d4aa18
+	github.com/pingcap/tipb v0.0.0-20220602075447-4847c5d68e73
+	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
 	github.com/soheilhy/cmux v0.1.5
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
-	github.com/tikv/client-go/v2 v2.0.1-0.20220311043619-5042c6f2aaa6
+	github.com/tikv/client-go/v2 v2.0.1-0.20220622080835-681fb6e537b5
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	github.com/unrolled/render v1.0.1
 	go.etcd.io/etcd/client/v3 v3.5.2
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/zap v1.21.0
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220317061510-51cd9980dadf
+	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
+	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f
 	google.golang.org/grpc v1.44.0
 )
 
@@ -51,6 +51,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.2.0 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
+	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1581 // indirect
 	github.com/aws/aws-sdk-go v1.35.3 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -60,10 +61,9 @@ require (
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
-	github.com/cznic/sortutil v0.0.0-20181122101858-f5f958428db8 // indirect
 	github.com/danjacques/gofslock v0.0.0-20191023191349-0a45f885bc37 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dgraph-io/ristretto v0.1.0 // indirect
+	github.com/dgraph-io/ristretto v0.1.1-0.20220403145359-8e850b710d6d // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/eapache/go-resiliency v1.2.0 // indirect
@@ -111,21 +111,22 @@ require (
 	github.com/opentracing/basictracer-go v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
-	github.com/pingcap/failpoint v0.0.0-20220309090818-0d9efe9d1572 // indirect
+	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3 // indirect
 	github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4 // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.32.1 // indirect
-	github.com/prometheus/procfs v0.6.0 // indirect
+	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.21.12 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.7.1 // indirect
+	github.com/stathat/consistent v1.0.0 // indirect
+	github.com/stretchr/testify v1.7.2-0.20220504104629-106ec21d14df // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
@@ -155,8 +156,10 @@ require (
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
+	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
+	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	golang.org/x/tools v0.1.10 // indirect

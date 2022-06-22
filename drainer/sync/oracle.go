@@ -6,7 +6,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/pingcap/tidb-binlog/drainer/relay"

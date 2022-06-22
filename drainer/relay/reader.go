@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/binlogfile"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	obinlog "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tipb/go-binlog"
 )
 

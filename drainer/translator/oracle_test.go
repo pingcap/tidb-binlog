@@ -18,10 +18,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	router "github.com/pingcap/tidb/util/table-router"
 )
 
 type testOracleSuite struct {

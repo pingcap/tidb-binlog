@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
+	router "github.com/pingcap/tidb/util/table-router"
 	tipb "github.com/pingcap/tipb/go-binlog"
 
 	"github.com/pingcap/tidb-binlog/pkg/loader"

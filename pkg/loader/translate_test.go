@@ -14,10 +14,10 @@
 package loader
 
 import (
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
-	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	ptypes "github.com/pingcap/tidb/parser/types"
+	pb "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
+	router "github.com/pingcap/tidb/util/table-router"
 
 	. "github.com/pingcap/check"
 )
@@ -228,9 +228,9 @@ func (s *secondaryBinlogToTxnSuite) TestTranslateOracleDML(c *C) {
 
 func checkColumnInfo(c *C, txnColInfo *model.ColumnInfo, pbColInfo *pb.ColumnInfo) {
 	c.Assert(txnColInfo.Name.O, Equals, pbColInfo.Name)
-	c.Assert(txnColInfo.Tp, Equals, ptypes.StrToType(pbColInfo.MysqlType))
-	c.Assert(txnColInfo.Flen, Equals, int(pbColInfo.Flen))
-	c.Assert(txnColInfo.Decimal, Equals, int(pbColInfo.Decimal))
+	c.Assert(txnColInfo.GetType(), Equals, ptypes.StrToType(pbColInfo.MysqlType))
+	c.Assert(txnColInfo.GetFlen(), Equals, int(pbColInfo.Flen))
+	c.Assert(txnColInfo.GetDecimal(), Equals, int(pbColInfo.Decimal))
 }
 
 func (s *secondaryBinlogToTxnSuite) TestGetDMLType(c *C) {

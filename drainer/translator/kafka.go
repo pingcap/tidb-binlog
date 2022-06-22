@@ -23,10 +23,10 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/tablecodec"
+	obinlog "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
@@ -102,10 +102,10 @@ func genTable(schema string, tableInfo *model.TableInfo) (table *obinlog.Table) 
 	for _, col := range tableInfo.Columns {
 		info := new(obinlog.ColumnInfo)
 		info.Name = col.Name.O
-		info.MysqlType = types.TypeToStr(col.Tp, col.Charset)
-		info.Flen = int32(col.Flen)
-		info.Decimal = int32(col.Decimal)
-		info.IsPrimaryKey = mysql.HasPriKeyFlag(col.Flag)
+		info.MysqlType = types.TypeToStr(col.GetType(), col.GetCharset())
+		info.Flen = int32(col.GetFlen())
+		info.Decimal = int32(col.GetDecimal())
+		info.IsPrimaryKey = mysql.HasPriKeyFlag(col.GetFlag())
 		columnInfos = append(columnInfos, info)
 	}
 	table.ColumnInfo = columnInfos
@@ -232,7 +232,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		return
 	}
 
-	switch types.TypeToStr(colInfo.Tp, colInfo.Charset) {
+	switch types.TypeToStr(colInfo.GetType(), colInfo.GetCharset()) {
 	// date and time type
 	case "date", "datetime", "time", "timestamp", "year":
 		str := fmt.Sprintf("%v", datum.GetValue())
@@ -242,7 +242,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 	// https://dev.mysql.com/doc/refman/8.0/en/integer-types.html
 	case "int", "bigint", "smallint", "tinyint", "mediumint":
 		str := fmt.Sprintf("%v", datum.GetValue())
-		if mysql.HasUnsignedFlag(colInfo.Flag) {
+		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			val, err := strconv.ParseUint(str, 10, 64)
 			if err != nil {
 				log.Fatal("ParseUint failed", zap.String("str", str), zap.Error(err))
@@ -276,7 +276,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 
 	// TiDB don't suppose now
 	case "geometry":
-		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.Tp))
+		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.GetType()))
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 
@@ -284,7 +284,7 @@ func DatumToColumn(colInfo *model.ColumnInfo, datum types.Datum) (col *obinlog.C
 		col.BytesValue = []byte(datum.GetMysqlJSON().String())
 
 	default:
-		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.Tp))
+		log.Warn("unknown mysql type", zap.Uint8("type", colInfo.GetType()))
 		str := fmt.Sprintf("%v", datum.GetValue())
 		col.StringValue = proto.String(str)
 
