@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	obinlog "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	ti "github.com/pingcap/tipb/go-binlog"
 )
 

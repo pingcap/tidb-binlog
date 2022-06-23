@@ -103,7 +103,7 @@ func insertRowToDatums(table *model.TableInfo, row []byte, loc *time.Location) (
 		}
 	} else {
 		for _, col := range table.Columns {
-			if (table.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == implicitColID {
+			if (table.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag())) || col.ID == implicitColID {
 				// If pk is handle, the datums TiDB write will always be Int64 type.
 				// https://github.com/pingcap/tidb/blob/cd10bca6660937beb5d6de11d49ec50e149fe083/table/tables/tables.go#L721
 				//
@@ -126,7 +126,7 @@ func getEnumDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
 	ivalue := getCol.GetOriginDefaultValue()
 	switch value := ivalue.(type) {
 	case string:
-		enum, err := types.ParseEnumName(getCol.Elems, value, "")
+		enum, err := types.ParseEnumName(getCol.GetElems(), value, "")
 		if err != nil {
 			return types.Datum{}, errors.AddStack(err)
 		}
@@ -140,7 +140,7 @@ func getSetDatum(getCol *model.ColumnInfo) (data types.Datum, err error) {
 	ivalue := getCol.GetOriginDefaultValue()
 	switch value := ivalue.(type) {
 	case string:
-		enum, err := types.ParseSetName(getCol.Elems, value, "")
+		enum, err := types.ParseSetName(getCol.GetElems(), value, "")
 		if err != nil {
 			return types.Datum{}, errors.AddStack(err)
 		}
@@ -179,7 +179,7 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 	if getCol.GetOriginDefaultValue() != nil {
 		// ref https://github.com/pingcap/tidb/blob/release-4.0/ddl/column.go#L675
 		// trans value from UTC to local timezone value format.
-		if getCol.Tp == mysql.TypeTimestamp {
+		if getCol.GetType() == mysql.TypeTimestamp {
 			value, err := transTimestampToLocal(getCol)
 			if err != nil {
 				log.Warn("failed to transTimestampToLocal",
@@ -188,7 +188,7 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 			} else {
 				return types.NewDatum(value)
 			}
-		} else if getCol.Tp == mysql.TypeEnum {
+		} else if getCol.GetType() == mysql.TypeEnum {
 			data, err := getEnumDatum(getCol)
 			if err != nil {
 				log.Warn("failed to get enum datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
@@ -196,7 +196,7 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 			} else {
 				return data
 			}
-		} else if getCol.Tp == mysql.TypeSet {
+		} else if getCol.GetType() == mysql.TypeSet {
 			data, err := getSetDatum(getCol)
 			if err != nil {
 				log.Warn("failed to get set datam", zap.Reflect("value", getCol.GetOriginDefaultValue()),
@@ -212,15 +212,15 @@ func getDefaultOrZeroValue(tableInfo *model.TableInfo, col *model.ColumnInfo) ty
 	// see https://github.com/pingcap/tidb/issues/9304
 	// must use null if TiDB not write the column value when default value is null
 	// and the value is null
-	if !mysql.HasNotNullFlag(col.Flag) {
+	if !mysql.HasNotNullFlag(col.GetFlag()) {
 		return types.NewDatum(nil)
 	}
 
 	// if !mysql.HasNotNullFlag(col.Flag) {
-	if col.Tp == mysql.TypeEnum {
+	if col.GetType() == mysql.TypeEnum {
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0])
+		return types.NewDatum(col.GetElems()[0])
 	}
 
 	return table.GetZeroValue(col)
@@ -320,7 +320,7 @@ func DecodeOldAndNewRow(b []byte,
 				"fill missing col with default val",
 				zap.String("name", missingCol.Name.O),
 				zap.Int64("id", missingCol.ID),
-				zap.Int("Tp", int(missingCol.FieldType.Tp)),
+				zap.Int("Tp", int(missingCol.FieldType.GetType())),
 				zap.Reflect("value", v))
 		}
 	}
@@ -350,7 +350,7 @@ func (ud updateDecoder) decode(b []byte, loc *time.Location) (map[int64]types.Da
 }
 
 func fixType(data types.Datum, col *model.ColumnInfo) types.Datum {
-	if mysql.HasUnsignedFlag(col.Flag) {
+	if mysql.HasUnsignedFlag(col.GetFlag()) {
 		switch oldV := data.GetValue().(type) {
 		case int64:
 			log.Debug("convert int64 type to uint64", zap.Int64("value", oldV))

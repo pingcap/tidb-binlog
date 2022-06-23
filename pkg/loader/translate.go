@@ -18,11 +18,11 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
+	router "github.com/pingcap/tidb/util/table-router"
 
-	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	ptypes "github.com/pingcap/tidb/parser/types"
+	pb "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -90,9 +90,12 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog, tableRouter *router.Table, upperCol
 func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
 	colMap := make(map[string]*model.ColumnInfo)
 	for _, col := range columnInfos {
+		tp := types.NewFieldType(ptypes.StrToType(col.MysqlType))
+		tp.SetFlen(int(col.Flen))
+		tp.SetDecimal(int(col.Decimal))
 		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
 			Name:      model.CIStr{O: col.Name},
-			FieldType: types.FieldType{Tp: ptypes.StrToType(col.MysqlType), Flen: int(col.Flen), Decimal: int(col.Decimal)},
+			FieldType: *tp,
 		}
 	}
 	return colMap

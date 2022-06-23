@@ -18,10 +18,10 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-binlog/pkg/loader"
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	router "github.com/pingcap/tidb/util/table-router"
 )
 
 type testOracleSuite struct {
@@ -114,7 +114,7 @@ func checkOracleColumn(c *check.C, col *model.ColumnInfo, myValue interface{}, d
 	tiStr, err := datum.ToString()
 	c.Assert(err, check.IsNil)
 
-	if col.Tp == mysql.TypeEnum {
+	if col.GetType() == mysql.TypeEnum {
 		tiStr = fmt.Sprintf("%d", datum.GetInt64())
 	}
 

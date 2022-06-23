@@ -15,8 +15,8 @@ package sync
 import (
 	"time"
 
-	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/parser/model"
+	router "github.com/pingcap/tidb/util/table-router"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
