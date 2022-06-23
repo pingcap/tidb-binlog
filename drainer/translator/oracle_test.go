@@ -114,7 +114,7 @@ func checkOracleColumn(c *check.C, col *model.ColumnInfo, myValue interface{}, d
 	tiStr, err := datum.ToString()
 	c.Assert(err, check.IsNil)
 
-	if col.Tp == mysql.TypeEnum {
+	if col.GetType() == mysql.TypeEnum {
 		tiStr = fmt.Sprintf("%d", datum.GetInt64())
 	}
 
