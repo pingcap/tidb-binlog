@@ -19,6 +19,6 @@ down_run_sql 'select table_mode from information_schema.tiflash_replica where ta
 check_contains 'FAST'
 
 
-run_sql 'DROP DATABASE cache_test'
+run_sql 'DROP DATABASE tiflash_mode_test'
 
 killall drainer
