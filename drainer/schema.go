@@ -318,6 +318,8 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 		return true
 	case model.ActionAlterCacheTable, model.ActionAlterNoCacheTable:
 		return true
+	case model.ActionSetTiFlashMode:
+		return true
 	case model.ActionAlterTableAttributes, model.ActionAlterTablePartitionAttributes:
 		return true
 	case model.ActionCreatePlacementPolicy, model.ActionAlterPlacementPolicy, model.ActionDropPlacementPolicy,
