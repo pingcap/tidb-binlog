@@ -16,6 +16,7 @@ package drainer
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
@@ -269,7 +270,7 @@ type schemaInfo struct {
 }
 
 func getStmtFromFile(file string) (string, error) {
-	content, err := os.ReadFile(file)
+	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		return "", err
 	}
