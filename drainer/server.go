@@ -209,8 +209,7 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 			return nil, errors.Trace(err)
 		}
 	} else {
-		schemaIDDir := path.Join(cfg.DumpSchemasDir, "schema-id")
-		dbIDMap, err := loadSchemaIDsFromDump(schemaIDDir)
+		dbIDMap, err := loadSchemaIDsFromDump(cfg.DumpSchemasDir)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

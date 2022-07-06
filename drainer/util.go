@@ -289,20 +289,18 @@ func getStmtFromFile(file string) (string, error) {
 	return "", errors.New("no stmt found")
 }
 
-func getSchemaIDByName(schemaName string, dbIDMaps map[string]int64) (int64, bool) {
-	id, ok := dbIDMaps[schemaName]
-	return id, ok
-}
-
 func getTableIDByName(schemaName, tableName string, tblIDMap map[string]map[string]int64) (int64, bool) {
-
-	id, ok := dbIDMaps[schemaName]
+	tblMap, ok := tblIDMap[schemaName]
+	if !ok {
+		return 0, false
+	}
+	id, ok := tblMap[tableName]
 	return id, ok
 }
 
 func loadSchemaIDsFromDump(dir string) (map[string]int64, error) {
 	schemaIDs := map[string]int64{}
-	file := path.Join(dir, "schema")
+	file := path.Join(dir, "schema-id")
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		return schemaIDs, err
