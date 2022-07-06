@@ -178,9 +178,9 @@ func parserSchemaTableFromDDL(ddlQuery string) (schema, table string, err error)
 			haveUseStmt = true
 			schema = node.DBName
 		case *ast.CreateDatabaseStmt:
-			schema = node.Name
+			schema = node.Name.O
 		case *ast.DropDatabaseStmt:
-			schema = node.Name
+			schema = node.Name.O
 		case *ast.TruncateTableStmt:
 			if len(node.Table.Schema.O) != 0 {
 				schema = node.Table.Schema.O
