@@ -63,7 +63,7 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (*Syncer, error) {
+func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job, dbInfos map[Key]Info, tbInfos map[Key]Info) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.cp = cp
@@ -81,7 +81,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 
 	var err error
 	// create schema
-	syncer.schema, err = NewSchema(jobs, false)
+	syncer.schema, err = NewSchema(jobs, dbInfos, tbInfos, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -349,7 +349,11 @@ ForLoop:
 				log.Debug("encounter older schema dml")
 			}
 
-			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
+			if s.cfg.DumpSchemasDir == "" {
+				err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
+			} else {
+				err = s.schema.handlePreviousSchemasIfNeed(preWrite.SchemaVersion)
+			}
 			if err != nil {
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
@@ -392,7 +396,11 @@ ForLoop:
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
 
-			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
+			if s.cfg.DumpSchemasDir == "" {
+				err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
+			} else {
+				err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion)
+			}
 			if err != nil {
 				err = errors.Trace(err)
 				break ForLoop

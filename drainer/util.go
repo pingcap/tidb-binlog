@@ -14,18 +14,23 @@
 package drainer
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
+	tmysql "github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
@@ -190,4 +195,129 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
+}
+
+// getParserFromSQLModeStr gets a parser and applies given sqlMode.
+func getParserFromSQLModeStr(sqlMode string) (*parser.Parser, error) {
+	mode, err := tmysql.GetSQLMode(sqlMode)
+	if err != nil {
+		return nil, err
+	}
+
+	parser2 := parser.New()
+	parser2.SetSQLMode(mode)
+	return parser2, nil
+}
+
+// collectDirFiles gets files in path.
+func collectDirFiles(path string) (map[string]struct{}, error) {
+	files := make(map[string]struct{})
+	err := filepath.Walk(path, func(_ string, f os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if f == nil {
+			return nil
+		}
+
+		if f.IsDir() {
+			return nil
+		}
+
+		name := strings.TrimSpace(f.Name())
+		files[name] = struct{}{}
+		return nil
+	})
+
+	return files, err
+}
+
+// getDBFromDumpFilename extracts db name from dump filename.
+func getDBFromDumpFilename(filename string) (db string, ok bool) {
+	if !strings.HasSuffix(filename, "-schema-create.sql") {
+		return "", false
+	}
+
+	idx := strings.LastIndex(filename, "-schema-create.sql")
+	return filename[:idx], true
+}
+
+// getTableFromDumpFilename extracts db and table name from dump filename.
+func getTableFromDumpFilename(filename string) (db, table string, ok bool) {
+	if !strings.HasSuffix(filename, "-schema.sql") {
+		return "", "", false
+	}
+
+	idx := strings.LastIndex(filename, "-schema.sql")
+	name := filename[:idx]
+	fields := strings.Split(name, ".")
+	if len(fields) != 2 {
+		return "", "", false
+	}
+	return fields[0], fields[1], true
+}
+
+type Key struct {
+	SchemaName string
+	TableName  string
+}
+
+type Info struct {
+	Stmt string
+	ID   int64
+}
+
+func getStmtFromFile(file string) (string, error) {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	stmts := bytes.Split(content, []byte(";"))
+	for _, stmt := range stmts {
+		stmt = bytes.TrimSpace(stmt)
+		if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
+			continue
+		}
+		return string(stmt), nil
+	}
+	return "", errors.New("no stmt found")
+}
+
+// TODO
+func getSchemaIDByName(schemaName string) int64 {
+	return int64(1)
+}
+
+// TODO
+func getTableIDByName(schemaName, tableName string) int64 {
+	return int64(1)
+}
+
+func loadInfosFromDump(dir string) (map[Key]Info, map[Key]Info, error) {
+	var (
+		dbInfos = make(map[Key]Info)
+		tbInfos = make(map[Key]Info)
+	)
+	files, err := collectDirFiles(dir)
+	if err != nil {
+		log.Error("fail to get dump files", zap.Error(err))
+		return nil, nil, err
+	}
+	for f := range files {
+		stmt, err := getStmtFromFile(filepath.Join(dir, f))
+		if err != nil {
+			log.L().Error("failed to get stmt from file", zap.String("dir", dir), zap.String("file", f), zap.Error(err))
+			return nil, nil, err
+		}
+		if db, ok := getDBFromDumpFilename(f); ok {
+			id := getSchemaIDByName(db)
+			dbInfos[Key{SchemaName: db}] = Info{Stmt: stmt, ID: id}
+		} else if db, tb, ok := getTableFromDumpFilename(f); ok {
+			id := getTableIDByName(db, tb)
+			tbInfos[Key{SchemaName: db, TableName: tb}] = Info{Stmt: stmt, ID: id}
+		}
+		// do we need handle view here?
+	}
+	return dbInfos, tbInfos, nil
 }
