@@ -10,19 +10,20 @@ require (
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.2
+	github.com/google/btree v1.0.0 // indirect
 	github.com/google/gofuzz v1.0.0
 	github.com/gorilla/mux v1.6.2
 	github.com/grpc-ecosystem/grpc-gateway v1.7.0 // indirect
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
-	github.com/pingcap/kvproto v0.0.0-20200311073257-e53d835099b0
+	github.com/pingcap/kvproto v0.0.0-20191118050206-47672e7eabc0
 	github.com/pingcap/log v0.0.0-20190715063458-479153f07ebd
-	github.com/pingcap/parser v3.0.17-0.20201113024240-d9bf17073679+incompatible
-	github.com/pingcap/pd v1.1.0-beta.0.20191223090411-ea2b748f6ee2
-	github.com/pingcap/tidb v1.1.0-beta.0.20201215094955-9ab0bbf9a012
+	github.com/pingcap/parser v0.0.0-20200103153514-95649ba8a872
+	github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0
+	github.com/pingcap/tidb v1.1.0-beta.0.20191120070053-5a7ecfeb94fd
 	github.com/pingcap/tidb-tools v3.1.0-beta.0.20191227034743-57985f125c52+incompatible
-	github.com/pingcap/tipb v0.0.0-20200426072559-d2c068e96eb3
+	github.com/pingcap/tipb v0.0.0-20191120045257-1b9900292ab6
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
