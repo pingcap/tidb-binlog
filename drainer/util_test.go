@@ -216,8 +216,10 @@ CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
 	require.NoError(t, err)
 	err = ioutil.WriteFile(tbPath, []byte(createTbStmt), 0644)
 	require.NoError(t, err)
+	dbIDMap := map[string]int64{"db": 101}
+	tableIDMap := map[string]map[string]int64{"db": {"tb": 102}}
 
-	dbInfos, tbInfos, err := loadInfosFromDump(localDir)
+	dbInfos, tbInfos, err := loadInfosFromDump(localDir, dbIDMap, tableIDMap)
 	require.NoError(t, err)
 	require.Len(t, dbInfos, 1)
 	require.Len(t, tbInfos, 1)
