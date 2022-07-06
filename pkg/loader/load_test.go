@@ -44,6 +44,14 @@ func (cs *LoadSuite) TestTiFlash(c *check.C) {
 	res := isSetTiFlashReplica(sql)
 	c.Assert(res, check.IsTrue)
 
+	sql = "ALTER TABLE t SET TIFLASH MODE FAST"
+	res = isSetTiFlashMode(sql)
+	c.Assert(res, check.IsTrue)
+
+	sql = "ALTER TABLE t SET TIFLASH MODE NORMAL"
+	res = isSetTiFlashMode(sql)
+	c.Assert(res, check.IsTrue)
+
 	sql = "create table a(id int)"
 	res = isSetTiFlashReplica(sql)
 	c.Assert(res, check.IsFalse)

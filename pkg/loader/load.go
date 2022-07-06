@@ -452,7 +452,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 		return nil
 	})
 
-	if err != nil && isSetTiFlashReplica(ddl.SQL) {
+	if err != nil && (isSetTiFlashReplica(ddl.SQL) || isSetTiFlashMode(ddl.SQL)) {
 		return nil
 	}
 
@@ -1002,6 +1002,31 @@ func isSetTiFlashReplica(sql string) bool {
 
 	for _, spec := range n.Specs {
 		if spec.Tp == ast.AlterTableSetTiFlashReplica {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isSetTiFlashMode(sql string) bool {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		log.Error("failed to parse", zap.Error(err), zap.String("sql", sql))
+		return false
+	}
+
+	n, ok := stmt.(*ast.AlterTableStmt)
+	if !ok {
+		return false
+	}
+
+	if len(n.Specs) > 1 {
+		return false
+	}
+
+	for _, spec := range n.Specs {
+		if spec.Tp == ast.AlterTableSetTiFlashMode {
 			return true
 		}
 	}
