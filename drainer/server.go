@@ -199,7 +199,7 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 	defer tiStore.Close()
 
 	var (
-		jobs    []*model.Job
+		jobs    = make([]*model.Job, 0)
 		dbInfos map[schemaKey]schemaInfo
 		tbInfos map[schemaKey]schemaInfo
 	)
