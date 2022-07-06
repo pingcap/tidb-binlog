@@ -30,6 +30,7 @@ require (
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
 	github.com/sirupsen/logrus v1.4.1 // indirect
 	github.com/soheilhy/cmux v0.1.4
+	github.com/stretchr/testify v1.5.1
 	github.com/syndtr/goleveldb v1.0.1-0.20190625010220-02440ea7a285
 	github.com/unrolled/render v0.0.0-20180914162206-b9786414de4d
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20190320044326-77d4b742cdbf

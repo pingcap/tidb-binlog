@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/ddl"
+	_ "github.com/pingcap/tidb/planner/core"
 	"go.uber.org/zap"
 )
 
@@ -508,7 +509,11 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 				zap.Int64("currentVersion", s.currentVersion))
 			continue
 		}
-		s.handleCreateSchema(info.stmt, info.id, v)
+		if job, err := s.mockCreateSchemaJob(info.stmt, info.id, v); err != nil {
+			return err
+		} else if _, _, _, err = s.handleDDL(job); err != nil {
+			return err
+		}
 		v++
 	}
 
@@ -529,7 +534,11 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 		if !ok {
 			return errors.Errorf("schema %s not found", key.schemaName)
 		}
-		s.handleCreateTable(info.stmt, dbInfo.id, info.id, v)
+		if job, err := s.mockCreateTableJob(info.stmt, dbInfo.id, info.id, v); err != nil {
+			return err
+		} else if _, _, _, err = s.handleDDL(job); err != nil {
+			return err
+		}
 		v++
 	}
 	return nil
@@ -620,12 +629,12 @@ func createTableInfo(tableID int64, stmt string) (*model.TableInfo, error) {
 	return ti, nil
 }
 
-func (s *Schema) handleCreateSchema(stmt string, schemaID, schemaVersion int64) (string, string, string, error) {
+func (s *Schema) mockCreateSchemaJob(stmt string, schemaID, schemaVersion int64) (*model.Job, error) {
 	dbInfo, err := createDBInfo(schemaID, stmt)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
-	job := &model.Job{
+	return &model.Job{
 		Type:  model.ActionCreateSchema,
 		State: model.JobStateDone,
 		Query: stmt,
@@ -633,17 +642,15 @@ func (s *Schema) handleCreateSchema(stmt string, schemaID, schemaVersion int64) 
 			SchemaVersion: schemaVersion,
 			DBInfo:        dbInfo,
 		},
-	}
-	return s.handleDDL(job)
+	}, nil
 }
 
-func (s *Schema) handleCreateTable(stmt string, schemaID, tableID, schemaVersion int64) (string, string, string, error) {
+func (s *Schema) mockCreateTableJob(stmt string, schemaID, tableID, schemaVersion int64) (*model.Job, error) {
 	tableInfo, err := createTableInfo(tableID, stmt)
 	if err != nil {
-		log.Error("createTableInfo error", zap.Error(err))
-		return "", "", "", err
+		return nil, err
 	}
-	job := &model.Job{
+	return &model.Job{
 		Type:     model.ActionCreateTable,
 		State:    model.JobStateDone,
 		Query:    stmt,
@@ -652,6 +659,5 @@ func (s *Schema) handleCreateTable(stmt string, schemaID, tableID, schemaVersion
 			SchemaVersion: schemaVersion,
 			TableInfo:     tableInfo,
 		},
-	}
-	return s.handleDDL(job)
+	}, nil
 }
