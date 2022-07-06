@@ -349,11 +349,13 @@ ForLoop:
 				log.Debug("encounter older schema dml")
 			}
 
-			if s.cfg.DumpSchemasDir == "" {
-				err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
-			} else {
-				err = s.schema.handlePreviousSchemasIfNeed(preWrite.SchemaVersion)
+			if s.cfg.DumpSchemasDir != "" {
+				if err = s.schema.handlePreviousSchemasIfNeed(preWrite.SchemaVersion); err != nil {
+					err = errors.Annotate(err, "handlePreviousSchemasIfNeed failed")
+					break ForLoop
+				}
 			}
+			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
 			if err != nil {
 				err = errors.Annotate(err, "handlePreviousDDLJobIfNeed failed")
 				break ForLoop
@@ -396,11 +398,13 @@ ForLoop:
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
 
-			if s.cfg.DumpSchemasDir == "" {
-				err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
-			} else {
-				err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion)
+			if s.cfg.DumpSchemasDir != "" {
+				if err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion); err != nil {
+					err = errors.Trace(err)
+					break ForLoop
+				}
 			}
+			err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
 				break ForLoop
