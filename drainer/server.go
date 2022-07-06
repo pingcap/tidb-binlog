@@ -199,8 +199,8 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 
 	var (
 		jobs    []*model.Job
-		dbInfos map[Key]Info
-		tbInfos map[Key]Info
+		dbInfos map[schemaKey]schemaInfo
+		tbInfos map[schemaKey]schemaInfo
 	)
 	if cfg.DumpSchemasDir == "" {
 		jobs, err = loadHistoryDDLJobs(tiStore)

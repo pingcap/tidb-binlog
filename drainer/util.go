@@ -258,14 +258,14 @@ func getTableFromDumpFilename(filename string) (db, table string, ok bool) {
 	return fields[0], fields[1], true
 }
 
-type Key struct {
-	SchemaName string
-	TableName  string
+type schemaKey struct {
+	schemaName string
+	tableName  string
 }
 
-type Info struct {
-	Stmt string
-	ID   int64
+type schemaInfo struct {
+	stmt string
+	id   int64
 }
 
 func getStmtFromFile(file string) (string, error) {
@@ -294,10 +294,10 @@ func getTableIDByName(schemaName, tableName string) int64 {
 	return int64(1)
 }
 
-func loadInfosFromDump(dir string) (map[Key]Info, map[Key]Info, error) {
+func loadInfosFromDump(dir string) (map[schemaKey]schemaInfo, map[schemaKey]schemaInfo, error) {
 	var (
-		dbInfos = make(map[Key]Info)
-		tbInfos = make(map[Key]Info)
+		dbInfos = make(map[schemaKey]schemaInfo)
+		tbInfos = make(map[schemaKey]schemaInfo)
 	)
 	files, err := collectDirFiles(dir)
 	if err != nil {
@@ -312,10 +312,10 @@ func loadInfosFromDump(dir string) (map[Key]Info, map[Key]Info, error) {
 		}
 		if db, ok := getDBFromDumpFilename(f); ok {
 			id := getSchemaIDByName(db)
-			dbInfos[Key{SchemaName: db}] = Info{Stmt: stmt, ID: id}
+			dbInfos[schemaKey{schemaName: db}] = schemaInfo{stmt: stmt, id: id}
 		} else if db, tb, ok := getTableFromDumpFilename(f); ok {
 			id := getTableIDByName(db, tb)
-			tbInfos[Key{SchemaName: db, TableName: tb}] = Info{Stmt: stmt, ID: id}
+			tbInfos[schemaKey{schemaName: db, tableName: tb}] = schemaInfo{stmt: stmt, id: id}
 		}
 		// do we need handle view here?
 	}

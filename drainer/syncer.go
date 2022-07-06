@@ -63,7 +63,7 @@ type Syncer struct {
 }
 
 // NewSyncer returns a Drainer instance
-func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job, dbInfos map[Key]Info, tbInfos map[Key]Info) (*Syncer, error) {
+func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job, dbInfos map[schemaKey]schemaInfo, tbInfos map[schemaKey]schemaInfo) (*Syncer, error) {
 	syncer := new(Syncer)
 	syncer.cfg = cfg
 	syncer.cp = cp

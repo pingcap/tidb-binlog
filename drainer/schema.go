@@ -47,8 +47,8 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
-	dbInfos             map[Key]Info
-	tbInfos             map[Key]Info
+	dbInfos             map[schemaKey]schemaInfo
+	tbInfos             map[schemaKey]schemaInfo
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -57,7 +57,7 @@ type Schema struct {
 type TableName = filter.TableName
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, dbInfos map[Key]Info, tbInfos map[Key]Info, hasImplicitCol bool) (*Schema, error) {
+func NewSchema(jobs []*model.Job, dbInfos map[schemaKey]schemaInfo, tbInfos map[schemaKey]schemaInfo, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
@@ -502,13 +502,13 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 		}
 		if v <= s.currentVersion {
 			log.Warn("schema version is less than current version, skip this schema",
-				zap.String("db", key.SchemaName),
-				zap.String("stmt", info.Stmt),
-				zap.Int64("id", info.ID),
+				zap.String("db", key.schemaName),
+				zap.String("stmt", info.stmt),
+				zap.Int64("id", info.id),
 				zap.Int64("currentVersion", s.currentVersion))
 			continue
 		}
-		s.handleCreateSchema(info.Stmt, info.ID, v)
+		s.handleCreateSchema(info.stmt, info.id, v)
 		v++
 	}
 
@@ -518,18 +518,18 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 		}
 		if v <= s.currentVersion {
 			log.Warn("schema version is less than current version, skip this schema",
-				zap.String("db", key.SchemaName),
-				zap.String("tb", key.TableName),
-				zap.String("stmt", info.Stmt),
-				zap.Int64("id", info.ID),
+				zap.String("db", key.schemaName),
+				zap.String("tb", key.tableName),
+				zap.String("stmt", info.stmt),
+				zap.Int64("id", info.id),
 				zap.Int64("currentVersion", s.currentVersion))
 			continue
 		}
-		dbInfo, ok := s.dbInfos[Key{SchemaName: key.SchemaName}]
+		dbInfo, ok := s.dbInfos[schemaKey{schemaName: key.schemaName}]
 		if !ok {
-			return errors.Errorf("schema %s not found", key.SchemaName)
+			return errors.Errorf("schema %s not found", key.schemaName)
 		}
-		s.handleCreateTable(info.Stmt, dbInfo.ID, info.ID, v)
+		s.handleCreateTable(info.stmt, dbInfo.id, info.id, v)
 		v++
 	}
 	return nil
