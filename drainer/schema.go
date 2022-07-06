@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
 	"github.com/pingcap/tidb/ddl"
-	_ "github.com/pingcap/tidb/planner/core"
+	_ "github.com/pingcap/tidb/planner/core" // init expression.EvalAstExpr
 	"go.uber.org/zap"
 )
 
