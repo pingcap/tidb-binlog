@@ -508,7 +508,10 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 				zap.Int64("currentVersion", s.currentVersion))
 			continue
 		}
-		s.handleCreateSchema(info.stmt, info.id, v)
+		_, _, _, err := s.handleCreateSchema(info.stmt, info.id, v)
+		if err != nil {
+			log.Error("fail to handle create schema", zap.Error(err))
+		}
 		v++
 	}
 
@@ -529,7 +532,10 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 		if !ok {
 			return errors.Errorf("schema %s not found", key.schemaName)
 		}
-		s.handleCreateTable(info.stmt, dbInfo.id, info.id, v)
+		_, _, _, err := s.handleCreateTable(info.stmt, dbInfo.id, info.id, v)
+		if err != nil {
+			log.Error("fail to handle create table", zap.Error(err))
+		}
 		v++
 	}
 	return nil

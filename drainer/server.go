@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -208,7 +209,18 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 			return nil, errors.Trace(err)
 		}
 	} else {
-		dbInfos, tbInfos, err = loadInfosFromDump(cfg.DumpSchemasDir)
+		schemaIDDir := path.Join(cfg.DumpSchemasDir, "schema-id")
+		dbIDMap, err := loadSchemaIDsFromDump(schemaIDDir)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		tableIDDir := path.Join(cfg.DumpSchemasDir, "table-id")
+		tableIDMap, err := loadTableIDsFromDump(tableIDDir)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		tableSchemasDir := path.Join(cfg.DumpSchemasDir, "tables")
+		dbInfos, tbInfos, err = loadInfosFromDump(tableSchemasDir, dbIDMap, tableIDMap)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

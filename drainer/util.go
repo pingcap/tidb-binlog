@@ -15,7 +15,10 @@ package drainer
 
 import (
 	"bytes"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
@@ -23,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -285,17 +289,68 @@ func getStmtFromFile(file string) (string, error) {
 	return "", errors.New("no stmt found")
 }
 
-// TODO
-func getSchemaIDByName(schemaName string) int64 {
-	return int64(1)
+func getSchemaIDByName(schemaName string, dbIDMaps map[string]int64) (int64, bool) {
+	id, ok := dbIDMaps[schemaName]
+	return id, ok
 }
 
-// TODO
-func getTableIDByName(schemaName, tableName string) int64 {
-	return int64(1)
+func getTableIDByName(schemaName, tableName string, tblIDMap map[string]map[string]int64) (int64, bool) {
+
+	id, ok := dbIDMaps[schemaName]
+	return id, ok
 }
 
-func loadInfosFromDump(dir string) (map[schemaKey]schemaInfo, map[schemaKey]schemaInfo, error) {
+func loadSchemaIDsFromDump(dir string) (map[string]int64, error) {
+	schemaIDs := map[string]int64{}
+	file := path.Join(dir, "schema")
+	content, err := ioutil.ReadFile(file)
+	if err != nil {
+		return schemaIDs, err
+	}
+	var dbs []*model.DBInfo
+	err = json.Unmarshal(content, &dbs)
+	if err != nil {
+		return schemaIDs, err
+	}
+	for _, dbInfo := range dbs {
+		schemaIDs[dbInfo.Name.O] = dbInfo.ID
+	}
+	return schemaIDs, nil
+}
+
+func loadTableIDsFromDump(dir string) (map[string]map[string]int64, error) {
+	tableIDs := make(map[string]map[string]int64)
+	fileName := path.Join(dir, "result.000000000.csv")
+	file, err := os.Open(fileName)
+	if err != nil {
+		return tableIDs, err
+	}
+	reader := csv.NewReader(file)
+	for {
+		records, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, errors.Trace(err)
+		}
+		if len(records) != 3 {
+			return nil, errors.Errorf("invalid csv record [%s]", strings.Join(records, ","))
+		}
+		dbName, tbName := strings.Trim(records[0], "\""), strings.Trim(records[1], "\"")
+		tableID, err := strconv.ParseInt(records[2], 10, 64)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if _, ok := tableIDs[dbName]; !ok {
+			tableIDs[dbName] = make(map[string]int64)
+		}
+		tableIDs[dbName][tbName] = tableID
+	}
+	return tableIDs, nil
+}
+
+func loadInfosFromDump(dir string, dbIDMaps map[string]int64, tblIDMaps map[string]map[string]int64) (map[schemaKey]schemaInfo, map[schemaKey]schemaInfo, error) {
 	var (
 		dbInfos = make(map[schemaKey]schemaInfo)
 		tbInfos = make(map[schemaKey]schemaInfo)
@@ -312,10 +367,16 @@ func loadInfosFromDump(dir string) (map[schemaKey]schemaInfo, map[schemaKey]sche
 			return nil, nil, err
 		}
 		if db, ok := getDBFromDumpFilename(f); ok {
-			id := getSchemaIDByName(db)
+			id, ok := dbIDMaps[db]
+			if !ok {
+				log.L().Error("database ID not found", zap.String("database", db))
+			}
 			dbInfos[schemaKey{schemaName: db}] = schemaInfo{stmt: stmt, id: id}
 		} else if db, tb, ok := getTableFromDumpFilename(f); ok {
-			id := getTableIDByName(db, tb)
+			id, ok := getTableIDByName(db, tb, tblIDMaps)
+			if !ok {
+				log.L().Error("table ID not found", zap.String("database", db), zap.String("table", tb))
+			}
 			tbInfos[schemaKey{schemaName: db, tableName: tb}] = schemaInfo{stmt: stmt, id: id}
 		}
 		// do we need handle view here?
