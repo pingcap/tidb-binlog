@@ -61,7 +61,7 @@ func (c dummyCli) GetTS(ctx context.Context) (int64, int64, error) {
 	return c.physical, c.logical, c.err
 }
 
-func newFakePDClient([]string, pd.SecurityOption) (pd.Client, error) {
+func newFakePDClient([]string, pd.SecurityOption, ...pd.ClientOption) (pd.Client, error) {
 	return &dummyCli{
 		physical: 123,
 		logical:  456,

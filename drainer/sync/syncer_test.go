@@ -58,7 +58,7 @@ func (s *syncerSuite) SetUpTest(c *check.C) {
 
 	// create mysql syncer
 	oldCreateDB := createDB
-	createDB = func(string, string, string, int, *tls.Config, *string) (db *sql.DB, err error) {
+	createDB = func(string, string, string, int, *tls.Config, *string, map[string]string) (db *sql.DB, err error) {
 		db, s.mysqlMock, err = sqlmock.New()
 		return
 	}
