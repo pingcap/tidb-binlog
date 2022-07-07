@@ -174,3 +174,5 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0 // indirect
 )
+
+replace github.com/pingcap/tidb/parser => github.com/hongyunyan/tidb/parser v0.0.0-20220706072648-8cd3d6b496f6
