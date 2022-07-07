@@ -18,9 +18,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"github.com/pingcap/tidb/ddl"
+	_ "github.com/pingcap/tidb/planner/core" // init expression.EvalAstExpr
 	"go.uber.org/zap"
 )
 
@@ -44,6 +48,8 @@ type Schema struct {
 	hasImplicitCol bool
 
 	jobs                []*model.Job
+	dbInfos             map[schemaKey]schemaInfo
+	tbInfos             map[schemaKey]schemaInfo
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -52,13 +58,15 @@ type Schema struct {
 type TableName = filter.TableName
 
 // NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
+func NewSchema(jobs []*model.Job, dbInfos map[schemaKey]schemaInfo, tbInfos map[schemaKey]schemaInfo, hasImplicitCol bool) (*Schema, error) {
 	s := &Schema{
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
 		tblsDroppingCol:     make(map[int64]bool),
 		jobs:                jobs,
+		dbInfos:             dbInfos,
+		tbInfos:             tbInfos,
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
@@ -483,4 +491,178 @@ func addImplicitColumn(table *model.TableInfo) {
 // At state *done*, it will be always and only changed to *synced*.
 func skipJob(job *model.Job) bool {
 	return !job.IsSynced() && !job.IsDone()
+}
+
+// learn from handlePreviousDDLJobIfNeed
+func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
+	// start from 1 is ok?
+	v := int64(1)
+	for key, info := range s.dbInfos {
+		if v > version {
+			return nil
+		}
+		if v <= s.currentVersion {
+			log.Warn("schema version is less than current version, skip this schema",
+				zap.String("db", key.schemaName),
+				zap.String("stmt", info.stmt),
+				zap.Int64("id", info.id),
+				zap.Int64("currentVersion", s.currentVersion))
+			continue
+		}
+		if job, err := s.mockCreateSchemaJob(info.stmt, info.id, v); err != nil {
+			log.Error("fail to handle create schema", zap.Error(err))
+			return err
+		} else if _, _, _, err = s.handleDDL(job); err != nil {
+			return err
+		}
+		v++
+	}
+
+	for key, info := range s.tbInfos {
+		if v > version {
+			return nil
+		}
+		if v <= s.currentVersion {
+			log.Warn("schema version is less than current version, skip this schema",
+				zap.String("db", key.schemaName),
+				zap.String("tb", key.tableName),
+				zap.String("stmt", info.stmt),
+				zap.Int64("id", info.id),
+				zap.Int64("currentVersion", s.currentVersion))
+			continue
+		}
+		dbInfo, ok := s.dbInfos[schemaKey{schemaName: key.schemaName}]
+		if !ok {
+			return errors.Errorf("schema %s not found", key.schemaName)
+		}
+		if job, err := s.mockCreateTableJob(info.stmt, dbInfo.id, info.id, v); err != nil {
+			log.Error("fail to handle create table", zap.Error(err))
+			return err
+		} else if _, _, _, err = s.handleDDL(job); err != nil {
+			return err
+		}
+		v++
+	}
+	// safe for gc
+	s.dbInfos = nil
+	s.tbInfos = nil
+	return nil
+}
+
+// learn from https://github.com/pingcap/tidb/blob/7f2b1359a4829b571b1e7714088aebc216f6455a/ddl/ddl_api.go#L1839
+func getCharsetAndCollateInDatabaseOption(startIdx int, options []*ast.DatabaseOption) (chs, coll string, err error) {
+	for i := startIdx; i < len(options); i++ {
+		opt := options[i]
+		// we set the charset to the last option. example: alter table t charset latin1 charset utf8 collate utf8_bin;
+		// the charset will be utf8, collate will be utf8_bin
+		switch opt.Tp {
+		case ast.DatabaseOptionCharset:
+			name, defaultCollation, err := charset.GetCharsetInfo(opt.Value)
+			if err != nil {
+				return "", "", err
+			}
+			if len(chs) == 0 {
+				chs = name
+			} else if chs != name {
+				return "", "", errors.Errorf("conflicting declarations, lhs: %s, rhs %s", chs, name)
+			}
+			if len(coll) == 0 {
+				coll = defaultCollation
+			}
+		case ast.DatabaseOptionCollate:
+			info, err := charset.GetCollationByName(opt.Value)
+			if err != nil {
+				return "", "", err
+			}
+			if len(chs) == 0 {
+				chs = info.CharsetName
+			} else if chs != info.CharsetName {
+				return "", "", errors.Errorf("collation charset mismatch, lhs: %s, rhs: %s", info.Name, chs)
+			}
+			coll = info.Name
+		}
+	}
+	return
+}
+
+func createDBInfo(schemaID int64, stmt string) (*model.DBInfo, error) {
+	p, err := getParserFromSQLModeStr(mysql.DefaultSQLMode)
+	if err != nil {
+		return nil, err
+	}
+	stmtNode, err := p.ParseOneStmt(stmt, "", "")
+	if err != nil {
+		return nil, err
+	}
+	createStmt, ok := stmtNode.(*ast.CreateDatabaseStmt)
+	if !ok {
+		return nil, errors.Errorf("%s is not a create database statement", stmt)
+	}
+	chs, col, err := getCharsetAndCollateInDatabaseOption(0, createStmt.Options)
+	if err != nil {
+		log.L().Error("get charset and collate error", zap.Error(err))
+		return nil, err
+	}
+	return &model.DBInfo{
+		ID:      schemaID,
+		Name:    model.NewCIStr(createStmt.Name),
+		State:   model.StatePublic,
+		Charset: chs,
+		Collate: col,
+	}, nil
+}
+
+func createTableInfo(tableID int64, stmt string) (*model.TableInfo, error) {
+	p, err := getParserFromSQLModeStr(mysql.DefaultSQLMode)
+	if err != nil {
+		return nil, err
+	}
+	stmtNode, err := p.ParseOneStmt(stmt, "", "")
+	if err != nil {
+		return nil, err
+	}
+	createStmt, ok := stmtNode.(*ast.CreateTableStmt)
+	if !ok {
+		return nil, errors.Errorf("%s is not a create table statement", stmt)
+	}
+	ti, err := ddl.BuildTableInfoFromAST(createStmt)
+	if err != nil {
+		return nil, err
+	}
+	ti.State = model.StatePublic
+	ti.ID = tableID
+	return ti, nil
+}
+
+func (s *Schema) mockCreateSchemaJob(stmt string, schemaID, schemaVersion int64) (*model.Job, error) {
+	dbInfo, err := createDBInfo(schemaID, stmt)
+	if err != nil {
+		return nil, err
+	}
+	return &model.Job{
+		Type:  model.ActionCreateSchema,
+		State: model.JobStateDone,
+		Query: stmt,
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: schemaVersion,
+			DBInfo:        dbInfo,
+		},
+	}, nil
+}
+
+func (s *Schema) mockCreateTableJob(stmt string, schemaID, tableID, schemaVersion int64) (*model.Job, error) {
+	tableInfo, err := createTableInfo(tableID, stmt)
+	if err != nil {
+		return nil, err
+	}
+	return &model.Job{
+		Type:     model.ActionCreateTable,
+		State:    model.JobStateDone,
+		Query:    stmt,
+		SchemaID: schemaID,
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: schemaVersion,
+			TableInfo:     tableInfo,
+		},
+	}, nil
 }

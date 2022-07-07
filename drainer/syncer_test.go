@@ -32,7 +32,7 @@ type syncerSuite struct{}
 var _ = check.Suite(&syncerSuite{})
 
 func (s *syncerSuite) TestFilterTable(c *check.C) {
-	schema, err := NewSchema(nil, false)
+	schema, err := NewSchema(nil, nil, nil, false)
 	c.Assert(err, check.IsNil)
 
 	var dropID int64 = 1
@@ -99,7 +99,7 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 	cp, err := checkpoint.NewFile(0, cpFile)
 	c.Assert(err, check.IsNil)
 
-	syncer, err := NewSyncer(cp, cfg, nil)
+	syncer, err := NewSyncer(cp, cfg, nil, nil, nil)
 	c.Assert(err, check.IsNil)
 
 	// run syncer

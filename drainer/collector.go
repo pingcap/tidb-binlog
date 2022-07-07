@@ -14,9 +14,14 @@
 package drainer
 
 import (
+	"bufio"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,18 +29,19 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
-	"github.com/pingcap/tidb-binlog/pkg/etcd"
-	"github.com/pingcap/tidb-binlog/pkg/flags"
-	"github.com/pingcap/tidb-binlog/pkg/node"
-	"github.com/pingcap/tidb-binlog/pkg/util"
-	"github.com/pingcap/tidb-binlog/pump"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
+
+	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/pkg/etcd"
+	"github.com/pingcap/tidb-binlog/pkg/flags"
+	"github.com/pingcap/tidb-binlog/pkg/node"
+	"github.com/pingcap/tidb-binlog/pkg/util"
+	"github.com/pingcap/tidb-binlog/pump"
 )
 
 const (
@@ -83,6 +89,65 @@ var (
 	fDDLJobGetter = getDDLJob
 )
 
+func parseMetaData(
+	dir string,
+	filename string) (int64, error) {
+
+	fd, err := os.Open(path.Join(dir, filename))
+	if err != nil {
+		return 0, err
+	}
+	defer fd.Close()
+
+	br := bufio.NewReader(fd)
+
+	parsePos := func() (int64, error) {
+		for {
+			line, err2 := br.ReadString('\n')
+			if err2 != nil {
+				return 0, err2
+			}
+			line = strings.TrimSpace(line)
+			if len(line) == 0 {
+				return 0, nil
+			}
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			switch key {
+			case "Pos":
+				pos64, err3 := strconv.ParseInt(value, 10, 64)
+				if err3 != nil {
+					return 0, err3
+				}
+				return pos64, nil
+			}
+		}
+	}
+
+	for {
+		line, err2 := br.ReadString('\n')
+		if err2 == io.EOF {
+			break
+		} else if err2 != nil {
+			return 0, err2
+		}
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+
+		switch line {
+		case "SHOW MASTER STATUS:":
+			return parsePos()
+		}
+	}
+	return 0, errors.Errorf("invalid dump metadata")
+}
+
 // NewCollector returns an instance of Collector
 func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.CheckPoint) (*Collector, error) {
 	urlv, err := flags.NewURLsValue(cfg.EtcdURLs)
@@ -105,6 +170,17 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	tso := cpt.TS()
+	if s.cfg.DumpSchemasDir != "" {
+		schemaTso, err := parseMetaData(path.Join(s.cfg.DumpSchemasDir, "tables"), "metadata")
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if schemaTso > tso {
+			return nil, errors.Errorf("invalid start tso %d for this dump schemas dir's metadata tso %d", tso, schemaTso)
+		}
+		tso = schemaTso
+	}
 
 	c := &Collector{
 		clusterID:       clusterID,
@@ -117,7 +193,7 @@ func NewCollector(cfg *Config, clusterID uint64, s *Syncer, cpt checkpoint.Check
 		tiStore:         tiStore,
 		notifyChan:      make(chan *notifyResult),
 		syncedCheckTime: cfg.SyncedCheckTime,
-		merger:          NewMerger(cpt.TS(), heapStrategy),
+		merger:          NewMerger(tso, heapStrategy),
 		errCh:           make(chan error, 10),
 	}
 

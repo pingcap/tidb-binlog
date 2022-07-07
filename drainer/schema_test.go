@@ -15,12 +15,17 @@ package drainer
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path"
+	"testing"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/ast"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/stretchr/testify/require"
 )
 
 type schemaSuite struct{}
@@ -59,7 +64,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateRollbackDone, BinlogInfo: &model.HistoryInfo{}})
 
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, false)
+	schema, err := NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(2)
 	c.Assert(err, IsNil)
@@ -76,7 +81,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(3)
 	c.Assert(err, IsNil)
@@ -85,7 +90,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, jobDup)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(2)
 	c.Log(err)
@@ -104,7 +109,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(1)
 	c.Assert(errors.IsNotFound(err), IsTrue)
@@ -202,7 +207,7 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, false)
+	schema, err := NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(4)
 	c.Assert(err, IsNil)
@@ -233,7 +238,7 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "truncate table " + tbName.O,
 		},
 	)
-	schema1, err := NewSchema(jobs, false)
+	schema1, err := NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema1.handlePreviousDDLJobIfNeed(5)
 	c.Assert(err, IsNil)
@@ -255,7 +260,7 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "drop table " + tbName.O,
 		},
 	)
-	schema2, err := NewSchema(jobs, false)
+	schema2, err := NewSchema(jobs, nil, nil, false)
 	c.Assert(err, IsNil)
 	err = schema2.handlePreviousDDLJobIfNeed(6)
 	c.Assert(err, IsNil)
@@ -273,7 +278,7 @@ func (*schemaSuite) TestTable(c *C) {
 }
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
-	schema, err := NewSchema(nil, false)
+	schema, err := NewSchema(nil, nil, nil, false)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	colName := model.NewCIStr("A")
@@ -404,4 +409,241 @@ func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql str
 	c.Assert(sql, Equals, resSQL)
 	c.Assert(schemaName, Equals, expectedSchema)
 	c.Assert(tableName, Equals, expectedTable)
+}
+
+func TestGetCharsetAndCollateInDatabaseOption(t *testing.T) {
+	chs, coll, err := getCharsetAndCollateInDatabaseOption(0, []*ast.DatabaseOption{
+		{Tp: ast.DatabaseOptionCharset, Value: "utf8"},
+		{Tp: ast.DatabaseOptionCollate, Value: "utf8_bin"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "utf8", chs)
+	require.Equal(t, "utf8_bin", coll)
+
+	chs, coll, err = getCharsetAndCollateInDatabaseOption(0, []*ast.DatabaseOption{
+		{Tp: ast.DatabaseOptionCharset, Value: "latin1"},
+		{Tp: ast.DatabaseOptionCollate, Value: "latin1_bin"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "latin1", chs)
+	require.Equal(t, "latin1_bin", coll)
+}
+
+func TestCreateDBInfo(t *testing.T) {
+	stmt := "CREATE DATABASE `test` /*!40100 DEFAULT CHARACTER SET utf8mb4 */"
+	dbInfo, err := createDBInfo(1, stmt)
+	require.NoError(t, err)
+	require.Equal(t, &model.DBInfo{
+		ID:      1,
+		Name:    model.NewCIStr("test"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+		State:   model.StatePublic,
+	}, dbInfo)
+
+	stmt = "CREATE DATABASE `mydatabase` /*!40100 DEFAULT CHARACTER SET utf8 COLLATE utf8_bin */"
+	dbInfo, err = createDBInfo(1, stmt)
+	require.NoError(t, err)
+	require.Equal(t, &model.DBInfo{
+		ID:      1,
+		Name:    model.NewCIStr("mydatabase"),
+		Charset: "utf8",
+		Collate: "utf8_bin",
+		State:   model.StatePublic,
+	}, dbInfo)
+
+	stmt = "CREATE DATABASE `test` /*!40100 DEFAULT COLLATE utf8mb4_bin */"
+	dbInfo, err = createDBInfo(1, stmt)
+	require.NoError(t, err)
+	require.Equal(t, &model.DBInfo{
+		ID:      1,
+		Name:    model.NewCIStr("test"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+		State:   model.StatePublic,
+	}, dbInfo)
+
+	stmt = "CREATE DATABASE `test` /*!40100 DEFAULT CHARACTER SET latin1 */"
+	dbInfo, err = createDBInfo(1, stmt)
+	require.NoError(t, err)
+	require.Equal(t, &model.DBInfo{
+		ID:      1,
+		Name:    model.NewCIStr("test"),
+		Charset: "latin1",
+		Collate: "latin1_bin",
+		State:   model.StatePublic,
+	}, dbInfo)
+}
+
+func TestCreateTableInfo(t *testing.T) {
+	stmt := `CREATE TABLE ` + "`t1`" + `(
+	` + "`id`" + ` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
+	tblInfo, err := createTableInfo(1, stmt)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tblInfo.ID)
+	require.Equal(t, model.StatePublic, tblInfo.State)
+	require.Equal(t, model.NewCIStr("t1"), tblInfo.Name)
+
+	stmt = `CREATE TABLE ` + "`tb`" + ` (
+	` + "`c`" + ` int(11) NOT NULL,
+	PRIMARY KEY (` + "`c`" + `) /*T![clustered_index] CLUSTERED */
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`
+	require.NoError(t, err)
+	tblInfo, err = createTableInfo(2, stmt)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), tblInfo.ID)
+	require.Equal(t, model.StatePublic, tblInfo.State)
+	require.Equal(t, model.NewCIStr("tb"), tblInfo.Name)
+}
+
+func TestMockCreateDatabaseJob(t *testing.T) {
+	s, err := NewSchema(nil, nil, nil, false)
+	require.NoError(t, err)
+	stmt := "CREATE DATABASE `test` /*!40100 DEFAULT CHARACTER SET utf8mb4 */"
+
+	job, err := s.mockCreateSchemaJob(stmt, 1, 1)
+	require.NoError(t, err)
+	require.Equal(t, model.ActionCreateSchema, job.Type)
+	require.Equal(t, model.JobStateDone, job.State)
+	require.Equal(t, stmt, job.Query)
+	require.Equal(t, model.NewCIStr("test"), job.BinlogInfo.DBInfo.Name)
+	require.Equal(t, int64(1), job.BinlogInfo.SchemaVersion)
+	require.Equal(t, int64(1), job.BinlogInfo.DBInfo.ID)
+	require.Equal(t, "utf8mb4", job.BinlogInfo.DBInfo.Charset)
+	require.Equal(t, "utf8mb4_bin", job.BinlogInfo.DBInfo.Collate)
+
+	stmt = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET latin1 */"
+	job, err = s.mockCreateSchemaJob(stmt, 2, 3)
+	require.NoError(t, err)
+	require.Equal(t, model.ActionCreateSchema, job.Type)
+	require.Equal(t, model.JobStateDone, job.State)
+	require.Equal(t, stmt, job.Query)
+	require.Equal(t, model.NewCIStr("db"), job.BinlogInfo.DBInfo.Name)
+	require.Equal(t, int64(3), job.BinlogInfo.SchemaVersion)
+	require.Equal(t, int64(2), job.BinlogInfo.DBInfo.ID)
+	require.Equal(t, "latin1", job.BinlogInfo.DBInfo.Charset)
+	require.Equal(t, "latin1_bin", job.BinlogInfo.DBInfo.Collate)
+
+	stmt = ""
+	job, err = s.mockCreateSchemaJob(stmt, 2, 3)
+	require.Error(t, err)
+	require.Nil(t, job)
+}
+
+func TestMockCreateTableJob(t *testing.T) {
+	s, err := NewSchema(nil, nil, nil, false)
+	require.NoError(t, err)
+	stmt := `CREATE TABLE ` + "`t1`" + `(
+		` + "`id`" + ` int(11) DEFAULT NULL
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
+
+	job, err := s.mockCreateTableJob(stmt, 1, 2, 3)
+	require.NoError(t, err)
+	require.Equal(t, model.ActionCreateTable, job.Type)
+	require.Equal(t, model.JobStateDone, job.State)
+	require.Equal(t, stmt, job.Query)
+	require.Equal(t, int64(1), job.SchemaID)
+	require.Equal(t, model.NewCIStr("t1"), job.BinlogInfo.TableInfo.Name)
+	require.Equal(t, int64(3), job.BinlogInfo.SchemaVersion)
+	require.Equal(t, int64(2), job.BinlogInfo.TableInfo.ID)
+	require.Equal(t, "utf8mb4", job.BinlogInfo.TableInfo.Charset)
+	require.Equal(t, "utf8mb4_bin", job.BinlogInfo.TableInfo.Collate)
+
+	stmt = `CREATE TABLE ` + "`tb`" + ` (
+		` + "`c`" + ` int(11) NOT NULL,
+		PRIMARY KEY (` + "`c`" + `) /*T![clustered_index] CLUSTERED */
+	) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin`
+	job, err = s.mockCreateTableJob(stmt, 3, 4, 4)
+	require.NoError(t, err)
+	require.Equal(t, model.ActionCreateTable, job.Type)
+	require.Equal(t, model.JobStateDone, job.State)
+	require.Equal(t, stmt, job.Query)
+	require.Equal(t, int64(3), job.SchemaID)
+	require.Equal(t, model.NewCIStr("tb"), job.BinlogInfo.TableInfo.Name)
+	require.Equal(t, int64(4), job.BinlogInfo.SchemaVersion)
+	require.Equal(t, int64(4), job.BinlogInfo.TableInfo.ID)
+	require.Equal(t, "latin1", job.BinlogInfo.TableInfo.Charset)
+	require.Equal(t, "latin1_bin", job.BinlogInfo.TableInfo.Collate)
+
+	stmt = ""
+	job, err = s.mockCreateTableJob(stmt, 3, 4, 4)
+	require.Error(t, err)
+	require.Nil(t, job)
+}
+
+func TestHandlePreviousSchemasIfNeed(t *testing.T) {
+	dbInfos := map[schemaKey]schemaInfo{
+		{schemaName: "db1"}: {stmt: "CREATE DATABASE `db1` /*!40100 DEFAULT CHARACTER SET utf8mb4 */", id: 1},
+		{schemaName: "db2"}: {stmt: "CREATE DATABASE `db2` /*!40100 DEFAULT CHARACTER SET latin1 */", id: 2},
+	}
+	tbInfos := map[schemaKey]schemaInfo{
+		{
+			schemaName: "db1",
+			tableName:  "t1",
+		}: {
+			stmt: `CREATE TABLE ` + "`t1`" + `(
+			` + "`id`" + ` int(11) DEFAULT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`,
+			id: 3,
+		},
+		{
+			schemaName: "db1",
+			tableName:  "t2",
+		}: {
+			stmt: `CREATE TABLE ` + "`t2`" + `(
+				` + "`id`" + ` int(11) DEFAULT NULL
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`,
+			id: 4,
+		},
+		{
+			schemaName: "db2",
+			tableName:  "t1",
+		}: {
+			stmt: `CREATE TABLE ` + "`t1`" + `(
+			` + "`id`" + ` int(11) DEFAULT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin;`,
+			id: 5,
+		},
+		{
+			schemaName: "db2",
+			tableName:  "t2",
+		}: {
+			stmt: `CREATE TABLE ` + "`t2`" + `(
+				` + "`id`" + ` int(11) DEFAULT NULL
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`,
+			id: 6,
+		},
+	}
+
+	schema, err := NewSchema(nil, dbInfos, tbInfos, false)
+	require.NoError(t, err)
+
+	err = schema.handlePreviousSchemasIfNeed(1000)
+	require.NoError(t, err)
+	require.Len(t, schema.schemas, 2)
+	require.Len(t, schema.tables, 4)
+	require.Len(t, schema.version2SchemaTable, 6)
+	require.Equal(t, int64(6), schema.currentVersion)
+
+	err = schema.handlePreviousSchemasIfNeed(2)
+	require.NoError(t, err)
+	require.Len(t, schema.schemas, 2)
+	require.Len(t, schema.tables, 4)
+	require.Len(t, schema.version2SchemaTable, 6)
+	require.Equal(t, int64(6), schema.currentVersion)
+}
+
+func TestParseMetadata(t *testing.T) {
+	metadata := `SHOW MASTER STATUS:
+        Log: tidb-binlog
+        Pos: 434397724836364293
+        GTID:
+`
+
+	dir := t.TempDir()
+	require.NoError(t, ioutil.WriteFile(path.Join(dir, "metadata"), []byte(metadata), 0666))
+	tso, err := parseMetaData(dir, "metadata")
+	require.NoError(t, err)
+	require.Equal(t, int64(434397724836364293), tso)
 }
