@@ -452,7 +452,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 		return nil
 	})
 
-	if err != nil && (isSetTiFlashReplica(ddl.SQL) || isSetTiFlashMode(ddl.SQL)) {
+	if err != nil && isSetTiFlashReplicaOrTiFlashMode(ddl.SQL) {
 		return nil
 	}
 
@@ -984,7 +984,7 @@ func getOracleAppliedTS(db *gosql.DB) int64 {
 	return appliedTS
 }
 
-func isSetTiFlashReplica(sql string) bool {
+func isSetTiFlashReplicaOrTiFlashMode(sql string) bool {
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("failed to parse", zap.Error(err), zap.String("sql", sql))
@@ -1001,32 +1001,7 @@ func isSetTiFlashReplica(sql string) bool {
 	}
 
 	for _, spec := range n.Specs {
-		if spec.Tp == ast.AlterTableSetTiFlashReplica {
-			return true
-		}
-	}
-
-	return false
-}
-
-func isSetTiFlashMode(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("failed to parse", zap.Error(err), zap.String("sql", sql))
-		return false
-	}
-
-	n, ok := stmt.(*ast.AlterTableStmt)
-	if !ok {
-		return false
-	}
-
-	if len(n.Specs) > 1 {
-		return false
-	}
-
-	for _, spec := range n.Specs {
-		if spec.Tp == ast.AlterTableSetTiFlashMode {
+		if spec.Tp == ast.AlterTableSetTiFlashReplica || spec.Tp == ast.AlterTableSetTiFlashMode {
 			return true
 		}
 	}
