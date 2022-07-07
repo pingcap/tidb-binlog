@@ -16,24 +16,24 @@ package drainer
 import (
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
-	"github.com/pingcap/tidb-binlog/pkg/loader"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	pb "github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
+	"github.com/pingcap/tidb-binlog/drainer/loopbacksync"
 	"github.com/pingcap/tidb-binlog/drainer/relay"
 	dsync "github.com/pingcap/tidb-binlog/drainer/sync"
 	"github.com/pingcap/tidb-binlog/drainer/translator"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	pb "github.com/pingcap/tipb/go-binlog"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 )
 
 // runWaitThreshold is the expected time for `Syncer.run` to quit
@@ -289,6 +289,8 @@ func (s *Syncer) run() error {
 	var pushFakeBinlog chan<- *pb.Binlog
 
 	var lastAddComitTS int64
+	var initSchemaOnce sync.Once
+
 	dsyncError := s.dsyncer.Error()
 ForLoop:
 	for {
@@ -327,9 +329,15 @@ ForLoop:
 		}
 
 		if startTS == commitTS {
+			if commitTS <= s.cp.TS() {
+				continue
+			}
 			fakeBinlogs = append(fakeBinlogs, binlog)
 			fakeBinlogPreAddTS = append(fakeBinlogPreAddTS, lastAddComitTS)
 		} else if jobID == 0 {
+			if commitTS <= s.cp.TS() {
+				continue
+			}
 			preWriteValue := binlog.GetPrewriteValue()
 			preWrite := &pb.PrewriteValue{}
 			err = preWrite.Unmarshal(preWriteValue)
@@ -350,9 +358,13 @@ ForLoop:
 			}
 
 			if s.cfg.DumpSchemasDir != "" {
-				if err = s.schema.handlePreviousSchemasIfNeed(preWrite.SchemaVersion); err != nil {
-					err = errors.Annotate(err, "handlePreviousSchemasIfNeed failed")
-					break ForLoop
+				initSchemaOnce.Do(func() {
+					if err = s.schema.handlePreviousSchemasIfNeed(preWrite.SchemaVersion); err != nil {
+						err = errors.Annotate(err, "handlePreviousSchemasIfNeed failed")
+					}
+				})
+				if err != nil {
+					break
 				}
 			}
 			err = s.schema.handlePreviousDDLJobIfNeed(preWrite.SchemaVersion)
@@ -394,14 +406,21 @@ ForLoop:
 			// Notice: the version of DDL Binlog we receive are Monotonically increasing
 			// DDL (with version 10, commit ts 100) -> DDL (with version 9, commit ts 101) would never happen
 			s.schema.addJob(b.job)
+			if commitTS <= s.cp.TS() {
+				continue
+			}
 
 			log.Debug("get DDL", zap.Int64("SchemaVersion", b.job.BinlogInfo.SchemaVersion))
 			lastDDLSchemaVersion = b.job.BinlogInfo.SchemaVersion
 
 			if s.cfg.DumpSchemasDir != "" {
-				if err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion); err != nil {
-					err = errors.Trace(err)
-					break ForLoop
+				initSchemaOnce.Do(func() {
+					if err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion); err != nil {
+						err = errors.Trace(err)
+					}
+				})
+				if err != nil {
+					break
 				}
 			}
 			err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion)
