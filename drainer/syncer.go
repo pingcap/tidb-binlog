@@ -415,7 +415,7 @@ ForLoop:
 
 			if s.cfg.DumpSchemasDir != "" {
 				initSchemaOnce.Do(func() {
-					if err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion); err != nil {
+					if err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion); err != nil {
 						err = errors.Trace(err)
 					}
 				})
@@ -423,7 +423,7 @@ ForLoop:
 					break
 				}
 			}
-			err = s.schema.handlePreviousSchemasIfNeed(b.job.BinlogInfo.SchemaVersion)
+			err = s.schema.handlePreviousDDLJobIfNeed(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
 				break ForLoop
