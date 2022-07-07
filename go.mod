@@ -21,7 +21,7 @@ require (
 	github.com/pingcap/log v1.1.0
 	github.com/pingcap/tidb v1.1.0-beta.0.20220706110502-6531bd1ff928
 	github.com/pingcap/tidb-tools v6.1.0+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220706054102-55aea2787d0f
+	github.com/pingcap/tidb/parser v0.0.0-20220707071503-6e22e47f06ab
 	github.com/pingcap/tipb v0.0.0-20220706024432-7be3cc83a7d5
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
@@ -174,5 +174,3 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0 // indirect
 )
-
-replace github.com/pingcap/tidb/parser => github.com/hongyunyan/tidb/parser v0.0.0-20220706072648-8cd3d6b496f6
