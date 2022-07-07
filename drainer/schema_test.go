@@ -15,6 +15,8 @@ package drainer
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -630,4 +632,18 @@ func TestHandlePreviousSchemasIfNeed(t *testing.T) {
 	require.Len(t, schema.tables, 4)
 	require.Len(t, schema.version2SchemaTable, 6)
 	require.Equal(t, int64(6), schema.currentVersion)
+}
+
+func TestParseMetadata(t *testing.T) {
+	metadata := `SHOW MASTER STATUS:
+        Log: tidb-binlog
+        Pos: 434397724836364293
+        GTID:
+`
+
+	dir := t.TempDir()
+	require.NoError(t, ioutil.WriteFile(path.Join(dir, "metadata"), []byte(metadata), 0666))
+	tso, err := parseMetaData(dir, "metadata")
+	require.NoError(t, err)
+	require.Equal(t, int64(434397724836364293), tso)
 }
