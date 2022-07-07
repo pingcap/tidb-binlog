@@ -543,6 +543,9 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 		}
 		v++
 	}
+	// safe for gc
+	s.dbInfos = nil
+	s.tbInfos = nil
 	return nil
 }
 
