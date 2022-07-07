@@ -47,9 +47,9 @@ func parseDDL(sql string) (node ast.Node, table filter.TableName, err error) {
 		}
 		switch v := n.(type) {
 		case *ast.CreateDatabaseStmt:
-			setSchemaIfExists(&table, v.Name, "")
+			setSchemaIfExists(&table, v.Name.O, "")
 		case *ast.DropDatabaseStmt:
-			setSchemaIfExists(&table, v.Name, "")
+			setSchemaIfExists(&table, v.Name.O, "")
 		case *ast.CreateTableStmt:
 			setSchemaIfExists(&table, v.Table.Schema.O, v.Table.Name.O)
 		case *ast.DropTableStmt:

@@ -3,7 +3,7 @@ module github.com/pingcap/tidb-binlog
 go 1.18
 
 require (
-	github.com/BurntSushi/toml v1.0.0
+	github.com/BurntSushi/toml v1.1.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.30.0
 	github.com/dustin/go-humanize v1.0.0
@@ -17,19 +17,19 @@ require (
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
-	github.com/pingcap/kvproto v0.0.0-20220517085838-12e2f5a9d167
+	github.com/pingcap/kvproto v0.0.0-20220705053936-aa9c2d20cd2a
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20220622075636-494759d4aa18
+	github.com/pingcap/tidb v1.1.0-beta.0.20220706110502-6531bd1ff928
 	github.com/pingcap/tidb-tools v6.1.0+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220622075636-494759d4aa18
-	github.com/pingcap/tipb v0.0.0-20220602075447-4847c5d68e73
+	github.com/pingcap/tidb/parser v0.0.0-20220706054102-55aea2787d0f
+	github.com/pingcap/tipb v0.0.0-20220706024432-7be3cc83a7d5
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
 	github.com/soheilhy/cmux v0.1.5
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
-	github.com/tikv/client-go/v2 v2.0.1-0.20220622080835-681fb6e537b5
+	github.com/tikv/client-go/v2 v2.0.1-0.20220627063500-947d923945fd
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	github.com/unrolled/render v1.0.1
 	go.etcd.io/etcd/client/v3 v3.5.2
@@ -37,7 +37,7 @@ require (
 	go.uber.org/zap v1.21.0
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
-	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f
+	golang.org/x/sys v0.0.0-20220622161953-175b2fd9d664
 	google.golang.org/grpc v1.44.0
 )
 
@@ -121,14 +121,14 @@ require (
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/shirou/gopsutil/v3 v3.21.12 // indirect
+	github.com/shirou/gopsutil/v3 v3.22.4 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stathat/consistent v1.0.0 // indirect
 	github.com/stretchr/testify v1.7.2-0.20220504104629-106ec21d14df // indirect
-	github.com/tklauser/go-sysconf v0.3.9 // indirect
-	github.com/tklauser/numcpus v0.3.0 // indirect
+	github.com/tklauser/go-sysconf v0.3.10 // indirect
+	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
 	github.com/twmb/murmur3 v1.1.3 // indirect
 	github.com/uber/jaeger-client-go v2.22.1+incompatible // indirect
@@ -157,17 +157,17 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
-	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5 // indirect
+	golang.org/x/exp v0.0.0-20220428152302-39d4317da171 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
-	golang.org/x/tools v0.1.10 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/tools v0.1.11 // indirect
+	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/api v0.69.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220216160803-4663080d8bc8 // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
+	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect

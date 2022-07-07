@@ -339,7 +339,8 @@ func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, int
 		d.SetBytes([]byte(val))
 		e = []byte(val)
 	case mysql.TypeDuration:
-		duration, err := types.ParseDuration(new(stmtctx.StatementContext), "10:10:10", 0)
+		duration, b, err := types.ParseDuration(new(stmtctx.StatementContext), "10:10:10", 0)
+		c.Assert(b, check.IsFalse)
 		c.Assert(err, check.IsNil)
 		d.SetMysqlDuration(duration)
 		e = "10:10:10"

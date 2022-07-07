@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser"
@@ -179,7 +180,7 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	jobs, err := ddl.GetAllHistoryDDLJobs(snapMeta)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
