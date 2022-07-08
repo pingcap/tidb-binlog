@@ -985,7 +985,8 @@ func getOracleAppliedTS(db *gosql.DB) int64 {
 }
 
 func isTiFlashDDL(sql string) bool {
-
+	// We need to ignore all errors related with TiFlash，
+	// Since TiFlash statements are not available in other dbs.
 	// TiFlash related DDL:
 	// alter table xx set tiflash replica xx
 	// alter table xx set tiflash mode xx
