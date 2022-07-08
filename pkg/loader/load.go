@@ -452,7 +452,7 @@ func (s *loaderImpl) processMysqlDDL(ddl *DDL) error {
 		return nil
 	})
 
-	if err != nil && isSetTiFlashReplicaOrTiFlashMode(ddl.SQL) {
+	if err != nil && isTiFlashDDL(ddl.SQL) {
 		return nil
 	}
 
@@ -984,13 +984,17 @@ func getOracleAppliedTS(db *gosql.DB) int64 {
 	return appliedTS
 }
 
-func isSetTiFlashReplicaOrTiFlashMode(sql string) bool {
+func isTiFlashDDL(sql string) bool {
+
+	// TiFlash related DDL:
+	// alter table xx set tiflash replica xx
+	// alter table xx set tiflash mode xx
+
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
 		log.Error("failed to parse", zap.Error(err), zap.String("sql", sql))
 		return false
 	}
-
 	n, ok := stmt.(*ast.AlterTableStmt)
 	if !ok {
 		return false
