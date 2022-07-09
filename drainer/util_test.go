@@ -146,10 +146,15 @@ func TestGetTableFromDumpFilename(t *testing.T) {
 	require.Len(t, db, 0)
 	require.Len(t, tb, 0)
 
-	db, tb, ok = getTableFromDumpFilename("db.tb.wrong-schema.sql")
+	db, tb, ok = getTableFromDumpFilename("db.db.tb-schema.sql")
+	require.True(t, ok)
+	require.Equal(t, db, "db")
+	require.Equal(t, tb, "db.tb")
+
+	db, tb, ok = getTableFromDumpFilename("db.-schema.sql")
 	require.False(t, ok)
-	require.Len(t, db, 0)
-	require.Len(t, tb, 0)
+	require.Equal(t, db, "")
+	require.Equal(t, tb, "")
 }
 
 func TestGetStmtFromFile(t *testing.T) {
@@ -160,14 +165,15 @@ func TestGetStmtFromFile(t *testing.T) {
 		dbPath       = filepath.Join(localDir, dbFilename)
 		tbPath       = filepath.Join(localDir, tbFilename)
 		createDbStmt = `/* some comment */;
-CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
-		dbStmt       = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET utf8mb4 */"
-		createTbStmt = `CREATE TABLE ` + "`tb`" + ` (
-	` + "`id`" + ` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
-		tbStmt = `CREATE TABLE ` + "`tb`" + ` (
-	` + "`id`" + ` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;
+`
+		dbStmt       = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;"
+		createTbStmt = `/* some comment */;
+CREATE TABLE ` + "`tb`" + ` (
+	` + "`id`" + ` int(11) DEFAULT NULL COMMENT 'fkdfjdfkjdf;\nfjkdfjd',
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+`
+		tbStmt = "CREATE TABLE `tb` (`id` int(11) DEFAULT NULL COMMENT 'fkdfjdfkjdf;\\nfjkdfjd',) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 	)
 
 	err := ioutil.WriteFile(dbPath, []byte(createDbStmt), 0644)
@@ -190,7 +196,7 @@ CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
 	err = ioutil.WriteFile(dbPath, []byte(""), 0644)
 	require.NoError(t, err)
 	stmt, err = getStmtFromFile(dbPath)
-	require.EqualError(t, err, "no stmt found")
+	require.EqualError(t, err, "can't find stmt in file "+dbPath)
 	require.Len(t, stmt, 0)
 }
 
@@ -206,10 +212,12 @@ CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
 		dbStmt       = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET utf8mb4 */"
 		createTbStmt = `CREATE TABLE ` + "`tb`" + ` (
 	` + "`id`" + ` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;`
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+`
 		tbStmt = `CREATE TABLE ` + "`tb`" + ` (
 	` + "`id`" + ` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+`
 	)
 
 	err := ioutil.WriteFile(dbPath, []byte(createDbStmt), 0644)

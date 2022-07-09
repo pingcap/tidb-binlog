@@ -536,7 +536,7 @@ func (s *Schema) handlePreviousSchemasIfNeed(version int64) error {
 			return errors.Errorf("schema %s not found", key.schemaName)
 		}
 		if job, err := s.mockCreateTableJob(info.stmt, dbInfo.id, info.id, v); err != nil {
-			log.Error("fail to handle create table", zap.Error(err))
+			log.Error("fail to handle create table", zap.Any("table", key), zap.Error(err))
 			return err
 		} else if _, _, _, err = s.handleDDL(job); err != nil {
 			return err

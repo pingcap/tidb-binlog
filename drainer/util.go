@@ -14,7 +14,7 @@
 package drainer
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -256,11 +256,12 @@ func getTableFromDumpFilename(filename string) (db, table string, ok bool) {
 
 	idx := strings.LastIndex(filename, "-schema.sql")
 	name := filename[:idx]
-	fields := strings.Split(name, ".")
-	if len(fields) != 2 {
+	// for db.db.table
+	idx = strings.Index(name, ".")
+	if idx == -1 || idx+1 >= len(name) {
 		return "", "", false
 	}
-	return fields[0], fields[1], true
+	return name[:idx], name[idx+1:], true
 }
 
 type schemaKey struct {
@@ -273,20 +274,37 @@ type schemaInfo struct {
 	id   int64
 }
 
+// copy from dm:loader
 func getStmtFromFile(file string) (string, error) {
-	content, err := ioutil.ReadFile(file)
+	data := make([]byte, 0, 1024*1024)
+	f, err := os.Open(file)
 	if err != nil {
 		return "", err
 	}
-	stmts := bytes.Split(content, []byte(";"))
-	for _, stmt := range stmts {
-		stmt = bytes.TrimSpace(stmt)
-		if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
+	br := bufio.NewReader(f)
+
+	for {
+		line, err := br.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+
+		realLine := strings.TrimSpace(line[:len(line)-1])
+		if len(realLine) == 0 {
 			continue
 		}
-		return string(stmt), nil
+
+		data = append(data, []byte(realLine)...)
+		if data[len(data)-1] == ';' {
+			query := string(data)
+			data = data[0:0]
+			if strings.HasPrefix(query, "/*") && strings.HasSuffix(query, "*/;") {
+				continue
+			}
+			return query, nil
+		}
 	}
-	return "", errors.New("no stmt found")
+	return "", errors.Errorf("can't find stmt in file %s", file)
 }
 
 func getTableIDByName(schemaName, tableName string, tblIDMap map[string]map[string]int64) (int64, bool) {
@@ -359,6 +377,10 @@ func loadInfosFromDump(dir string, dbIDMaps map[string]int64, tblIDMaps map[stri
 		return nil, nil, err
 	}
 	for f := range files {
+		// metadata
+		if !strings.HasSuffix(f, ".sql") {
+			continue
+		}
 		stmt, err := getStmtFromFile(filepath.Join(dir, f))
 		if err != nil {
 			log.L().Error("failed to get stmt from file", zap.String("dir", dir), zap.String("file", f), zap.Error(err))
