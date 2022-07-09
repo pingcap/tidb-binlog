@@ -208,16 +208,14 @@ func TestLoadInfosFromDump(t *testing.T) {
 		dbPath       = filepath.Join(localDir, dbFilename)
 		tbPath       = filepath.Join(localDir, tbFilename)
 		createDbStmt = `/* some comment */;
-CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
-		dbStmt       = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET utf8mb4 */"
+CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;
+`
+		dbStmt       = "CREATE DATABASE `db` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;"
 		createTbStmt = `CREATE TABLE ` + "`tb`" + ` (
 	` + "`id`" + ` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 `
-		tbStmt = `CREATE TABLE ` + "`tb`" + ` (
-	` + "`id`" + ` int(11) DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
-`
+		tbStmt = "CREATE TABLE `tb` (`id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 	)
 
 	err := ioutil.WriteFile(dbPath, []byte(createDbStmt), 0644)
@@ -236,6 +234,6 @@ CREATE DATABASE ` + "`db`" + ` /*!40100 DEFAULT CHARACTER SET utf8mb4 */;`
 
 	dbInfo := dbInfos[schemaKey{schemaName: "db"}]
 	tbInfo := tbInfos[schemaKey{schemaName: "db", tableName: "tb"}]
-	require.Equal(t, schemaInfo{stmt: dbStmt, id: 1}, dbInfo)
-	require.Equal(t, schemaInfo{stmt: tbStmt, id: 1}, tbInfo)
+	require.Equal(t, schemaInfo{stmt: dbStmt, id: 101}, dbInfo)
+	require.Equal(t, schemaInfo{stmt: tbStmt, id: 102}, tbInfo)
 }
