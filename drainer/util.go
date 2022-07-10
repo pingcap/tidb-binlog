@@ -257,11 +257,11 @@ func getTableFromDumpFilename(filename string) (db, table string, ok bool) {
 	idx := strings.LastIndex(filename, "-schema.sql")
 	name := filename[:idx]
 	// for db.db.table
-	idx = strings.Index(name, ".")
-	if idx == -1 || idx+1 >= len(name) {
+	fields := strings.SplitN(name, ".", 2)
+	if len(fields) != 2 {
 		return "", "", false
 	}
-	return name[:idx], name[idx+1:], true
+	return fields[0], fields[1], true
 }
 
 type schemaKey struct {
@@ -276,7 +276,7 @@ type schemaInfo struct {
 
 // copy from dm:loader
 func getStmtFromFile(file string) (string, error) {
-	data := make([]byte, 0, 1024*1024)
+	var data strings.Builder
 	f, err := os.Open(file)
 	if err != nil {
 		return "", err
@@ -294,10 +294,10 @@ func getStmtFromFile(file string) (string, error) {
 			continue
 		}
 
-		data = append(data, []byte(realLine)...)
-		if data[len(data)-1] == ';' {
-			query := string(data)
-			data = data[0:0]
+		data.WriteString(realLine)
+		if strings.HasSuffix(realLine, ";") {
+			query := data.String()
+			data.Reset()
 			if strings.HasPrefix(query, "/*") && strings.HasSuffix(query, "*/;") {
 				continue
 			}
