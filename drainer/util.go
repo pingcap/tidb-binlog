@@ -184,6 +184,7 @@ func loadTableInfos(tiStore kv.Storage, startTs int64) ([]*model.Job, error) {
 		}
 		for _, tableInfo := range tableInfos {
 			jobs = append(jobs, mockCreateTableJob(tableInfo, dbinfo.ID, version))
+			version++
 		}
 	}
 	return jobs, nil
