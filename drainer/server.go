@@ -26,6 +26,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-binlog/drainer/checkpoint"
 	"github.com/pingcap/tidb-binlog/pkg/flags"
 	"github.com/pingcap/tidb-binlog/pkg/node"
@@ -196,7 +197,12 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 	}
 	defer tiStore.Close()
 
-	jobs, err := loadHistoryDDLJobs(tiStore)
+	var jobs []*model.Job
+	if cfg.LoadTableInfos {
+		jobs, err = loadTableInfos(tiStore, cp.TS())
+	} else {
+		jobs, err = loadHistoryDDLJobs(tiStore)
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

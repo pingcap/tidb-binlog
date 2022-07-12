@@ -78,6 +78,7 @@ type SyncerConfig struct {
 	Relay             RelayConfig        `toml:"relay" json:"relay"`
 	SafeMode          bool               `toml:"safe-mode" json:"safe-mode"`
 	DisableCausality  bool               `toml:"disable-detect" json:"disable-detect"`
+	LoadTableInfos    bool               `toml:"load-table-infos" json:"load-table-infos"`
 }
 
 // RelayConfig is the Relay log's configuration.
@@ -152,6 +153,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.SyncerCfg.Relay.LogDir, "relay-log-dir", "", "path to relay log of syncer")
 	fs.Int64Var(&cfg.SyncerCfg.Relay.MaxFileSize, "relay-max-file-size", 10485760, "max file size of each relay log")
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
+	fs.BoolVar(&cfg.SyncerCfg.LoadTableInfos, "load-table-infos", false, "load table infos")
 	fs.BoolVar(&cfg.SyncerCfg.DisableCausality, "disable-detect", false, "disable detect causality")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
