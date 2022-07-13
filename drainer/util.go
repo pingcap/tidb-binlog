@@ -161,12 +161,51 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 	return jobs, nil
 }
 
+// loadTableInfos loads all table infos after startTs
+func loadTableInfos(tiStore kv.Storage, startTs int64) ([]*model.Job, error) {
+	meta, err := getSnapshotMetaFromTs(tiStore, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dbinfos, err := meta.ListDatabases()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs := make([]*model.Job, 0, len(dbinfos))
+	version := int64(1)
+	for _, dbinfo := range dbinfos {
+		log.L().Info("load db info", zap.Stringer("db", dbinfo.Name), zap.Int64("version", version))
+		jobs = append(jobs, mockCreateSchemaJob(dbinfo, version))
+		version++
+	}
+	for _, dbinfo := range dbinfos {
+		tableInfos, err := meta.ListTables(dbinfo.ID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		for _, tableInfo := range tableInfos {
+			log.L().Debug("load table info", zap.Stringer("db", dbinfo.Name), zap.Stringer("table", tableInfo.Name), zap.Int64("version", version))
+			jobs = append(jobs, mockCreateTableJob(tableInfo, dbinfo.ID, version))
+			version++
+		}
+	}
+	return jobs, nil
+}
+
 func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	version, err := tiStore.CurrentVersion()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return meta.NewSnapshotMeta(snapshot), nil
+}
+
+func getSnapshotMetaFromTs(tiStore kv.Storage, ts int64) (*meta.Meta, error) {
+	snapshot, err := tiStore.GetSnapshot(kv.NewVersion(uint64(ts)))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -190,4 +229,27 @@ func genDrainerID(listenAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s:%s", hostname, port), nil
+}
+
+func mockCreateSchemaJob(dbInfo *model.DBInfo, schemaVersion int64) *model.Job {
+	return &model.Job{
+		Type:  model.ActionCreateSchema,
+		State: model.JobStateDone,
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: schemaVersion,
+			DBInfo:        dbInfo,
+		},
+	}
+}
+
+func mockCreateTableJob(tableInfo *model.TableInfo, schemaID, schemaVersion int64) *model.Job {
+	return &model.Job{
+		Type:     model.ActionCreateTable,
+		State:    model.JobStateDone,
+		SchemaID: schemaID,
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: schemaVersion,
+			TableInfo:     tableInfo,
+		},
+	}
 }
