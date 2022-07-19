@@ -100,6 +100,7 @@ func NewSyncer(cp checkpoint.CheckPoint, cfg *SyncerConfig, jobs []*model.Job) (
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	syncer.schema.InitForCreateMySQLSchema()
 
 	syncer.dsyncer, err = createDSyncer(cfg, syncer.schema, syncer.loopbackSync, syncer.tableRouter)
 	if err != nil {

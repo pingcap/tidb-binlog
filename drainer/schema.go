@@ -78,6 +78,19 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	return s, nil
 }
 
+// InitForCreateMySQLSchema create the schema info for `mysql`, since it's created by KV after TiDB 6.2.
+func (s *Schema) InitForCreateMySQLSchema() {
+	db := model.DBInfo{
+		ID:      1,
+		Name:    model.NewCIStr(mysql.SystemDB),
+		Charset: mysql.UTF8MB4Charset,
+		Collate: mysql.UTF8MB4DefaultCollation,
+		State:   model.StatePublic,
+	}
+	s.schemas[1] = &db
+	s.schemaNameToID["mysql"] = 1
+}
+
 func (s *Schema) String() string {
 	mp := map[string]interface{}{
 		"tableIDToName":  s.tableIDToName,
@@ -156,8 +169,14 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 
 // CreateSchema adds new DBInfo
 func (s *Schema) CreateSchema(db *model.DBInfo) error {
-	if _, ok := s.schemas[db.ID]; ok {
-		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
+	if dbInfo, ok := s.schemas[db.ID]; ok {
+		// The `mysql` database is created by SQL, not by KV.
+		if dbInfo.Name.L == "mysql" {
+			delete(s.schemas, db.ID)
+			delete(s.schemaNameToID, "mysql")
+		} else {
+			return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
+		}
 	}
 
 	s.schemas[db.ID] = db
