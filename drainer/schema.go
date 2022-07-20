@@ -89,8 +89,8 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 
 // InitForCreateMySQLSchema create the schema info for `mysql`, since it's created by KV after TiDB 6.2.
 func (s *Schema) InitForCreateMySQLSchema() {
-	s.schemas[1] = &defaultMySQLSchemaInfo
-	s.schemaNameToID[mysql.SystemDB] = 1
+	s.schemas[defaultMySQLSchemaInfo.ID] = &defaultMySQLSchemaInfo
+	s.schemaNameToID[mysql.SystemDB] = defaultMySQLSchemaInfo.ID
 }
 
 func (s *Schema) String() string {
