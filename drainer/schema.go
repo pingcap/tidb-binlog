@@ -28,6 +28,15 @@ import (
 const implicitColName = "_tidb_rowid"
 const implicitColID = -1
 
+// Keep it's the same as TiDB side.
+var defaultMySQLSchemaInfo = model.DBInfo{
+	ID:      1,
+	Name:    model.NewCIStr(mysql.SystemDB),
+	Charset: mysql.UTF8MB4Charset,
+	Collate: mysql.UTF8MB4DefaultCollation,
+	State:   model.StatePublic,
+}
+
 // Schema stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
@@ -80,15 +89,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 
 // InitForCreateMySQLSchema create the schema info for `mysql`, since it's created by KV after TiDB 6.2.
 func (s *Schema) InitForCreateMySQLSchema() {
-	// Keep it's the same as TiDB side.
-	db := model.DBInfo{
-		ID:      1,
-		Name:    model.NewCIStr(mysql.SystemDB),
-		Charset: mysql.UTF8MB4Charset,
-		Collate: mysql.UTF8MB4DefaultCollation,
-		State:   model.StatePublic,
-	}
-	s.schemas[1] = &db
+	s.schemas[1] = &defaultMySQLSchemaInfo
 	s.schemaNameToID[mysql.SystemDB] = 1
 }
 
