@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
@@ -33,7 +33,7 @@ func (s *testMysqlSuite) testMysqlSyncer(c *check.C, safemode bool) {
 		createDB = oldCreateDB
 	}()
 
-	syncer, err := newMysqlSyncer(&DBConfig{}, 1, 20, safemode)
+	syncer, err := newMysqlSyncer(&DBConfig{}, 1, 20, safemode, nil)
 	c.Assert(err, check.IsNil)
 
 	mock.ExpectBegin()
