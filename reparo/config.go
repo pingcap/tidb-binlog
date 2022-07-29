@@ -46,6 +46,7 @@ type Config struct {
 	StopTSO       int64  `toml:"stop-tso" json:"stop-tso"`
 	TxnBatch      int    `toml:"txn-batch" json:"txn-batch"`
 	WorkerCount   int    `toml:"worker-count" json:"worker-count"`
+	StatusAddr    string `toml:"status-addr" json:"status-addr"`
 
 	DestType string           `toml:"dest-type" json:"dest-type"`
 	DestDB   *syncer.DBConfig `toml:"dest-db" json:"dest-db"`
@@ -77,6 +78,7 @@ func NewConfig() *Config {
 	fs.StringVar(&c.Dir, "data-dir", "", "drainer data directory path")
 	fs.StringVar(&c.StartDatetime, "start-datetime", "", "recovery from start-datetime, empty string means starting from the beginning of the first file")
 	fs.StringVar(&c.StopDatetime, "stop-datetime", "", "recovery end in stop-datetime, empty string means never end.")
+	fs.StringVar(&c.StatusAddr, "status-addr", ":8381", "reparo API server and pprof addr")
 	fs.Int64Var(&c.StartTSO, "start-tso", 0, "similar to start-datetime but in pd-server tso format")
 	fs.Int64Var(&c.StopTSO, "stop-tso", 0, "similar to stop-datetime, but in pd-server tso format")
 	fs.IntVar(&c.TxnBatch, "txn-batch", 20, "number of binlog events in a transaction batch")

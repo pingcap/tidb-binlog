@@ -15,10 +15,12 @@ package reparo
 
 import (
 	"io"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-binlog/pkg/filter"
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 	"github.com/pingcap/tidb-binlog/reparo/syncer"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -37,7 +39,11 @@ type Reparo struct {
 func New(cfg *Config) (*Reparo, error) {
 	log.Info("New Reparo", zap.Stringer("config", cfg))
 
-	syncer, err := syncer.New(cfg.DestType, cfg.DestDB, cfg.WorkerCount, cfg.TxnBatch, cfg.SafeMode)
+	syncer, err := syncer.New(cfg.DestType, cfg.DestDB, cfg.WorkerCount, cfg.TxnBatch, cfg.SafeMode, &loader.MetricsGroup{
+		EventCounterVec:   eventCounter,
+		QueryHistogramVec: queryHistogramVec,
+		QueueSizeGauge:    queueSizeGauge,
+	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -53,6 +59,14 @@ func New(cfg *Config) (*Reparo, error) {
 
 // Process runs the main procedure.
 func (r *Reparo) Process() error {
+	if r.cfg.StatusAddr != "" {
+		go func() {
+			err := startReparoService(r.cfg.StatusAddr)
+			if err != nil {
+				log.Info("meet error when stopping reparo http service", zap.String("error", err.Error()))
+			}
+		}()
+	}
 	pbReader, err := newDirPbReader(r.cfg.Dir, r.cfg.StartTSO, r.cfg.StopTSO)
 	if err != nil {
 		return errors.Annotatef(err, "new reader failed dir: %s", r.cfg.Dir)
@@ -77,10 +91,12 @@ func (r *Reparo) Process() error {
 		if ignore {
 			continue
 		}
-
+		beginTime := time.Now()
 		err = r.syncer.Sync(binlog, func(binlog *pb.Binlog) {
 			dt := oracle.GetTimeFromTS(uint64(binlog.CommitTs))
 			log.Info("sync binlog success", zap.Int64("ts", binlog.CommitTs), zap.Time("datetime", dt))
+			checkpointTSOGauge.Set(float64(oracle.ExtractPhysical(uint64(binlog.CommitTs))))
+			executeHistogram.Observe(time.Since(beginTime).Seconds())
 		})
 
 		if err != nil {
