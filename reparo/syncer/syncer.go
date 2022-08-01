@@ -16,6 +16,7 @@ package syncer
 import (
 	"fmt"
 
+	"github.com/pingcap/tidb-binlog/pkg/loader"
 	pb "github.com/pingcap/tidb-binlog/proto/binlog"
 )
 
@@ -29,10 +30,10 @@ type Syncer interface {
 }
 
 // New creates a new executor based on the name.
-func New(name string, cfg *DBConfig, worker int, batchSize int, safemode bool) (Syncer, error) {
+func New(name string, cfg *DBConfig, worker int, batchSize int, safemode bool, metricsGroup *loader.MetricsGroup) (Syncer, error) {
 	switch name {
 	case "mysql":
-		return newMysqlSyncer(cfg, worker, batchSize, safemode)
+		return newMysqlSyncer(cfg, worker, batchSize, safemode, metricsGroup)
 	case "print":
 		return newPrintSyncer()
 	case "memory":

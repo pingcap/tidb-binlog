@@ -28,6 +28,7 @@ func Decode(r io.Reader) (*pb.Binlog, int64, error) {
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
+	readBinlogSizeHistogram.Observe(float64(length))
 
 	binlog := &pb.Binlog{}
 	err = binlog.Unmarshal(payload)
