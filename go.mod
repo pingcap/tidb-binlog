@@ -27,7 +27,6 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210918120811-547c13e3eb00 // indirect
 	github.com/pingcap/kvproto v0.0.0-20211207042851-78a55fb8e69c
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/parser v3.1.2+incompatible
 	github.com/pingcap/tidb v1.1.0-beta.0.20220114083142-ed1cd2a2f4d3
 	github.com/pingcap/tidb-tools v5.2.3-0.20211101071251-40e8f0cfcb1d+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20220114083142-ed1cd2a2f4d3
@@ -40,7 +39,6 @@ require (
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.2.1 // indirect
-	github.com/spf13/pflag v1.0.5
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tikv/client-go/v2 v2.0.0-rc.0.20211229051614-62d6b4a2e8f7
 	github.com/tikv/pd v1.1.0-beta.0.20211118054146-02848d2660ee
