@@ -989,7 +989,6 @@ func isTiFlashDDL(sql string) bool {
 	// Since TiFlash statements are not available in other dbs.
 	// TiFlash related DDL:
 	// alter table xx set tiflash replica xx
-	// alter table xx set tiflash mode xx
 
 	stmt, err := parser.New().ParseOneStmt(sql, "", "")
 	if err != nil {
@@ -1006,7 +1005,7 @@ func isTiFlashDDL(sql string) bool {
 	}
 
 	for _, spec := range n.Specs {
-		if spec.Tp == ast.AlterTableSetTiFlashReplica || spec.Tp == ast.AlterTableSetTiFlashMode {
+		if spec.Tp == ast.AlterTableSetTiFlashReplica {
 			return true
 		}
 	}

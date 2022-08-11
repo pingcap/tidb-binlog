@@ -44,14 +44,6 @@ func (cs *LoadSuite) TestTiFlash(c *check.C) {
 	res := isTiFlashDDL(sql)
 	c.Assert(res, check.IsTrue)
 
-	sql = "ALTER TABLE t SET TIFLASH MODE FAST"
-	res = isTiFlashDDL(sql)
-	c.Assert(res, check.IsTrue)
-
-	sql = "ALTER TABLE t SET TIFLASH MODE NORMAL"
-	res = isTiFlashDDL(sql)
-	c.Assert(res, check.IsTrue)
-
 	sql = "create table a(id int)"
 	res = isTiFlashDDL(sql)
 	c.Assert(res, check.IsFalse)
