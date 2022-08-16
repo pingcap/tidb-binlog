@@ -44,7 +44,7 @@ import (
 
 const (
 	maxKafkaMsgSize = 1 << 30
-	maxGrpcMsgSize  = int(^uint(0) >> 1)
+	maxGrpcMsgSize  = int(^uint(0)>>1) - 4*1024*1024 // max grpc message size, leave 4MB as buffer, see https://github.com/pingcap/tidb-binlog/issues/1152
 )
 
 // taskGroup is a wrapper of `sync.WaitGroup`.
