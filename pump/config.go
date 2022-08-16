@@ -35,7 +35,7 @@ const (
 	defaultEtcdDialTimeout   = 5 * time.Second
 	defaultEtcdURLs          = "http://127.0.0.1:2379"
 	defaultListenAddr        = "127.0.0.1:8250"
-	defaultMaxMsgSize        = int(^uint(0) >> 1) // max grpc message size
+	defaultMaxMsgSize        = int(^uint(0)>>1) - 4*1024*1024 // max grpc message size, leave 4MB as buffer, see https://github.com/pingcap/tidb-binlog/issues/1152
 	defaultHeartbeatInterval = 2
 	defaultGC                = "7"
 	defaultDataDir           = "data.pump"
