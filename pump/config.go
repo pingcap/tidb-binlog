@@ -32,10 +32,12 @@ import (
 )
 
 const (
-	defaultEtcdDialTimeout   = 5 * time.Second
-	defaultEtcdURLs          = "http://127.0.0.1:2379"
-	defaultListenAddr        = "127.0.0.1:8250"
-	defaultMaxMsgSize        = int(^uint(0) >> 1) // max grpc message size
+	defaultEtcdDialTimeout = 5 * time.Second
+	defaultEtcdURLs        = "http://127.0.0.1:2379"
+	defaultListenAddr      = "127.0.0.1:8250"
+	// max grpc message size, leave 4MB as buffer. Because when grpc decompresses messages, it will leave a few buffer
+	// for this, which overflows the int64: https://github.com/grpc/grpc-go/blob/v1.44.0/rpc_util.go#L742
+	defaultMaxMsgSize        = int(^uint(0)>>1) - 4*1024*1024
 	defaultHeartbeatInterval = 2
 	defaultGC                = "7"
 	defaultDataDir           = "data.pump"
