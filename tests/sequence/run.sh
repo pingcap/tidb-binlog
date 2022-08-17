@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-run_drainer &
+run_drainer --compressor gzip &
 
 sleep 3
 
