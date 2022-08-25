@@ -44,7 +44,9 @@ import (
 
 const (
 	maxKafkaMsgSize = 1 << 30
-	maxGrpcMsgSize  = int(^uint(0) >> 1)
+	// max grpc message size, leave 4MB as buffer. Because when grpc decompresses messages, it will leave a few buffer
+	// for this, which overflows the int64: https://github.com/grpc/grpc-go/blob/v1.44.0/rpc_util.go#L742
+	maxGrpcMsgSize = int(^uint(0)>>1) - 4*1024*1024
 )
 
 // taskGroup is a wrapper of `sync.WaitGroup`.
