@@ -171,10 +171,7 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 
 // loadTableInfos loads all table infos after startTs
 func loadTableInfos(tiStore kv.Storage, startTs int64) ([]*model.Job, error) {
-	meta, err := getSnapshotMetaFromTs(tiStore, startTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	meta := getSnapshotMetaFromTs(tiStore, startTs)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -209,12 +206,9 @@ func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
 	return meta.NewSnapshotMeta(snapshot), nil
 }
 
-func getSnapshotMetaFromTs(tiStore kv.Storage, ts int64) (*meta.Meta, error) {
-	snapshot, err := tiStore.GetSnapshot(kv.NewVersion(uint64(ts)))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return meta.NewSnapshotMeta(snapshot), nil
+func getSnapshotMetaFromTs(tiStore kv.Storage, ts int64) *meta.Meta {
+	snapshot := tiStore.GetSnapshot(kv.NewVersion(uint64(ts)))
+	return meta.NewSnapshotMeta(snapshot)
 }
 
 func genDrainerID(listenAddr string) (string, error) {
