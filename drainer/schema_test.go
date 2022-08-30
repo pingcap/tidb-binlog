@@ -286,12 +286,6 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
-	// check job.Query is empty
-	job = &model.Job{ID: 1, State: model.JobStateDone}
-	_, _, sql, err = schema.handleDDL(job)
-	c.Assert(sql, Equals, "")
-	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
-
 	// db info
 	dbInfo := &model.DBInfo{
 		ID:    2,
