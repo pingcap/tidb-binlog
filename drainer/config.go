@@ -89,6 +89,7 @@ type SyncerConfig struct {
 	EnableCausalityFlag  *bool `toml:"-" json:"enable-detect-flag"`
 	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
+	LoadTableInfos       bool  `toml:"load-table-infos" json:"load-table-infos"`
 }
 
 // EnableDispatch return true if enable dispatch.
@@ -213,6 +214,7 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.SyncerCfg.SafeMode, "safe-mode", false, "enable safe mode to make syncer reentrant")
 	fs.BoolVar(cfg.SyncerCfg.DisableCausalityFlag, "disable-detect", false, "DEPRECATED, use enable-detect")
 	fs.BoolVar(cfg.SyncerCfg.EnableCausalityFlag, "enable-detect", true, "enable detect causality")
+	fs.BoolVar(&cfg.SyncerCfg.LoadTableInfos, "load-table-infos", false, "load table infos")
 	fs.IntVar(&maxBinlogItemCount, "cache-binlog-count", defaultBinlogItemCount, "blurry count of binlogs in cache, limit cache size")
 	fs.IntVar(&cfg.SyncedCheckTime, "synced-check-time", defaultSyncedCheckTime, "if we can't detect new binlog after many minute, we think the all binlog is all synced")
 	fs.StringVar(new(string), "log-rotate", "", "DEPRECATED")
