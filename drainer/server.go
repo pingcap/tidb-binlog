@@ -280,6 +280,19 @@ func (s *Server) Start() error {
 		}
 	})
 
+	if s.cfg.SyncerCfg != nil && s.cfg.SyncerCfg.LoadTableInfos {
+		s.tg.GoNoPanic("gc_safepoint", func() {
+			defer func() { go s.Close() }()
+			pdCli, err := getPdClient(s.cfg.EtcdURLs, s.cfg.Security)
+			if err != nil {
+				log.Error("fail to create pdCli", zap.Error(err))
+				errCh <- err
+			}
+			updateServiceSafePoint(s.ctx, pdCli, s.cp, defaultDrainerGCSafePointTTL)
+			pdCli.Close()
+		})
+	}
+
 	s.tg.GoNoPanic("collect", func() {
 		defer func() { go s.Close() }()
 		s.collector.Start(s.ctx)
