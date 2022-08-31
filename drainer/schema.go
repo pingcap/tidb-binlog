@@ -333,7 +333,8 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 
 	log.Debug("Handle job", zap.Stringer("job", job))
 
-	if job.Query == "" {
+	sql = job.Query
+	if sql == "" {
 		log.Warn("job query is empty", zap.Stringer("job", job))
 	}
 
