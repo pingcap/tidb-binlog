@@ -105,7 +105,7 @@ endif
 
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
-	tools/bin/golangci-lint run $$($(PACKAGE_DIRECTORIES))
+	tools/bin/golangci-lint run --timeout 10m0s $$($(PACKAGE_DIRECTORIES))
 
 clean:
 	go clean -i ./...
