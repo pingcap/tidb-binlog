@@ -104,9 +104,9 @@ password = ""
 # if encrypted_password is not empty, password will be ignored.
 encrypted_password = ""
 port = 3306
-# I/O read timeout for drainer's downstream db connection.
-# default value is 1m, if drainer keeps failing on some long-time costing ddls, you can set this variable to a larger time
-# read-timeout = "10m"
+# I/O read timeout of database connections downstream.
+# The default value is `"1m"`. If Drainer keeps failing on some DDLs that take a long time, you can set this configuration to a larger value.
+# read-timeout = "1m"
 #
 # 1: SyncFullColumn, 2: SyncPartialColumn
 # when setting SyncPartialColumn drainer will allow the downstream schema
