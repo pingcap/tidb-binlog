@@ -79,7 +79,7 @@ EOF
     tidb-server \
         -P $port \
         -status $sport \
-        -config "$OUT_DIR/tidb-config.toml" \
+        --config "$OUT_DIR/tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2379 \
         --enable-binlog=true \
@@ -118,7 +118,7 @@ EOF
         --peer-urls https://127.0.0.1:2380 \
         --advertise-client-urls https://127.0.0.1:2379 \
         --advertise-peer-urls https://127.0.0.1:2380 \
-        -config "$OUT_DIR/pd-config.toml" \
+        --config "$OUT_DIR/pd-config.toml" \
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
@@ -220,7 +220,7 @@ EOF
     echo "Starting Downstream TiDB..."
     tidb-server \
         -P 3306 \
-        -config "$OUT_DIR/down-tidb-config.toml" \
+        --config "$OUT_DIR/down-tidb-config.toml" \
         --store tikv \
         --path 127.0.0.1:2381 \
         --status=20080 \
