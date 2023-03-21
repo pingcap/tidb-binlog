@@ -344,6 +344,8 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 	case model.ActionCreatePlacementPolicy, model.ActionAlterPlacementPolicy, model.ActionDropPlacementPolicy,
 		model.ActionAlterTablePartitionPlacement, model.ActionModifySchemaDefaultPlacement, model.ActionAlterTablePlacement:
 		return true
+	case model.ActionCreateResourceGroup, model.ActionAlterResourceGroup, model.ActionDropResourceGroup:
+		return true
 	}
 
 	return false
