@@ -469,13 +469,15 @@ ForLoop:
 
 			if b.job.BinlogInfo.SchemaVersion == 0 {
 				log.Info("skip ddl due to the failed ddl", zap.String("sql", sql), zap.Int64("commit ts", commitTS))
-				shouldSkip = true
-			} else if s.cfg.SyncDDL {
-				schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
-				if err != nil {
-					err = errors.Trace(err)
-					break ForLoop
-				}
+				appendFakeBinlogIfNeeded(nil, commitTS)
+				continue
+			}
+			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
+			if err != nil {
+				err = errors.Trace(err)
+				break ForLoop
+			}
+			if s.cfg.SyncDDL {
 				if s.filter.SkipSchemaAndTable(schema, table) {
 					log.Info("skip ddl by block allow filter", zap.String("schema", schema), zap.String("table", table),
 						zap.String("sql", sql), zap.Int64("commit ts", commitTS))
