@@ -139,12 +139,13 @@ func (cs *UtilSuite) TestGetOracleTableInfo(c *check.C) {
 
 }
 
-func (cs *UtilSuite) TestRemovePlacementSpecialComments(c *check.C) {
+func (cs *UtilSuite) TestProcessDDLQuery(c *check.C) {
 	cases := []struct {
 		sql    string
 		result string
 		errMsg string
 	}{
+		// should remove placement attributions
 		{
 			sql:    "CREATE TABLE `t1` (`a` INT) /*T![placement] PLACEMENT POLICY=`p1` */",
 			result: "CREATE TABLE `t1` (`a` INT) ",
@@ -174,10 +175,35 @@ func (cs *UtilSuite) TestRemovePlacementSpecialComments(c *check.C) {
 			sql:    "create table t1(id int)",
 			result: "create table t1(id int)",
 		},
+		// should disable TTL
+		{
+			sql:    "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */",
+			result: "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */",
+			result: "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			sql:    "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+			result: "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+			result: "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			sql:    "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'ON' */",
+			result: "CREATE TABLE `t1` (`created_at` DATETIME) /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			sql:    "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'ON' */",
+			result: "ALTER TABLE `t1` /*T![ttl] TTL = `created_at` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
 	}
 
 	for _, ca := range cases {
-		sql, err := removeDDLPlacementOptions(ca.sql)
+		sql, err := processDDLQuery(ca.sql)
 		c.Assert(err, check.IsNil)
 		c.Assert(sql, check.Equals, ca.result)
 	}
