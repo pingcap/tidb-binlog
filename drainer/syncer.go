@@ -466,6 +466,12 @@ ForLoop:
 				schema, table string
 			)
 			sql := b.job.Query
+
+			if b.job.BinlogInfo.SchemaVersion == 0 {
+				log.Info("skip ddl due to the failed ddl", zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				appendFakeBinlogIfNeeded(nil, commitTS)
+				continue
+			}
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
@@ -505,8 +511,7 @@ ForLoop:
 					}
 				}
 			} else {
-				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
-					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				log.Info("skip ddl by SyncDDL setting to false", zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
 				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true

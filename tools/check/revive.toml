@@ -14,6 +14,7 @@ warningCode = -1
 [rule.if-return]
 [rule.var-naming]
 [rule.package-comments]
+  Disabled = true
 [rule.range]
 [rule.receiver-naming]
 [rule.indent-error-flow]
