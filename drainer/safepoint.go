@@ -19,6 +19,7 @@ const (
 func updateServiceSafePoint(ctx context.Context, pdClient pd.Client, cpt checkpoint.CheckPoint, ttl int64) {
 	updateInterval := time.Duration(ttl/2) * time.Second
 	tick := time.NewTicker(updateInterval)
+	de
 	dumplingServiceSafePointID := fmt.Sprintf("%s_%d", drainerServiceSafePointPrefix, time.Now().UnixNano())
 	log.Info("generate drainer gc safePoint id", zap.String("id", dumplingServiceSafePointID))
 
