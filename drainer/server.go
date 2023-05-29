@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tipb/go-binlog"
@@ -200,7 +201,12 @@ func createSyncer(etcdURLs string, cp checkpoint.CheckPoint, cfg *SyncerConfig) 
 	}
 	defer tiStore.Close()
 
-	jobs, err := loadHistoryDDLJobs(tiStore)
+	var jobs []*model.Job
+	if cfg.LoadTableInfos {
+		jobs, err = loadTableInfos(tiStore, cp.TS())
+	} else {
+		jobs, err = loadHistoryDDLJobs(tiStore)
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -274,6 +280,19 @@ func (s *Server) Start() error {
 			errCh <- err
 		}
 	})
+
+	if s.cfg.SyncerCfg != nil && s.cfg.SyncerCfg.LoadTableInfos {
+		s.tg.GoNoPanic("gc_safepoint", func() {
+			defer func() { go s.Close() }()
+			pdCli, err := getPdClient(s.cfg.EtcdURLs, s.cfg.Security)
+			if err != nil {
+				log.Error("fail to create pdCli", zap.Error(err))
+				errCh <- err
+			}
+			updateServiceSafePoint(s.ctx, pdCli, s.cp, defaultDrainerGCSafePointTTL)
+			pdCli.Close()
+		})
+	}
 
 	s.tg.GoNoPanic("collect", func() {
 		defer func() { go s.Close() }()
