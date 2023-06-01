@@ -214,6 +214,9 @@ func loadTableInfos(tiStore kv.Storage, startTs int64) ([]*model.Job, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if len(tableInfos) == 0 {
+			continue
+		}
 		for _, tableInfo := range tableInfos {
 			log.L().Debug("load table info", zap.Stringer("db", dbinfo.Name), zap.Stringer("table", tableInfo.Name), zap.Int64("version", version))
 		}
