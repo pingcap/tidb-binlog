@@ -122,7 +122,7 @@ type SyncerConfig struct {
 	EnableCausalityFlag  *bool `toml:"-" json:"enable-detect-flag"`
 	DisableCausalityFile *bool `toml:"disable-detect" json:"disable-detect"`
 	EnableCausalityFile  *bool `toml:"enable-detect" json:"enable-detect"`
-	LoadSchemaSnapshot   bool  `toml:"load-schema-snapshot" json:load-schema-snapshot"`
+	LoadSchemaSnapshot   bool  `toml:"load-schema-snapshot" json:"load-schema-snapshot"`
 
 	// v2 filter rules
 	CaseSensitive    bool                   `toml:"case-sensitive" json:"case-sensitive"`
