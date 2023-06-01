@@ -216,9 +216,17 @@ func loadTableInfos(tiStore kv.Storage, startTs int64) ([]*model.Job, error) {
 		}
 		for _, tableInfo := range tableInfos {
 			log.L().Debug("load table info", zap.Stringer("db", dbinfo.Name), zap.Stringer("table", tableInfo.Name), zap.Int64("version", version))
-			jobs = append(jobs, mockCreateTableJob(tableInfo, dbinfo.ID, version))
-			version++
 		}
+		jobs = append(jobs, &model.Job{
+			Type:     model.ActionCreateTables,
+			State:    model.JobStateDone,
+			SchemaID: dbinfo.ID,
+			BinlogInfo: &model.HistoryInfo{
+				SchemaVersion:      version,
+				MultipleTableInfos: tableInfos,
+			},
+		})
+		version++
 	}
 	return jobs, nil
 }
