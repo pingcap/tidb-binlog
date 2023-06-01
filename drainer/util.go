@@ -390,15 +390,3 @@ func mockCreateSchemaJob(dbInfo *model.DBInfo, schemaVersion int64) *model.Job {
 		},
 	}
 }
-
-func mockCreateTableJob(tableInfo *model.TableInfo, schemaID, schemaVersion int64) *model.Job {
-	return &model.Job{
-		Type:     model.ActionCreateTable,
-		State:    model.JobStateDone,
-		SchemaID: schemaID,
-		BinlogInfo: &model.HistoryInfo{
-			SchemaVersion: schemaVersion,
-			TableInfo:     tableInfo,
-		},
-	}
-}
