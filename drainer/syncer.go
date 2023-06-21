@@ -433,7 +433,7 @@ ForLoop:
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
-			if skipUnsupportedDDLJob(b.job) {
+			if skipUnsupportedDDLJob(b.job) || isDDLSystemTable(b.job.TableID) {
 				log.Info("skip unsupported DDL job", zap.Stringer("job", b.job))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
@@ -601,7 +601,7 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 			return false, errors.Errorf("not found table id: %d", mutation.GetTableId())
 		}
 
-		if filter.SkipSchemaAndTable(schemaName, tableName) {
+		if filter.SkipSchemaAndTable(schemaName, tableName) || isDDLSystemTable(mutation.GetTableId()) {
 			log.Debug("skip dml", zap.String("schema", schemaName), zap.String("table", tableName))
 			continue
 		}
