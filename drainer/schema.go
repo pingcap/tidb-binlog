@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
@@ -505,6 +506,9 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			if table == nil {
 				return "", "", "", errors.NotValidf("job %d", job.ID)
 			}
+			if isDDLSystemTable(table.ID) {
+				continue
+			}
 
 			schema, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
@@ -612,5 +616,13 @@ func addImplicitColumn(table *model.TableInfo) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func skipJob(job *model.Job) bool {
+	if isDDLSystemTable(job.TableID) {
+		return true
+	}
 	return !job.IsSynced() && !job.IsDone()
+}
+
+// isDDLSystemTable checks if the tableID is a ddl system table ID.
+func isDDLSystemTable(tableID int64) bool {
+	return tableID > meta.MaxGlobalID
 }
