@@ -194,7 +194,7 @@ func Merge(v bool) Option {
 	}
 }
 
-//DestinationDBType set destDBType option.
+// DestinationDBType set destDBType option.
 func DestinationDBType(t string) Option {
 	destDBType := DBTypeUnknown
 	if t == "oracle" {
@@ -209,7 +209,7 @@ func DestinationDBType(t string) Option {
 	}
 }
 
-//SetloopBackSyncInfo set loop back sync info of loader
+// SetloopBackSyncInfo set loop back sync info of loader
 func SetloopBackSyncInfo(loopBackSyncInfo *loopbacksync.LoopBackSync) Option {
 	return func(o *options) {
 		o.loopBackSyncInfo = loopBackSyncInfo
