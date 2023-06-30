@@ -86,7 +86,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 	return items
 }
 
-/// sorter
+// / sorter
 type sortItem struct {
 	start  int64
 	commit int64
