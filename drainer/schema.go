@@ -575,7 +575,7 @@ func addImplicitColumn(table *model.TableInfo) {
 		ID:   implicitColID,
 		Name: model.NewCIStr(implicitColName),
 	}
-	newColumn.Tp = mysql.TypeInt24
+	newColumn.SetType(mysql.TypeInt24)
 	table.Columns = append(table.Columns, newColumn)
 
 	newIndex := &model.IndexInfo{

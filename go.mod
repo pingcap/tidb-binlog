@@ -11,6 +11,7 @@ require (
 	github.com/godror/godror v0.33.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/mock v1.6.0
+	github.com/golang/protobuf v1.5.2
 	github.com/google/gofuzz v1.0.0
 	github.com/gorilla/mux v1.8.0
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
@@ -19,7 +20,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20220517085838-12e2f5a9d167
 	github.com/pingcap/log v1.1.1-0.20221116035753-734d527bc87c
 	github.com/pingcap/tidb v1.1.0-beta.0.20230630045808-5e0977a67074
-	github.com/pingcap/tidb-tools v6.0.0-alpha.0.20220309081549-563c2a342f9c+incompatible
+	github.com/pingcap/tidb-tools v6.1.1-0.20230630083836-395ea2aa318d+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20230630045808-5e0977a67074
 	github.com/pingcap/tipb v0.0.0-20220314125451-bfb5c2c55188
 	github.com/prometheus/client_golang v1.11.0
@@ -78,7 +79,6 @@ require (
 	github.com/godror/knownpb v0.1.0 // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
@@ -159,7 +159,6 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.10.0 // indirect
 	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5 // indirect
-	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
 	golang.org/x/term v0.9.0 // indirect
 	golang.org/x/text v0.10.0 // indirect

@@ -254,7 +254,7 @@ func formatData(data types.Datum, ft types.FieldType, destDBType loader.DBType) 
 		return data, nil
 	}
 
-	switch ft.Tp {
+	switch ft.GetType() {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeNewDecimal, mysql.TypeJSON:
 		data = types.NewDatum(fmt.Sprintf("%v", data.GetValue()))
 	case mysql.TypeDuration:
@@ -285,7 +285,7 @@ func formatData(data types.Datum, ft types.FieldType, destDBType loader.DBType) 
 }
 
 func isBlob(ft types.FieldType) bool {
-	stype := types.TypeToStr(ft.Tp, ft.Charset)
+	stype := types.TypeToStr(ft.GetType(), ft.GetCharset())
 	switch stype {
 	case "blob", "tinyblob", "mediumblob", "longblob":
 		return true
