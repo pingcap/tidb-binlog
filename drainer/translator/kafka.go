@@ -22,10 +22,10 @@ import (
 	//nolint
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/tablecodec"
+	obinlog "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 	pb "github.com/pingcap/tipb/go-binlog"
 	"go.uber.org/zap"

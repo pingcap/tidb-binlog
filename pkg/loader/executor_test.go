@@ -244,9 +244,11 @@ func (s *singleExecSuite) TestOracleSafeUpdate(c *C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"name": {
-				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+				FieldType: *types.NewFieldType(tmysql.TypeString),
+			},
 			"age": {
-				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+				FieldType: *types.NewFieldType(tmysql.TypeInt24),
+			},
 		},
 		DestDBType: OracleDB,
 	}
@@ -317,9 +319,11 @@ func (s *singleExecSuite) TestOracleSafeInsert(c *C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"name": {
-				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+				FieldType: *types.NewFieldType(tmysql.TypeString),
+			},
 			"age": {
-				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+				FieldType: *types.NewFieldType(tmysql.TypeInt24),
+			},
 		},
 		DestDBType: OracleDB,
 	}
@@ -377,9 +381,11 @@ func (s *singleExecSuite) TestOracleSafeDelete(c *C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"name": {
-				FieldType: types.FieldType{Tp: tmysql.TypeString}},
+				FieldType: *types.NewFieldType(tmysql.TypeString),
+			},
 			"age": {
-				FieldType: types.FieldType{Tp: tmysql.TypeInt24}},
+				FieldType: *types.NewFieldType(tmysql.TypeInt24),
+			},
 		},
 		DestDBType: OracleDB,
 	}

@@ -158,22 +158,18 @@ func (t *testKafkaSuite) TestGenTable(c *check.C) {
 		Columns: []*model.ColumnInfo{
 			{
 				Name: model.NewCIStr("c1"),
-				FieldType: types.FieldType{
-					Flag: mysql.PriKeyFlag,
-					Tp:   mysql.TypeLong,
-				},
+				FieldType: types.NewFieldTypeBuilder().
+					SetFlag(mysql.PriKeyFlag).
+					SetType(mysql.TypeLong).
+					Build(),
 			},
 			{
-				Name: model.NewCIStr("c2"),
-				FieldType: types.FieldType{
-					Tp: mysql.TypeLong,
-				},
+				Name:      model.NewCIStr("c2"),
+				FieldType: *types.NewFieldType(mysql.TypeLong),
 			},
 			{
-				Name: model.NewCIStr("c3"),
-				FieldType: types.FieldType{
-					Tp: mysql.TypeLong,
-				},
+				Name:      model.NewCIStr("c3"),
+				FieldType: *types.NewFieldType(mysql.TypeLong),
 			},
 		},
 		Indices: []*model.IndexInfo{
@@ -227,10 +223,14 @@ func (t *testKafkaSuite) TestGenTable(c *check.C) {
 			{
 				Name:      "c2",
 				MysqlType: "int",
+				Flen:      types.UnspecifiedLength,
+				Decimal:   types.UnspecifiedLength,
 			},
 			{
 				Name:      "c3",
 				MysqlType: "int",
+				Flen:      types.UnspecifiedLength,
+				Decimal:   types.UnspecifiedLength,
 			},
 		},
 		UniqueKeys: []*obinlog.Key{
