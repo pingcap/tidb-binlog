@@ -50,7 +50,6 @@ func newBinlogItem(b *pb.Binlog, nodeID string) *binlogItem {
 	return itemp
 }
 
-//
 func (b *binlogItem) SetJob(job *model.Job) {
 	b.job = job
 }
