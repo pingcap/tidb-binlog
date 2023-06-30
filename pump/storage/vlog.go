@@ -445,9 +445,9 @@ func (vlog *valueLog) scanRequests(start valuePointer, fn func(*request) error) 
 
 // scan visits binlogs in order starting from the specified position.
 // There are two limitations to the usage of scan:
-// 1. Binlogs added in new logFiles after scan starts are not visible, so don't assume
-//    that every single binlog added would be visited
-// 2. If GC is running concurrently, logFiles may be closed and deleted, thus breaking the scanning.
+//  1. Binlogs added in new logFiles after scan starts are not visible, so don't assume
+//     that every single binlog added would be visited
+//  2. If GC is running concurrently, logFiles may be closed and deleted, thus breaking the scanning.
 func (vlog *valueLog) scan(start valuePointer, fn func(vp valuePointer, record *Record) error) error {
 	vlog.gcLock.Lock()
 	defer vlog.gcLock.Unlock()
