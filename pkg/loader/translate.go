@@ -20,9 +20,9 @@ import (
 	"github.com/pingcap/errors"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
-	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	ptypes "github.com/pingcap/tidb/parser/types"
+	pb "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 )
 
