@@ -90,9 +90,12 @@ func SecondaryBinlogToTxn(binlog *pb.Binlog, tableRouter *router.Table, upperCol
 func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInfo {
 	colMap := make(map[string]*model.ColumnInfo)
 	for _, col := range columnInfos {
+		ft := types.NewFieldType(ptypes.StrToType(col.MysqlType))
+		ft.SetFlen(int(col.Flen))
+		ft.SetDecimal(int(col.Decimal))
 		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
 			Name:      model.CIStr{O: col.Name},
-			FieldType: types.FieldType{Tp: ptypes.StrToType(col.MysqlType), Flen: int(col.Flen), Decimal: int(col.Decimal)},
+			FieldType: *ft,
 		}
 	}
 	return colMap
