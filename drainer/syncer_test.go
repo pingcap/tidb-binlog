@@ -168,6 +168,34 @@ func (s *syncerSuite) TestNewSyncer(c *check.C) {
 		job:    job,
 	})
 
+	// Add failed ddl
+	commitTS++
+	jobID++
+	binlog = &pb.Binlog{
+		Tp:       pb.BinlogType_Commit,
+		CommitTs: commitTS,
+		DdlQuery: []byte("alter table test.test add column a int"),
+		DdlJobId: jobID,
+	}
+	job = &model.Job{
+		ID:       jobID,
+		SchemaID: 1, // must be the previous create schema id of `test`
+		Type:     model.ActionAddColumn,
+		State:    model.JobStateSynced,
+		Query:    "create table test.test(id int)",
+		BinlogInfo: &model.HistoryInfo{
+			SchemaVersion: 0,
+			TableInfo: &model.TableInfo{
+				ID:   testTableID,
+				Name: model.CIStr{O: "test", L: "test"},
+			},
+		},
+	}
+	syncer.Add(&binlogItem{
+		binlog: binlog,
+		job:    job,
+	})
+
 	// Add dml
 	commitTS++
 	binlog = &pb.Binlog{
