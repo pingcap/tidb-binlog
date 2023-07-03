@@ -20,7 +20,6 @@ import (
 	"time"
 
 	//nolint
-	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	tipb "github.com/pingcap/tipb/go-binlog"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/pingcap/tidb-binlog/pkg/loader"
 	"github.com/pingcap/tidb-binlog/pkg/util"
@@ -131,8 +131,8 @@ func genInsert(schema string, ptable, table *model.TableInfo, row []byte) (event
 
 	for _, col := range columns {
 		cols = append(cols, col.Name.O)
-		tps = append(tps, col.Tp)
-		mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
+		tps = append(tps, col.GetType())
+		mysqlTypes = append(mysqlTypes, types.TypeToStr(col.GetType(), col.GetCharset()))
 		val, ok := columnValues[col.ID]
 		if !ok {
 			val = getDefaultOrZeroValue(ptable, col)
@@ -185,8 +185,8 @@ func genUpdate(schema string, ptable, table *model.TableInfo, row []byte, canApp
 			oldVals = append(oldVals, oldValue)
 			newVals = append(newVals, newValue)
 			cols = append(cols, col.Name.O)
-			tps = append(tps, col.Tp)
-			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
+			tps = append(tps, col.GetType())
+			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.GetType(), col.GetCharset()))
 		}
 	}
 
@@ -224,8 +224,8 @@ func genDelete(schema string, table *model.TableInfo, row []byte) (event *pb.Eve
 			}
 			vals = append(vals, value)
 			cols = append(cols, col.Name.O)
-			tps = append(tps, col.Tp)
-			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.Tp, col.Charset))
+			tps = append(tps, col.GetType())
+			mysqlTypes = append(mysqlTypes, types.TypeToStr(col.GetType(), col.GetCharset()))
 		}
 	}
 

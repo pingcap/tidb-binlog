@@ -299,13 +299,17 @@ func (s *SQLSuite) TestOracleUpdateSQLCharType(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24),
+			},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString),
+			},
 			"OFFER": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString),
+			},
 			"ADDRESS": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString),
+			},
 		},
 		DestDBType: OracleDB,
 	}
@@ -342,9 +346,9 @@ func (s *SQLSuite) TestOracleUpdateSQL(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -379,11 +383,11 @@ func (s *SQLSuite) TestOracleUpdateSQLEmptyString(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"OFFER": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -426,9 +430,9 @@ func (s *SQLSuite) TestOracleUpdateSQLPrimaryKey(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -464,13 +468,13 @@ func (s *SQLSuite) TestOracleDeleteSQLCharType(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"OFFER": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"ADDRESS": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -499,9 +503,9 @@ func (s *SQLSuite) TestOracleDeleteSQL(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -528,9 +532,9 @@ func (s *SQLSuite) TestOracleDeleteSQLEmptyString(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -557,11 +561,11 @@ func (s *SQLSuite) TestOracleInsertSQL(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -596,11 +600,11 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -633,11 +637,11 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithOneUK(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -676,13 +680,13 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithMultiUK(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"ID2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -711,13 +715,13 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLWithNoUK(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"ID2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -748,13 +752,13 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLEmptyString(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"ID2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}
@@ -790,13 +794,13 @@ func (s *SQLSuite) TestOracleDeleteNewValueSQLCharType(c *check.C) {
 		},
 		UpColumnsInfoMap: map[string]*model.ColumnInfo{
 			"ID": {
-				FieldType: types.FieldType{Tp: mysql.TypeInt24}},
+				FieldType: *types.NewFieldType(mysql.TypeInt24)},
 			"ID2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"NAME": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 			"C2": {
-				FieldType: types.FieldType{Tp: mysql.TypeVarString}},
+				FieldType: *types.NewFieldType(mysql.TypeVarString)},
 		},
 		DestDBType: OracleDB,
 	}

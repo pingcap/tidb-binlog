@@ -212,14 +212,14 @@ func testGenTable(tt string) *model.TableInfo {
 		ID:     1,
 		Name:   model.NewCIStr("ID"),
 		Offset: 0,
-		FieldType: types.FieldType{
-			Tp:      mysql.TypeLong,
-			Flag:    mysql.BinaryFlag,
-			Flen:    11,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-		},
+		FieldType: types.NewFieldTypeBuilder().
+			SetType(mysql.TypeLong).
+			SetFlag(mysql.BinaryFlag).
+			SetFlen(11).
+			SetDecimal(-1).
+			SetCharset("binary").
+			SetCollate("binary").
+			Build(),
 		State: model.StatePublic,
 	}
 
@@ -227,14 +227,14 @@ func testGenTable(tt string) *model.TableInfo {
 		ID:     2,
 		Name:   model.NewCIStr("NAME"),
 		Offset: 1,
-		FieldType: types.FieldType{
-			Tp:      mysql.TypeVarchar,
-			Flag:    0,
-			Flen:    45,
-			Decimal: -1,
-			Charset: "utf8",
-			Collate: "utf8_unicode_ci",
-		},
+		FieldType: types.NewFieldTypeBuilder().
+			SetType(mysql.TypeVarchar).
+			SetFlag(0).
+			SetFlen(45).
+			SetDecimal(-1).
+			SetCharset("utf8").
+			SetCollate("utf8_unicode_ci").
+			Build(),
 		State: model.StatePublic,
 	}
 
@@ -242,15 +242,15 @@ func testGenTable(tt string) *model.TableInfo {
 		ID:     3,
 		Name:   model.NewCIStr("SEX"),
 		Offset: 2,
-		FieldType: types.FieldType{
-			Tp:      mysql.TypeEnum,
-			Flag:    mysql.BinaryFlag,
-			Flen:    -1,
-			Decimal: -1,
-			Charset: "binary",
-			Collate: "binary",
-			Elems:   []string{"male", "female"},
-		},
+		FieldType: types.NewFieldTypeBuilder().
+			SetType(mysql.TypeEnum).
+			SetFlag(mysql.BinaryFlag).
+			SetFlen(-1).
+			SetDecimal(-1).
+			SetCharset("binary").
+			SetCollate("binary").
+			SetElems([]string{"male", "female"}).
+			Build(),
 		State: model.StatePublic,
 	}
 
@@ -258,7 +258,7 @@ func testGenTable(tt string) *model.TableInfo {
 
 	switch tt {
 	case "hasID":
-		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag
+		userIDCol.SetFlag(mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag)
 
 		t.PKIsHandle = true
 		t.Indices = append(t.Indices, &model.IndexInfo{
@@ -267,8 +267,8 @@ func testGenTable(tt string) *model.TableInfo {
 		})
 
 	case "hasPK":
-		userIDCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag | mysql.UniqueKeyFlag
-		userNameCol.Flag = mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag
+		userIDCol.SetFlag(mysql.NotNullFlag | mysql.PriKeyFlag | mysql.BinaryFlag | mysql.NoDefaultValueFlag | mysql.UniqueKeyFlag)
+		userNameCol.SetFlag(mysql.NotNullFlag | mysql.PriKeyFlag | mysql.NoDefaultValueFlag)
 
 		t.Indices = append(t.Indices, &model.IndexInfo{
 			Primary: true,
@@ -307,9 +307,9 @@ func testGenDeleteBinlog(c *check.C, t *model.TableInfo, r []types.Datum) []byte
 func testGenDatum(c *check.C, col *model.ColumnInfo, base int) (types.Datum, interface{}) {
 	var d types.Datum
 	var e interface{}
-	switch col.Tp {
+	switch col.GetType() {
 	case mysql.TypeTiny, mysql.TypeInt24, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeYear:
-		if mysql.HasUnsignedFlag(col.Flag) {
+		if mysql.HasUnsignedFlag(col.GetFlag()) {
 			d.SetUint64(uint64(base))
 			e = int64(base)
 		} else {
@@ -419,5 +419,5 @@ func testGenUpdateBinlog(c *check.C, t *model.TableInfo, oldData []types.Datum, 
 }
 
 func testIsPKHandleColumn(table *model.TableInfo, column *model.ColumnInfo) bool {
-	return mysql.HasPriKeyFlag(column.Flag) && table.PKIsHandle
+	return mysql.HasPriKeyFlag(column.GetFlag()) && table.PKIsHandle
 }

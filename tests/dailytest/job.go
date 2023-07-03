@@ -145,10 +145,7 @@ func doDDLProcess(table *table, db *sql.DB) {
 
 	col = &column{
 		name: colName,
-		tp: &types.FieldType{
-			Tp:   mysql.TypeVarchar,
-			Flen: 45,
-		},
+		tp:   types.NewFieldTypeBuilder().SetType(mysql.TypeVarchar).SetFlen(45).BuildP(),
 	}
 
 	newCols := make([]*column, 0, len(table.columns)+1)

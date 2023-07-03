@@ -22,7 +22,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	obinlog "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
+	obinlog "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-binlog/drainer/translator"

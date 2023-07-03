@@ -20,9 +20,9 @@ import (
 	"github.com/pingcap/errors"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 
-	pb "github.com/pingcap/tidb-tools/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/parser/model"
 	ptypes "github.com/pingcap/tidb/parser/types"
+	pb "github.com/pingcap/tidb/tidb-binlog/proto/go-binlog"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -91,8 +91,12 @@ func getColumnsInfoMap(columnInfos []*pb.ColumnInfo) map[string]*model.ColumnInf
 	colMap := make(map[string]*model.ColumnInfo)
 	for _, col := range columnInfos {
 		colMap[strings.ToUpper(col.Name)] = &model.ColumnInfo{
-			Name:      model.CIStr{O: col.Name},
-			FieldType: types.FieldType{Tp: ptypes.StrToType(col.MysqlType), Flen: int(col.Flen), Decimal: int(col.Decimal)},
+			Name: model.CIStr{O: col.Name},
+			FieldType: types.NewFieldTypeBuilder().
+				SetType(ptypes.StrToType(col.MysqlType)).
+				SetFlen(int(col.Flen)).
+				SetDecimal(int(col.Decimal)).
+				Build(),
 		}
 	}
 	return colMap
