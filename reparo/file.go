@@ -105,7 +105,7 @@ func getFirstBinlogCommitTS(filename string) (int64, error) {
 		return 0, nil
 	}
 	if err != nil {
-		return 0, errors.Annotatef(err, "decode binlog error")
+		return 0, errors.Annotatef(err, "decode binlog error from file %s", filename)
 	}
 
 	return binlog.CommitTs, nil
