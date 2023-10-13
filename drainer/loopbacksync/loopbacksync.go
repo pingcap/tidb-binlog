@@ -42,14 +42,14 @@ var CreateMarkTableDDL string = fmt.Sprintf("CREATE TABLE If Not Exists %s (%s b
 // CreateMarkDBDDL is DDL to create the database of mark table.
 var CreateMarkDBDDL = "create database IF NOT EXISTS retl;"
 
-//LoopBackSync loopback sync info
+// LoopBackSync loopback sync info
 type LoopBackSync struct {
 	ChannelID       int64
 	LoopbackControl bool
 	SyncDDL         bool
 }
 
-//NewLoopBackSyncInfo return LoopBackSyncInfo objec
+// NewLoopBackSyncInfo return LoopBackSyncInfo objec
 func NewLoopBackSyncInfo(ChannelID int64, LoopbackControl, SyncDDL bool) *LoopBackSync {
 	l := &LoopBackSync{
 		ChannelID:       ChannelID,
