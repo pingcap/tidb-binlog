@@ -433,7 +433,7 @@ ForLoop:
 		} else if jobID > 0 {
 			log.Debug("get ddl binlog job", zap.Stringer("job", b.job))
 
-			if skipUnsupportedDDLJob(b.job) {
+			if skipUnsupportedDDLJob(b.job) || isDDLSystemTable(b.job.TableID) {
 				log.Info("skip unsupported DDL job", zap.Stringer("job", b.job))
 				appendFakeBinlogIfNeeded(nil, commitTS)
 				continue
@@ -466,6 +466,12 @@ ForLoop:
 				schema, table string
 			)
 			sql := b.job.Query
+
+			if b.job.BinlogInfo.SchemaVersion == 0 {
+				log.Info("skip ddl due to the failed ddl", zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				appendFakeBinlogIfNeeded(nil, commitTS)
+				continue
+			}
 			schema, table, err = s.schema.getSchemaTableAndDelete(b.job.BinlogInfo.SchemaVersion)
 			if err != nil {
 				err = errors.Trace(err)
@@ -505,8 +511,7 @@ ForLoop:
 					}
 				}
 			} else {
-				log.Info("skip ddl by SyncDDL setting to false", zap.String("schema", schema), zap.String("table", table),
-					zap.String("sql", sql), zap.Int64("commit ts", commitTS))
+				log.Info("skip ddl by SyncDDL setting to false", zap.String("sql", sql), zap.Int64("commit ts", commitTS))
 				// A empty sql force it to evict the downstream table info.
 				if s.cfg.DestDBType == "tidb" || s.cfg.DestDBType == "mysql" || s.cfg.DestDBType == "oracle" {
 					shouldSkip = true
@@ -596,7 +601,7 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 			return false, errors.Errorf("not found table id: %d", mutation.GetTableId())
 		}
 
-		if filter.SkipSchemaAndTable(schemaName, tableName) {
+		if filter.SkipSchemaAndTable(schemaName, tableName) || isDDLSystemTable(mutation.GetTableId()) {
 			log.Debug("skip dml", zap.String("schema", schemaName), zap.String("table", tableName))
 			continue
 		}

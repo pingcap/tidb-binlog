@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
@@ -344,6 +345,8 @@ func skipUnsupportedDDLJob(job *model.Job) bool {
 	case model.ActionCreatePlacementPolicy, model.ActionAlterPlacementPolicy, model.ActionDropPlacementPolicy,
 		model.ActionAlterTablePartitionPlacement, model.ActionModifySchemaDefaultPlacement, model.ActionAlterTablePlacement:
 		return true
+	case model.ActionCreateResourceGroup, model.ActionAlterResourceGroup, model.ActionDropResourceGroup:
+		return true
 	}
 
 	return false
@@ -362,9 +365,8 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 
 	log.Debug("Handle job", zap.Stringer("job", job))
 
-	sql = job.Query
-	if sql == "" {
-		return "", "", "", errors.Errorf("[ddl job sql miss]%+v", job)
+	if job.Query == "" {
+		log.Warn("job query is empty", zap.Stringer("job", job))
 	}
 
 	switch job.Type {
@@ -504,6 +506,9 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 			if table == nil {
 				return "", "", "", errors.NotValidf("job %d", job.ID)
 			}
+			if isDDLSystemTable(table.ID) {
+				continue
+			}
 
 			schema, ok := s.SchemaByID(job.SchemaID)
 			if !ok {
@@ -611,5 +616,13 @@ func addImplicitColumn(table *model.TableInfo) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func skipJob(job *model.Job) bool {
+	if isDDLSystemTable(job.TableID) {
+		return true
+	}
 	return !job.IsSynced() && !job.IsDone()
+}
+
+// isDDLSystemTable checks if the tableID is a ddl system table ID.
+func isDDLSystemTable(tableID int64) bool {
+	return tableID > meta.MaxGlobalID
 }
