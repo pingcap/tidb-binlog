@@ -32,13 +32,13 @@ import (
 
 var (
 	// ErrFileContentCorruption represents file or directory's content is curruption for some season
-	ErrFileContentCorruption = errors.New("binlogger: content is corruption")
+	ErrFileContentCorruption = errors.NewNoStackError("binlogger: content is corruption")
 
 	// ErrCRCMismatch is the error represents crc don't match
-	ErrCRCMismatch = errors.New("binlogger: crc mismatch")
+	ErrCRCMismatch = errors.NewNoStackError("binlogger: crc mismatch")
 
 	// ErrMagicMismatch is the error represents magic don't match
-	ErrMagicMismatch = errors.New("binlogger: magic mismatch")
+	ErrMagicMismatch = errors.NewNoStackError("binlogger: magic mismatch")
 
 	crcTable = crc32.MakeTable(crc32.Castagnoli)
 
@@ -297,15 +297,16 @@ func (b *binlogger) Walk(ctx context.Context, from binlog.Pos, sendBinlog func(e
 			payload, offset, err = decoder.Decode()
 
 			if err != nil {
+				errCause := errors.Cause(err)
 				// if this is the current file we are writing,
 				// may contain a partial write entity in the file end
 				// we treat is as io.EOF and will return nil
-				if err == io.ErrUnexpectedEOF && isLastFile {
+				if errCause == io.ErrUnexpectedEOF && isLastFile {
 					err = io.EOF
 				}
 
 				// seek next binlog and report metrics
-				if err == ErrCRCMismatch || err == ErrMagicMismatch {
+				if errCause == ErrCRCMismatch || errCause == ErrMagicMismatch {
 					corruptionBinlogCounter.Add(1)
 					log.Error("decode binlog failed %v", zap.Reflect("position", from), zap.Error(err))
 					// offset + 1 to skip magic code of current binlog

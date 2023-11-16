@@ -63,7 +63,7 @@ func (d *decoder) Decode() (payload []byte, offset int64, err error) {
 // CheckMagic check weather the magicNum is right
 func CheckMagic(mgicNum uint32) error {
 	if mgicNum != magic {
-		return ErrMagicMismatch
+		return errors.Annotatef(ErrMagicMismatch, "expected magic %d got %d", magic, mgicNum)
 	}
 
 	return nil

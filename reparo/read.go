@@ -128,6 +128,6 @@ func (r *dirPbReader) read() (binlog *pb.Binlog, err error) {
 			continue
 		}
 
-		return nil, errors.Annotate(err, "decode failed")
+		return nil, errors.Annotatef(err, "decode failed from file %s", r.files[r.idx-1])
 	}
 }
