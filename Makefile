@@ -78,9 +78,9 @@ fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
-lint:tools/bin/revive
+lint:
 	@echo "linting"
-	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
+	$(GO) run github.com/mgechev/revive@v1.2.5 -formatter friendly -config tools/check/revive.toml $(FILES)
 
 vet:
 	@echo "vet"
@@ -103,18 +103,9 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-check-static: tools/bin/golangci-lint
-	$(GO) mod vendor
-	tools/bin/golangci-lint run --timeout 7m $$($(PACKAGE_DIRECTORIES))
+check-static:
+	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1 run --timeout 7m
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
-
-tools/bin/revive: tools/check/go.mod
-	cd tools/check; \
-	$(GO) build -o ../bin/revive github.com/mgechev/revive
-
-tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check; \
-	GOBIN=$(CURDIR)/tools/bin $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint
