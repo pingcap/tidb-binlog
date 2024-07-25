@@ -90,4 +90,4 @@ for details on submitting patches and the contribution workflow.
 ## License
 TiDB-Binlog is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
 
-<!-- VERSION_PLACEHOLDER: v8.2.0-alpha -->
+<!-- VERSION_PLACEHOLDER: v8.3.0-alpha -->
