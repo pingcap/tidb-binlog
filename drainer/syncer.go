@@ -660,7 +660,9 @@ func skipDMLEvent(pv *pb.PrewriteValue, schema *Schema, filter *filter.Filter, b
 			mutation.DeletedRows = mutation.DeletedRows[0:filteredDeleteIdx]
 		}
 
-		muts = append(muts, mutation)
+		if len(mutation.Sequence) > 0 {
+			muts = append(muts, mutation)
+		}
 	}
 
 	pv.Mutations = muts
