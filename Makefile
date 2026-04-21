@@ -1,3 +1,5 @@
+
+
 ### Makefile for tidb-binlog
 .PHONY: build test check update clean pump drainer fmt reparo integration_test arbiter binlogctl
 

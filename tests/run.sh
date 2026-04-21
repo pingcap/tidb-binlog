@@ -2,6 +2,8 @@
 
 set -eu
 
+
+
 OUT_DIR=/tmp/tidb_binlog_test
 
 mkdir -p $OUT_DIR || true
