@@ -1,5 +1,7 @@
 #!/bin/sh
 
+
+
 set -eu
 
 OUT_DIR=/tmp/tidb_binlog_test
