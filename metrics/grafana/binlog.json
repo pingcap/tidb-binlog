@@ -106,7 +106,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_pump_storage_storage_size_bytes",
+              "expr": "binlog_pump_storage_storage_size_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
@@ -196,14 +196,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_pump_storage_gc_ts",
+              "expr": "binlog_pump_storage_gc_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : gc_tso",
               "refId": "A"
             },
             {
-              "expr": "binlog_pump_storage_max_commit_ts",
+              "expr": "binlog_pump_storage_max_commit_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : max_commit_tso",
@@ -293,7 +293,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(binlog_pump_rpc_duration_seconds_count{method=\"WriteBinlog\"}[1m])",
+              "expr": "rate(binlog_pump_rpc_duration_seconds_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", method=\"WriteBinlog\"}[1m])",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} :: {{label}}",
@@ -386,14 +386,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, rate(binlog_pump_rpc_duration_seconds_bucket{method=\"WriteBinlog\"}[1m]))",
+              "expr": "histogram_quantile(0.99, rate(binlog_pump_rpc_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", method=\"WriteBinlog\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{method}}:99",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, rate(binlog_pump_rpc_duration_seconds_bucket{method=\"WriteBinlog\"}[1m]))",
+              "expr": "histogram_quantile(0.95, rate(binlog_pump_rpc_duration_seconds_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", method=\"WriteBinlog\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{method}} : 95",
@@ -481,14 +481,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, rate(binlog_pump_storage_write_binlog_size_bucket[1m]))",
+              "expr": "histogram_quantile(0.99, rate(binlog_pump_storage_write_binlog_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{type}} : 99",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.95, rate(binlog_pump_storage_write_binlog_size_bucket[1m]))",
+              "expr": "histogram_quantile(0.95, rate(binlog_pump_storage_write_binlog_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{type}} : 95",
@@ -578,14 +578,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, rate(binlog_pump_storage_write_binlog_duration_time_bucket[1m]))",
+              "expr": "histogram_quantile(0.99, rate(binlog_pump_storage_write_binlog_duration_time_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{type}}:99",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, rate(binlog_pump_storage_write_binlog_duration_time_bucket[1m]))",
+              "expr": "histogram_quantile(0.95, rate(binlog_pump_storage_write_binlog_duration_time_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}} : {{type}}:95",
@@ -673,7 +673,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(binlog_pump_storage_error_count[1m])",
+              "expr": "rate(binlog_pump_storage_error_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}[1m])",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -761,7 +761,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_pump_storage_query_tikv_count",
+              "expr": "binlog_pump_storage_query_tikv_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -848,7 +848,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "tidb_server_critical_error_total",
+              "expr": "tidb_server_critical_error_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -974,7 +974,7 @@
           "tableColumn": "__name__",
           "targets": [
             {
-              "expr": "binlog_drainer_checkpoint_tso{instance = \"$drainer_instance\"}",
+              "expr": "binlog_drainer_checkpoint_tso{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 2,
@@ -1039,7 +1039,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_drainer_pump_position{instance = \"$drainer_instance\"}",
+              "expr": "binlog_drainer_pump_position{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}",
               "format": "time_series",
               "hide": false,
               "instant": false,
@@ -1127,7 +1127,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(binlog_drainer_read_binlog_size_count{instance = \"$drainer_instance\"}[1m])) by (nodeID)",
+              "expr": "sum(rate(binlog_drainer_read_binlog_size_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m])) by (nodeID)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{nodeID}}",
@@ -1215,7 +1215,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, rate(binlog_drainer_binlog_reach_duration_time_bucket{instance = \"$drainer_instance\"}[1m]))",
+              "expr": "histogram_quantile(0.95, rate(binlog_drainer_binlog_reach_duration_time_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{nodeID}}",
@@ -1303,7 +1303,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_drainer_error_count{instance = \"$drainer_instance\"}",
+              "expr": "binlog_drainer_error_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{type}}",
@@ -1391,7 +1391,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "irate(binlog_drainer_event{instance = \"$drainer_instance\"}[1m])",
+              "expr": "irate(binlog_drainer_event{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m])",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{type}}",
@@ -1477,7 +1477,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, rate(binlog_drainer_execute_duration_time_bucket{instance = \"$drainer_instance\"}[1m]))",
+              "expr": "histogram_quantile(0.99, rate(binlog_drainer_execute_duration_time_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{job}}",
@@ -1563,7 +1563,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, rate(binlog_drainer_query_duration_time_bucket{instance = \"$drainer_instance\"}[1m]))",
+              "expr": "histogram_quantile(0.99, rate(binlog_drainer_query_duration_time_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{type}}",
@@ -1651,7 +1651,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, rate(binlog_drainer_read_binlog_size_bucket{instance = \"$drainer_instance\"}[1m]))",
+              "expr": "histogram_quantile(0.95, rate(binlog_drainer_read_binlog_size_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}[1m]))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "pump: {{nodeID}}",
@@ -1739,7 +1739,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_drainer_ddl_jobs_total{instance = \"$drainer_instance\"}",
+              "expr": "binlog_drainer_ddl_jobs_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -1823,7 +1823,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "binlog_drainer_queue_size{instance = \"$drainer_instance\"}",
+              "expr": "binlog_drainer_queue_size{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance = \"$drainer_instance\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{name}}",
@@ -1923,7 +1923,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "go_goroutines{job=~\"binlog|pump|drainer\"}",
+              "expr": "go_goroutines{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"binlog|pump|drainer\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -2011,7 +2011,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "go_memstats_heap_inuse_bytes{job=~\"binlog|pump|drainer\"}",
+              "expr": "go_memstats_heap_inuse_bytes{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", job=~\"binlog|pump|drainer\"}",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{instance}}",
@@ -2076,11 +2076,55 @@
         "definition": "",
         "hide": 0,
         "includeAll": false,
+        "label": "K8s-cluster",
+        "multi": false,
+        "name": "k8s_cluster",
+        "options": [],
+        "query": "label_values(binlog_drainer_ddl_jobs_total, k8s_cluster)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "${DS_TEST-CLUSTER}",
+        "definition": "",
+        "hide": 0,
+        "includeAll": false,
+        "label": "tidb_cluster",
+        "multi": false,
+        "name": "tidb_cluster",
+        "options": [],
+        "query": "label_values(binlog_drainer_ddl_jobs_total{k8s_cluster=\"$k8s_cluster\"}, tidb_cluster)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": "${DS_TEST-CLUSTER}",
+        "definition": "",
+        "hide": 0,
+        "includeAll": false,
         "label": null,
         "multi": false,
         "name": "drainer_instance",
         "options": [],
-        "query": "label_values(binlog_drainer_ddl_jobs_total, instance)",
+        "query": "label_values(binlog_drainer_ddl_jobs_total{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\"}, instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
